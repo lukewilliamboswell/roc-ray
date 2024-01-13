@@ -31,9 +31,11 @@ pub fn build(b: *std.Build) !void {
     // raygui.addTo(b, lib, target, mode);
 
     const lib_raylib = raylib_build.addRaylib(b, target, mode, .{});
+    const lib_raylib_wrapper = raylib.linkThisLibrary(b, target, mode);
 
     b.installArtifact(lib);
     b.installArtifact(lib_raylib);
+    b.installArtifact(lib_raylib_wrapper);
 
     // Create a binary
     // const bin = b.addExecutable(.{

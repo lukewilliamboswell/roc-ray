@@ -1,5 +1,6 @@
 const std = @import("std");
 const raylib = @import("raylib/build.zig");
+const raylib_build = @import("raylib/raylib/src/build.zig");
 const raygui = @import("raygui/build.zig");
 
 pub fn build(b: *std.Build) !void {
@@ -29,7 +30,10 @@ pub fn build(b: *std.Build) !void {
     });
     // raygui.addTo(b, lib, target, mode);
 
+    const lib_raylib = raylib_build.addRaylib(b, target, mode, .{});
+
     b.installArtifact(lib);
+    b.installArtifact(lib_raylib);
 
     // Create a binary
     // const bin = b.addExecutable(.{

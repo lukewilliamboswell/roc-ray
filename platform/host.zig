@@ -146,6 +146,8 @@ var update_captures: *anyopaque = undefined;
 // }
 
 pub fn main() void {
+
+    // THIS CODE EXAMPLE IS USING BOTH RAYLIB AND RAYGUI
     // raylib.InitWindow(800, 800, "hello world!");
     // raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
     // raylib.SetTargetFPS(60);
@@ -163,19 +165,21 @@ pub fn main() void {
     //         std.debug.print("pressed\n", .{});
     //     }
     // }
+
+    // THIS CODE EXAMPLE IS ONLY USING RAYLIB
     raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
-    // raylib.InitWindow(800, 800, "hello world!");
-    // raylib.SetTargetFPS(60);
+    raylib.InitWindow(800, 800, "hello world!");
+    raylib.SetTargetFPS(60);
 
-    // defer raylib.CloseWindow();
+    defer raylib.CloseWindow();
 
-    // while (!raylib.WindowShouldClose()) {
-    //     raylib.BeginDrawing();
-    //     defer raylib.EndDrawing();
+    while (!raylib.WindowShouldClose()) {
+        raylib.BeginDrawing();
+        defer raylib.EndDrawing();
 
-    //     raylib.ClearBackground(raylib.BLACK);
-    //     raylib.DrawFPS(10, 10);
+        raylib.ClearBackground(raylib.BLACK);
+        raylib.DrawFPS(10, 10);
 
-    //     raylib.DrawText("hello world!", 100, 100, 20, raylib.YELLOW);
-    // }
+        raylib.DrawText("hello world!", 100, 100, 20, raylib.YELLOW);
+    }
 }

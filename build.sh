@@ -1,6 +1,4 @@
 
-lib="libroc-ray.a"
-
 # Build for macos-arm64
 rm -rf zig-out/
 
@@ -8,6 +6,6 @@ rm -rf zig-out/
 # zig build -Dtarget=aarch64-macos 
 
 zig build
-cp zig-out/lib/$lib platform/macos-arm64.a
+libtool -static -o platform/macos-arm64.a zig-out/lib/*
 
 roc build --prebuilt-platform examples/basic.roc

@@ -18,15 +18,23 @@ pub fn build(b: *std.Build) !void {
     lib.force_pic = true;
     lib.disable_stack_probing = true;
 
-    raylib.addTo(b, lib, target, mode, .{});
-    raygui.addTo(b, lib, target, mode);
+    raylib.addTo(b, lib, target, mode, .{
+        .raudio = true,
+        .rmodels = true,
+        .rshapes = true,
+        .rtext = true,
+        .rtextures = true,
+        .raygui = false,
+        .platform_drm = false,
+    });
+    // raygui.addTo(b, lib, target, mode);
 
     b.installArtifact(lib);
 
     // Create a binary
     // const bin = b.addExecutable(.{
-    //     .name = "roc-raygui-bin",
-    //     .root_source_file = .{ .path = "platform/host.zig" },
+    //     .name = "roc-ray-bin",
+    //     .root_source_file = .{ .path = "src.zig" },
     //     .target = target,
     //     .optimize = mode,
     //     .link_libc = true,

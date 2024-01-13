@@ -1,0 +1,6 @@
+[submodule "raygui"]
+	path = raygui
+	url = https://github.com/ryupold/raygui.zig
+[submodule "raylib"]
+	path = raylib
+	url = https://github.com/ryupold/raylib.zig

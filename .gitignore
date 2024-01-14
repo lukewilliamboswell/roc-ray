@@ -4,3 +4,5 @@ zig-out/
 platform/macos-arm64.o
 
 examples/basic
+
+platform/*.tar.br

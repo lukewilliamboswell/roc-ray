@@ -1,6 +1,6 @@
 app "basic"
     packages {
-        ray: "../platform/main.roc",
+        ray: "https://github.com/lukewilliamboswell/roc-ray/releases/download/test/WaRodymdcnmfXFOj0XdNV9tauWNB66qpDh51v9ab4GQ.tar.br",
     }
     imports [ray.Task.{ Task }, ray.Core]
     provides [main, Model] to ray

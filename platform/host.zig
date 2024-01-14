@@ -177,5 +177,6 @@ export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *R
 
 fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     var new_str = str.appendScalar(roc_str.*, 0);
+    new_str.str_len -= 1;
     return @ptrCast(new_str.asU8ptrMut());
 }

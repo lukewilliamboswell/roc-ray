@@ -1,15 +1,17 @@
-interface Core 
+interface Core
     exposes [
         setWindowSize,
-        drawGuiButton,
+        button,
         exit,
+        text,
     ]
     imports [InternalTask, Task.{ Task }, Effect.{ Effect }]
 
-Rectangle : {x: F32,y: F32,width: F32,height: F32}
+Rectangle : { x : F32, y : F32, width : F32, height : F32 }
+Color : { r : U8, g : U8, b : U8, a : U8 }
 
 exit : Task {} []
-exit = 
+exit =
     Effect.exit
     |> Effect.map Ok
     |> InternalTask.fromEffect
@@ -20,8 +22,14 @@ setWindowSize = \{ width, height } ->
     |> Effect.map Ok
     |> InternalTask.fromEffect
 
-drawGuiButton : Rectangle, Str -> Task {isPressed : Bool} []
-drawGuiButton = \{x,y,width,height}, text ->
-    Effect.drawGuiButton x y width height text
-    |> Effect.map \i32 -> Ok {isPressed: (i32 != 0)}
+button : Rectangle, Str -> Task { isPressed : Bool } []
+button = \{ x, y, width, height }, str ->
+    Effect.drawGuiButton x y width height str
+    |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
+    |> InternalTask.fromEffect
+
+text : { x : I32, y : I32 }, { size ? I32, color ? Color }, Str -> Task {} []
+text = \{ x, y }, { size ? 10, color ? { r: 255, g: 0, b: 0, a: 255 } }, str ->
+    Effect.drawText x y size str color.r color.g color.b color.a
+    |> Effect.map Ok
     |> InternalTask.fromEffect

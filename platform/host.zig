@@ -175,8 +175,21 @@ export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *R
     return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
+// TODO this is terrible, but I'm not sure how to make it properly
+var memory: [1000]u8 = undefined;
 fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
-    var new_str = str.appendScalar(roc_str.*, 0);
-    new_str.str_len -= 1;
-    return @ptrCast(new_str.asU8ptrMut());
+    const slice = roc_str.asSlice();
+
+    var buffer: []u8 = &memory;
+
+    @memcpy(buffer[0..slice.len], slice);
+
+    buffer[slice.len] = 0;
+
+    return @ptrCast(&memory);
+}
+
+// void DrawText(const char *text, int posX, int posY, int fontSize, Color color);       // Draw text (using default font)
+export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
+    raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }

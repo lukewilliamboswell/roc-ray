@@ -9,6 +9,7 @@ hosted Effect
         setWindowSize,
         drawGuiButton,
         exit,
+        drawText,
     ]
     imports []
     generates Effect with [after, map, always, forever, loop]
@@ -16,6 +17,7 @@ hosted Effect
 setWindowSize : U32, U32 -> Effect {}
 drawGuiButton : F32, F32, F32, F32, Str -> Effect I32
 exit : Effect {}
+drawText : I32, I32, I32, Str, U8, U8, U8, U8 -> Effect {}
 
 # text : Str, I32, I32 -> Effect {}
 # setPalette : U32, U32, U32, U32 -> Effect {}

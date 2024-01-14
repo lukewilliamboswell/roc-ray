@@ -7,7 +7,6 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardOptimizeOption(.{});
 
-    // Create a static library
     const lib = b.addStaticLibrary(.{
         .name = "roc-ray",
         .root_source_file = .{ .path = "platform/host.zig" },
@@ -36,18 +35,4 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
     b.installArtifact(lib_raylib);
     b.installArtifact(lib_raylib_wrapper);
-
-    // Create a binary
-    // const bin = b.addExecutable(.{
-    //     .name = "roc-ray-bin",
-    //     .root_source_file = .{ .path = "src.zig" },
-    //     .target = target,
-    //     .optimize = mode,
-    //     .link_libc = true,
-    // });
-
-    // raylib.addTo(b, bin, target, mode, .{});
-    // raygui.addTo(b, bin, target, mode);
-
-    // b.installArtifact(bin);
 }

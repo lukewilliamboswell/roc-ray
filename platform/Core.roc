@@ -28,8 +28,8 @@ button = \{ x, y, width, height }, str ->
     |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
     |> InternalTask.fromEffect
 
-text : { x : I32, y : I32 }, { size ? I32, color ? Color }, Str -> Task {} []
-text = \{ x, y }, { size ? 10, color ? { r: 255, g: 0, b: 0, a: 255 } }, str ->
+text : Str, { x : I32, y : I32, size : I32, color : Color } -> Task {} []
+text = \str, { x, y, size, color } ->
     Effect.drawText x y size str color.r color.g color.b color.a
     |> Effect.map Ok
     |> InternalTask.fromEffect

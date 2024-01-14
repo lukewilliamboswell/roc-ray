@@ -1,4 +1,6 @@
 zig-cache/
 zig-out/
 
-platform/macos-arm64.a
+platform/macos-arm64.o
+
+examples/basic

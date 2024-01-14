@@ -23,24 +23,24 @@ extern fn free(c_ptr: [*]align(Align) u8) callconv(.C) void;
 extern fn memcpy(dst: [*]u8, src: [*]u8, size: usize) callconv(.C) void;
 extern fn memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void;
 
-export fn roc_alloc(size: usize, alignment: u32) callconv(.C) ?*anyopaque {
+export fn roc_alloc(size: usize, alignment: u32) callconv(.C) *anyopaque {
     if (DEBUG) {
         var ptr = malloc(size);
         const stdout = std.io.getStdOut().writer();
         stdout.print("alloc:   {d} (alignment {d}, size {d})\n", .{ ptr, alignment, size }) catch unreachable;
         return ptr;
     } else {
-        return malloc(size);
+        return malloc(size).?;
     }
 }
 
-export fn roc_realloc(old_ptr: *anyopaque, new_size: usize, old_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
+export fn roc_realloc(old_ptr: *anyopaque, new_size: usize, old_size: usize, alignment: u32) callconv(.C) *anyopaque {
     if (DEBUG) {
         const stdout = std.io.getStdOut().writer();
         stdout.print("realloc: {d} (alignment {d}, old_size {d})\n", .{ old_ptr, alignment, old_size }) catch unreachable;
     }
 
-    return realloc(@as([*]align(Align) u8, @alignCast(@ptrCast(old_ptr))), new_size);
+    return realloc(@as([*]align(Align) u8, @alignCast(@ptrCast(old_ptr))), new_size).?;
 }
 
 export fn roc_dealloc(c_ptr: *anyopaque, alignment: u32) callconv(.C) void {
@@ -118,24 +118,6 @@ extern fn roc__mainForHost_1_size() callconv(.C) i64;
 extern fn roc__mainForHost_2_caller(*anyopaque, *anyopaque, **anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_2_size() callconv(.C) i64;
 
-// export fn start() void {
-//     const update_size = @as(usize, @intCast(roc__mainForHost_1_size()));
-//     if (update_size != 0) {
-//         w4.trace("This platform does not allow for the update function to have captures");
-//         @panic("Invalid roc app: captures not allowed");
-//     }
-
-//     const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
-//     const captures = roc_alloc(size, @alignOf(u128));
-//     defer roc_dealloc(captures, @alignOf(u128));
-
-//     roc__mainForHost_1_exposed_generic(captures);
-//     roc__mainForHost_0_caller(undefined, captures, &model);
-
-//     const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
-//     update_captures = roc_alloc(update_task_size, @alignOf(u128));
-// }
-
 var update_captures: *anyopaque = undefined;
 
 // export fn update() void {
@@ -143,10 +125,29 @@ var update_captures: *anyopaque = undefined;
 //     roc__mainForHost_2_caller(undefined, update_captures, &model);
 // }
 
+var window_size_width: c_int = 800;
+var window_size_height: c_int = 800;
+
 pub fn main() void {
 
+    // INIT
+    const update_size = @as(usize, @intCast(roc__mainForHost_1_size()));
+    if (update_size != 0) {
+        @panic("Invalid roc app: captures not allowed");
+    }
+
+    const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
+    const captures = roc_alloc(size, @alignOf(u128));
+    defer roc_dealloc(captures, @alignOf(u128));
+
+    roc__mainForHost_1_exposed_generic(captures);
+    roc__mainForHost_0_caller(undefined, captures, &model);
+
+    const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
+    update_captures = roc_alloc(update_task_size, @alignOf(u128));
+
     // THIS CODE EXAMPLE IS USING BOTH RAYLIB AND RAYGUI
-    raylib.InitWindow(800, 800, "hello world!");
+    raylib.InitWindow(window_size_width, window_size_height, "hello world!");
     raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.SetTargetFPS(60);
 
@@ -180,4 +181,9 @@ pub fn main() void {
 
     //     raylib.DrawText("hello world!", 100, 100, 20, raylib.YELLOW);
     // }
+}
+
+export fn roc_fx_setWindowSize(width: u32, height: u32) callconv(.C) void {
+    window_size_width = @intCast(width);
+    window_size_height = @intCast(height);
 }

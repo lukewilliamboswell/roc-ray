@@ -6,35 +6,12 @@ hosted Effect
         always,
         forever,
         loop,
-        # text,
-        # setPalette,
-        # getPalette,
-        # setDrawColors,
-        # getDrawColors,
-        # getGamepad,
-        # getMouse,
-        # getNetplay,
-        # rect,
-        # oval,
-        # line,
-        # hline,
-        # vline,
-        # seedRand,
-        # rand,
-        # randRangeLessThan,
-        # blit,
-        # blitSub,
-        # trace,
-        # diskw,
-        # diskr,
-        # setPreserveFrameBuffer,
-        # setHideGamepadOverlay,
-        # tone,
-        # getPixel,
-        # setPixel,
+        setWindowSize,
     ]
     imports []
     generates Effect with [after, map, always, forever, loop]
+
+setWindowSize : U32, U32 -> Effect {}
 
 # text : Str, I32, I32 -> Effect {}
 # setPalette : U32, U32, U32, U32 -> Effect {}

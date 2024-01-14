@@ -1,4 +1,7 @@
 
+# CLEANUP previous builds
+rm -f platform/macos-arm64.o
+
 # PRE-BUILD PLATFORM 
 
 # macos-arm64
@@ -11,7 +14,7 @@ zig build -Doptimize=ReleaseSmall
 libtool -static -o platform/macos-arm64.o zig-out/lib/*
 
 # BUILD
-roc build --prebuilt-platform examples/basic.roc
+# roc build --prebuilt-platform examples/basic.roc
 
 # RUN 
-# roc dev --prebuilt-platform examples/basic.roc
+roc dev --prebuilt-platform examples/basic.roc

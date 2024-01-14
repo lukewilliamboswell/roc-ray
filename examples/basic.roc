@@ -18,9 +18,19 @@ main = { init, update }
 init : Task Model []
 init = 
 
-    {} <- Core.setWindowSize {width: 400, height: 200} |> Task.await
+    {} <- Core.setWindowSize {width: 400, height: 400} |> Task.await
 
     Task.ok {}
 
 update : Model -> Task Model []
-update = \model -> Task.ok model
+update = \model -> 
+
+    {isPressed} <- Core.drawGuiButton {x: 100, y: 100, width: 200, height: 100 } "Click Me" |> Task.await
+
+    if isPressed then 
+        {} <- Core.exit |> Task.await
+        Task.ok model
+    else 
+        Task.ok model
+
+    

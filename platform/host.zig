@@ -60,12 +60,10 @@ export fn roc_panic(msg: *RocStr, tag_id: u32) callconv(.C) void {
 }
 
 export fn roc_dbg(loc: *RocStr, msg: *RocStr, src: *RocStr) callconv(.C) void {
-    _ = loc;
-    _ = src;
-    _ = msg;
-
-    @panic("Roc dbg not implemented");
+    const stderr = std.io.getStdErr().writer();
+    stderr.print("[{s}] {s} = {s}\n", .{ loc.asSlice(), src.asSlice(), msg.asSlice() }) catch unreachable;
 }
+
 export fn roc_memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void {
     return memset(dst, value, size);
 }
@@ -118,19 +116,15 @@ extern fn roc__mainForHost_1_size() callconv(.C) i64;
 extern fn roc__mainForHost_2_caller(*anyopaque, *anyopaque, **anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_2_size() callconv(.C) i64;
 
-var update_captures: *anyopaque = undefined;
-
-// export fn update() void {
-//     roc__mainForHost_1_caller(&model, undefined, update_captures);
-//     roc__mainForHost_2_caller(undefined, update_captures, &model);
-// }
-
+// VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
 var window_size_height: c_int = 800;
+var show_fps: bool = true;
+var should_exit: bool = false;
 
 pub fn main() void {
 
-    // INIT
+    // INIT ROC
     const update_size = @as(usize, @intCast(roc__mainForHost_1_size()));
     if (update_size != 0) {
         @panic("Invalid roc app: captures not allowed");
@@ -144,46 +138,47 @@ pub fn main() void {
     roc__mainForHost_0_caller(undefined, captures, &model);
 
     const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
-    update_captures = roc_alloc(update_task_size, @alignOf(u128));
+    var update_captures = roc_alloc(update_task_size, @alignOf(u128));
 
-    // THIS CODE EXAMPLE IS USING BOTH RAYLIB AND RAYGUI
     raylib.InitWindow(window_size_width, window_size_height, "hello world!");
     raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
     raylib.SetTargetFPS(60);
 
-    defer raylib.CloseWindow();
-
-    while (!raylib.WindowShouldClose()) {
+    while (!raylib.WindowShouldClose() and !should_exit) {
         raylib.BeginDrawing();
         defer raylib.EndDrawing();
 
         raylib.ClearBackground(raylib.BLACK);
-        raylib.DrawFPS(10, 10);
 
-        if (1 == raygui.GuiButton(.{ .x = 100, .y = 100, .width = 200, .height = 100 }, "press me!")) {
-            std.debug.print("pressed\n", .{});
+        if (show_fps) {
+            raylib.DrawFPS(10, 10);
         }
+
+        // UPDATE ROC
+        roc__mainForHost_1_caller(&model, undefined, update_captures);
+        roc__mainForHost_2_caller(undefined, update_captures, &model);
     }
 
-    // THIS CODE EXAMPLE IS ONLY USING RAYLIB
-    // raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
-    // raylib.InitWindow(800, 800, "hello world!");
-    // raylib.SetTargetFPS(60);
+    raylib.CloseWindow();
+}
 
-    // defer raylib.CloseWindow();
-
-    // while (!raylib.WindowShouldClose()) {
-    //     raylib.BeginDrawing();
-    //     defer raylib.EndDrawing();
-
-    //     raylib.ClearBackground(raylib.BLACK);
-    //     raylib.DrawFPS(10, 10);
-
-    //     raylib.DrawText("hello world!", 100, 100, 20, raylib.YELLOW);
-    // }
+export fn roc_fx_exit() callconv(.C) void {
+    should_exit = true;
 }
 
 export fn roc_fx_setWindowSize(width: u32, height: u32) callconv(.C) void {
     window_size_width = @intCast(width);
     window_size_height = @intCast(height);
+}
+
+export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
+    _ = text;
+    return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, "EXIT");
+}
+
+// TODO IMPLEMENT ME PROPERLY
+fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
+    _ = roc_str;
+
+    return undefined;
 }

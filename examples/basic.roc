@@ -25,7 +25,7 @@ init =
 update : Model -> Task Model []
 update = \model -> 
 
-    {isPressed} <- Core.drawGuiButton {x: 100, y: 100, width: 200, height: 100 } "Click Me" |> Task.await
+    {isPressed} <- Core.drawGuiButton {x: 100, y: 100, width: 200, height: 100 } "Click Me to EXIT" |> Task.await
 
     if isPressed then 
         {} <- Core.exit |> Task.await

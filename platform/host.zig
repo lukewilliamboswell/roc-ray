@@ -172,13 +172,10 @@ export fn roc_fx_setWindowSize(width: u32, height: u32) callconv(.C) void {
 }
 
 export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
-    _ = text;
-    return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, "EXIT");
+    return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
-// TODO IMPLEMENT ME PROPERLY
 fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
-    _ = roc_str;
-
-    return undefined;
+    var new_str = str.appendScalar(roc_str.*, 0);
+    return @ptrCast(new_str.asU8ptrMut());
 }

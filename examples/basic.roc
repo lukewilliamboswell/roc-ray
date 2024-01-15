@@ -21,7 +21,7 @@ main = { init, render }
 init : {width : F32, height : F32 } -> Task Model []
 init = \window ->
 
-    
+    {} <- Core.setWindowTitle "Counter Demo" |> Task.await
 
     Task.ok { left: 10, middle: 20, right: 30, window }
 

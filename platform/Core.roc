@@ -8,6 +8,7 @@ interface Core
         button,
         exit,
         text,
+        setWindowTitle,
     ]
     imports [InternalTask, Task.{ Task }, Effect.{ Effect }, Action.{ Action }]
 
@@ -62,5 +63,11 @@ text = \str, { x, y, size, color } ->
     y32 = y |> Num.round |> Num.toI32
     size32 = size |> Num.round |> Num.toI32
     Effect.drawText x32 y32 size32 str color.r color.g color.b color.a
+    |> Effect.map Ok
+    |> InternalTask.fromEffect
+
+setWindowTitle : Str -> Task {} []
+setWindowTitle = \title ->
+    Effect.setWindowTitle title
     |> Effect.map Ok
     |> InternalTask.fromEffect

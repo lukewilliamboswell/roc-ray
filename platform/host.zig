@@ -124,6 +124,11 @@ var should_exit: bool = false;
 
 pub fn main() void {
 
+    // SETUP WINDOW
+    raylib.InitWindow(window_size_width, window_size_height, "hello world!");
+    raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
+    raylib.SetTargetFPS(60);
+
     // INIT ROC
     const update_size = @as(usize, @intCast(roc__mainForHost_1_size()));
     if (update_size != 0) {
@@ -140,10 +145,7 @@ pub fn main() void {
     const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
     var update_captures = roc_alloc(update_task_size, @alignOf(u128));
 
-    raylib.InitWindow(window_size_width, window_size_height, "hello world!");
-    raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
-    raylib.SetTargetFPS(60);
-
+    // RUN WINDOW FRAME LOOP
     while (!raylib.WindowShouldClose() and !should_exit) {
         raylib.BeginDrawing();
         defer raylib.EndDrawing();
@@ -159,6 +161,7 @@ pub fn main() void {
         roc__mainForHost_2_caller(undefined, update_captures, &model);
     }
 
+    // CLEANUP
     raylib.CloseWindow();
 }
 
@@ -175,7 +178,7 @@ export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *R
     return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
-// TODO this is terrible, but I'm not sure how to make it properly
+// TODO this is terrible, but I'm not sure how to make it right
 var memory: [1000]u8 = undefined;
 fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     const slice = roc_str.asSlice();
@@ -189,7 +192,10 @@ fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     return @ptrCast(&memory);
 }
 
-// void DrawText(const char *text, int posX, int posY, int fontSize, Color color);       // Draw text (using default font)
 export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
     raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+}
+
+export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) void {
+    raylib.SetWindowTitle(str_to_c(text));
 }

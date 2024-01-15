@@ -16,15 +16,21 @@ mainForHost = { init, update }
 init : Task (Box Model) []
 init =
 
-    {} <- Core.setWindowSize { width: 360f32, height: 120f32 } |> Task.await
+    defaultWidth = 800f32
+    defaultHeight = 600f32
 
-    Task.ok (Box.box main.init)
+    {} <- Core.setWindowSize { width: defaultWidth, height: defaultHeight } |> Task.await
+
+    main.init { width: defaultWidth, height: defaultHeight } 
+    |> Task.map Box.box
 
 update : Box Model -> Task (Box Model) []
 update = \boxedModel ->
     boxedModel
     |> Box.unbox
-    |> \model -> draw model { x: 0, y: 0, width: 360, height: 120 } (main.render model)
+    |> \model -> 
+        elem <- main.render model |> Task.await 
+        draw model { x: 0, y: 0, width: 360, height: 120 } elem
     |> Task.map Box.box
 
 draw : Model, { x : F32, y : F32, width : F32, height : F32 }, Elem Model -> Task Model []

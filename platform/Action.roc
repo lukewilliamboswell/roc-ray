@@ -2,7 +2,10 @@ interface Action
     exposes [Action, none, update, map]
     imports []
 
-Action state : [None, Update state]
+Action state : [
+    None, 
+    Update state,
+]
 
 none : Action *
 none = None

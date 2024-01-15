@@ -28,21 +28,33 @@ init = \window ->
 render : Model -> Task (Elem Model) []
 render = \model ->
 
-    left = Core.translate (renderCounter model.left) .left (\record -> \count -> { record & left: count })
-    middle = Core.translate (renderCounter model.middle) .middle (\record -> \count -> { record & middle: count })
-    right = Core.translate (renderCounter model.right) .right (\record -> \count -> { record & right: count })
+    left = Core.translate (renderCounter model.left red) .left (\record -> \count -> { record & left: count })
+    middle = Core.translate (renderCounter model.middle green) .middle (\record -> \count -> { record & middle: count })
+    right = Core.translate (renderCounter model.right blue) .right (\record -> \count -> { record & right: count })
 
-    {} <- Core.text "Counter Demo" { x: 10, y: 150, size: 20, color: { r: 255, g: 255, b: 255, a: 255 } } |> Task.await
-    
-    Task.ok (
-        # Note that Row and Col only support exactly 3 elements for now
-        Row [left, middle, right]
-    )
+    {} <- Core.text "Press ESC to EXIT" { x: model.window.width - 120, y: model.window.height - 10, size: 10, color: black } |> Task.await
+    {} <- drawBackground model |> Task.await
 
-renderCounter : I32 -> Elem I32
-renderCounter = \count ->
+    Col [
+        Text { label: "Counter Demo", color: black },
+        Row [left, middle, right],
+    ]
+    |> Task.ok
+
+renderCounter : I32, Color -> Elem I32
+renderCounter = \count, color ->
     Col [
         Button { label: "+", onPress: \prev -> Action.update (prev + 1) },
-        Text { label: "Clicked $(Num.toStr count) times", color: { r: 0, g: 255, b: 255, a: 255 } },
+        Text { label: "Clicked $(Num.toStr count) times", color },
         Button { label: "-", onPress: \prev -> Action.update (prev - 1) },
     ]
+
+drawBackground : Model -> Task {} []
+drawBackground = \model -> 
+    Core.drawRectangle { x : 0, y : 0, width : model.window.width, height : model.window.height, color : white }
+
+black = { r: 0, g: 0, b: 0, a: 255 }
+white = { r: 255, g: 255, b: 255, a: 255 }
+blue = { r: 0, g: 0, b: 255, a: 255 }
+red = { r: 255, g: 0, b: 0, a: 255 }
+green = { r: 0, g: 255, b: 0, a: 255 }

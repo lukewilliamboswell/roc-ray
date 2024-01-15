@@ -54,7 +54,6 @@ export fn roc_dealloc(c_ptr: *anyopaque, alignment: u32) callconv(.C) void {
 
 export fn roc_panic(msg: *RocStr, tag_id: u32) callconv(.C) void {
     const stderr = std.io.getStdErr().writer();
-    // const msg = @as([*:0]const u8, @ptrCast(c_ptr));
     stderr.print("\n\nRoc crashed with the following error;\nMSG:{s}\nTAG:{d}\n\nShutting down\n", .{ msg.asSlice(), tag_id }) catch unreachable;
     std.process.exit(0);
 }
@@ -170,8 +169,12 @@ export fn roc_fx_exit() callconv(.C) void {
 }
 
 export fn roc_fx_setWindowSize(width: u32, height: u32) callconv(.C) void {
-    window_size_width = @intCast(width);
-    window_size_height = @intCast(height);
+    if (true) {
+        const stdout = std.io.getStdOut().writer();
+        stdout.print("DEBUG: setting window size to {d} {d}\n", .{ width, height }) catch unreachable;
+    }
+
+    raylib.SetWindowSize(@intCast(width), @intCast(height));
 }
 
 export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
@@ -194,6 +197,10 @@ fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
 
 export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
     raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+}
+
+export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
+    raylib.DrawRectangle(x, y, width, height, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }
 
 export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) void {

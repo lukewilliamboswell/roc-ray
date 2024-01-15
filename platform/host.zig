@@ -119,7 +119,7 @@ extern fn roc__mainForHost_2_size() callconv(.C) i64;
 // VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
 var window_size_height: c_int = 800;
-var show_fps: bool = true;
+var show_fps: bool = false;
 var should_exit: bool = false;
 
 pub fn main() void {

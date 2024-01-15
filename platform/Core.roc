@@ -1,6 +1,6 @@
 interface Core
     exposes [
-        Color, 
+        Color,
         Elem,
         Rectangle,
         translate,
@@ -9,7 +9,7 @@ interface Core
         exit,
         text,
     ]
-    imports [InternalTask, Task.{ Task }, Effect.{ Effect }, Action.{Action}]
+    imports [InternalTask, Task.{ Task }, Effect.{ Effect }, Action.{ Action }]
 
 Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 Color : { r : U8, g : U8, b : U8, a : U8 }
@@ -18,30 +18,23 @@ Elem state : [
     Text { label : Str, color : Color },
     Button { label : Str, onPress : state -> Action state },
     Col (List (Elem state)),
+    Row (List (Elem state)),
     None,
 ]
 
-# map : Action a, (a -> b) -> Action b
-# map = \action, transform ->
-#     when action is
-#         None -> None
-#         Update state -> Update (transform state)
-
-translate : Elem child, (parent -> child), (child -> parent) -> Elem parent
+translate : Elem child, (parent -> child), (parent -> (child -> parent)) -> Elem parent
 translate = \elem, parentToChild, childToParent ->
-    when elem is 
+    when elem is
         Text config -> Text config
-
-        Button {label, onPress} ->
+        Button { label, onPress } ->
             Button {
-                label, 
-                onPress: \parent -> onPress (parentToChild parent) |> Action.map childToParent,
+                label,
+                onPress: \prevParent -> onPress (parentToChild prevParent) |> Action.map (childToParent prevParent),
             }
 
-        Col children -> Col (List.map children \c -> translate c parentToChild childToParent) 
-            
+        Col children -> Col (List.map children \c -> translate c parentToChild childToParent)
+        Row children -> Row (List.map children \c -> translate c parentToChild childToParent)
         None -> None
-
 
 exit : Task {} []
 exit =

@@ -15,7 +15,7 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 Color : { r : U8, g : U8, b : U8, a : U8 }
 
 Elem state : [
-    Text Str { color : Color },
+    Text { label : Str, color : Color },
     Button { label : Str, onPress : state -> Action state },
     Col (List (Elem state)),
     None,
@@ -30,7 +30,7 @@ Elem state : [
 translate : Elem child, (parent -> child), (child -> parent) -> Elem parent
 translate = \elem, parentToChild, childToParent ->
     when elem is 
-        Text str data -> Text str data
+        Text config -> Text config
 
         Button {label, onPress} ->
             Button {

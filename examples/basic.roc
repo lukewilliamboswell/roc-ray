@@ -19,13 +19,21 @@ init : Model
 init = 1
 
 render : Model -> Elem Model
-render = \state ->
-    Button {label: "Clicked $(Num.toStr state) times", onPress: \prev -> Action.update (prev + 1)}
-    # Col [
-    #     Text "Foo" { color : white },
-    #     Button {label: "Click", onPress: onBtnPress}
-    #     Text "Bar" { color : white },
-    # ]
+render = \model ->
+    Col [
+        increase,
+        label model,
+        decrease,
+    ]
 
-# white : Color
-# white = {r:255, g:255, b:255, a:255}
+increase : Elem Model
+increase = Button {label: "+", onPress: \prev -> Action.update (prev + 1)}
+
+label : Model -> Elem Model
+label = \model -> Text { label: "Clicked $(Num.toStr model) times", color : white }
+
+decrease : Elem Model
+decrease = Button {label: "-", onPress: \prev -> Action.update (prev - 1)}
+
+white : Color
+white = {r:255, g:255, b:255, a:255}

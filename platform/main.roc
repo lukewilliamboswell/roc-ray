@@ -11,8 +11,6 @@ platform "roc-ray"
 # }
 
 ProgramModel : {
-    width : F32,
-    height : F32,
     model : Model,
 }
 
@@ -30,11 +28,9 @@ init =
     pm : ProgramModel
     pm = { 
         model: main.init,
-        width : 800f32,
-        height : 800f32,
     }
 
-    {} <- Core.setWindowSize { width : pm.width, height : pm.height } |> Task.await
+    {} <- Core.setWindowSize { width : 400f32, height : 400f32 } |> Task.await
 
     Task.ok (Box.box pm)
     
@@ -45,15 +41,15 @@ update = \boxedPM ->
 
     elem = main.render pm.model
 
-    newModel <- draw {x: 0, y: 0, width : 800, height: 800} pm.model elem |> Task.await 
+    newModel <- draw {x: 0, y: 0, width : 400, height: 400} pm.model elem |> Task.await 
     
     Task.ok (Box.box {pm & model: newModel})
 
 draw : {x : F32, y : F32, width : F32, height : F32}, Model, Elem Model -> Task Model [] 
-draw = \boundingBox, model, elem ->
+draw = \bb, model, elem ->
     when elem is
         Button { label, onPress } ->
-            {isPressed} <- Core.button { x: 20, y: 20, width: 120, height: 50 } label |> Task.await
+            {isPressed} <- Core.button { x: bb.x, y: bb.y, width: 120, height: 20 } label |> Task.await
 
             if isPressed then 
                 when onPress model is 
@@ -62,14 +58,34 @@ draw = \boundingBox, model, elem ->
             else 
                 Task.ok model
             
-        Col _ -> Task.ok model # drawCols boundingBox children
+        Col children ->
+            when children is 
+                [first, second, third] -> 
+                    firstBB = {x : bb.x, y : bb.y, width : bb.width, height : 120}
+                    secondBB = {x : bb.x, y : bb.y + 50, width : bb.width, height : 120}
+                    thirdBB = {x : bb.x, y : bb.y + 100, width : bb.width, height : 120}
+                    model1 <- draw firstBB model first |> Task.await
+                    model2 <- draw secondBB model1 second |> Task.await
+                    model3 <- draw thirdBB model2 third |> Task.await
+                
+                    Task.ok model3                    
+                _ -> Task.ok model
             
-        Text str { color } -> 
+        Text { label, color } -> 
             
-            {} <- Core.text str { x: boundingBox.x, y: boundingBox.y, size: 20, color } |> Task.await
+            {} <- Core.text label { x: bb.x, y: bb.y, size: 20, color } |> Task.await
             Task.ok model
 
         None -> Task.ok model
+
+# drawThreeChildren : {x : F32, y : F32, width : F32, height : F32}, Model, Elem Model, Elem Model, Elem Model -> Task Model []
+# drawThreeChildren = \bb, model, first, second, third ->
+
+#     model1 <- draw bb model first |> Task.await
+#     model2 <- draw bb model1 second |> Task.await
+#     model3 <- draw bb model2 third |> Task.await
+
+#     Task.ok model3
 
 # drawCols : {x : F32, y : F32, width : F32, height : F32}, List Elem -> Task {} []
 # drawCols = \boundingBox, children ->

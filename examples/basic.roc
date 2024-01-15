@@ -28,16 +28,17 @@ init = \window ->
 render : Model -> Task (Elem Model) []
 render = \model ->
 
-    left = Core.translate (renderCounter model.left red) .left (\record -> \count -> { record & left: count })
-    middle = Core.translate (renderCounter model.middle green) .middle (\record -> \count -> { record & middle: count })
-    right = Core.translate (renderCounter model.right blue) .right (\record -> \count -> { record & right: count })
 
-    {} <- Core.text "Press ESC to EXIT" { x: model.window.width - 120, y: model.window.height - 10, size: 10, color: black } |> Task.await
     {} <- drawBackground model |> Task.await
+    {} <- Core.text "Press ESC to EXIT" { x: model.window.width - 110, y: model.window.height - 15, size: 10, color: black } |> Task.await
 
     Col [
         Text { label: "Counter Demo", color: black },
-        Row [left, middle, right],
+        Row [
+            Core.translate (renderCounter model.left red) .left (\record -> \count -> { record & left: count }),
+            Core.translate (renderCounter model.middle green) .middle (\record -> \count -> { record & middle: count }),
+            Core.translate (renderCounter model.right blue) .right (\record -> \count -> { record & right: count }),
+        ],
     ]
     |> Task.ok
 

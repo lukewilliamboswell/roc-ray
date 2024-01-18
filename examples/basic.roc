@@ -1,61 +1,70 @@
 app "counter"
     packages { ray: "../platform/main.roc" }
-    imports [ray.Core.{ Color, Elem }, ray.Task.{Task}, ray.Action.{ Action }]
+    imports [ray.Task.{ Task }, ray.Action.{ Action }, ray.Core.{ Color, Rectangle }, ray.GUI.{ Elem }]
     provides [main, Model] to ray
 
 Program : {
-    init : {width : F32, height : F32 } -> Task Model [],
-    render : Model -> Task (Elem Model) [],
+    init : Task Model [],
+    render : Model -> Task Model [],
 }
 
 Model : {
     left : I32,
-    middle : I32, 
+    middle : I32,
     right : I32,
-    window : {width : F32, height : F32 },
+    showCounters : Bool,
 }
 
 main : Program
 main = { init, render }
 
-init : {width : F32, height : F32 } -> Task Model []
-init = \window ->
+width = 800
+height = 600
 
-    {} <- Core.setWindowTitle "Counter Demo" |> Task.await
+init : Task Model []
+init =
 
-    Task.ok { left: 10, middle: 20, right: 30, window }
+    {} <- Core.setWindowSize { width, height } |> Task.await
+    {} <- Core.setWindowTitle "Basic Demo" |> Task.await
 
-render : Model -> Task (Elem Model) []
+    Task.ok { left: 10, middle: 20, right: 30, showCounters: Bool.true }
+
+render : Model -> Task Model []
 render = \model ->
 
+    {} <- Core.drawText { text: "Press ESC to EXIT", posX: width - 220, posY: height - 25, fontSize: 20, color: white } |> Task.await
 
-    {} <- drawBackground model |> Task.await
-    {} <- Core.text "Press ESC to EXIT" { x: model.window.width - 110, y: model.window.height - 15, size: 10, color: black } |> Task.await
-
-    Col [
-        Text { label: "Counter Demo", color: black },
-        Row [
-            Core.translate (renderCounter model.left red) .left (\record -> \count -> { record & left: count }),
-            Core.translate (renderCounter model.middle green) .middle (\record -> \count -> { record & middle: count }),
-            Core.translate (renderCounter model.right blue) .right (\record -> \count -> { record & right: count }),
-        ],
-    ]
-    |> Task.ok
+    Window
+        { title: "COUNTER Demo", onClose: \_ -> Action.none }
+        (
+            Col [
+                Text { label: "Click below to change the counters", color: black },
+                Row [
+                    GUI.translate (renderCounter model.left red) .left (\record, count -> { record & left: count }),
+                    GUI.translate (renderCounter model.middle green) .middle (\record, count -> { record & middle: count }),
+                    GUI.translate (renderCounter model.right blue) .right (\record, count -> { record & right: count }),
+                ],
+            ]
+        )
+    |> GUI.draw model {
+        x: width / 8,
+        y: height / 8,
+        width: width * 6 / 8,
+        height: height * 6 / 8,
+    }
 
 renderCounter : I32, Color -> Elem I32
 renderCounter = \count, color ->
     Col [
-        Button { label: "+", onPress: \prev -> Action.update (prev + 1) },
+        Button { text: "+", onPress: \prev -> Action.update (prev + 1) },
         Text { label: "Clicked $(Num.toStr count) times", color },
-        Button { label: "-", onPress: \prev -> Action.update (prev - 1) },
+        Button { text: "-", onPress: \prev -> Action.update (prev - 1) },
     ]
 
-drawBackground : Model -> Task {} []
-drawBackground = \model -> 
-    Core.drawRectangle { x : 0, y : 0, width : model.window.width, height : model.window.height, color : white }
+# === HELPERS ========================
 
 black = { r: 0, g: 0, b: 0, a: 255 }
-white = { r: 255, g: 255, b: 255, a: 255 }
 blue = { r: 0, g: 0, b: 255, a: 255 }
 red = { r: 255, g: 0, b: 0, a: 255 }
 green = { r: 0, g: 255, b: 0, a: 255 }
+white = { r: 255, g: 255, b: 255, a: 255 }

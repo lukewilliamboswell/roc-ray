@@ -12,7 +12,7 @@ interface Task
         loop,
         fromResult,
         batch,
-        seq, 
+        seq,
         forEach,
     ]
     imports [Effect, InternalTask]
@@ -210,7 +210,6 @@ batch = \current -> \next ->
         f <- next |> await
 
         map current f
-
 
 ## Apply a task repeatedly to a list of items, and return a list of the resulting values
 ##

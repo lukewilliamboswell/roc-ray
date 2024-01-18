@@ -4,5 +4,10 @@ zig-out/
 platform/macos-arm64.o
 
 examples/basic
+examples/squares
 
 platform/*.tar.br
+
+.DS_Store
+
+format.sh

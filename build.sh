@@ -1,23 +1,17 @@
-
-# CLEANUP previous builds
+# CLEANUP PREVIOUS
 rm -f platform/macos-arm64.o
 rm -f platform/linux-x64.a
 
-# PRE-BUILD PLATFORM 
-
-# UNCOMMENT FOR MACOS-ARM64
+# PRE-BUILD PLATFORM FOR MACOS-ARM64
 rm -rf zig-out/
-zig build
+zig build -Doptimize=ReleaseSmall
 libtool -static -o platform/macos-arm64.o zig-out/lib/*
 
-# UNCOMMENT FOR LINUX-x64
-# TODO test this
+# PRE-BUILD PLATFORM FOR LINUX-x64 TODO test this
 # rm -rf zig-out/
 # zig build
 # libtool -static -o platform/linux-x64.a zig-out/lib/*
 
-# JUST BUILD
-# roc build --prebuilt-platform examples/basic.roc
-
-# BUILD AND RUN 
-roc dev --prebuilt-platform examples/basic.roc
+# RUN DEMOS 
+# roc dev --prebuilt-platform examples/squares.roc
+# roc dev --prebuilt-platform examples/basic.roc

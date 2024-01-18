@@ -3,7 +3,7 @@ interface Action
     imports []
 
 Action state : [
-    None, 
+    None,
     Update state,
 ]
 

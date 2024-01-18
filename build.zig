@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) !void {
     lib.force_pic = true;
     lib.disable_stack_probing = true;
 
-    raylib.addTo(b, lib, target, mode, .{
+    try raylib.addTo(b, lib, target, mode, .{
         .raudio = true,
         .rmodels = true,
         .rshapes = true,
@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) !void {
     });
     raygui.addTo(b, lib, target, mode);
 
-    const lib_raylib = raylib_build.addRaylib(b, target, mode, .{});
+    const lib_raylib = try raylib_build.addRaylib(b, target, mode, .{});
     const lib_raylib_wrapper = raylib.linkThisLibrary(b, target, mode);
 
     b.installArtifact(lib);

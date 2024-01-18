@@ -117,8 +117,8 @@ extern fn roc__mainForHost_2_size() callconv(.C) i64;
 
 // VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
-var window_size_height: c_int = 800;
-var show_fps: bool = false;
+var window_size_height: c_int = 600;
+var show_fps: bool = true;
 var should_exit: bool = false;
 
 pub fn main() void {
@@ -151,13 +151,13 @@ pub fn main() void {
 
         raylib.ClearBackground(raylib.BLACK);
 
-        if (show_fps) {
-            raylib.DrawFPS(10, 10);
-        }
-
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
+
+        if (show_fps) {
+            raylib.DrawFPS(10, 10);
+        }
     }
 
     // CLEANUP
@@ -168,25 +168,48 @@ export fn roc_fx_exit() callconv(.C) void {
     should_exit = true;
 }
 
-export fn roc_fx_setWindowSize(width: u32, height: u32) callconv(.C) void {
-    if (true) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("DEBUG: setting window size to {d} {d}\n", .{ width, height }) catch unreachable;
-    }
+export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) void {
+    raylib.SetWindowSize(width, height);
+}
 
-    raylib.SetWindowSize(@intCast(width), @intCast(height));
+export fn roc_fx_getMousePosition() callconv(.C) raylib.Vector2 {
+    return raylib.GetMousePosition();
+}
+
+const ScreenSize = extern struct {
+    height: i32,
+    width: i32,
+};
+
+export fn roc_fx_getScreenSize() callconv(.C) ScreenSize {
+    const height: i32 = raylib.GetScreenHeight();
+    const width: i32 = raylib.GetScreenWidth();
+    return ScreenSize{ .height = height, .width = width };
 }
 
 export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
     return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
-// TODO this is terrible, but I'm not sure how to make it right
+export fn roc_fx_guiWindowBox(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
+    return raygui.GuiWindowBox(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+}
+
+export fn roc_fx_isMouseButtonPressed(button: raylib.MouseButton) callconv(.C) bool {
+    return raylib.IsMouseButtonPressed(button);
+}
+
+// TODO this is terrible, but works for now
 var memory: [1000]u8 = undefined;
+
 fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     const slice = roc_str.asSlice();
 
     var buffer: []u8 = &memory;
+
+    if (slice.len > 1000) {
+        @panic("unsupported, the platform only handles RocStr that are less than 1000 bytes for now");
+    }
 
     @memcpy(buffer[0..slice.len], slice);
 

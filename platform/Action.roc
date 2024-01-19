@@ -1,6 +1,6 @@
 interface Action
     exposes [Action, none, update, map]
-    imports []
+    imports [Task.{Task}]
 
 Action state : [
     None,
@@ -18,3 +18,6 @@ map = \action, transform ->
     when action is
         None -> None
         Update state -> Update (transform state)
+
+# TODO can we implement this??
+# fromTask : Task ok err, (Result ok err -> (Result state [Removed]* -> Action state)) -> Action state

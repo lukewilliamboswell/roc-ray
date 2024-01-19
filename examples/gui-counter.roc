@@ -15,9 +15,6 @@ Model : {
     right : Counter,
 }
 
-width = 800
-height = 600
-
 Program : {
     init : Task Model [],
     render : Model -> Task Model [],
@@ -61,6 +58,8 @@ render = \model ->
         height: height * 6 / 8,
     }
 
+width = 800
+height = 600
 black = { r: 0, g: 0, b: 0, a: 255 }
 blue = { r: 29, g: 66, b: 137, a: 255 }
 red = { r: 211, g: 39, b: 62, a: 255 }

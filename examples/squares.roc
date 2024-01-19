@@ -1,5 +1,5 @@
 app "squares"
-    packages { ray: "../platform/main.roc" }
+    packages { ray: "https://github.com/lukewilliamboswell/roc-ray/releases/download/test/5JjXlOa8wScAnwM6Dl2LaHAygvRbZ_bXgaonv1z8xes.tar.br" }
     imports [ray.Task.{ Task }, ray.Core.{ Color, Rectangle }]
     provides [main, Model] to ray
 

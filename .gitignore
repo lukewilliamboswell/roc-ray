@@ -3,7 +3,7 @@ zig-out/
 
 platform/macos-arm64.o
 
-examples/basic
+examples/gui-counter
 examples/squares
 
 platform/*.tar.br

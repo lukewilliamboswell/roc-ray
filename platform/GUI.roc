@@ -5,6 +5,11 @@ interface GUI
         draw,
         guiButton,
         guiWindowBox,
+        button,
+        col,
+        row,
+        text,
+        window,
     ]
     imports [InternalTask, Task.{ Task }, Effect.{ Effect }, Action.{ Action }, Core.{ Color, Rectangle }]
 
@@ -17,14 +22,29 @@ Elem state : [
     None,
 ]
 
+button : { text : Str, onPress : state -> Action state } -> Elem state
+button = \config -> Button config
+
+col : List (Elem state) -> Elem state
+col = \children -> Col children
+
+row : List (Elem state) -> Elem state
+row = \children -> Row children
+
+text : { label : Str, color : Color } -> Elem state
+text = \config -> Text config
+
+window : Elem state, { title : Str, onClose : state -> Action state } -> Elem state
+window = \child, config -> Window config child
+
 translate : Elem child, (parent -> child), (parent, child -> parent) -> Elem parent
 translate = \elem, parentToChild, childToParent ->
     when elem is
         Text config -> Text config
-        Button { text, onPress } ->
+        Button config ->
             Button {
-                text,
-                onPress: \prevParent -> onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
+                text: config.text,
+                onPress: \prevParent -> config.onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
             }
 
         Window { title, onClose } c ->
@@ -46,11 +66,11 @@ draw = \elem, model, bb ->
     defaultStepY = 50
 
     when elem is
-        Button { text, onPress } ->
-            { isPressed } <- GUI.guiButton { text, shape: { x: bb.x, y: bb.y, width: 120, height: 20 } } |> Task.await
+        Button config ->
+            { isPressed } <- GUI.guiButton { text: config.text, shape: { x: bb.x, y: bb.y, width: defaultStepX, height: defaultStepY } } |> Task.await
 
             if isPressed then
-                when onPress model is
+                when config.onPress model is
                     None -> Task.ok model
                     Update newModel -> Task.ok newModel
             else
@@ -70,7 +90,7 @@ draw = \elem, model, bb ->
             when children is
                 [first] -> draw first model bb
                 [first, second] ->
-                    firstBB = { x: bb.x, y: bb.y + (0 * defaultStepX), width: defaultStepX, height: bb.height }
+                    firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     model1 <- draw first model firstBB |> Task.await
                     model2 <- draw second model1 secondBB |> Task.await
@@ -78,7 +98,7 @@ draw = \elem, model, bb ->
                     Task.ok model2
 
                 [first, second, third] ->
-                    firstBB = { x: bb.x, y: bb.y + (0 * defaultStepX), width: defaultStepX, height: bb.height }
+                    firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     thirdBB = { x: bb.x + (2 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     model1 <- draw first model firstBB |> Task.await
@@ -102,8 +122,8 @@ draw = \elem, model, bb ->
 
                 [first, second, third] ->
                     firstBB = { x: bb.x, y: bb.y + (0 * defaultStepY), width: bb.width, height: defaultStepY }
-                    secondBB = { x: bb.x, y: bb.y + (1 * defaultStepY), width: bb.width, height: defaultStepY }
-                    thirdBB = { x: bb.x, y: bb.y + (2 * defaultStepY), width: bb.width, height: defaultStepY }
+                    secondBB = { x: bb.x, y: bb.y + (1.5 * defaultStepY), width: bb.width, height: defaultStepY }
+                    thirdBB = { x: bb.x, y: bb.y + (2.5 * defaultStepY), width: bb.width, height: defaultStepY }
                     model1 <- draw first model firstBB |> Task.await
                     model2 <- draw second model1 secondBB |> Task.await
                     model3 <- draw third model2 thirdBB |> Task.await
@@ -119,8 +139,8 @@ draw = \elem, model, bb ->
         None -> Task.ok model
 
 guiButton : { text : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } []
-guiButton = \{ text, shape: { x, y, width, height } } ->
-    Effect.drawGuiButton x y width height text
+guiButton = \{ text: str, shape: { x, y, width, height } } ->
+    Effect.drawGuiButton x y width height str
     |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
     |> InternalTask.fromEffect
 

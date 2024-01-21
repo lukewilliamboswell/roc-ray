@@ -1,8 +1,8 @@
 platform "roc-ray"
-    requires { Model } { main : _ }
+    requires { Model } { main : Program Model }
     exposes [Core, GUI, Action, Task]
     packages {}
-    imports [Task.{ Task }]
+    imports [Core.{Program}, Task.{ Task }]
     provides [mainForHost]
 
 ProgramForHost : {

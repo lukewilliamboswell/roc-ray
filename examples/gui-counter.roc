@@ -1,26 +1,17 @@
 app "counter"
-    packages { ray: "https://github.com/lukewilliamboswell/roc-ray/releases/download/test/5JjXlOa8wScAnwM6Dl2LaHAygvRbZ_bXgaonv1z8xes.tar.br" }
+    packages { ray: "../platform/main.roc" }
     imports [
         ray.Task.{ Task },
         ray.Action.{ Action },
-        ray.Core.{ Color, Rectangle },
+        ray.Core.{ Program, Color, Rectangle },
         ray.GUI.{ Elem },
         Counter.{ Counter },
     ]
     provides [main, Model] to ray
 
-Model : {
-    left : Counter,
-    middle : Counter,
-    right : Counter,
-}
+Model : { left : Counter, middle : Counter, right : Counter }
 
-Program : {
-    init : Task Model [],
-    render : Model -> Task Model [],
-}
-
-main : Program
+main : Program Model
 main = { init, render }
 
 init : Task Model []

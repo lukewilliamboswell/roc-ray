@@ -1,5 +1,6 @@
 interface Core
     exposes [
+        Program,
         Color,
         Rectangle,
         Vector2,
@@ -13,6 +14,12 @@ interface Core
         isMouseButtonPressed,
     ]
     imports [InternalTask, Task.{ Task }, Effect.{ Effect }]
+
+## 
+Program state : {
+    init : Task state [],
+    render : state -> Task state [],
+}
 
 Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 Vector2 : { x : F32, y : F32 }

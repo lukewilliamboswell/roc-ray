@@ -1,6 +1,6 @@
 interface Action
     exposes [Action, none, update, map]
-    imports [Task.{Task}]
+    imports []
 
 Action state : [
     None,

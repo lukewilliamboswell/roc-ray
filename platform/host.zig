@@ -129,11 +129,6 @@ pub fn main() void {
     raylib.SetTargetFPS(60);
 
     // INIT ROC
-    const update_size = @as(usize, @intCast(roc__mainForHost_1_size()));
-    if (update_size != 0) {
-        @panic("Invalid roc app: captures not allowed");
-    }
-
     const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
     const captures = roc_alloc(size, @alignOf(u128));
     defer roc_dealloc(captures, @alignOf(u128));

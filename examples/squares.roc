@@ -1,6 +1,6 @@
 app "squares"
-    packages { ray: "https://github.com/lukewilliamboswell/roc-ray/releases/download/test/5JjXlOa8wScAnwM6Dl2LaHAygvRbZ_bXgaonv1z8xes.tar.br" }
-    imports [ray.Task.{ Task }, ray.Core.{ Color, Rectangle }]
+    packages { ray: "../platform/main.roc" }
+    imports [ray.Task.{ Task }, ray.Core.{ Color, Rectangle }, Draw.{ renderDrawables }]
     provides [main, Model] to ray
 
 Program : {
@@ -80,18 +80,12 @@ render = \model ->
 
                 Task.ok model
 
+drawableSquares = \squares ->
+    List.map squares \square -> Fill (Rect square, white)
+
 drawSquares : List Rectangle -> Task {} []
 drawSquares = \squares ->
-    List.walk squares (Task.ok {}) \state, bounds ->
-        state
-        |> Task.await \{} ->
-            Core.drawRectangle {
-                x: bounds.x,
-                y: bounds.y,
-                width: bounds.width,
-                height: bounds.height,
-                color: white,
-            }
+    renderDrawables (drawableSquares squares)
 
 # === HELPERS ========================
 

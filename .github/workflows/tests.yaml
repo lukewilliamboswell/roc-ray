@@ -42,7 +42,7 @@ jobs:
         run: mv zig-linux-x86_64-0.11.0.tar.xz zig_release.tar.xz
 
       - name: decompress the tar
-        run: tar -xzf zig_release.tar.xz
+        run: tar -xf zig_release.tar.xz
 
       - run: rm zig_release.tar.xz
 

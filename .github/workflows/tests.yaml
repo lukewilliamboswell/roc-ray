@@ -46,8 +46,5 @@ jobs:
 
       - run: rm zig_release.tar.xz
 
-      - name: simplify nightly folder name
-        run: mv zig_release* zig_release
-
       # Run all tests 
       - run: ROC=./roc_nightly/roc ZIG=zig_release/zig ./ci/all_tests.sh

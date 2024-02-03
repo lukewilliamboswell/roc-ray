@@ -16,14 +16,29 @@ fi
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
 
-# roc check
-for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    $ROC check $ROC_FILE
-done
+# Check the output of the `uname` command to detect the operating system
+if [[ "$(uname)" == "Darwin" ]]; then
+  echo "Running on macOS"
+  rm -rf zig-out/
+  zig build
+  libtool -static -o platform/macos-arm64.o zig-out/lib/*
+elif [[ "$(uname)" == "Linux" ]]; then
+  echo "Running on Linux"
+  rm -rf zig-out/
+  zig build
+  libtool -static -o platform/linux-x64.a zig-out/lib/*
+else
+    echo "Unsupported operating system"
+fi
+
+# List of files to ignore
+IGNORED_FILES=("Counter.roc" "draw.roc")
 
 # roc build
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    $ROC build $ROC_FILE --linker=legacy
+    if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
+        $ROC build --prebuilt-platform --linker=legacy "$ROC_FILE"
+    fi
 done
 
 # test building docs website

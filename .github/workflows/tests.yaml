@@ -16,20 +16,14 @@ jobs:
       - name: Checkout code 
         uses: actions/checkout@v2
 
+      - name: Install Build Essentials
+        run: sudo apt install build-essential git
+
       - name: Install OpenGL
         run: sudo apt-get install -y libgl1-mesa-dev
 
-      - name: Install libxcursor development package
-        run: sudo apt-get install -y libxcursor-dev
-
-      - name: Install libxrandr development package
-        run: sudo apt-get install -y libxrandr-dev
-
-      - name: Install libxinerama development package
-        run: sudo apt-get install -y libxinerama-dev
-
-      - name: Install libxi-dev (XInput2 development package)
-        run: sudo apt-get install -y libxi-dev
+      - name: Install Required Libs
+        run: sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
 
       - name: Install raylib
         run: git submodule update --init --recursive

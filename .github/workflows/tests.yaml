@@ -1,50 +1,38 @@
-on: 
+on:
   pull_request:
   workflow_dispatch:
 
-# this cancels workflows currently in progress if you start a new one
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-
   test-examples:
-    runs-on: [ubuntu-20.04]
+    runs-on: ubuntu-latest
+    env:
+      ROC_VERSION: nightly
+      ZIG_VERSION: 0.11.0
     steps:
-      - uses: actions/checkout@v3
-    
-      # GET LATEST ROC
-      - name: get latest roc nightly
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install ROC and Zig
         run: |
-          curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-latest.tar.gz
+          # Install ROC
+          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-linux_x86_64-latest.tar.gz
+          tar -xzf roc_nightly.tar.gz
+          rm roc_nightly.tar.gz
 
-      - name: rename nightly tar
-        run: mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+          # Install Zig
+          curl -fOL https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz
+          tar -xf zig-linux-x86_64-${ZIG_VERSION}.tar.xz
+          rm zig-linux-x86_64-${ZIG_VERSION}.tar.xz
 
-      - name: decompress the tar
-        run: tar -xzf roc_nightly.tar.gz
+      - name: Check ROC version
+        run: ./roc_nightly/roc version
 
-      - run: rm roc_nightly.tar.gz
+      - name: Check Zig version
+        run: ./zig-linux-x86_64-${ZIG_VERSION}/zig version
 
-      - name: simplify nightly folder name
-        run: mv roc_nightly* roc_nightly
-
-      # Check roc cli available
-      - run: ./roc_nightly/roc version
-
-      # GET ZIG 0.11.0
-      - name: get zig 0.11.0
-        run: |
-          curl -fOL https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz
-
-      - name: decompress the tar
-        run: tar -xf zig-linux-x86_64-0.11.0.tar.xz
-
-      - run: rm zig-linux-x86_64-0.11.0.tar.xz
-
-      # Check roc cli available
-      - run: ./zig-linux-x86_64-0.11.0/zig version
-
-      # Run all tests 
-      - run: ROC=./roc_nightly/roc ZIG=./zig-linux-x86_64-0.11.0/zig ./ci/all_tests.sh
+      - name: Run all tests
+        run: ROC=./roc_nightly/roc ZIG=./zig-linux-x86_64-${ZIG_VERSION}/zig ./ci/all_tests.sh

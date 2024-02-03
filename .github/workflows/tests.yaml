@@ -23,6 +23,7 @@ jobs:
           mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
           tar -xzf roc_nightly.tar.gz
           rm roc_nightly.tar.gz
+          mv roc_nightly* roc_nightly
 
           # Install Zig
           curl -fOL https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz

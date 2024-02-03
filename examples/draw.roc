@@ -8,6 +8,7 @@ Shape : [
     Text { text : Str, x : F32, y : F32, fontSize : I32 },
 ]
 
+# add a comment
 Drawable : [
     Fill (Shape, Color),
     # Stroke (Shape, Color, F32)

@@ -47,4 +47,4 @@ jobs:
       - run: rm zig_release.tar.xz
 
       # Run all tests 
-      - run: ROC=./roc_nightly/roc ZIG=zig_release/zig ./ci/all_tests.sh
+      - run: ROC=./roc_nightly/roc ZIG=./zig_release/zig ./ci/all_tests.sh

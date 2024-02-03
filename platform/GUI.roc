@@ -11,41 +11,54 @@ interface GUI
         text,
         window,
     ]
-    imports [InternalTask, Task.{ Task }, Effect.{ Effect }, Action.{ Action }, Core.{ Color, Rectangle }]
+    imports [
+        InternalTask, 
+        Task.{ Task }, 
+        Effect.{ Effect }, 
+        Action.{ Action }, 
+        Core.{ Color, Rectangle },
+        Layout.{Layoutable, Constraint, Size},
+    ]
 
-Elem state : [
+Elem state := [
     Text { label : Str, color : Color },
     Button { text : Str, onPress : state -> Action state },
     Window { title : Str, onClose : state -> Action state } (Elem state),
     Col (List (Elem state)),
     Row (List (Elem state)),
     None,
-]
+] implements [Layoutable { layout: layoutElem }]
+
+layoutElem : Elem state, Constraint -> Size
+layoutElem = \@Elem elem, _ ->
+    when elem is 
+        _ -> {width : 0, height : 0}
 
 button : { text : Str, onPress : state -> Action state } -> Elem state
-button = \config -> Button config
+button = \config -> Button config |> @Elem
 
 col : List (Elem state) -> Elem state
-col = \children -> Col children
+col = \children -> Col children |> @Elem
 
 row : List (Elem state) -> Elem state
-row = \children -> Row children
+row = \children -> Row children |> @Elem
 
 text : { label : Str, color : Color } -> Elem state
-text = \config -> Text config
+text = \config -> Text config |> @Elem
 
 window : Elem state, { title : Str, onClose : state -> Action state } -> Elem state
-window = \child, config -> Window config child
+window = \child, config -> Window config child |> @Elem
 
 translate : Elem child, (parent -> child), (parent, child -> parent) -> Elem parent
-translate = \elem, parentToChild, childToParent ->
+translate = \@Elem elem, parentToChild, childToParent ->
     when elem is
-        Text config -> Text config
+        Text config -> Text config |> @Elem
         Button config ->
             Button {
                 text: config.text,
                 onPress: \prevParent -> config.onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
             }
+            |> @Elem
 
         Window { title, onClose } c ->
             Window
@@ -54,13 +67,14 @@ translate = \elem, parentToChild, childToParent ->
                     onClose: \prevParent -> onClose (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
                 }
                 (translate c parentToChild childToParent)
+            |> @Elem
 
-        Col children -> Col (List.map children \c -> translate c parentToChild childToParent)
-        Row children -> Row (List.map children \c -> translate c parentToChild childToParent)
-        None -> None
+        Col children -> Col (List.map children \c -> translate c parentToChild childToParent) |> @Elem
+        Row children -> Row (List.map children \c -> translate c parentToChild childToParent) |> @Elem
+        None -> None |> @Elem
 
 draw : Elem state, state, Rectangle -> Task state []
-draw = \elem, model, bb ->
+draw = \@Elem elem, model, bb ->
 
     defaultStepX = 120
     defaultStepY = 50

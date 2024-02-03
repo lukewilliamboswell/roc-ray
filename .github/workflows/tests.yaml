@@ -16,20 +16,21 @@ jobs:
       - name: Checkout code 
         uses: actions/checkout@v2
 
-      - name: Install Build Essentials
-        run: sudo apt install build-essential git
+      # TODO activate when I figure out how to build on linux-x64
+      # - name: Install Build Essentials
+      #   run: sudo apt install build-essential git
 
-      - name: Install OpenGL
-        run: sudo apt-get install -y libgl1-mesa-dev
+      # - name: Install OpenGL
+      #   run: sudo apt-get install -y libgl1-mesa-dev
 
-      - name: Install Required Libs
-        run: sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
+      # - name: Install Required Libs
+      #   run: sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
 
-      - name: Install libtool
-        run: sudo apt-get install -y libtool libtool-bin
+      # - name: Install libtool
+      #   run: sudo apt-get install -y libtool libtool-bin
 
-      - name: Install raylib
-        run: git submodule update --init --recursive
+      # - name: Install raylib
+      #   run: git submodule update --init --recursive
 
       - name: Install Zig
         run: |

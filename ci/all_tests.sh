@@ -29,7 +29,7 @@ $ZIG build
 if [[ "$(uname)" == "Darwin" ]]; then
   $LIBTOOL -static -o platform/macos-arm64.o zig-out/lib/*
 elif [[ "$(uname)" == "Linux" ]]; then
-  $LIBTOOL -static -o platform/linux-x64.a zig-out/lib/*
+  $LIBTOOL -o platform/linux-x64.a zig-out/lib/*
 else
   echo "Unsupported operating system"
 fi

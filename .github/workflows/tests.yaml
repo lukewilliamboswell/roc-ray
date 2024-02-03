@@ -36,6 +36,9 @@ jobs:
       - name: Check Zig version
         run: ./zig-linux-x86_64-${ZIG_VERSION}/zig version
 
+      - name: Install OpenGL
+        run: sudo apt-get install -y libgl1-mesa-dev
+
       - name: Install raylib
         run: git submodule update --init --recursive
 

@@ -20,6 +20,7 @@ jobs:
         run: |
           # Install ROC
           curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-linux_x86_64-latest.tar.gz
+          mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
           tar -xzf roc_nightly.tar.gz
           rm roc_nightly.tar.gz
 

@@ -26,9 +26,9 @@ $ZIG build
 
 # Check the output of the `uname` command to detect the operating system
 if [[ "$(uname)" == "Darwin" ]]; then
-  $(which libtool) -static -o platform/macos-arm64.o zig-out/lib/*
+  "$(which libtool)" -static -o platform/macos-arm64.o zig-out/lib/*
 elif [[ "$(uname)" == "Linux" ]]; then
-  $(which libtool) -static -o platform/linux-x64.a zig-out/lib/*
+  "$(which libtool)" -static -o platform/linux-x64.a zig-out/lib/*
 else
     echo "Unsupported operating system"
 fi

@@ -15,7 +15,6 @@ fi
 
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
-LIBTOOL=`which libtool`
 
 # List of files to ignore
 IGNORED_FILES=("Counter.roc" "draw.roc")
@@ -37,6 +36,7 @@ done
 # $ZIG build
 
 # # Check the output of the `uname` command to detect the operating system
+# LIBTOOL=`which libtool`
 # if [[ "$(uname)" == "Darwin" ]]; then
 #   $LIBTOOL -static -o platform/macos-arm64.o zig-out/lib/*
 # elif [[ "$(uname)" == "Linux" ]]; then

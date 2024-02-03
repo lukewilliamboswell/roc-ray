@@ -15,6 +15,7 @@ fi
 
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
+LIBTOOL=`which libtool`
 
 # Remove zig-out if it exists
 if [ -d zig-out/ ]; then
@@ -26,11 +27,11 @@ $ZIG build
 
 # Check the output of the `uname` command to detect the operating system
 if [[ "$(uname)" == "Darwin" ]]; then
-  "$(which libtool)" -static -o platform/macos-arm64.o zig-out/lib/*
+  $LIBTOOL -static -o platform/macos-arm64.o zig-out/lib/*
 elif [[ "$(uname)" == "Linux" ]]; then
-  "$(which libtool)" -static -o platform/linux-x64.a zig-out/lib/*
+  $LIBTOOL -static -o platform/linux-x64.a zig-out/lib/*
 else
-    echo "Unsupported operating system"
+  echo "Unsupported operating system"
 fi
 
 # List of files to ignore

@@ -17,7 +17,7 @@ EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
 
 # List of files to ignore
-IGNORED_FILES=("Counter.roc" "Draw.roc")
+IGNORED_FILES=("Counter.roc")
 
 # roc check
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do

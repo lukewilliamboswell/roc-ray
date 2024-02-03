@@ -1,6 +1,11 @@
 app "squares"
     packages { ray: "../platform/main.roc" }
-    imports [ray.Task.{ Task }, ray.Core.{ Color, Rectangle }, Draw.{ renderDrawables }]
+    imports [
+        ray.Task.{ Task }, 
+        ray.Core.{ Color, Rectangle },
+        ray.Shape2D,
+        ray.Drawable.{ draw },
+    ]
     provides [main, Model] to ray
 
 Program : {
@@ -48,7 +53,18 @@ render = \model ->
         |> Task.await
 
     # Draw the squares
-    {} <- drawSquares model.squares |> Task.await
+    {} <- 
+        model.squares 
+        |> List.map \square -> 
+            Shape2D.rect { 
+                posX: Num.round square.x, 
+                posY: Num.round square.y, 
+                width: Num.round square.width, 
+                height: Num.round square.height, 
+                color: white
+            }
+        |> Task.forEach draw
+        |> Task.await
 
     when model.status is
         Ready ->
@@ -79,15 +95,6 @@ render = \model ->
                     |> Task.await
 
                 Task.ok model
-
-drawableSquares = \squares ->
-    List.map squares \square -> Fill (Rect square, white)
-
-drawSquares : List Rectangle -> Task {} []
-drawSquares = \squares ->
-    renderDrawables (drawableSquares squares)
-
-# === HELPERS ========================
 
 green = { r: 0, g: 255, b: 0, a: 255 }
 white = { r: 255, g: 255, b: 255, a: 255 }

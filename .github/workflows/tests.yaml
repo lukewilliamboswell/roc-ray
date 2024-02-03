@@ -28,6 +28,9 @@ jobs:
       - name: Install libxinerama development package
         run: sudo apt-get install -y libxinerama-dev
 
+      - name: Install libxi-dev (XInput2 development package)
+        run: sudo apt-get install -y libxi-dev
+
       - name: Install raylib
         run: git submodule update --init --recursive
 

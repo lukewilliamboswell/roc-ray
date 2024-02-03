@@ -39,6 +39,9 @@ jobs:
       - name: Install OpenGL
         run: sudo apt-get install -y libgl1-mesa-dev
 
+      - name: Install libxcursor development package
+        run: sudo apt-get install -y libxcursor-dev
+
       - name: Install raylib
         run: git submodule update --init --recursive
 

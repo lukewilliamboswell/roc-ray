@@ -37,14 +37,14 @@ jobs:
       - name: get zig 0.11.0
         run: |
           curl -fOL https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz
-      
-      - name: rename zig tar
-        run: mv zig-linux-x86_64-0.11.0.tar.xz zig_release.tar.xz
 
       - name: decompress the tar
-        run: tar -xf zig_release.tar.xz
+        run: tar -xf zig-linux-x86_64-0.11.0.tar.xz
 
-      - run: rm zig_release.tar.xz
+      - run: rm zig-linux-x86_64-0.11.0.tar.xz
+
+      # Check roc cli available
+      - run: ./zig-linux-x86_64-0.11.0/zig version
 
       # Run all tests 
-      - run: ROC=./roc_nightly/roc ZIG=./zig_release/zig ./ci/all_tests.sh
+      - run: ROC=./roc_nightly/roc ZIG=./zig-linux-x86_64-0.11.0/zig ./ci/all_tests.sh

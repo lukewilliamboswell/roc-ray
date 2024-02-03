@@ -221,6 +221,31 @@ export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g
     raylib.DrawRectangle(x, y, width, height, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }
 
+export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
+    raylib.DrawCircle(centerX, centerY, radius, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+}
+
+export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
+    raylib.DrawCircleGradient(
+        centerX,
+        centerY,
+        radius,
+        raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+        raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    );
+}
+
+export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
+    raylib.DrawRectangleGradientV(
+        x,
+        y,
+        width,
+        height,
+        raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+        raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    );
+}
+
 export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) void {
     raylib.SetWindowTitle(str_to_c(text));
 }

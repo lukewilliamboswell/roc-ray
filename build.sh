@@ -16,4 +16,5 @@ libtool -static -o platform/macos-arm64.o zig-out/lib/*
 
 # RUN DEMOS
 # roc dev --prebuilt-platform examples/squares.roc
-roc dev --prebuilt-platform examples/gui-counter.roc
+# roc dev --prebuilt-platform examples/gui-counter.roc
+roc dev --prebuilt-platform examples/basic_shapes.roc

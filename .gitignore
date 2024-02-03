@@ -6,6 +6,7 @@ platform/macos-arm64.o
 examples/gui-counter
 examples/squares
 examples/pong
+examples/basic_shapes
 
 platform/*.tar.br
 

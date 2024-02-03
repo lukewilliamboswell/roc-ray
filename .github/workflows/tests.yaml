@@ -39,12 +39,12 @@ jobs:
           curl -fOL https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz
       
       - name: rename zig tar
-        run: mv zig-linux-x86_64-0.11.0.tar.xz zig_release.tar.gz
+        run: mv zig-linux-x86_64-0.11.0.tar.xz zig_release.tar.xz
 
       - name: decompress the tar
-        run: tar -xzf zig_release.tar.gz
+        run: tar -xzf zig_release.tar.xz
 
-      - run: rm zig_release.tar.gz
+      - run: rm zig_release.tar.xz
 
       - name: simplify nightly folder name
         run: mv zig_release* zig_release

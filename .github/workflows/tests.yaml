@@ -36,5 +36,8 @@ jobs:
       - name: Check Zig version
         run: ./zig-linux-x86_64-${ZIG_VERSION}/zig version
 
+      - name: Install raylib
+        run: git submodule update --init --recursive
+
       - name: Run all tests
         run: ROC=./roc_nightly/roc ZIG=./zig-linux-x86_64-${ZIG_VERSION}/zig ./ci/all_tests.sh

@@ -17,22 +17,57 @@ interface GUI
         Effect.{ Effect }, 
         Action.{ Action }, 
         Core.{ Color, Rectangle },
-        Layout.{Layoutable, Constraint, Size},
+        # Layout.{Layoutable, Constraint, Size},
     ]
 
 Elem state := [
-    Text { label : Str, color : Color },
+    Text { label : Str, size : I32, color : Color },
     Button { text : Str, onPress : state -> Action state },
     Window { title : Str, onClose : state -> Action state } (Elem state),
     Col (List (Elem state)),
     Row (List (Elem state)),
     None,
-] implements [Layoutable { layout: layoutElem }]
+] 
 
-layoutElem : Elem state, Constraint -> Size
-layoutElem = \@Elem elem, _ ->
+Constraint : {
+    minWidth : F32,
+    maxWidth : F32,
+    minHeight : F32,
+    maxHeight : F32,
+}
+
+Size : {
+    width : F32,
+    height : F32,
+}
+
+layout : Elem state, Constraint -> Task Size []
+layout = \@Elem elem, constraints ->
+
+    # TODO check this is the right height? maybe it scales with font size??
+    defaultTextHeight = 10f32 
+
     when elem is 
-        _ -> {width : 0, height : 0}
+        Text config ->
+
+            widthI32 <- Core.measureText {text : config.label, size : config.size} |> Task.await
+
+            width = 
+                if (Num.toFrac widthI32) > constraints.minWidth && (Num.toFrac widthI32) < constraints.maxWidth then 
+                    defaultTextHeight
+                else 
+                    crash "TODO handle text width out of range"
+
+            height = 
+                if defaultTextHeight > constraints.minHeight && defaultTextHeight < constraints.maxHeight then 
+                    defaultTextHeight
+                else 
+                    crash "TODO handle default text height out of range"
+
+            Task.ok {width, height}
+
+        Col children -> crash "TODO not supported"
+        _ -> crash "TODO not supported"
 
 button : { text : Str, onPress : state -> Action state } -> Elem state
 button = \config -> Button config |> @Elem
@@ -43,7 +78,7 @@ col = \children -> Col children |> @Elem
 row : List (Elem state) -> Elem state
 row = \children -> Row children |> @Elem
 
-text : { label : Str, color : Color } -> Elem state
+text : { label : Str, size : I32, color : Color } -> Elem state
 text = \config -> Text config |> @Elem
 
 window : Elem state, { title : Str, onClose : state -> Action state } -> Elem state
@@ -146,8 +181,27 @@ draw = \@Elem elem, model, bb ->
 
                 _ -> Task.ok model
 
-        Text { label, color } ->
-            {} <- Core.drawText { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color } |> Task.await
+        Text config ->
+
+            # constraint = {
+            #     minWidth : 0,
+            #     maxWidth : bb.width,
+            #     minHeight : 0,
+            #     maxHeight : bb.height,
+            # }
+
+            # size <- layout (@Elem elem) constraint |> Task.await
+
+            {} <-
+                Core.drawText { 
+                    text: config.label, 
+                    posX: bb.x, 
+                    posY: bb.y, 
+                    fontSize: config.size, 
+                    color: config.color,
+                } 
+                |> Task.await
+
             Task.ok model
 
         None -> Task.ok model

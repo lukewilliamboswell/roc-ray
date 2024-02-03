@@ -10,10 +10,11 @@ concurrency:
 jobs:
 
   test-examples:
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-20.04, x64]
     steps:
       - uses: actions/checkout@v3
     
+      # GET LATEST ROC
       - name: get latest roc nightly
         run: |
           curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-latest.tar.gz
@@ -32,5 +33,21 @@ jobs:
       # Check roc cli available
       - run: ./roc_nightly/roc version
 
+      # GET ZIG 0.11.0
+      - name: get zig 0.11.0
+        run: |
+          curl -fOL https://ziglang.org/download/0.11.0/zig-linux-x86_64-0.11.0.tar.xz
+
+      - name: rename zig tar
+        run: mv $(ls | grep "0.11.0.*tar\.gz") zig_release.tar.gz
+
+      - name: decompress the tar
+        run: tar -xzf zig_release.tar.gz
+
+      - run: rm zig_release.tar.gz
+
+      - name: simplify nightly folder name
+        run: mv zig_release* zig_release
+
       # Run all tests 
-      - run: ROC=./roc_nightly/roc ./ci/all_tests.sh
+      - run: ROC=./roc_nightly/roc ZIG=zig_release/zig ./ci/all_tests.sh

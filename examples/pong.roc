@@ -49,15 +49,15 @@ bounce = \ball, pos ->
         else (y, vy2)
     {pos: {x: x2, y: y2}, vel: {x: vx2, y: vy3}}
 
-wrap = \num, max ->
-    if num < 0 then
-        max
-    else if num > max then
-        0
-    else
-        num
+# wrap = \num, max ->
+#     if num < 0 then
+#         max
+#     else if num > max then
+#         0
+#     else
+#         num
 
-wrapScreen = \ball -> { ball & pos: { x: wrap ball.pos.x width, y: wrap ball.pos.y height } }
+# wrapScreen = \ball -> { ball & pos: { x: wrap ball.pos.x width, y: wrap ball.pos.y height } }
 
 render : Model -> Task Model []
 render = \model ->

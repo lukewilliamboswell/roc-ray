@@ -25,7 +25,7 @@ renderFilled = \shape, color ->
                 color: color,
             }
 
-        Circle { x, y, radius } ->
+        Circle {} ->
             Task.ok {}
 
         Text { text, fontSize, x, y } -> Core.drawText { text, posX: x, posY: y, fontSize, color }

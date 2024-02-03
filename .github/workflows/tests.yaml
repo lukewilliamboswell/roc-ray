@@ -42,6 +42,9 @@ jobs:
       - name: Install libxcursor development package
         run: sudo apt-get install -y libxcursor-dev
 
+      - name: Install libxrandr development package
+        run: sudo apt-get install -y libxrandr-dev
+
       - name: Install raylib
         run: git submodule update --init --recursive
 

@@ -2,10 +2,14 @@ zig-cache/
 zig-out/
 
 platform/macos-arm64.o
+platform/linux-x64.a
 
 examples/gui-counter
 examples/squares
 examples/pong
+examples/basic-shapes
+
+generated-docs/
 
 platform/*.tar.br
 

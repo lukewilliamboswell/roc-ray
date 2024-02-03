@@ -9,11 +9,14 @@ rm -rf zig-out/
 zig build
 libtool -static -o platform/macos-arm64.o zig-out/lib/*
 
-# PRE-BUILD PLATFORM FOR LINUX-x64 TODO test this
+# TODO test this proplery and find out why it fails
+# PRE-BUILD PLATFORM FOR LINUX-x64 
 # rm -rf zig-out/
 # zig build
-# libtool -static -o platform/linux-x64.a zig-out/lib/*
+# ar rcs platform/linux-x64.a zig-out/lib/*
 
 # RUN DEMOS
 # roc dev --prebuilt-platform examples/squares.roc
-roc dev --prebuilt-platform examples/gui-counter.roc
+# roc dev --prebuilt-platform examples/gui-counter.roc
+# roc dev --prebuilt-platform examples/basic_shapes.roc
+# roc dev --prebuilt-platform examples/pong.roc

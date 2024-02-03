@@ -13,6 +13,9 @@ hosted Effect
         drawText,
         setWindowTitle,
         drawRectangle,
+        drawRectangleGradientV,
+        drawCircle,
+        drawCircleGradient,
         guiWindowBox,
         getMousePosition,
         isMouseButtonPressed,
@@ -26,7 +29,11 @@ drawGuiButton : F32, F32, F32, F32, Str -> Effect I32
 exit : Effect {}
 drawText : I32, I32, I32, Str, U8, U8, U8, U8 -> Effect {}
 setWindowTitle : Str -> Effect {}
+
 drawRectangle : I32, I32, I32, I32, U8, U8, U8, U8 -> Effect {}
+drawRectangleGradientV : I32, I32, I32, I32, U8, U8, U8, U8, U8, U8, U8, U8 -> Effect {}
+drawCircle : I32, I32, F32, U8, U8, U8, U8 -> Effect {}
+drawCircleGradient : I32, I32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Effect {}
 
 guiWindowBox : F32, F32, F32, F32, Str -> Effect I32
 getMousePosition : Effect { x : F32, y : F32 }

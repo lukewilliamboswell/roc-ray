@@ -25,6 +25,9 @@ jobs:
       - name: Install Required Libs
         run: sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
 
+      - name: Install libtool
+        run: sudo apt-get install -y libtool
+
       - name: Install raylib
         run: git submodule update --init --recursive
 

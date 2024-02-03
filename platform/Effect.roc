@@ -11,6 +11,7 @@ hosted Effect
         drawGuiButton,
         exit,
         drawText,
+        measureText,
         setWindowTitle,
         drawRectangle,
         drawRectangleGradientV,
@@ -27,7 +28,10 @@ setWindowSize : I32, I32 -> Effect {}
 getScreenSize : Effect { height : I32, width : I32 }
 drawGuiButton : F32, F32, F32, F32, Str -> Effect I32
 exit : Effect {}
+
 drawText : I32, I32, I32, Str, U8, U8, U8, U8 -> Effect {}
+measureText : Str, I32 -> Effect I32
+
 setWindowTitle : Str -> Effect {}
 
 drawRectangle : I32, I32, I32, I32, U8, U8, U8, U8 -> Effect {}

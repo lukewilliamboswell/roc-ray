@@ -8,6 +8,7 @@ interface Core
         getScreenSize,
         exit,
         drawText,
+        measureText,
         setWindowTitle,
         drawRectangle,
         getMousePosition,
@@ -56,6 +57,12 @@ getScreenSize =
 drawText : { text : Str, posX : F32, posY : F32, fontSize : I32, color : Color } -> Task {} []
 drawText = \{ text, posX, posY, fontSize, color } ->
     Effect.drawText (Num.round posX) (Num.round posY) fontSize text color.r color.g color.b color.a
+    |> Effect.map Ok
+    |> InternalTask.fromEffect
+
+measureText : {text : Str, size : I32 } -> Task I32 []
+measureText = \{text, size} ->
+    Effect.measureText text size
     |> Effect.map Ok
     |> InternalTask.fromEffect
 

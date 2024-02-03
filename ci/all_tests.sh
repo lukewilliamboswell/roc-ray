@@ -16,16 +16,18 @@ fi
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
 
+# Remove zig-out if it exists
+if [ -d zig-out/ ]; then
+  rm -rf zig-out/
+fi
+
+# Build with zig
+$ZIG build
+
 # Check the output of the `uname` command to detect the operating system
 if [[ "$(uname)" == "Darwin" ]]; then
-  echo "Running on macOS"
-  rm -rf zig-out/
-  zig build
   libtool -static -o platform/macos-arm64.o zig-out/lib/*
 elif [[ "$(uname)" == "Linux" ]]; then
-  echo "Running on Linux"
-  rm -rf zig-out/
-  zig build
   libtool -static -o platform/linux-x64.a zig-out/lib/*
 else
     echo "Unsupported operating system"

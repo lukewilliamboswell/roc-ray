@@ -1,25 +1,58 @@
 interface Counter
-    exposes [Counter, init, render]
-    imports [ray.Action.{ Action }, ray.Core.{ Color }, ray.GUI.{ Elem }]
+    exposes [
+        Counter,
+        init,
+    ]
+    imports [
+        ray.Action.{ Action },
+        ray.GUI.{ GUI },
+        ray.Task.{ Task },
+        ray.Stateful.{ Stateful },
+    ]
 
-Counter := I64
+Counter := {
+    opened : Bool,
+    count : I64,
+    x : F32, 
+    y : F32, 
+    width : F32, 
+    height : F32,
+}
+    implements [Stateful { render, translate }]
 
-init : I64 -> Counter
+init : { opened : Bool, count : I64, x : F32, y : F32, width : F32, height : F32 } -> Counter
 init = @Counter
 
-render : Counter, Color -> Elem Counter
-render = \@Counter state, color ->
-    GUI.col [
-        GUI.button {
-            text: "+",
-            onPress: \@Counter prev -> Action.update (@Counter (prev + 1)),
-        },
-        GUI.text {
-            label: "Clicked $(Num.toStr state) times",
-            color,
-        },
-        GUI.button {
-            text: "-",
-            onPress: \@Counter prev -> Action.update (@Counter (prev - 1)),
-        },
-    ]
+open : Counter -> Counter
+open = \@Counter state -> @Counter { state & opened : Bool.true}
+
+render : Task model [], Counter -> Task model []
+render = \prevTask, @Counter state ->
+
+    counterWindow = GUI.windowBox {
+        title: "SMALL WINDOW",
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
+        onPress: \_ -> Action.none,
+    }
+
+    closedButton = GUI.button { 
+        label : "Open Counter", 
+        x: state.x,
+        y: state.y,
+        width: 100,
+        height: 50,
+        onPress : \_ -> Action.none #\prevCounter -> Action.update (open prevCounter), 
+    }
+
+    if state.opened then 
+        prevTask
+        |> Stateful.render closedButton
+    else 
+        prevTask
+        |> Stateful.render counterWindow
+
+translate : Counter, (p -> c), (p, c -> p) -> Counter
+translate = \counter, _, _ -> counter

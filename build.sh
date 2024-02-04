@@ -31,6 +31,7 @@ fi
 
 # RUN DEMOS
 # roc dev --prebuilt-platform examples/squares.roc
-roc dev --prebuilt-platform examples/gui-counter.roc
+# roc dev --prebuilt-platform examples/gui-counter.roc
 # roc dev --prebuilt-platform examples/basic_shapes.roc
 # roc dev --prebuilt-platform examples/pong.roc
+roc dev --prebuilt-platform examples/gui-counter2.roc

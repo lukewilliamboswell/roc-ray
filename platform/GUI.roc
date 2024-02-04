@@ -1,165 +1,71 @@
 interface GUI
     exposes [
-        Elem,
-        translate,
-        draw,
-        guiButton,
-        guiWindowBox,
+        GUI,
         button,
-        col,
-        row,
-        text,
-        window,
+        windowBox,
+        translateGUI,
     ]
     imports [
-        InternalTask, 
-        Task.{ Task }, 
-        Effect.{ Effect }, 
-        Action.{ Action }, 
-        Core.{ Color, Rectangle },
-        Layout.{Layoutable, Constraint, Size},
+        InternalTask,
+        Task.{ Task },
+        Effect.{ Effect },
+        Action.{ Action },
+        Stateful.{ Stateful, render },
     ]
 
-Elem state := [
-    Text { label : Str, color : Color },
-    Button { text : Str, onPress : state -> Action state },
-    Window { title : Str, onClose : state -> Action state } (Elem state),
-    Col (List (Elem state)),
-    Row (List (Elem state)),
-    None,
-] implements [Layoutable { layout: layoutElem }]
+GUI state := [
+    GuiButton { label : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state },
+    GuiWindowBox { title : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state },
+]
+    implements [Stateful { render: renderGUI, translate: translateGUI }]
 
-layoutElem : Elem state, Constraint -> Size
-layoutElem = \@Elem elem, _ ->
-    when elem is 
-        _ -> {width : 0, height : 0}
+button : { label : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state } -> GUI state
+button = \config -> GuiButton config |> @GUI
 
-button : { text : Str, onPress : state -> Action state } -> Elem state
-button = \config -> Button config |> @Elem
+windowBox : { title : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state } -> GUI state
+windowBox = \config -> GuiWindowBox config |> @GUI
 
-col : List (Elem state) -> Elem state
-col = \children -> Col children |> @Elem
+renderGUI : Task state [], GUI state -> Task state []
+renderGUI = \prev, @GUI thing ->
 
-row : List (Elem state) -> Elem state
-row = \children -> Row children |> @Elem
+    state <- prev |> Task.await
 
-text : { label : Str, color : Color } -> Elem state
-text = \config -> Text config |> @Elem
-
-window : Elem state, { title : Str, onClose : state -> Action state } -> Elem state
-window = \child, config -> Window config child |> @Elem
-
-translate : Elem child, (parent -> child), (parent, child -> parent) -> Elem parent
-translate = \@Elem elem, parentToChild, childToParent ->
-    when elem is
-        Text config -> Text config |> @Elem
-        Button config ->
-            Button {
-                text: config.text,
-                onPress: \prevParent -> config.onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
-            }
-            |> @Elem
-
-        Window { title, onClose } c ->
-            Window
-                {
-                    title,
-                    onClose: \prevParent -> onClose (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child,
-                }
-                (translate c parentToChild childToParent)
-            |> @Elem
-
-        Col children -> Col (List.map children \c -> translate c parentToChild childToParent) |> @Elem
-        Row children -> Row (List.map children \c -> translate c parentToChild childToParent) |> @Elem
-        None -> None |> @Elem
-
-draw : Elem state, state, Rectangle -> Task state []
-draw = \@Elem elem, model, bb ->
-
-    defaultStepX = 120
-    defaultStepY = 50
-
-    when elem is
-        Button config ->
-            { isPressed } <- GUI.guiButton { text: config.text, shape: { x: bb.x, y: bb.y, width: defaultStepX, height: defaultStepY } } |> Task.await
+    when thing is
+        GuiButton { label, x, y, width, height, onPress } ->
+            { isPressed } <-
+                Effect.drawGuiButton x y width height label
+                |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
+                |> InternalTask.fromEffect
+                |> Task.await
 
             if isPressed then
-                when config.onPress model is
-                    None -> Task.ok model
-                    Update newModel -> Task.ok newModel
+                when onPress state is
+                    None -> Task.ok state
+                    Update newState -> Task.ok newState
             else
-                Task.ok model
+                Task.ok state
 
-        Window { title, onClose } child ->
-            { isPressed } <- GUI.guiWindowBox { title, shape: bb } |> Task.await
+        GuiWindowBox { title, x, y, width, height, onPress } ->
+            { isPressed } <-
+                Effect.guiWindowBox x y width height title
+                |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
+                |> InternalTask.fromEffect
+                |> Task.await
 
             if isPressed then
-                when onClose model is
-                    None -> Task.ok model
-                    Update newModel -> Task.ok newModel
+                when onPress state is
+                    None -> Task.ok state
+                    Update newState -> Task.ok newState
             else
-                draw child model { x: bb.x + 5, y: bb.y + 30, width: bb.width - 10, height: bb.height - 30 }
+                Task.ok state
 
-        Row children ->
-            when children is
-                [first] -> draw first model bb
-                [first, second] ->
-                    firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
+translateGUI : GUI child, (parent -> child), (parent, child -> parent) -> GUI parent
+translateGUI = \@GUI item, parentToChild, childToParent ->
+    when item is
+        GuiButton { label, x, y, width, height, onPress } ->
+            newPress = \prevParent -> onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child
+            GuiButton { label, x, y, width, height, onPress: newPress } |> @GUI
 
-                    Task.ok model2
-
-                [first, second, third] ->
-                    firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    thirdBB = { x: bb.x + (2 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
-                    model3 <- draw third model2 thirdBB |> Task.await
-
-                    Task.ok model3
-
-                _ -> Task.ok model
-
-        Col children ->
-            when children is
-                [first] -> draw first model bb
-                [first, second] ->
-                    firstBB = { x: bb.x, y: bb.y + (0 * defaultStepY), width: bb.width, height: defaultStepY }
-                    secondBB = { x: bb.x, y: bb.y + (1 * defaultStepY), width: bb.width, height: defaultStepY }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
-
-                    Task.ok model2
-
-                [first, second, third] ->
-                    firstBB = { x: bb.x, y: bb.y + (0 * defaultStepY), width: bb.width, height: defaultStepY }
-                    secondBB = { x: bb.x, y: bb.y + (1.5 * defaultStepY), width: bb.width, height: defaultStepY }
-                    thirdBB = { x: bb.x, y: bb.y + (2.5 * defaultStepY), width: bb.width, height: defaultStepY }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
-                    model3 <- draw third model2 thirdBB |> Task.await
-
-                    Task.ok model3
-
-                _ -> Task.ok model
-
-        Text { label, color } ->
-            {} <- Core.drawText { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color } |> Task.await
-            Task.ok model
-
-        None -> Task.ok model
-
-guiButton : { text : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } []
-guiButton = \{ text: str, shape: { x, y, width, height } } ->
-    Effect.drawGuiButton x y width height str
-    |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
-    |> InternalTask.fromEffect
-
-guiWindowBox : { title : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } []
-guiWindowBox = \{ title, shape: { x, y, width, height } } ->
-    Effect.guiWindowBox x y width height title
-    |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
-    |> InternalTask.fromEffect
+        GuiWindowBox { title, x, y, width, height, onPress } ->
+            newPress = \prevParent -> onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child
+            GuiWindowBox { title, x, y, width, height, onPress: newPress } |> @GUI

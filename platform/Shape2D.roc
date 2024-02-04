@@ -1,6 +1,8 @@
 interface Shape2D
     exposes [
         Shape2D,
+        Shapes,
+        shapes,
         rect,
         rectGradientV,
         text,
@@ -8,12 +10,17 @@ interface Shape2D
         circleGradient,
     ]
     imports [
-        Drawable.{ Drawable },
+        Stateful.{ Stateful },
         Core.{ Color },
         Task.{ Task },
         InternalTask,
         Effect,
     ]
+
+Shapes := List Shape2D implements [Stateful { render: renderShapes, translate: translateShapes }]
+
+shapes : List Shape2D -> Shapes
+shapes = @Shapes
 
 Shape2D := [
     DrawText { text : Str, posX : I32, posY : I32, size : I32, color : Color },
@@ -22,7 +29,31 @@ Shape2D := [
     DrawCircle { centerX : I32, centerY : I32, radius : F32, color : Color },
     DrawCircleGradient { centerX : I32, centerY : I32, radius : F32, inner : Color, outer : Color },
 ]
-    implements [Drawable { draw: drawShape }]
+    implements [Stateful { render: renderShape, translate: translateShape }]
+
+renderShape : Task model [], Shape2D -> Task model []
+renderShape = \prev, shape ->
+    
+    model <- prev |> Task.await
+    
+    {} <- drawShape shape |> Task.await
+
+    Task.ok model
+
+renderShapes : Task model [], Shapes -> Task model []
+renderShapes = \prev, @Shapes ss ->
+
+    model <- prev |> Task.await
+        
+    {} <- ss |> Task.forEach drawShape |> Task.await
+
+    Task.ok model
+
+translateShape : Shape2D, (parent -> child), (parent, child -> parent) -> Shape2D
+translateShape = \s, _, _ -> s
+
+translateShapes : Shapes, (parent -> child), (parent, child -> parent) -> Shapes
+translateShapes = \ss, _, _ -> ss
 
 ## Draw a color-filled rectangle
 rect : { posX : I32, posY : I32, width : I32, height : I32, color : Color } -> Shape2D

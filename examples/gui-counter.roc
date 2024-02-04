@@ -4,12 +4,14 @@ app "counter"
         ray.Task.{ Task },
         ray.Action.{ Action },
         ray.Core.{ Program, Color, Rectangle },
-        ray.GUI.{ Elem },
+        ray.GUI.{ GUI },
         Counter.{ Counter },
+        SmallWindow.{ SmallWindow },
+        ray.Shape2D.{ Shape2D},
     ]
     provides [main, Model] to ray
 
-Model : { left : Counter, middle : Counter, right : Counter }
+Model : { left : Counter, right : SmallWindow }
 
 main : Program Model
 main = { init, render }
@@ -17,41 +19,42 @@ main = { init, render }
 init : Task Model []
 init =
 
-    {} <- Core.setWindowSize { width, height } |> Task.await
-    {} <- Core.setWindowTitle "GUI Counter Demo" |> Task.await
+    {} <- Core.setWindowSize { width: 800, height: 600 } |> Task.await
+    {} <- Core.setWindowTitle "Counter Demo" |> Task.await
 
-    Task.ok {
-        left: Counter.init 10,
-        middle: Counter.init 20,
-        right: Counter.init 30,
+    Task.ok { 
+        left: Counter.init {count: 10, x: 10, y: 300, width: 100, height: 50},
+        right: SmallWindow.init {window : Closed, x: 300, y: 300, width: 200, height: 100},
     }
 
 render : Model -> Task Model []
 render = \model ->
-
-    # this is temporary workaround for a bug `Error in alias analysis: error in module...`
-    # sometimes we need an extra Task in the chain to prevent this error
-    _ <- Core.getMousePosition |> Task.await
-    
-    GUI.col [
-        GUI.text { label: "Click below to change the counters, press ESC to exit", color: black },
-        GUI.row [
-            GUI.translate (Counter.render model.left red) .left \record, count -> { record & left: count },
-            GUI.translate (Counter.render model.middle green) .middle \record, count -> { record & middle: count },
-            GUI.translate (Counter.render model.right blue) .right \record, count -> { record & right: count },
-        ],
+    Task.ok model
+    |> Shape2D.renderAll [
+        Shape2D.rect { posX: 10, posY: 50, width: 200, height: 50, color: white },
+        Shape2D.rectGradientV { posX: 10, posY: 150, width: 200, height: 50, top: white, bottom: blue },
+        Shape2D.text { text: Inspect.toStr model, posX: 10, posY: 250, size: 10, color: white },
+        Shape2D.circle { centerX: 300, centerY: 100, radius: 50, color: red },
+        Shape2D.circleGradient { centerX: 300, centerY: 200, radius: 35, inner: red, outer: blue },
     ]
-    |> GUI.window { title: "Window", onClose: \_ -> Action.none }
-    |> GUI.draw model {
-        x: width / 8,
-        y: height / 8,
-        width: width * 6 / 8,
-        height: height * 6 / 8,
-    }
+    |> Shape2D.render (Shape2D.text { text: "ENTER TEXT HERE", posX: 10, posY: 550, size: 20, color: blue })
+    |> GUI.render (leftButton model)
+    |> GUI.render (rightButton model)
 
-width = 800
-height = 600
-black = { r: 0, g: 0, b: 0, a: 255 }
-blue = { r: 29, g: 66, b: 137, a: 255 }
-red = { r: 211, g: 39, b: 62, a: 255 }
-green = { r: 0, g: 59, b: 73, a: 255 }
+white = { r: 255, g: 255, b: 255, a: 255 }
+blue = { r: 0, g: 0, b: 255, a: 255 }
+red = { r: 255, g: 0, b: 0, a: 255 }
+    
+leftButton : Model -> GUI Model
+leftButton = \model ->
+    GUI.translate
+        (Counter.render model.left)
+        \parent -> parent.left
+        \parent, child -> { parent & left: child }
+
+rightButton : Model -> GUI Model
+rightButton = \model ->
+    GUI.translate
+        (SmallWindow.render model.right)
+        \parent -> parent.right
+        \parent, child -> { parent & right: child }

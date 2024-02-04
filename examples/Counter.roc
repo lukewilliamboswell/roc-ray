@@ -1,58 +1,24 @@
 interface Counter
     exposes [
-        Counter,
-        init,
+        Counter, 
+        init, 
+        render,
     ]
     imports [
-        ray.Action.{ Action },
+        ray.Action.{ Action }, 
         ray.GUI.{ GUI },
-        ray.Task.{ Task },
-        ray.Stateful.{ Stateful },
     ]
 
-Counter := {
-    opened : Bool,
-    count : I64,
-    x : F32, 
-    y : F32, 
-    width : F32, 
-    height : F32,
-}
-    implements [Stateful { render, translate }]
+Counter := {count : I64, x : F32, y : F32, width : F32, height : F32} implements [Inspect]
 
-init : { opened : Bool, count : I64, x : F32, y : F32, width : F32, height : F32 } -> Counter
 init = @Counter
 
-open : Counter -> Counter
-open = \@Counter state -> @Counter { state & opened : Bool.true}
-
-render : Task model [], Counter -> Task model []
-render = \prevTask, @Counter state ->
-
-    counterWindow = GUI.windowBox {
-        title: "SMALL WINDOW",
+render = \@Counter state ->
+    GUI.button {
         x: state.x,
         y: state.y,
         width: state.width,
         height: state.height,
-        onPress: \_ -> Action.none,
+        label: "Clicked $(Num.toStr state.count) times",
+        onPress: \@Counter prev -> Action.update (@Counter {prev & count: prev.count + 1}),
     }
-
-    closedButton = GUI.button { 
-        label : "Open Counter", 
-        x: state.x,
-        y: state.y,
-        width: 100,
-        height: 50,
-        onPress : \_ -> Action.none #\prevCounter -> Action.update (open prevCounter), 
-    }
-
-    if state.opened then 
-        prevTask
-        |> Stateful.render closedButton
-    else 
-        prevTask
-        |> Stateful.render counterWindow
-
-translate : Counter, (p -> c), (p, c -> p) -> Counter
-translate = \counter, _, _ -> counter

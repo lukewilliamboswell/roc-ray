@@ -1,23 +1,23 @@
 interface GUI
     exposes [
         GUI,
+        render,
+        renderAll,
+        translate,
         button,
         windowBox,
-        translateGUI,
     ]
     imports [
         InternalTask,
         Task.{ Task },
         Effect.{ Effect },
         Action.{ Action },
-        Stateful.{ Stateful, render },
     ]
 
 GUI state := [
     GuiButton { label : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state },
     GuiWindowBox { title : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state },
 ]
-    implements [Stateful { render: renderGUI, translate: translateGUI }]
 
 button : { label : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state } -> GUI state
 button = \config -> GuiButton config |> @GUI
@@ -25,8 +25,8 @@ button = \config -> GuiButton config |> @GUI
 windowBox : { title : Str, x : F32, y : F32, width : F32, height : F32, onPress : state -> Action state } -> GUI state
 windowBox = \config -> GuiWindowBox config |> @GUI
 
-renderGUI : Task state [], GUI state -> Task state []
-renderGUI = \prev, @GUI thing ->
+render : Task state [], GUI state -> Task state []
+render = \prev, @GUI thing ->
 
     state <- prev |> Task.await
 
@@ -59,13 +59,24 @@ renderGUI = \prev, @GUI thing ->
             else
                 Task.ok state
 
-translateGUI : GUI child, (parent -> child), (parent, child -> parent) -> GUI parent
-translateGUI = \@GUI item, parentToChild, childToParent ->
+translate : GUI child, (parent -> child), (parent, child -> parent) -> GUI parent
+translate = \@GUI item, parentToChild, childToParent ->
     when item is
         GuiButton { label, x, y, width, height, onPress } ->
-            newPress = \prevParent -> onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child
+            
+            newPress : parent -> Action parent
+            newPress = \parent -> onPress (parentToChild parent) |> Action.map \child -> childToParent parent child
+            
             GuiButton { label, x, y, width, height, onPress: newPress } |> @GUI
 
         GuiWindowBox { title, x, y, width, height, onPress } ->
-            newPress = \prevParent -> onPress (parentToChild prevParent) |> Action.map \child -> childToParent prevParent child
+
+            newPress : parent -> Action parent
+            newPress = \parent -> onPress (parentToChild parent) |> Action.map \child -> childToParent parent child
+            
             GuiWindowBox { title, x, y, width, height, onPress: newPress } |> @GUI
+
+renderAll : Task state [], List (GUI state) -> Task state []
+renderAll = \prev, items ->
+    List.walk items prev \state, item -> render state item
+            

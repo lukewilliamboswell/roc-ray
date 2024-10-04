@@ -1,25 +1,25 @@
-interface Core
-    exposes [
-        Program,
-        Color,
-        Rectangle,
-        Vector2,
-        setWindowSize,
-        getScreenSize,
-        exit,
-        drawText,
-        measureText,
-        setWindowTitle,
-        drawRectangle,
-        getMousePosition,
-        isMouseButtonPressed,
-    ]
-    imports [InternalTask, Task.{ Task }, Effect.{ Effect }]
+module [
+    Program,
+    Color,
+    Rectangle,
+    Vector2,
+    setWindowSize,
+    getScreenSize,
+    exit,
+    drawText,
+    measureText,
+    setWindowTitle,
+    drawRectangle,
+    getMousePosition,
+    isMouseButtonPressed,
+]
 
-## 
+import Effect
+
+##
 Program state : {
-    init : Task state [],
-    render : state -> Task state [],
+    init : Task state {},
+    render : state -> Task state {},
 }
 
 Rectangle : { x : F32, y : F32, width : F32, height : F32 }
@@ -36,55 +36,47 @@ MouseButton : [
     BACK,
 ]
 
-exit : Task {} []
+exit : Task {} {}
 exit =
     Effect.exit
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-setWindowSize : { width : F32, height : F32 } -> Task {} []
+setWindowSize : { width : F32, height : F32 } -> Task {} {}
 setWindowSize = \{ width, height } ->
     Effect.setWindowSize (Num.round width) (Num.round height)
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-getScreenSize : Task { height : F32, width : F32 } []
+getScreenSize : Task { height : F32, width : F32 } {}
 getScreenSize =
     Effect.getScreenSize
-    |> Effect.map \{ width, height } -> Ok { width: Num.toFrac width, height: Num.toFrac height }
-    |> InternalTask.fromEffect
+    |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
 
-drawText : { text : Str, posX : F32, posY : F32, fontSize : I32, color : Color } -> Task {} []
+drawText : { text : Str, posX : F32, posY : F32, fontSize : I32, color : Color } -> Task {} {}
 drawText = \{ text, posX, posY, fontSize, color } ->
     Effect.drawText (Num.round posX) (Num.round posY) fontSize text color.r color.g color.b color.a
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-measureText : {text : Str, size : I32 } -> Task I32 []
-measureText = \{text, size} ->
+measureText : { text : Str, size : I32 } -> Task I32 {}
+measureText = \{ text, size } ->
     Effect.measureText text size
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-setWindowTitle : Str -> Task {} []
+setWindowTitle : Str -> Task {} {}
 setWindowTitle = \title ->
     Effect.setWindowTitle title
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} []
+drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} {}
 drawRectangle = \{ x, y, width, height, color } ->
     Effect.drawRectangle (Num.round x) (Num.round y) (Num.round width) (Num.round height) color.r color.g color.b color.a
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-getMousePosition : Task Vector2 []
+getMousePosition : Task Vector2 {}
 getMousePosition =
     Effect.getMousePosition
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}
 
-isMouseButtonPressed : MouseButton -> Task Bool []
+isMouseButtonPressed : MouseButton -> Task Bool {}
 isMouseButtonPressed = \button ->
 
     selection =
@@ -98,5 +90,4 @@ isMouseButtonPressed = \button ->
             BACK -> 6i32
 
     Effect.isMouseButtonPressed selection
-    |> Effect.map Ok
-    |> InternalTask.fromEffect
+    |> Task.mapErr \_ -> {}

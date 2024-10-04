@@ -1,11 +1,9 @@
-interface Layout
-    exposes [
-        Constraint,
-        Size,
-        Layoutable,
-        layout,
-    ]
-    imports []
+module [
+    Constraint,
+    Size,
+    Layoutable,
+    layout,
+]
 
 Constraint : {
     minWidth : F32,

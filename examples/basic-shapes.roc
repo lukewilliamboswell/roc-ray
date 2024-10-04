@@ -1,12 +1,10 @@
-app "basic_shapes"
-    packages { ray: "../platform/main.roc" }
-    imports [
-        ray.Task.{ Task },
-        ray.Core.{ Color, Rectangle, Vector2 },
-        ray.Drawable.{ draw },
-        ray.Shape2D,
-    ]
-    provides [main, Model] to ray
+app [main, Model] {
+    ray: platform "../platform/main.roc",
+}
+
+import ray.Core
+import ray.Drawable exposing [draw]
+import ray.Shape2D
 
 main = { init, render }
 
@@ -15,14 +13,14 @@ Model : {}
 width = 800
 height = 600
 
-init : Task Model []
+init : Task Model {}
 init =
-    {} <- Core.setWindowSize { width, height } |> Task.await
-    {} <- Core.setWindowTitle "Basic Shapes" |> Task.await
+    _ = Core.setWindowSize! { width, height }
+    _ = Core.setWindowTitle! "Basic Shapes"
 
     Task.ok {}
 
-render : Model -> Task Model []
+render : Model -> Task Model {}
 render = \_ ->
 
     shapes = [
@@ -33,7 +31,7 @@ render = \_ ->
         Shape2D.circleGradient { centerX: 300, centerY: 200, radius: 35, inner: red, outer: blue },
     ]
 
-    {} <- shapes |> Task.forEach draw |> Task.await
+    _ = shapes |> Task.forEach! draw
 
     Task.ok {}
 

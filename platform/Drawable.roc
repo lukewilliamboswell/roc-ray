@@ -1,9 +1,7 @@
-interface Drawable
-    exposes [
-        Drawable, 
-        draw,
-    ]
-    imports [Task.{Task}]
+module [
+    Drawable,
+    draw,
+]
 
 Drawable implements
-    draw : val -> Task {} [] where val implements Drawable
+    draw : val -> Task {} {} where val implements Drawable

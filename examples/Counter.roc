@@ -1,6 +1,8 @@
-interface Counter
-    exposes [Counter, init, render]
-    imports [ray.Action.{ Action }, ray.Core.{ Color }, ray.GUI.{ Elem }]
+module [Counter, init, render]
+
+import ray.Action
+import ray.Core exposing [Color]
+import ray.GUI exposing [Elem]
 
 Counter := I64
 

@@ -1,24 +1,22 @@
-app "counter"
-    packages { ray: "../platform/main.roc" }
-    imports [
-        ray.Task.{ Task },
-        ray.Action.{ Action },
-        ray.Core.{ Program, Color, Rectangle },
-        ray.GUI.{ Elem },
-        Counter.{ Counter },
-    ]
-    provides [main, Model] to ray
+app [main, Model] {
+    ray: platform "../platform/main.roc",
+}
+
+import ray.Action
+import ray.Core exposing [Program]
+import ray.GUI
+import Counter exposing [Counter]
 
 Model : { left : Counter, middle : Counter, right : Counter }
 
 main : Program Model
 main = { init, render }
 
-init : Task Model []
+init : Task Model {}
 init =
 
-    {} <- Core.setWindowSize { width, height } |> Task.await
-    {} <- Core.setWindowTitle "GUI Counter Demo" |> Task.await
+    _ = Core.setWindowSize! { width, height }
+    _ = Core.setWindowTitle! "GUI Counter Demo"
 
     Task.ok {
         left: Counter.init 10,
@@ -26,13 +24,13 @@ init =
         right: Counter.init 30,
     }
 
-render : Model -> Task Model []
+render : Model -> Task Model {}
 render = \model ->
 
     # this is temporary workaround for a bug `Error in alias analysis: error in module...`
     # sometimes we need an extra Task in the chain to prevent this error
-    _ <- Core.getMousePosition |> Task.await
-    
+    _ = Core.getMousePosition!
+
     GUI.col [
         GUI.text { label: "Click below to change the counters, press ESC to exit", color: black },
         GUI.row [

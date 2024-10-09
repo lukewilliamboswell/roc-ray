@@ -25,4 +25,4 @@ fi
 
 # DEBUG
 # LET's run an example
-roc examples/squares.roc
+roc examples/pong.roc

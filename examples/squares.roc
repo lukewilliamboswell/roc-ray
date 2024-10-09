@@ -37,7 +37,7 @@ render = \model ->
 
     { x, y } = Raylib.getMousePosition!
 
-    {left,right } = Raylib.mouseButtons!
+    { left, right } = Raylib.mouseButtons!
 
     leftStr  = if left then ", LEFT" else ""
     rightSTr = if right then ", RIGHT" else ""

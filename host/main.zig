@@ -283,17 +283,10 @@ export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) i32 {
     // return raylib.MeasureText(str_to_c(text), size);
 }
 
-export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    _ = x;
-    _ = y;
-    _ = width;
-    _ = height;
-    _ = r;
-    _ = g;
-    _ = b;
-    _ = a;
-    @panic("TODO roc_fx_drawRectangle");
-    // raylib.DrawRectangle(x, y, width, height, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawRectangle(x, y, width, height, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+
+    return ok_void;
 }
 
 export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {

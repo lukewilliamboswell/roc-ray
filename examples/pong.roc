@@ -67,8 +67,8 @@ render = \model ->
         score = model.score |> Num.toStr
         _ = Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
 
-        isMousePressed = Raylib.isMouseButtonPressed! LEFT
-        if isMousePressed then
+        {left} = Raylib.mouseButtons!
+        if left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model

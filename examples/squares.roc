@@ -3,7 +3,6 @@ app [main, Model] {
 }
 
 import ray.Raylib exposing [Rectangle]
-import ray.Shape2D
 
 Program : {
     init : Task Model {},
@@ -95,5 +94,5 @@ render = \model ->
     #            Task.ok model
     Task.ok model
 
-green = { r: 0, g: 255, b: 0, a: 255 }
+#green = { r: 0, g: 255, b: 0, a: 255 }
 white = { r: 255, g: 255, b: 255, a: 255 }

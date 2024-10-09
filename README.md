@@ -8,18 +8,32 @@ Also check out [this article](https://lukewilliamboswell.github.io/roc-ray-exper
 
 Use nix to setup the development environment - we need roc and zig
 
-```sh
+```
 $ nix develop
 ```
 
 Prebuild the platform host for roc to link with.
 
-```sh
+```
 $ ./prebuild-host.sh
 ```
 
 Run an example
 
-```sh
-roc examples/gui-counter.roc
+```
+$ roc examples/gui-counter.roc
+```
+
+## Running the tests locally
+
+Use nix to setup the development environment - we need roc and zig
+
+```
+$ nix develop
+```
+
+Run the tests
+
+```
+$ ROC=roc ZIG=zig bash ci/all_tests.sh
 ```

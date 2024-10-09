@@ -1,38 +1,37 @@
 const std = @import("std");
-const raylib = @import("raylib/build.zig");
-const raylib_build = @import("raylib/raylib/src/build.zig");
-const raygui = @import("raygui/build.zig");
 
 pub fn build(b: *std.Build) !void {
+    // Standard target options allows the person running `zig build` to choose
+    // what target to build for. Here we do not override the defaults, which
+    // means any target is allowed, and the default is native. Other options
+    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
-    const mode = b.standardOptimizeOption(.{});
+
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
+
+    const raylib_dep = b.dependency("raylib-zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const lib = b.addStaticLibrary(.{
-        .name = "roc-ray",
-        .root_source_file = .{ .path = "platform/host.zig" },
+        .name = "rocray",
+        .root_source_file = b.path("host/main.zig"),
         .target = target,
-        .optimize = mode,
-        .link_libc = true,
+        .optimize = optimize,
     });
 
-    lib.force_pic = true;
-    lib.disable_stack_probing = true;
+    const raylib = raylib_dep.module("raylib"); // main raylib module
+    const raygui = raylib_dep.module("raygui"); // raygui module
+    const raylib_artifact = raylib_dep.artifact("raylib"); // raylib C library
 
-    try raylib.addTo(b, lib, target, mode, .{
-        .raudio = true,
-        .rmodels = true,
-        .rshapes = true,
-        .rtext = true,
-        .rtextures = true,
-        .raygui = false,
-        .platform_drm = false,
-    });
-    raygui.addTo(b, lib, target, mode);
-
-    const lib_raylib = try raylib_build.addRaylib(b, target, mode, .{});
-    const lib_raylib_wrapper = raylib.linkThisLibrary(b, target, mode);
+    lib.linkLibrary(raylib_artifact);
+    lib.root_module.addImport("raylib", raylib);
+    lib.root_module.addImport("raygui", raygui);
 
     b.installArtifact(lib);
-    b.installArtifact(lib_raylib);
-    b.installArtifact(lib_raylib_wrapper);
+    b.installArtifact(raylib_artifact);
 }

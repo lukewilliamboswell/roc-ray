@@ -2,15 +2,15 @@ const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
 
-const str = @import("vendored/str.zig");
+const str = @import("roc/str.zig");
 const RocStr = str.RocStr;
 
-const list = @import("vendored/list.zig");
+const list = @import("roc/list.zig");
 const RocList = list.RocList;
 
-const utils = @import("vendored/utils.zig");
+const utils = @import("roc/utils.zig");
 
-const raylib = @import("raylib");
+const rl = @import("raylib");
 const raygui = @import("raygui");
 
 const DEBUG: bool = false;
@@ -25,7 +25,7 @@ extern fn memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void;
 
 export fn roc_alloc(size: usize, alignment: u32) callconv(.C) *anyopaque {
     if (DEBUG) {
-        var ptr = malloc(size);
+        const ptr = malloc(size);
         const stdout = std.io.getStdOut().writer();
         stdout.print("alloc:   {d} (alignment {d}, size {d})\n", .{ ptr, alignment, size }) catch unreachable;
         return ptr;
@@ -89,13 +89,13 @@ fn roc_mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_
 
 comptime {
     if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .Strong });
-        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .Strong });
-        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .Strong });
+        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
+        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
+        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
     }
 
     if (builtin.os.tag == .windows) {
-        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .Strong });
+        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
     }
 }
 
@@ -124,39 +124,41 @@ var should_exit: bool = false;
 pub fn main() void {
 
     // SETUP WINDOW
-    raylib.InitWindow(window_size_width, window_size_height, "hello world!");
-    raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
-    raylib.SetTargetFPS(60);
+    rl.initWindow(window_size_width, window_size_height, "hello world!");
+    defer rl.closeWindow(); // Close window and OpenGL context
+
+    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+    // raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
+    // raylib.SetTargetFPS(60);
 
     // INIT ROC
-    const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
-    const captures = roc_alloc(size, @alignOf(u128));
-    defer roc_dealloc(captures, @alignOf(u128));
+    // const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
+    // const captures = roc_alloc(size, @alignOf(u128));
+    // defer roc_dealloc(captures, @alignOf(u128));
 
-    roc__mainForHost_1_exposed_generic(captures);
-    roc__mainForHost_0_caller(undefined, captures, &model);
+    // roc__mainForHost_1_exposed_generic(captures);
+    // roc__mainForHost_0_caller(undefined, captures, &model);
 
-    const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
-    var update_captures = roc_alloc(update_task_size, @alignOf(u128));
+    // const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
+    // const update_captures = roc_alloc(update_task_size, @alignOf(u128));
 
     // RUN WINDOW FRAME LOOP
-    while (!raylib.WindowShouldClose() and !should_exit) {
-        raylib.BeginDrawing();
-        defer raylib.EndDrawing();
+    while (!rl.windowShouldClose() and !should_exit) {
+        rl.beginDrawing();
+        defer rl.endDrawing();
 
-        raylib.ClearBackground(raylib.BLACK);
+        rl.clearBackground(rl.Color.violet);
 
         // UPDATE ROC
-        roc__mainForHost_1_caller(&model, undefined, update_captures);
-        roc__mainForHost_2_caller(undefined, update_captures, &model);
+        // roc__mainForHost_1_caller(&model, undefined, update_captures);
+        // roc__mainForHost_2_caller(undefined, update_captures, &model);
 
-        if (show_fps) {
-            raylib.DrawFPS(10, 10);
-        }
+        rl.drawText("Congrats! You created your first window!", 190, 200, 20, rl.Color.light_gray);
+
+        // if (show_fps) {
+        //     raylib.DrawFPS(10, 10);
+        // }
     }
-
-    // CLEANUP
-    raylib.CloseWindow();
 }
 
 export fn roc_fx_exit() callconv(.C) void {
@@ -164,11 +166,14 @@ export fn roc_fx_exit() callconv(.C) void {
 }
 
 export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) void {
-    raylib.SetWindowSize(width, height);
+    std.debug.print("roc_fx_setWindowSize\n", .{});
+    rl.setWindowSize(width, height);
 }
 
-export fn roc_fx_getMousePosition() callconv(.C) raylib.Vector2 {
-    return raylib.GetMousePosition();
+// export fn roc_fx_getMousePosition() callconv(.C) raylib.Vector2 {
+export fn roc_fx_getMousePosition() callconv(.C) u8 {
+    @panic("TODO implement roc_fx_getMousePosition");
+    // return raylib.GetMousePosition();
 }
 
 const ScreenSize = extern struct {
@@ -177,21 +182,44 @@ const ScreenSize = extern struct {
 };
 
 export fn roc_fx_getScreenSize() callconv(.C) ScreenSize {
-    const height: i32 = raylib.GetScreenHeight();
-    const width: i32 = raylib.GetScreenWidth();
-    return ScreenSize{ .height = height, .width = width };
+    @panic("TODO implement roc_fx_getScreenSize");
+
+    // const height: i32 = raylib.GetScreenHeight();
+    // const width: i32 = raylib.GetScreenWidth();
+    // return ScreenSize{ .height = height, .width = width };
 }
 
 export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
-    return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+    _ = x;
+    _ = y;
+    _ = width;
+    _ = height;
+    _ = text;
+
+    @panic("TODO implement roc_fx_drawGuiButton");
+
+    // return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
 export fn roc_fx_guiWindowBox(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
-    return raygui.GuiWindowBox(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+    _ = x;
+    _ = y;
+    _ = width;
+    _ = height;
+    _ = text;
+
+    @panic("TODO implement roc_fx_guiWindowBox");
+
+    // return raygui.GuiWindowBox(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
-export fn roc_fx_isMouseButtonPressed(button: raylib.MouseButton) callconv(.C) bool {
-    return raylib.IsMouseButtonPressed(button);
+// export fn roc_fx_isMouseButtonPressed(button: raylib.MouseButton) callconv(.C) bool {
+export fn roc_fx_isMouseButtonPressed(button: u8) callconv(.C) bool {
+    _ = button;
+
+    @panic("TODO implement roc_fx_isMouseButtonPressed");
+
+    // return raylib.IsMouseButtonPressed(button);
 }
 
 // TODO this is terrible, but works for now
@@ -214,42 +242,103 @@ fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
 }
 
 export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+    _ = x;
+    _ = y;
+    _ = size;
+    _ = text;
+    _ = r;
+    _ = g;
+    _ = b;
+    _ = a;
+    @panic("TODO roc_fx_drawText");
+
+    // raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }
 
 export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) i32 {
-    return raylib.MeasureText(str_to_c(text), size);
+    _ = text;
+    _ = size;
+    @panic("TODO roc_fx_measureText");
+
+    // return raylib.MeasureText(str_to_c(text), size);
 }
 
 export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    raylib.DrawRectangle(x, y, width, height, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+    _ = x;
+    _ = y;
+    _ = width;
+    _ = height;
+    _ = r;
+    _ = g;
+    _ = b;
+    _ = a;
+    @panic("TODO roc_fx_drawRectangle");
+    // raylib.DrawRectangle(x, y, width, height, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }
 
 export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    raylib.DrawCircle(centerX, centerY, radius, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+    _ = centerX;
+    _ = centerY;
+    _ = radius;
+    _ = r;
+    _ = g;
+    _ = b;
+    _ = a;
+
+    @panic("TODO");
+
+    // raylib.DrawCircle(centerX, centerY, radius, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
 }
 
 export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
-    raylib.DrawCircleGradient(
-        centerX,
-        centerY,
-        radius,
-        raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
-        raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
-    );
+    _ = centerX;
+    _ = centerY;
+    _ = radius;
+    _ = r1;
+    _ = g1;
+    _ = b1;
+    _ = a1;
+    _ = r2;
+    _ = g2;
+    _ = b2;
+    _ = a2;
+
+    @panic("TODO");
+    // raylib.DrawCircleGradient(
+    //     centerX,
+    //     centerY,
+    //     radius,
+    //     raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+    //     raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    // );
 }
 
 export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
-    raylib.DrawRectangleGradientV(
-        x,
-        y,
-        width,
-        height,
-        raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
-        raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
-    );
+    _ = x;
+    _ = y;
+    _ = width;
+    _ = height;
+    _ = r1;
+    _ = g1;
+    _ = b1;
+    _ = a1;
+    _ = r2;
+    _ = g2;
+    _ = b2;
+    _ = a2;
+
+    @panic("TODO");
+    // raylib.DrawRectangleGradientV(
+    //     x,
+    //     y,
+    //     width,
+    //     height,
+    //     raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+    //     raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    // );
 }
 
 export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) void {
-    raylib.SetWindowTitle(str_to_c(text));
+    std.debug.print("roc_fx_setWindowTitle\n", .{});
+    rl.setWindowTitle(str_to_c(text));
 }

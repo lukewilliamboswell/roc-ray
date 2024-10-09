@@ -48,10 +48,10 @@ drawText = \{ text, posX, posY, fontSize, color } ->
     Effect.drawText (Num.round posX) (Num.round posY) fontSize text color.r color.g color.b color.a
     |> Task.mapErr \_ -> {}
 
-measureText : { text : Str, size : I32 } -> Task I32 {}
+measureText : { text : Str, size : I32 } -> Task I64 *
 measureText = \{ text, size } ->
     Effect.measureText text size
-    |> Task.mapErr \_ -> {}
+    |> Task.mapErr \{} -> crash "unreachable measureText"
 
 setWindowTitle : Str -> Task {} {}
 setWindowTitle = \title ->

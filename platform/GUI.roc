@@ -152,9 +152,9 @@ draw = \@Elem elem, model, bb ->
 guiButton : { text : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiButton = \{ text: str, shape: { x, y, width, height } } ->
     Effect.drawGuiButton x y width height str
-    |> Task.map \i32 -> { isPressed: (i32 != 0) }
+    |> Task.map \i64 -> { isPressed: (i64 != 0) }
 
 guiWindowBox : { title : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiWindowBox = \{ title, shape: { x, y, width, height } } ->
     Effect.guiWindowBox x y width height title
-    |> Task.map \i32 -> { isPressed: (i32 != 0) }
+    |> Task.map \i64 -> { isPressed: (i64 != 0) }

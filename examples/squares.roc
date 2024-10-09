@@ -4,7 +4,6 @@ app [main, Model] {
 
 import ray.Raylib exposing [Rectangle]
 import ray.Shape2D
-import ray.Drawable exposing [draw]
 
 Program : {
     init : Task Model {},
@@ -19,8 +18,8 @@ Model : {
 main : Program
 main = { init, render }
 
-width = 800
-height = 600
+width = 900
+height = 400
 
 init : Task Model {}
 init =

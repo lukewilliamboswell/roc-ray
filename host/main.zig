@@ -15,7 +15,7 @@ const RocResultPayload = result.RocResultPayload;
 const utils = @import("roc/utils.zig");
 
 const rl = @import("raylib");
-const raygui = @import("raygui");
+const rg = @import("raygui");
 
 const DEBUG: bool = false;
 
@@ -132,8 +132,7 @@ pub fn main() void {
     defer rl.closeWindow(); // Close window and OpenGL context
 
     rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
-    // raylib.SetConfigFlags(raylib.ConfigFlags{ .FLAG_WINDOW_RESIZABLE = true });
-    // raylib.SetTargetFPS(60);
+    rl.setConfigFlags(rl.ConfigFlags{ .window_resizable = true });
 
     // INIT ROC
     const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
@@ -156,10 +155,6 @@ pub fn main() void {
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
-
-        // if (show_fps) {
-        //     raylib.DrawFPS(10, 10);
-        // }
     }
 }
 
@@ -202,28 +197,14 @@ export fn roc_fx_getScreenSize() callconv(.C) RocResult(ScreenSize, void) {
     return .{ .payload = .{ .ok = ScreenSize{ .height = height, .width = width, .z = 0 } }, .tag = .RocOk };
 }
 
-export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
-    _ = x;
-    _ = y;
-    _ = width;
-    _ = height;
-    _ = text;
-
-    @panic("TODO implement roc_fx_drawGuiButton");
-
-    // return raygui.GuiButton(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) RocResult(i64, void) {
+    const id = rg.guiButton(rl.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+    return .{ .payload = .{ .ok = id }, .tag = .RocOk };
 }
 
-export fn roc_fx_guiWindowBox(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
-    _ = x;
-    _ = y;
-    _ = width;
-    _ = height;
-    _ = text;
-
-    @panic("TODO implement roc_fx_guiWindowBox");
-
-    // return raygui.GuiWindowBox(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+export fn roc_fx_guiWindowBox(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) RocResult(i64, void) {
+    const id = rg.guiWindowBox(rl.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
+    return .{ .payload = .{ .ok = id }, .tag = .RocOk };
 }
 
 const MouseButtons = extern struct {
@@ -275,12 +256,8 @@ export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8
     return ok_void;
 }
 
-export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) i32 {
-    _ = text;
-    _ = size;
-    @panic("TODO roc_fx_measureText");
-
-    // return raylib.MeasureText(str_to_c(text), size);
+export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) RocResult(i64, void) {
+    return .{ .payload = .{ .ok = rl.measureText(str_to_c(text), size) }, .tag = .RocOk };
 }
 
 export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
@@ -289,66 +266,35 @@ export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g
     return ok_void;
 }
 
-export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    _ = centerX;
-    _ = centerY;
-    _ = radius;
-    _ = r;
-    _ = g;
-    _ = b;
-    _ = a;
+export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawCircle(centerX, centerY, radius, rl.Color{ .r = r, .g = g, .b = b, .a = a });
 
-    @panic("TODO");
-
-    // raylib.DrawCircle(centerX, centerY, radius, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+    return ok_void;
 }
 
-export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
-    _ = centerX;
-    _ = centerY;
-    _ = radius;
-    _ = r1;
-    _ = g1;
-    _ = b1;
-    _ = a1;
-    _ = r2;
-    _ = g2;
-    _ = b2;
-    _ = a2;
+export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+    rl.drawCircleGradient(
+        centerX,
+        centerY,
+        radius,
+        rl.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+        rl.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    );
 
-    @panic("TODO");
-    // raylib.DrawCircleGradient(
-    //     centerX,
-    //     centerY,
-    //     radius,
-    //     raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
-    //     raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
-    // );
+    return ok_void;
 }
 
-export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) void {
-    _ = x;
-    _ = y;
-    _ = width;
-    _ = height;
-    _ = r1;
-    _ = g1;
-    _ = b1;
-    _ = a1;
-    _ = r2;
-    _ = g2;
-    _ = b2;
-    _ = a2;
+export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+    rl.drawRectangleGradientV(
+        x,
+        y,
+        width,
+        height,
+        rl.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
+        rl.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
+    );
 
-    @panic("TODO");
-    // raylib.DrawRectangleGradientV(
-    //     x,
-    //     y,
-    //     width,
-    //     height,
-    //     raylib.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
-    //     raylib.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
-    // );
+    return ok_void;
 }
 
 export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void) {

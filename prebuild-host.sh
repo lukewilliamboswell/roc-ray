@@ -22,7 +22,3 @@ elif [[ "$(uname)" == "Linux" ]]; then
 else
     echo "Unsupported operating system"
 fi
-
-# DEBUG
-# LET's run an example
-roc examples/pong.roc

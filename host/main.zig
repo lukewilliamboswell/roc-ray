@@ -151,13 +151,11 @@ pub fn main() void {
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(rl.Color.violet);
+        rl.clearBackground(rl.Color.black);
 
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
-
-        rl.drawText("Congrats! You created your first window!", 190, 200, 20, rl.Color.light_gray);
 
         // if (show_fps) {
         //     raylib.DrawFPS(10, 10);
@@ -176,10 +174,20 @@ export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) RocResult(v
     return ok_void;
 }
 
-// export fn roc_fx_getMousePosition() callconv(.C) raylib.Vector2 {
-export fn roc_fx_getMousePosition() callconv(.C) u8 {
-    @panic("TODO implement roc_fx_getMousePosition");
-    // return raylib.GetMousePosition();
+// z : I64 isn't used here it's a workaround for https://github.com/roc-lang/roc/issues/7142'
+const MousePos = extern struct {
+    z: i64,
+    x: f32,
+    y: f32,
+};
+
+export fn roc_fx_getMousePosition() callconv(.C) RocResult(MousePos, void) {
+    const pos = rl.getMousePosition();
+    return .{ .payload = .{ .ok = MousePos{
+        .x = pos.x,
+        .y = pos.y,
+        .z = 0,
+    } }, .tag = .RocOk };
 }
 
 const ScreenSize = extern struct {

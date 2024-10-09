@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Core exposing [Vector2]
+import ray.Raylib exposing [Vector2]
 import ray.Shape2D
 import ray.Drawable exposing [draw]
 
@@ -28,8 +28,8 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
 init : Task Model {}
 init =
-    _ = Core.setWindowSize! { width, height }
-    _ = Core.setWindowTitle! "Pong"
+    _ = Raylib.setWindowSize! { width, height }
+    _ = Raylib.setWindowTitle! "Pong"
 
     Task.ok { ball: newBall, pos: height / 2 - paddle / 2, score: 0, playing: Bool.false, maxScore: 0 }
 
@@ -59,24 +59,24 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-        _ = Core.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
+        _ = Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
 
         maxScore = model.maxScore |> Num.toStr
-        _ = Core.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
+        _ = Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
 
         score = model.score |> Num.toStr
-        _ = Core.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
+        _ = Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
 
-        isMousePressed = Core.isMouseButtonPressed! LEFT
+        isMousePressed = Raylib.isMouseButtonPressed! LEFT
         if isMousePressed then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
         score = model.score |> Num.toStr
-        _ = Core.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
+        _ = Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
 
-        { y } = Core.getMousePosition!
+        { y } = Raylib.getMousePosition!
         pos = model.pos + (y - model.pos) / 5
 
         _ = [

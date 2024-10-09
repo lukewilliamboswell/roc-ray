@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Core
+import ray.Raylib
 import ray.Drawable exposing [draw]
 import ray.Shape2D
 
@@ -15,8 +15,8 @@ height = 600
 
 init : Task Model {}
 init =
-    _ = Core.setWindowSize! { width, height }
-    _ = Core.setWindowTitle! "Basic Shapes"
+    _ = Raylib.setWindowSize! { width, height }
+    _ = Raylib.setWindowTitle! "Basic Shapes"
 
     Task.ok {}
 

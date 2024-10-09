@@ -1,7 +1,7 @@
 module [Counter, init, render]
 
 import ray.Action
-import ray.Core exposing [Color]
+import ray.Raylib exposing [Color]
 import ray.GUI exposing [Elem]
 
 Counter := I64

@@ -8,7 +8,7 @@ module [
 ]
 
 import Drawable exposing [Drawable]
-import Core exposing [Color]
+import Raylib exposing [Color]
 import Effect
 
 Shape2D := [

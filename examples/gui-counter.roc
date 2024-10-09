@@ -3,7 +3,7 @@ app [main, Model] {
 }
 
 import ray.Action
-import ray.Core exposing [Program]
+import ray.Raylib exposing [Program]
 import ray.GUI
 import Counter exposing [Counter]
 
@@ -15,8 +15,8 @@ main = { init, render }
 init : Task Model {}
 init =
 
-    _ = Core.setWindowSize! { width, height }
-    _ = Core.setWindowTitle! "GUI Counter Demo"
+    _ = Raylib.setWindowSize! { width, height }
+    _ = Raylib.setWindowTitle! "GUI Counter Demo"
 
     Task.ok {
         left: Counter.init 10,
@@ -29,7 +29,7 @@ render = \model ->
 
     # this is temporary workaround for a bug `Error in alias analysis: error in module...`
     # sometimes we need an extra Task in the chain to prevent this error
-    _ = Core.getMousePosition!
+    _ = Raylib.getMousePosition!
 
     GUI.col [
         GUI.text { label: "Click below to change the counters, press ESC to exit", color: black },

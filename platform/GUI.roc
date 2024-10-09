@@ -13,7 +13,7 @@ module [
 
 import Effect
 import Action exposing [Action]
-import Core exposing [Color, Rectangle]
+import Raylib exposing [Color, Rectangle]
 import Layout exposing [Layoutable, Constraint, Size]
 
 Elem state := [
@@ -144,17 +144,17 @@ draw = \@Elem elem, model, bb ->
                 _ -> Task.ok model
 
         Text { label, color } ->
-            _ = Core.drawText! { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color }
+            _ = Raylib.drawText! { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color }
             Task.ok model
 
         None -> Task.ok model
 
-guiButton : { text : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } {}
+guiButton : { text : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiButton = \{ text: str, shape: { x, y, width, height } } ->
     Effect.drawGuiButton x y width height str
     |> Task.map \i32 -> { isPressed: (i32 != 0) }
 
-guiWindowBox : { title : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } {}
+guiWindowBox : { title : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiWindowBox = \{ title, shape: { x, y, width, height } } ->
     Effect.guiWindowBox x y width height title
     |> Task.map \i32 -> { isPressed: (i32 != 0) }

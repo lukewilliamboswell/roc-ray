@@ -33,5 +33,5 @@ drawCircle : I32, I32, F32, U8, U8, U8, U8 -> Task {} {}
 drawCircleGradient : I32, I32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
 
 guiWindowBox : F32, F32, F32, F32, Str -> Task I32 {}
-getMousePosition : Task { x : F32, y : F32 } {}
+getMousePosition : Task { x : F32, y : F32, z: I64 } {}
 isMouseButtonPressed : I32 -> Task Bool {}

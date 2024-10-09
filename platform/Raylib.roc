@@ -73,8 +73,9 @@ drawRectangle = \{ x, y, width, height, color } ->
 
 getMousePosition : Task Vector2 {}
 getMousePosition =
-    Effect.getMousePosition
-    |> Task.mapErr \_ -> {}
+    {x,y} = Effect.getMousePosition!
+
+    Task.ok {x, y}
 
 isMouseButtonPressed : MouseButton -> Task Bool {}
 isMouseButtonPressed = \button ->

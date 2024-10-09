@@ -8,6 +8,10 @@ const RocStr = str.RocStr;
 const list = @import("roc/list.zig");
 const RocList = list.RocList;
 
+const result = @import("result.zig");
+const RocResult = result.RocResult;
+const RocResultPayload = result.RocResultPayload;
+
 const utils = @import("roc/utils.zig");
 
 const rl = @import("raylib");
@@ -132,15 +136,15 @@ pub fn main() void {
     // raylib.SetTargetFPS(60);
 
     // INIT ROC
-    // const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
-    // const captures = roc_alloc(size, @alignOf(u128));
-    // defer roc_dealloc(captures, @alignOf(u128));
+    const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
+    const captures = roc_alloc(size, @alignOf(u128));
+    defer roc_dealloc(captures, @alignOf(u128));
 
-    // roc__mainForHost_1_exposed_generic(captures);
-    // roc__mainForHost_0_caller(undefined, captures, &model);
+    roc__mainForHost_1_exposed_generic(captures);
+    roc__mainForHost_0_caller(undefined, captures, &model);
 
-    // const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
-    // const update_captures = roc_alloc(update_task_size, @alignOf(u128));
+    const update_task_size = @as(usize, @intCast(roc__mainForHost_2_size()));
+    const update_captures = roc_alloc(update_task_size, @alignOf(u128));
 
     // RUN WINDOW FRAME LOOP
     while (!rl.windowShouldClose() and !should_exit) {
@@ -150,8 +154,8 @@ pub fn main() void {
         rl.clearBackground(rl.Color.violet);
 
         // UPDATE ROC
-        // roc__mainForHost_1_caller(&model, undefined, update_captures);
-        // roc__mainForHost_2_caller(undefined, update_captures, &model);
+        roc__mainForHost_1_caller(&model, undefined, update_captures);
+        roc__mainForHost_2_caller(undefined, update_captures, &model);
 
         rl.drawText("Congrats! You created your first window!", 190, 200, 20, rl.Color.light_gray);
 
@@ -165,9 +169,11 @@ export fn roc_fx_exit() callconv(.C) void {
     should_exit = true;
 }
 
-export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) void {
-    std.debug.print("roc_fx_setWindowSize\n", .{});
+const ok_void = .{ .payload = .{ .ok = void{} }, .tag = .RocOk };
+
+export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) RocResult(void, void) {
     rl.setWindowSize(width, height);
+    return ok_void;
 }
 
 // export fn roc_fx_getMousePosition() callconv(.C) raylib.Vector2 {
@@ -241,18 +247,9 @@ fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     return @ptrCast(&memory);
 }
 
-export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) void {
-    _ = x;
-    _ = y;
-    _ = size;
-    _ = text;
-    _ = r;
-    _ = g;
-    _ = b;
-    _ = a;
-    @panic("TODO roc_fx_drawText");
-
-    // raylib.DrawText(str_to_c(text), x, y, size, raylib.Color{ .r = r, .g = g, .b = b, .a = a });
+export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawText(str_to_c(text), x, y, size, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+    return ok_void;
 }
 
 export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) i32 {
@@ -338,7 +335,7 @@ export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32,
     // );
 }
 
-export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) void {
-    std.debug.print("roc_fx_setWindowTitle\n", .{});
+export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void) {
     rl.setWindowTitle(str_to_c(text));
+    return ok_void;
 }

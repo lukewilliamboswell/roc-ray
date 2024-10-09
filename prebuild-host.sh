@@ -9,7 +9,9 @@ if [ -z "${ZIG:-}" ]; then
 fi
 
 # Build with zig
-$ZIG build
+# --release=fast gives best runtime performance
+# --release=safe gives better debugging for the host
+$ZIG build --release=fast
 
 # Re-package platform archives into prebuilt-platfrom
 if [[ "$(uname)" == "Darwin" ]]; then

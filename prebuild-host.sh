@@ -3,8 +3,13 @@
 # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
 set -euxo pipefail
 
+if [ -z "${ZIG:-}" ]; then
+  echo "INFO: The ZIG environment variable was not set."
+  export ZIG=$(which zig)
+fi
+
 # Build with zig
-zig build
+$ZIG build
 
 # Re-package platform archives into prebuilt-platfrom
 if [[ "$(uname)" == "Darwin" ]]; then

@@ -11,7 +11,9 @@ module [
     setWindowTitle,
     drawRectangle,
     getMousePosition,
-    isMouseButtonPressed,
+
+    MouseButtons,
+    mouseButtons,
 ]
 
 import Effect
@@ -25,16 +27,6 @@ Program state : {
 Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 Vector2 : { x : F32, y : F32 }
 Color : { r : U8, g : U8, b : U8, a : U8 }
-
-MouseButton : [
-    LEFT,
-    RIGHT,
-    MIDDLE,
-    SIDE,
-    EXTRA,
-    FORWARD,
-    BACK,
-]
 
 exit : Task {} {}
 exit =
@@ -77,18 +69,37 @@ getMousePosition =
 
     Task.ok {x, y}
 
-isMouseButtonPressed : MouseButton -> Task Bool {}
-isMouseButtonPressed = \button ->
+MouseButtons : {
+    back: Bool,
+    left: Bool,
+    right: Bool,
+    middle: Bool,
+    side: Bool,
+    extra: Bool,
+    forward: Bool,
+}
 
-    selection =
-        when button is
-            LEFT -> 0i32
-            RIGHT -> 1i32
-            MIDDLE -> 2i32
-            SIDE -> 3i32
-            EXTRA -> 4i32
-            FORWARD -> 5i32
-            BACK -> 6i32
+mouseButtons : Task MouseButtons *
+mouseButtons =
+    # note we are unpacking and repacking the mouseButtons here as a workaround for
+    # https://github.com/roc-lang/roc/issues/7142
+    {
+        back,
+        left,
+        right,
+        middle,
+        side,
+        extra,
+        forward,
+    } = Effect.mouseButtons
+        |> Task.mapErr! \{} -> crash "unreachable mouseButtons"
 
-    Effect.isMouseButtonPressed selection
-    |> Task.mapErr \_ -> {}
+    Task.ok {
+        back,
+        left,
+        right,
+        middle,
+        side,
+        extra,
+        forward,
+    }

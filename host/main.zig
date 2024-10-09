@@ -174,7 +174,7 @@ export fn roc_fx_setWindowSize(width: i32, height: i32) callconv(.C) RocResult(v
     return ok_void;
 }
 
-// z : I64 isn't used here it's a workaround for https://github.com/roc-lang/roc/issues/7142'
+// z : I64 isn't used here it's a workaround for https://github.com/roc-lang/roc/issues/7142
 const MousePos = extern struct {
     z: i64,
     x: f32,
@@ -191,16 +191,15 @@ export fn roc_fx_getMousePosition() callconv(.C) RocResult(MousePos, void) {
 }
 
 const ScreenSize = extern struct {
+    z: i64,
     height: i32,
     width: i32,
 };
 
-export fn roc_fx_getScreenSize() callconv(.C) ScreenSize {
-    @panic("TODO implement roc_fx_getScreenSize");
-
-    // const height: i32 = raylib.GetScreenHeight();
-    // const width: i32 = raylib.GetScreenWidth();
-    // return ScreenSize{ .height = height, .width = width };
+export fn roc_fx_getScreenSize() callconv(.C) RocResult(ScreenSize, void) {
+    const height: i32 = rl.getScreenHeight();
+    const width: i32 = rl.getScreenWidth();
+    return .{ .payload = .{ .ok = ScreenSize{ .height = height, .width = width, .z = 0 } }, .tag = .RocOk };
 }
 
 export fn roc_fx_drawGuiButton(x: f32, y: f32, width: f32, height: f32, text: *RocStr) callconv(.C) i32 {
@@ -227,13 +226,29 @@ export fn roc_fx_guiWindowBox(x: f32, y: f32, width: f32, height: f32, text: *Ro
     // return raygui.GuiWindowBox(raylib.Rectangle{ .x = x, .y = y, .width = width, .height = height }, str_to_c(text));
 }
 
-// export fn roc_fx_isMouseButtonPressed(button: raylib.MouseButton) callconv(.C) bool {
-export fn roc_fx_isMouseButtonPressed(button: u8) callconv(.C) bool {
-    _ = button;
+const MouseButtons = extern struct {
+    unused: i64,
+    back: bool,
+    extra: bool,
+    forward: bool,
+    left: bool,
+    middle: bool,
+    right: bool,
+    side: bool,
+};
 
-    @panic("TODO implement roc_fx_isMouseButtonPressed");
-
-    // return raylib.IsMouseButtonPressed(button);
+export fn roc_fx_mouseButtons() callconv(.C) RocResult(MouseButtons, void) {
+    const buttons = MouseButtons{
+        .unused = 0,
+        .back = rl.isMouseButtonPressed(.mouse_button_back),
+        .extra = rl.isMouseButtonPressed(.mouse_button_extra),
+        .forward = rl.isMouseButtonPressed(.mouse_button_forward),
+        .left = rl.isMouseButtonPressed(.mouse_button_left),
+        .middle = rl.isMouseButtonPressed(.mouse_button_middle),
+        .right = rl.isMouseButtonPressed(.mouse_button_right),
+        .side = rl.isMouseButtonPressed(.mouse_button_side),
+    };
+    return .{ .payload = .{ .ok = buttons }, .tag = .RocOk };
 }
 
 // TODO this is terrible, but works for now

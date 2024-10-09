@@ -18,3 +18,5 @@ generated-docs/
 *.tar.gz
 
 .DS_Store
+
+test-platform.roc

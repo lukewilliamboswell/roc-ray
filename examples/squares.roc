@@ -37,13 +37,16 @@ render = \model ->
 
     { x, y } = Raylib.getMousePosition!
 
-    # isMousePressed = Raylib.isMouseButtonPressed! LEFT
+    {left,right } = Raylib.mouseButtons!
+
+    leftStr  = if left then ", LEFT" else ""
+    rightSTr = if right then ", RIGHT" else ""
 
     mouseX = x |> Num.round |> Num.toStr
     mouseY = y |> Num.round |> Num.toStr
 
     _ =  Raylib.drawText! {
-        text: "Mouse $(mouseX),$(mouseY)",
+        text: "Mouse $(mouseX),$(mouseY)$(leftStr)$(rightSTr)",
         posX: 10,
         posY: height - 25,
         fontSize: 20,

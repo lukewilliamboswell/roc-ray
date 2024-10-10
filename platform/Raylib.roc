@@ -74,7 +74,7 @@ getScreenSize =
 ## Draw text on the screen using the default font.
 drawText : { text : Str, posX : F32, posY : F32, fontSize : I32, color : Color } -> Task {} *
 drawText = \{ text, posX, posY, fontSize, color } ->
-    Effect.drawText (Num.round posX) (Num.round posY) fontSize text color.r color.g color.b color.a
+    Effect.drawText posX posY fontSize text color.r color.g color.b color.a
     |> Task.mapErr \{} -> crash "unreachable drawText"
 
 ## Measure the width of a text string using the default font.
@@ -86,7 +86,7 @@ measureText = \{ text, size } ->
 ## Draw a rectangle on the screen.
 drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
 drawRectangle = \{ x, y, width, height, color } ->
-    Effect.drawRectangle (Num.round x) (Num.round y) (Num.round width) (Num.round height) color.r color.g color.b color.a
+    Effect.drawRectangle x y width height color.r color.g color.b color.a
     |> Task.mapErr \{} -> crash "unreachable drawRectangle"
 
 ## Get the current mouse position.

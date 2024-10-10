@@ -35,7 +35,7 @@ render = \model ->
         Shape2D.rectGradientV { posX: 10, posY: 150, width: 200, height: 50, top: white, bottom: blue },
         Shape2D.text { text: "Hello World", posX: 10, posY: 250, size: 20, color: white },
         Shape2D.circle { centerX: 300, centerY: 100, radius: 50, color: red },
-        Shape2D.circleGradient { centerX: Num.round (model.width / 2), centerY: Num.round (model.height / 2), radius: 35, inner: red, outer: blue },
+        Shape2D.circleGradient { centerX: model.width / 2, centerY: model.height / 2, radius: 35, inner: red, outer: blue },
     ] draw
 
     # return the model unchanged for next render

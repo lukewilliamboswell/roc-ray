@@ -94,8 +94,8 @@ render = \model ->
         pos = model.pos + (y - model.pos) / 5
 
         Task.forEach! [
-            Shape2D.rect { posX: 0, posY: Num.round pos, width: Num.round pw, height: paddle, color: white },
-            Shape2D.rect { posX: Num.round model.ball.pos.x, posY: Num.round model.ball.pos.y, width: ballSize, height: ballSize, color: white },
+            Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
+            Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
         ] draw
 
         ball = bounce (moveBall model.ball) model.pos

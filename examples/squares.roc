@@ -10,6 +10,8 @@ Program : {
 }
 
 Model : {
+    width : F32,
+    height : F32,
     squares : List Rectangle,
     status : [Ready, AfterClick Raylib.Vector2],
 }
@@ -17,21 +19,26 @@ Model : {
 main : Program
 main = { init, render }
 
-width = 900
-height = 400
-
 init : Task Model {}
 init =
 
-    _ = Raylib.setWindowSize! { width, height }
-    _ = Raylib.setWindowTitle! "Squares Demo"
+    width = 900f32
+    height = 400f32
 
-    Task.ok { squares: [], status: Ready }
+    Raylib.setWindowSize! { width, height }
+    Raylib.setWindowTitle! "Squares Demo"
+
+    Task.ok {
+        width,
+        height,
+        squares: [],
+        status: Ready,
+    }
 
 render : Model -> Task Model {}
 render = \model ->
 
-    _ = Raylib.drawText! { text: "Click on the screen to draw a square", posX: width - 400, posY: height - 25, fontSize: 20, color: white }
+    Raylib.drawText! { text: "Click on the screen to draw a square", posX: model.width - 400, posY: model.height - 25, fontSize: 20, color: white }
 
     { x, y } = Raylib.getMousePosition!
 
@@ -40,16 +47,17 @@ render = \model ->
     leftStr  = if left then ", LEFT" else ""
     rightSTr = if right then ", RIGHT" else ""
 
-    mouseX = x |> Num.round |> Num.toStr
-    mouseY = y |> Num.round |> Num.toStr
-
-    _ =  Raylib.drawText! {
-        text: "Mouse $(mouseX),$(mouseY)$(leftStr)$(rightSTr)",
+    Raylib.drawText! {
+        text: "Mouse $(Num.toStr (Num.round x)),$(Num.toStr (Num.round y))$(leftStr)$(rightSTr)",
         posX: 10,
-        posY: height - 25,
+        posY: model.height - 25,
         fontSize: 20,
         color: white,
     }
+
+    Task.ok model
+
+    # TODO restore this code
 
     ## Draw the squares
     # _ =
@@ -92,7 +100,7 @@ render = \model ->
     #                }
 
     #            Task.ok model
-    Task.ok model
+
 
 #green = { r: 0, g: 255, b: 0, a: 255 }
 white = { r: 255, g: 255, b: 255, a: 255 }

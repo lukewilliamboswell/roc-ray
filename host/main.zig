@@ -251,8 +251,8 @@ fn str_to_c(roc_str: *RocStr) [*:0]const u8 {
     return @ptrCast(&memory);
 }
 
-export fn roc_fx_drawText(x: i32, y: i32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
-    rl.drawText(str_to_c(text), x, y, size, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+export fn roc_fx_drawText(x: f32, y: f32, size: i32, text: *RocStr, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawText(str_to_c(text), @intFromFloat(x), @intFromFloat(y), size, rl.Color{ .r = r, .g = g, .b = b, .a = a });
     return ok_void;
 }
 
@@ -260,22 +260,33 @@ export fn roc_fx_measureText(text: *RocStr, size: i32) callconv(.C) RocResult(i6
     return .{ .payload = .{ .ok = rl.measureText(str_to_c(text), size) }, .tag = .RocOk };
 }
 
-export fn roc_fx_drawRectangle(x: i32, y: i32, width: i32, height: i32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
-    rl.drawRectangle(x, y, width, height, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+export fn roc_fx_drawRectangle(x: f32, y: f32, width: f32, height: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawRectangle(
+        @intFromFloat(x),
+        @intFromFloat(y),
+        @intFromFloat(width),
+        @intFromFloat(height),
+        rl.Color{ .r = r, .g = g, .b = b, .a = a },
+    );
 
     return ok_void;
 }
 
-export fn roc_fx_drawCircle(centerX: i32, centerY: i32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
-    rl.drawCircle(centerX, centerY, radius, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+export fn roc_fx_drawCircle(centerX: f32, centerY: f32, radius: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    rl.drawCircle(
+        @intFromFloat(centerX),
+        @intFromFloat(centerY),
+        radius,
+        rl.Color{ .r = r, .g = g, .b = b, .a = a },
+    );
 
     return ok_void;
 }
 
-export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+export fn roc_fx_drawCircleGradient(centerX: f32, centerY: f32, radius: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
     rl.drawCircleGradient(
-        centerX,
-        centerY,
+        @intFromFloat(centerX),
+        @intFromFloat(centerY),
         radius,
         rl.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
         rl.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
@@ -284,12 +295,12 @@ export fn roc_fx_drawCircleGradient(centerX: i32, centerY: i32, radius: f32, r1:
     return ok_void;
 }
 
-export fn roc_fx_drawRectangleGradientV(x: i32, y: i32, width: i32, height: i32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+export fn roc_fx_drawRectangleGradientV(x: f32, y: f32, width: f32, height: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
     rl.drawRectangleGradientV(
-        x,
-        y,
-        width,
-        height,
+        @intFromFloat(x),
+        @intFromFloat(y),
+        @intFromFloat(width),
+        @intFromFloat(height),
         rl.Color{ .r = r1, .g = g1, .b = b1, .a = a1 },
         rl.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
     );

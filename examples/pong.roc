@@ -2,13 +2,15 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Vector2]
+import ray.Raylib exposing [Program, Vector2]
 import ray.Shape2D
 import ray.Drawable exposing [draw]
 
+main : Program Model
 main = { init, render }
 
 Ball : { pos : Vector2, vel : Vector2 }
+
 Model : {
     playing : Bool,
     maxScore : I32,
@@ -28,11 +30,18 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
 init : Task Model {}
 init =
-    _ = Raylib.setWindowSize! { width, height }
-    _ = Raylib.setWindowTitle! "Pong"
+    Raylib.setWindowSize! { width, height }
+    Raylib.setWindowTitle! "Pong"
 
-    Task.ok { ball: newBall, pos: height / 2 - paddle / 2, score: 0, playing: Bool.false, maxScore: 0 }
+    Task.ok {
+        ball: newBall,
+        pos: height / 2 - paddle / 2,
+        score: 0,
+        playing: Bool.false,
+        maxScore: 0,
+    }
 
+moveBall : Ball -> Ball
 moveBall = \ball -> { ball & pos: { x: ball.pos.x + ball.vel.x, y: ball.pos.y + ball.vel.y } }
 
 bounce : Ball, F32 -> Ball
@@ -59,31 +68,35 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-        _ = Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
+
+        Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
 
         maxScore = model.maxScore |> Num.toStr
-        _ = Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
+
+        Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
 
         score = model.score |> Num.toStr
-        _ = Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
+
+        Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
 
         {left} = Raylib.mouseButtons!
+
         if left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
         score = model.score |> Num.toStr
-        _ = Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
 
         { y } = Raylib.getMousePosition!
+
         pos = model.pos + (y - model.pos) / 5
 
-        _ = [
-                Shape2D.rect { posX: 0, posY: Num.round pos, width: Num.round pw, height: paddle, color: white },
-                Shape2D.rect { posX: Num.round model.ball.pos.x, posY: Num.round model.ball.pos.y, width: ballSize, height: ballSize, color: white },
-            ]
-            |> Task.forEach! draw
+        Task.forEach! [
+            Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
+            Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
+        ] draw
 
         ball = bounce (moveBall model.ball) model.pos
 

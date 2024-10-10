@@ -1,12 +1,10 @@
-app "pong"
-    packages { ray: "../platform/main.roc" }
-    imports [
-        ray.Task.{ Task },
-        ray.Core.{ Color, Rectangle, Vector2 },
-        ray.Shape2D,
-        ray.Drawable.{ draw },
-    ]
-    provides [main, Model] to ray
+app [main, Model] {
+    ray: platform "../platform/main.roc",
+}
+
+import ray.Raylib exposing [Vector2]
+import ray.Shape2D
+import ray.Drawable exposing [draw]
 
 main = { init, render }
 
@@ -28,10 +26,10 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model []
+init : Task Model {}
 init =
-    {} <- Core.setWindowSize { width, height } |> Task.await
-    {} <- Core.setWindowTitle "Pong" |> Task.await
+    _ = Raylib.setWindowSize! { width, height }
+    _ = Raylib.setWindowTitle! "Pong"
 
     Task.ok { ball: newBall, pos: height / 2 - paddle / 2, score: 0, playing: Bool.false, maxScore: 0 }
 
@@ -58,35 +56,34 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model -> Task Model []
+render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-        {} <- Core.drawText { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white } |> Task.await
+        _ = Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
 
         maxScore = model.maxScore |> Num.toStr
-        {} <- Core.drawText { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white } |> Task.await
+        _ = Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
 
         score = model.score |> Num.toStr
-        {} <- Core.drawText { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white } |> Task.await
+        _ = Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
 
-        isMousePressed <- Core.isMouseButtonPressed LEFT |> Task.await
-        if isMousePressed then
+        {left} = Raylib.mouseButtons!
+        if left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
         score = model.score |> Num.toStr
-        {} <- Core.drawText { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white } |> Task.await
+        _ = Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
 
-        { y } <- Core.getMousePosition |> Task.await
+        { y } = Raylib.getMousePosition!
         pos = model.pos + (y - model.pos) / 5
 
-        {} <- [
+        _ = [
                 Shape2D.rect { posX: 0, posY: Num.round pos, width: Num.round pw, height: paddle, color: white },
                 Shape2D.rect { posX: Num.round model.ball.pos.x, posY: Num.round model.ball.pos.y, width: ballSize, height: ballSize, color: white },
             ]
-            |> Task.forEach draw
-            |> Task.await
+            |> Task.forEach! draw
 
         ball = bounce (moveBall model.ball) model.pos
 

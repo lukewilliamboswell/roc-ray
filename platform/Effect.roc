@@ -1,11 +1,5 @@
 hosted Effect
     exposes [
-        Effect,
-        after,
-        map,
-        always,
-        forever,
-        loop,
         setWindowSize,
         getScreenSize,
         drawGuiButton,
@@ -19,26 +13,40 @@ hosted Effect
         drawCircleGradient,
         guiWindowBox,
         getMousePosition,
-        isMouseButtonPressed,
+
+        MouseButtons,
+        mouseButtons,
     ]
     imports []
-    generates Effect with [after, map, always, forever, loop]
 
-setWindowSize : I32, I32 -> Effect {}
-getScreenSize : Effect { height : I32, width : I32 }
-drawGuiButton : F32, F32, F32, F32, Str -> Effect I32
-exit : Effect {}
+setWindowSize : I32, I32 -> Task {} {}
+getScreenSize : Task { height : I32, width : I32, z : I64 } {}
+drawGuiButton : F32, F32, F32, F32, Str -> Task I64 {}
+exit : Task {} {}
 
-drawText : I32, I32, I32, Str, U8, U8, U8, U8 -> Effect {}
-measureText : Str, I32 -> Effect I32
+drawText : I32, I32, I32, Str, U8, U8, U8, U8 -> Task {} {}
+measureText : Str, I32 -> Task I64 {}
 
-setWindowTitle : Str -> Effect {}
+setWindowTitle : Str -> Task {} {}
 
-drawRectangle : I32, I32, I32, I32, U8, U8, U8, U8 -> Effect {}
-drawRectangleGradientV : I32, I32, I32, I32, U8, U8, U8, U8, U8, U8, U8, U8 -> Effect {}
-drawCircle : I32, I32, F32, U8, U8, U8, U8 -> Effect {}
-drawCircleGradient : I32, I32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Effect {}
+drawRectangle : I32, I32, I32, I32, U8, U8, U8, U8 -> Task {} {}
+drawRectangleGradientV : I32, I32, I32, I32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
+drawCircle : I32, I32, F32, U8, U8, U8, U8 -> Task {} {}
+drawCircleGradient : I32, I32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
 
-guiWindowBox : F32, F32, F32, F32, Str -> Effect I32
-getMousePosition : Effect { x : F32, y : F32 }
-isMouseButtonPressed : I32 -> Effect Bool
+guiWindowBox : F32, F32, F32, F32, Str -> Task I64 {}
+getMousePosition : Task { x : F32, y : F32, z: I64 } {}
+
+MouseButtons : {
+    # isn't used here it's a workaround for https://github.com/roc-lang/roc/issues/7142
+    unused: I64,
+    back: Bool,
+    left: Bool,
+    right: Bool,
+    middle: Bool,
+    side: Bool,
+    extra: Bool,
+    forward: Bool,
+}
+
+mouseButtons : Task MouseButtons {}

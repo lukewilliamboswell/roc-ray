@@ -1,24 +1,20 @@
-interface GUI
-    exposes [
-        Elem,
-        translate,
-        draw,
-        guiButton,
-        guiWindowBox,
-        button,
-        col,
-        row,
-        text,
-        window,
-    ]
-    imports [
-        InternalTask, 
-        Task.{ Task }, 
-        Effect.{ Effect }, 
-        Action.{ Action }, 
-        Core.{ Color, Rectangle },
-        Layout.{Layoutable, Constraint, Size},
-    ]
+module [
+    Elem,
+    translate,
+    draw,
+    guiButton,
+    guiWindowBox,
+    button,
+    col,
+    row,
+    text,
+    window,
+]
+
+import Effect
+import Action exposing [Action]
+import Raylib exposing [Color, Rectangle]
+import Layout exposing [Layoutable, Constraint, Size]
 
 Elem state := [
     Text { label : Str, color : Color },
@@ -27,12 +23,13 @@ Elem state := [
     Col (List (Elem state)),
     Row (List (Elem state)),
     None,
-] implements [Layoutable { layout: layoutElem }]
+]
+    implements [Layoutable { layout: layoutElem }]
 
 layoutElem : Elem state, Constraint -> Size
 layoutElem = \@Elem elem, _ ->
-    when elem is 
-        _ -> {width : 0, height : 0}
+    when elem is
+        _ -> { width: 0, height: 0 }
 
 button : { text : Str, onPress : state -> Action state } -> Elem state
 button = \config -> Button config |> @Elem
@@ -73,7 +70,7 @@ translate = \@Elem elem, parentToChild, childToParent ->
         Row children -> Row (List.map children \c -> translate c parentToChild childToParent) |> @Elem
         None -> None |> @Elem
 
-draw : Elem state, state, Rectangle -> Task state []
+draw : Elem state, state, Rectangle -> Task state {}
 draw = \@Elem elem, model, bb ->
 
     defaultStepX = 120
@@ -81,7 +78,7 @@ draw = \@Elem elem, model, bb ->
 
     when elem is
         Button config ->
-            { isPressed } <- GUI.guiButton { text: config.text, shape: { x: bb.x, y: bb.y, width: defaultStepX, height: defaultStepY } } |> Task.await
+            { isPressed } = GUI.guiButton! { text: config.text, shape: { x: bb.x, y: bb.y, width: defaultStepX, height: defaultStepY } }
 
             if isPressed then
                 when config.onPress model is
@@ -91,7 +88,7 @@ draw = \@Elem elem, model, bb ->
                 Task.ok model
 
         Window { title, onClose } child ->
-            { isPressed } <- GUI.guiWindowBox { title, shape: bb } |> Task.await
+            { isPressed } = GUI.guiWindowBox! { title, shape: bb }
 
             if isPressed then
                 when onClose model is
@@ -106,8 +103,8 @@ draw = \@Elem elem, model, bb ->
                 [first, second] ->
                     firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
+                    model1 = draw! first model firstBB
+                    model2 = draw! second model1 secondBB
 
                     Task.ok model2
 
@@ -115,9 +112,9 @@ draw = \@Elem elem, model, bb ->
                     firstBB = { x: bb.x + (0 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     secondBB = { x: bb.x + (1 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
                     thirdBB = { x: bb.x + (2 * defaultStepX), y: bb.y, width: defaultStepX, height: bb.height }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
-                    model3 <- draw third model2 thirdBB |> Task.await
+                    model1 = draw! first model firstBB
+                    model2 = draw! second model1 secondBB
+                    model3 = draw! third model2 thirdBB
 
                     Task.ok model3
 
@@ -129,8 +126,8 @@ draw = \@Elem elem, model, bb ->
                 [first, second] ->
                     firstBB = { x: bb.x, y: bb.y + (0 * defaultStepY), width: bb.width, height: defaultStepY }
                     secondBB = { x: bb.x, y: bb.y + (1 * defaultStepY), width: bb.width, height: defaultStepY }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
+                    model1 = draw! first model firstBB
+                    model2 = draw! second model1 secondBB
 
                     Task.ok model2
 
@@ -138,28 +135,26 @@ draw = \@Elem elem, model, bb ->
                     firstBB = { x: bb.x, y: bb.y + (0 * defaultStepY), width: bb.width, height: defaultStepY }
                     secondBB = { x: bb.x, y: bb.y + (1.5 * defaultStepY), width: bb.width, height: defaultStepY }
                     thirdBB = { x: bb.x, y: bb.y + (2.5 * defaultStepY), width: bb.width, height: defaultStepY }
-                    model1 <- draw first model firstBB |> Task.await
-                    model2 <- draw second model1 secondBB |> Task.await
-                    model3 <- draw third model2 thirdBB |> Task.await
+                    model1 = draw! first model firstBB
+                    model2 = draw! second model1 secondBB
+                    model3 = draw! third model2 thirdBB
 
                     Task.ok model3
 
                 _ -> Task.ok model
 
         Text { label, color } ->
-            {} <- Core.drawText { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color } |> Task.await
+            _ = Raylib.drawText! { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color }
             Task.ok model
 
         None -> Task.ok model
 
-guiButton : { text : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } []
+guiButton : { text : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiButton = \{ text: str, shape: { x, y, width, height } } ->
     Effect.drawGuiButton x y width height str
-    |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
-    |> InternalTask.fromEffect
+    |> Task.map \i64 -> { isPressed: (i64 != 0) }
 
-guiWindowBox : { title : Str, shape : Core.Rectangle } -> Task { isPressed : Bool } []
+guiWindowBox : { title : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
 guiWindowBox = \{ title, shape: { x, y, width, height } } ->
     Effect.guiWindowBox x y width height title
-    |> Effect.map \i32 -> Ok { isPressed: (i32 != 0) }
-    |> InternalTask.fromEffect
+    |> Task.map \i64 -> { isPressed: (i64 != 0) }

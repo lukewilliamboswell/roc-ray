@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ROC_VERSION: nightly
-      ZIG_VERSION: 0.11.0
+      ZIG_VERSION: 0.13.0
     steps:
-      - name: Checkout code 
+      - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Install Build Essentials

@@ -1,34 +1,39 @@
 # roc-raylib
 
-Roc platform for graphics and GUI using [zig](https://ziglang.org) and [raylib](https://www.raylib.com)
-
-🚧 Work in Progress 🚧 basic implementation, no release, still refining APIs, please explore and give any feedback or assistance 
+Roc platform for graphics and GUI using [zig](https://ziglang.org) *version 0.13.0* and [raylib](https://www.raylib.com)
 
 Also check out [this article](https://lukewilliamboswell.github.io/roc-ray-experiment/) for an overview of how I developed this platform.
 
-## Documenation
+## Building the platform locally
 
-**Hosted** docs site coming soon.
+Use nix to setup the development environment - we need roc and zig
 
-**Generate** locally with `roc docs platform/main.roc` and then serve with file server e.g. `cd generated-docs &&  simple-http-server`.
+```
+$ nix develop
+```
 
-## Developing Locally
+Prebuild the platform host for roc to link with.
 
-Tested on *MacOS apple silicon* and *Ubuntu x64*, please let me know if this works on other systems.
+```
+$ ./prebuild-host.sh
+```
 
-**Build platform** using `bash build.sh`
+Run an example
 
-**Run examples** with `roc dev --prebuilt-platform examples/basic_shapes.roc`
+```
+$ roc examples/gui-counter.roc
+```
 
-## Demo - GUI Counter
+## Running the tests locally
 
-This is a minimal implementation of the Counter Example used in the [Action-State](https://docs.google.com/document/d/16qY4NGVOHu8mvInVD-ddTajZYSsFvFBvQON_hmyHGfo/edit?usp=sharing) design idea.
+Use nix to setup the development environment - we need roc and zig
 
-![GUI counter demo](/examples/gui-counter.gif)
+```
+$ nix develop
+```
 
-## Demo - Pong
+Run the tests
 
-This is a demo of the classical [pong](https://en.wikipedia.org/wiki/Pong) video arcade game.
-
-![pong demo](/examples/pong.gif)
-
+```
+$ ROC=roc ZIG=zig bash ci/all_tests.sh
+```

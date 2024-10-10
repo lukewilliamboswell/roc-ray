@@ -41,9 +41,9 @@ render = \model ->
     GUI.col [
         GUI.text { label: "Click below to change the counters, press ESC to exit", color: black },
         GUI.row [
-            GUI.translate (Counter.render model.left red) .left \record, count -> { record & left: count },
-            GUI.translate (Counter.render model.middle green) .middle \record, count -> { record & middle: count },
-            GUI.translate (Counter.render model.right blue) .right \record, count -> { record & right: count },
+            GUI.translate (Counter.render model.left red) .left &left,
+            GUI.translate (Counter.render model.middle green) .middle &middle,
+            GUI.translate (Counter.render model.right blue) .right &right,
         ],
     ]
     |> GUI.window { title: "Window", onClose: \_ -> Action.none }

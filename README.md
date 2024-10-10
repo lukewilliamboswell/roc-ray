@@ -4,6 +4,10 @@ Roc platform for graphics and GUI using [zig](https://ziglang.org) *version 0.13
 
 Also check out [this article](https://lukewilliamboswell.github.io/roc-ray-experiment/) for an overview of how I developed this platform.
 
+## Documentation
+
+Checkout the docs site at [lukewilliamboswell.github.io/roc-ray](https://lukewilliamboswell.github.io/roc-ray/)
+
 ## Building the platform locally
 
 Use nix to setup the development environment - we need roc and zig

@@ -48,7 +48,7 @@ pub fn main() !void {
     // Proceed to `roc build`
     var roc_build_args = try std.ArrayList([]const u8).initCapacity(allocator, 10);
     defer roc_build_args.deinit();
-    try roc_build_args.appendSlice(&[_][]const u8{ "roc", "build", "--no-link", "--output", ".\\app.o" });
+    try roc_build_args.appendSlice(&[_][]const u8{ "roc", "build", "--no-link", "--output", "./app.o" });
     if (optimize_flag.len != 0) {
         try roc_build_args.append(optimize_flag);
     }

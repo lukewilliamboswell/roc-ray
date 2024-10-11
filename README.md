@@ -46,9 +46,3 @@ Run an example
 ```
 PS > .\build-and-run.ps1 examples\pong.roc
 ```
-
-Note if you would like to use a different version of zig, you can set the `ZIG` environment variable to the path of the zig executable.
-
-```
-PS > set ZIG=C:\path\to\zig.exe
-```

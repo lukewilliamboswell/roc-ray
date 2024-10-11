@@ -29,6 +29,7 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 init : Task Model {}
 init =
 
+    Raylib.setBackgroundColor! Navy
     Raylib.setDrawFPS! { fps: Visible }
     Raylib.setWindowSize! { width, height }
     Raylib.setWindowTitle! "Pong"

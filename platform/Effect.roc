@@ -7,14 +7,19 @@ hosted Effect
         drawText,
         measureText,
         setWindowTitle,
+        setBackgroundColor,
+
         drawRectangle,
         drawRectangleGradientV,
         drawCircle,
         drawCircleGradient,
+
         guiWindowBox,
         getMousePosition,
+
         MouseButtons,
         mouseButtons,
+
         setTargetFPS,
         setDrawFPS,
     ]
@@ -29,6 +34,7 @@ drawText : F32, F32, I32, Str, U8, U8, U8, U8 -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
 
 setWindowTitle : Str -> Task {} {}
+setBackgroundColor : U8, U8, U8, U8 -> Task {} {}
 
 drawRectangle : F32, F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
 drawRectangleGradientV : F32, F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}

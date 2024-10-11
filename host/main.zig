@@ -126,6 +126,7 @@ var show_fps: bool = false;
 var show_fps_pos_x: i32 = 10;
 var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
+var background_clear_color: rl.Color = rl.Color.black;
 
 pub fn main() void {
 
@@ -152,7 +153,7 @@ pub fn main() void {
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(rl.Color.black);
+        rl.clearBackground(background_clear_color);
 
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
@@ -321,6 +322,11 @@ export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void
 
 export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
     rl.setTargetFPS(rate);
+    return ok_void;
+}
+
+export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    background_clear_color = rl.Color{ .r = r, .g = g, .b = b, .a = a };
     return ok_void;
 }
 

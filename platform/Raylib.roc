@@ -5,6 +5,7 @@ module [
     Vector2,
     setWindowSize,
     getScreenSize,
+    setBackgroundColor,
     exit,
     setWindowTitle,
     drawRectangle,
@@ -190,6 +191,14 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     Effect.setDrawFPS showFps posX posY
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
+
+## Set the background color to clear the window between each frame.
+setBackgroundColor : Color -> Task {} *
+setBackgroundColor = \color ->
+    { r, g, b, a } = rgba color
+
+    Effect.setBackgroundColor r g b a
+    |> Task.mapErr \{} -> crash "unreachable setBackgroundColor"
 
 ## Measure the width of a text string using the default font.
 measureText : { text : Str, size : I32 } -> Task I64 *

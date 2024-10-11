@@ -312,3 +312,8 @@ export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void
     rl.setWindowTitle(str_to_c(text));
     return ok_void;
 }
+
+export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
+    rl.setTargetFPS(rate);
+    return ok_void;
+}

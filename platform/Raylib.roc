@@ -14,6 +14,8 @@ module [
 
     MouseButtons,
     mouseButtons,
+
+    setTargetFPS,
 ]
 
 import Effect
@@ -150,3 +152,7 @@ mouseButtons =
         extra,
         forward,
     }
+
+## Set the target frames per second. The default value is 60.
+setTargetFPS : I32 -> Task {} *
+setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"

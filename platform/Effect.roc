@@ -16,6 +16,8 @@ hosted Effect
 
         MouseButtons,
         mouseButtons,
+
+        setTargetFPS,
     ]
     imports []
 
@@ -50,3 +52,5 @@ MouseButtons : {
 }
 
 mouseButtons : Task MouseButtons {}
+
+setTargetFPS : I32 -> Task {} {}

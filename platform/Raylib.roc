@@ -14,6 +14,8 @@ module [
     mouseButtons,
     setTargetFPS,
     setDrawFPS,
+    getFrameCount,
+
     measureText,
     drawText,
     drawLine,
@@ -192,6 +194,13 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     Effect.setDrawFPS showFps posX posY
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
+
+## Get the number of frames that have been drawn since the program started.
+getFrameCount : Task I64 *
+getFrameCount =
+    Effect.getFrameCount
+    |> Task.mapErr \{} -> crash "unreachable getFrameCount"
+
 
 ## Set the background color to clear the window between each frame.
 setBackgroundColor : Color -> Task {} *

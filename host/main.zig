@@ -127,6 +127,7 @@ var show_fps_pos_x: i32 = 10;
 var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
 var background_clear_color: rl.Color = rl.Color.black;
+var frame_count: i64 = 0;
 
 pub fn main() void {
 
@@ -162,6 +163,8 @@ pub fn main() void {
         if (show_fps) {
             rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
         }
+
+        frame_count += 1;
     }
 }
 
@@ -330,6 +333,10 @@ export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void
 export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
     rl.setTargetFPS(rate);
     return ok_void;
+}
+
+export fn roc_fx_getFrameCount() callconv(.C) RocResult(i64, void) {
+    return .{ .payload = .{ .ok = frame_count }, .tag = .RocOk };
 }
 
 export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {

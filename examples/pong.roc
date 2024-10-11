@@ -86,6 +86,11 @@ render = \model ->
         else
             Task.ok model
     else
+
+        # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
+        frameCount = Raylib.getFrameCount |> Task.map! Num.toFrac
+        Raylib.setTargetFPS! (60 + (frameCount / 60 |> Num.floor |> Num.toI32))
+
         score = model.score |> Num.toStr
         Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 

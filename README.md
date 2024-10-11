@@ -32,13 +32,15 @@ $ ./ci/all_tests.sh
 
 ### Windows
 
-Ensure you have [zig 0.13.0](https://ziglang.org/download/) and roc in your path. I've made an unofficial Windows release of roc available at [lukewilliamboswell/roc/releases/tag/windows-20241011](https://github.com/lukewilliamboswell/roc/releases/tag/windows-20241011)
+Ensure you have [roc](https://www.roc-lang.org) and [zig 0.13.0](https://ziglang.org/download/) in your path.
+
+Unofficial Windows release of roc available at [lukewilliamboswell/roc/releases/tag/windows-20241011](https://github.com/lukewilliamboswell/roc/releases/tag/windows-20241011)
 
 ```
-PS > zig version
-0.13.0
 PS > roc version
 roc built from commit b5e3c3e441 with additional changes, committed at 2024-10-09 11:34:35 UTC
+PS > zig version
+0.13.0
 ```
 
 Run an example

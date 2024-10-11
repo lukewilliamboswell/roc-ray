@@ -144,7 +144,7 @@ draw = \@Elem elem, model, bb ->
                 _ -> Task.ok model
 
         Text { label, color } ->
-            _ = Raylib.drawText! { text: label, posX: bb.x, posY: bb.y, fontSize: 15, color }
+            _ = Raylib.drawText! { text: label, x: bb.x, y: bb.y, size: 15, color }
             Task.ok model
 
         None -> Task.ok model

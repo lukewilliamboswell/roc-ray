@@ -39,11 +39,11 @@ render : Model -> Task Model {}
 render = \model ->
 
     GUI.col [
-        GUI.text { label: "Click below to change the counters, press ESC to exit", color: black },
+        GUI.text { label: "Click below to change the counters, press ESC to exit", color: Black },
         GUI.row [
-            GUI.translate (Counter.render model.left red) .left &left,
-            GUI.translate (Counter.render model.middle green) .middle &middle,
-            GUI.translate (Counter.render model.right blue) .right &right,
+            GUI.translate (Counter.render model.left Red) .left &left,
+            GUI.translate (Counter.render model.middle Green) .middle &middle,
+            GUI.translate (Counter.render model.right Blue) .right &right,
         ],
     ]
     |> GUI.window { title: "Window", onClose: \_ -> Action.none }
@@ -53,8 +53,3 @@ render = \model ->
         width: model.width * 6 / 8,
         height: model.height * 6 / 8,
     }
-
-black = { r: 0, g: 0, b: 0, a: 255 }
-blue = { r: 29, g: 66, b: 137, a: 255 }
-red = { r: 211, g: 39, b: 62, a: 255 }
-green = { r: 0, g: 59, b: 73, a: 255 }

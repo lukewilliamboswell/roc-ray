@@ -122,8 +122,12 @@ extern fn roc__mainForHost_2_size() callconv(.C) i64;
 // VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
 var window_size_height: c_int = 600;
-var show_fps: bool = true;
+var show_fps: bool = false;
+var show_fps_pos_x: i32 = 10;
+var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
+var background_clear_color: rl.Color = rl.Color.black;
+var frame_count: i64 = 0;
 
 pub fn main() void {
 
@@ -150,11 +154,17 @@ pub fn main() void {
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        rl.clearBackground(rl.Color.black);
+        rl.clearBackground(background_clear_color);
 
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
+
+        if (show_fps) {
+            rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
+        }
+
+        frame_count += 1;
     }
 }
 
@@ -295,7 +305,7 @@ export fn roc_fx_drawCircleGradient(centerX: f32, centerY: f32, radius: f32, r1:
     return ok_void;
 }
 
-export fn roc_fx_drawRectangleGradientV(x: f32, y: f32, width: f32, height: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+export fn roc_fx_drawRectangleGradient(x: f32, y: f32, width: f32, height: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
     rl.drawRectangleGradientV(
         @intFromFloat(x),
         @intFromFloat(y),
@@ -308,7 +318,35 @@ export fn roc_fx_drawRectangleGradientV(x: f32, y: f32, width: f32, height: f32,
     return ok_void;
 }
 
+export fn roc_fx_drawLine(startX: f32, startY: f32, endX: f32, endY: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    const start = rl.Vector2{ .x = startX, .y = startY };
+    const end = rl.Vector2{ .x = endX, .y = endY };
+    rl.drawLineV(start, end, rl.Color{ .r = r, .g = g, .b = b, .a = a });
+    return ok_void;
+}
+
 export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void) {
     rl.setWindowTitle(str_to_c(text));
+    return ok_void;
+}
+
+export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
+    rl.setTargetFPS(rate);
+    return ok_void;
+}
+
+export fn roc_fx_getFrameCount() callconv(.C) RocResult(i64, void) {
+    return .{ .payload = .{ .ok = frame_count }, .tag = .RocOk };
+}
+
+export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    background_clear_color = rl.Color{ .r = r, .g = g, .b = b, .a = a };
+    return ok_void;
+}
+
+export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocResult(void, void) {
+    show_fps = show;
+    show_fps_pos_x = @intFromFloat(posX);
+    show_fps_pos_y = @intFromFloat(posY);
     return ok_void;
 }

@@ -3,8 +3,6 @@ app [main, Model] {
 }
 
 import ray.Raylib exposing [Program, Vector2]
-import ray.Shape2D
-import ray.Drawable exposing [draw]
 
 main : Program Model
 main = { init, render }
@@ -30,6 +28,9 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
 init : Task Model {}
 init =
+
+    Raylib.setBackgroundColor! Navy
+    Raylib.setDrawFPS! { fps: Visible }
     Raylib.setWindowSize! { width, height }
     Raylib.setWindowTitle! "Pong"
 
@@ -68,35 +69,44 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-
-        Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
 
         maxScore = model.maxScore |> Num.toStr
 
-        Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: White }
 
         score = model.score |> Num.toStr
 
-        Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
 
-        {left} = Raylib.mouseButtons!
+        { left } = Raylib.mouseButtons!
 
         if left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
+
+        # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
+        frameCount = Raylib.getFrameCount |> Task.map! Num.toFrac
+        Raylib.setTargetFPS! (60 + (frameCount / 60 |> Num.floor |> Num.toI32))
+
         score = model.score |> Num.toStr
-        Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
         { y } = Raylib.getMousePosition!
 
         pos = model.pos + (y - model.pos) / 5
 
-        Task.forEach! [
-            Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
-            Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
-        ] draw
+        Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
+        Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
+
+        # vertical line
+        Raylib.drawLine! {
+            start: { x: width  / 2, y: 0 },
+            end: { x: width / 2, y: height },
+            color: Green,
+        }
 
         ball = bounce (moveBall model.ball) model.pos
 
@@ -104,5 +114,3 @@ render = \model ->
             Task.ok { model & pos: pos, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
-
-white = { r: 255, g: 255, b: 255, a: 255 }

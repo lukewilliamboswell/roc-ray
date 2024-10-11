@@ -4,6 +4,7 @@ zig-out/
 
 *.o
 *.a
+*.so
 *.lib
 *.dylib
 *.ll
@@ -15,6 +16,8 @@ examples/pong
 examples/basic-shapes
 
 generated-docs/
+raygui/
+raylib/
 
 *.tar.br
 *.tar.gz

@@ -3,8 +3,6 @@ app [main, Model] {
 }
 
 import ray.Raylib exposing [Program, Vector2]
-import ray.Shape2D
-import ray.Drawable exposing [draw]
 
 main : Program Model
 main = { init, render }
@@ -70,15 +68,15 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-        Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: white }
 
         maxScore = model.maxScore |> Num.toStr
 
-        Raylib.drawText! { text: "Max Score: $(maxScore)", posX: 50, posY: 50, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: white }
 
         score = model.score |> Num.toStr
 
-        Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: white }
 
         { left } = Raylib.mouseButtons!
 
@@ -88,18 +86,14 @@ render = \model ->
             Task.ok model
     else
         score = model.score |> Num.toStr
-        Raylib.drawText! { text: "Score: $(score)", posX: 50, posY: 50, fontSize: 20, color: white }
+        Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: white }
 
         { y } = Raylib.getMousePosition!
 
         pos = model.pos + (y - model.pos) / 5
 
-        Task.forEach!
-            [
-                Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
-                Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
-            ]
-            draw
+        Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: white }
+        Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: white }
 
         ball = bounce (moveBall model.ball) model.pos
 

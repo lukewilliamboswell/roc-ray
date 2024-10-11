@@ -38,7 +38,7 @@ init =
 render : Model -> Task Model {}
 render = \model ->
 
-    Raylib.drawText! { text: "Click on the screen to draw a square", posX: model.width - 400, posY: model.height - 25, fontSize: 20, color: white }
+    Raylib.drawText! { text: "Click on the screen to draw a square", x: model.width - 400, y: model.height - 25, size: 20, color: white }
 
     { x, y } = Raylib.getMousePosition!
 
@@ -49,9 +49,9 @@ render = \model ->
 
     Raylib.drawText! {
         text: "Mouse $(Num.toStr (Num.round x)),$(Num.toStr (Num.round y))$(leftStr)$(rightSTr)",
-        posX: 10,
-        posY: model.height - 25,
-        fontSize: 20,
+        x: 10,
+        y: model.height - 25,
+        size: 20,
         color: white,
     }
 

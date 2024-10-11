@@ -1,6 +1,6 @@
 platform "roc-ray"
     requires { Model } { main : Program Model }
-    exposes [Raylib, GUI, Action, Task, Drawable, Shape2D, Layout]
+    exposes [Raylib, GUI, Action, Task, Layout]
     packages {}
     imports []
     provides [mainForHost]

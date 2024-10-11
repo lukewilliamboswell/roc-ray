@@ -6,8 +6,6 @@ module [
     setWindowSize,
     getScreenSize,
     exit,
-    drawText,
-    measureText,
     setWindowTitle,
     drawRectangle,
     getMousePosition,
@@ -15,6 +13,12 @@ module [
     mouseButtons,
     setTargetFPS,
     setDrawFPS,
+    measureText,
+    drawText,
+    drawRectangle,
+    drawRectangleGradientV,
+    drawCircle,
+    drawCircleGradient,
 ]
 
 import Effect
@@ -71,24 +75,6 @@ getScreenSize =
     Effect.getScreenSize
     |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
     |> Task.mapErr \{} -> crash "unreachable getScreenSize"
-
-## Draw text on the screen using the default font.
-drawText : { text : Str, posX : F32, posY : F32, fontSize : I32, color : Color } -> Task {} *
-drawText = \{ text, posX, posY, fontSize, color } ->
-    Effect.drawText posX posY fontSize text color.r color.g color.b color.a
-    |> Task.mapErr \{} -> crash "unreachable drawText"
-
-## Measure the width of a text string using the default font.
-measureText : { text : Str, size : I32 } -> Task I64 *
-measureText = \{ text, size } ->
-    Effect.measureText text size
-    |> Task.mapErr \{} -> crash "unreachable measureText"
-
-## Draw a rectangle on the screen.
-drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
-drawRectangle = \{ x, y, width, height, color } ->
-    Effect.drawRectangle x y width height color.r color.g color.b color.a
-    |> Task.mapErr \{} -> crash "unreachable drawRectangle"
 
 ## Get the current mouse position.
 getMousePosition : Task Vector2 *
@@ -164,3 +150,39 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     Effect.setDrawFPS showFps posX posY
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
+
+## Measure the width of a text string using the default font.
+measureText : { text : Str, size : I32 } -> Task I64 *
+measureText = \{ text, size } ->
+    Effect.measureText text size
+    |> Task.mapErr \{} -> crash "unreachable measureText"
+
+## Draw text on the screen using the default font.
+drawText : { text : Str, x : F32, y : F32, size : I32, color : Color } -> Task {} *
+drawText = \{ text, x, y, size, color } ->
+    Effect.drawText x y size text color.r color.g color.b color.a
+    |> Task.mapErr \{} -> crash "unreachable drawText"
+
+## Draw a rectangle on the screen.
+drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
+drawRectangle = \{ x, y, width, height, color } ->
+    Effect.drawRectangle x y width height color.r color.g color.b color.a
+    |> Task.mapErr \{} -> crash "unreachable drawRectangle"
+
+## Draw a rectangle with a gradient on the screen.
+drawRectangleGradientV : { x : F32, y : F32, width : F32, height : F32, top : Color, bottom : Color } -> Task {} *
+drawRectangleGradientV = \{ x, y, width, height, top, bottom } ->
+    Effect.drawRectangleGradientV x y width height top.r top.g top.b top.a bottom.r bottom.g bottom.b bottom.a
+    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradientV"
+
+## Draw a circle on the screen.
+drawCircle : { x : F32, y : F32, radius : F32, color : Color } -> Task {} *
+drawCircle = \{ x, y, radius, color } ->
+    Effect.drawCircle x y radius color.r color.g color.b color.a
+    |> Task.mapErr \{} -> crash "unreachable drawCircle"
+
+## Draw a circle with a gradient on the screen.
+drawCircleGradient : { x : F32, y : F32, radius : F32, inner : Color, outer : Color } -> Task {} *
+drawCircleGradient = \{ x, y, radius, inner, outer } ->
+    Effect.drawCircleGradient x y radius inner.r inner.g inner.b inner.a outer.r outer.g outer.b outer.a
+    |> Task.mapErr \{} -> crash "unreachable drawCircleGradient"

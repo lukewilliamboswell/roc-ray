@@ -11,11 +11,10 @@ module [
     setWindowTitle,
     drawRectangle,
     getMousePosition,
-
     MouseButtons,
     mouseButtons,
-
     setTargetFPS,
+    setDrawFPS,
 ]
 
 import Effect
@@ -94,11 +93,11 @@ drawRectangle = \{ x, y, width, height, color } ->
 ## Get the current mouse position.
 getMousePosition : Task Vector2 *
 getMousePosition =
-    {x,y} =
+    { x, y } =
         Effect.getMousePosition
-        |> Task.mapErr! \{} -> crash "unreachable getMousePosition"
+            |> Task.mapErr! \{} -> crash "unreachable getMousePosition"
 
-    Task.ok {x, y}
+    Task.ok { x, y }
 
 ## Represents the state of the mouse buttons.
 ## ```
@@ -113,13 +112,13 @@ getMousePosition =
 ## }
 ## ```
 MouseButtons : {
-    back: Bool,
-    left: Bool,
-    right: Bool,
-    middle: Bool,
-    side: Bool,
-    extra: Bool,
-    forward: Bool,
+    back : Bool,
+    left : Bool,
+    right : Bool,
+    middle : Bool,
+    side : Bool,
+    extra : Bool,
+    forward : Bool,
 }
 
 ## Get the current state of the mouse buttons.
@@ -132,16 +131,9 @@ mouseButtons : Task MouseButtons *
 mouseButtons =
     # note we are unpacking and repacking the mouseButtons here as a workaround for
     # https://github.com/roc-lang/roc/issues/7142
-    {
-        back,
-        left,
-        right,
-        middle,
-        side,
-        extra,
-        forward,
-    } = Effect.mouseButtons
-        |> Task.mapErr! \{} -> crash "unreachable mouseButtons"
+    { back, left, right, middle, side, extra, forward } =
+        Effect.mouseButtons
+            |> Task.mapErr! \{} -> crash "unreachable mouseButtons"
 
     Task.ok {
         back,
@@ -156,3 +148,19 @@ mouseButtons =
 ## Set the target frames per second. The default value is 60.
 setTargetFPS : I32 -> Task {} *
 setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"
+
+## Display the frames per second, and set the location.
+## The default values are Hidden, 10, 10.
+## ```
+## Raylib.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
+## ```
+setDrawFPS : { fps : [Visible, Hidden], posX ? F32, posY ? F32 } -> Task {} *
+setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
+
+    showFps =
+        when fps is
+            Visible -> Bool.true
+            Hidden -> Bool.false
+
+    Effect.setDrawFPS showFps posX posY
+    |> Task.mapErr \{} -> crash "unreachable setDrawFPS"

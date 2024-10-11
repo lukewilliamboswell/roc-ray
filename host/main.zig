@@ -122,7 +122,9 @@ extern fn roc__mainForHost_2_size() callconv(.C) i64;
 // VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
 var window_size_height: c_int = 600;
-var show_fps: bool = true;
+var show_fps: bool = false;
+var show_fps_pos_x: i32 = 10;
+var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
 
 pub fn main() void {
@@ -155,6 +157,10 @@ pub fn main() void {
         // UPDATE ROC
         roc__mainForHost_1_caller(&model, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
+
+        if (show_fps) {
+            rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
+        }
     }
 }
 
@@ -315,5 +321,12 @@ export fn roc_fx_setWindowTitle(text: *RocStr) callconv(.C) RocResult(void, void
 
 export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
     rl.setTargetFPS(rate);
+    return ok_void;
+}
+
+export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocResult(void, void) {
+    show_fps = show;
+    show_fps_pos_x = @intFromFloat(posX);
+    show_fps_pos_y = @intFromFloat(posY);
     return ok_void;
 }

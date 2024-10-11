@@ -30,6 +30,8 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
 init : Task Model {}
 init =
+
+    Raylib.setDrawFPS! { fps: Visible }
     Raylib.setWindowSize! { width, height }
     Raylib.setWindowTitle! "Pong"
 
@@ -68,7 +70,6 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-
         Raylib.drawText! { text: "Click to start", posX: 50, posY: 120, fontSize: 20, color: white }
 
         maxScore = model.maxScore |> Num.toStr
@@ -79,7 +80,7 @@ render = \model ->
 
         Raylib.drawText! { text: "Last Score: $(score)", posX: 50, posY: 80, fontSize: 20, color: white }
 
-        {left} = Raylib.mouseButtons!
+        { left } = Raylib.mouseButtons!
 
         if left then
             Task.ok { model & playing: Bool.true, score: 0 }
@@ -93,10 +94,12 @@ render = \model ->
 
         pos = model.pos + (y - model.pos) / 5
 
-        Task.forEach! [
-            Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
-            Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
-        ] draw
+        Task.forEach!
+            [
+                Shape2D.rect { posX: 0, posY: pos, width: pw, height: paddle, color: white },
+                Shape2D.rect { posX: model.ball.pos.x, posY: model.ball.pos.y, width: ballSize, height: ballSize, color: white },
+            ]
+            draw
 
         ball = bounce (moveBall model.ball) model.pos
 

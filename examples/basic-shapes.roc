@@ -30,7 +30,7 @@ render = \model ->
 
     Raylib.drawText! { text: "Hello World", x: 10, y: 250, size: 20, color: Green }
     Raylib.drawRectangle! { x: 10, y: 50, width: 200, height: 50, color: Aqua }
-    Raylib.drawRectangleGradientV! { x: 10, y: 150, width: 200, height: 50, top: White, bottom: Blue }
+    Raylib.drawRectangleGradient! { x: 10, y: 150, width: 200, height: 50, top: White, bottom: Blue }
     Raylib.drawCircle! { x: 300, y: 100, radius: 50, color: Red }
     Raylib.drawCircleGradient! { x: model.width / 2, y: model.height / 2, radius: 35, inner: Red, outer: RGBA 255 255 128 255 }
 

@@ -19,6 +19,7 @@ module [
     drawRectangleGradientV,
     drawCircle,
     drawCircleGradient,
+    rgba,
 ]
 
 import Effect
@@ -51,7 +52,46 @@ Vector2 : { x : F32, y : F32 }
 ## ```
 ## { r : U8, g : U8, b : U8, a : U8 }
 ## ```
-Color : { r : U8, g : U8, b : U8, a : U8 }
+Color : [
+    RGBA U8 U8 U8 U8,
+    White,
+    Silver,
+    Gray,
+    Black,
+    Red,
+    Maroon,
+    Yellow,
+    Olive,
+    Lime,
+    Green,
+    Aqua,
+    Teal,
+    Blue,
+    Navy,
+    Fuchsia,
+    Purple,
+]
+
+rgba : Color -> { r : U8, g : U8, b : U8, a : U8 }
+rgba = \color ->
+    when color is
+        RGBA r g b a -> { r, g, b, a }
+        White -> { r: 255, g: 255, b: 255, a: 255 }
+        Silver -> { r: 192, g: 192, b: 192, a: 255 }
+        Gray -> { r: 128, g: 128, b: 128, a: 255 }
+        Black -> { r: 0, g: 0, b: 0, a: 255 }
+        Red -> { r: 255, g: 0, b: 0, a: 255 }
+        Maroon -> { r: 128, g: 0, b: 0, a: 255 }
+        Yellow -> { r: 255, g: 255, b: 0, a: 255 }
+        Olive -> { r: 128, g: 128, b: 0, a: 255 }
+        Lime -> { r: 0, g: 255, b: 0, a: 255 }
+        Green -> { r: 0, g: 128, b: 0, a: 255 }
+        Aqua -> { r: 0, g: 255, b: 255, a: 255 }
+        Teal -> { r: 0, g: 128, b: 128, a: 255 }
+        Blue -> { r: 0, g: 0, b: 255, a: 255 }
+        Navy -> { r: 0, g: 0, b: 128, a: 255 }
+        Fuchsia -> { r: 255, g: 0, b: 255, a: 255 }
+        Purple -> { r: 128, g: 0, b: 128, a: 255 }
 
 ## Exit the program.
 exit : Task {} *
@@ -160,29 +200,46 @@ measureText = \{ text, size } ->
 ## Draw text on the screen using the default font.
 drawText : { text : Str, x : F32, y : F32, size : I32, color : Color } -> Task {} *
 drawText = \{ text, x, y, size, color } ->
-    Effect.drawText x y size text color.r color.g color.b color.a
+
+    { r, g, b, a } = rgba color
+
+    Effect.drawText x y size text r g b a
     |> Task.mapErr \{} -> crash "unreachable drawText"
 
 ## Draw a rectangle on the screen.
 drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
 drawRectangle = \{ x, y, width, height, color } ->
-    Effect.drawRectangle x y width height color.r color.g color.b color.a
+
+    { r, g, b, a } = rgba color
+
+    Effect.drawRectangle x y width height r g b a
     |> Task.mapErr \{} -> crash "unreachable drawRectangle"
 
 ## Draw a rectangle with a gradient on the screen.
 drawRectangleGradientV : { x : F32, y : F32, width : F32, height : F32, top : Color, bottom : Color } -> Task {} *
 drawRectangleGradientV = \{ x, y, width, height, top, bottom } ->
-    Effect.drawRectangleGradientV x y width height top.r top.g top.b top.a bottom.r bottom.g bottom.b bottom.a
+
+    tc = rgba top
+    bc = rgba bottom
+
+    Effect.drawRectangleGradientV x y width height tc.r tc.g tc.b tc.a bc.r bc.g bc.b bc.a
     |> Task.mapErr \{} -> crash "unreachable drawRectangleGradientV"
 
 ## Draw a circle on the screen.
 drawCircle : { x : F32, y : F32, radius : F32, color : Color } -> Task {} *
 drawCircle = \{ x, y, radius, color } ->
-    Effect.drawCircle x y radius color.r color.g color.b color.a
+
+    { r, g, b, a } = rgba color
+
+    Effect.drawCircle x y radius r g b a
     |> Task.mapErr \{} -> crash "unreachable drawCircle"
 
 ## Draw a circle with a gradient on the screen.
 drawCircleGradient : { x : F32, y : F32, radius : F32, inner : Color, outer : Color } -> Task {} *
 drawCircleGradient = \{ x, y, radius, inner, outer } ->
-    Effect.drawCircleGradient x y radius inner.r inner.g inner.b inner.a outer.r outer.g outer.b outer.a
+
+    ic = rgba inner
+    oc = rgba outer
+
+    Effect.drawCircleGradient x y radius ic.r ic.g ic.b ic.a oc.r oc.g oc.b oc.a
     |> Task.mapErr \{} -> crash "unreachable drawCircleGradient"

@@ -68,15 +68,15 @@ bounce = \ball, pos ->
 render : Model -> Task Model {}
 render = \model ->
     if !model.playing then
-        Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: white }
+        Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
 
         maxScore = model.maxScore |> Num.toStr
 
-        Raylib.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: white }
+        Raylib.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: White }
 
         score = model.score |> Num.toStr
 
-        Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: white }
+        Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
 
         { left } = Raylib.mouseButtons!
 
@@ -86,14 +86,14 @@ render = \model ->
             Task.ok model
     else
         score = model.score |> Num.toStr
-        Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: white }
+        Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
         { y } = Raylib.getMousePosition!
 
         pos = model.pos + (y - model.pos) / 5
 
-        Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: white }
-        Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: white }
+        Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
+        Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
 
         ball = bounce (moveBall model.ball) model.pos
 
@@ -101,5 +101,3 @@ render = \model ->
             Task.ok { model & pos: pos, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
-
-white = { r: 255, g: 255, b: 255, a: 255 }

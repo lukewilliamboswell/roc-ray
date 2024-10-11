@@ -9,8 +9,9 @@ hosted Effect
         setWindowTitle,
         setBackgroundColor,
 
+        drawLine,
         drawRectangle,
-        drawRectangleGradientV,
+        drawRectangleGradient,
         drawCircle,
         drawCircleGradient,
 
@@ -36,8 +37,9 @@ measureText : Str, I32 -> Task I64 {}
 setWindowTitle : Str -> Task {} {}
 setBackgroundColor : U8, U8, U8, U8 -> Task {} {}
 
+drawLine : F32, F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
 drawRectangle : F32, F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
-drawRectangleGradientV : F32, F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
+drawRectangleGradient : F32, F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
 drawCircle : F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
 drawCircleGradient : F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
 

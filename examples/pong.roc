@@ -96,6 +96,13 @@ render = \model ->
         Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
         Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
 
+        # vertical line
+        Raylib.drawLine! {
+            start: { x: width  / 2, y: 0 },
+            end: { x: width / 2, y: height },
+            color: Green,
+        }
+
         ball = bounce (moveBall model.ball) model.pos
 
         if ball.pos.x <= 0 then

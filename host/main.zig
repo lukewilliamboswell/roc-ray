@@ -302,7 +302,7 @@ export fn roc_fx_drawCircleGradient(centerX: f32, centerY: f32, radius: f32, r1:
     return ok_void;
 }
 
-export fn roc_fx_drawRectangleGradientV(x: f32, y: f32, width: f32, height: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
+export fn roc_fx_drawRectangleGradient(x: f32, y: f32, width: f32, height: f32, r1: u8, g1: u8, b1: u8, a1: u8, r2: u8, g2: u8, b2: u8, a2: u8) callconv(.C) RocResult(void, void) {
     rl.drawRectangleGradientV(
         @intFromFloat(x),
         @intFromFloat(y),
@@ -312,6 +312,13 @@ export fn roc_fx_drawRectangleGradientV(x: f32, y: f32, width: f32, height: f32,
         rl.Color{ .r = r2, .g = g2, .b = b2, .a = a2 },
     );
 
+    return ok_void;
+}
+
+export fn roc_fx_drawLine(startX: f32, startY: f32, endX: f32, endY: f32, r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
+    const start = rl.Vector2{ .x = startX, .y = startY };
+    const end = rl.Vector2{ .x = endX, .y = endY };
+    rl.drawLineV(start, end, rl.Color{ .r = r, .g = g, .b = b, .a = a });
     return ok_void;
 }
 

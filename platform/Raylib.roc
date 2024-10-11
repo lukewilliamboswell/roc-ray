@@ -16,8 +16,9 @@ module [
     setDrawFPS,
     measureText,
     drawText,
+    drawLine,
     drawRectangle,
-    drawRectangleGradientV,
+    drawRectangleGradient,
     drawCircle,
     drawCircleGradient,
     rgba,
@@ -215,6 +216,15 @@ drawText = \{ text, x, y, size, color } ->
     Effect.drawText x y size text r g b a
     |> Task.mapErr \{} -> crash "unreachable drawText"
 
+## Draw a line on the screen.
+drawLine : { start : Vector2, end : Vector2, color : Color } -> Task {} *
+drawLine = \{ start, end, color } ->
+
+    { r, g, b, a } = rgba color
+
+    Effect.drawLine start.x start.y end.x end.y r g b a
+    |> Task.mapErr \{} -> crash "unreachable drawLine"
+
 ## Draw a rectangle on the screen.
 drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
 drawRectangle = \{ x, y, width, height, color } ->
@@ -225,14 +235,14 @@ drawRectangle = \{ x, y, width, height, color } ->
     |> Task.mapErr \{} -> crash "unreachable drawRectangle"
 
 ## Draw a rectangle with a gradient on the screen.
-drawRectangleGradientV : { x : F32, y : F32, width : F32, height : F32, top : Color, bottom : Color } -> Task {} *
-drawRectangleGradientV = \{ x, y, width, height, top, bottom } ->
+drawRectangleGradient : { x : F32, y : F32, width : F32, height : F32, top : Color, bottom : Color } -> Task {} *
+drawRectangleGradient = \{ x, y, width, height, top, bottom } ->
 
     tc = rgba top
     bc = rgba bottom
 
-    Effect.drawRectangleGradientV x y width height tc.r tc.g tc.b tc.a bc.r bc.g bc.b bc.a
-    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradientV"
+    Effect.drawRectangleGradient x y width height tc.r tc.g tc.b tc.a bc.r bc.g bc.b bc.a
+    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradient"
 
 ## Draw a circle on the screen.
 drawCircle : { x : F32, y : F32, radius : F32, color : Color } -> Task {} *

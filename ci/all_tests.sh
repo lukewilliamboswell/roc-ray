@@ -8,11 +8,6 @@ if [ -z "${ROC:-}" ]; then
   export ROC=$(which roc)
 fi
 
-if [ -z "${ZIG:-}" ]; then
-  echo "INFO: The ZIG environment variable is not set."
-  export ZIG=$(which zig)
-fi
-
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
 
@@ -23,16 +18,6 @@ IGNORED_FILES=("Counter.roc")
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
         $ROC check $ROC_FILE
-    fi
-done
-
-# build the host
-./prebuild-host.sh
-
-# roc build
-for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
-        $ROC build --linker=legacy $ROC_FILE
     fi
 done
 

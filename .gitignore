@@ -7,6 +7,7 @@ zig-out/
 *.lib
 *.dylib
 *.ll
+*.obj
 
 examples/gui-counter
 examples/squares

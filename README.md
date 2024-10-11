@@ -8,36 +8,41 @@ Also check out [this article](https://lukewilliamboswell.github.io/roc-ray-exper
 
 Checkout the docs site at [lukewilliamboswell.github.io/roc-ray](https://lukewilliamboswell.github.io/roc-ray/)
 
-## Building the platform locally
+## Building and Run
 
-Use nix to setup the development environment - we need roc and zig
+### Linux and MacOS - Nix Package Manager
+
+Using nix package manager to setup a development environment with roc and zig
 
 ```
 $ nix develop
-```
-
-Prebuild the platform host for roc to link with.
-
-```
-$ ./prebuild-host.sh
 ```
 
 Run an example
 
 ```
-$ roc examples/gui-counter.roc
+$ ./build-and-run.sh examples/pong.roc
 ```
 
-## Running the tests locally
-
-Use nix to setup the development environment - we need roc and zig
+**Running the tests locally**
 
 ```
-$ nix develop
+$ ./ci/all_tests.sh
 ```
 
-Run the tests
+### Windows
+
+Ensure you have [zig 0.13.0](https://ziglang.org/download/) and roc in your path. I've made an unofficial Windows release of roc available at [lukewilliamboswell/roc/releases/tag/windows-20241011](https://github.com/lukewilliamboswell/roc/releases/tag/windows-20241011)
 
 ```
-$ ROC=roc ZIG=zig bash ci/all_tests.sh
+PS > zig version
+0.13.0
+PS > roc version
+roc built from commit b5e3c3e441 with additional changes, committed at 2024-10-09 11:34:35 UTC
+```
+
+Run an example
+
+```
+PS > .\build-and-run.ps1 examples\pong.roc
 ```

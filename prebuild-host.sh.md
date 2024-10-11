@@ -1,3 +1,6 @@
+TODO -- prebuild the host so roc can link with it and app authors don't need zig installed
+
+```sh
 #!/usr/bin/env bash
 
 # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
@@ -29,3 +32,15 @@ elif [[ "$(uname)" == "Linux" ]]; then
 else
     echo "Unsupported operating system"
 fi
+```
+
+```ps1
+# build host
+C:\zig-windows-x86_64-0.13.0\zig.exe build --release=fast
+
+# run the executable
+.\zig-out\bin\rocray.exe
+
+# bundle the host with raylib (NOT USED... leaving this here for a future where we try to prebuild the host)
+#LIB.EXE /OUT:./platform/windows-x64.lib /VERBOSE /LTCG .\zig-out\lib\raylib.lib .\zig-out\lib\rocray.lib
+```

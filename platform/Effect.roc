@@ -19,6 +19,7 @@ hosted Effect
         mouseButtons,
         setTargetFPS,
         setDrawFPS,
+        takeScreenshot,
     ]
     imports []
 
@@ -58,3 +59,5 @@ mouseButtons : Task MouseButtons {}
 
 setTargetFPS : I32 -> Task {} {}
 setDrawFPS : Bool, F32, F32 -> Task {} {}
+
+takeScreenshot : Str -> Task {} {}

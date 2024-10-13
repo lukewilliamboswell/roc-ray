@@ -67,7 +67,14 @@ bounce = \ball, pos ->
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { frameCount, mouseButtons, mousePos } ->
+render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
+
+    screenTask =
+        if Set.contains keyboardButtons KeyLeftControl && Set.contains keyboardButtons KeyK then
+            Raylib.takeScreenshot "saved-$(Num.toStr frameCount).png"
+        else
+            Task.ok {}
+
     if !model.playing then
         Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
 
@@ -78,6 +85,10 @@ render = \model, { frameCount, mouseButtons, mousePos } ->
         score = model.score |> Num.toStr
 
         Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
+
+        Raylib.drawText! { text: "Ctrl-K to Screenshot to 'saved.png'", x: 50, y: 150, size: 20, color: White }
+
+        screenTask!
 
         if Set.contains mouseButtons MouseButtonLeft then
             Task.ok { model & playing: Bool.true, score: 0 }
@@ -99,6 +110,8 @@ render = \model, { frameCount, mouseButtons, mousePos } ->
         drawCrossHair! mousePos
 
         ball = bounce (moveBall model.ball) model.pos
+
+        screenTask!
 
         if ball.pos.x <= 0 then
             Task.ok { model & pos: pos, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }

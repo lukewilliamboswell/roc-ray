@@ -23,7 +23,7 @@ module [
     PlatformState,
     KeyboardKey,
     MouseButton,
-
+    takeScreenshot,
 ]
 
 import Effect
@@ -231,3 +231,12 @@ drawCircleGradient = \{ x, y, radius, inner, outer } ->
 
     Effect.drawCircleGradient x y radius ic.r ic.g ic.b ic.a oc.r oc.g oc.b oc.a
     |> Task.mapErr \{} -> crash "unreachable drawCircleGradient"
+
+## Takes a screenshot of current screen (filename extension defines format)
+## ```
+## Raylib.takeScreenshot! "screenshot.png"
+## ```
+takeScreenshot : Str -> Task {} *
+takeScreenshot = \filename ->
+    Effect.takeScreenshot filename
+    |> Task.mapErr \{} -> crash "unreachable takeScreenshot"

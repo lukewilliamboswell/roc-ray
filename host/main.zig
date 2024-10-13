@@ -357,6 +357,11 @@ export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) Roc
     return ok_void;
 }
 
+export fn roc_fx_takeScreenshot(path: *RocStr) callconv(.C) RocResult(void, void) {
+    rl.takeScreenshot(str_to_c(path));
+    return ok_void;
+}
+
 export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocResult(void, void) {
     show_fps = show;
     show_fps_pos_x = @intFromFloat(posX);

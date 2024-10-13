@@ -2,11 +2,11 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Rectangle]
+import ray.Raylib exposing [Rectangle, KeyBoardKey]
 
 Program : {
     init : Task Model {},
-    render : Model -> Task Model {},
+    render : Model, Set KeyBoardKey -> Task Model {},
 }
 
 Model : {
@@ -37,8 +37,8 @@ init =
         status: Ready,
     }
 
-render : Model -> Task Model {}
-render = \model ->
+render : Model, Set KeyBoardKey -> Task Model {}
+render = \model, keys ->
 
     Raylib.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
 
@@ -48,8 +48,6 @@ render = \model ->
 
     leftStr = if left then ", LEFT" else ""
     rightSTr = if right then ", RIGHT" else ""
-
-    keys = Raylib.getKeysPressed!
 
     Raylib.drawText! {
         text: "Mouse $(Num.toStr (Num.round mouseX)),$(Num.toStr (Num.round mouseY))$(leftStr)$(rightSTr), $(Inspect.toStr keys)",

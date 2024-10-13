@@ -113,8 +113,9 @@ extern fn roc__mainForHost_0_caller(*anyopaque, *anyopaque, **anyopaque) callcon
 extern fn roc__mainForHost_0_size() callconv(.C) i64;
 
 // Update Fn
-extern fn roc__mainForHost_1_caller(**anyopaque, *anyopaque, *anyopaque) callconv(.C) void;
+extern fn roc__mainForHost_1_caller(**anyopaque, RocList, *anyopaque, *anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_1_size() callconv(.C) i64;
+
 // Update Task
 extern fn roc__mainForHost_2_caller(*anyopaque, *anyopaque, **anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_2_size() callconv(.C) i64;
@@ -129,7 +130,10 @@ var should_exit: bool = false;
 var background_clear_color: rl.Color = rl.Color.black;
 var frame_count: i64 = 0;
 
-pub fn main() void {
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+
+pub fn main() !void {
 
     // SETUP WINDOW
     rl.initWindow(window_size_width, window_size_height, "hello world!");
@@ -156,8 +160,12 @@ pub fn main() void {
 
         rl.clearBackground(background_clear_color);
 
+        try update_keys_down();
+
+        const keys_down_list = get_keys_down();
+
         // UPDATE ROC
-        roc__mainForHost_1_caller(&model, undefined, update_captures);
+        roc__mainForHost_1_caller(&model, keys_down_list, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
 
         if (show_fps) {
@@ -351,21 +359,49 @@ export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocRe
     return ok_void;
 }
 
-// store the keys pressed as we read from the queue... assume max 1000 queued
-var key_queue: [1000]u64 = undefined;
+// store all the keys in a map so we can track those that are currently pressed down
+// when a key is pressed it is inserted into the map, and then checked on each frame
+// until it is released
+var keys_down = std.AutoHashMap(rl.KeyboardKey, bool).init(allocator);
 
-export fn roc_fx_getKeysPressed() callconv(.C) RocResult(RocList, void) {
-    var count: u64 = 0;
+fn update_keys_down() !void {
+    var key = rl.getKeyPressed();
 
-    while (count < 1000) {
-        const key = rl.getKeyPressed();
-        if (key == rl.KeyboardKey.key_null) {
-            break;
-        }
-        key_queue[count] = @intCast(@intFromEnum(key));
-        count = count + 1;
+    // insert newly pressed keys
+    while (key != rl.KeyboardKey.key_null) {
+        try keys_down.put(key, true);
+        key = rl.getKeyPressed();
     }
 
-    const keys = RocList.fromSlice(u64, key_queue[0..count], false);
-    return .{ .payload = .{ .ok = keys }, .tag = .RocOk };
+    // check all keys that are marked "down" and update if they have been released
+    var iter = keys_down.iterator();
+    while (iter.next()) |kv|  {
+        if (kv.value_ptr.*) {
+            const k = kv.key_ptr.*;
+            if (!rl.isKeyDown(k)) {
+                try keys_down.put(k, false);
+            }
+        } else {
+            // key hasn't been pressed, ignore it
+        }
+    }
+}
+
+fn get_keys_down() RocList {
+
+    // store the keys pressed as we read from the queue... assume max 1000 queued
+    var key_queue: [1000]u64 = undefined;
+    var count: u64 = 0;
+
+    var iter = keys_down.iterator();
+    while (iter.next()) |kv|  {
+        if (kv.value_ptr.*) {
+            key_queue[count] = @intCast(@intFromEnum(kv.key_ptr.*));
+            count = count + 1;
+        } else {
+            // key hasn't been pressed, ignore it
+        }
+    }
+
+    return RocList.fromSlice(u64, key_queue[0..count], false);
 }

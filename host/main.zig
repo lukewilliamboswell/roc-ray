@@ -113,8 +113,9 @@ extern fn roc__mainForHost_0_caller(*anyopaque, *anyopaque, **anyopaque) callcon
 extern fn roc__mainForHost_0_size() callconv(.C) i64;
 
 // Update Fn
-extern fn roc__mainForHost_1_caller(**anyopaque, *anyopaque, *anyopaque) callconv(.C) void;
+extern fn roc__mainForHost_1_caller(**anyopaque, PlatformState, *anyopaque, *anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_1_size() callconv(.C) i64;
+
 // Update Task
 extern fn roc__mainForHost_2_caller(*anyopaque, *anyopaque, **anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_2_size() callconv(.C) i64;
@@ -127,9 +128,13 @@ var show_fps_pos_x: i32 = 10;
 var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
 var background_clear_color: rl.Color = rl.Color.black;
-var frame_count: i64 = 0;
 
-pub fn main() void {
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+
+pub fn main() !void {
+
+    var frame_count: u64 = 0;
 
     // SETUP WINDOW
     rl.initWindow(window_size_width, window_size_height, "hello world!");
@@ -156,8 +161,20 @@ pub fn main() void {
 
         rl.clearBackground(background_clear_color);
 
+        try update_keys_down();
+
+        const mouse_pos = rl.getMousePosition();
+
+        const platform_state = PlatformState {
+            .frameCount = frame_count,
+            .keysDown = get_keys_down(),
+            .mouseDown = get_mouse_down(),
+            .mousePosX = mouse_pos.x,
+            .mousePosY = mouse_pos.y,
+        };
+
         // UPDATE ROC
-        roc__mainForHost_1_caller(&model, undefined, update_captures);
+        roc__mainForHost_1_caller(&model, platform_state, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
 
         if (show_fps) {
@@ -335,12 +352,13 @@ export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
     return ok_void;
 }
 
-export fn roc_fx_getFrameCount() callconv(.C) RocResult(i64, void) {
-    return .{ .payload = .{ .ok = frame_count }, .tag = .RocOk };
-}
-
 export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
     background_clear_color = rl.Color{ .r = r, .g = g, .b = b, .a = a };
+    return ok_void;
+}
+
+export fn roc_fx_takeScreenshot(path: *RocStr) callconv(.C) RocResult(void, void) {
+    rl.takeScreenshot(str_to_c(path));
     return ok_void;
 }
 
@@ -351,21 +369,96 @@ export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocRe
     return ok_void;
 }
 
-// store the keys pressed as we read from the queue... assume max 1000 queued
-var key_queue: [1000]u64 = undefined;
+// store all the keys in a map so we can track those that are currently pressed down
+// when a key is pressed it is inserted into the map, and then checked on each frame
+// until it is released
+var keys_down = std.AutoHashMap(rl.KeyboardKey, bool).init(allocator);
 
-export fn roc_fx_getKeysPressed() callconv(.C) RocResult(RocList, void) {
-    var count: u64 = 0;
+fn update_keys_down() !void {
+    var key = rl.getKeyPressed();
 
-    while (count < 1000) {
-        const key = rl.getKeyPressed();
-        if (key == rl.KeyboardKey.key_null) {
-            break;
-        }
-        key_queue[count] = @intCast(@intFromEnum(key));
-        count = count + 1;
+    // insert newly pressed keys
+    while (key != rl.KeyboardKey.key_null) {
+        try keys_down.put(key, true);
+        key = rl.getKeyPressed();
     }
 
-    const keys = RocList.fromSlice(u64, key_queue[0..count], false);
-    return .{ .payload = .{ .ok = keys }, .tag = .RocOk };
+    // check all keys that are marked "down" and update if they have been released
+    var iter = keys_down.iterator();
+    while (iter.next()) |kv|  {
+        if (kv.value_ptr.*) {
+            const k = kv.key_ptr.*;
+            if (!rl.isKeyDown(k)) {
+                try keys_down.put(k, false);
+            }
+        } else {
+            // key hasn't been pressed, ignore it
+        }
+    }
 }
+
+fn get_keys_down() RocList {
+
+    // store the keys pressed as we read from the queue... assume max 1000 queued
+    var key_queue: [1000]u64 = undefined;
+    var count: u64 = 0;
+
+    var iter = keys_down.iterator();
+    while (iter.next()) |kv|  {
+        if (kv.value_ptr.*) {
+            key_queue[count] = @intCast(@intFromEnum(kv.key_ptr.*));
+            count = count + 1;
+        } else {
+            // key hasn't been pressed, ignore it
+        }
+    }
+
+    return RocList.fromSlice(u64, key_queue[0..count], false);
+}
+
+fn get_mouse_down() RocList {
+
+    var mouse_down: [6]u64 = undefined;
+    var count: u64 = 0;
+
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_left)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_left));
+        count += 1;
+    }
+
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_right)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_right));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_middle)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_middle));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_side)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_side));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_extra)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_extra));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_forward)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_forward));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_back)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_back));
+        count += 1;
+    }
+
+    return RocList.fromSlice(u64, mouse_down[0..count], false);
+}
+
+
+const PlatformState = extern struct {
+    frameCount: u64,
+    keysDown: RocList,
+    mouseDown: RocList,
+    mousePosX: f32,
+    mousePosY: f32,
+};

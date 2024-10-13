@@ -25,8 +25,8 @@ init =
         height,
     }
 
-render : Model -> Task Model {}
-render = \model ->
+render : Model, _ -> Task Model {}
+render = \model, _ ->
 
     Raylib.drawText! { text: "Hello World", x: 10, y: 250, size: 20, color: Green }
     Raylib.drawRectangle! { x: 10, y: 50, width: 200, height: 50, color: Aqua }

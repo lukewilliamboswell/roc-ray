@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Program, Vector2]
+import ray.Raylib exposing [Program, PlatformState, Vector2]
 
 main : Program Model
 main = { init, render }
@@ -66,8 +66,15 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model -> Task Model {}
-render = \model ->
+render : Model, PlatformState -> Task Model {}
+render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
+
+    screenTask =
+        if Set.contains keyboardButtons KeyLeftControl && Set.contains keyboardButtons KeyK then
+            Raylib.takeScreenshot "saved-$(Num.toStr frameCount).png"
+        else
+            Task.ok {}
+
     if !model.playing then
         Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
 
@@ -79,37 +86,49 @@ render = \model ->
 
         Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
 
-        { left } = Raylib.mouseButtons!
+        Raylib.drawText! { text: "Ctrl-K to Screenshot to 'saved.png'", x: 50, y: 150, size: 20, color: White }
 
-        if left then
+        screenTask!
+
+        if Set.contains mouseButtons MouseButtonLeft then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
         # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
-        frameCount = Raylib.getFrameCount |> Task.map! Num.toFrac
-        Raylib.setTargetFPS! (60 + (frameCount / 60 |> Num.floor |> Num.toI32))
+        Raylib.setTargetFPS! (60 + ((Num.toFrac frameCount) / 60 |> Num.floor |> Num.toI32))
 
         score = model.score |> Num.toStr
+
         Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
-        { y } = Raylib.getMousePosition!
-
-        pos = model.pos + (y - model.pos) / 5
+        pos = model.pos + (mousePos.y - model.pos) / 5
 
         Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
         Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
 
-        # vertical line
-        Raylib.drawLine! {
-            start: { x: width / 2, y: 0 },
-            end: { x: width / 2, y: height },
-            color: Green,
-        }
+        drawCrossHair! mousePos
 
         ball = bounce (moveBall model.ball) model.pos
+
+        screenTask!
 
         if ball.pos.x <= 0 then
             Task.ok { model & pos: pos, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
+
+drawCrossHair : Vector2 -> Task {} {}
+drawCrossHair = \mousePos ->
+
+    Raylib.drawLine! {
+        start: { x: mousePos.x, y: 0 },
+        end: { x: mousePos.x, y: height },
+        color: Yellow,
+    }
+
+    Raylib.drawLine! {
+        start: { x: 0, y: mousePos.y },
+        end: { x: width, y: mousePos.y },
+        color: Yellow,
+    }

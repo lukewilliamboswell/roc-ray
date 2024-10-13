@@ -35,8 +35,8 @@ init =
         right: Counter.init 30,
     }
 
-render : Model -> Task Model {}
-render = \model ->
+render : Model, _ -> Task Model {}
+render = \model, _ ->
 
     GUI.col [
         GUI.text { label: "Click below to change the counters, press ESC to exit", color: Black },

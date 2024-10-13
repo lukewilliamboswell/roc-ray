@@ -25,3 +25,5 @@ raylib/
 .DS_Store
 
 test-platform.roc
+
+platform/glue.roc

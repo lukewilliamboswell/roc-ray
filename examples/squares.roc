@@ -2,11 +2,11 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Rectangle]
+import ray.Raylib exposing [Rectangle, PlatformState]
 
 Program : {
     init : Task Model {},
-    render : Model -> Task Model {},
+    render : Model, PlatformState -> Task Model {},
 }
 
 Model : {
@@ -37,40 +37,31 @@ init =
         status: Ready,
     }
 
-render : Model -> Task Model {}
-render = \model ->
+render : Model, PlatformState -> Task Model {}
+render = \model, { keyboardButtons, mouseButtons, mousePos } ->
 
     Raylib.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
 
-    { x: mouseX, y: mouseY } = Raylib.getMousePosition!
-
-    { left, right } = Raylib.mouseButtons!
-
-    leftStr = if left then ", LEFT" else ""
-    rightSTr = if right then ", RIGHT" else ""
-
-    keys = Raylib.getKeysPressed!
-
     Raylib.drawText! {
-        text: "Mouse $(Num.toStr (Num.round mouseX)),$(Num.toStr (Num.round mouseY))$(leftStr)$(rightSTr), $(Inspect.toStr keys)",
+        text: "Mouse $(Num.toStr (Num.round mousePos.x)),$(Num.toStr (Num.round mousePos.y)), $(Inspect.toStr keyboardButtons), $(Inspect.toStr mouseButtons)",
         x: 10,
         y: model.height - 25,
         size: 20,
         color: White,
     }
 
-    Raylib.drawRectangle! { x: mouseX - 10, y: mouseY - 10, width: 20, height: 20, color: Red }
+    Raylib.drawRectangle! { x: mousePos.x - 10, y: mousePos.y - 10, width: 20, height: 20, color: Red }
 
     Raylib.drawRectangle! { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50, color: Aqua }
 
     newCirclePos =
-        if Set.contains keys KeyUp then
+        if Set.contains keyboardButtons KeyUp then
             { x: model.circlePos.x, y: model.circlePos.y - 10 }
-        else if Set.contains keys KeyDown then
+        else if Set.contains keyboardButtons KeyDown then
             { x: model.circlePos.x, y: model.circlePos.y + 10 }
-        else if Set.contains keys KeyLeft then
+        else if Set.contains keyboardButtons KeyLeft then
             { x: model.circlePos.x - 10, y: model.circlePos.y }
-        else if Set.contains keys KeyRight then
+        else if Set.contains keyboardButtons KeyRight then
             { x: model.circlePos.x + 10, y: model.circlePos.y }
         else
             model.circlePos

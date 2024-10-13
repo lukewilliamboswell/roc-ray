@@ -113,7 +113,7 @@ extern fn roc__mainForHost_0_caller(*anyopaque, *anyopaque, **anyopaque) callcon
 extern fn roc__mainForHost_0_size() callconv(.C) i64;
 
 // Update Fn
-extern fn roc__mainForHost_1_caller(**anyopaque, RocList, *anyopaque, *anyopaque) callconv(.C) void;
+extern fn roc__mainForHost_1_caller(**anyopaque, PlatformState, *anyopaque, *anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_1_size() callconv(.C) i64;
 
 // Update Task
@@ -128,12 +128,13 @@ var show_fps_pos_x: i32 = 10;
 var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
 var background_clear_color: rl.Color = rl.Color.black;
-var frame_count: i64 = 0;
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
 pub fn main() !void {
+
+    var frame_count: u64 = 0;
 
     // SETUP WINDOW
     rl.initWindow(window_size_width, window_size_height, "hello world!");
@@ -162,10 +163,18 @@ pub fn main() !void {
 
         try update_keys_down();
 
-        const keys_down_list = get_keys_down();
+        const mouse_pos = rl.getMousePosition();
+
+        const platform_state = PlatformState {
+            .frameCount = frame_count,
+            .keysDown = get_keys_down(),
+            .mouseDown = get_mouse_down(),
+            .mousePosX = mouse_pos.x,
+            .mousePosY = mouse_pos.y,
+        };
 
         // UPDATE ROC
-        roc__mainForHost_1_caller(&model, keys_down_list, undefined, update_captures);
+        roc__mainForHost_1_caller(&model, platform_state, undefined, update_captures);
         roc__mainForHost_2_caller(undefined, update_captures, &model);
 
         if (show_fps) {
@@ -343,10 +352,6 @@ export fn roc_fx_setTargetFPS(rate: i32) callconv(.C) RocResult(void, void) {
     return ok_void;
 }
 
-export fn roc_fx_getFrameCount() callconv(.C) RocResult(i64, void) {
-    return .{ .payload = .{ .ok = frame_count }, .tag = .RocOk };
-}
-
 export fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) callconv(.C) RocResult(void, void) {
     background_clear_color = rl.Color{ .r = r, .g = g, .b = b, .a = a };
     return ok_void;
@@ -405,3 +410,50 @@ fn get_keys_down() RocList {
 
     return RocList.fromSlice(u64, key_queue[0..count], false);
 }
+
+fn get_mouse_down() RocList {
+
+    var mouse_down: [6]u64 = undefined;
+    var count: u64 = 0;
+
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_left)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_left));
+        count += 1;
+    }
+
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_right)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_right));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_middle)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_middle));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_side)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_side));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_extra)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_extra));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_forward)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_forward));
+        count += 1;
+    }
+    if (rl.isMouseButtonDown(rl.MouseButton.mouse_button_back)) {
+        mouse_down[count] = @intCast(@intFromEnum(rl.MouseButton.mouse_button_back));
+        count += 1;
+    }
+
+    return RocList.fromSlice(u64, mouse_down[0..count], false);
+}
+
+
+const PlatformState = extern struct {
+    frameCount: u64,
+    keysDown: RocList,
+    mouseDown: RocList,
+    mousePosX: f32,
+    mousePosY: f32,
+};

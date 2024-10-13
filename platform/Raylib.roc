@@ -10,11 +10,8 @@ module [
     setWindowTitle,
     drawRectangle,
     getMousePosition,
-    MouseButtons,
-    mouseButtons,
     setTargetFPS,
     setDrawFPS,
-    getFrameCount,
     measureText,
     drawText,
     drawLine,
@@ -23,12 +20,15 @@ module [
     drawCircle,
     drawCircleGradient,
     rgba,
-    KeyBoardKey,
-    getKeysPressed,
+    PlatformState,
+    KeyboardKey,
+    MouseButton,
+
 ]
 
 import Effect
 import InternalKeyboard
+import InternalMouse
 
 ## Provide an initial state and a render function to the platform.
 ## ```
@@ -39,8 +39,19 @@ import InternalKeyboard
 ## ```
 Program state : {
     init : Task state {},
-    render : state, Set KeyBoardKey -> Task state {},
+    render : state, PlatformState -> Task state {},
 }
+
+PlatformState : {
+    frameCount : U64,
+    keyboardButtons : Set KeyboardKey,
+    mouseButtons : Set MouseButton,
+    mousePos : Vector2,
+}
+
+KeyboardKey : InternalKeyboard.KeyboardKey
+
+MouseButton : InternalMouse.MouseButton
 
 ## Represents a rectangle.
 ## ```
@@ -131,52 +142,6 @@ getMousePosition =
 
     Task.ok { x, y }
 
-## Represents the state of the mouse buttons.
-## ```
-## MouseButtons : {
-##     back: Bool,
-##     left: Bool,
-##     right: Bool,
-##     middle: Bool,
-##     side: Bool,
-##     extra: Bool,
-##     forward: Bool,
-## }
-## ```
-MouseButtons : {
-    back : Bool,
-    left : Bool,
-    right : Bool,
-    middle : Bool,
-    side : Bool,
-    extra : Bool,
-    forward : Bool,
-}
-
-## Get the current state of the mouse buttons.
-##
-## Here is an example checking if the left and right mouse buttons are currently pressed:
-## ```
-## { left, right } = Raylib.mouseButtons!
-## ```
-mouseButtons : Task MouseButtons *
-mouseButtons =
-    # note we are unpacking and repacking the mouseButtons here as a workaround for
-    # https://github.com/roc-lang/roc/issues/7142
-    { back, left, right, middle, side, extra, forward } =
-        Effect.mouseButtons
-            |> Task.mapErr! \{} -> crash "unreachable mouseButtons"
-
-    Task.ok {
-        back,
-        left,
-        right,
-        middle,
-        side,
-        extra,
-        forward,
-    }
-
 ## Set the target frames per second. The default value is 60.
 setTargetFPS : I32 -> Task {} *
 setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"
@@ -196,12 +161,6 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     Effect.setDrawFPS showFps posX posY
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
-
-## Get the number of frames that have been drawn since the program started.
-getFrameCount : Task I64 *
-getFrameCount =
-    Effect.getFrameCount
-    |> Task.mapErr \{} -> crash "unreachable getFrameCount"
 
 ## Set the background color to clear the window between each frame.
 setBackgroundColor : Color -> Task {} *
@@ -272,13 +231,3 @@ drawCircleGradient = \{ x, y, radius, inner, outer } ->
 
     Effect.drawCircleGradient x y radius ic.r ic.g ic.b ic.a oc.r oc.g oc.b oc.a
     |> Task.mapErr \{} -> crash "unreachable drawCircleGradient"
-
-## Get's the set of keys pressed since last time this function was called.
-## Key presses are queued until read.
-getKeysPressed : Task (Set KeyBoardKey) *
-getKeysPressed =
-    Effect.getKeysPressed
-        |> Task.map \keys -> keys |> List.map InternalKeyboard.keyFromU64 |> Set.fromList
-        |> Task.mapErr! \{} -> crash "unreachable getKeysPressed"
-
-KeyBoardKey : InternalKeyboard.Key

@@ -19,8 +19,6 @@ hosted Effect
         mouseButtons,
         setTargetFPS,
         setDrawFPS,
-        getFrameCount,
-        getKeysPressed,
     ]
     imports []
 
@@ -60,6 +58,3 @@ mouseButtons : Task MouseButtons {}
 
 setTargetFPS : I32 -> Task {} {}
 setDrawFPS : Bool, F32, F32 -> Task {} {}
-getFrameCount : Task I64 {}
-
-getKeysPressed : Task (List U64) {}

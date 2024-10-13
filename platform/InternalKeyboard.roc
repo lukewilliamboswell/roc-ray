@@ -1,6 +1,6 @@
-module [Key, keyFromU64]
+module [KeyboardKey, keyFromU64]
 
-Key : [
+KeyboardKey : [
     KeyApostrophe, # = 39,
     KeyComma, # = 44,
     KeyMinus, # = 45,
@@ -111,7 +111,7 @@ Key : [
     KeyVolumeDown, # = 25,
 ]
 
-keyFromU64 : U64 -> Key
+keyFromU64 : U64 -> KeyboardKey
 keyFromU64 = \key ->
     if key == 39 then
         KeyApostrophe

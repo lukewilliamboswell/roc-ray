@@ -43,6 +43,7 @@ Program state : {
 }
 
 PlatformState : {
+    nanosTimestampUtc : I128,
     frameCount : U64,
     keyboardButtons : Set KeyboardKey,
     mouseButtons : Set MouseButton,

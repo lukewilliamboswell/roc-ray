@@ -1,10 +1,12 @@
 app [main, Model] {
     ray: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
+    time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
 import ray.Raylib exposing [PlatformState, Color]
 import rand.Random
+import time.DateTime
 
 main = { init, render }
 
@@ -37,25 +39,29 @@ init =
     }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { keyboardButtons } ->
+render = \model, { keyboardButtons, nanosTimestampUtc } ->
+
+    nowStr = DateTime.fromNanosSinceEpoch nanosTimestampUtc |> DateTime.toIsoStr
+
+    Raylib.drawText! { text: "DateTime $(nowStr)", x: 10, y: 50, size: 20, color: White }
 
     generator = Random.u32 0 800
 
-    {seed, lines} = randomList model.seed generator model.number
+    { seed, lines } = randomList model.seed generator model.number
 
     Task.forEach! lines Raylib.drawRectangle
 
     Raylib.drawText! { text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", x: 10, y: model.height - 25, size: 20, color: White }
 
     if Set.contains keyboardButtons KeyUp then
-        Task.ok {model & seed, number: Num.addSaturated model.number 10}
+        Task.ok { model & seed, number: Num.addSaturated model.number 10 }
     else if Set.contains keyboardButtons KeyDown then
-        Task.ok {model & seed, number: Num.subSaturated model.number 10}
+        Task.ok { model & seed, number: Num.subSaturated model.number 10 }
     else
-        Task.ok {model & seed}
+        Task.ok { model & seed }
 
 # Generate a list of lines using the seed and generator provided
-randomList : Random.State U32, Random.Generator U32 U32, U64 -> {seed: Random.State U32, lines: List {x: F32, y: F32, width: F32, height: F32, color: Color}}
+randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { x : F32, y : F32, width : F32, height : F32, color : Color } }
 randomList = \initialSeed, generator, number ->
     List.range { start: At 0, end: Before number }
     |> List.walk { seed: initialSeed, lines: [] } \state, _ ->

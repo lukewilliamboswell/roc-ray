@@ -166,6 +166,7 @@ pub fn main() !void {
         const mouse_pos = rl.getMousePosition();
 
         const platform_state = PlatformState {
+            .nanosTimestampUtc = std.time.nanoTimestamp(),
             .frameCount = frame_count,
             .keysDown = get_keys_down(),
             .mouseDown = get_mouse_down(),
@@ -454,8 +455,8 @@ fn get_mouse_down() RocList {
     return RocList.fromSlice(u64, mouse_down[0..count], false);
 }
 
-
 const PlatformState = extern struct {
+    nanosTimestampUtc: i128,
     frameCount: u64,
     keysDown: RocList,
     mouseDown: RocList,

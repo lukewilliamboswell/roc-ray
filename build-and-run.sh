@@ -12,9 +12,8 @@ if [ -z "${ZIG:-}" ]; then
 fi
 
 # Build the roc app and then link that with the host to produce the executable
-# --release=fast gives best runtime performance
-# --release=safe gives better debugging for the host
-$ZIG build --release=fast -Dapp="$APP"
+# $ZIG build --release=safe -Dapp="$APP" # --release=safe gives better debugging for the host
+$ZIG build --release=fast -Dapp="$APP" # --release=fast gives best runtime performance
 
 # Run the executable
 ./zig-out/bin/rocray

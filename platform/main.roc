@@ -9,7 +9,8 @@ import Raylib exposing [Program]
 import InternalKeyboard
 import InternalMouse
 
-PlatformState : {
+PlatformStateFromHost : {
+    nanosTimestampUtc : I128,
     frameCount : U64,
     keysDownU64 : List U64,
     mouseDownU64 : List U64,
@@ -19,7 +20,7 @@ PlatformState : {
 
 ProgramForHost : {
     init : Task (Box Model) {},
-    update : Box Model, PlatformState -> Task (Box Model) {},
+    update : Box Model, PlatformStateFromHost -> Task (Box Model) {},
 }
 
 mainForHost : ProgramForHost
@@ -28,18 +29,19 @@ mainForHost = { init, update }
 init : Task (Box Model) {}
 init = main.init |> Task.map Box.box
 
-update : Box Model, PlatformState -> Task (Box Model) {}
+update : Box Model, PlatformStateFromHost -> Task (Box Model) {}
 update = \boxedModel, platformState ->
 
     model = Box.unbox boxedModel
 
-    { frameCount, keysDownU64, mouseDownU64, mousePosX, mousePosY } = platformState
+    { nanosTimestampUtc, frameCount, keysDownU64, mouseDownU64, mousePosX, mousePosY } = platformState
 
     keyboardButtons = keysDownU64 |> List.map InternalKeyboard.keyFromU64 |> Set.fromList
     mouseButtons = mouseDownU64 |> List.map InternalMouse.mouseButtonFromU64 |> Set.fromList
 
     state : Raylib.PlatformState
     state = {
+        nanosTimestampUtc,
         frameCount,
         keyboardButtons,
         mouseButtons,

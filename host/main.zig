@@ -350,3 +350,22 @@ export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocRe
     show_fps_pos_y = @intFromFloat(posY);
     return ok_void;
 }
+
+// store the keys pressed as we read from the queue... assume max 1000 queued
+var key_queue: [1000]u64 = undefined;
+
+export fn roc_fx_getKeysPressed() callconv(.C) RocResult(RocList, void) {
+    var count: u64 = 0;
+
+    while (count < 1000) {
+        const key = rl.getKeyPressed();
+        if (key == rl.KeyboardKey.key_null) {
+            break;
+        }
+        key_queue[count] = @intCast(@intFromEnum(key));
+        count = count + 1;
+    }
+
+    const keys = RocList.fromSlice(u64, key_queue[0..count], false);
+    return .{ .payload = .{ .ok = keys }, .tag = .RocOk };
+}

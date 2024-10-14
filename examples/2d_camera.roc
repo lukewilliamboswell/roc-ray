@@ -86,6 +86,3 @@ randomBuilding =
         |> Random.map \{ red, green, blue } -> RGBA red green blue 255,
     }
     |> Random.map updateY
-
-#
-# toggleDisplayFPS : Set Raylib.KeyboardKey -> Task {} {}

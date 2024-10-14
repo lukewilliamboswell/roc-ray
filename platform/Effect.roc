@@ -20,6 +20,9 @@ hosted Effect
         setTargetFPS,
         setDrawFPS,
         takeScreenshot,
+        createCamera,
+        beginMode2D,
+        endMode2D,
     ]
     imports []
 
@@ -61,3 +64,8 @@ setTargetFPS : I32 -> Task {} {}
 setDrawFPS : Bool, F32, F32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
+
+createCamera : F32, F32, F32, F32, F32, F32 -> Task U64 {}
+
+beginMode2D : U64 -> Task {} {}
+endMode2D : U64 -> Task {} {}

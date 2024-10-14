@@ -120,7 +120,10 @@ extern fn roc__mainForHost_1_size() callconv(.C) i64;
 extern fn roc__mainForHost_2_caller(*anyopaque, *anyopaque, **anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_2_size() callconv(.C) i64;
 
-// VARIABLES THAT ROC CHANGES
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+
+// GLOBAL VARIABLES THAT ROC CHANGES
 var window_size_width: c_int = 800;
 var window_size_height: c_int = 600;
 var show_fps: bool = false;
@@ -129,8 +132,14 @@ var show_fps_pos_y: i32 = 10;
 var should_exit: bool = false;
 var background_clear_color: rl.Color = rl.Color.black;
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
+// store all the keys in a map so we can track those that are currently pressed down
+// when a key is pressed it is inserted into the map, and then checked on each frame
+// until it is released
+var keys_down = std.AutoHashMap(rl.KeyboardKey, bool).init(allocator);
+
+// store the cameras in a map so we pass an u64 id to roc as an opaque handle
+var camera_list = std.AutoHashMap(u64, rl.Camera2D).init(allocator);
+var camera_list_next_free_id: u64 = 0;
 
 pub fn main() !void {
 
@@ -370,10 +379,52 @@ export fn roc_fx_setDrawFPS(show: bool, posX: f32, posY: f32) callconv(.C) RocRe
     return ok_void;
 }
 
-// store all the keys in a map so we can track those that are currently pressed down
-// when a key is pressed it is inserted into the map, and then checked on each frame
-// until it is released
-var keys_down = std.AutoHashMap(rl.KeyboardKey, bool).init(allocator);
+export fn roc_fx_createCamera(targetX: f32, targetY: f32, offsetX: f32, offsetY: f32, rotation: f32, zoom: f32) callconv(.C) RocResult(u64, void) {
+    const camera = rl.Camera2D{
+        .target = rl.Vector2{
+            .x = targetX,
+            .y = targetY,
+        },
+        .offset = rl.Vector2{
+            .x = offsetX,
+            .y = offsetY,
+        },
+        .rotation = rotation,
+        .zoom = zoom,
+    };
+
+    const camera_id = camera_list_next_free_id;
+
+    camera_list.put(camera_id, camera) catch |err| switch (err) {
+        error.OutOfMemory => @panic("Failed to create camera, out of memory."),
+    };
+
+    camera_list_next_free_id += 1;
+
+    return .{ .payload = .{ .ok = camera_id }, .tag = .RocOk };
+}
+
+export fn roc_fx_beginMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
+
+    const camera = camera_list.get(camera_id) orelse {
+        @panic("Failed to begin 2D mode, camera not found.");
+    };
+
+    camera.begin();
+
+    return ok_void;
+}
+
+export fn roc_fx_endMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
+
+    const camera = camera_list.get(camera_id) orelse {
+        @panic("Failed to end 2D mode, camera not found.");
+    };
+
+    camera.end();
+
+    return ok_void;
+}
 
 fn update_keys_down() !void {
     var key = rl.getKeyPressed();

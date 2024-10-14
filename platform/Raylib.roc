@@ -24,6 +24,10 @@ module [
     KeyboardKey,
     MouseButton,
     takeScreenshot,
+    Camera,
+    createCamera,
+    updateCamera,
+    drawMode2D,
 ]
 
 import Effect
@@ -43,6 +47,7 @@ Program state : {
 }
 
 PlatformState : {
+    nanosTimestampUtc : I128,
     frameCount : U64,
     keyboardButtons : Set KeyboardKey,
     mouseButtons : Set MouseButton,
@@ -240,3 +245,36 @@ takeScreenshot : Str -> Task {} *
 takeScreenshot = \filename ->
     Effect.takeScreenshot filename
     |> Task.mapErr \{} -> crash "unreachable takeScreenshot"
+
+Camera := U64
+
+createCamera : { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task Camera *
+createCamera = \{ target, offset, rotation, zoom } ->
+    Effect.createCamera target.x target.y offset.x offset.y rotation zoom
+    |> Task.map \camera -> @Camera camera
+    |> Task.mapErr \{} -> crash "unreachable createCamera"
+
+updateCamera : Camera, { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task {} *
+updateCamera = \@Camera camera, { target, offset, rotation, zoom } ->
+    Effect.updateCamera camera target.x target.y offset.x offset.y rotation zoom
+    |> Task.mapErr \{} -> crash "unreachable updateCamera"
+
+drawMode2D : Camera, Task {} err -> Task {} err
+drawMode2D = \@Camera camera, drawTask ->
+
+    Effect.beginMode2D camera
+        |> Task.mapErr! \{} -> crash "unreachable beginMode2D"
+
+    Task.attempt drawTask \result ->
+        when result is
+            Ok {} ->
+                Effect.endMode2D camera
+                    |> Task.mapErr! \{} -> crash "unreachable endMode2D"
+
+                Task.ok {}
+
+            Err err ->
+                Effect.endMode2D camera
+                    |> Task.mapErr! \{} -> crash "unreachable endMode2D"
+
+                Task.err err

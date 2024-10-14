@@ -1,38 +1,28 @@
-app [main, Model] {
-    ray: platform "../platform/main.roc",
-}
+app [main, Model] { ray: platform "../platform/main.roc" }
 
 import ray.Raylib
 
+width = 800f32
+height = 600f32
+
+Model : {}
+
+main : Raylib.Program Model []
 main = { init, render }
 
-Model : {
-    width : F32,
-    height : F32,
-}
-
-init : Task Model _
 init =
-
-    width = 800f32
-    height = 600f32
 
     Raylib.setWindowSize! { width, height }
     Raylib.setWindowTitle! "Basic Shapes"
 
-    Task.ok {
-        width,
-        height,
-    }
+    Task.ok {}
 
-render : Model, _ -> Task Model _
-render = \model, _ ->
+render = \_, _ ->
 
-    Raylib.drawText! { text: "Hello World", x: 10, y: 250, size: 20, color: Green }
-    Raylib.drawRectangle! { x: 10, y: 50, width: 200, height: 50, color: Aqua }
-    Raylib.drawRectangleGradient! { x: 10, y: 150, width: 200, height: 50, top: White, bottom: Blue }
-    Raylib.drawCircle! { x: 300, y: 100, radius: 50, color: Red }
-    Raylib.drawCircleGradient! { x: model.width / 2, y: model.height / 2, radius: 35, inner: Red, outer: RGBA 255 255 128 255 }
+    Raylib.drawText! { text: "Hello World", x: 300, y: 50, size: 40, color: Navy }
+    Raylib.drawRectangle! { x: 100, y: 150, width: 250, height: 100, color: Aqua }
+    Raylib.drawRectangleGradient! { x: 400, y: 150, width: 250, height: 100, top: Lime, bottom: Green }
+    Raylib.drawCircle! { x: 200, y: 400, radius: 75, color: Fuchsia }
+    Raylib.drawCircleGradient! { x: 600, y: 400, radius: 75, inner: Yellow, outer: Maroon }
 
-    # return the model unchanged for next render
-    Task.ok model
+    Task.ok {}

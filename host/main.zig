@@ -444,6 +444,22 @@ export fn roc_fx_endMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
     return ok_void;
 }
 
+export fn roc_fx_log(msg: *RocStr, level: u8) callconv(.C) RocResult(void, void) {
+    switch (level) {
+        0 => rl.traceLog(rl.TraceLogLevel.log_all, str_to_c(msg)),
+        1 => rl.traceLog(rl.TraceLogLevel.log_trace, str_to_c(msg)),
+        2 => rl.traceLog(rl.TraceLogLevel.log_debug, str_to_c(msg)),
+        3 => rl.traceLog(rl.TraceLogLevel.log_info, str_to_c(msg)),
+        4 => rl.traceLog(rl.TraceLogLevel.log_warning, str_to_c(msg)),
+        5 => rl.traceLog(rl.TraceLogLevel.log_error, str_to_c(msg)),
+        6 => rl.traceLog(rl.TraceLogLevel.log_fatal, str_to_c(msg)),
+        7 => rl.traceLog(rl.TraceLogLevel.log_none, str_to_c(msg)),
+        else => @panic("Invalid log level from roc"),
+    }
+
+    return ok_void;
+}
+
 fn update_keys_down() !void {
     var key = rl.getKeyPressed();
 

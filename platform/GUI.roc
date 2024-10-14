@@ -70,7 +70,7 @@ translate = \@Elem elem, parentToChild, childToParent ->
         Row children -> Row (List.map children \c -> translate c parentToChild childToParent) |> @Elem
         None -> None |> @Elem
 
-draw : Elem state, state, Rectangle -> Task state {}
+draw : Elem state, state, Rectangle -> Task state *
 draw = \@Elem elem, model, bb ->
 
     defaultStepX = 120
@@ -144,17 +144,19 @@ draw = \@Elem elem, model, bb ->
                 _ -> Task.ok model
 
         Text { label, color } ->
-            _ = Raylib.drawText! { text: label, x: bb.x, y: bb.y, size: 15, color }
+            Raylib.drawText! { text: label, x: bb.x, y: bb.y, size: 15, color }
             Task.ok model
 
         None -> Task.ok model
 
-guiButton : { text : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
+guiButton : { text : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } *
 guiButton = \{ text: str, shape: { x, y, width, height } } ->
     Effect.drawGuiButton x y width height str
     |> Task.map \i64 -> { isPressed: (i64 != 0) }
+    |> Task.mapErr \{} -> crash "unreachable guiButton"
 
-guiWindowBox : { title : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } {}
+guiWindowBox : { title : Str, shape : Raylib.Rectangle } -> Task { isPressed : Bool } *
 guiWindowBox = \{ title, shape: { x, y, width, height } } ->
     Effect.guiWindowBox x y width height title
     |> Task.map \i64 -> { isPressed: (i64 != 0) }
+    |> Task.mapErr \{} -> crash "unreachable guiWindowBox"

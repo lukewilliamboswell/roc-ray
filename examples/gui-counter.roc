@@ -15,10 +15,11 @@ Model : {
     right : Counter,
 }
 
-main : Program Model
+# We use a [] here for the error type as don't want our app to have an unhandled errors
+main : Program Model []
 main = { init, render }
 
-init : Task Model {}
+init : Task Model []
 init =
 
     width = 800f32
@@ -35,7 +36,7 @@ init =
         right: Counter.init 30,
     }
 
-render : Model, _ -> Task Model {}
+render : Model, _ -> Task Model []
 render = \model, _ ->
 
     GUI.col [

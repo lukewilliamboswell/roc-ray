@@ -11,7 +11,7 @@ Model : {
     height : F32,
 }
 
-init : Task Model {}
+init : Task Model _
 init =
 
     width = 800f32
@@ -25,7 +25,7 @@ init =
         height,
     }
 
-render : Model, _ -> Task Model {}
+render : Model, _ -> Task Model _
 render = \model, _ ->
 
     Raylib.drawText! { text: "Hello World", x: 10, y: 250, size: 20, color: Green }

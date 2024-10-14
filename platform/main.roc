@@ -1,5 +1,5 @@
 platform "roc-ray"
-    requires { Model } { main : Program Model }
+    requires { Model } { main : Program Model _ }
     exposes [Raylib, GUI, Action, Task, Layout]
     packages {}
     imports []
@@ -8,6 +8,7 @@ platform "roc-ray"
 import Raylib exposing [Program]
 import InternalKeyboard
 import InternalMouse
+import Effect
 
 PlatformStateFromHost : {
     nanosTimestampUtc : I128,
@@ -27,7 +28,14 @@ mainForHost : ProgramForHost
 mainForHost = { init, update }
 
 init : Task (Box Model) {}
-init = main.init |> Task.map Box.box
+init =
+    Task.attempt main.init \result ->
+        when result is
+            Ok m -> Task.ok (Box.box m)
+            Err err ->
+                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
+                Effect.exit!
+                Task.err {}
 
 update : Box Model, PlatformStateFromHost -> Task (Box Model) {}
 update = \boxedModel, platformState ->
@@ -51,5 +59,10 @@ update = \boxedModel, platformState ->
         },
     }
 
-    main.render model state
-    |> Task.map Box.box
+    Task.attempt (main.render model state) \result ->
+        when result is
+            Ok m -> Task.ok (Box.box m)
+            Err err ->
+                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
+                Effect.exit!
+                Task.err {}

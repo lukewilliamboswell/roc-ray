@@ -2,9 +2,8 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Program, PlatformState, Vector2]
+import ray.Raylib exposing [Vector2]
 
-main : Program Model
 main = { init, render }
 
 Ball : { pos : Vector2, vel : Vector2 }
@@ -26,7 +25,7 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model {}
+init : Task Model []
 init =
 
     Raylib.setBackgroundColor! Navy
@@ -66,7 +65,7 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, PlatformState -> Task Model {}
+render : Model, Raylib.PlatformState -> Task Model []
 render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
 
     screenTask =
@@ -118,7 +117,7 @@ render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
 
-drawCrossHair : Vector2 -> Task {} {}
+drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->
 
     Raylib.drawLine! {

@@ -24,6 +24,8 @@ hosted Effect
         updateCamera,
         beginMode2D,
         endMode2D,
+        log,
+        toLogLevel,
     ]
     imports []
 
@@ -31,6 +33,20 @@ setWindowSize : I32, I32 -> Task {} {}
 getScreenSize : Task { height : I32, width : I32, z : I64 } {}
 drawGuiButton : F32, F32, F32, F32, Str -> Task I64 {}
 exit : Task {} {}
+
+toLogLevel : _ -> U8
+toLogLevel = \level ->
+    when level is
+        LogAll -> 0
+        LogTrace -> 1
+        LogDebug -> 2
+        LogInfo -> 3
+        LogWarning -> 4
+        LogError -> 5
+        LogFatal -> 6
+        LogNone -> 7
+
+log : Str, U8 -> Task {} {}
 
 drawText : F32, F32, I32, Str, U8, U8, U8, U8 -> Task {} {}
 measureText : Str, I32 -> Task I64 {}

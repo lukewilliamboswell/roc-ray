@@ -1,8 +1,12 @@
 module [
     Program,
+    PlatformState,
+    KeyboardKey,
+    MouseButton,
     Color,
     Rectangle,
     Vector2,
+    Camera,
     setWindowSize,
     getScreenSize,
     setBackgroundColor,
@@ -20,14 +24,11 @@ module [
     drawCircle,
     drawCircleGradient,
     rgba,
-    PlatformState,
-    KeyboardKey,
-    MouseButton,
     takeScreenshot,
-    Camera,
     createCamera,
     updateCamera,
     drawMode2D,
+    log,
 ]
 
 import Effect
@@ -41,10 +42,10 @@ import InternalMouse
 ##     render : state -> Task state {},
 ## }
 ## ```
-Program state : {
-    init : Task state {},
-    render : state, PlatformState -> Task state {},
-}
+Program state err : {
+    init : Task state err,
+    render : state, PlatformState -> Task state err,
+} where err implements Inspect
 
 PlatformState : {
     nanosTimestampUtc : I128,
@@ -118,6 +119,16 @@ rgba = \color ->
 ## Exit the program.
 exit : Task {} *
 exit = Effect.exit |> Task.mapErr \{} -> crash "unreachable exit"
+
+## Show a Raylib log trace message.
+##
+## ```
+## Raylib.log! "Not yet implemented" LogError
+## ```
+log : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] -> Task {} *
+log = \message, level ->
+    Effect.log message (Effect.toLogLevel level)
+    |> Task.mapErr \{} -> crash "unreachable log"
 
 ## Set the window title.
 setWindowTitle : Str -> Task {} *

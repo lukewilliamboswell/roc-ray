@@ -142,7 +142,6 @@ var camera_list = std.AutoHashMap(u64, rl.Camera2D).init(allocator);
 var camera_list_next_free_id: u64 = 0;
 
 pub fn main() !void {
-
     var frame_count: u64 = 0;
 
     // SETUP WINDOW
@@ -174,7 +173,7 @@ pub fn main() !void {
 
         const mouse_pos = rl.getMousePosition();
 
-        const platform_state = PlatformState {
+        const platform_state = PlatformState{
             .nanosTimestampUtc = std.time.nanoTimestamp(),
             .frameCount = frame_count,
             .keysDown = get_keys_down(),
@@ -404,8 +403,28 @@ export fn roc_fx_createCamera(targetX: f32, targetY: f32, offsetX: f32, offsetY:
     return .{ .payload = .{ .ok = camera_id }, .tag = .RocOk };
 }
 
-export fn roc_fx_beginMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
+export fn roc_fx_updateCamera(camera_id: u64, targetX: f32, targetY: f32, offsetX: f32, offsetY: f32, rotation: f32, zoom: f32) callconv(.C) RocResult(void, void) {
+    const camera_ptr = camera_list.getPtr(camera_id) orelse {
+        @panic("Failed to update camera, camera not found.");
+    };
 
+    camera_ptr.target = rl.Vector2{
+        .x = targetX,
+        .y = targetY,
+    };
+
+    camera_ptr.offset = rl.Vector2{
+        .x = offsetX,
+        .y = offsetY,
+    };
+
+    camera_ptr.rotation = rotation;
+    camera_ptr.zoom = zoom;
+
+    return ok_void;
+}
+
+export fn roc_fx_beginMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
     const camera = camera_list.get(camera_id) orelse {
         @panic("Failed to begin 2D mode, camera not found.");
     };
@@ -416,7 +435,6 @@ export fn roc_fx_beginMode2D(camera_id: u64) callconv(.C) RocResult(void, void) 
 }
 
 export fn roc_fx_endMode2D(camera_id: u64) callconv(.C) RocResult(void, void) {
-
     const camera = camera_list.get(camera_id) orelse {
         @panic("Failed to end 2D mode, camera not found.");
     };
@@ -437,7 +455,7 @@ fn update_keys_down() !void {
 
     // check all keys that are marked "down" and update if they have been released
     var iter = keys_down.iterator();
-    while (iter.next()) |kv|  {
+    while (iter.next()) |kv| {
         if (kv.value_ptr.*) {
             const k = kv.key_ptr.*;
             if (!rl.isKeyDown(k)) {
@@ -456,7 +474,7 @@ fn get_keys_down() RocList {
     var count: u64 = 0;
 
     var iter = keys_down.iterator();
-    while (iter.next()) |kv|  {
+    while (iter.next()) |kv| {
         if (kv.value_ptr.*) {
             key_queue[count] = @intCast(@intFromEnum(kv.key_ptr.*));
             count = count + 1;
@@ -469,7 +487,6 @@ fn get_keys_down() RocList {
 }
 
 fn get_mouse_down() RocList {
-
     var mouse_down: [6]u64 = undefined;
     var count: u64 = 0;
 

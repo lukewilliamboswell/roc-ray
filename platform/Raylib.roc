@@ -26,6 +26,7 @@ module [
     takeScreenshot,
     Camera,
     createCamera,
+    updateCamera,
     drawMode2D,
 ]
 
@@ -252,6 +253,11 @@ createCamera = \{ target, offset, rotation, zoom } ->
     Effect.createCamera target.x target.y offset.x offset.y rotation zoom
     |> Task.map \camera -> @Camera camera
     |> Task.mapErr \{} -> crash "unreachable createCamera"
+
+updateCamera : Camera, { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task {} *
+updateCamera = \@Camera camera, { target, offset, rotation, zoom } ->
+    Effect.updateCamera camera target.x target.y offset.x offset.y rotation zoom
+    |> Task.mapErr \{} -> crash "unreachable updateCamera"
 
 drawMode2D : Camera, Task {} err -> Task {} err
 drawMode2D = \@Camera camera, drawTask ->

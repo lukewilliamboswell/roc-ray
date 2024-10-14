@@ -21,6 +21,7 @@ hosted Effect
         setDrawFPS,
         takeScreenshot,
         createCamera,
+        updateCamera,
         beginMode2D,
         endMode2D,
     ]
@@ -66,6 +67,7 @@ setDrawFPS : Bool, F32, F32 -> Task {} {}
 takeScreenshot : Str -> Task {} {}
 
 createCamera : F32, F32, F32, F32, F32, F32 -> Task U64 {}
+updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
 
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}

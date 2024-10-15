@@ -1,68 +1,50 @@
 use raylib::prelude::*;
 use roc_std::{RocList, RocResult, RocStr};
-use std::borrow::BorrowMut;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, SystemTime};
+use std::ffi::{c_int, CString};
+use std::time::SystemTime;
 
 mod roc;
 
-// We definitely should find a better solution to this!!!
-static RL: OnceLock<Arc<Mutex<raylib::RaylibHandle>>> = OnceLock::new();
-
-fn get_rl() -> &'static Arc<Mutex<raylib::RaylibHandle>> {
-    RL.get().expect("raylib should have been initialised")
-}
-
 fn main() {
-    let (rl, thread) = raylib::init().size(100, 100).title("Loading...").build();
-
-    RL.set(Arc::new(Mutex::new(rl)))
-        .expect("raylib should not have been initialised");
-
-    let mut model = roc::call_roc_init();
-    let mut frame_count = 0;
-    let mut should_close = false;
-
-    while !should_close {
-        {
-            let rl = get_rl().lock().unwrap();
-            should_close = rl.window_should_close();
+    unsafe {
+        let c_title = CString::new("Loading...").unwrap();
+        raylib::ffi::InitWindow(100, 50, c_title.as_ptr());
+        if !raylib::ffi::IsWindowReady() {
+            panic!("Attempting to create window failed!");
         }
 
-        {
-            let mut rl = get_rl().lock().unwrap();
-            let mut d = rl.begin_drawing(&thread);
+        let mut model = roc::call_roc_init();
+        let mut frame_count = 0;
 
-            d.clear_background(Color::WHITE);
-            // d.draw_text("Hello, world!", 12, 12, 20, Color::BLACK);
+        while !raylib::ffi::WindowShouldClose() {
+            raylib::ffi::BeginDrawing();
+
+            let duration_since_epoch = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap();
+
+            let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
+
+            let platform_state = roc::PlatformState {
+                timestamp_millis: timestamp,
+                frame_count,
+                keys_down: RocList::empty(),
+                mouse_down: RocList::empty(),
+                mouse_pos_x: (raylib::ffi::GetMouseX() as i32).as_f32(),
+                mouse_pos_y: (raylib::ffi::GetMouseY() as i32).as_f32(),
+            };
+
+            model = roc::call_roc_render(platform_state, &model);
+
+            // TODO will need to model this differently for roc to use...
+            // if (show_fps) {
+            //     rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
+            // }
+
+            frame_count += 1;
+
+            raylib::ffi::EndDrawing();
         }
-
-        let duration_since_epoch = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap();
-
-        let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
-
-        let rl = get_rl().lock().unwrap();
-        let mouse_pos_x = rl.get_mouse_x().as_f32();
-        let mouse_pos_y = rl.get_mouse_y().as_f32();
-
-        let platform_state = roc::PlatformState {
-            timestamp_millis: timestamp,
-            frame_count,
-            keys_down: RocList::empty(),
-            mouse_down: RocList::empty(),
-            mouse_pos_x,
-            mouse_pos_y,
-        };
-
-        model = roc::call_roc_render(platform_state, &model);
-
-        // if (show_fps) {
-        //     rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
-        // }
-
-        frame_count += 1;
     }
 }
 
@@ -72,58 +54,55 @@ pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_log(msg: &RocStr, level: u8) -> RocResult<(), ()> {
-    let rl = get_rl().lock().unwrap();
-    match level {
-        0 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_ALL, msg.as_str()),
-        1 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_TRACE, msg.as_str()),
-        2 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_DEBUG, msg.as_str()),
-        3 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_INFO, msg.as_str()),
-        4 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_WARNING, msg.as_str()),
-        5 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_ERROR, msg.as_str()),
-        6 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_FATAL, msg.as_str()),
-        7 => rl.trace_log(raylib::consts::TraceLogLevel::LOG_NONE, msg.as_str()),
-        _ => panic!("Invalid log level from roc"),
+pub unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
+    let text = CString::new(msg.as_str()).unwrap();
+    if level >= 0 && level <= 7 {
+        raylib::ffi::TraceLog(level, text.as_ptr())
+    } else {
+        panic!("Invalid log level from roc");
     }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
-    let mut rl = get_rl().lock().unwrap();
-    rl.set_window_size(width, height);
+pub unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
+    raylib::ffi::SetWindowSize(width, height);
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.set_window_title(test.as_str());
-    eprintln!("TODO -- this needs to run in the same thread that started raylib...");
+pub unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
+    let text = CString::new(text.as_str()).unwrap();
+    raylib::ffi::SetWindowTitle(text.as_ptr());
+
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_drawCircle(
-    centerX: f32,
-    centerY: f32,
+pub unsafe extern "C" fn roc_fx_drawCircle(
+    center_x: f32,
+    center_y: f32,
     radius: f32,
     r: u8,
     g: u8,
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    eprintln!("TODO roc_fx_drawCircle");
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.begin_drawing(test.as_str());
+    let center = raylib::ffi::Vector2 {
+        x: center_x,
+        y: center_y,
+    };
+    let color = raylib::ffi::Color { r, g, b, a };
+    raylib::ffi::DrawCircleV(center, radius, color);
+
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_drawCircleGradient(
-    centerX: f32,
-    centerY: f32,
+pub unsafe extern "C" fn roc_fx_drawCircleGradient(
+    center_x: f32,
+    center_y: f32,
     radius: f32,
     r1: u8,
     g1: u8,
@@ -134,14 +113,24 @@ pub extern "C" fn roc_fx_drawCircleGradient(
     b2: u8,
     a2: u8,
 ) -> RocResult<(), ()> {
-    eprintln!("TODO roc_fx_drawCircleGradient");
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.begin_drawing(test.as_str());
+    let color1 = raylib::ffi::Color {
+        r: r1,
+        g: g1,
+        b: b1,
+        a: a1,
+    };
+    let color2 = raylib::ffi::Color {
+        r: r2,
+        g: g2,
+        b: b2,
+        a: a2,
+    };
+    raylib::ffi::DrawCircleGradient(center_x as c_int, center_y as c_int, radius, color1, color2);
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_drawRectangleGradient(
+pub unsafe extern "C" fn roc_fx_drawRectangleGradient(
     x: f32,
     y: f32,
     width: f32,
@@ -155,14 +144,31 @@ pub extern "C" fn roc_fx_drawRectangleGradient(
     b2: u8,
     a2: u8,
 ) -> RocResult<(), ()> {
-    eprintln!("TODO roc_fx_drawRectangleGradient");
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.begin_drawing(test.as_str());
+    let color1 = raylib::ffi::Color {
+        r: r1,
+        g: g1,
+        b: b1,
+        a: a1,
+    };
+    let color2 = raylib::ffi::Color {
+        r: r2,
+        g: g2,
+        b: b2,
+        a: a2,
+    };
+    raylib::ffi::DrawRectangleGradientV(
+        x as c_int,
+        y as c_int,
+        width as c_int,
+        height as c_int,
+        color1,
+        color2,
+    );
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_drawText(
+pub unsafe extern "C" fn roc_fx_drawText(
     x: f32,
     y: f32,
     size: i32,
@@ -172,14 +178,14 @@ pub extern "C" fn roc_fx_drawText(
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    eprintln!("TODO roc_fx_drawText");
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.begin_drawing(test.as_str());
+    let text = CString::new(text.as_str()).unwrap();
+    let color = raylib::ffi::Color { r, g, b, a };
+    raylib::ffi::DrawText(text.as_ptr(), x as c_int, y as c_int, size as c_int, color);
     RocResult::ok(())
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_drawRectangle(
+pub unsafe extern "C" fn roc_fx_drawRectangle(
     x: f32,
     y: f32,
     width: f32,
@@ -189,8 +195,12 @@ pub extern "C" fn roc_fx_drawRectangle(
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    eprintln!("TODO roc_fx_drawRectangle");
-    // let mut rl = get_rl().lock().unwrap();
-    // rl.begin_drawing(test.as_str());
+    let position = raylib::ffi::Vector2 { x, y };
+    let size = raylib::ffi::Vector2 {
+        x: width,
+        y: height,
+    };
+    let color = raylib::ffi::Color { r, g, b, a };
+    raylib::ffi::DrawRectangleV(position, size, color);
     RocResult::ok(())
 }

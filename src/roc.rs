@@ -10,6 +10,11 @@ pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void 
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
+    libc::free(c_ptr);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn roc_realloc(
     c_ptr: *mut c_void,
     new_size: usize,
@@ -17,11 +22,6 @@ pub unsafe extern "C" fn roc_realloc(
     _alignment: u32,
 ) -> *mut c_void {
     libc::realloc(c_ptr, new_size)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
-    libc::free(c_ptr);
 }
 
 #[no_mangle]

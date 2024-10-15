@@ -261,6 +261,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
+name = "memmap2"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe751422e4a8caa417e13c3ea66452215d7d63e19e604f4980461212f3ae1322"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -411,6 +420,7 @@ dependencies = [
  "libc",
  "raylib",
  "roc_std",
+ "roc_std_heap",
 ]
 
 [[package]]
@@ -420,6 +430,15 @@ source = "git+https://github.com/roc-lang/roc.git#367911d73a3d9eccb4d991fe661ed5
 dependencies = [
  "arrayvec 0.7.6",
  "static_assertions",
+]
+
+[[package]]
+name = "roc_std_heap"
+version = "0.0.1"
+source = "git+https://github.com/roc-lang/roc.git#367911d73a3d9eccb4d991fe661ed5381c374c13"
+dependencies = [
+ "memmap2",
+ "roc_std",
 ]
 
 [[package]]

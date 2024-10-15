@@ -48,7 +48,7 @@ Program state err : {
 } where err implements Inspect
 
 PlatformState : {
-    nanosTimestampUtc : I128,
+    timestampMillis : U64,
     frameCount : U64,
     keyboardButtons : Set KeyboardKey,
     mouseButtons : Set MouseButton,

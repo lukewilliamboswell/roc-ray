@@ -27,3 +27,8 @@ raylib/
 test-platform.roc
 
 platform/glue.roc
+
+
+# Added by cargo
+
+/target

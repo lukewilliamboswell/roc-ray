@@ -1,8 +1,22 @@
 #![allow(non_snake_case)]
 use roc_std::{RocBox, RocResult, RocStr};
+use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::alloc::Layout;
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::os::raw::c_void;
+use std::sync::OnceLock;
+
+const MAX_CAMERAS_HEAP_SIZE: usize = 100;
+
+// note this is checked and deallocated in the roc_dealloc function
+pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::ffi::Camera2D> {
+    static FILE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::ffi::Camera2D>> =
+        OnceLock::new();
+    FILE_HEAP.get_or_init(|| {
+        ThreadSafeRefcountedResourceHeap::new(MAX_CAMERAS_HEAP_SIZE)
+            .expect("Failed to allocate mmap for heap references.")
+    })
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void {
@@ -11,6 +25,12 @@ pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void 
 
 #[no_mangle]
 pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
+    let camera_heap = camera_heap();
+    if camera_heap.in_range(c_ptr) {
+        camera_heap.dealloc(c_ptr);
+        return;
+    }
+
     libc::free(c_ptr);
 }
 

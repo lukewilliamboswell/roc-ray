@@ -39,9 +39,9 @@ init =
     }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { keyboardButtons, nanosTimestampUtc } ->
+render = \model, { keyboardButtons, timestampMillis } ->
 
-    nowStr = DateTime.fromNanosSinceEpoch nanosTimestampUtc |> DateTime.toIsoStr
+    nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
     Raylib.drawText! { text: "DateTime $(nowStr)", x: 10, y: 50, size: 20, color: White }
 

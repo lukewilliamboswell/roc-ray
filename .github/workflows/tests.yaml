@@ -14,7 +14,7 @@ jobs:
       ZIG_VERSION: 0.13.0
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Update apt-get
         run: sudo apt-get update
@@ -34,15 +34,7 @@ jobs:
       - name: Install raylib
         run: git submodule update --init --recursive
 
-      - name: Install Zig
-        run: |
-          # Install Zig
-          curl -fOL https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz
-          tar -xf zig-linux-x86_64-${ZIG_VERSION}.tar.xz
-          rm zig-linux-x86_64-${ZIG_VERSION}.tar.xz
-
-      - name: Check Zig version
-        run: ./zig-linux-x86_64-${ZIG_VERSION}/zig version
+        # TODO install Rust and Cargo and check things...
 
       - name: Install ROC
         run: |
@@ -57,4 +49,4 @@ jobs:
         run: ./roc_nightly/roc version
 
       - name: Run all tests
-        run: ROC=./roc_nightly/roc ZIG=./zig-linux-x86_64-${ZIG_VERSION}/zig ./ci/all_tests.sh
+        run: ROC=./roc_nightly/roc ./ci/all_tests.sh

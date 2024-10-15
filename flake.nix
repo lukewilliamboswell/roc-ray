@@ -31,7 +31,7 @@
           ] else [];
         in {
           default = pkgs.mkShell {
-            packages = [ pkgs.zig_0_13 rocPkgs.cli ] ++ linuxDeps ++ macosDeps;
+            packages = [ rocPkgs.cli ] ++ linuxDeps ++ macosDeps;
             shellHook = ''
               if [ "$(uname)" = "Darwin" ]; then
                 export SDKROOT=$(xcrun --show-sdk-path)

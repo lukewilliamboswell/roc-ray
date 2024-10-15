@@ -1,0 +1,10 @@
+[package]
+name = "roc-ray"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+raylib = { version = "5.0" }
+roc_std = { git = "https://github.com/roc-lang/roc.git" }
+roc_std_heap = { git = "https://github.com/roc-lang/roc.git" }
+libc = "0.2"

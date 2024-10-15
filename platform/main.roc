@@ -3,7 +3,7 @@ platform "roc-ray"
     exposes [Raylib, GUI, Action, Task, Layout]
     packages {}
     imports []
-    provides [mainForHost]
+    provides [forHost]
 
 import Raylib exposing [Program]
 import InternalKeyboard
@@ -11,7 +11,7 @@ import InternalMouse
 import Effect
 
 PlatformStateFromHost : {
-    nanosTimestampUtc : I128,
+    timestampMillis : U64,
     frameCount : U64,
     keysDownU64 : List U64,
     mouseDownU64 : List U64,
@@ -21,11 +21,11 @@ PlatformStateFromHost : {
 
 ProgramForHost : {
     init : Task (Box Model) {},
-    update : Box Model, PlatformStateFromHost -> Task (Box Model) {},
+    render : Box Model, PlatformStateFromHost -> Task (Box Model) {},
 }
 
-mainForHost : ProgramForHost
-mainForHost = { init, update }
+forHost : ProgramForHost
+forHost = { init, render }
 
 init : Task (Box Model) {}
 init =
@@ -37,19 +37,19 @@ init =
                 Effect.exit!
                 Task.err {}
 
-update : Box Model, PlatformStateFromHost -> Task (Box Model) {}
-update = \boxedModel, platformState ->
+render : Box Model, PlatformStateFromHost -> Task (Box Model) {}
+render = \boxedModel, platformState ->
 
     model = Box.unbox boxedModel
 
-    { nanosTimestampUtc, frameCount, keysDownU64, mouseDownU64, mousePosX, mousePosY } = platformState
+    { timestampMillis, frameCount, keysDownU64, mouseDownU64, mousePosX, mousePosY } = platformState
 
     keyboardButtons = keysDownU64 |> List.map InternalKeyboard.keyFromU64 |> Set.fromList
     mouseButtons = mouseDownU64 |> List.map InternalMouse.mouseButtonFromU64 |> Set.fromList
 
     state : Raylib.PlatformState
     state = {
-        nanosTimestampUtc,
+        timestampMillis,
         frameCount,
         keyboardButtons,
         mouseButtons,

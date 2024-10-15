@@ -34,7 +34,7 @@ getScreenSize : Task { height : I32, width : I32, z : I64 } {}
 drawGuiButton : F32, F32, F32, F32, Str -> Task I64 {}
 exit : Task {} {}
 
-toLogLevel : _ -> U8
+toLogLevel : _ -> I32
 toLogLevel = \level ->
     when level is
         LogAll -> 0
@@ -46,7 +46,7 @@ toLogLevel = \level ->
         LogFatal -> 6
         LogNone -> 7
 
-log : Str, U8 -> Task {} {}
+log : Str, I32 -> Task {} {}
 
 drawText : F32, F32, I32, Str, U8, U8, U8, U8 -> Task {} {}
 measureText : Str, I32 -> Task I64 {}

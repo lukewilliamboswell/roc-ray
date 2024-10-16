@@ -45,22 +45,12 @@ jobs:
     runs-on: macos-latest
     env:
       ROC_VERSION: nightly
-      DYLD_LIBRARY_PATH: /usr/local/opt/zstd/lib
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install Build Essentials
         run: brew install automake autoconf libtool
-
-      - name: Install zstd
-        run: |
-          brew install zstd
-          brew link zstd
-
-          # Create symlink in /usr/local/lib
-          sudo mkdir -p /usr/local/lib
-          sudo ln -sf $(brew --prefix zstd)/lib/libzstd.* /usr/local/lib/
 
       - name: Install Rust and Cargo
         run: |
@@ -70,7 +60,7 @@ jobs:
       - name: Install ROC
         run: |
           # Install ROC
-          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_x86_64-latest.tar.gz
+          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_apple_silicon-latest.tar.gz
           mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
           tar -xzf roc_nightly.tar.gz
           rm roc_nightly.tar.gz

@@ -8,7 +8,7 @@ use std::time::SystemTime;
 mod roc;
 
 thread_local! {
-    static DRAW_FPS: Cell<Option<(i32, i32)>> = Cell::new(None);
+    static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
 }
 
 fn main() {

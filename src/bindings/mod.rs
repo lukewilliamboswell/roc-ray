@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(nonstandard_style)]
+#![allow(unused_variables)]
+
 #[cfg(target_arch = "aarch64")]
 #[cfg(target_os = "macos")]
 mod aarch64_apple_darwin;

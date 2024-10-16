@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ROC_VERSION: nightly
-      ZIG_VERSION: 0.13.0
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,19 +21,10 @@ jobs:
       - name: Install Build Essentials
         run: sudo apt install build-essential git
 
-      - name: Install OpenGL
-        run: sudo apt-get install -y libgl1-mesa-dev
-
-      - name: Install Required Libs
-        run: sudo apt install libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev
-
-      - name: Install libtool
-        run: sudo apt-get install -y libtool libtool-bin
-
-      - name: Install raylib
-        run: git submodule update --init --recursive
-
-        # TODO install Rust and Cargo and check things...
+      - name: Install Rust and Cargo
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
 
       - name: Install ROC
         run: |

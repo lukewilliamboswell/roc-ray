@@ -57,6 +57,19 @@ $ ./build-and-run.sh examples/pong.roc
 $ ./ci/all_tests.sh
 ```
 
+*Required dependencies*
+1. Install [roc](https://www.roc-lang.org)
+2. Install [rust](https://www.rust-lang.org/tools/install)
+3. Install dev tools `sudo apt install build-essential git` or `xcode-select --install`
+
+**OR**
+
+Use the [nix package manager](https://nixos.org/download/) to install the dependencies
+
+```
+$ nix develop
+```
+
 ### Windows
 
 Ensure you have [roc](https://www.roc-lang.org) and [cargo](https://www.rust-lang.org/tools/install) in your path.

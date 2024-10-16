@@ -167,7 +167,7 @@ setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unre
 ## ```
 ## Raylib.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
 ## ```
-setDrawFPS : { fps : [Visible, Hidden], posX ? F32, posY ? F32 } -> Task {} *
+setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
 setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     showFps =

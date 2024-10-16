@@ -78,7 +78,7 @@ MouseButtons : {
 mouseButtons : Task MouseButtons {}
 
 setTargetFPS : I32 -> Task {} {}
-setDrawFPS : Bool, F32, F32 -> Task {} {}
+setDrawFPS : Bool, I32, I32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 

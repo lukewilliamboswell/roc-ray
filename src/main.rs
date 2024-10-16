@@ -1,10 +1,15 @@
 use raylib::prelude::*;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
+use std::cell::Cell;
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
 
 mod roc;
+
+thread_local! {
+    static DRAW_FPS: Cell<Option<(i32, i32)>> = Cell::new(None);
+}
 
 fn main() {
     unsafe {
@@ -44,10 +49,9 @@ fn main() {
 
             model = roc::call_roc_render(platform_state, &model);
 
-            // TODO will need to model this differently for roc to use...
-            // if (show_fps) {
-            //     rl.drawFPS(show_fps_pos_x, show_fps_pos_y);
-            // }
+            if let Some((x, y)) = DRAW_FPS.get() {
+                raylib::ffi::DrawFPS(x, y);
+            }
 
             frame_count += 1;
 
@@ -322,9 +326,13 @@ unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setDrawFPS(_show: bool, _pos_x: f32, _pos_y: f32) -> RocResult<(), ()> {
-    // TODO how to handle this?
-    eprintln!("TODO refactor the way we do drawFPS");
+unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+    if show {
+        DRAW_FPS.set(Some((pos_x, pos_y)));
+    } else {
+        DRAW_FPS.set(None);
+    }
+
     RocResult::ok(())
 }
 

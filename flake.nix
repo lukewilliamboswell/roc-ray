@@ -1,5 +1,5 @@
 {
-  description = "Roc Raylib platform flake";
+  description = "Roc Ray platform flake";
 
   inputs = {
     roc.url = "github:roc-lang/roc";
@@ -21,30 +21,26 @@
             pkgs.mesa.drivers
           ] else [];
           macosDeps = if pkgs.stdenv.isDarwin then [
-            pkgs.darwin.apple_sdk.frameworks.Foundation
-            pkgs.darwin.apple_sdk.frameworks.CoreServices
+            pkgs.libiconv
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
             pkgs.darwin.apple_sdk.frameworks.CoreGraphics
             pkgs.darwin.apple_sdk.frameworks.AppKit
-            pkgs.darwin.apple_sdk.frameworks.IOKit
-            pkgs.darwin.apple_sdk.frameworks.AudioToolbox
-            pkgs.darwin.apple_sdk.frameworks.CoreMIDI
           ] else [];
         in {
           default = pkgs.mkShell {
-            packages = [ rocPkgs.cli ] ++ linuxDeps ++ macosDeps;
+            packages = [ rocPkgs.cli pkgs.rustc pkgs.cargo ] ++ linuxDeps ++ macosDeps;
             shellHook = ''
-              if [ "$(uname)" = "Darwin" ]; then
-                export SDKROOT=$(xcrun --show-sdk-path)
-              fi
+                if [ "$(uname)" = "Darwin" ]; then
+                    export SDKROOT=$(xcrun --show-sdk-path)
+                    export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath macosDeps}:$LD_LIBRARY_PATH
+                fi
 
-              if [ "$(uname)" = "Linux" ]; then
-                export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath linuxDeps}:$LD_LIBRARY_PATH
-              fi
-
-              unset NIX_CFLAGS_COMPILE
-              unset NIX_LDFLAGS
+                if [ "$(uname)" = "Linux" ]; then
+                    export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath linuxDeps}:$LD_LIBRARY_PATH
+                fi
             '';
           };
+
         }
       );
     };

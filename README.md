@@ -1,6 +1,6 @@
-# roc-raylib
+# Roc Ray Graphics Platform
 
-Roc platform for graphics and GUI using [rust](https://www.rust-lang.org) and [raylib](https://www.raylib.com)
+[Roc](https://www.roc-lang.org) platform for building graphics applications, like grames and simulations, using the [Raylib](https://www.raylib.com) graphics library.
 
 ## Documentation
 

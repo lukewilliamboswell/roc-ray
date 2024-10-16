@@ -254,52 +254,6 @@ unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawGuiButton(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    text: &RocStr,
-) -> RocResult<i64, ()> {
-    // let text = CString::new(text.as_str()).unwrap();
-    // let id = bindings::GuiButton(
-    //     bindings::Rectangle {
-    //         x,
-    //         y,
-    //         width,
-    //         height,
-    //     },
-    //     text.as_ptr(),
-    // );
-    // RocResult::ok(id as i64)
-    eprintln!("TODO GUI SUPPORT");
-    RocResult::err(())
-}
-
-#[no_mangle]
-unsafe extern "C" fn roc_fx_guiWindowBox(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    text: &RocStr,
-) -> RocResult<i64, ()> {
-    let text = CString::new(text.as_str()).unwrap();
-    // let id = bindings::GuiWindowBox(
-    //     bindings::Rectangle {
-    //         x,
-    //         y,
-    //         width,
-    //         height,
-    //     },
-    //     text.as_ptr(),
-    // );
-    // RocResult::ok(id as i64)
-    eprintln!("TODO GUI SUPPORT");
-    RocResult::err(())
-}
-
-#[no_mangle]
 unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i64, ()> {
     let text = CString::new(text.as_str()).unwrap();
     let width = bindings::MeasureText(text.as_ptr(), size as c_int);

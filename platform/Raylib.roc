@@ -13,7 +13,6 @@ module [
     exit,
     setWindowTitle,
     drawRectangle,
-    getMousePosition,
     setTargetFPS,
     setDrawFPS,
     measureText,
@@ -148,15 +147,6 @@ getScreenSize =
     Effect.getScreenSize
     |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
     |> Task.mapErr \{} -> crash "unreachable getScreenSize"
-
-## Get the current mouse position.
-getMousePosition : Task Vector2 *
-getMousePosition =
-    { x, y } =
-        Effect.getMousePosition
-            |> Task.mapErr! \{} -> crash "unreachable getMousePosition"
-
-    Task.ok { x, y }
 
 ## Set the target frames per second. The default value is 60.
 setTargetFPS : I32 -> Task {} *

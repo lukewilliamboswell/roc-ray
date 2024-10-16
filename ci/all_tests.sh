@@ -8,6 +8,11 @@ if [ -z "${ROC:-}" ]; then
   export ROC=$(which roc)
 fi
 
+if [ -z "${CARGO:-}" ]; then
+  echo "INFO: The CARGO environment variable is not set."
+  export CARGO=$(which cargo)
+fi
+
 EXAMPLES_DIR='./examples'
 PLATFORM_DIR='./platform'
 
@@ -18,6 +23,14 @@ IGNORED_FILES=("Counter.roc")
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
         $ROC check $ROC_FILE
+    fi
+done
+
+# build the example
+for ROC_FILE in $EXAMPLES_DIR/*.roc; do
+    if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
+        $ROC build --no-link --output app.o $ROC_FILE
+        $CARGO build
     fi
 done
 

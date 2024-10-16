@@ -59,7 +59,9 @@ jobs:
         run: brew install automake autoconf libtool
 
       - name: Install zstd
-        run: brew install zstd
+        run: |
+          brew install zstd
+          brew link zstd
 
       - name: Install Rust and Cargo
         run: |

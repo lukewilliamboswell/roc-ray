@@ -45,18 +45,13 @@ jobs:
     runs-on: macos-latest
     env:
       ROC_VERSION: nightly
+      LIBRARY_PATH: /opt/homebrew/Cellar/zstd/1.5.6/lib
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Update brew
-        run: brew update
-
       - name: Install Build Essentials
         run: brew install automake autoconf libtool
-
-      - name: Install zstd
-        run: brew install zstd
 
       - name: Install Rust and Cargo
         run: |

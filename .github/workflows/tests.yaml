@@ -49,19 +49,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Homebrew
-        run: |
-          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-          echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $HOME/.zprofile
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-
       - name: Install Build Essentials
         run: brew install automake autoconf libtool
 
       - name: Install zstd
-        run: |
-          brew install zstd
-          brew link zstd
+        run: brew install zstd
 
       - name: Install Rust and Cargo
         run: |

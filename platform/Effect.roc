@@ -56,7 +56,7 @@ drawCircle : F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
 drawCircleGradient : F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
 
 setTargetFPS : I32 -> Task {} {}
-setDrawFPS : Bool, F32, F32 -> Task {} {}
+setDrawFPS : Bool, I32, I32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 

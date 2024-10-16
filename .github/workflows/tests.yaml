@@ -58,6 +58,9 @@ jobs:
       - name: Install Build Essentials
         run: brew install automake autoconf libtool
 
+      - name: Install zstd
+        run: brew install zstd
+
       - name: Install Rust and Cargo
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

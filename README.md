@@ -1,6 +1,6 @@
 # Roc Ray Graphics Platform
 
-[Roc](https://www.roc-lang.org) platform for building graphics applications, like grames and simulations, using the [Raylib](https://www.raylib.com) graphics library.
+[Roc](https://www.roc-lang.org) platform for building graphics applications, like games and simulations, using the [Raylib](https://www.raylib.com) graphics library.
 
 ## Documentation
 
@@ -8,6 +8,7 @@ Checkout the docs site at [lukewilliamboswell.github.io/roc-ray](https://lukewil
 
 ## Example
 
+(requires cloning the repo locally)
 ```roc
 app [main, Model] { ray: platform "../platform/main.roc" }
 
@@ -45,22 +46,16 @@ render = \_, _ ->
 
 ### Linux and MacOS
 
-Run an example
+*Required dependencies*
+1. Install [roc](https://www.roc-lang.org)
+2. Install [rust](https://www.rust-lang.org/tools/install)
+3. Install dev tools on linux `sudo apt install build-essential git` or on macOS `xcode-select --install`
+
+Run an example:
 
 ```
 $ ./build-and-run.sh examples/pong.roc
 ```
-
-**Running the tests locally**
-
-```
-$ ./ci/all_tests.sh
-```
-
-*Required dependencies*
-1. Install [roc](https://www.roc-lang.org)
-2. Install [rust](https://www.rust-lang.org/tools/install)
-3. Install dev tools `sudo apt install build-essential git` or `xcode-select --install`
 
 **OR**
 
@@ -68,6 +63,7 @@ Use the [nix package manager](https://nixos.org/download/) to install the depend
 
 ```
 $ nix develop
+$ ./build-and-run.sh examples/pong.roc
 ```
 
 ### Windows
@@ -85,4 +81,12 @@ Run an example
 
 ```
 PS > .\build-and-run.ps1 examples\pong.roc
+```
+
+## Contributing
+
+To run the tests locally:
+
+```
+$ ./ci/all_tests.sh
 ```

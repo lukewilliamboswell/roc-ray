@@ -49,6 +49,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Update brew
+        run: brew update
+
       - name: Install Build Essentials
         run: brew install automake autoconf libtool
 

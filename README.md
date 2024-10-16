@@ -1,6 +1,6 @@
-# roc-raylib
+# Roc Ray Graphics Platform
 
-Roc platform for graphics and GUI using [rust](https://www.rust-lang.org) and [raylib](https://www.raylib.com)
+[Roc](https://www.roc-lang.org) platform for building graphics applications, like grames and simulations, using the [Raylib](https://www.raylib.com) graphics library.
 
 ## Documentation
 
@@ -43,13 +43,7 @@ render = \_, _ ->
 
 ## Building and Run
 
-### Linux and MacOS - Nix Package Manager
-
-Using nix package manager to setup a development environment with roc and zig
-
-```
-$ nix develop
-```
+### Linux and MacOS
 
 Run an example
 
@@ -61,6 +55,19 @@ $ ./build-and-run.sh examples/pong.roc
 
 ```
 $ ./ci/all_tests.sh
+```
+
+*Required dependencies*
+1. Install [roc](https://www.roc-lang.org)
+2. Install [rust](https://www.rust-lang.org/tools/install)
+3. Install dev tools `sudo apt install build-essential git` or `xcode-select --install`
+
+**OR**
+
+Use the [nix package manager](https://nixos.org/download/) to install the dependencies
+
+```
+$ nix develop
 ```
 
 ### Windows

@@ -1,10 +1,10 @@
-use raylib::prelude::*;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::cell::Cell;
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
 
+mod bindings;
 mod roc;
 
 thread_local! {
@@ -14,18 +14,19 @@ thread_local! {
 fn main() {
     unsafe {
         let c_title = CString::new("Loading...").unwrap();
-        raylib::ffi::InitWindow(100, 50, c_title.as_ptr());
-        if !raylib::ffi::IsWindowReady() {
+
+        bindings::InitWindow(100, 50, c_title.as_ptr());
+        if !bindings::IsWindowReady() {
             panic!("Attempting to create window failed!");
         }
 
         let mut model = roc::call_roc_init();
         let mut frame_count = 0;
 
-        while !raylib::ffi::WindowShouldClose() {
-            raylib::ffi::BeginDrawing();
+        while !bindings::WindowShouldClose() {
+            bindings::BeginDrawing();
 
-            raylib::ffi::ClearBackground(raylib::ffi::Color {
+            bindings::ClearBackground(bindings::Color {
                 r: 0,
                 g: 0,
                 b: 0,
@@ -43,19 +44,19 @@ fn main() {
                 frame_count,
                 keys_down: RocList::empty(),
                 mouse_down: RocList::empty(),
-                mouse_pos_x: (raylib::ffi::GetMouseX() as i32).as_f32(),
-                mouse_pos_y: (raylib::ffi::GetMouseY() as i32).as_f32(),
+                mouse_pos_x: bindings::GetMouseX() as f32,
+                mouse_pos_y: bindings::GetMouseY() as f32,
             };
 
             model = roc::call_roc_render(platform_state, &model);
 
             if let Some((x, y)) = DRAW_FPS.get() {
-                raylib::ffi::DrawFPS(x, y);
+                bindings::DrawFPS(x, y);
             }
 
             frame_count += 1;
 
-            raylib::ffi::EndDrawing();
+            bindings::EndDrawing();
         }
     }
 }
@@ -69,7 +70,7 @@ pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
 unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
     let text = CString::new(msg.as_str()).unwrap();
     if level >= 0 && level <= 7 {
-        raylib::ffi::TraceLog(level, text.as_ptr())
+        bindings::TraceLog(level, text.as_ptr())
     } else {
         panic!("Invalid log level from roc");
     }
@@ -79,14 +80,14 @@ unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
-    raylib::ffi::SetWindowSize(width, height);
+    bindings::SetWindowSize(width, height);
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
     let text = CString::new(text.as_str()).unwrap();
-    raylib::ffi::SetWindowTitle(text.as_ptr());
+    bindings::SetWindowTitle(text.as_ptr());
 
     RocResult::ok(())
 }
@@ -101,12 +102,12 @@ unsafe extern "C" fn roc_fx_drawCircle(
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    let center = raylib::ffi::Vector2 {
+    let center = bindings::Vector2 {
         x: center_x,
         y: center_y,
     };
-    let color = raylib::ffi::Color { r, g, b, a };
-    raylib::ffi::DrawCircleV(center, radius, color);
+    let color = bindings::Color { r, g, b, a };
+    bindings::DrawCircleV(center, radius, color);
 
     RocResult::ok(())
 }
@@ -125,19 +126,19 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
     b2: u8,
     a2: u8,
 ) -> RocResult<(), ()> {
-    let color1 = raylib::ffi::Color {
+    let color1 = bindings::Color {
         r: r1,
         g: g1,
         b: b1,
         a: a1,
     };
-    let color2 = raylib::ffi::Color {
+    let color2 = bindings::Color {
         r: r2,
         g: g2,
         b: b2,
         a: a2,
     };
-    raylib::ffi::DrawCircleGradient(center_x as c_int, center_y as c_int, radius, color1, color2);
+    bindings::DrawCircleGradient(center_x as c_int, center_y as c_int, radius, color1, color2);
     RocResult::ok(())
 }
 
@@ -156,19 +157,19 @@ unsafe extern "C" fn roc_fx_drawRectangleGradient(
     b2: u8,
     a2: u8,
 ) -> RocResult<(), ()> {
-    let color1 = raylib::ffi::Color {
+    let color1 = bindings::Color {
         r: r1,
         g: g1,
         b: b1,
         a: a1,
     };
-    let color2 = raylib::ffi::Color {
+    let color2 = bindings::Color {
         r: r2,
         g: g2,
         b: b2,
         a: a2,
     };
-    raylib::ffi::DrawRectangleGradientV(
+    bindings::DrawRectangleGradientV(
         x as c_int,
         y as c_int,
         width as c_int,
@@ -191,8 +192,8 @@ unsafe extern "C" fn roc_fx_drawText(
     a: u8,
 ) -> RocResult<(), ()> {
     let text = CString::new(text.as_str()).unwrap();
-    let color = raylib::ffi::Color { r, g, b, a };
-    raylib::ffi::DrawText(text.as_ptr(), x as c_int, y as c_int, size as c_int, color);
+    let color = bindings::Color { r, g, b, a };
+    bindings::DrawText(text.as_ptr(), x as c_int, y as c_int, size as c_int, color);
     RocResult::ok(())
 }
 
@@ -207,13 +208,13 @@ unsafe extern "C" fn roc_fx_drawRectangle(
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    let position = raylib::ffi::Vector2 { x, y };
-    let size = raylib::ffi::Vector2 {
+    let position = bindings::Vector2 { x, y };
+    let size = bindings::Vector2 {
         x: width,
         y: height,
     };
-    let color = raylib::ffi::Color { r, g, b, a };
-    raylib::ffi::DrawRectangleV(position, size, color);
+    let color = bindings::Color { r, g, b, a };
+    bindings::DrawRectangleV(position, size, color);
     RocResult::ok(())
 }
 
@@ -228,13 +229,13 @@ unsafe extern "C" fn roc_fx_drawLine(
     b: u8,
     a: u8,
 ) -> RocResult<(), ()> {
-    let start = raylib::ffi::Vector2 {
+    let start = bindings::Vector2 {
         x: start_x,
         y: start_y,
     };
-    let end = raylib::ffi::Vector2 { x: end_x, y: end_y };
-    let color = raylib::ffi::Color { r, g, b, a };
-    raylib::ffi::DrawLineV(start, end, color);
+    let end = bindings::Vector2 { x: end_x, y: end_y };
+    let color = bindings::Color { r, g, b, a };
+    bindings::DrawLineV(start, end, color);
     RocResult::ok(())
 }
 
@@ -247,8 +248,8 @@ struct ScreenSize {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
-    let height = raylib::ffi::GetScreenHeight();
-    let width = raylib::ffi::GetScreenWidth();
+    let height = bindings::GetScreenHeight();
+    let width = bindings::GetScreenWidth();
     RocResult::ok(ScreenSize {
         height,
         width,
@@ -257,71 +258,29 @@ unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawGuiButton(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    text: &RocStr,
-) -> RocResult<i64, ()> {
-    let text = CString::new(text.as_str()).unwrap();
-    let id = raylib::ffi::GuiButton(
-        raylib::ffi::Rectangle {
-            x,
-            y,
-            width,
-            height,
-        },
-        text.as_ptr(),
-    );
-    RocResult::ok(id as i64)
-}
-
-#[no_mangle]
-unsafe extern "C" fn roc_fx_guiWindowBox(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    text: &RocStr,
-) -> RocResult<i64, ()> {
-    let text = CString::new(text.as_str()).unwrap();
-    let id = raylib::ffi::GuiWindowBox(
-        raylib::ffi::Rectangle {
-            x,
-            y,
-            width,
-            height,
-        },
-        text.as_ptr(),
-    );
-    RocResult::ok(id as i64)
-}
-
-#[no_mangle]
 unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i64, ()> {
     let text = CString::new(text.as_str()).unwrap();
-    let width = raylib::ffi::MeasureText(text.as_ptr(), size as c_int);
+    let width = bindings::MeasureText(text.as_ptr(), size as c_int);
     RocResult::ok(width as i64)
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
-    raylib::ffi::SetTargetFPS(rate as c_int);
+    bindings::SetTargetFPS(rate as c_int);
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) -> RocResult<(), ()> {
-    let color = raylib::ffi::Color { r, g, b, a };
-    raylib::ffi::ClearBackground(color);
+    let color = bindings::Color { r, g, b, a };
+    bindings::ClearBackground(color);
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
     let path = CString::new(path.as_str()).unwrap();
-    raylib::ffi::TakeScreenshot(path.as_ptr());
+    bindings::TakeScreenshot(path.as_ptr());
     RocResult::ok(())
 }
 
@@ -345,12 +304,12 @@ unsafe extern "C" fn roc_fx_createCamera(
     rotation: f32,
     zoom: f32,
 ) -> RocResult<RocBox<()>, ()> {
-    let camera = raylib::ffi::Camera2D {
-        target: raylib::ffi::Vector2 {
+    let camera = bindings::Camera2D {
+        target: bindings::Vector2 {
             x: target_x,
             y: target_y,
         },
-        offset: raylib::ffi::Vector2 {
+        offset: bindings::Vector2 {
             x: offset_x,
             y: offset_y,
         },
@@ -378,14 +337,14 @@ unsafe extern "C" fn roc_fx_updateCamera(
     rotation: f32,
     zoom: f32,
 ) -> RocResult<(), ()> {
-    let camera: &mut raylib::ffi::Camera2D =
+    let camera: &mut bindings::Camera2D =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    camera.target = raylib::ffi::Vector2 {
+    camera.target = bindings::Vector2 {
         x: target_x,
         y: target_y,
     };
-    camera.offset = raylib::ffi::Vector2 {
+    camera.offset = bindings::Vector2 {
         x: offset_x,
         y: offset_y,
     };
@@ -397,17 +356,17 @@ unsafe extern "C" fn roc_fx_updateCamera(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> {
-    let camera: &mut raylib::ffi::Camera2D =
+    let camera: &mut bindings::Camera2D =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    raylib::ffi::BeginMode2D(*camera);
+    bindings::BeginMode2D(*camera);
 
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
-    raylib::ffi::EndMode2D();
+    bindings::EndMode2D();
 
     RocResult::ok(())
 }

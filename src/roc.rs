@@ -6,11 +6,13 @@ use std::mem::{ManuallyDrop, MaybeUninit};
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
+use crate::bindings;
+
 const MAX_CAMERAS_HEAP_SIZE: usize = 100;
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::ffi::Camera2D> {
-    static FILE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::ffi::Camera2D>> =
+pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Camera2D> {
+    static FILE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
         OnceLock::new();
     FILE_HEAP.get_or_init(|| {
         ThreadSafeRefcountedResourceHeap::new(MAX_CAMERAS_HEAP_SIZE)

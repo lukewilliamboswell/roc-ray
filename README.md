@@ -43,13 +43,7 @@ render = \_, _ ->
 
 ## Building and Run
 
-### Linux and MacOS - Nix Package Manager
-
-Using nix package manager to setup a development environment with roc and zig
-
-```
-$ nix develop
-```
+### Linux and MacOS
 
 Run an example
 

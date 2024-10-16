@@ -136,7 +136,7 @@ fn download_raylib_release(
         println!("cargo:rerun-if-changed=app.o");
 
         // Run the `ar rcs libapp.a app.o` command
-        let output = Command::new("ar")
+        let output = std::process::Command::new("ar")
             .args(&["rcs", "libapp.a", "app.o"])
             .output()
             .expect("Failed to execute ar command");

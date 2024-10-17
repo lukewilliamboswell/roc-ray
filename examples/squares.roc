@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Rectangle, PlatformState]
+import ray.RocRay exposing [Rectangle, PlatformState]
 
 Program : {
     init : Task Model {},
@@ -13,8 +13,8 @@ Model : {
     width : F32,
     height : F32,
     squares : List Rectangle,
-    status : [Ready, AfterClick Raylib.Vector2],
-    circlePos : Raylib.Vector2,
+    status : [Ready, AfterClick RocRay.Vector2],
+    circlePos : RocRay.Vector2,
 }
 
 main : Program
@@ -26,8 +26,8 @@ init =
     width = 900f32
     height = 400f32
 
-    Raylib.setWindowSize! { width, height }
-    Raylib.setWindowTitle! "Squares Demo"
+    RocRay.setWindowSize! { width, height }
+    RocRay.setWindowTitle! "Squares Demo"
 
     Task.ok {
         width,
@@ -40,9 +40,9 @@ init =
 render : Model, PlatformState -> Task Model {}
 render = \model, { keyboardButtons, mouseButtons, mousePos } ->
 
-    Raylib.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
+    RocRay.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
 
-    Raylib.drawText! {
+    RocRay.drawText! {
         text: "Mouse $(Num.toStr (Num.round mousePos.x)),$(Num.toStr (Num.round mousePos.y)), $(Inspect.toStr keyboardButtons), $(Inspect.toStr mouseButtons)",
         x: 10,
         y: model.height - 25,
@@ -50,9 +50,9 @@ render = \model, { keyboardButtons, mouseButtons, mousePos } ->
         color: White,
     }
 
-    Raylib.drawRectangle! { x: mousePos.x - 10, y: mousePos.y - 10, width: 20, height: 20, color: Red }
+    RocRay.drawRectangle! { x: mousePos.x - 10, y: mousePos.y - 10, width: 20, height: 20, color: Red }
 
-    Raylib.drawRectangle! { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50, color: Aqua }
+    RocRay.drawRectangle! { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50, color: Aqua }
 
     newCirclePos =
         if Set.contains keyboardButtons KeyUp then

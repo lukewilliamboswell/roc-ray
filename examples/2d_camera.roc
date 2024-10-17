@@ -4,7 +4,7 @@ app [main, Model] {
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.Raylib exposing [PlatformState, Vector2, Color, Camera]
+import ray.RocRay exposing [PlatformState, Vector2, Color, Camera]
 import rand.Random
 
 main = { init, render }
@@ -26,9 +26,9 @@ Model : {
 init : Task Model []
 init =
 
-    Raylib.setDrawFPS! { fps: Visible }
-    Raylib.setWindowSize! { width: screenWidth, height: screenHeight }
-    Raylib.setWindowTitle! "2D Camera Example"
+    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
+    RocRay.setWindowTitle! "2D Camera Example"
 
     cameraSettings = {
         target: { x: 20, y: 20 },
@@ -37,7 +37,7 @@ init =
         zoom: 1,
     }
 
-    cameraID = Raylib.createCamera! cameraSettings
+    cameraID = RocRay.createCamera! cameraSettings
 
     buildings = generateBuildings
 
@@ -46,11 +46,11 @@ init =
 render : Model, PlatformState -> Task Model []
 render = \model, { mousePos } ->
 
-    Raylib.drawMode2D! model.cameraID (Task.forEach model.buildings Raylib.drawRectangle)
+    RocRay.drawMode2D! model.cameraID (Task.forEach model.buildings RocRay.drawRectangle)
 
     cameraSettings = model.cameraSettings |> &target mousePos
 
-    Raylib.updateCamera! model.cameraID cameraSettings
+    RocRay.updateCamera! model.cameraID cameraSettings
 
     Task.ok { model & cameraSettings }
 

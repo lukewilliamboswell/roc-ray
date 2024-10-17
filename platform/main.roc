@@ -1,11 +1,11 @@
 platform "roc-ray"
     requires { Model } { main : Program Model _ }
-    exposes [Raylib]
+    exposes [RocRay]
     packages {}
     imports []
     provides [forHost]
 
-import Raylib exposing [Program]
+import RocRay exposing [Program]
 import InternalKeyboard
 import InternalMouse
 import Effect
@@ -47,7 +47,7 @@ render = \boxedModel, platformState ->
     keyboardButtons = keysDownU64 |> List.map InternalKeyboard.keyFromU64 |> Set.fromList
     mouseButtons = mouseDownU64 |> List.map InternalMouse.mouseButtonFromU64 |> Set.fromList
 
-    state : Raylib.PlatformState
+    state : RocRay.PlatformState
     state = {
         timestampMillis,
         frameCount,

@@ -4,7 +4,7 @@ app [main, Model] {
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.Raylib exposing [PlatformState, Color]
+import ray.RocRay exposing [PlatformState, Color]
 import rand.Random
 import time.DateTime
 
@@ -26,10 +26,10 @@ init =
 
     seed = Random.seed 1234
 
-    Raylib.setTargetFPS! 500
-    Raylib.setDrawFPS! { fps: Visible }
-    Raylib.setWindowSize! { width, height }
-    Raylib.setWindowTitle! "Random Dots"
+    RocRay.setTargetFPS! 500
+    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.setWindowSize! { width, height }
+    RocRay.setWindowTitle! "Random Dots"
 
     Task.ok {
         number,
@@ -43,15 +43,15 @@ render = \model, { keyboardButtons, timestampMillis } ->
 
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
-    Raylib.drawText! { text: "DateTime $(nowStr)", x: 10, y: 50, size: 20, color: White }
+    RocRay.drawText! { text: "DateTime $(nowStr)", x: 10, y: 50, size: 20, color: White }
 
     generator = Random.u32 0 800
 
     { seed, lines } = randomList model.seed generator model.number
 
-    Task.forEach! lines Raylib.drawRectangle
+    Task.forEach! lines RocRay.drawRectangle
 
-    Raylib.drawText! { text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", x: 10, y: model.height - 25, size: 20, color: White }
+    RocRay.drawText! { text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", x: 10, y: model.height - 25, size: 20, color: White }
 
     if Set.contains keyboardButtons KeyUp then
         Task.ok { model & seed, number: Num.addSaturated model.number 10 }

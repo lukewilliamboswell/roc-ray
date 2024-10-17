@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.Raylib exposing [Vector2]
+import ray.RocRay exposing [Vector2]
 
 main = { init, render }
 
@@ -28,10 +28,10 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 init : Task Model []
 init =
 
-    Raylib.setBackgroundColor! Navy
-    Raylib.setDrawFPS! { fps: Visible }
-    Raylib.setWindowSize! { width, height }
-    Raylib.setWindowTitle! "Pong"
+    RocRay.setBackgroundColor! Navy
+    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.setWindowSize! { width, height }
+    RocRay.setWindowTitle! "Pong"
 
     Task.ok {
         ball: newBall,
@@ -65,27 +65,27 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, Raylib.PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
 
     screenTask =
         if Set.contains keyboardButtons KeyLeftControl && Set.contains keyboardButtons KeyK then
-            Raylib.takeScreenshot "saved-$(Num.toStr frameCount).png"
+            RocRay.takeScreenshot "saved-$(Num.toStr frameCount).png"
         else
             Task.ok {}
 
     if !model.playing then
-        Raylib.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
+        RocRay.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
 
         maxScore = model.maxScore |> Num.toStr
 
-        Raylib.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: White }
+        RocRay.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: White }
 
         score = model.score |> Num.toStr
 
-        Raylib.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
+        RocRay.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
 
-        Raylib.drawText! { text: "Ctrl-K to Screenshot to 'saved.png'", x: 50, y: 150, size: 20, color: White }
+        RocRay.drawText! { text: "Ctrl-K to Screenshot to 'saved.png'", x: 50, y: 150, size: 20, color: White }
 
         screenTask!
 
@@ -95,16 +95,16 @@ render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
             Task.ok model
     else
         # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
-        Raylib.setTargetFPS! (60 + ((Num.toFrac frameCount) / 60 |> Num.floor |> Num.toI32))
+        RocRay.setTargetFPS! (60 + ((Num.toFrac frameCount) / 60 |> Num.floor |> Num.toI32))
 
         score = model.score |> Num.toStr
 
-        Raylib.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
+        RocRay.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
         pos = model.pos + (mousePos.y - model.pos) / 5
 
-        Raylib.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
-        Raylib.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
+        RocRay.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
+        RocRay.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
 
         drawCrossHair! mousePos
 
@@ -120,13 +120,13 @@ render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
 drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->
 
-    Raylib.drawLine! {
+    RocRay.drawLine! {
         start: { x: mousePos.x, y: 0 },
         end: { x: mousePos.x, y: height },
         color: Yellow,
     }
 
-    Raylib.drawLine! {
+    RocRay.drawLine! {
         start: { x: 0, y: mousePos.y },
         end: { x: width, y: mousePos.y },
         color: Yellow,

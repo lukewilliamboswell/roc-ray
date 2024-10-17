@@ -5,7 +5,7 @@ triple=$(rustc -vV | sed -n 's|host: ||p' | sed 's|-|_|g')
 
 # Generate bindings
 # install binidgen with `cargo install bindgen-cli`
-bindgen vendor/raylib.h \
+bindgen raylib.h \
   --blocklist-item "DEG2RAD" \
   --blocklist-item "PI" \
   --blocklist-item "RAD2DEG" \
@@ -14,4 +14,4 @@ bindgen vendor/raylib.h \
   --blocklist-item "false_" \
   --blocklist-item "true_" \
   --blocklist-type "ENUM_PATTERN.*" \
-  --output "src/bindings/$triple.rs"
+  --output "../src/bindings/$triple.rs"

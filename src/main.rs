@@ -10,6 +10,7 @@ mod roc;
 
 thread_local! {
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
+    static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
 }
 
 fn main() {
@@ -24,7 +25,7 @@ fn main() {
         let mut model = roc::call_roc_init();
         let mut frame_count = 0;
 
-        while !bindings::WindowShouldClose() {
+        while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             bindings::BeginDrawing();
 
             bindings::ClearBackground(bindings::Color {
@@ -67,7 +68,8 @@ fn main() {
 
 #[no_mangle]
 pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
-    todo!("roc_fx_exit");
+    SHOULD_EXIT.set(true);
+    RocResult::ok(())
 }
 
 #[no_mangle]

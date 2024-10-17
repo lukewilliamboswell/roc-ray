@@ -3,6 +3,7 @@ app [main, Model] {
 }
 
 import ray.RocRay exposing [Vector2]
+import ray.RocRay.Mouse as Mouse
 
 main = { init, render }
 
@@ -27,9 +28,9 @@ newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
 init : Task Model []
 init =
-
-    RocRay.setBackgroundColor! Navy
+    RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
+    RocRay.setBackgroundColor! Navy
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Pong"
 
@@ -66,7 +67,7 @@ bounce = \ball, pos ->
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
+render = \model, { frameCount, keyboardButtons, mouse } ->
 
     screenTask =
         if Set.contains keyboardButtons KeyLeftControl && Set.contains keyboardButtons KeyK then
@@ -89,7 +90,7 @@ render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
 
         screenTask!
 
-        if Set.contains mouseButtons MouseButtonLeft then
+        if Mouse.pressed mouse.buttons.left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
@@ -101,12 +102,12 @@ render = \model, { frameCount, keyboardButtons, mouseButtons, mousePos } ->
 
         RocRay.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
-        pos = model.pos + (mousePos.y - model.pos) / 5
+        pos = model.pos + (mouse.position.y - model.pos) / 5
 
         RocRay.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
         RocRay.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
 
-        drawCrossHair! mousePos
+        drawCrossHair! mouse.position
 
         ball = bounce (moveBall model.ball) model.pos
 

@@ -38,12 +38,14 @@ init =
     }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { keyboardButtons, mouseButtons, mousePos } ->
+render = \model, { keyboardButtons, mouse } ->
 
     RocRay.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
 
+    mousePos = mouse.position
+
     RocRay.drawText! {
-        text: "Mouse $(Num.toStr (Num.round mousePos.x)),$(Num.toStr (Num.round mousePos.y)), $(Inspect.toStr keyboardButtons), $(Inspect.toStr mouseButtons)",
+        text: "Mouse $(Num.toStr (Num.round mousePos.x)),$(Num.toStr (Num.round mousePos.y)), $(Inspect.toStr keyboardButtons), $(Inspect.toStr mouse.buttons)",
         x: 10,
         y: model.height - 25,
         size: 20,

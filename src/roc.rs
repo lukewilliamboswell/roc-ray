@@ -116,7 +116,10 @@ unsafe impl Sync for Model {}
 pub struct PlatformState {
     pub frame_count: u64,
     pub keys_down: roc_std::RocList<u64>,
-    pub mouse_down: roc_std::RocList<u64>,
+    pub mouse_down: roc_std::RocList<bool>,
+    pub mouse_pressed: roc_std::RocList<bool>,
+    pub mouse_released: roc_std::RocList<bool>,
+    pub mouse_up: roc_std::RocList<bool>,
     pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
     pub mouse_pos_y: f32,

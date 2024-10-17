@@ -2,7 +2,6 @@ module [
     Program,
     PlatformState,
     KeyboardKey,
-    MouseButton,
     Color,
     Rectangle,
     Vector2,
@@ -30,9 +29,9 @@ module [
     log,
 ]
 
+import RocRay.Mouse as Mouse
 import Effect
 import InternalKeyboard
-import InternalMouse
 
 ## Provide an initial state and a render function to the platform.
 ## ```
@@ -50,13 +49,13 @@ PlatformState : {
     timestampMillis : U64,
     frameCount : U64,
     keyboardButtons : Set KeyboardKey,
-    mouseButtons : Set MouseButton,
-    mousePos : Vector2,
+    mouse : {
+        position : Vector2,
+        buttons : Mouse.Buttons,
+    },
 }
 
 KeyboardKey : InternalKeyboard.KeyboardKey
-
-MouseButton : InternalMouse.MouseButton
 
 ## Represents a rectangle.
 ## ```

@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-examples:
+  test-examples-linux:
     runs-on: ubuntu-latest
     env:
       ROC_VERSION: nightly
@@ -30,6 +30,37 @@ jobs:
         run: |
           # Install ROC
           curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-linux_x86_64-latest.tar.gz
+          mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+          tar -xzf roc_nightly.tar.gz
+          rm roc_nightly.tar.gz
+          mv roc_nightly* roc_nightly
+
+      - name: Check ROC version
+        run: ./roc_nightly/roc version
+
+      - name: Run all tests
+        run: ROC=./roc_nightly/roc ./ci/all_tests.sh
+
+  test-examples-macos:
+    runs-on: macos-latest
+    env:
+      ROC_VERSION: nightly
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Build Essentials
+        run: brew install automake autoconf libtool
+
+      - name: Install Rust and Cargo
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+
+      - name: Install ROC
+        run: |
+          # Install ROC
+          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_apple_silicon-latest.tar.gz
           mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
           tar -xzf roc_nightly.tar.gz
           rm roc_nightly.tar.gz

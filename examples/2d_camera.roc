@@ -44,11 +44,11 @@ init =
     Task.ok { buildings, cameraID, cameraSettings }
 
 render : Model, PlatformState -> Task Model []
-render = \model, { mousePos } ->
+render = \model, { mouse } ->
 
     RocRay.drawMode2D! model.cameraID (Task.forEach model.buildings RocRay.drawRectangle)
 
-    cameraSettings = model.cameraSettings |> &target mousePos
+    cameraSettings = model.cameraSettings |> &target mouse.position
 
     RocRay.updateCamera! model.cameraID cameraSettings
 

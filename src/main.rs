@@ -46,8 +46,8 @@ fn main() {
                 keys: get_keys_states(),
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
-                mouse_pos_x: bindings::GetMouseX(),
-                mouse_pos_y: bindings::GetMouseY(),
+                mouse_pos_x: bindings::GetMouseX() as f32,
+                mouse_pos_y: bindings::GetMouseY() as f32,
             };
 
             model = roc::call_roc_render(platform_state, &model);

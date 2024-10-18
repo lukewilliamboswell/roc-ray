@@ -2,7 +2,7 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Vector2, IVector2]
+import ray.RocRay exposing [Vector2]
 import ray.RocRay.Mouse as Mouse
 import ray.RocRay.Keys as Keys
 
@@ -119,11 +119,11 @@ render = \model, { frameCount, keys, mouse } ->
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
 
-drawCrossHair : IVector2 -> Task {} []
+drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->
     RocRay.drawLine! {
-        start: { x: Num.toF32 mousePos.x, y: 0 },
-        end: { x: Num.toF32 mousePos.x, y: height },
+        start: { x: mousePos.x, y: 0 },
+        end: { x: mousePos.x, y: height },
         color: Yellow,
     }
 

@@ -1,12 +1,10 @@
 module [
-    toVector2,
     Program,
     PlatformState,
     KeyboardKey,
     Color,
     Rectangle,
     Vector2,
-    IVector2,
     Camera,
     setWindowSize,
     getScreenSize,
@@ -53,7 +51,7 @@ PlatformState : {
     frameCount : U64,
     keys : Keys.Keys,
     mouse : {
-        position : IVector2,
+        position : Vector2,
         buttons : Mouse.Buttons,
     },
 }
@@ -68,19 +66,9 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 
 ## Represents a 2D vector.
 ## ```
-## { x : I32, y : I32 }
-## ```
-IVector2 : { x : I32, y : I32 }
-
-## Represents a 2D vector.
-## ```
 ## { x : F32, y : F32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
-
-toVector2 : IVector2 -> Vector2
-toVector2 = \{ x, y } ->
-    { x: Num.toF32 x, y: Num.toF32 y }
 
 ## Represents a color.
 ## ```

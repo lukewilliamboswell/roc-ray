@@ -80,9 +80,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        run: choco install rust
-
       - name: Install ROC
         run: |
           # Install ROC
@@ -90,6 +87,18 @@ jobs:
 
       - name: Check ROC version
         run: .\roc.exe version
+
+      - name: Install GLFW
+        run: |
+          curl -L https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip --output glfw-3.4.bin.WIN64.zip
+          tar -xf glfw-3.4.bin.WIN64.zip
+          move glfw-3.4.bin.WIN64/lib-vc2022/glfw3_mt.lib ./glfw3_mt.lib
+          move glfw-3.4.bin.WIN64/include/GLFW ./GLFW
+
+      - name: Set environment variables for GLFW
+        run: |
+          $env:LIB = "${{ github.workspace }};$env:LIB"
+          $env:INCLUDE = "${{ github.workspace }};$env:INCLUDE"
 
       - name: Build the basic-shapes example
         run: |

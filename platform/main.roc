@@ -69,18 +69,22 @@ keysForApp = \{ keys } ->
     keys
     |> List.map InternalKeyboard.keyStateFromU8
     |> List.mapWithIndex \s, i -> (InternalKeyboard.keyFromU64 i, s)
+    |> List.keepOks \(recognized, s) ->
+        Result.map recognized \key -> (key, s)
     |> Dict.fromList
 
 mouseButtonsForApp : { mouseButtons : List U8 } -> Mouse.Buttons
 mouseButtonsForApp = \{ mouseButtons } ->
-    mouseButtonDict =
+    buttonsToStates : Dict InternalMouse.MouseButton Mouse.ButtonState
+    buttonsToStates =
         mouseButtons
         |> List.map InternalMouse.mouseButtonStateFromU8
         |> List.mapWithIndex \s, i -> (InternalMouse.mouseButtonFromU64 i, s)
         |> Dict.fromList
 
+    stateOf : InternalMouse.MouseButton -> Mouse.ButtonState
     stateOf = \button ->
-        Dict.get mouseButtonDict button
+        Dict.get buttonsToStates button
         |> Result.withDefault Up
 
     {

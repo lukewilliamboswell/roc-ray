@@ -48,7 +48,7 @@ render = \model, { mouse } ->
 
     RocRay.drawMode2D! model.cameraID (Task.forEach model.buildings RocRay.drawRectangle)
 
-    cameraSettings = model.cameraSettings |> &target mouse.position
+    cameraSettings = model.cameraSettings |> &target (RocRay.toVector2 mouse.position)
 
     RocRay.updateCamera! model.cameraID cameraSettings
 

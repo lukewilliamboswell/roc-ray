@@ -115,24 +115,21 @@ unsafe impl Sync for Model {}
 #[repr(C)]
 pub struct PlatformState {
     pub frame_count: u64,
-    pub keys_down: roc_std::RocList<u64>,
-    pub mouse_down: roc_std::RocList<bool>,
-    pub mouse_pressed: roc_std::RocList<bool>,
-    pub mouse_released: roc_std::RocList<bool>,
-    pub mouse_up: roc_std::RocList<bool>,
+    pub keys: roc_std::RocList<u8>,
+    pub mouse_buttons: roc_std::RocList<u8>,
     pub timestamp_millis: u64,
-    pub mouse_pos_x: f32,
-    pub mouse_pos_y: f32,
+    pub mouse_pos_x: i32,
+    pub mouse_pos_y: i32,
 }
 
 impl roc_std::RocRefcounted for PlatformState {
     fn inc(&mut self) {
-        self.keys_down.inc();
-        self.mouse_down.inc();
+        self.keys.inc();
+        self.mouse_buttons.inc();
     }
     fn dec(&mut self) {
-        self.keys_down.dec();
-        self.mouse_down.dec();
+        self.keys.dec();
+        self.mouse_buttons.dec();
     }
     fn is_refcounted() -> bool {
         true

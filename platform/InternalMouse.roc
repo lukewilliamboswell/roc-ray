@@ -1,4 +1,4 @@
-module [MouseButton, mouseButtonFromU64]
+module [MouseButton, mouseButtonFromU64, mouseButtonStateFromU8, ButtonState]
 
 MouseButton : [
     MouseButtonLeft,
@@ -12,19 +12,23 @@ MouseButton : [
 
 mouseButtonFromU64 : U64 -> MouseButton
 mouseButtonFromU64 = \mouse ->
-    if mouse == 0 then
-        MouseButtonLeft
-    else if mouse == 1 then
-        MouseButtonRight
-    else if mouse == 2 then
-        MouseButtonMiddle
-    else if mouse == 3 then
-        MouseButtonSide
-    else if mouse == 4 then
-        MouseButtonExtra
-    else if mouse == 5 then
-        MouseButtonForward
-    else if mouse == 6 then
-        MouseButtonBack
-    else
-        crash "unreachable mouse button value from host"
+    when mouse is
+        0 -> MouseButtonLeft
+        1 -> MouseButtonRight
+        2 -> MouseButtonMiddle
+        3 -> MouseButtonSide
+        4 -> MouseButtonExtra
+        5 -> MouseButtonForward
+        6 -> MouseButtonBack
+        _ -> crash "unreachable mouse button from host"
+
+ButtonState : [Up, Down, Pressed, Released]
+
+mouseButtonStateFromU8 : U8 -> ButtonState
+mouseButtonStateFromU8 = \n ->
+    when n is
+        0 -> Pressed
+        1 -> Released
+        2 -> Down
+        3 -> Up
+        _ -> crash "unreachable mouse button state from host"

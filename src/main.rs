@@ -10,6 +10,7 @@ mod roc;
 
 thread_local! {
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
+    static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
 }
 
 fn main() {
@@ -24,7 +25,7 @@ fn main() {
         let mut model = roc::call_roc_init();
         let mut frame_count = 0;
 
-        while !bindings::WindowShouldClose() {
+        while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             bindings::BeginDrawing();
 
             bindings::ClearBackground(bindings::Color {
@@ -41,15 +42,12 @@ fn main() {
             let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
 
             let platform_state = roc::PlatformState {
-                timestamp_millis: timestamp,
                 frame_count,
-                keys_down: RocList::empty(),
-                mouse_down: get_mouse_down(),
-                mouse_pressed: get_mouse_pressed(),
-                mouse_released: get_mouse_released(),
-                mouse_up: get_mouse_up(),
-                mouse_pos_x: bindings::GetMouseX() as f32,
-                mouse_pos_y: bindings::GetMouseY() as f32,
+                keys: get_keys_states(),
+                mouse_buttons: get_mouse_button_states(),
+                timestamp_millis: timestamp,
+                mouse_pos_x: bindings::GetMouseX(),
+                mouse_pos_y: bindings::GetMouseY(),
             };
 
             model = roc::call_roc_render(platform_state, &model);
@@ -67,7 +65,8 @@ fn main() {
 
 #[no_mangle]
 pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
-    todo!("roc_fx_exit");
+    SHOULD_EXIT.set(true);
+    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -375,22 +374,38 @@ unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<()
     RocResult::ok(())
 }
 
-unsafe fn get_mouse_down() -> RocList<bool> {
-    let mouse_buttons: [bool; 7] = array::from_fn(|i| bindings::IsMouseButtonDown(i as c_int));
+unsafe fn get_mouse_button_states() -> RocList<u8> {
+    let mouse_buttons: [u8; 7] = array::from_fn(|i| {
+        if bindings::IsMouseButtonPressed(i as c_int) {
+            0
+        } else if bindings::IsMouseButtonReleased(i as c_int) {
+            1
+        } else if bindings::IsMouseButtonDown(i as c_int) {
+            2
+        } else {
+            // Up
+            3
+        }
+    });
+
     RocList::from_slice(&mouse_buttons)
 }
 
-unsafe fn get_mouse_pressed() -> RocList<bool> {
-    let mouse_buttons: [bool; 7] = array::from_fn(|i| bindings::IsMouseButtonPressed(i as c_int));
-    RocList::from_slice(&mouse_buttons)
-}
+unsafe fn get_keys_states() -> RocList<u8> {
+    let keys: [u8; 350] = array::from_fn(|i| {
+        if bindings::IsKeyPressed(i as c_int) {
+            0
+        } else if bindings::IsKeyReleased(i as c_int) {
+            1
+        } else if bindings::IsKeyDown(i as c_int) {
+            2
+        } else if bindings::IsKeyUp(i as c_int) {
+            3
+        } else {
+            // PressedRepeat
+            4
+        }
+    });
 
-unsafe fn get_mouse_up() -> RocList<bool> {
-    let mouse_buttons: [bool; 7] = array::from_fn(|i| bindings::IsMouseButtonUp(i as c_int));
-    RocList::from_slice(&mouse_buttons)
-}
-
-unsafe fn get_mouse_released() -> RocList<bool> {
-    let mouse_buttons: [bool; 7] = array::from_fn(|i| bindings::IsMouseButtonReleased(i as c_int));
-    RocList::from_slice(&mouse_buttons)
+    RocList::from_slice(&keys)
 }

@@ -1,4 +1,4 @@
-module [KeyboardKey, keyFromU64]
+module [KeyboardKey, KeyState, keyFromU64, keyStateFromU8]
 
 KeyboardKey : [
     KeyApostrophe, # = 39,
@@ -111,223 +111,133 @@ KeyboardKey : [
     KeyVolumeDown, # = 25,
 ]
 
-keyFromU64 : U64 -> KeyboardKey
+KeyState : [
+    Pressed,
+    Released,
+    Down,
+    Up,
+    PressedRepeat,
+]
+
+keyStateFromU8 : U8 -> KeyState
+keyStateFromU8 = \n ->
+    when n is
+        0 -> Pressed
+        1 -> Released
+        2 -> Down
+        3 -> Up
+        4 -> PressedRepeat
+        _ -> crash "unreachable key state from host"
+
+keyFromU64 : U64 -> Result KeyboardKey [Ignored]
 keyFromU64 = \key ->
-    if key == 39 then
-        KeyApostrophe
-    else if key == 44 then
-        KeyComma
-    else if key == 45 then
-        KeyMinus
-    else if key == 46 then
-        KeyPeriod
-    else if key == 47 then
-        KeySlash
-    else if key == 48 then
-        KeyZero
-    else if key == 49 then
-        KeyOne
-    else if key == 50 then
-        KeyTwo
-    else if key == 51 then
-        KeyThree
-    else if key == 52 then
-        KeyFour
-    else if key == 53 then
-        KeyFive
-    else if key == 54 then
-        KeySix
-    else if key == 55 then
-        KeySeven
-    else if key == 56 then
-        KeyEight
-    else if key == 57 then
-        KeyNine
-    else if key == 59 then
-        KeySemicolon
-    else if key == 61 then
-        KeyEqual
-    else if key == 65 then
-        KeyA
-    else if key == 66 then
-        KeyB
-    else if key == 67 then
-        KeyC
-    else if key == 68 then
-        KeyD
-    else if key == 69 then
-        KeyE
-    else if key == 70 then
-        KeyF
-    else if key == 71 then
-        KeyG
-    else if key == 72 then
-        KeyH
-    else if key == 73 then
-        KeyI
-    else if key == 74 then
-        KeyJ
-    else if key == 75 then
-        KeyK
-    else if key == 76 then
-        KeyL
-    else if key == 77 then
-        KeyM
-    else if key == 78 then
-        KeyN
-    else if key == 79 then
-        KeyO
-    else if key == 80 then
-        KeyP
-    else if key == 81 then
-        KeyQ
-    else if key == 82 then
-        KeyR
-    else if key == 83 then
-        KeyS
-    else if key == 84 then
-        KeyT
-    else if key == 85 then
-        KeyU
-    else if key == 86 then
-        KeyV
-    else if key == 87 then
-        KeyW
-    else if key == 88 then
-        KeyX
-    else if key == 89 then
-        KeyY
-    else if key == 90 then
-        KeyZ
-    else if key == 32 then
-        KeySpace
-    else if key == 256 then
-        KeyEscape
-    else if key == 257 then
-        KeyEnter
-    else if key == 258 then
-        KeyTab
-    else if key == 259 then
-        KeyBackspace
-    else if key == 260 then
-        KeyInsert
-    else if key == 261 then
-        KeyDelete
-    else if key == 262 then
-        KeyRight
-    else if key == 263 then
-        KeyLeft
-    else if key == 264 then
-        KeyDown
-    else if key == 265 then
-        KeyUp
-    else if key == 266 then
-        KeyPageUp
-    else if key == 267 then
-        KeyPageDown
-    else if key == 268 then
-        KeyHome
-    else if key == 269 then
-        KeyEnd
-    else if key == 280 then
-        KeyCapsLock
-    else if key == 281 then
-        KeyScrollLock
-    else if key == 282 then
-        KeyNumLock
-    else if key == 283 then
-        KeyPrintScreen
-    else if key == 284 then
-        KeyPause
-    else if key == 290 then
-        KeyF1
-    else if key == 291 then
-        KeyF2
-    else if key == 292 then
-        KeyF3
-    else if key == 293 then
-        KeyF4
-    else if key == 294 then
-        KeyF5
-    else if key == 295 then
-        KeyF6
-    else if key == 296 then
-        KeyF7
-    else if key == 297 then
-        KeyF8
-    else if key == 298 then
-        KeyF9
-    else if key == 299 then
-        KeyF10
-    else if key == 300 then
-        KeyF11
-    else if key == 301 then
-        KeyF12
-    else if key == 340 then
-        KeyLeftShift
-    else if key == 341 then
-        KeyLeftControl
-    else if key == 342 then
-        KeyLeftAlt
-    else if key == 343 then
-        KeyLeftSuper
-    else if key == 344 then
-        KeyRightShift
-    else if key == 345 then
-        KeyRightControl
-    else if key == 346 then
-        KeyRightAlt
-    else if key == 347 then
-        KeyRightSuper
-    else if key == 348 then
-        KeyKBMenu
-    else if key == 91 then
-        KeyLeftBracket
-    else if key == 92 then
-        KeyBackslash
-    else if key == 93 then
-        KeyRightBracket
-    else if key == 96 then
-        KeyGrave
-    else if key == 320 then
-        KeyKP0
-    else if key == 321 then
-        KeyKP1
-    else if key == 322 then
-        KeyKP2
-    else if key == 323 then
-        KeyKP3
-    else if key == 324 then
-        KeyKP4
-    else if key == 325 then
-        KeyKP5
-    else if key == 326 then
-        KeyKP6
-    else if key == 327 then
-        KeyKP7
-    else if key == 328 then
-        KeyKP8
-    else if key == 329 then
-        KeyKP9
-    else if key == 330 then
-        KeyKPDecimal
-    else if key == 331 then
-        KeyKPDivide
-    else if key == 332 then
-        KeyKPMultiply
-    else if key == 333 then
-        KeyKPSubtract
-    else if key == 334 then
-        KeyKPAdd
-    else if key == 335 then
-        KeyKPEnter
-    else if key == 336 then
-        KeyKPEqual
-    else if key == 4 then
-        KeyBack
-    else if key == 24 then
-        KeyVolumeUp
-    else if key == 25 then
-        KeyVolumeDown
-    else
-        crash "unkown key code from host"
+    when key is
+        39 -> Ok KeyApostrophe
+        44 -> Ok KeyComma
+        45 -> Ok KeyMinus
+        46 -> Ok KeyPeriod
+        47 -> Ok KeySlash
+        48 -> Ok KeyZero
+        49 -> Ok KeyOne
+        50 -> Ok KeyTwo
+        51 -> Ok KeyThree
+        52 -> Ok KeyFour
+        53 -> Ok KeyFive
+        54 -> Ok KeySix
+        55 -> Ok KeySeven
+        56 -> Ok KeyEight
+        57 -> Ok KeyNine
+        59 -> Ok KeySemicolon
+        61 -> Ok KeyEqual
+        65 -> Ok KeyA
+        66 -> Ok KeyB
+        67 -> Ok KeyC
+        68 -> Ok KeyD
+        69 -> Ok KeyE
+        70 -> Ok KeyF
+        71 -> Ok KeyG
+        72 -> Ok KeyH
+        73 -> Ok KeyI
+        74 -> Ok KeyJ
+        75 -> Ok KeyK
+        76 -> Ok KeyL
+        77 -> Ok KeyM
+        78 -> Ok KeyN
+        79 -> Ok KeyO
+        80 -> Ok KeyP
+        81 -> Ok KeyQ
+        82 -> Ok KeyR
+        83 -> Ok KeyS
+        84 -> Ok KeyT
+        85 -> Ok KeyU
+        86 -> Ok KeyV
+        87 -> Ok KeyW
+        88 -> Ok KeyX
+        89 -> Ok KeyY
+        90 -> Ok KeyZ
+        32 -> Ok KeySpace
+        256 -> Ok KeyEscape
+        257 -> Ok KeyEnter
+        258 -> Ok KeyTab
+        259 -> Ok KeyBackspace
+        260 -> Ok KeyInsert
+        261 -> Ok KeyDelete
+        262 -> Ok KeyRight
+        263 -> Ok KeyLeft
+        264 -> Ok KeyDown
+        265 -> Ok KeyUp
+        266 -> Ok KeyPageUp
+        267 -> Ok KeyPageDown
+        268 -> Ok KeyHome
+        269 -> Ok KeyEnd
+        280 -> Ok KeyCapsLock
+        281 -> Ok KeyScrollLock
+        282 -> Ok KeyNumLock
+        283 -> Ok KeyPrintScreen
+        284 -> Ok KeyPause
+        290 -> Ok KeyF1
+        291 -> Ok KeyF2
+        292 -> Ok KeyF3
+        293 -> Ok KeyF4
+        294 -> Ok KeyF5
+        295 -> Ok KeyF6
+        296 -> Ok KeyF7
+        297 -> Ok KeyF8
+        298 -> Ok KeyF9
+        299 -> Ok KeyF10
+        300 -> Ok KeyF11
+        301 -> Ok KeyF12
+        340 -> Ok KeyLeftShift
+        341 -> Ok KeyLeftControl
+        342 -> Ok KeyLeftAlt
+        343 -> Ok KeyLeftSuper
+        344 -> Ok KeyRightShift
+        345 -> Ok KeyRightControl
+        346 -> Ok KeyRightAlt
+        347 -> Ok KeyRightSuper
+        348 -> Ok KeyKBMenu
+        91 -> Ok KeyLeftBracket
+        92 -> Ok KeyBackslash
+        93 -> Ok KeyRightBracket
+        96 -> Ok KeyGrave
+        320 -> Ok KeyKP0
+        321 -> Ok KeyKP1
+        322 -> Ok KeyKP2
+        323 -> Ok KeyKP3
+        324 -> Ok KeyKP4
+        325 -> Ok KeyKP5
+        326 -> Ok KeyKP6
+        327 -> Ok KeyKP7
+        328 -> Ok KeyKP8
+        329 -> Ok KeyKP9
+        330 -> Ok KeyKPDecimal
+        331 -> Ok KeyKPDivide
+        332 -> Ok KeyKPMultiply
+        333 -> Ok KeyKPSubtract
+        334 -> Ok KeyKPAdd
+        335 -> Ok KeyKPEnter
+        336 -> Ok KeyKPEqual
+        4 -> Ok KeyBack
+        24 -> Ok KeyVolumeUp
+        25 -> Ok KeyVolumeDown
+        _ -> Err Ignored

@@ -1,6 +1,16 @@
 # Roc Ray Graphics Platform
 
-[Roc](https://www.roc-lang.org) platform for building graphics applications, like games and simulations, using the [Raylib](https://www.raylib.com) graphics library.
+[Roc](https://www.roc-lang.org) platform for building graphics applications, like games and simulations, while using the [Raylib](https://www.raylib.com) graphics library.
+
+We aim to provide a nice experience for the hobby developer or a small team who wants to build a game or graphical application in Roc.
+
+## Features
+
+- Simple API for 2D & 3D graphics
+- Built on the awesome Raylib library
+- Cross-platform support for Linux, macOS, and Windows (hopefully Web coming soon)
+- Write games using Roc, the Fast, Friendly, and Functional programming language
+- Designed for beginners, hobby developers and small teams
 
 ## Documentation
 
@@ -8,7 +18,8 @@ Checkout the docs site at [lukewilliamboswell.github.io/roc-ray](https://lukewil
 
 ## Example
 
-(requires cloning the repo locally)
+(requires cloning the repository locally)
+
 ```roc
 app [main, Model] { ray: platform "../platform/main.roc" }
 
@@ -42,7 +53,13 @@ render = \_, _ ->
 
 ![basic shapes example](examples/demo-basic-shapes.png)
 
-## Building and Run
+## Getting Started
+
+### Clone the repository
+
+```
+$ git clone https://github.com/lukewilliamboswell/roc-ray.git
+```
 
 ### Linux and MacOS
 
@@ -90,3 +107,7 @@ To run the tests locally:
 ```
 $ ./ci/all_tests.sh
 ```
+
+We are exploring how we can make a nice API for Roc and experimenting with different ideas, not quite a 1-1 mapping of the raylib API. We hope to find a nice balance between Roc's functional and Raylib's imperative style.
+
+This platform is young, and there is a lot of work to do. You are welcome to contribute ideas or PR's, please let us know if you have any questions or need help.

@@ -24,3 +24,5 @@ test-platform.roc
 platform/glue.roc
 
 target/
+
+windows/bin

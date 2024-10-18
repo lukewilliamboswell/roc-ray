@@ -78,8 +78,6 @@ IVector2 : { x : I32, y : I32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
 
-# TODO replace this with a Frac style generic
-# make Vector2 an alias for Vec2 F32
 toVector2 : IVector2 -> Vector2
 toVector2 = \{ x, y } ->
     { x: Num.toF32 x, y: Num.toF32 y }

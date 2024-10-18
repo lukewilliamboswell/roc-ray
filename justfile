@@ -1,7 +1,10 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 # the unix commands assume a recent roc is on the path
-# the windows commands include a 'setup' recipe to download a windows build of roc
+#
+# the windows commands include a 'setup' recipe,
+# to download an unofficial windows build of roc
+
 
 # list the available commands
 list:
@@ -16,14 +19,14 @@ setup:
 
 # build and run an executable
 [unix]
-dev app:
+dev app="examples/basic-shapes.roc":
     roc check {{app}}
     roc build --no-link --output app.o {{app}}
     cargo run
 
 # build and run an executable
 [windows]
-dev app:
+dev app="examples/basic-shapes.roc":
     .\windows\bin\roc.exe check {{app}}
     .\windows\bin\roc.exe build --no-link --output app.obj {{app}}
     cargo run

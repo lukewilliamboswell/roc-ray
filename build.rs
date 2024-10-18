@@ -41,6 +41,10 @@ fn main() {
         .join("raylib-5.0_macos")
         .join("libraylib.a");
 
+    if !vendored_path.exists() {
+        panic!("vendored static library not found");
+    }
+
     std::fs::copy(vendored_path, out_path).unwrap();
 
     // Static link the app and raylib libraries, and dynamic link the required Macos frameworks
@@ -89,6 +93,10 @@ fn main() {
         .join("raylib-5.0_linux_amd64")
         .join("libraylib.a");
 
+    if !vendored_path.exists() {
+        panic!("vendored static library not found");
+    }
+
     let out_path = Path::new(&out_dir).join("libraylib.a");
 
     std::fs::copy(vendored_path, out_path).unwrap();
@@ -117,6 +125,10 @@ fn main() {
         .join("vendor")
         .join("raylib-5.0_win64_msvc16")
         .join("raylib.lib");
+
+    if !vendored_path.exists() {
+        panic!("vendored static library not found");
+    }
 
     let out_path = Path::new(&out_dir).join("raylib.lib");
 

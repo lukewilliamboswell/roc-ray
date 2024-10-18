@@ -10,9 +10,10 @@ mod glue;
 mod roc;
 
 thread_local! {
+    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
-    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
+    static SOUNDS: RefCell<Vec<bindings::Sound>> = const { RefCell::new(vec![]) }
 }
 
 fn main() {
@@ -23,6 +24,8 @@ fn main() {
         if !bindings::IsWindowReady() {
             panic!("Attempting to create window failed!");
         }
+
+        bindings::InitAudioDevice();
 
         let mut model = roc::call_roc_init();
         let mut frame_count = 0;
@@ -370,4 +373,29 @@ unsafe fn get_keys_states() -> RocList<u8> {
     });
 
     RocList::from_slice(&keys)
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadSound(path: RocStr) -> RocResult<u32, ()> {
+    let path = CString::new(path.to_string()).unwrap();
+    let sound = bindings::LoadSound(path.into_raw());
+
+    let sound_id = SOUNDS.with_borrow_mut(|sounds| {
+        sounds.push(sound);
+        sounds.len() - 1
+    });
+
+    dbg!(sound_id);
+
+    RocResult::ok(sound_id as u32)
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_playSound(sound_id: u32) -> RocResult<(), ()> {
+    SOUNDS.with_borrow_mut(|sounds| {
+        let sound = sounds[sound_id as usize];
+        bindings::PlaySound(sound);
+    });
+
+    RocResult::ok(())
 }

@@ -23,6 +23,8 @@ hosted Effect
         log,
         toLogLevel,
         fromRGBA,
+        loadSound,
+        playSound,
     ]
     imports []
 
@@ -69,6 +71,9 @@ updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
 
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
+
+loadSound : Str -> Task U32 {}
+playSound : U32 -> Task {} {}
 
 # HELPERS ---------------------------------------------------------------------
 

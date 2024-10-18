@@ -32,15 +32,15 @@ dev app:
 # clean build artifacts
 [unix]
 clean:
-    rm -f app.o
-    rm -f libapp.a
+    rm -f *.o
+    rm -f *.a
     cargo clean
 
 # clean build artifacts
 [windows]
 clean:
-    rm -f app.obj
-    rm -f app.lib
+    rm -f *.obj
+    rm -f *.lib
     cargo clean
 
 

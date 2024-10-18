@@ -6,11 +6,13 @@ use std::ffi::{c_int, CString};
 use std::time::SystemTime;
 
 mod bindings;
+mod glue;
 mod roc;
 
 thread_local! {
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
+    static CLEAR_BACKGOUND: Cell<glue::HostColor> = const { Cell::new(glue::HostColor::BLACK) };
 }
 
 fn main() {
@@ -28,12 +30,14 @@ fn main() {
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             bindings::BeginDrawing();
 
-            bindings::ClearBackground(bindings::Color {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 255,
-            });
+            dbg!(CLEAR_BACKGOUND.get());
+            bindings::ClearBackground((&CLEAR_BACKGOUND.get()).into());
+            // bindings::ClearBackground(bindings::Color {
+            //     r: 255,
+            //     g: 255,
+            //     b: 255,
+            //     a: 255,
+            // });
 
             let duration_since_epoch = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -274,9 +278,9 @@ unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) -> RocResult<(), ()> {
-    let color = bindings::Color { r, g, b, a };
-    bindings::ClearBackground(color);
+unsafe extern "C" fn roc_fx_setBackgroundColor(color: glue::HostColor) -> RocResult<(), ()> {
+    CLEAR_BACKGOUND.set(color);
+
     RocResult::ok(())
 }
 
@@ -408,4 +412,37 @@ unsafe fn get_keys_states() -> RocList<u8> {
     });
 
     RocList::from_slice(&keys)
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    // should have a valid utf8 string from roc, no need to check for null bytes
+    let file_path = CString::new(file_path.as_str()).unwrap();
+    let texture: bindings::Texture = bindings::LoadTexture(file_path.as_ptr());
+
+    let heap = roc::texture_heap();
+
+    let alloc_result = heap.alloc_for(texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        // TODO: handle this std::io::Error and give it back to roc
+        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawTextureRec(
+    boxed_texture: RocBox<()>,
+    source: &glue::Rectangle,
+    position: &glue::Vector2,
+    color: &glue::HostColor,
+) -> RocResult<(), ()> {
+    dbg!(source, position, color);
+
+    let texture: &mut bindings::Texture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+
+    RocResult::ok(())
 }

@@ -21,12 +21,12 @@ PlatformStateFromHost : {
     mousePosY : F32,
 }
 
-ProgramForHost : {
-    init : Task (Box Model) {},
-    render : Box Model, PlatformStateFromHost -> Task (Box Model) {},
+ProgramForHost model : {
+    init : Task (Box model) {},
+    render : Box model, PlatformStateFromHost -> Task (Box model) {},
 }
 
-forHost : ProgramForHost
+forHost : ProgramForHost _
 forHost = { init, render }
 
 init : Task (Box Model) {}

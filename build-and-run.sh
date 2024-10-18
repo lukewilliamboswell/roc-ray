@@ -10,7 +10,7 @@ APP=${1:-"examples/basic-shapes.roc"}
 # --optimize will instruct roc to use the LLVM backend and produce runtime optimised machine code
 # --output will instruct roc to put the output in the current directory
 # $APP is that path to the roc app we want to build
-roc build --no-link --optimize --output app.o $APP
+roc build --no-link --profiling --output app.o $APP
 
 # Build the app executable
 cargo run

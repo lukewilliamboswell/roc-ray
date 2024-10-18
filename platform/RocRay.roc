@@ -6,6 +6,7 @@ module [
     Rectangle,
     Vector2,
     Camera,
+    Texture,
     setWindowSize,
     getScreenSize,
     setBackgroundColor,
@@ -27,6 +28,8 @@ module [
     updateCamera,
     drawMode2D,
     log,
+    loadTexture,
+    drawTextureRec,
 ]
 
 import RocRay.Keys as Keys
@@ -70,9 +73,10 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
 
-## Represents a color.
+## Represents a color using a tag union.
 ## ```
-## { r : U8, g : U8, b : U8, a : U8 }
+## # a generic rgba color
+## RGBA { r : U8, g : U8, b : U8, a : U8 }
 ## ```
 Color : [
     RGBA U8 U8 U8 U8,
@@ -94,26 +98,29 @@ Color : [
     Purple,
 ]
 
-rgba : Color -> { r : U8, g : U8, b : U8, a : U8 }
+## Represents a 2D rasterised texture. These are typically sprite sheets or images loaded at runtime from a disk.
+Texture := Box {}
+
+rgba : Color -> { r : U8, g : U8, b : U8, a : U8, unused: I64, unused2: I64 }
 rgba = \color ->
     when color is
-        RGBA r g b a -> { r, g, b, a }
-        White -> { r: 255, g: 255, b: 255, a: 255 }
-        Silver -> { r: 192, g: 192, b: 192, a: 255 }
-        Gray -> { r: 128, g: 128, b: 128, a: 255 }
-        Black -> { r: 0, g: 0, b: 0, a: 255 }
-        Red -> { r: 255, g: 0, b: 0, a: 255 }
-        Maroon -> { r: 128, g: 0, b: 0, a: 255 }
-        Yellow -> { r: 255, g: 255, b: 0, a: 255 }
-        Olive -> { r: 128, g: 128, b: 0, a: 255 }
-        Lime -> { r: 0, g: 255, b: 0, a: 255 }
-        Green -> { r: 0, g: 128, b: 0, a: 255 }
-        Aqua -> { r: 0, g: 255, b: 255, a: 255 }
-        Teal -> { r: 0, g: 128, b: 128, a: 255 }
-        Blue -> { r: 0, g: 0, b: 255, a: 255 }
-        Navy -> { r: 0, g: 0, b: 128, a: 255 }
-        Fuchsia -> { r: 255, g: 0, b: 255, a: 255 }
-        Purple -> { r: 128, g: 0, b: 128, a: 255 }
+        RGBA r g b a -> { r, g, b, a, unused: 0, unused2: 0 }
+        White -> { r: 255, g: 255, b: 255, a: 255, unused: 0, unused2: 0 }
+        Silver -> { r: 192, g: 192, b: 192, a: 255, unused: 0, unused2: 0 }
+        Gray -> { r: 128, g: 128, b: 128, a: 255, unused: 0, unused2: 0 }
+        Black -> { r: 0, g: 0, b: 0, a: 255, unused: 0, unused2: 0 }
+        Red -> { r: 255, g: 0, b: 0, a: 255, unused: 0, unused2: 0 }
+        Maroon -> { r: 128, g: 0, b: 0, a: 255, unused: 0, unused2: 0 }
+        Yellow -> { r: 255, g: 255, b: 0, a: 255, unused: 0, unused2: 0 }
+        Olive -> { r: 128, g: 128, b: 0, a: 255, unused: 0, unused2: 0 }
+        Lime -> { r: 0, g: 255, b: 0, a: 255, unused: 0, unused2: 0 }
+        Green -> { r: 0, g: 128, b: 0, a: 255, unused: 0, unused2: 0 }
+        Aqua -> { r: 0, g: 255, b: 255, a: 255, unused: 0, unused2: 0 }
+        Teal -> { r: 0, g: 128, b: 128, a: 255, unused: 0, unused2: 0 }
+        Blue -> { r: 0, g: 0, b: 255, a: 255, unused: 0, unused2: 0 }
+        Navy -> { r: 0, g: 0, b: 128, a: 255, unused: 0, unused2: 0 }
+        Fuchsia -> { r: 255, g: 0, b: 255, a: 255, unused: 0, unused2: 0 }
+        Purple -> { r: 128, g: 0, b: 128, a: 255, unused: 0, unused2: 0 }
 
 ## Exit the program.
 exit : Task {} *
@@ -170,10 +177,15 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
 ## Set the background color to clear the window between each frame.
 setBackgroundColor : Color -> Task {} *
-setBackgroundColor = \color ->
-    { r, g, b, a } = rgba color
-
-    Effect.setBackgroundColor r g b a
+setBackgroundColor = \_color ->
+    Effect.setBackgroundColor {
+        unused : 0,
+        unused2 : 0,
+        r : 255,
+        g : 255,
+        b : 255,
+        a : 255,
+    }
     |> Task.mapErr \{} -> crash "unreachable setBackgroundColor"
 
 ## Measure the width of a text string using the default font.
@@ -279,3 +291,22 @@ drawMode2D = \@Camera camera, drawTask ->
                     |> Task.mapErr! \{} -> crash "unreachable endMode2D"
 
                 Task.err err
+
+## Load a texture from a file.
+## ```
+## texture = Raylib.loadTexture! "sprites.png"
+## ```
+loadTexture : Str -> Task Texture [TextureLoadErr Str]_
+loadTexture = \filename ->
+    Effect.loadTexture filename
+    |> Task.map \texture -> @Texture texture
+    |> Task.mapErr \msg -> TextureLoadErr msg
+
+## Draw part of a texture.
+## ```
+## Raylib.drawTextureRec! texture { x: 0, y: 0, width: 32, height: 32 } { x: 10, y: 10 } White
+## ```
+drawTextureRec : Texture, Rectangle, Vector2, Color -> Task {} *
+drawTextureRec = \@Texture texture, source, position, color ->
+    Effect.drawTextureRec texture source position (rgba color)
+    |> Task.mapErr \{} -> crash "unreachable drawTextureRec"

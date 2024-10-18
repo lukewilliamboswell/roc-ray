@@ -17,8 +17,8 @@ PlatformStateFromHost : {
     keys : List U8,
     mouseButtons : List U8,
     timestampMillis : U64,
-    mousePosX : I32,
-    mousePosY : I32,
+    mousePosX : F32,
+    mousePosY : F32,
 }
 
 ProgramForHost : {

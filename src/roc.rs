@@ -118,8 +118,8 @@ pub struct PlatformState {
     pub keys: roc_std::RocList<u8>,
     pub mouse_buttons: roc_std::RocList<u8>,
     pub timestamp_millis: u64,
-    pub mouse_pos_x: i32,
-    pub mouse_pos_y: i32,
+    pub mouse_pos_x: f32,
+    pub mouse_pos_y: f32,
 }
 
 impl roc_std::RocRefcounted for PlatformState {

@@ -5,6 +5,7 @@ app [main, Model] {
 }
 
 import ray.RocRay exposing [PlatformState, Color]
+import ray.RocRay.Keys as Keys
 import rand.Random
 import time.DateTime
 
@@ -39,7 +40,7 @@ init =
     }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { keyboardButtons, timestampMillis } ->
+render = \model, { keys, timestampMillis } ->
 
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
@@ -53,9 +54,9 @@ render = \model, { keyboardButtons, timestampMillis } ->
 
     RocRay.drawText! { text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", x: 10, y: model.height - 25, size: 20, color: White }
 
-    if Set.contains keyboardButtons KeyUp then
+    if Keys.down keys KeyUp then
         Task.ok { model & seed, number: Num.addSaturated model.number 10 }
-    else if Set.contains keyboardButtons KeyDown then
+    else if Keys.down keys KeyDown then
         Task.ok { model & seed, number: Num.subSaturated model.number 10 }
     else
         Task.ok { model & seed }

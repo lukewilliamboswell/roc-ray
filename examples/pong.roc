@@ -2,8 +2,9 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Vector2]
+import ray.RocRay exposing [Vector2, IVector2]
 import ray.RocRay.Mouse as Mouse
+import ray.RocRay.Keys as Keys
 
 main = { init, render }
 
@@ -67,10 +68,10 @@ bounce = \ball, pos ->
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { frameCount, keyboardButtons, mouse } ->
+render = \model, { frameCount, keys, mouse } ->
 
     screenTask =
-        if Set.contains keyboardButtons KeyLeftControl && Set.contains keyboardButtons KeyK then
+        if Keys.down keys KeyLeftControl && Keys.down keys KeyK then
             RocRay.takeScreenshot "saved-$(Num.toStr frameCount).png"
         else
             Task.ok {}
@@ -102,7 +103,7 @@ render = \model, { frameCount, keyboardButtons, mouse } ->
 
         RocRay.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
 
-        pos = model.pos + (mouse.position.y - model.pos) / 5
+        pos = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
 
         RocRay.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
         RocRay.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
@@ -118,17 +119,16 @@ render = \model, { frameCount, keyboardButtons, mouse } ->
         else
             Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
 
-drawCrossHair : Vector2 -> Task {} []
+drawCrossHair : IVector2 -> Task {} []
 drawCrossHair = \mousePos ->
-
     RocRay.drawLine! {
-        start: { x: mousePos.x, y: 0 },
-        end: { x: mousePos.x, y: height },
+        start: { x: Num.toF32 mousePos.x, y: 0 },
+        end: { x: Num.toF32 mousePos.x, y: height },
         color: Yellow,
     }
 
     RocRay.drawLine! {
-        start: { x: 0, y: mousePos.y },
-        end: { x: width, y: mousePos.y },
+        start: { x: 0, y: Num.toF32 mousePos.y },
+        end: { x: width, y: Num.toF32 mousePos.y },
         color: Yellow,
     }

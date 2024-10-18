@@ -4,6 +4,7 @@ import Bool exposing [true, false]
 
 ButtonState : [Up, Down, Pressed, Released]
 
+# TODO replace this with opaque thing? avoid alloc later
 Buttons : {
     left : ButtonState,
     right : ButtonState,

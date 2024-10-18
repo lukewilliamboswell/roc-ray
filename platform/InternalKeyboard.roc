@@ -1,4 +1,4 @@
-module [KeyboardKey, keyFromU64]
+module [KeyboardKey, KeyState, keyFromU64, keyStateFromU8]
 
 KeyboardKey : [
     KeyApostrophe, # = 39,
@@ -110,6 +110,24 @@ KeyboardKey : [
     KeyVolumeUp, # = 24,
     KeyVolumeDown, # = 25,
 ]
+
+KeyState : [
+    Pressed,
+    Released,
+    Down,
+    Up,
+    PressedRepeat,
+]
+
+keyStateFromU8 : U8 -> KeyState
+keyStateFromU8 = \n ->
+    when n is
+        0 -> Pressed
+        1 -> Released
+        2 -> Down
+        3 -> Up
+        4 -> PressedRepeat
+        _ -> crash "unreachable key state from host"
 
 keyFromU64 : U64 -> KeyboardKey
 keyFromU64 = \key ->

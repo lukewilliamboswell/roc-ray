@@ -1,10 +1,12 @@
 module [
+    toVector2,
     Program,
     PlatformState,
     KeyboardKey,
     Color,
     Rectangle,
     Vector2,
+    IVector2,
     Camera,
     setWindowSize,
     getScreenSize,
@@ -29,6 +31,7 @@ module [
     log,
 ]
 
+import RocRay.Keys as Keys
 import RocRay.Mouse as Mouse
 import Effect
 import InternalKeyboard
@@ -48,9 +51,9 @@ Program state err : {
 PlatformState : {
     timestampMillis : U64,
     frameCount : U64,
-    keyboardButtons : Set KeyboardKey,
+    keys : Keys.Keys,
     mouse : {
-        position : Vector2,
+        position : IVector2,
         buttons : Mouse.Buttons,
     },
 }
@@ -65,9 +68,21 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 
 ## Represents a 2D vector.
 ## ```
+## { x : I32, y : I32 }
+## ```
+IVector2 : { x : I32, y : I32 }
+
+## Represents a 2D vector.
+## ```
 ## { x : F32, y : F32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
+
+# TODO replace this with a Frac style generic
+# make Vector2 an alias for Vec2 F32
+toVector2 : IVector2 -> Vector2
+toVector2 = \{ x, y } ->
+    { x: Num.toF32 x, y: Num.toF32 y }
 
 ## Represents a color.
 ## ```

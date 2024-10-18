@@ -3,6 +3,7 @@ app [main, Model] {
 }
 
 import ray.RocRay exposing [Rectangle, PlatformState]
+import ray.RocRay.Keys as Keys
 
 Program : {
     init : Task Model {},
@@ -38,32 +39,32 @@ init =
     }
 
 render : Model, PlatformState -> Task Model {}
-render = \model, { keyboardButtons, mouse } ->
+render = \model, { keys, mouse } ->
 
     RocRay.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
 
     mousePos = mouse.position
 
     RocRay.drawText! {
-        text: "Mouse $(Num.toStr (Num.round mousePos.x)),$(Num.toStr (Num.round mousePos.y)), $(Inspect.toStr keyboardButtons), $(Inspect.toStr mouse.buttons)",
+        text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y), $(Inspect.toStr keys), $(Inspect.toStr mouse.buttons)",
         x: 10,
         y: model.height - 25,
         size: 20,
         color: White,
     }
 
-    RocRay.drawRectangle! { x: mousePos.x - 10, y: mousePos.y - 10, width: 20, height: 20, color: Red }
+    RocRay.drawRectangle! { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20, color: Red }
 
     RocRay.drawRectangle! { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50, color: Aqua }
 
     newCirclePos =
-        if Set.contains keyboardButtons KeyUp then
+        if Keys.down keys KeyUp then
             { x: model.circlePos.x, y: model.circlePos.y - 10 }
-        else if Set.contains keyboardButtons KeyDown then
+        else if Keys.down keys KeyDown then
             { x: model.circlePos.x, y: model.circlePos.y + 10 }
-        else if Set.contains keyboardButtons KeyLeft then
+        else if Keys.down keys KeyLeft then
             { x: model.circlePos.x - 10, y: model.circlePos.y }
-        else if Set.contains keyboardButtons KeyRight then
+        else if Keys.down keys KeyRight then
             { x: model.circlePos.x + 10, y: model.circlePos.y }
         else
             model.circlePos

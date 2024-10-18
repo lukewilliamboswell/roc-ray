@@ -39,8 +39,8 @@ clean:
 # clean build artifacts
 [windows]
 clean:
-    rm -f *.obj
-    rm -f *.lib
+    Remove-Item . -include *.obj
+    Remove-Item . -include *.lib
     cargo clean
 
 

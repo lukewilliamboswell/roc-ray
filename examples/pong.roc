@@ -77,17 +77,17 @@ render = \model, { frameCount, keys, mouse } ->
             Task.ok {}
 
     if !model.playing then
-        RocRay.drawText! { text: "Click to start", x: 50, y: 120, size: 20, color: White }
+        RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
 
         maxScore = model.maxScore |> Num.toStr
 
-        RocRay.drawText! { text: "Max Score: $(maxScore)", x: 50, y: 50, size: 20, color: White }
+        RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
 
         score = model.score |> Num.toStr
 
-        RocRay.drawText! { text: "Last Score: $(score)", x: 50, y: 80, size: 20, color: White }
+        RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
 
-        RocRay.drawText! { text: "Ctrl-K to Screenshot to 'saved.png'", x: 50, y: 150, size: 20, color: White }
+        RocRay.drawText! { pos: { x: 50, y: 150 }, text: "Ctrl-K to Screenshot to 'saved.png'", size: 20, color: White }
 
         screenTask!
 
@@ -101,12 +101,12 @@ render = \model, { frameCount, keys, mouse } ->
 
         score = model.score |> Num.toStr
 
-        RocRay.drawText! { text: "Score: $(score)", x: 50, y: 50, size: 20, color: White }
+        RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
 
-        pos = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
+        newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
 
-        RocRay.drawRectangle! { x: 0, y: pos, width: pw, height: paddle, color: Aqua }
-        RocRay.drawRectangle! { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize, color: Green }
+        RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
+        RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
 
         drawCrossHair! mouse.position
 
@@ -115,9 +115,9 @@ render = \model, { frameCount, keys, mouse } ->
         screenTask!
 
         if ball.pos.x <= 0 then
-            Task.ok { model & pos: pos, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
+            Task.ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
-            Task.ok { model & pos: pos, ball: ball, score: model.score + 1 }
+            Task.ok { model & pos: newY, ball: ball, score: model.score + 1 }
 
 drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->

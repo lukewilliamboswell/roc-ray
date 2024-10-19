@@ -41,21 +41,23 @@ init =
 render : Model, PlatformState -> Task Model {}
 render = \model, { keys, mouse } ->
 
-    RocRay.drawText! { text: "Click on the screen ...", x: model.width - 400, y: model.height - 25, size: 20, color: White }
+    RocRay.drawText! { pos: { x: model.width - 400, y: model.height - 25 }, text: "Click on the screen ...", size: 20, color: White }
 
     mousePos = mouse.position
 
     RocRay.drawText! {
+        pos: {
+            x: 10,
+            y: model.height - 25,
+        },
         text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y), $(Inspect.toStr keys), $(Inspect.toStr mouse.buttons)",
-        x: 10,
-        y: model.height - 25,
         size: 20,
         color: White,
     }
 
-    RocRay.drawRectangle! { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20, color: Red }
+    RocRay.drawRectangle! { rect: { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20 }, color: Red }
 
-    RocRay.drawRectangle! { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50, color: Aqua }
+    RocRay.drawRectangle! { rect: { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50 }, color: Aqua }
 
     newCirclePos =
         if Keys.down keys KeyUp then

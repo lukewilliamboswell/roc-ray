@@ -23,7 +23,6 @@ hosted Effect
         endMode2D,
         log,
         toLogLevel,
-        fromRGBA,
         loadTexture,
         drawTextureRec,
         loadSound,
@@ -79,43 +78,9 @@ updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
 
-loadSound : Str -> Task U32 {}
-playSound : U32 -> Task {} {}
-
 Texture := Box {}
 loadTexture : Str -> Task Texture Str
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
 
-# HELPERS ---------------------------------------------------------------------
-
-fromRGBA : { r : U8, g : U8, b : U8, a : U8 } -> Color
-fromRGBA = \{ r, g, b, a } ->
-    (Num.intCast a |> Num.shiftLeftBy 24)
-    |> Num.bitwiseOr (Num.intCast b |> Num.shiftLeftBy 16)
-    |> Num.bitwiseOr (Num.intCast g |> Num.shiftLeftBy 8)
-    |> Num.bitwiseOr (Num.intCast r)
-    |> @Color
-
-expect
-    a = fromRGBA { r: 255, g: 255, b: 255, a: 255 }
-    a == @Color 0x00000000_FFFFFFFF
-
-expect
-    b = fromRGBA { r: 0, g: 0, b: 0, a: 0 }
-    b == @Color 0x00000000_00000000
-
-expect
-    c = fromRGBA { r: 255, g: 0, b: 0, a: 0 }
-    c == @Color 0x00000000_000000FF
-
-expect
-    d = fromRGBA { r: 0, g: 255, b: 0, a: 0 }
-    d == @Color 0x00000000_0000FF00
-
-expect
-    d = fromRGBA { r: 0, g: 0, b: 255, a: 0 }
-    d == @Color 0x00000000_00FF0000
-
-expect
-    d = fromRGBA { r: 0, g: 0, b: 0, a: 255 }
-    d == @Color 0x00000000_FF000000
+loadSound : Str -> Task U32 {}
+playSound : U32 -> Task {} {}

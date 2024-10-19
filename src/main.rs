@@ -97,7 +97,7 @@ unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircle(
-    center: glue::RocVector2,
+    center: &glue::RocVector2,
     radius: f32,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
@@ -107,7 +107,7 @@ unsafe extern "C" fn roc_fx_drawCircle(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircleGradient(
-    center: glue::RocVector2,
+    center: &glue::RocVector2,
     radius: f32,
     inner: glue::RocColor,
     outer: glue::RocColor,
@@ -119,7 +119,7 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawRectangleGradientV(
-    rect: glue::RocRectangle,
+    rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
@@ -130,7 +130,7 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientV(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawRectangleGradientH(
-    rect: glue::RocRectangle,
+    rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
@@ -141,12 +141,12 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientH(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawText(
-    pos: glue::RocVector2,
+    pos: &glue::RocVector2,
     size: i32,
     text: &RocStr,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let text = CString::new(text.as_str()).unwrap();
+    let text = CString::new(text.as_bytes()).unwrap();
     let (x, y) = pos.to_components_c_int();
     bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
     RocResult::ok(())
@@ -154,7 +154,7 @@ unsafe extern "C" fn roc_fx_drawText(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawRectangle(
-    rect: glue::RocRectangle,
+    rect: &glue::RocRectangle,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
     bindings::DrawRectangleRec(rect.into(), color.into());
@@ -163,8 +163,8 @@ unsafe extern "C" fn roc_fx_drawRectangle(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawLine(
-    start: glue::RocVector2,
-    end: glue::RocVector2,
+    start: &glue::RocVector2,
+    end: &glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
     bindings::DrawLineV(start.into(), end.into(), color.into());
@@ -360,8 +360,8 @@ unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawTextureRec(
     boxed_texture: RocBox<()>,
-    source: glue::RocRectangle,
-    position: glue::RocVector2,
+    source: &glue::RocRectangle,
+    position: &glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let texture: &mut bindings::Texture =

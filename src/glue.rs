@@ -143,12 +143,12 @@ pub struct RocVector2 {
 
 impl RocVector2 {
     pub fn to_components_c_int(&self) -> (c_int, c_int) {
-        (self.x as c_int, self.y as c_int)
+        (self.x.round() as c_int, self.y.round() as c_int)
     }
 }
 
-impl From<RocVector2> for bindings::Vector2 {
-    fn from(vector: RocVector2) -> bindings::Vector2 {
+impl From<&RocVector2> for bindings::Vector2 {
+    fn from(vector: &RocVector2) -> bindings::Vector2 {
         bindings::Vector2 {
             x: vector.x,
             y: vector.y,
@@ -181,8 +181,8 @@ impl RocRectangle {
     }
 }
 
-impl From<RocRectangle> for bindings::Rectangle {
-    fn from(rectangle: RocRectangle) -> bindings::Rectangle {
+impl From<&RocRectangle> for bindings::Rectangle {
+    fn from(rectangle: &RocRectangle) -> bindings::Rectangle {
         bindings::Rectangle {
             x: rectangle.x,
             y: rectangle.y,

@@ -1,16 +1,18 @@
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
 
 mod bindings;
+mod glue;
 mod roc;
 
 thread_local! {
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
+    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
 }
 
 fn main() {
@@ -28,11 +30,9 @@ fn main() {
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             bindings::BeginDrawing();
 
-            bindings::ClearBackground(bindings::Color {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 255,
+            CLEAR_COLOR.with(|cc| {
+                let (r, g, b, a) = cc.borrow().to_rgba();
+                bindings::ClearBackground(bindings::Color { r, g, b, a });
             });
 
             let duration_since_epoch = SystemTime::now()
@@ -100,17 +100,13 @@ unsafe extern "C" fn roc_fx_drawCircle(
     center_x: f32,
     center_y: f32,
     radius: f32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let center = bindings::Vector2 {
         x: center_x,
         y: center_y,
     };
-    let color = bindings::Color { r, g, b, a };
-    bindings::DrawCircleV(center, radius, color);
+    bindings::DrawCircleV(center, radius, color.into());
 
     RocResult::ok(())
 }
@@ -120,28 +116,16 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
     center_x: f32,
     center_y: f32,
     radius: f32,
-    r1: u8,
-    g1: u8,
-    b1: u8,
-    a1: u8,
-    r2: u8,
-    g2: u8,
-    b2: u8,
-    a2: u8,
+    inner: glue::RocColor,
+    outer: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let color1 = bindings::Color {
-        r: r1,
-        g: g1,
-        b: b1,
-        a: a1,
-    };
-    let color2 = bindings::Color {
-        r: r2,
-        g: g2,
-        b: b2,
-        a: a2,
-    };
-    bindings::DrawCircleGradient(center_x as c_int, center_y as c_int, radius, color1, color2);
+    bindings::DrawCircleGradient(
+        center_x as c_int,
+        center_y as c_int,
+        radius,
+        inner.into(),
+        outer.into(),
+    );
     RocResult::ok(())
 }
 
@@ -151,34 +135,16 @@ unsafe extern "C" fn roc_fx_drawRectangleGradient(
     y: f32,
     width: f32,
     height: f32,
-    r1: u8,
-    g1: u8,
-    b1: u8,
-    a1: u8,
-    r2: u8,
-    g2: u8,
-    b2: u8,
-    a2: u8,
+    top: glue::RocColor,
+    bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let color1 = bindings::Color {
-        r: r1,
-        g: g1,
-        b: b1,
-        a: a1,
-    };
-    let color2 = bindings::Color {
-        r: r2,
-        g: g2,
-        b: b2,
-        a: a2,
-    };
     bindings::DrawRectangleGradientV(
         x as c_int,
         y as c_int,
         width as c_int,
         height as c_int,
-        color1,
-        color2,
+        top.into(),
+        bottom.into(),
     );
     RocResult::ok(())
 }
@@ -189,14 +155,16 @@ unsafe extern "C" fn roc_fx_drawText(
     y: f32,
     size: i32,
     text: &RocStr,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let text = CString::new(text.as_str()).unwrap();
-    let color = bindings::Color { r, g, b, a };
-    bindings::DrawText(text.as_ptr(), x as c_int, y as c_int, size as c_int, color);
+    bindings::DrawText(
+        text.as_ptr(),
+        x as c_int,
+        y as c_int,
+        size as c_int,
+        color.into(),
+    );
     RocResult::ok(())
 }
 
@@ -206,18 +174,14 @@ unsafe extern "C" fn roc_fx_drawRectangle(
     y: f32,
     width: f32,
     height: f32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let position = bindings::Vector2 { x, y };
     let size = bindings::Vector2 {
         x: width,
         y: height,
     };
-    let color = bindings::Color { r, g, b, a };
-    bindings::DrawRectangleV(position, size, color);
+    bindings::DrawRectangleV(position, size, color.into());
     RocResult::ok(())
 }
 
@@ -227,18 +191,14 @@ unsafe extern "C" fn roc_fx_drawLine(
     start_y: f32,
     end_x: f32,
     end_y: f32,
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let start = bindings::Vector2 {
         x: start_x,
         y: start_y,
     };
     let end = bindings::Vector2 { x: end_x, y: end_y };
-    let color = bindings::Color { r, g, b, a };
-    bindings::DrawLineV(start, end, color);
+    bindings::DrawLineV(start, end, color.into());
     RocResult::ok(())
 }
 
@@ -274,9 +234,11 @@ unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setBackgroundColor(r: u8, g: u8, b: u8, a: u8) -> RocResult<(), ()> {
-    let color = bindings::Color { r, g, b, a };
-    bindings::ClearBackground(color);
+unsafe extern "C" fn roc_fx_setBackgroundColor(color: glue::RocColor) -> RocResult<(), ()> {
+    CLEAR_COLOR.with(|cc| {
+        let mut clear_color = cc.borrow_mut();
+        *clear_color = color;
+    });
     RocResult::ok(())
 }
 

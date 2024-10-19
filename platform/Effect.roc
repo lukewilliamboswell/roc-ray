@@ -1,8 +1,6 @@
 hosted Effect
     exposes [
-        Rectangle,
-        Vector2,
-        HostColor,
+        Texture,
         setWindowSize,
         getScreenSize,
         exit,
@@ -12,7 +10,8 @@ hosted Effect
         setBackgroundColor,
         drawLine,
         drawRectangle,
-        drawRectangleGradient,
+        drawRectangleGradientV,
+        drawRectangleGradientH,
         drawCircle,
         drawCircleGradient,
         setTargetFPS,
@@ -29,27 +28,9 @@ hosted Effect
     ]
     imports []
 
-Rectangle : {
-    x : F32,
-    y : F32,
-    width : F32,
-    height : F32,
-}
-
-Vector2 : {
-    x : F32,
-    y : F32,
-}
-
-HostColor : {
-    # this is a hack to work around https://github.com/roc-lang/roc/issues/7142
-    unused : I64,
-    unused2 : I64,
-    r : U8,
-    g : U8,
-    b : U8,
-    a : U8,
-}
+import InternalColor exposing [RocColor]
+import InternalVector exposing [RocVector2]
+import InternalRectangle exposing [RocRectangle]
 
 setWindowSize : I32, I32 -> Task {} {}
 getScreenSize : Task { height : I32, width : I32, z : I64 } {}
@@ -70,17 +51,19 @@ toLogLevel = \level ->
 
 log : Str, I32 -> Task {} {}
 
-drawText : F32, F32, I32, Str, U8, U8, U8, U8 -> Task {} {}
+drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
 
 setWindowTitle : Str -> Task {} {}
-setBackgroundColor : HostColor -> Task {} {}
+setBackgroundColor : RocColor -> Task {} {}
 
-drawLine : F32, F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
-drawRectangle : F32, F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
-drawRectangleGradient : F32, F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
-drawCircle : F32, F32, F32, U8, U8, U8, U8 -> Task {} {}
-drawCircleGradient : F32, F32, F32, U8, U8, U8, U8, U8, U8, U8, U8 -> Task {} {}
+drawLine : RocVector2, RocVector2, RocColor -> Task {} {}
+
+drawRectangle : RocRectangle, RocColor -> Task {} {}
+drawRectangleGradientV : RocRectangle, RocColor, RocColor -> Task {} {}
+drawRectangleGradientH : RocRectangle, RocColor, RocColor -> Task {} {}
+drawCircle : RocVector2, F32, RocColor -> Task {} {}
+drawCircleGradient : RocVector2, F32, RocColor, RocColor -> Task {} {}
 
 setTargetFPS : I32 -> Task {} {}
 setDrawFPS : Bool, I32, I32 -> Task {} {}
@@ -93,6 +76,6 @@ updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
 
-loadTexture : Str -> Task (Box {}) Str
-
-drawTextureRec : Box {}, Rectangle, Vector2, HostColor -> Task {} {}
+Texture := Box {}
+loadTexture : Str -> Task Texture Str
+drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}

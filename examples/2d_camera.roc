@@ -4,7 +4,7 @@ app [main, Model] {
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.RocRay exposing [PlatformState, Vector2, Color, Camera]
+import ray.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
 import rand.Random
 
 main = { init, render }
@@ -13,7 +13,7 @@ screenWidth = 800f32
 screenHeight = 800f32
 
 Model : {
-    buildings : List { x : F32, y : F32, width : F32, height : F32, color : Color },
+    buildings : List { rect: Rectangle, color : Color },
     cameraSettings : {
         target : Vector2,
         offset : Vector2,
@@ -54,7 +54,7 @@ render = \model, { mouse } ->
 
     Task.ok { model & cameraSettings }
 
-generateBuildings : List { x : F32, y : F32, width : F32, height : F32, color : Color }
+generateBuildings : List { rect: Rectangle, color : Color }
 generateBuildings =
     List.range { start: At 0, end: Before 100 }
     |> List.walk { seed: Random.seed 1234u32, rects: [], nextX: -6000f32 } \state, _ ->
@@ -63,21 +63,27 @@ generateBuildings =
 
         bldg = bldgGen.value
 
-        rects = List.append state.rects { bldg & x: state.nextX }
+        rect = {
+            x: state.nextX,
+            y: screenHeight - 130f32 - bldg.rect.height,
+            width: bldg.rect.width,
+            height: bldg.rect.height,
+        }
 
-        { seed: bldgGen.state, rects, nextX: state.nextX + bldg.width }
+        rects = List.append state.rects { bldg & rect }
+
+        { seed: bldgGen.state, rects, nextX: state.nextX + bldg.rect.width }
     |> .rects
 
-randomBuilding : Random.Generator { x : F32, y : F32, width : F32, height : F32, color : Color }
+randomBuilding : Random.Generator { rect : Rectangle, color : Color }
 randomBuilding =
-
-    updateY = \values -> { values & y: screenHeight - 130f32 - values.height }
-
     { Random.chain <-
-        x: Random.static 0f32,
-        y: Random.static 0f32,
-        width: Random.boundedU16 50 200 |> Random.map Num.toF32,
-        height: Random.boundedU16 100 800 |> Random.map Num.toF32,
+        rect: { Random.chain <-
+            x: Random.static 0f32,
+            y: Random.static 0f32,
+            width: Random.boundedU16 50 200 |> Random.map Num.toF32,
+            height: Random.boundedU16 100 800 |> Random.map Num.toF32,
+        } |> Random.map \a -> a,
         color: { Random.chain <-
             red: Random.boundedU8 200 240,
             green: Random.boundedU8 200 240,
@@ -85,4 +91,3 @@ randomBuilding =
         }
         |> Random.map \{ red, green, blue } -> RGBA red green blue 255,
     }
-    |> Random.map updateY

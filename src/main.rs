@@ -97,108 +97,77 @@ unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircle(
-    center_x: f32,
-    center_y: f32,
+    center: glue::RocVector2,
     radius: f32,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let center = bindings::Vector2 {
-        x: center_x,
-        y: center_y,
-    };
-    bindings::DrawCircleV(center, radius, color.into());
-
+    bindings::DrawCircleV(center.into(), radius, color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircleGradient(
-    center_x: f32,
-    center_y: f32,
+    center: glue::RocVector2,
     radius: f32,
     inner: glue::RocColor,
     outer: glue::RocColor,
 ) -> RocResult<(), ()> {
-    bindings::DrawCircleGradient(
-        center_x as c_int,
-        center_y as c_int,
-        radius,
-        inner.into(),
-        outer.into(),
-    );
+    let (x, y) = center.to_components_c_int();
+    bindings::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawRectangleGradient(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+unsafe extern "C" fn roc_fx_drawRectangleGradientV(
+    rect: glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
-    bindings::DrawRectangleGradientV(
-        x as c_int,
-        y as c_int,
-        width as c_int,
-        height as c_int,
-        top.into(),
-        bottom.into(),
-    );
+    let (x, y, w, h) = rect.to_components_c_int();
+    bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawRectangleGradientH(
+    rect: glue::RocRectangle,
+    top: glue::RocColor,
+    bottom: glue::RocColor,
+) -> RocResult<(), ()> {
+    let (x, y, w, h) = rect.to_components_c_int();
+    bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawText(
-    x: f32,
-    y: f32,
+    pos: glue::RocVector2,
     size: i32,
     text: &RocStr,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
     let text = CString::new(text.as_str()).unwrap();
-    bindings::DrawText(
-        text.as_ptr(),
-        x as c_int,
-        y as c_int,
-        size as c_int,
-        color.into(),
-    );
+    let (x, y) = pos.to_components_c_int();
+    bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawRectangle(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    rect: glue::RocRectangle,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let position = bindings::Vector2 { x, y };
-    let size = bindings::Vector2 {
-        x: width,
-        y: height,
-    };
-    bindings::DrawRectangleV(position, size, color.into());
+    bindings::DrawRectangleRec(rect.into(), color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawLine(
-    start_x: f32,
-    start_y: f32,
-    end_x: f32,
-    end_y: f32,
+    start: glue::RocVector2,
+    end: glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let start = bindings::Vector2 {
-        x: start_x,
-        y: start_y,
-    };
-    let end = bindings::Vector2 { x: end_x, y: end_y };
-    bindings::DrawLineV(start, end, color.into());
+    bindings::DrawLineV(start.into(), end.into(), color.into());
     RocResult::ok(())
 }
 

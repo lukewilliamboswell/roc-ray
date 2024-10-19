@@ -21,7 +21,7 @@ setup:
 [unix]
 dev app="examples/basic-shapes.roc":
     roc check {{app}}
-    roc build --no-link --output app.o {{app}}
+    roc build --no-link --emit-llvm-ir --output app.o {{app}}
     cargo run
 
 # build and run an executable

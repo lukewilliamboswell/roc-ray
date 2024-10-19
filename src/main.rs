@@ -340,3 +340,34 @@ unsafe fn get_keys_states() -> RocList<u8> {
 
     RocList::from_slice(&keys)
 }
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    // should have a valid utf8 string from roc, no need to check for null bytes
+    let file_path = CString::new(file_path.as_str()).unwrap();
+    let texture: bindings::Texture = bindings::LoadTexture(file_path.as_ptr());
+
+    let heap = roc::texture_heap();
+
+    let alloc_result = heap.alloc_for(texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        // TODO: handle this std::io::Error and give it back to roc
+        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawTextureRec(
+    boxed_texture: RocBox<()>,
+    source: glue::RocRectangle,
+    position: glue::RocVector2,
+    color: glue::RocColor,
+) -> RocResult<(), ()> {
+    let texture: &mut bindings::Texture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+
+    RocResult::ok(())
+}

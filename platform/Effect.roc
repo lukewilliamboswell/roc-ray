@@ -1,5 +1,6 @@
 hosted Effect
     exposes [
+        Texture,
         setWindowSize,
         getScreenSize,
         exit,
@@ -22,6 +23,8 @@ hosted Effect
         endMode2D,
         log,
         toLogLevel,
+        loadTexture,
+        drawTextureRec,
     ]
     imports []
 
@@ -72,3 +75,7 @@ updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
 
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
+
+Texture := Box {}
+loadTexture : Str -> Task Texture Str
+drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}

@@ -6,6 +6,7 @@ module [
     Rectangle,
     Vector2,
     Camera,
+    Texture,
     setWindowSize,
     getScreenSize,
     setBackgroundColor,
@@ -27,6 +28,8 @@ module [
     updateCamera,
     drawMode2D,
     log,
+    loadTexture,
+    drawTextureRec,
 ]
 
 import RocRay.Keys as Keys
@@ -73,9 +76,10 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
 
-## Represents a color.
+## Represents a color using a tag union.
 ## ```
-## { r : U8, g : U8, b : U8, a : U8 }
+## # a generic rgba color
+## RGBA { r : U8, g : U8, b : U8, a : U8 }
 ## ```
 Color : [
     RGBA U8 U8 U8 U8,
@@ -96,6 +100,8 @@ Color : [
     Fuchsia,
     Purple,
 ]
+
+Texture : Effect.Texture
 
 rgba : Color -> InternalColor.RocColor
 rgba = \color ->
@@ -278,3 +284,21 @@ drawMode2D = \@Camera camera, drawTask ->
                     |> Task.mapErr! \{} -> crash "unreachable endMode2D"
 
                 Task.err err
+
+## Load a texture from a file.
+## ```
+## texture = Raylib.loadTexture! "sprites.png"
+## ```
+loadTexture : Str -> Task Texture [TextureLoadErr Str]_
+loadTexture = \filename ->
+    Effect.loadTexture filename
+    |> Task.mapErr \msg -> TextureLoadErr msg
+
+## Draw part of a texture.
+## ```
+## Raylib.drawTextureRec! texture { x: 0, y: 0, width: 32, height: 32 } { x: 10, y: 10 } White
+## ```
+drawTextureRec : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } -> Task {} *
+drawTextureRec = \{ texture, source, pos, tint } ->
+    Effect.drawTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+    |> Task.mapErr \{} -> crash "unreachable drawTextureRec"

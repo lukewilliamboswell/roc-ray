@@ -8,14 +8,30 @@ use std::sync::OnceLock;
 
 use crate::bindings;
 
-const MAX_CAMERAS_HEAP_SIZE: usize = 100;
-
 // note this is checked and deallocated in the roc_dealloc function
 pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Camera2D> {
-    static FILE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
+    static CAMERA_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
         OnceLock::new();
-    FILE_HEAP.get_or_init(|| {
-        ThreadSafeRefcountedResourceHeap::new(MAX_CAMERAS_HEAP_SIZE)
+    const DEFAULT_ROC_RAY_MAX_CAMERAS_HEAP_SIZE: usize = 100;
+    let max_heap_size = std::env::var("ROC_RAY_MAX_CAMERAS_HEAP_SIZE")
+        .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_CAMERAS_HEAP_SIZE))
+        .unwrap_or(DEFAULT_ROC_RAY_MAX_CAMERAS_HEAP_SIZE);
+    CAMERA_HEAP.get_or_init(|| {
+        ThreadSafeRefcountedResourceHeap::new(max_heap_size)
+            .expect("Failed to allocate mmap for heap references.")
+    })
+}
+
+// note this is checked and deallocated in the roc_dealloc function
+pub fn texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Texture> {
+    static TEXTURE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Texture>> =
+        OnceLock::new();
+    const DEFAULT_ROC_RAY_MAX_TEXTURES_HEAP_SIZE: usize = 1000;
+    let max_heap_size = std::env::var("ROC_RAY_MAX_TEXTURES_HEAP_SIZE")
+        .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_TEXTURES_HEAP_SIZE))
+        .unwrap_or(DEFAULT_ROC_RAY_MAX_TEXTURES_HEAP_SIZE);
+    TEXTURE_HEAP.get_or_init(|| {
+        ThreadSafeRefcountedResourceHeap::new(max_heap_size)
             .expect("Failed to allocate mmap for heap references.")
     })
 }
@@ -30,6 +46,12 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     let camera_heap = camera_heap();
     if camera_heap.in_range(c_ptr) {
         camera_heap.dealloc(c_ptr);
+        return;
+    }
+
+    let texture_heap = texture_heap();
+    if texture_heap.in_range(c_ptr) {
+        texture_heap.dealloc(c_ptr);
         return;
     }
 

@@ -111,108 +111,77 @@ unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircle(
-    center_x: f32,
-    center_y: f32,
+    center: &glue::RocVector2,
     radius: f32,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let center = bindings::Vector2 {
-        x: center_x,
-        y: center_y,
-    };
-    bindings::DrawCircleV(center, radius, color.into());
-
+    bindings::DrawCircleV(center.into(), radius, color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawCircleGradient(
-    center_x: f32,
-    center_y: f32,
+    center: &glue::RocVector2,
     radius: f32,
     inner: glue::RocColor,
     outer: glue::RocColor,
 ) -> RocResult<(), ()> {
-    bindings::DrawCircleGradient(
-        center_x as c_int,
-        center_y as c_int,
-        radius,
-        inner.into(),
-        outer.into(),
-    );
+    let (x, y) = center.to_components_c_int();
+    bindings::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawRectangleGradient(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+unsafe extern "C" fn roc_fx_drawRectangleGradientV(
+    rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
-    bindings::DrawRectangleGradientV(
-        x as c_int,
-        y as c_int,
-        width as c_int,
-        height as c_int,
-        top.into(),
-        bottom.into(),
-    );
+    let (x, y, w, h) = rect.to_components_c_int();
+    bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawRectangleGradientH(
+    rect: &glue::RocRectangle,
+    top: glue::RocColor,
+    bottom: glue::RocColor,
+) -> RocResult<(), ()> {
+    let (x, y, w, h) = rect.to_components_c_int();
+    bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawText(
-    x: f32,
-    y: f32,
+    pos: &glue::RocVector2,
     size: i32,
     text: &RocStr,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let text = CString::new(text.as_str()).unwrap();
-    bindings::DrawText(
-        text.as_ptr(),
-        x as c_int,
-        y as c_int,
-        size as c_int,
-        color.into(),
-    );
+    let text = CString::new(text.as_bytes()).unwrap();
+    let (x, y) = pos.to_components_c_int();
+    bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawRectangle(
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    rect: &glue::RocRectangle,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let position = bindings::Vector2 { x, y };
-    let size = bindings::Vector2 {
-        x: width,
-        y: height,
-    };
-    bindings::DrawRectangleV(position, size, color.into());
+    bindings::DrawRectangleRec(rect.into(), color.into());
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_drawLine(
-    start_x: f32,
-    start_y: f32,
-    end_x: f32,
-    end_y: f32,
+    start: &glue::RocVector2,
+    end: &glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
-    let start = bindings::Vector2 {
-        x: start_x,
-        y: start_y,
-    };
-    let end = bindings::Vector2 { x: end_x, y: end_y };
-    bindings::DrawLineV(start, end, color.into());
+    bindings::DrawLineV(start.into(), end.into(), color.into());
     RocResult::ok(())
 }
 
@@ -387,7 +356,7 @@ unsafe fn get_keys_states() -> RocList<u8> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadSound(path: RocStr) -> RocResult<u32, ()> {
+unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<u32, ()> {
     println!("in roc_fx_loadSound");
     dbg!(&path);
 
@@ -398,7 +367,7 @@ unsafe extern "C" fn roc_fx_loadSound(path: RocStr) -> RocResult<u32, ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn load_sound_internal(path: RocStr) -> u32 {
+unsafe extern "C" fn load_sound_internal(path: &RocStr) -> u32 {
     let path = CString::new(path.to_string()).unwrap();
     dbg!(&path);
 
@@ -415,5 +384,36 @@ unsafe extern "C" fn load_sound_internal(path: RocStr) -> u32 {
 #[no_mangle]
 unsafe extern "C" fn roc_fx_playSound(sound_id: u32) -> RocResult<(), ()> {
     SOUNDS.with_borrow(|sounds| bindings::PlaySound(sounds[sound_id as usize]));
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    // should have a valid utf8 string from roc, no need to check for null bytes
+    let file_path = CString::new(file_path.as_str()).unwrap();
+    let texture: bindings::Texture = bindings::LoadTexture(file_path.as_ptr());
+
+    let heap = roc::texture_heap();
+
+    let alloc_result = heap.alloc_for(texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        // TODO: handle this std::io::Error and give it back to roc
+        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawTextureRec(
+    boxed_texture: RocBox<()>,
+    source: &glue::RocRectangle,
+    position: &glue::RocVector2,
+    color: glue::RocColor,
+) -> RocResult<(), ()> {
+    let texture: &mut bindings::Texture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+
     RocResult::ok(())
 }

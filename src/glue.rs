@@ -1,5 +1,7 @@
 use crate::bindings;
 use core::fmt::Debug;
+use roc_std::RocRefcounted;
+use std::ffi::c_int;
 
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -127,3 +129,67 @@ mod test_color {
         assert_eq!(original.0, cloned.0);
     }
 }
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct RocVector2 {
+    pub unused: i64,
+    pub unused2: i64,
+    pub unused3: i64,
+    pub unused4: i64,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl RocVector2 {
+    pub fn to_components_c_int(&self) -> (c_int, c_int) {
+        (self.x.round() as c_int, self.y.round() as c_int)
+    }
+}
+
+impl From<&RocVector2> for bindings::Vector2 {
+    fn from(vector: &RocVector2) -> bindings::Vector2 {
+        bindings::Vector2 {
+            x: vector.x,
+            y: vector.y,
+        }
+    }
+}
+
+roc_std::roc_refcounted_noop_impl!(RocVector2);
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct RocRectangle {
+    pub unused: i64,
+    pub unused2: i64,
+    pub unused3: i64,
+    pub height: f32,
+    pub width: f32,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl RocRectangle {
+    pub fn to_components_c_int(&self) -> (c_int, c_int, c_int, c_int) {
+        (
+            self.x as c_int,
+            self.y as c_int,
+            self.width as c_int,
+            self.height as c_int,
+        )
+    }
+}
+
+impl From<&RocRectangle> for bindings::Rectangle {
+    fn from(rectangle: &RocRectangle) -> bindings::Rectangle {
+        bindings::Rectangle {
+            x: rectangle.x,
+            y: rectangle.y,
+            width: rectangle.width,
+            height: rectangle.height,
+        }
+    }
+}
+
+roc_std::roc_refcounted_noop_impl!(RocRectangle);

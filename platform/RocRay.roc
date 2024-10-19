@@ -6,19 +6,20 @@ module [
     Rectangle,
     Vector2,
     Camera,
+    Texture,
     setWindowSize,
     getScreenSize,
     setBackgroundColor,
     exit,
     setWindowTitle,
-    drawRectangle,
     setTargetFPS,
     setDrawFPS,
     measureText,
     drawText,
     drawLine,
     drawRectangle,
-    drawRectangleGradient,
+    drawRectangleGradientV,
+    drawRectangleGradientH,
     drawCircle,
     drawCircleGradient,
     rgba,
@@ -27,12 +28,17 @@ module [
     updateCamera,
     drawMode2D,
     log,
+    loadTexture,
+    drawTextureRec,
 ]
 
 import RocRay.Keys as Keys
 import RocRay.Mouse as Mouse
 import Effect
 import InternalKeyboard
+import InternalColor
+import InternalVector
+import InternalRectangle
 
 ## Provide an initial state and a render function to the platform.
 ## ```
@@ -70,9 +76,10 @@ Rectangle : { x : F32, y : F32, width : F32, height : F32 }
 ## ```
 Vector2 : { x : F32, y : F32 }
 
-## Represents a color.
+## Represents a color using a tag union.
 ## ```
-## { r : U8, g : U8, b : U8, a : U8 }
+## # a generic rgba color
+## RGBA { r : U8, g : U8, b : U8, a : U8 }
 ## ```
 Color : [
     RGBA U8 U8 U8 U8,
@@ -94,26 +101,28 @@ Color : [
     Purple,
 ]
 
-rgba : Color -> Effect.Color
+Texture : Effect.Texture
+
+rgba : Color -> InternalColor.RocColor
 rgba = \color ->
     when color is
-        RGBA r g b a -> Effect.fromRGBA { r, g, b, a }
-        White -> Effect.fromRGBA { r: 255, g: 255, b: 255, a: 255 }
-        Silver -> Effect.fromRGBA { r: 192, g: 192, b: 192, a: 255 }
-        Gray -> Effect.fromRGBA { r: 128, g: 128, b: 128, a: 255 }
-        Black -> Effect.fromRGBA { r: 0, g: 0, b: 0, a: 255 }
-        Red -> Effect.fromRGBA { r: 255, g: 0, b: 0, a: 255 }
-        Maroon -> Effect.fromRGBA { r: 128, g: 0, b: 0, a: 255 }
-        Yellow -> Effect.fromRGBA { r: 255, g: 255, b: 0, a: 255 }
-        Olive -> Effect.fromRGBA { r: 128, g: 128, b: 0, a: 255 }
-        Lime -> Effect.fromRGBA { r: 0, g: 255, b: 0, a: 255 }
-        Green -> Effect.fromRGBA { r: 0, g: 128, b: 0, a: 255 }
-        Aqua -> Effect.fromRGBA { r: 0, g: 255, b: 255, a: 255 }
-        Teal -> Effect.fromRGBA { r: 0, g: 128, b: 128, a: 255 }
-        Blue -> Effect.fromRGBA { r: 0, g: 0, b: 255, a: 255 }
-        Navy -> Effect.fromRGBA { r: 0, g: 0, b: 128, a: 255 }
-        Fuchsia -> Effect.fromRGBA { r: 255, g: 0, b: 255, a: 255 }
-        Purple -> Effect.fromRGBA { r: 128, g: 0, b: 128, a: 255 }
+        RGBA r g b a -> InternalColor.fromRGBA { r, g, b, a }
+        White -> InternalColor.fromRGBA { r: 255, g: 255, b: 255, a: 255 }
+        Silver -> InternalColor.fromRGBA { r: 192, g: 192, b: 192, a: 255 }
+        Gray -> InternalColor.fromRGBA { r: 128, g: 128, b: 128, a: 255 }
+        Black -> InternalColor.fromRGBA { r: 0, g: 0, b: 0, a: 255 }
+        Red -> InternalColor.fromRGBA { r: 255, g: 0, b: 0, a: 255 }
+        Maroon -> InternalColor.fromRGBA { r: 128, g: 0, b: 0, a: 255 }
+        Yellow -> InternalColor.fromRGBA { r: 255, g: 255, b: 0, a: 255 }
+        Olive -> InternalColor.fromRGBA { r: 128, g: 128, b: 0, a: 255 }
+        Lime -> InternalColor.fromRGBA { r: 0, g: 255, b: 0, a: 255 }
+        Green -> InternalColor.fromRGBA { r: 0, g: 128, b: 0, a: 255 }
+        Aqua -> InternalColor.fromRGBA { r: 0, g: 255, b: 255, a: 255 }
+        Teal -> InternalColor.fromRGBA { r: 0, g: 128, b: 128, a: 255 }
+        Blue -> InternalColor.fromRGBA { r: 0, g: 0, b: 255, a: 255 }
+        Navy -> InternalColor.fromRGBA { r: 0, g: 0, b: 128, a: 255 }
+        Fuchsia -> InternalColor.fromRGBA { r: 255, g: 0, b: 255, a: 255 }
+        Purple -> InternalColor.fromRGBA { r: 128, g: 0, b: 128, a: 255 }
 
 ## Exit the program.
 exit : Task {} *
@@ -181,47 +190,57 @@ measureText = \{ text, size } ->
     |> Task.mapErr \{} -> crash "unreachable measureText"
 
 ## Draw text on the screen using the default font.
-drawText : { text : Str, x : F32, y : F32, size : I32, color : Color } -> Task {} *
-drawText = \{ text, x, y, size, color } ->
-    Effect.drawText x y size text (rgba color)
+drawText : { pos : { x : F32, y : F32 }, text : Str, size : I32, color : Color } -> Task {} *
+drawText = \{ text, pos, size, color } ->
+    Effect.drawText (InternalVector.fromVector2 pos) size text (rgba color)
     |> Task.mapErr \{} -> crash "unreachable drawText"
 
 ## Draw a line on the screen.
 drawLine : { start : Vector2, end : Vector2, color : Color } -> Task {} *
 drawLine = \{ start, end, color } ->
-    Effect.drawLine start.x start.y end.x end.y (rgba color)
+    Effect.drawLine (InternalVector.fromVector2 start) (InternalVector.fromVector2 end) (rgba color)
     |> Task.mapErr \{} -> crash "unreachable drawLine"
 
 ## Draw a rectangle on the screen.
-drawRectangle : { x : F32, y : F32, width : F32, height : F32, color : Color } -> Task {} *
-drawRectangle = \{ x, y, width, height, color } ->
-    Effect.drawRectangle x y width height (rgba color)
+drawRectangle : { rect : Rectangle, color : Color } -> Task {} *
+drawRectangle = \{ rect, color } ->
+    Effect.drawRectangle (InternalRectangle.fromRect rect) (rgba color)
     |> Task.mapErr \{} -> crash "unreachable drawRectangle"
 
-## Draw a rectangle with a gradient on the screen.
-drawRectangleGradient : { x : F32, y : F32, width : F32, height : F32, top : Color, bottom : Color } -> Task {} *
-drawRectangleGradient = \{ x, y, width, height, top, bottom } ->
+## Draw a rectangle with a vertical-gradient fill on the screen.
+drawRectangleGradientV : { rect : Rectangle, top : Color, bottom : Color } -> Task {} *
+drawRectangleGradientV = \{ rect, top, bottom } ->
 
     tc = rgba top
     bc = rgba bottom
 
-    Effect.drawRectangleGradient x y width height tc bc
-    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradient"
+    Effect.drawRectangleGradientV (InternalRectangle.fromRect rect) tc bc
+    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradientV"
+
+## Draw a rectangle with a horizontal-gradient fill on the screen.
+drawRectangleGradientH : { rect : Rectangle, top : Color, bottom : Color } -> Task {} *
+drawRectangleGradientH = \{ rect, top, bottom } ->
+
+    tc = rgba top
+    bc = rgba bottom
+
+    Effect.drawRectangleGradientH (InternalRectangle.fromRect rect) tc bc
+    |> Task.mapErr \{} -> crash "unreachable drawRectangleGradientH"
 
 ## Draw a circle on the screen.
-drawCircle : { x : F32, y : F32, radius : F32, color : Color } -> Task {} *
-drawCircle = \{ x, y, radius, color } ->
-    Effect.drawCircle x y radius (rgba color)
+drawCircle : { center : Vector2, radius : F32, color : Color } -> Task {} *
+drawCircle = \{ center, radius, color } ->
+    Effect.drawCircle (InternalVector.fromVector2 center) radius (rgba color)
     |> Task.mapErr \{} -> crash "unreachable drawCircle"
 
 ## Draw a circle with a gradient on the screen.
-drawCircleGradient : { x : F32, y : F32, radius : F32, inner : Color, outer : Color } -> Task {} *
-drawCircleGradient = \{ x, y, radius, inner, outer } ->
+drawCircleGradient : { center : Vector2, radius : F32, inner : Color, outer : Color } -> Task {} *
+drawCircleGradient = \{ center, radius, inner, outer } ->
 
     ic = rgba inner
     oc = rgba outer
 
-    Effect.drawCircleGradient x y radius ic oc
+    Effect.drawCircleGradient (InternalVector.fromVector2 center) radius ic oc
     |> Task.mapErr \{} -> crash "unreachable drawCircleGradient"
 
 ## Takes a screenshot of current screen (filename extension defines format)
@@ -265,3 +284,21 @@ drawMode2D = \@Camera camera, drawTask ->
                     |> Task.mapErr! \{} -> crash "unreachable endMode2D"
 
                 Task.err err
+
+## Load a texture from a file.
+## ```
+## texture = Raylib.loadTexture! "sprites.png"
+## ```
+loadTexture : Str -> Task Texture [TextureLoadErr Str]_
+loadTexture = \filename ->
+    Effect.loadTexture filename
+    |> Task.mapErr \msg -> TextureLoadErr msg
+
+## Draw part of a texture.
+## ```
+## Raylib.drawTextureRec! texture { x: 0, y: 0, width: 32, height: 32 } { x: 10, y: 10 } White
+## ```
+drawTextureRec : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } -> Task {} *
+drawTextureRec = \{ texture, source, pos, tint } ->
+    Effect.drawTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+    |> Task.mapErr \{} -> crash "unreachable drawTextureRec"

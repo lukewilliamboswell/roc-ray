@@ -4,7 +4,7 @@ app [main, Model] {
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.RocRay exposing [PlatformState, Color]
+import ray.RocRay exposing [PlatformState, Rectangle, Color]
 import ray.RocRay.Keys as Keys
 import rand.Random
 import time.DateTime
@@ -44,7 +44,7 @@ render = \model, { keys, timestampMillis } ->
 
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
-    RocRay.drawText! { text: "DateTime $(nowStr)", x: 10, y: 50, size: 20, color: White }
+    RocRay.drawText! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
 
     generator = Random.u32 0 800
 
@@ -52,7 +52,7 @@ render = \model, { keys, timestampMillis } ->
 
     Task.forEach! lines RocRay.drawRectangle
 
-    RocRay.drawText! { text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", x: 10, y: model.height - 25, size: 20, color: White }
+    RocRay.drawText! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
     if Keys.down keys KeyUp then
         Task.ok { model & seed, number: Num.addSaturated model.number 10 }
@@ -62,7 +62,7 @@ render = \model, { keys, timestampMillis } ->
         Task.ok { model & seed }
 
 # Generate a list of lines using the seed and generator provided
-randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { x : F32, y : F32, width : F32, height : F32, color : Color } }
+randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }
 randomList = \initialSeed, generator, number ->
     List.range { start: At 0, end: Before number }
     |> List.walk { seed: initialSeed, lines: [] } \state, _ ->
@@ -75,7 +75,7 @@ randomList = \initialSeed, generator, number ->
 
         y = Num.toF32 random2.value
 
-        lines = List.append state.lines { x, y, width: 1, height: 1, color: colorFromU32 random2.value }
+        lines = List.append state.lines { rect: { x, y, width: 1, height: 1 }, color: colorFromU32 random2.value }
 
         { seed: random2.state, lines }
 

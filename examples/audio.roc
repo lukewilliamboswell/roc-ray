@@ -4,6 +4,7 @@ app [main, Model] {
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
+import ray.Effect
 import ray.RocRay
 import ray.RocRay.Keys as Keys
 import ray.RocRay.Sound as Sound exposing [Sound]
@@ -19,8 +20,9 @@ init : Task Model []
 init =
     RocRay.log! "in init" LogFatal
 
-    # FIXME "in init" gets logged but nothing after it  does
-    # but that's also true if you comment out `RocRay.setTargetFPS! 60`
+    # FIXME
+    # The "in init" above gets logged, but nothing later does.
+
     RocRay.setTargetFPS! 60
 
     RocRay.log! "after setTargetFPS" LogFatal

@@ -27,7 +27,18 @@ fn main() {
 
         bindings::InitAudioDevice();
 
+        // // This plays a sound correctly:
+        // {
+        //     let path = RocStr::from("resources/sound.wav");
+        //     let sound_id = load_sound_internal(path);
+        //     roc_fx_playSound(sound_id);
+        //     // I HOPE this is only necessary because our program is exiting immediately
+        //     std::thread::sleep(std::time::Duration::from_secs(1));
+        // }
+
         let mut model = roc::call_roc_init();
+        println!("we never get to this message after init");
+
         let mut frame_count = 0;
 
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
@@ -377,7 +388,20 @@ unsafe fn get_keys_states() -> RocList<u8> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_loadSound(path: RocStr) -> RocResult<u32, ()> {
+    println!("in roc_fx_loadSound");
+    dbg!(&path);
+
+    let sound_id = load_sound_internal(path);
+    dbg!(sound_id);
+
+    RocResult::ok(sound_id)
+}
+
+#[no_mangle]
+unsafe extern "C" fn load_sound_internal(path: RocStr) -> u32 {
     let path = CString::new(path.to_string()).unwrap();
+    dbg!(&path);
+
     let sound = bindings::LoadSound(path.into_raw());
 
     let sound_id = SOUNDS.with_borrow_mut(|sounds| {
@@ -385,17 +409,11 @@ unsafe extern "C" fn roc_fx_loadSound(path: RocStr) -> RocResult<u32, ()> {
         sounds.len() - 1
     });
 
-    dbg!(sound_id);
-
-    RocResult::ok(sound_id as u32)
+    sound_id as u32
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_playSound(sound_id: u32) -> RocResult<(), ()> {
-    SOUNDS.with_borrow_mut(|sounds| {
-        let sound = sounds[sound_id as usize];
-        bindings::PlaySound(sound);
-    });
-
+    SOUNDS.with_borrow(|sounds| bindings::PlaySound(sounds[sound_id as usize]));
     RocResult::ok(())
 }

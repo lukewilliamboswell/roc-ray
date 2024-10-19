@@ -33,6 +33,7 @@ import RocRay.Keys as Keys
 import RocRay.Mouse as Mouse
 import Effect
 import InternalKeyboard
+import InternalColor
 
 ## Provide an initial state and a render function to the platform.
 ## ```
@@ -94,26 +95,26 @@ Color : [
     Purple,
 ]
 
-rgba : Color -> Effect.Color
+rgba : Color -> InternalColor.RocColor
 rgba = \color ->
     when color is
-        RGBA r g b a -> Effect.fromRGBA { r, g, b, a }
-        White -> Effect.fromRGBA { r: 255, g: 255, b: 255, a: 255 }
-        Silver -> Effect.fromRGBA { r: 192, g: 192, b: 192, a: 255 }
-        Gray -> Effect.fromRGBA { r: 128, g: 128, b: 128, a: 255 }
-        Black -> Effect.fromRGBA { r: 0, g: 0, b: 0, a: 255 }
-        Red -> Effect.fromRGBA { r: 255, g: 0, b: 0, a: 255 }
-        Maroon -> Effect.fromRGBA { r: 128, g: 0, b: 0, a: 255 }
-        Yellow -> Effect.fromRGBA { r: 255, g: 255, b: 0, a: 255 }
-        Olive -> Effect.fromRGBA { r: 128, g: 128, b: 0, a: 255 }
-        Lime -> Effect.fromRGBA { r: 0, g: 255, b: 0, a: 255 }
-        Green -> Effect.fromRGBA { r: 0, g: 128, b: 0, a: 255 }
-        Aqua -> Effect.fromRGBA { r: 0, g: 255, b: 255, a: 255 }
-        Teal -> Effect.fromRGBA { r: 0, g: 128, b: 128, a: 255 }
-        Blue -> Effect.fromRGBA { r: 0, g: 0, b: 255, a: 255 }
-        Navy -> Effect.fromRGBA { r: 0, g: 0, b: 128, a: 255 }
-        Fuchsia -> Effect.fromRGBA { r: 255, g: 0, b: 255, a: 255 }
-        Purple -> Effect.fromRGBA { r: 128, g: 0, b: 128, a: 255 }
+        RGBA r g b a -> InternalColor.fromRGBA { r, g, b, a }
+        White -> InternalColor.fromRGBA { r: 255, g: 255, b: 255, a: 255 }
+        Silver -> InternalColor.fromRGBA { r: 192, g: 192, b: 192, a: 255 }
+        Gray -> InternalColor.fromRGBA { r: 128, g: 128, b: 128, a: 255 }
+        Black -> InternalColor.fromRGBA { r: 0, g: 0, b: 0, a: 255 }
+        Red -> InternalColor.fromRGBA { r: 255, g: 0, b: 0, a: 255 }
+        Maroon -> InternalColor.fromRGBA { r: 128, g: 0, b: 0, a: 255 }
+        Yellow -> InternalColor.fromRGBA { r: 255, g: 255, b: 0, a: 255 }
+        Olive -> InternalColor.fromRGBA { r: 128, g: 128, b: 0, a: 255 }
+        Lime -> InternalColor.fromRGBA { r: 0, g: 255, b: 0, a: 255 }
+        Green -> InternalColor.fromRGBA { r: 0, g: 128, b: 0, a: 255 }
+        Aqua -> InternalColor.fromRGBA { r: 0, g: 255, b: 255, a: 255 }
+        Teal -> InternalColor.fromRGBA { r: 0, g: 128, b: 128, a: 255 }
+        Blue -> InternalColor.fromRGBA { r: 0, g: 0, b: 255, a: 255 }
+        Navy -> InternalColor.fromRGBA { r: 0, g: 0, b: 128, a: 255 }
+        Fuchsia -> InternalColor.fromRGBA { r: 255, g: 0, b: 255, a: 255 }
+        Purple -> InternalColor.fromRGBA { r: 128, g: 0, b: 128, a: 255 }
 
 ## Exit the program.
 exit : Task {} *

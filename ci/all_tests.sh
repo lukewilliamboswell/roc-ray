@@ -34,5 +34,9 @@ for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     fi
 done
 
+# run the cargo tests
+# note we need an `app.o` file to build the test runner, so do this after buildings the examples
+$CARGO test
+
 # test building docs website
 $ROC docs $PLATFORM_DIR/main.roc

@@ -13,7 +13,6 @@ thread_local! {
     static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
-    static SOUNDS: RefCell<Vec<bindings::Sound>> = const { RefCell::new(vec![]) }
 }
 
 fn main() {
@@ -355,35 +354,28 @@ unsafe fn get_keys_states() -> RocList<u8> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<u32, ()> {
-    println!("in roc_fx_loadSound");
-    dbg!(&path);
+unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    let path = CString::new(path.as_str()).unwrap();
 
-    let sound_id = load_sound_internal(path);
-    dbg!(sound_id);
+    let sound = bindings::LoadSound(path.as_ptr());
 
-    RocResult::ok(sound_id)
+    let heap = roc::sound_heap();
+
+    let alloc_result = heap.alloc_for(sound);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        // TODO: handle this std::io::Error and give it back to roc
+        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+    }
 }
 
 #[no_mangle]
-unsafe extern "C" fn load_sound_internal(path: &RocStr) -> u32 {
-    let path = CString::new(path.to_string()).unwrap();
-    dbg!(&path);
+unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
+    let sound: &mut bindings::Sound =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
 
-    let sound = bindings::LoadSound(path.into_raw());
+    bindings::PlaySound(*sound);
 
-    let sound_id = SOUNDS.with_borrow_mut(|sounds| {
-        sounds.push(sound);
-        sounds.len() - 1
-    });
-
-    sound_id as u32
-}
-
-#[no_mangle]
-unsafe extern "C" fn roc_fx_playSound(sound_id: u32) -> RocResult<(), ()> {
-    println!("in roc_fx_playSound");
-    SOUNDS.with_borrow(|sounds| bindings::PlaySound(sounds[sound_id as usize]));
     RocResult::ok(())
 }
 

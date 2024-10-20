@@ -13,7 +13,7 @@ screenWidth = 800f32
 screenHeight = 800f32
 
 Model : {
-    buildings : List { rect: Rectangle, color : Color },
+    buildings : List { rect : Rectangle, color : Color },
     cameraSettings : {
         target : Vector2,
         offset : Vector2,
@@ -54,7 +54,7 @@ render = \model, { mouse } ->
 
     Task.ok { model & cameraSettings }
 
-generateBuildings : List { rect: Rectangle, color : Color }
+generateBuildings : List { rect : Rectangle, color : Color }
 generateBuildings =
     List.range { start: At 0, end: Before 100 }
     |> List.walk { seed: Random.seed 1234u32, rects: [], nextX: -6000f32 } \state, _ ->
@@ -83,7 +83,8 @@ randomBuilding =
             y: Random.static 0f32,
             width: Random.boundedU16 50 200 |> Random.map Num.toF32,
             height: Random.boundedU16 100 800 |> Random.map Num.toF32,
-        } |> Random.map \a -> a,
+        }
+        |> Random.map \a -> a,
         color: { Random.chain <-
             red: Random.boundedU8 200 240,
             green: Random.boundedU8 200 240,

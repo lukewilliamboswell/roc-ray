@@ -1,6 +1,7 @@
 hosted Effect
     exposes [
         Texture,
+        Sound,
         setWindowSize,
         getScreenSize,
         exit,
@@ -82,5 +83,6 @@ Texture := Box {}
 loadTexture : Str -> Task Texture Str
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
 
-loadSound : Str -> Task U32 {}
-playSound : U32 -> Task {} {}
+Sound := Box {}
+loadSound : Str -> Task Sound Str
+playSound : Sound -> Task {} {}

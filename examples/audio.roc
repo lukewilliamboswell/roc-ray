@@ -4,9 +4,8 @@ app [main, Model] {
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
-import ray.RocRay
+import ray.RocRay exposing [Sound]
 import ray.RocRay.Keys as Keys
-import ray.RocRay.Sound as Sound exposing [Sound]
 
 main = { init, render }
 
@@ -15,36 +14,26 @@ Model : {
     ogg : Sound,
 }
 
-init : Task Model []
 init =
-    # RocRay.log! "in init" LogFatal
-
-    # FIXME
-    # The "in init" above gets logged, but nothing later does.
 
     RocRay.setTargetFPS! 60
 
-    # RocRay.log! "after setTargetFPS" LogFatal
-
     RocRay.setBackgroundColor! White
     RocRay.setWindowSize! { width: 800, height: 450 }
-    RocRay.setWindowTitle! "Sound Loading"
+    RocRay.setWindowTitle! "Making Sounds"
 
-    # RocRay.log! "before load wav" LogFatal
+    wav =
+        RocRay.loadSound "resources/sound.wav"
+            |> Task.mapErr! \LoadSoundErr msg -> crash msg
 
-    wav = Sound.load! "resources/sound.wav"
-
-    # RocRay.log! "after load wav" LogFatal
-
-    ogg = Sound.load! "resources/target.ogg"
-
-    # RocRay.log! "after load ogg" LogFatal
+    ogg =
+        RocRay.loadSound "resources/target.ogg"
+            |> Task.mapErr! \LoadSoundErr msg -> crash msg
 
     Task.ok { wav, ogg }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->
-    # RocRay.log! "in render" LogFatal
 
     RocRay.drawText! {
         text: "Press SPACE to PLAY the WAV sound",
@@ -60,8 +49,6 @@ render = \model, { keys } ->
         color: Gray,
     }
 
-    # RocRay.log! "choosing sound" LogFatal
-
     chosenSound =
         if Keys.pressed keys KeySpace then
             Play model.wav
@@ -70,13 +57,10 @@ render = \model, { keys } ->
         else
             None
 
-    # RocRay.log! "chose sound" LogFatal
-
     when chosenSound is
         Play sound ->
-            Sound.play! sound
+            RocRay.playSound! sound
             Task.ok model
 
         None ->
             Task.ok model
-

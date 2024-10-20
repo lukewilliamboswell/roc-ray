@@ -19,7 +19,7 @@ init =
 
 render = \_, _ ->
 
-    RocRay.drawText! { pos : { x: 300, y: 50 }, text: "Hello World", size: 40, color: Navy }
+    RocRay.drawText! { pos: { x: 300, y: 50 }, text: "Hello World", size: 40, color: Navy }
     RocRay.drawRectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
     RocRay.drawRectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, top: Lime, bottom: Navy }
     RocRay.drawRectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }

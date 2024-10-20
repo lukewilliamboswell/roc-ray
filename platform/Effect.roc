@@ -73,8 +73,8 @@ setDrawFPS : Bool, I32, I32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 
-createCamera : F32, F32, F32, F32, F32, F32 -> Task U64 {}
-updateCamera : U64, F32, F32, F32, F32, F32, F32 -> Task {} {}
+createCamera : RocVector2, RocVector2, F32, F32 -> Task U64 {}
+updateCamera : U64, RocVector2, RocVector2, F32, F32 -> Task {} {}
 
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}

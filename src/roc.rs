@@ -162,6 +162,7 @@ pub struct PlatformState {
     pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
     pub mouse_pos_y: f32,
+    pub mouse_wheel: f32,
 }
 
 impl roc_std::RocRefcounted for PlatformState {

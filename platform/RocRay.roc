@@ -62,6 +62,7 @@ PlatformState : {
     mouse : {
         position : Vector2,
         buttons : Mouse.Buttons,
+        wheel : F32,
     },
 }
 
@@ -261,13 +262,13 @@ Camera := U64
 
 createCamera : { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task Camera *
 createCamera = \{ target, offset, rotation, zoom } ->
-    Effect.createCamera target.x target.y offset.x offset.y rotation zoom
+    Effect.createCamera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
     |> Task.map \camera -> @Camera camera
     |> Task.mapErr \{} -> crash "unreachable createCamera"
 
 updateCamera : Camera, { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task {} *
 updateCamera = \@Camera camera, { target, offset, rotation, zoom } ->
-    Effect.updateCamera camera target.x target.y offset.x offset.y rotation zoom
+    Effect.updateCamera camera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
     |> Task.mapErr \{} -> crash "unreachable updateCamera"
 
 drawMode2D : Camera, Task {} err -> Task {} err

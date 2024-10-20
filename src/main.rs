@@ -51,6 +51,7 @@ fn main() {
                 timestamp_millis: timestamp,
                 mouse_pos_x: bindings::GetMouseX() as f32,
                 mouse_pos_y: bindings::GetMouseY() as f32,
+                mouse_wheel: bindings::GetMouseWheelMove(),
             };
 
             model = roc::call_roc_render(platform_state, &model);
@@ -234,22 +235,14 @@ unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> Ro
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_createCamera(
-    target_x: f32,
-    target_y: f32,
-    offset_x: f32,
-    offset_y: f32,
+    target: &glue::RocVector2,
+    offset: &glue::RocVector2,
     rotation: f32,
     zoom: f32,
 ) -> RocResult<RocBox<()>, ()> {
     let camera = bindings::Camera2D {
-        target: bindings::Vector2 {
-            x: target_x,
-            y: target_y,
-        },
-        offset: bindings::Vector2 {
-            x: offset_x,
-            y: offset_y,
-        },
+        target: target.into(),
+        offset: offset.into(),
         rotation,
         zoom,
     };
@@ -267,24 +260,16 @@ unsafe extern "C" fn roc_fx_createCamera(
 #[no_mangle]
 unsafe extern "C" fn roc_fx_updateCamera(
     boxed_camera: RocBox<()>,
-    target_x: f32,
-    target_y: f32,
-    offset_x: f32,
-    offset_y: f32,
+    target: &glue::RocVector2,
+    offset: &glue::RocVector2,
     rotation: f32,
     zoom: f32,
 ) -> RocResult<(), ()> {
     let camera: &mut bindings::Camera2D =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    camera.target = bindings::Vector2 {
-        x: target_x,
-        y: target_y,
-    };
-    camera.offset = bindings::Vector2 {
-        x: offset_x,
-        y: offset_y,
-    };
+    camera.target = target.into();
+    camera.offset = offset.into();
     camera.rotation = rotation;
     camera.zoom = zoom;
 

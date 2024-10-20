@@ -26,15 +26,6 @@ fn main() {
 
         bindings::InitAudioDevice();
 
-        // // This plays a sound:
-        // {
-        //     let path = RocStr::from("resources/sound.wav");
-        //     let sound_id = load_sound_internal(&path);
-        //     roc_fx_playSound(sound_id);
-        //     // I HOPE this is only necessary because our program is exiting immediately
-        //     std::thread::sleep(std::time::Duration::from_secs(1));
-        // }
-
         let mut model = roc::call_roc_init();
 
         let mut frame_count = 0;

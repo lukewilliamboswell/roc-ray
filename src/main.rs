@@ -10,9 +10,9 @@ mod glue;
 mod roc;
 
 thread_local! {
+    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
-    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
 }
 
 fn main() {
@@ -24,7 +24,10 @@ fn main() {
             panic!("Attempting to create window failed!");
         }
 
+        bindings::InitAudioDevice();
+
         let mut model = roc::call_roc_init();
+
         let mut frame_count = 0;
 
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
@@ -339,6 +342,32 @@ unsafe fn get_keys_states() -> RocList<u8> {
     });
 
     RocList::from_slice(&keys)
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    let path = CString::new(path.as_str()).unwrap();
+
+    let sound = bindings::LoadSound(path.as_ptr());
+
+    let heap = roc::sound_heap();
+
+    let alloc_result = heap.alloc_for(sound);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        // TODO: handle this std::io::Error and give it back to roc
+        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
+    let sound: &mut bindings::Sound =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
+
+    bindings::PlaySound(*sound);
+
+    RocResult::ok(())
 }
 
 #[no_mangle]

@@ -32,6 +32,21 @@ dev app="examples/basic-shapes.roc":
     cargo run
 
 
+# build a release executable
+[unix]
+build app:
+    roc check {{app}}
+    roc build --no-link --optimize --output app.o {{app}}
+    cargo build --release
+
+# build a release executable
+[windows]
+build app:
+    .\windows\bin\roc.exe check {{app}}
+    .\windows\bin\roc.exe build --no-link --optimize --output app.obj {{app}}
+    cargo build --release
+
+
 # clean build artifacts
 [unix]
 clean:

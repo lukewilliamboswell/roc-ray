@@ -1,6 +1,7 @@
 hosted Effect
     exposes [
         Texture,
+        Sound,
         setWindowSize,
         getScreenSize,
         exit,
@@ -25,6 +26,8 @@ hosted Effect
         toLogLevel,
         loadTexture,
         drawTextureRec,
+        loadSound,
+        playSound,
     ]
     imports []
 
@@ -79,3 +82,7 @@ endMode2D : U64 -> Task {} {}
 Texture := Box {}
 loadTexture : Str -> Task Texture Str
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
+
+Sound := Box {}
+loadSound : Str -> Task Sound Str
+playSound : Sound -> Task {} {}

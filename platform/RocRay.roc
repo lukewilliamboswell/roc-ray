@@ -7,6 +7,7 @@ module [
     Vector2,
     Camera,
     Texture,
+    Sound,
     setWindowSize,
     getScreenSize,
     setBackgroundColor,
@@ -30,6 +31,8 @@ module [
     log,
     loadTexture,
     drawTextureRec,
+    loadSound,
+    playSound,
 ]
 
 import RocRay.Keys as Keys
@@ -102,6 +105,8 @@ Color : [
 ]
 
 Texture : Effect.Texture
+
+Sound : Effect.Sound
 
 rgba : Color -> InternalColor.RocColor
 rgba = \color ->
@@ -302,3 +307,13 @@ drawTextureRec : { texture : Texture, source : Rectangle, pos : Vector2, tint : 
 drawTextureRec = \{ texture, source, pos, tint } ->
     Effect.drawTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
     |> Task.mapErr \{} -> crash "unreachable drawTextureRec"
+
+loadSound : Str -> Task Sound [LoadSoundErr Str]
+loadSound = \path ->
+    Effect.loadSound path
+    |> Task.mapErr \err -> LoadSoundErr err
+
+playSound : Sound -> Task {} *
+playSound = \sound ->
+    Effect.playSound sound
+    |> Task.mapErr \{} -> crash "unreachable Sound.play"

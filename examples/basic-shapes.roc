@@ -8,16 +8,16 @@ height = 600
 Model : {}
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
-init =
+init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Basic Shapes"
 
-    Task.ok {}
+    Ok {}
 
-render = \_, _ ->
+render! = \_, _ ->
 
     RocRay.drawText! { pos : { x: 300, y: 50 }, text: "Hello World", size: 40, color: Navy }
     RocRay.drawRectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
@@ -27,4 +27,4 @@ render = \_, _ ->
     RocRay.drawCircleGradient! { center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon }
     RocRay.drawLine! { start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }
 
-    Task.ok {}
+    Ok {}

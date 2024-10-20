@@ -10,9 +10,57 @@ mod glue;
 mod roc;
 
 thread_local! {
-    static CLEAR_COLOR: RefCell<glue::RocColor> = const { RefCell::new(glue::RocColor::BLACK) };
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     static SHOULD_EXIT: Cell<bool> = const { Cell::new(false) };
+    static PLATFORM_MODE: RefCell<PlatformMode> = const { RefCell::new(PlatformMode::None) };
+}
+
+#[derive(Debug)]
+enum PlatformMode {
+    None,
+    // TextureMode,
+    // TextureMode2D,
+    FramebufferMode,
+    FramebufferMode2D,
+}
+
+enum PlatformEffect {
+    BeginDrawing,
+    EndDrawing,
+    CreateCamera,
+}
+
+impl PlatformMode {
+    fn is_effect_permitted(&self, e: PlatformEffect) -> bool {
+        use PlatformEffect::*;
+        use PlatformMode::*;
+        match (self, e) {
+            (None, BeginDrawing) => true,
+            (None, CreateCamera) => true,
+            (FramebufferMode, EndDrawing) => true,
+            (_, _) => false, // TODO
+        }
+    }
+    fn as_str(&self) -> &'static str {
+        use PlatformMode::*;
+        match self {
+            None => "None",
+            FramebufferMode => "FramebufferMode",
+            FramebufferMode2D => "FramebufferMode2D",
+        }
+    }
+}
+
+fn is_effect_permitted(e: PlatformEffect) -> bool {
+    PLATFORM_MODE.with(|mode| mode.borrow().is_effect_permitted(e))
+}
+
+fn platform_mode_str() -> &'static str {
+    PLATFORM_MODE.with(|m| m.borrow().as_str())
+}
+
+fn update_platform_mode(mode: PlatformMode) {
+    PLATFORM_MODE.with(|m| *m.borrow_mut() = mode);
 }
 
 fn main() {
@@ -31,13 +79,6 @@ fn main() {
         let mut frame_count = 0;
 
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
-            bindings::BeginDrawing();
-
-            CLEAR_COLOR.with(|cc| {
-                let (r, g, b, a) = cc.borrow().to_rgba();
-                bindings::ClearBackground(bindings::Color { r, g, b, a });
-            });
-
             let duration_since_epoch = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap();
@@ -65,6 +106,14 @@ fn main() {
             bindings::EndDrawing();
         }
     }
+}
+
+fn exit_with_msg(msg: String) {
+    let c_msg = CString::new(msg).unwrap();
+    unsafe {
+        bindings::TraceLog(bindings::TraceLogLevel_LOG_FATAL as i32, c_msg.as_ptr());
+    }
+    std::process::exit(99);
 }
 
 #[no_mangle]
@@ -207,15 +256,6 @@ unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setBackgroundColor(color: glue::RocColor) -> RocResult<(), ()> {
-    CLEAR_COLOR.with(|cc| {
-        let mut clear_color = cc.borrow_mut();
-        *clear_color = color;
-    });
-    RocResult::ok(())
-}
-
-#[no_mangle]
 unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
     let path = CString::new(path.as_str()).unwrap();
     bindings::TakeScreenshot(path.as_ptr());
@@ -272,6 +312,35 @@ unsafe extern "C" fn roc_fx_updateCamera(
     camera.offset = offset.into();
     camera.rotation = rotation;
     camera.zoom = zoom;
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::BeginDrawing) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot begin drawing while in mode {mode}"));
+    }
+
+    update_platform_mode(PlatformMode::FramebufferMode);
+
+    bindings::BeginDrawing();
+    bindings::ClearBackground(clear_color.into());
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::EndDrawing) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot end drawing while in mode {mode}"));
+    }
+
+    update_platform_mode(PlatformMode::None);
+
+    bindings::EndMode2D();
 
     RocResult::ok(())
 }

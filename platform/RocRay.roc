@@ -10,7 +10,6 @@ module [
     Sound,
     setWindowSize,
     getScreenSize,
-    setBackgroundColor,
     exit,
     setWindowTitle,
     setTargetFPS,
@@ -33,6 +32,8 @@ module [
     drawTextureRec,
     loadSound,
     playSound,
+    beginDrawing,
+    endDrawing,
 ]
 
 import RocRay.Keys as Keys
@@ -144,6 +145,14 @@ log = \message, level ->
     Effect.log message (Effect.toLogLevel level)
     |> Task.mapErr \{} -> crash "unreachable log"
 
+beginDrawing : Color -> Task {} *
+beginDrawing = \color ->
+    Effect.beginDrawing (rgba color)
+    |> Task.mapErr \{} -> crash "unreachable beginDrawing"
+
+endDrawing : Task {} *
+endDrawing = Effect.endDrawing |> Task.mapErr \{} -> crash "unreachable endDrawing"
+
 ## Set the window title.
 setWindowTitle : Str -> Task {} *
 setWindowTitle = \title ->
@@ -182,12 +191,6 @@ setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
     Effect.setDrawFPS showFps posX posY
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
-
-## Set the background color to clear the window between each frame.
-setBackgroundColor : Color -> Task {} *
-setBackgroundColor = \color ->
-    Effect.setBackgroundColor (rgba color)
-    |> Task.mapErr \{} -> crash "unreachable setBackgroundColor"
 
 ## Measure the width of a text string using the default font.
 measureText : { text : Str, size : I32 } -> Task I64 *

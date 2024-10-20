@@ -8,7 +8,6 @@ hosted Effect
         drawText,
         measureText,
         setWindowTitle,
-        setBackgroundColor,
         drawLine,
         drawRectangle,
         drawRectangleGradientV,
@@ -20,6 +19,8 @@ hosted Effect
         takeScreenshot,
         createCamera,
         updateCamera,
+        beginDrawing,
+        endDrawing,
         beginMode2D,
         endMode2D,
         log,
@@ -58,7 +59,6 @@ drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
 
 setWindowTitle : Str -> Task {} {}
-setBackgroundColor : RocColor -> Task {} {}
 
 drawLine : RocVector2, RocVector2, RocColor -> Task {} {}
 
@@ -76,6 +76,8 @@ takeScreenshot : Str -> Task {} {}
 createCamera : RocVector2, RocVector2, F32, F32 -> Task U64 {}
 updateCamera : U64, RocVector2, RocVector2, F32, F32 -> Task {} {}
 
+beginDrawing : RocColor -> Task {} {}
+endDrawing : Task {} {}
 beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
 

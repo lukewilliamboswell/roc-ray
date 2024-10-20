@@ -4,10 +4,10 @@ app [main, Model] {
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
+import ray.RocRay exposing [Vector2, Rectangle, Color, Camera]
 import rand.Random
 
-main = { init, render }
+main = { init!, render! }
 
 screenWidth = 800f32
 screenHeight = 800f32
@@ -23,8 +23,7 @@ Model : {
     cameraID : Camera,
 }
 
-init : Task Model []
-init =
+init! = \{} ->
 
     RocRay.setDrawFPS! { fps: Visible }
     RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
@@ -41,18 +40,26 @@ init =
 
     buildings = generateBuildings
 
-    Task.ok { buildings, cameraID, cameraSettings }
+    Ok { buildings, cameraID, cameraSettings }
 
-render : Model, PlatformState -> Task Model []
-render = \model, { mouse } ->
+render! = \model, { mouse } ->
 
-    RocRay.drawMode2D! model.cameraID (Task.forEach model.buildings RocRay.drawRectangle)
+    RocRay.drawMode2D! model.cameraID (forEach! model.buildings RocRay.drawRectangle!)
 
     cameraSettings = model.cameraSettings |> &target mouse.position
 
     RocRay.updateCamera! model.cameraID cameraSettings
 
-    Task.ok { model & cameraSettings }
+    Ok { model & cameraSettings }
+
+# not sure this is ok, but just trying to replace Task.forEach
+forEach! : List a, (a => {}) => ({} => {})
+forEach! = \things, do -> \{} ->
+    when things is
+        [] -> {}
+        [first, .. as rest] ->
+            do first
+            (forEach! rest do) {}
 
 generateBuildings : List { rect: Rectangle, color : Color }
 generateBuildings =

@@ -9,7 +9,7 @@ import ray.RocRay.Keys as Keys
 import rand.Random
 import time.DateTime
 
-main = { init, render }
+main = { init!, render! }
 
 Model : {
     width : F32,
@@ -18,8 +18,8 @@ Model : {
     number : U64,
 }
 
-init : Task Model {}
-init =
+init! : {} => Result Model {}
+init! = \{} ->
 
     width = 800f32
     height = 800f32
@@ -32,15 +32,15 @@ init =
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Random Dots"
 
-    Task.ok {
+    Ok {
         number,
         seed,
         width,
         height,
     }
 
-render : Model, PlatformState -> Task Model {}
-render = \model, { keys, timestampMillis } ->
+render! : Model, PlatformState => Result Model {}
+render! = \model, { keys, timestampMillis } ->
 
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
@@ -50,16 +50,25 @@ render = \model, { keys, timestampMillis } ->
 
     { seed, lines } = randomList model.seed generator model.number
 
-    Task.forEach! lines RocRay.drawRectangle
+    (forEach! lines RocRay.drawRectangle!) {}
 
     RocRay.drawText! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
     if Keys.down keys KeyUp then
-        Task.ok { model & seed, number: Num.addSaturated model.number 10 }
+        Ok { model & seed, number: Num.addSaturated model.number 10 }
     else if Keys.down keys KeyDown then
-        Task.ok { model & seed, number: Num.subSaturated model.number 10 }
+        Ok { model & seed, number: Num.subSaturated model.number 10 }
     else
-        Task.ok { model & seed }
+        Ok { model & seed }
+
+# not sure this is ok, but just trying to replace Task.forEach
+forEach! : List a, (a => {}) => ({} => {})
+forEach! = \things, do -> \{} ->
+    when things is
+        [] -> {}
+        [first, .. as rest] ->
+            do first
+            (forEach! rest do) {}
 
 # Generate a list of lines using the seed and generator provided
 randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }

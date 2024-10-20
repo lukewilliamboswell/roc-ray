@@ -1,6 +1,6 @@
 module [Sound, play, load]
 
-# import SoundId exposing [SoundId]
+# import InternalSound exposing [SoundId]
 import Effect
 
 ## A handle to a loaded sound

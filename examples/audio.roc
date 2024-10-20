@@ -17,34 +17,34 @@ Model : {
 
 init : Task Model []
 init =
-    RocRay.log! "in init" LogFatal
+    # RocRay.log! "in init" LogFatal
 
     # FIXME
     # The "in init" above gets logged, but nothing later does.
 
     RocRay.setTargetFPS! 60
 
-    RocRay.log! "after setTargetFPS" LogFatal
+    # RocRay.log! "after setTargetFPS" LogFatal
 
     RocRay.setBackgroundColor! White
     RocRay.setWindowSize! { width: 800, height: 450 }
     RocRay.setWindowTitle! "Sound Loading"
 
-    RocRay.log! "before load wav" LogFatal
+    # RocRay.log! "before load wav" LogFatal
 
     wav = Sound.load! "resources/sound.wav"
 
-    RocRay.log! "after load wav" LogFatal
+    # RocRay.log! "after load wav" LogFatal
 
     ogg = Sound.load! "resources/target.ogg"
 
-    RocRay.log! "after load ogg" LogFatal
+    # RocRay.log! "after load ogg" LogFatal
 
     Task.ok { wav, ogg }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->
-    RocRay.log! "in render" LogFatal
+    # RocRay.log! "in render" LogFatal
 
     RocRay.drawText! {
         text: "Press SPACE to PLAY the WAV sound",
@@ -60,7 +60,7 @@ render = \model, { keys } ->
         color: Gray,
     }
 
-    RocRay.log! "choosing sound" LogFatal
+    # RocRay.log! "choosing sound" LogFatal
 
     chosenSound =
         if Keys.pressed keys KeySpace then
@@ -70,7 +70,7 @@ render = \model, { keys } ->
         else
             None
 
-    RocRay.log! "chose sound" LogFatal
+    # RocRay.log! "chose sound" LogFatal
 
     when chosenSound is
         Play sound ->

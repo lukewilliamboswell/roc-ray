@@ -37,7 +37,6 @@ fn main() {
         // }
 
         let mut model = roc::call_roc_init();
-        println!("we never get to this message after init");
 
         let mut frame_count = 0;
 
@@ -383,6 +382,7 @@ unsafe extern "C" fn load_sound_internal(path: &RocStr) -> u32 {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_playSound(sound_id: u32) -> RocResult<(), ()> {
+    println!("in roc_fx_playSound");
     SOUNDS.with_borrow(|sounds| bindings::PlaySound(sounds[sound_id as usize]));
     RocResult::ok(())
 }

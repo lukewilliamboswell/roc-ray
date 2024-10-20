@@ -2,13 +2,8 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Rectangle, PlatformState]
+import ray.RocRay exposing [Rectangle]
 import ray.RocRay.Keys as Keys
-
-Program : {
-    init : Task Model {},
-    render : Model, PlatformState -> Task Model {},
-}
 
 Model : {
     width : F32,
@@ -18,11 +13,9 @@ Model : {
     circlePos : RocRay.Vector2,
 }
 
-main : Program
-main = { init, render }
+main = { init!, render! }
 
-init : Task Model {}
-init =
+init! = \{} ->
 
     width = 900f32
     height = 400f32
@@ -30,7 +23,7 @@ init =
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Squares Demo"
 
-    Task.ok {
+    Ok {
         width,
         height,
         circlePos: { x: width / 2, y: height / 2 },
@@ -38,8 +31,7 @@ init =
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model {}
-render = \model, { keys, mouse } ->
+render! = \model, { keys, mouse } ->
 
     RocRay.drawText! { pos: { x: model.width - 400, y: model.height - 25 }, text: "Click on the screen ...", size: 20, color: White }
 
@@ -71,4 +63,4 @@ render = \model, { keys, mouse } ->
         else
             model.circlePos
 
-    Task.ok { model & circlePos: newCirclePos }
+    Ok { model & circlePos: newCirclePos }

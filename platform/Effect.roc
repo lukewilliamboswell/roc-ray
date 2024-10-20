@@ -32,10 +32,10 @@ import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
 
-setWindowSize! : I32, I32 -> {}
-getScreenSize! : {} -> { height : I32, width : I32, z : I64 }
+setWindowSize! : I32, I32 => {}
+getScreenSize! : {} => { height : I32, width : I32, z : I64 }
 
-exit! : {} -> {}
+exit! : {} => {}
 
 toLogLevel : _ -> I32
 toLogLevel = \level ->
@@ -49,34 +49,34 @@ toLogLevel = \level ->
         LogFatal -> 6
         LogNone -> 7
 
-log! : Str, I32 -> {}
+log! : Str, I32 => {}
 
-drawText! : RocVector2, I32, Str, RocColor -> {}
-measureText! : Str, I32 -> I64
+drawText! : RocVector2, I32, Str, RocColor => {}
+measureText! : Str, I32 => I64
 
-setWindowTitle! : Str -> {}
-setBackgroundColor! : RocColor -> {}
+setWindowTitle! : Str => {}
+setBackgroundColor! : RocColor => {}
 
-drawLine! : RocVector2, RocVector2, RocColor -> {}
+drawLine! : RocVector2, RocVector2, RocColor => {}
 
-drawRectangle! : RocRectangle, RocColor -> {}
-drawRectangleGradientV! : RocRectangle, RocColor, RocColor -> {}
-drawRectangleGradientH! : RocRectangle, RocColor, RocColor -> {}
-drawCircle! : RocVector2, F32, RocColor -> {}
-drawCircleGradient! : RocVector2, F32, RocColor, RocColor -> {}
+drawRectangle! : RocRectangle, RocColor => {}
+drawRectangleGradientV! : RocRectangle, RocColor, RocColor => {}
+drawRectangleGradientH! : RocRectangle, RocColor, RocColor => {}
+drawCircle! : RocVector2, F32, RocColor => {}
+drawCircleGradient! : RocVector2, F32, RocColor, RocColor => {}
 
-setTargetFPS! : I32 -> {}
-setDrawFPS! : Bool, I32, I32 -> {}
+setTargetFPS! : I32 => {}
+setDrawFPS! : Bool, I32, I32 => {}
 
-takeScreenshot! : Str -> {}
+takeScreenshot! : Str => {}
 
-createCamera! : F32, F32, F32, F32, F32, F32 -> U64
-updateCamera! : U64, F32, F32, F32, F32, F32, F32 -> {}
+createCamera! : F32, F32, F32, F32, F32, F32 => U64
+updateCamera! : U64, F32, F32, F32, F32, F32, F32 => {}
 
-beginMode2D! : U64 -> {}
-endMode2D! : U64 -> {}
+beginMode2D! : U64 => {}
+endMode2D! : U64 => {}
 
 Texture := Box {}
 
-loadTexture! : Str -> Result Texture Str
-drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor -> {}
+loadTexture! : Str => Texture
+drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}

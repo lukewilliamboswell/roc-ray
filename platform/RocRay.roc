@@ -125,7 +125,7 @@ rgba = \color ->
 
 ## Exit the program.
 exit! : {} => {}
-exit! = Effect.exit! {}
+exit! = \{} -> Effect.exit! {}
 
 ## Show a Raylib log! trace message.
 ##
@@ -247,7 +247,7 @@ drawMode2D! = \@Camera camera, drawTask! ->
 
     Effect.beginMode2D! camera
 
-    drawTask!
+    drawTask! {}
 
     Effect.endMode2D! camera
 
@@ -255,9 +255,9 @@ drawMode2D! = \@Camera camera, drawTask! ->
 ## ```
 ## texture = Raylib.loadTexture! "sprites.png"
 ## ```
-loadTexture! : Str => Result Texture [TextureLoadErr Str]_
+loadTexture! : Str => Texture
 loadTexture! = \filename ->
-    Effect.loadTexture! filename |> Result.mapErr \msg -> TextureLoadErr msg
+    Effect.loadTexture! filename
 
 ## Draw part of a texture.
 ## ```

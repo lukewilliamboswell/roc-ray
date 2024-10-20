@@ -6,7 +6,7 @@ import ray.RocRay exposing [Vector2]
 import ray.RocRay.Mouse as Mouse
 import ray.RocRay.Keys as Keys
 
-main = { init, render }
+main = { init!, render! }
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -27,15 +27,15 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
     RocRay.setBackgroundColor! Navy
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Pong"
 
-    Task.ok {
+    Ok {
         ball: newBall,
         pos: height / 2 - paddle / 2,
         score: 0,
@@ -67,14 +67,13 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { frameCount, keys, mouse } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { frameCount, keys, mouse } ->
 
-    screenTask =
-        if Keys.down keys KeyLeftControl && Keys.down keys KeyK then
-            RocRay.takeScreenshot "saved-$(Num.toStr frameCount).png"
-        else
-            Task.ok {}
+    if Keys.down keys KeyLeftControl && Keys.down keys KeyK then
+        RocRay.takeScreenshot! "saved-$(Num.toStr frameCount).png"
+    else
+        {}
 
     if !model.playing then
         RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
@@ -89,12 +88,10 @@ render = \model, { frameCount, keys, mouse } ->
 
         RocRay.drawText! { pos: { x: 50, y: 150 }, text: "Ctrl-K to Screenshot to 'saved.png'", size: 20, color: White }
 
-        screenTask!
-
         if Mouse.pressed mouse.buttons.left then
-            Task.ok { model & playing: Bool.true, score: 0 }
+            Ok { model & playing: Bool.true, score: 0 }
         else
-            Task.ok model
+            Ok model
     else
         # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
         RocRay.setTargetFPS! (60 + ((Num.toFrac frameCount) / 60 |> Num.floor |> Num.toI32))
@@ -112,15 +109,13 @@ render = \model, { frameCount, keys, mouse } ->
 
         ball = bounce (moveBall model.ball) model.pos
 
-        screenTask!
-
         if ball.pos.x <= 0 then
-            Task.ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
+            Ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
-            Task.ok { model & pos: newY, ball: ball, score: model.score + 1 }
+            Ok { model & pos: newY, ball: ball, score: model.score + 1 }
 
-drawCrossHair : Vector2 -> Task {} []
-drawCrossHair = \mousePos ->
+drawCrossHair! : Vector2 => {}
+drawCrossHair! = \mousePos ->
     RocRay.drawLine! {
         start: { x: mousePos.x, y: 0 },
         end: { x: mousePos.x, y: height },

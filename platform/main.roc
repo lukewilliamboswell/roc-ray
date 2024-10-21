@@ -3,7 +3,7 @@ platform "roc-ray"
     exposes [RocRay]
     packages {}
     imports []
-    provides [forHost]
+    provides [init!, render!]
 
 import RocRay exposing [Program]
 import RocRay.Mouse as Mouse
@@ -22,26 +22,19 @@ PlatformStateFromHost : {
     mouseWheel : F32,
 }
 
-ProgramForHost model : {
-    init : Task (Box model) {},
-    render : Box model, PlatformStateFromHost -> Task (Box model) {},
-}
-
-forHost : ProgramForHost _
-forHost = { init, render }
-
-init : Task (Box Model) {}
-init =
-    Task.attempt main.init \result ->
+init! : {} => Result (Box Model) {}
+init! = \{} ->
+    main.init! {}
+    |> \result ->
         when result is
-            Ok m -> Task.ok (Box.box m)
+            Ok m -> Ok (Box.box m)
             Err err ->
                 Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit!
-                Task.err {}
+                Effect.exit! {}
+                Err {}
 
-render : Box Model, PlatformStateFromHost -> Task (Box Model) {}
-render = \boxedModel, platformState ->
+render! : Box Model, PlatformStateFromHost => Result (Box Model) {}
+render! = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
     { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
@@ -58,13 +51,14 @@ render = \boxedModel, platformState ->
         },
     }
 
-    Task.attempt (main.render model state) \result ->
+    main.render! model state
+    |> \result ->
         when result is
-            Ok m -> Task.ok (Box.box m)
+            Ok m -> Ok (Box.box m)
             Err err ->
                 Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit!
-                Task.err {}
+                Effect.exit! {}
+                Err {}
 
 keysForApp : { keys : List U8 } -> Keys.Keys
 keysForApp = \{ keys } ->

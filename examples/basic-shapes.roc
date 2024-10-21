@@ -8,16 +8,16 @@ height = 600
 Model : {}
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
-init =
+init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Basic Shapes"
 
-    Task.ok {}
+    Ok {}
 
-render = \_, _ ->
+render! = \_, _ ->
 
     RocRay.beginDrawing! White
 

@@ -13,10 +13,11 @@ Model : {
     dudeAnimation : AnimatedSprite,
 }
 
-main : RocRay.Program Model _
-main = { init, render }
+main : RocRay.Program Model []
+main = { init!, render! }
 
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width, height }
@@ -24,7 +25,7 @@ init =
 
     dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
 
-    Task.ok {
+    Ok {
         player: { x: width / 2, y: height / 2 },
         direction: WalkRight,
         dude,
@@ -35,8 +36,8 @@ init =
         },
     }
 
-render : Model, PlatformState -> Task Model _
-render = \model, { timestampMillis, keys } ->
+render! : Model, PlatformState -> Result Model []
+render! = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White
 

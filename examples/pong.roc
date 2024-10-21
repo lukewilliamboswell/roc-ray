@@ -5,7 +5,7 @@ app [main, Model] {
 import ray.RocRay exposing [Vector2, PlatformState]
 import ray.RocRay.Mouse as Mouse
 
-main = { init, render }
+main = { init!, render! }
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -26,14 +26,14 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Pong"
 
-    Task.ok {
+    Ok {
         ball: newBall,
         pos: height / 2 - paddle / 2,
         score: 0,
@@ -75,7 +75,7 @@ render = \model, state ->
         if Mouse.pressed state.mouse.buttons.left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
-            Task.ok model
+            Ok model
     else
         # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
         RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
@@ -87,9 +87,9 @@ render = \model, state ->
         newY = model.pos + (Num.toF32 state.mouse.position.y - model.pos) / 5
 
         if ball.pos.x <= 0 then
-            Task.ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
+            Ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
-            Task.ok { model & pos: newY, ball: ball, score: model.score + 1 }
+            Ok { model & pos: newY, ball: ball, score: model.score + 1 }
 
 drawGameStartMenu : Model -> Task {} _
 drawGameStartMenu = \model ->

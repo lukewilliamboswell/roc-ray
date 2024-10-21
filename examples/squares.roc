@@ -2,13 +2,8 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Rectangle, PlatformState]
+import ray.RocRay exposing [Rectangle]
 import ray.RocRay.Keys as Keys
-
-Program : {
-    init : Task Model {},
-    render : Model, PlatformState -> Task Model {},
-}
 
 Model : {
     squares : List Rectangle,
@@ -22,8 +17,7 @@ height = 400
 main : Program
 main = { init, render }
 
-init : Task Model {}
-init =
+init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Squares Demo"
@@ -34,8 +28,7 @@ init =
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model {}
-render = \model, { keys, mouse } ->
+render! = \model, { keys, mouse } ->
 
     RocRay.beginDrawing! Black
 
@@ -71,4 +64,4 @@ render = \model, { keys, mouse } ->
         else
             model.circlePos
 
-    Task.ok { model & circlePos: newCirclePos }
+    Ok { model & circlePos: newCirclePos }

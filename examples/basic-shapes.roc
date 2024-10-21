@@ -13,8 +13,10 @@ main = { init, render }
 init : Task Model []
 init =
 
-    RocRay.setWindowSize! { width, height }
+    RocRay.setWindowSize!  { width, height }
     RocRay.setWindowTitle! "Basic Shapes"
+
+    _ = RocRay.createRenderTexture! { width: width/2, height: height/2 }
 
     Task.ok {}
 

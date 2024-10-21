@@ -1,6 +1,7 @@
 hosted Effect
     exposes [
         Texture,
+        RenderTexture,
         Sound,
         Camera,
         setWindowSize,
@@ -22,6 +23,8 @@ hosted Effect
         updateCamera,
         beginDrawing,
         endDrawing,
+        beginTexture,
+        endTexture,
         beginMode2D,
         endMode2D,
         log,
@@ -30,6 +33,7 @@ hosted Effect
         drawTextureRec,
         loadSound,
         playSound,
+        createRenderTexture,
     ]
     imports []
 
@@ -91,3 +95,8 @@ drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
 Sound := Box {}
 loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}
+
+RenderTexture := Box {}
+createRenderTexture : RocVector2 -> Task RenderTexture {}
+beginTexture : RenderTexture, RocColor -> Task {} {}
+endTexture : RenderTexture -> Task {} {}

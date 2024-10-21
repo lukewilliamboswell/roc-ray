@@ -1,7 +1,7 @@
-app [main, Model] { ray: platform "../platform/main.roc" }
+app [main, Model] { rr: platform "../platform/main.roc" }
 
-import ray.RocRay exposing [PlatformState, Texture, Rectangle]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Texture, Rectangle]
+import rr.Keys
 
 width = 800
 height = 600
@@ -53,7 +53,7 @@ render! = \model, { timestampMillis, keys } ->
         tint: White,
     }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -67,7 +67,7 @@ render! = \model, { timestampMillis, keys } ->
         else
             (model.player, model.direction)
 
-    Task.ok { model & player, dudeAnimation, direction }
+    Ok { model & player, dudeAnimation, direction }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
 dudeSprite = \sequence, frame ->

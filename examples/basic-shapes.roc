@@ -1,6 +1,6 @@
-app [main, Model] { ray: platform "../platform/main.roc" }
+app [main, Model] { rr: platform "../platform/main.roc" }
 
-import ray.RocRay
+import rr.RocRay exposing [PlatformState]
 
 width = 800
 height = 600
@@ -10,6 +10,7 @@ Model : {}
 main : RocRay.Program Model []
 main = { init!, render! }
 
+init! : {} => Result Model []
 init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
@@ -17,6 +18,7 @@ init! = \{} ->
 
     Ok {}
 
+render! : Model, PlatformState => Result Model []
 render! = \_, _ ->
 
     RocRay.beginDrawing! White
@@ -29,6 +31,6 @@ render! = \_, _ ->
     RocRay.drawCircleGradient! { center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon }
     RocRay.drawLine! { start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
-    Task.ok {}
+    Ok {}

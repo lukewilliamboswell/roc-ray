@@ -2,6 +2,7 @@ hosted Effect
     exposes [
         Texture,
         Sound,
+        Camera,
         setWindowSize!,
         getScreenSize!,
         exit!,
@@ -73,13 +74,15 @@ setDrawFPS! : Bool, I32, I32 => {}
 
 takeScreenshot! : Str => {}
 
-createCamera! : RocVector2, RocVector2, F32, F32 => U64
-updateCamera! : U64, RocVector2, RocVector2, F32, F32 => {}
-
 beginDrawing! : RocColor => {}
 endDrawing! : {} => {}
-beginMode2D! : U64 => {}
-endMode2D! : U64 => {}
+
+Camera := Box {}
+createCamera! : RocVector2, RocVector2, F32, F32 => Camera
+updateCamera! : Camera, RocVector2, RocVector2, F32, F32 => {}
+
+beginMode2D! : Camera => {}
+endMode2D! : Camera => {}
 
 Texture := Box {}
 loadTexture! : Str => Texture

@@ -406,8 +406,10 @@ unsafe extern "C" fn roc_fx_createCamera(
     let alloc_result = heap.alloc_for(camera);
     match alloc_result {
         Ok(roc_box) => RocResult::ok(roc_box),
-        // TODO: handle this std::io::Error and give it back to roc
-        Err(_err) => panic!("Failed to create camera, out of memory."),
+        Err(_) => {
+            exit_with_msg("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into());
+            std::process::exit(1);
+        }
     }
 }
 
@@ -532,7 +534,7 @@ unsafe fn get_keys_states() -> RocList<u8> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, ()> {
     if !is_effect_permitted(PlatformEffect::LoadSound) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot load a sound while in {mode}"));
@@ -547,8 +549,10 @@ unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, Ro
     let alloc_result = heap.alloc_for(sound);
     match alloc_result {
         Ok(roc_box) => RocResult::ok(roc_box),
-        // TODO: handle this std::io::Error and give it back to roc
-        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+        Err(_) => {
+            exit_with_msg("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into());
+            std::process::exit(1);
+        }
     }
 }
 
@@ -564,7 +568,7 @@ unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), 
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, ()> {
     if !is_effect_permitted(PlatformEffect::LoadTexture) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot load a texture while in {mode}"));
@@ -579,8 +583,10 @@ unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<
     let alloc_result = heap.alloc_for(texture);
     match alloc_result {
         Ok(roc_box) => RocResult::ok(roc_box),
-        // TODO: handle this std::io::Error and give it back to roc
-        Err(err) => RocResult::err(format!("{}", err).as_str().into()),
+        Err(_) => {
+            exit_with_msg("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into());
+            std::process::exit(1);
+        }
     }
 }
 

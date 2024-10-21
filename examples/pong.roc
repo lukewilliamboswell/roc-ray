@@ -1,10 +1,11 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Vector2, PlatformState]
-import ray.RocRay.Mouse as Mouse
+import rr.RocRay exposing [Vector2, PlatformState]
+import rr.Mouse
 
+main : RocRay.Program Model []
 main = { init!, render! }
 
 Ball : { pos : Vector2, vel : Vector2 }
@@ -65,15 +66,15 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, PlatformState -> Task Model []
-render = \model, state ->
+render! : Model, PlatformState => Result Model []
+render! = \model, state ->
 
     if !model.playing then
         # DRAW START MENU
         drawGameStartMenu! model
 
         if Mouse.pressed state.mouse.buttons.left then
-            Task.ok { model & playing: Bool.true, score: 0 }
+            Ok { model & playing: Bool.true, score: 0 }
         else
             Ok model
     else
@@ -91,8 +92,8 @@ render = \model, state ->
         else
             Ok { model & pos: newY, ball: ball, score: model.score + 1 }
 
-drawGameStartMenu : Model -> Task {} _
-drawGameStartMenu = \model ->
+drawGameStartMenu! : Model => {}
+drawGameStartMenu! = \model ->
 
     RocRay.beginDrawing! Navy
 
@@ -106,10 +107,10 @@ drawGameStartMenu = \model ->
 
     RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
-drawGamePlaying : Model, PlatformState -> Task {} _
-drawGamePlaying = \model, { mouse } ->
+drawGamePlaying! : Model, PlatformState => {}
+drawGamePlaying! = \model, { mouse } ->
 
     RocRay.beginDrawing! Navy
 
@@ -124,10 +125,10 @@ drawGamePlaying = \model, { mouse } ->
 
     drawCrossHair! mouse.position
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
-drawCrossHair : Vector2 -> Task {} []
-drawCrossHair = \mousePos ->
+drawCrossHair! : Vector2 => {}
+drawCrossHair! = \mousePos ->
     RocRay.drawLine! {
         start: { x: mousePos.x, y: 0 },
         end: { x: mousePos.x, y: height },

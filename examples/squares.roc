@@ -1,9 +1,9 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Rectangle]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Rectangle]
+import rr.Keys
 
 Model : {
     squares : List Rectangle,
@@ -14,20 +14,22 @@ Model : {
 width = 900
 height = 400
 
-main : Program
-main = { init, render }
+main : RocRay.Program Model []
+main = { init!, render! }
 
+init! : {} => Result Model []
 init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Squares Demo"
 
-    Task.ok {
+    Ok {
         circlePos: { x: width / 2, y: height / 2 },
         squares: [],
         status: Ready,
     }
 
+render! : Model, PlatformState => Result Model []
 render! = \model, { keys, mouse } ->
 
     RocRay.beginDrawing! Black
@@ -50,7 +52,7 @@ render! = \model, { keys, mouse } ->
 
     RocRay.drawCircle! { center: model.circlePos, radius: 50, color: Aqua }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
     newCirclePos =
         if Keys.down keys KeyUp then

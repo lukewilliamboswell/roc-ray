@@ -274,7 +274,7 @@ drawRectangle = \{ rect, color } ->
 
 ## Draw a rectangle with a vertical-gradient fill on the screen.
 ## ```
-### RocRay.drawRectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }
+## RocRay.drawRectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }
 ## ```
 drawRectangleGradientV : { rect : Rectangle, top : Color, bottom : Color } -> Task {} *
 drawRectangleGradientV = \{ rect, top, bottom } ->

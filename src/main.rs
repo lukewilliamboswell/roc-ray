@@ -27,6 +27,8 @@ enum PlatformMode {
 enum PlatformEffect {
     BeginDrawing,
     EndDrawing,
+    BeginMode2D,
+    EndMode2D,
     CreateCamera,
 }
 
@@ -34,11 +36,15 @@ impl PlatformMode {
     fn is_effect_permitted(&self, e: PlatformEffect) -> bool {
         use PlatformEffect::*;
         use PlatformMode::*;
+
+        // we only need to track the "permitted" effects, everything else is "not permitted"
         match (self, e) {
-            (None, BeginDrawing) => true,
-            (None, CreateCamera) => true,
+            (None, BeginDrawing)
+            | (None, CreateCamera)
+            | (FramebufferMode, BeginMode2D)
+            | (FramebufferMode2D, EndMode2D) => true,
             (FramebufferMode, EndDrawing) => true,
-            (_, _) => false, // TODO
+            (_, _) => false,
         }
     }
     fn as_str(&self) -> &'static str {
@@ -280,6 +286,11 @@ unsafe extern "C" fn roc_fx_createCamera(
     rotation: f32,
     zoom: f32,
 ) -> RocResult<RocBox<()>, ()> {
+    if !is_effect_permitted(PlatformEffect::CreateCamera) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot create a camera while in {mode}"));
+    }
+
     let camera = bindings::Camera2D {
         target: target.into(),
         offset: offset.into(),
@@ -320,7 +331,7 @@ unsafe extern "C" fn roc_fx_updateCamera(
 unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::BeginDrawing) {
         let mode = platform_mode_str();
-        exit_with_msg(format!("Cannot begin drawing while in mode {mode}"));
+        exit_with_msg(format!("Cannot begin drawing while in {mode}"));
     }
 
     update_platform_mode(PlatformMode::FramebufferMode);
@@ -335,7 +346,7 @@ unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResu
 unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndDrawing) {
         let mode = platform_mode_str();
-        exit_with_msg(format!("Cannot end drawing while in mode {mode}"));
+        exit_with_msg(format!("Cannot end drawing while in {mode}"));
     }
 
     update_platform_mode(PlatformMode::None);
@@ -347,6 +358,13 @@ unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::BeginMode2D) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot being drawing in 2D while in {mode}"));
+    }
+
+    update_platform_mode(PlatformMode::FramebufferMode2D);
+
     let camera: &mut bindings::Camera2D =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
@@ -357,6 +375,13 @@ unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::EndMode2D) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot being drawing in 2D while in {mode}"));
+    }
+
+    update_platform_mode(PlatformMode::FramebufferMode);
+
     bindings::EndMode2D();
 
     RocResult::ok(())

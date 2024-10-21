@@ -17,8 +17,6 @@ Model : {
 init =
 
     RocRay.setTargetFPS! 60
-
-    RocRay.setBackgroundColor! White
     RocRay.setWindowSize! { width: 800, height: 450 }
     RocRay.setWindowTitle! "Making Sounds"
 
@@ -34,6 +32,8 @@ init =
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->
+
+    RocRay.beginDrawing! White
 
     RocRay.drawText! {
         text: "Press SPACE to PLAY the WAV sound",
@@ -56,6 +56,8 @@ render = \model, { keys } ->
             Play model.ogg
         else
             None
+
+    RocRay.endDrawing!
 
     when chosenSound is
         Play sound ->

@@ -22,13 +22,8 @@ init =
     RocRay.setWindowSize! { width: 800, height: 450 }
     RocRay.setWindowTitle! "Making Sounds"
 
-    wav =
-        RocRay.loadSound "resources/sound.wav"
-            |> Task.mapErr! \LoadSoundErr msg -> crash msg
-
-    ogg =
-        RocRay.loadSound "resources/target.ogg"
-            |> Task.mapErr! \LoadSoundErr msg -> crash msg
+    wav = RocRay.loadSound! "resources/sound.wav"
+    ogg = RocRay.loadSound! "resources/target.ogg"
 
     Task.ok { wav, ogg }
 

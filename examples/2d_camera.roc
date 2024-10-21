@@ -23,7 +23,7 @@ Model : {
         rotation : F32,
         zoom : F32,
     },
-    cameraID : Camera,
+    camera : Camera,
 }
 
 init : Task Model []
@@ -43,14 +43,14 @@ init =
         zoom: 1,
     }
 
-    cameraID = RocRay.createCamera! cameraSettings
+    camera = RocRay.createCamera! cameraSettings
 
     buildings = generateBuildings
 
     Task.ok {
         player,
         buildings,
-        cameraID,
+        camera,
         cameraSettings,
     }
 
@@ -81,7 +81,7 @@ render = \model, { mouse, keys } ->
         |> &rotation rotation
         |> &zoom zoom
 
-    RocRay.updateCamera! model.cameraID cameraSettings
+    RocRay.updateCamera! model.camera cameraSettings
 
     # UPDATE PLAYER
     player =
@@ -96,7 +96,9 @@ render = \model, { mouse, keys } ->
     RocRay.beginDrawing! White
 
     # RENDER WORLD
-    RocRay.drawMode2D! model.cameraID (drawWorld model)
+    RocRay.beginMode2D! model.camera
+    drawWorld! model
+    RocRay.endMode2D! model.camera
 
     # RENDER SCREEN UI
     drawScreenUI!

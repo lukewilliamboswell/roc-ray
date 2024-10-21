@@ -19,6 +19,7 @@ PlatformStateFromHost : {
     timestampMillis : U64,
     mousePosX : F32,
     mousePosY : F32,
+    mouseWheel : F32,
 }
 
 init! : {} => Result (Box Model) {}
@@ -36,7 +37,7 @@ render! : Box Model, PlatformStateFromHost => Result (Box Model) {}
 render! = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
-    { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY } = platformState
+    { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
@@ -46,6 +47,7 @@ render! = \boxedModel, platformState ->
         mouse: {
             position: { x: mousePosX, y: mousePosY },
             buttons: mouseButtonsForApp { mouseButtons },
+            wheel: mouseWheel,
         },
     }
 

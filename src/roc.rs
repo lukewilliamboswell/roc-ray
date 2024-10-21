@@ -36,6 +36,20 @@ pub fn texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Tex
     })
 }
 
+// note this is checked and deallocated in the roc_dealloc function
+pub fn sound_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Sound> {
+    static SOUND_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Sound>> =
+        OnceLock::new();
+    const DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE: usize = 1000;
+    let max_heap_size = std::env::var("ROC_RAY_MAX_SOUNDS_HEAP_SIZE")
+        .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE))
+        .unwrap_or(DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE);
+    SOUND_HEAP.get_or_init(|| {
+        ThreadSafeRefcountedResourceHeap::new(max_heap_size)
+            .expect("Failed to allocate mmap for heap references.")
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void {
     libc::malloc(size)
@@ -52,6 +66,12 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     let texture_heap = texture_heap();
     if texture_heap.in_range(c_ptr) {
         texture_heap.dealloc(c_ptr);
+        return;
+    }
+
+    let sound_heap = sound_heap();
+    if sound_heap.in_range(c_ptr) {
+        sound_heap.dealloc(c_ptr);
         return;
     }
 
@@ -142,6 +162,7 @@ pub struct PlatformState {
     pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
     pub mouse_pos_y: f32,
+    pub mouse_wheel: f32,
 }
 
 impl roc_std::RocRefcounted for PlatformState {

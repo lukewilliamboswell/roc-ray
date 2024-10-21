@@ -19,6 +19,13 @@
             pkgs.xorg.libX11
             pkgs.libGL
             pkgs.mesa.drivers
+            pkgs.alsa-lib
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXi
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXinerama
+            pkgs.libxkbcommon
+            pkgs.wayland
           ] else [];
           macosDeps = if pkgs.stdenv.isDarwin then [
             pkgs.libiconv

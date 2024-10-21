@@ -7,7 +7,7 @@ width = 800
 height = 600
 
 Model : {
-    player : { x: F32, y: F32 },
+    player : { x : F32, y : F32 },
     direction : [WalkUp, WalkDown, WalkLeft, WalkRight],
     dude : Texture,
     dudeAnimation : AnimatedSprite,
@@ -22,7 +22,6 @@ init! = \{} ->
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Animated Sprite Example"
-    RocRay.setBackgroundColor! White
 
     dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
 
@@ -34,16 +33,18 @@ init! = \{} ->
             frame: 0,
             frameRate: 10,
             nextAnimationTick: 0,
-        }
+        },
     }
 
 render! : Model, PlatformState -> Result Model []
 render! = \model, { timestampMillis, keys } ->
 
+    RocRay.beginDrawing! White
+
     dudeAnimation = updateAnimation model.dudeAnimation timestampMillis
 
-    RocRay.drawText! { pos: {x: 10, y: 10}, text: "Rocci the Cool Dude", size: 40, color: Navy }
-    RocRay.drawText! { pos: {x: 10, y: 50}, text: "Use arrow keys to walk around", size: 20, color: Green }
+    RocRay.drawText! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
+    RocRay.drawText! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
     RocRay.drawTextureRec! {
         texture: model.dude,
@@ -51,6 +52,8 @@ render! = \model, { timestampMillis, keys } ->
         pos: model.player,
         tint: White,
     }
+
+    RocRay.endDrawing!
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -64,20 +67,20 @@ render! = \model, { timestampMillis, keys } ->
         else
             (model.player, model.direction)
 
-    Ok {model & player, dudeAnimation, direction}
+    Task.ok { model & player, dudeAnimation, direction }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
 dudeSprite = \sequence, frame ->
     when sequence is
-        WalkUp -> sprite64x64source {row: 8, col : frame % 9 }
-        WalkDown -> sprite64x64source {row: 10, col : frame % 9 }
-        WalkLeft -> sprite64x64source {row: 9, col : frame % 9}
-        WalkRight -> sprite64x64source {row: 11, col : frame % 9}
+        WalkUp -> sprite64x64source { row: 8, col: frame % 9 }
+        WalkDown -> sprite64x64source { row: 10, col: frame % 9 }
+        WalkLeft -> sprite64x64source { row: 9, col: frame % 9 }
+        WalkRight -> sprite64x64source { row: 11, col: frame % 9 }
 
 AnimatedSprite : {
-    frame: U8, # frame index, increments each tick
-    frameRate: U8, # frames per second
-    nextAnimationTick: U64, # milliseconds
+    frame : U8, # frame index, increments each tick
+    frameRate : U8, # frames per second
+    nextAnimationTick : U64, # milliseconds
 }
 
 updateAnimation : AnimatedSprite, U64 -> AnimatedSprite
@@ -85,19 +88,18 @@ updateAnimation = \{ frame, frameRate, nextAnimationTick }, timestampMillis ->
 
     if timestampMillis > nextAnimationTick then
         {
-            frame : Num.addWrap frame 1,
+            frame: Num.addWrap frame 1,
             frameRate,
-            nextAnimationTick : timestampMillis + (Num.toU64 (Num.round (1000 / (Num.toF64 frameRate))))
+            nextAnimationTick: timestampMillis + (Num.toU64 (Num.round (1000 / (Num.toF64 frameRate)))),
         }
     else
         { frame, frameRate, nextAnimationTick }
 
 # get the pixel coordinates of a 64x64 sprite in the spritesheet
-sprite64x64source : {row: U8, col: U8} -> Rectangle
-sprite64x64source = \{row, col} ->
-    {
-        x: 64 * (Num.toF32 col),
-        y: 64 * (Num.toF32 row),
-        width: 64,
-        height: 64,
-    }
+sprite64x64source : { row : U8, col : U8 } -> Rectangle
+sprite64x64source = \{ row, col } -> {
+    x: 64 * (Num.toF32 col),
+    y: 64 * (Num.toF32 row),
+    width: 64,
+    height: 64,
+}

@@ -67,11 +67,12 @@ $ git clone https://github.com/lukewilliamboswell/roc-ray.git
 1. Install [roc](https://www.roc-lang.org)
 2. Install [rust](https://www.rust-lang.org/tools/install)
 3. Install dev tools on linux `sudo apt install build-essential git` or on macOS `xcode-select --install`
+4. Install [just](https://github.com/casey/just?tab=readme-ov-file#packages)
 
 Run an example:
 
 ```
-$ ./build-and-run.sh examples/pong.roc
+$ just dev examples/pong.roc
 ```
 
 **OR**
@@ -80,25 +81,28 @@ Use the [nix package manager](https://nixos.org/download/) to install the depend
 
 ```
 $ nix develop
-$ ./build-and-run.sh examples/pong.roc
+$ just dev examples/pong.roc
 ```
 
 ### Windows
 
-Ensure you have [roc](https://www.roc-lang.org) and [cargo](https://www.rust-lang.org/tools/install) in your path.
+1. Ensure you have [cargo](https://www.rust-lang.org/tools/install) in your path.
+2. Install [just](https://github.com/casey/just?tab=readme-ov-file#packages)
+3. Run `just setup` to download a windows build of Roc
 
-Unofficial Windows release of roc available at [lukewilliamboswell/roc/releases/tag/windows-20241011](https://github.com/lukewilliamboswell/roc/releases/tag/windows-20241011)
+Run an example:
+
+``` 
+PS > just dev .\examples\pong.roc
+```
+
+The unofficial Windows release of roc can be manually downloaded at [lukewilliamboswell/roc/releases/tag/windows-20241011](https://github.com/lukewilliamboswell/roc/releases/tag/windows-20241011)
 
 ```
 PS > roc version
 roc built from commit b5e3c3e441 with additional changes, committed at 2024-10-09 11:34:35 UTC
 ```
 
-Run an example
-
-```
-PS > .\build-and-run.ps1 examples\pong.roc
-```
 
 ## Contributing
 

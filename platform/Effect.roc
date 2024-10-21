@@ -1,13 +1,13 @@
 hosted Effect
     exposes [
         Texture,
+        Sound,
         setWindowSize!,
         getScreenSize!,
         exit!,
         drawText!,
         measureText!,
         setWindowTitle!,
-        setBackgroundColor!,
         drawLine!,
         drawRectangle!,
         drawRectangleGradientV!,
@@ -19,12 +19,16 @@ hosted Effect
         takeScreenshot!,
         createCamera!,
         updateCamera!,
+        beginDrawing!,
+        endDrawing!,
         beginMode2D!,
         endMode2D!,
         log!,
         toLogLevel,
         loadTexture!,
         drawTextureRec!,
+        loadSound!,
+        playSound!,
     ]
     imports []
 
@@ -55,7 +59,6 @@ drawText! : RocVector2, I32, Str, RocColor => {}
 measureText! : Str, I32 => I64
 
 setWindowTitle! : Str => {}
-setBackgroundColor! : RocColor => {}
 
 drawLine! : RocVector2, RocVector2, RocColor => {}
 
@@ -70,13 +73,18 @@ setDrawFPS! : Bool, I32, I32 => {}
 
 takeScreenshot! : Str => {}
 
-createCamera! : F32, F32, F32, F32, F32, F32 => U64
-updateCamera! : U64, F32, F32, F32, F32, F32, F32 => {}
+createCamera! : RocVector2, RocVector2, F32, F32 => U64
+updateCamera! : U64, RocVector2, RocVector2, F32, F32 => {}
 
+beginDrawing! : RocColor => {}
+endDrawing! : {} => {}
 beginMode2D! : U64 => {}
 endMode2D! : U64 => {}
 
 Texture := Box {}
-
 loadTexture! : Str => Texture
 drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
+
+Sound := Box {}
+loadSound! : Str => Sound
+playSound! : Sound => {}

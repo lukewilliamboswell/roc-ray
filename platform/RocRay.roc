@@ -7,9 +7,9 @@ module [
     Vector2,
     Camera,
     Texture,
+    Sound,
     setWindowSize!,
     getScreenSize!,
-    setBackgroundColor!,
     exit!,
     setWindowTitle!,
     setTargetFPS!,
@@ -29,6 +29,10 @@ module [
     log!,
     loadTexture!,
     drawTextureRec!,
+    loadSound!,
+    playSound!,
+    beginDrawing!,
+    endDrawing!,
 ]
 
 import RocRay.Keys as Keys
@@ -58,6 +62,7 @@ PlatformState : {
     mouse : {
         position : Vector2,
         buttons : Mouse.Buttons,
+        wheel : F32,
     },
 }
 
@@ -102,6 +107,8 @@ Color : [
 
 Texture : Effect.Texture
 
+Sound : Effect.Sound
+
 rgba : Color -> InternalColor.RocColor
 rgba = \color ->
     when color is
@@ -136,6 +143,13 @@ log! : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal
 log! = \message, level ->
     Effect.log! message (Effect.toLogLevel level)
 
+beginDrawing! : Color => {}
+beginDrawing! = \color ->
+    Effect.beginDrawing! (rgba color)
+
+endDrawing! : {} => {}
+endDrawing! = \{} -> Effect.endDrawing! {}
+
 ## Set the window title.
 setWindowTitle! : Str => {}
 setWindowTitle! = \title -> Effect.setWindowTitle! title
@@ -168,10 +182,6 @@ setDrawFPS! = \{ fps, posX ? 10, posY ? 10 } ->
             Hidden -> Bool.false
 
     Effect.setDrawFPS! showFps posX posY
-
-## Set the background color to clear the window between each frame.
-setBackgroundColor! : Color => {}
-setBackgroundColor! = \color -> Effect.setBackgroundColor! (rgba color)
 
 ## Measure the width of a text string using the default font.
 measureText! : { text : Str, size : I32 } => I64
@@ -235,12 +245,12 @@ Camera := U64
 
 createCamera! : { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } => Camera
 createCamera! = \{ target, offset, rotation, zoom } ->
-    Effect.createCamera! target.x target.y offset.x offset.y rotation zoom
+    Effect.createCamera! (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
     |> \camera -> @Camera camera
 
 updateCamera! : Camera, { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } => {}
 updateCamera! = \@Camera camera, { target, offset, rotation, zoom } ->
-    Effect.updateCamera! camera target.x target.y offset.x offset.y rotation zoom
+    Effect.updateCamera! camera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
 
 drawMode2D! : Camera, ({} => {}) => {}
 drawMode2D! = \@Camera camera, drawTask! ->
@@ -266,3 +276,11 @@ loadTexture! = \filename ->
 drawTextureRec! : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } => {}
 drawTextureRec! = \{ texture, source, pos, tint } ->
     Effect.drawTextureRec! texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+
+loadSound! : Str => Sound
+loadSound! = \path ->
+    Effect.loadSound! path
+
+playSound! : Sound => {}
+playSound! = \sound ->
+    Effect.playSound! sound

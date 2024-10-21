@@ -1,6 +1,6 @@
 platform "roc-ray"
     requires { Model } { main : Program Model _ }
-    exposes [RocRay]
+    exposes [RocRay, Keys, Mouse]
     packages {}
     imports []
     provides [forHost]

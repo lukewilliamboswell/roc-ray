@@ -518,10 +518,37 @@ unsafe extern "C" fn roc_fx_createRenderTexture(
     }
 
     let (width, height) = size.to_components_c_int();
-    let render_texture = bindings::LoadRenderTexture(width, height);
+
+    // [src/main.rs:521:5] width = 400
+    // [src/main.rs:521:5] height = 300
+    dbg!(width, height);
+
+    let render_texture: bindings::RenderTexture = bindings::LoadRenderTexture(width, height);
+
+    // [src/main.rs:524:5] &render_texture = RenderTexture {
+    //     id: 1,
+    //     texture: Texture {
+    //         id: 3,
+    //         width: 400,
+    //         height: 300,
+    //         mipmaps: 1,
+    //         format: 7,
+    //     },
+    //     depth: Texture {
+    //         id: 1,
+    //         width: 400,
+    //         height: 300,
+    //         mipmaps: 1,
+    //         format: 19,
+    //     },
+    // }
+    dbg!(&render_texture);
 
     let heap = roc::render_texture_heap();
 
+    // WHY IS THIS FAILING??
+    // roc-ray(54393,0x2015c0f40) malloc: *** error for object 0x10ba68000: pointer being freed was not allocated
+    // roc-ray(54393,0x2015c0f40) malloc: *** set a breakpoint in malloc_error_break to debug
     let alloc_result = heap.alloc_for(render_texture);
     match alloc_result {
         Ok(roc_box) => RocResult::ok(roc_box),
@@ -647,8 +674,8 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
 #[allow(unused_variables)]
 #[no_mangle]
 extern "C" fn roc_fx_beginTexture(
-    clear_color: glue::RocColor,
     boxed_render_texture: RocBox<()>,
+    clear_color: glue::RocColor,
 ) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::BeginDrawingTexture) {
         let mode = platform_mode_str();
@@ -673,7 +700,7 @@ extern "C" fn roc_fx_beginTexture(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_endTexture() -> RocResult<(), ()> {
+extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndDrawingTexture) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -846,14 +873,14 @@ mod test_platform_mode_transitions {
     #[test]
     fn test_begin_texture() {
         set_platform_mode(PlatformMode::None);
-        roc_fx_beginTexture(glue::RocColor::WHITE, RocBox::new(()));
+        roc_fx_beginTexture(RocBox::new(()), glue::RocColor::WHITE);
         assert_eq!(get_platform_mode(), PlatformMode::TextureMode);
     }
 
     #[test]
     fn test_end_texture() {
         set_platform_mode(PlatformMode::TextureMode);
-        roc_fx_endTexture();
+        roc_fx_endTexture(RocBox::new(()));
         assert_eq!(get_platform_mode(), PlatformMode::None);
     }
 

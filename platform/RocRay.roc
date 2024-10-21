@@ -35,6 +35,9 @@ module [
     playSound,
     beginDrawing,
     endDrawing,
+    createRenderTexture,
+    beginTexture,
+    endTexture,
 ]
 
 import Keys
@@ -129,8 +132,15 @@ Color : [
     Purple,
 ]
 
-## A loaded texture resource, used to draw images.
+## A static image loaded into GPU memory, typically from a file. Once loaded, it can be used
+## multiple times for efficient rendering. Cannot be modified after creation - for dynamic
+## textures that can be drawn to, see [RenderTexture] instead.
 Texture : Effect.Texture
+
+## A special texture that can be used as a render target. Allows drawing operations to be
+## performed to it (like a canvas), making it useful for effects, buffering, or off-screen
+## rendering. The result can then be used like a regular texture.
+RenderTexture : Effect.RenderTexture
 
 ## A loaded sound resource, used to play audio.
 Sound : Effect.Sound
@@ -422,3 +432,18 @@ playSound : Sound -> Task {} *
 playSound = \sound ->
     Effect.playSound sound
     |> Task.mapErr \{} -> crash "unreachable Sound.play"
+
+createRenderTexture : { width : F32, height : F32 } -> Task RenderTexture *
+createRenderTexture = \{ width, height } ->
+    Effect.createRenderTexture (InternalVector.fromXY width height)
+    |> Task.mapErr \{} -> crash "unreachable createRenderTexture"
+
+beginTexture : RenderTexture, Color -> Task {} *
+beginTexture = \texture, color ->
+    Effect.beginTexture texture (rgba color)
+    |> Task.mapErr \{} -> crash "unreachable beginTexture"
+
+endTexture : RenderTexture -> Task {} *
+endTexture = \texture ->
+    Effect.endTexture texture
+    |> Task.mapErr \{} -> crash "unreachable endTexture"

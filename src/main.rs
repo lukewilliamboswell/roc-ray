@@ -25,28 +25,69 @@ enum PlatformMode {
 }
 
 enum PlatformEffect {
-    BeginDrawing,
-    EndDrawing,
+    BeginDrawingFramebuffer,
+    EndDrawingFramebuffer,
     BeginMode2D,
     EndMode2D,
     CreateCamera,
+    UpdateCamera,
+    LoadTexture,
+    SetWindowSize,
+    SetWindowTitle,
+    SetTargetFPS,
+    GetScreenSize,
+    LoadSound,
+    DrawCircle,
+    DrawCircleGradient,
+    DrawRectangleGradientV,
+    DrawRectangleGradientH,
+    DrawText,
+    DrawRectangle,
+    DrawLine,
+    DrawTextureRectangle,
 }
 
 impl PlatformMode {
+    #[inline]
+    fn is_draw_mode(&self) -> bool {
+        matches!(
+            self,
+            PlatformMode::FramebufferMode | PlatformMode::FramebufferMode2D
+        )
+    }
+
+    #[inline]
     fn is_effect_permitted(&self, e: PlatformEffect) -> bool {
         use PlatformEffect::*;
         use PlatformMode::*;
 
         // we only need to track the "permitted" effects, everything else is "not permitted"
         match (self, e) {
-            (None, BeginDrawing)
-            | (None, CreateCamera)
+            (None, CreateCamera)
+            | (None, UpdateCamera)
+            | (None, SetWindowSize)
+            | (None, SetWindowTitle)
+            | (None, SetTargetFPS)
+            | (None, GetScreenSize)
+            | (None, LoadSound)
+            | (None, LoadTexture)
+            | (None, BeginDrawingFramebuffer)
             | (FramebufferMode, BeginMode2D)
+            | (FramebufferMode, EndDrawingFramebuffer)
             | (FramebufferMode2D, EndMode2D) => true,
-            (FramebufferMode, EndDrawing) => true,
+            (mode, DrawCircle) if mode.is_draw_mode() => true,
+            (mode, DrawCircleGradient) if mode.is_draw_mode() => true,
+            (mode, DrawRectangleGradientV) if mode.is_draw_mode() => true,
+            (mode, DrawRectangleGradientH) if mode.is_draw_mode() => true,
+            (mode, DrawText) if mode.is_draw_mode() => true,
+            (mode, DrawRectangle) if mode.is_draw_mode() => true,
+            (mode, DrawLine) if mode.is_draw_mode() => true,
+            (mode, DrawTextureRectangle) if mode.is_draw_mode() => true,
             (_, _) => false,
         }
     }
+
+    #[inline]
     fn as_str(&self) -> &'static str {
         use PlatformMode::*;
         match self {
@@ -142,12 +183,22 @@ unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::SetWindowSize) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot set the window size while in {mode}"));
+    }
+
     bindings::SetWindowSize(width, height);
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::SetWindowTitle) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot set the window title while in {mode}"));
+    }
+
     let text = CString::new(text.as_str()).unwrap();
     bindings::SetWindowTitle(text.as_ptr());
 
@@ -160,6 +211,10 @@ unsafe extern "C" fn roc_fx_drawCircle(
     radius: f32,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawCircle) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot draw a circle while in {mode}"));
+    }
     bindings::DrawCircleV(center.into(), radius, color.into());
     RocResult::ok(())
 }
@@ -171,6 +226,13 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
     inner: glue::RocColor,
     outer: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawCircleGradient) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!(
+            "Cannot draw a circle with gradient while in {mode}"
+        ));
+    }
+
     let (x, y) = center.to_components_c_int();
     bindings::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
     RocResult::ok(())
@@ -182,6 +244,13 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientV(
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawRectangleGradientV) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!(
+            "Cannot draw a rectangle with verticle gradient while in {mode}"
+        ));
+    }
+
     let (x, y, w, h) = rect.to_components_c_int();
     bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
     RocResult::ok(())
@@ -193,6 +262,13 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientH(
     top: glue::RocColor,
     bottom: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawRectangleGradientH) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!(
+            "Cannot draw a rectangle with verticle gradient while in {mode}"
+        ));
+    }
+
     let (x, y, w, h) = rect.to_components_c_int();
     bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
     RocResult::ok(())
@@ -205,6 +281,11 @@ unsafe extern "C" fn roc_fx_drawText(
     text: &RocStr,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawText) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot draw text while in {mode}"));
+    }
+
     let text = CString::new(text.as_bytes()).unwrap();
     let (x, y) = pos.to_components_c_int();
     bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
@@ -216,6 +297,11 @@ unsafe extern "C" fn roc_fx_drawRectangle(
     rect: &glue::RocRectangle,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawRectangle) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot draw rectangle while in {mode}"));
+    }
+
     bindings::DrawRectangleRec(rect.into(), color.into());
     RocResult::ok(())
 }
@@ -226,6 +312,11 @@ unsafe extern "C" fn roc_fx_drawLine(
     end: &glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawLine) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot draw line while in {mode}"));
+    }
+
     bindings::DrawLineV(start.into(), end.into(), color.into());
     RocResult::ok(())
 }
@@ -239,6 +330,11 @@ struct ScreenSize {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
+    if !is_effect_permitted(PlatformEffect::GetScreenSize) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot get screen size while in {mode}"));
+    }
+
     let height = bindings::GetScreenHeight();
     let width = bindings::GetScreenWidth();
     RocResult::ok(ScreenSize {
@@ -250,6 +346,7 @@ unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i64, ()> {
+    // permitted in any mode
     let text = CString::new(text.as_str()).unwrap();
     let width = bindings::MeasureText(text.as_ptr(), size as c_int);
     RocResult::ok(width as i64)
@@ -257,12 +354,17 @@ unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::SetTargetFPS) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot set target FPS while in {mode}"));
+    }
     bindings::SetTargetFPS(rate as c_int);
     RocResult::ok(())
 }
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
+    // permitted in any mode
     let path = CString::new(path.as_str()).unwrap();
     bindings::TakeScreenshot(path.as_ptr());
     RocResult::ok(())
@@ -270,6 +372,7 @@ unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+    // permitted in any mode
     if show {
         DRAW_FPS.set(Some((pos_x, pos_y)));
     } else {
@@ -316,6 +419,11 @@ unsafe extern "C" fn roc_fx_updateCamera(
     rotation: f32,
     zoom: f32,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::UpdateCamera) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot update camera while in {mode}"));
+    }
+
     let camera: &mut bindings::Camera2D =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
@@ -329,7 +437,7 @@ unsafe extern "C" fn roc_fx_updateCamera(
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
-    if !is_effect_permitted(PlatformEffect::BeginDrawing) {
+    if !is_effect_permitted(PlatformEffect::BeginDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot begin drawing while in {mode}"));
     }
@@ -344,7 +452,7 @@ unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResu
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
-    if !is_effect_permitted(PlatformEffect::EndDrawing) {
+    if !is_effect_permitted(PlatformEffect::EndDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot end drawing while in {mode}"));
     }
@@ -425,6 +533,11 @@ unsafe fn get_keys_states() -> RocList<u8> {
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    if !is_effect_permitted(PlatformEffect::LoadSound) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot load a sound while in {mode}"));
+    }
+
     let path = CString::new(path.as_str()).unwrap();
 
     let sound = bindings::LoadSound(path.as_ptr());
@@ -441,6 +554,7 @@ unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, Ro
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
+    // permitted in any mode
     let sound: &mut bindings::Sound =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
 
@@ -451,6 +565,11 @@ unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), 
 
 #[no_mangle]
 unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    if !is_effect_permitted(PlatformEffect::LoadTexture) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot load a texture while in {mode}"));
+    }
+
     // should have a valid utf8 string from roc, no need to check for null bytes
     let file_path = CString::new(file_path.as_str()).unwrap();
     let texture: bindings::Texture = bindings::LoadTexture(file_path.as_ptr());
@@ -472,6 +591,11 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     position: &glue::RocVector2,
     color: glue::RocColor,
 ) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawTextureRectangle) {
+        let mode = platform_mode_str();
+        exit_with_msg(format!("Cannot draw a texture rectangle while in {mode}"));
+    }
+
     let texture: &mut bindings::Texture =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 

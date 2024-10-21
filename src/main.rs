@@ -31,7 +31,7 @@ enum ExitErrCode {
 ///
 /// if this is expensive for performance, we can only include this in dev builds and remove
 /// it in release builds
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum PlatformMode {
     None,
     TextureMode,
@@ -161,6 +161,7 @@ fn update_platform_mode_draw_2d() {
         } else if mode.is_texture_mode() {
             *mode = TextureModeDraw2D;
         } else {
+            // TODO HANDLE GOING THE OTHER WAY TOO
             panic!("unreachable, invalid mode should have been caught by is_effect_permitted")
         }
     });
@@ -553,8 +554,9 @@ unsafe extern "C" fn roc_fx_updateCamera(
     RocResult::ok(())
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
-unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
+extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::BeginDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -565,14 +567,17 @@ unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResu
 
     update_platform_mode(PlatformMode::FramebufferMode);
 
-    bindings::BeginDrawing();
-    bindings::ClearBackground(clear_color.into());
+    #[cfg(not(test))]
+    unsafe {
+        bindings::BeginDrawing();
+        bindings::ClearBackground(clear_color.into());
+    }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
+extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -583,13 +588,17 @@ unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
 
     update_platform_mode(PlatformMode::None);
 
-    bindings::EndMode2D();
+    #[cfg(not(test))]
+    unsafe {
+        bindings::EndMode2D();
+    }
 
     RocResult::ok(())
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
-unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::BeginMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -600,16 +609,19 @@ unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(
 
     update_platform_mode_draw_2d();
 
-    let camera: &mut bindings::Camera2D =
-        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
+    #[cfg(not(test))]
+    unsafe {
+        let camera: &mut bindings::Camera2D =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    bindings::BeginMode2D(*camera);
+        bindings::BeginMode2D(*camera);
+    }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -618,15 +630,19 @@ unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<()
         );
     }
 
-    update_platform_mode(PlatformMode::FramebufferMode);
+    update_platform_mode_draw_2d();
 
-    bindings::EndMode2D();
+    #[cfg(not(test))]
+    unsafe {
+        bindings::EndMode2D();
+    }
 
     RocResult::ok(())
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
-unsafe extern "C" fn roc_fx_beginTexture(
+extern "C" fn roc_fx_beginTexture(
     clear_color: glue::RocColor,
     boxed_render_texture: RocBox<()>,
 ) -> RocResult<(), ()> {
@@ -640,17 +656,20 @@ unsafe extern "C" fn roc_fx_beginTexture(
 
     update_platform_mode(PlatformMode::TextureMode);
 
-    let render_texture: &mut bindings::RenderTexture =
-        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
+    #[cfg(not(test))]
+    unsafe {
+        let render_texture: &mut bindings::RenderTexture =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
 
-    bindings::BeginTextureMode(*render_texture);
-    bindings::ClearBackground(clear_color.into());
+        bindings::BeginTextureMode(*render_texture);
+        bindings::ClearBackground(clear_color.into());
+    }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_endTexture() -> RocResult<(), ()> {
+extern "C" fn roc_fx_endTexture() -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndDrawingTexture) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -661,7 +680,10 @@ unsafe extern "C" fn roc_fx_endTexture() -> RocResult<(), ()> {
 
     update_platform_mode(PlatformMode::None);
 
-    bindings::EndMode2D();
+    #[cfg(not(test))]
+    unsafe {
+        bindings::EndMode2D();
+    }
 
     RocResult::ok(())
 }
@@ -784,4 +806,78 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
 
     RocResult::ok(())
+}
+
+#[cfg(test)]
+mod test_platform_mode_transitions {
+    use super::*;
+
+    fn set_platform_mode(mode: PlatformMode) {
+        PLATFORM_MODE.with(|m| *m.borrow_mut() = mode);
+    }
+
+    fn get_platform_mode() -> PlatformMode {
+        PLATFORM_MODE.with(|m| m.borrow().clone())
+    }
+
+    #[test]
+    fn test_initial_mode() {
+        assert_eq!(get_platform_mode(), PlatformMode::None);
+    }
+
+    #[test]
+    fn test_begin_drawing_framebuffer() {
+        set_platform_mode(PlatformMode::None);
+        roc_fx_beginDrawing(glue::RocColor::WHITE);
+        assert_eq!(get_platform_mode(), PlatformMode::FramebufferMode);
+    }
+
+    #[test]
+    fn test_end_drawing_framebuffer() {
+        set_platform_mode(PlatformMode::FramebufferMode);
+        roc_fx_endDrawing();
+        assert_eq!(get_platform_mode(), PlatformMode::None);
+    }
+
+    #[test]
+    fn test_begin_texture() {
+        set_platform_mode(PlatformMode::None);
+        roc_fx_beginTexture(glue::RocColor::WHITE, RocBox::new(()));
+        assert_eq!(get_platform_mode(), PlatformMode::TextureMode);
+    }
+
+    #[test]
+    fn test_end_texture() {
+        set_platform_mode(PlatformMode::TextureMode);
+        roc_fx_endTexture();
+        assert_eq!(get_platform_mode(), PlatformMode::None);
+    }
+
+    #[test]
+    fn test_begin_mode_2d_from_framebuffer() {
+        set_platform_mode(PlatformMode::FramebufferMode);
+        roc_fx_beginMode2D(RocBox::new(()));
+        assert_eq!(get_platform_mode(), PlatformMode::FramebufferModeDraw2D);
+    }
+
+    #[test]
+    fn test_end_mode_2d_to_framebuffer() {
+        set_platform_mode(PlatformMode::FramebufferModeDraw2D);
+        roc_fx_endMode2D(RocBox::new(()));
+        assert_eq!(get_platform_mode(), PlatformMode::FramebufferMode);
+    }
+
+    #[test]
+    fn test_begin_mode_2d_from_texture() {
+        set_platform_mode(PlatformMode::TextureMode);
+        roc_fx_beginMode2D(RocBox::new(()));
+        assert_eq!(get_platform_mode(), PlatformMode::TextureModeDraw2D);
+    }
+
+    #[test]
+    fn test_end_mode_2d_to_texture() {
+        set_platform_mode(PlatformMode::TextureModeDraw2D);
+        roc_fx_endMode2D(RocBox::new(()));
+        assert_eq!(get_platform_mode(), PlatformMode::TextureMode);
+    }
 }

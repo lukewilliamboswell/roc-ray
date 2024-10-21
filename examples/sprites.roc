@@ -1,7 +1,7 @@
-app [main, Model] { ray: platform "../platform/main.roc" }
+app [main, Model] { rr: platform "../platform/main.roc" }
 
-import ray.RocRay exposing [PlatformState, Texture, Rectangle]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Texture, Rectangle]
+import rr.Keys
 
 width = 800
 height = 600
@@ -16,6 +16,7 @@ Model : {
 main : RocRay.Program Model _
 main = { init, render }
 
+init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
@@ -35,7 +36,7 @@ init =
         },
     }
 
-render : Model, PlatformState -> Task Model _
+render : Model, PlatformState -> Task Model []
 render = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White

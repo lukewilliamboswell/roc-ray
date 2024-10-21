@@ -2,6 +2,7 @@ hosted Effect
     exposes [
         Texture,
         Sound,
+        Camera,
         setWindowSize,
         getScreenSize,
         exit,
@@ -73,18 +74,20 @@ setDrawFPS : Bool, I32, I32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 
-createCamera : RocVector2, RocVector2, F32, F32 -> Task U64 {}
-updateCamera : U64, RocVector2, RocVector2, F32, F32 -> Task {} {}
-
 beginDrawing : RocColor -> Task {} {}
 endDrawing : Task {} {}
-beginMode2D : U64 -> Task {} {}
-endMode2D : U64 -> Task {} {}
+
+Camera := Box {}
+createCamera : RocVector2, RocVector2, F32, F32 -> Task Camera {}
+updateCamera : Camera, RocVector2, RocVector2, F32, F32 -> Task {} {}
+
+beginMode2D : Camera -> Task {} {}
+endMode2D : Camera -> Task {} {}
 
 Texture := Box {}
-loadTexture : Str -> Task Texture Str
+loadTexture : Str -> Task Texture {}
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
 
 Sound := Box {}
-loadSound : Str -> Task Sound Str
+loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}

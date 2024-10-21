@@ -1,6 +1,6 @@
-app [main, Model] { ray: platform "../platform/main.roc" }
+app [main, Model] { rr: platform "../platform/main.roc" }
 
-import ray.RocRay
+import rr.RocRay exposing [PlatformState]
 
 width = 800
 height = 600
@@ -10,6 +10,7 @@ Model : {}
 main : RocRay.Program Model []
 main = { init, render }
 
+init : Task Model []
 init =
 
     RocRay.setWindowSize! { width, height }
@@ -17,6 +18,7 @@ init =
 
     Task.ok {}
 
+render : Model, PlatformState -> Task Model []
 render = \_, _ ->
 
     RocRay.beginDrawing! White

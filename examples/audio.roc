@@ -1,12 +1,13 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
-import ray.RocRay exposing [Sound]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Sound]
+import rr.Keys
 
+main : RocRay.Program Model []
 main = { init, render }
 
 Model : {
@@ -14,23 +15,19 @@ Model : {
     ogg : Sound,
 }
 
+init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width: 800, height: 450 }
     RocRay.setWindowTitle! "Making Sounds"
 
-    wav =
-        RocRay.loadSound "resources/sound.wav"
-            |> Task.mapErr! \LoadSoundErr msg -> crash msg
-
-    ogg =
-        RocRay.loadSound "resources/target.ogg"
-            |> Task.mapErr! \LoadSoundErr msg -> crash msg
+    wav = RocRay.loadSound! "resources/sound.wav"
+    ogg = RocRay.loadSound! "resources/target.ogg"
 
     Task.ok { wav, ogg }
 
-render : Model, RocRay.PlatformState -> Task Model []
+render : Model, PlatformState -> Task Model []
 render = \model, { keys } ->
 
     RocRay.beginDrawing! White

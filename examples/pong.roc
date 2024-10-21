@@ -1,10 +1,11 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Vector2, PlatformState]
-import ray.RocRay.Mouse as Mouse
+import rr.RocRay exposing [Vector2, PlatformState]
+import rr.Mouse
 
+main : RocRay.Program Model []
 main = { init, render }
 
 Ball : { pos : Vector2, vel : Vector2 }

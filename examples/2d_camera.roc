@@ -1,13 +1,14 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import ray.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
+import rr.Keys
 import rand.Random
 
+main : RocRay.Program Model []
 main = { init, render }
 
 screenWidth = 800
@@ -22,7 +23,7 @@ Model : {
         rotation : F32,
         zoom : F32,
     },
-    cameraID : Camera,
+    camera : Camera,
 }
 
 init : Task Model []
@@ -42,14 +43,14 @@ init =
         zoom: 1,
     }
 
-    cameraID = RocRay.createCamera! cameraSettings
+    camera = RocRay.createCamera! cameraSettings
 
     buildings = generateBuildings
 
     Task.ok {
         player,
         buildings,
-        cameraID,
+        camera,
         cameraSettings,
     }
 
@@ -80,7 +81,7 @@ render = \model, { mouse, keys } ->
         |> &rotation rotation
         |> &zoom zoom
 
-    RocRay.updateCamera! model.cameraID cameraSettings
+    RocRay.updateCamera! model.camera cameraSettings
 
     # UPDATE PLAYER
     player =
@@ -95,7 +96,9 @@ render = \model, { mouse, keys } ->
     RocRay.beginDrawing! White
 
     # RENDER WORLD
-    RocRay.drawMode2D! model.cameraID (drawWorld model)
+    RocRay.beginMode2D! model.camera
+    drawWorld! model
+    RocRay.endMode2D! model.camera
 
     # RENDER SCREEN UI
     drawScreenUI!

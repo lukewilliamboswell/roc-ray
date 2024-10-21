@@ -1,14 +1,9 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Rectangle, PlatformState]
-import ray.RocRay.Keys as Keys
-
-Program : {
-    init : Task Model {},
-    render : Model, PlatformState -> Task Model {},
-}
+import rr.RocRay exposing [PlatformState, Rectangle]
+import rr.Keys
 
 Model : {
     squares : List Rectangle,
@@ -19,10 +14,10 @@ Model : {
 width = 900
 height = 400
 
-main : Program
+main : RocRay.Program Model []
 main = { init, render }
 
-init : Task Model {}
+init : Task Model []
 init =
 
     RocRay.setWindowSize! { width, height }
@@ -34,7 +29,7 @@ init =
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model {}
+render : Model, PlatformState -> Task Model []
 render = \model, { keys, mouse } ->
 
     RocRay.beginDrawing! Black

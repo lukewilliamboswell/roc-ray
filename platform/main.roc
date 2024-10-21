@@ -1,13 +1,13 @@
 platform "roc-ray"
     requires { Model } { main : Program Model _ }
-    exposes [RocRay]
+    exposes [RocRay, Keys, Mouse]
     packages {}
     imports []
     provides [forHost]
 
 import RocRay exposing [Program]
-import RocRay.Mouse as Mouse
-import RocRay.Keys as Keys
+import Mouse
+import Keys
 import InternalKeyboard
 import InternalMouse
 import Effect

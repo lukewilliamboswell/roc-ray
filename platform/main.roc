@@ -6,8 +6,8 @@ platform "roc-ray"
     provides [forHost]
 
 import RocRay exposing [Program]
-import RocRay.Mouse as Mouse
-import RocRay.Keys as Keys
+import Mouse
+import Keys
 import InternalKeyboard
 import InternalMouse
 import Effect

@@ -1,7 +1,7 @@
-app [main, Model] { ray: platform "../platform/main.roc" }
+app [main, Model] { rr: platform "../platform/main.roc" }
 
-import ray.RocRay exposing [PlatformState, Texture, Rectangle]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Texture, Rectangle]
+import rr.Keys
 
 width = 800
 height = 600

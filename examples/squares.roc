@@ -1,9 +1,9 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [PlatformState, Rectangle]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Rectangle]
+import rr.Keys
 
 Model : {
     squares : List Rectangle,

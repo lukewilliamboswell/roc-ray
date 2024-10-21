@@ -1,11 +1,11 @@
 app [main, Model] {
-    ray: platform "../platform/main.roc",
+    rr: platform "../platform/main.roc",
 }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
-import ray.RocRay exposing [PlatformState, Sound]
-import ray.RocRay.Keys as Keys
+import rr.RocRay exposing [PlatformState, Sound]
+import rr.Keys
 
 main : RocRay.Program Model []
 main = { init, render }

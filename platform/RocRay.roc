@@ -36,8 +36,8 @@ module [
     endDrawing,
 ]
 
-import RocRay.Keys as Keys
-import RocRay.Mouse as Mouse
+import Keys
+import Mouse
 import Effect
 import InternalKeyboard
 import InternalColor

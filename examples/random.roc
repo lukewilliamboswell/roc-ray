@@ -42,6 +42,8 @@ init =
 render : Model, PlatformState -> Task Model {}
 render = \model, { keys, timestampMillis } ->
 
+    RocRay.beginDrawing! Black
+
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
     RocRay.drawText! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
@@ -53,6 +55,8 @@ render = \model, { keys, timestampMillis } ->
     Task.forEach! lines RocRay.drawRectangle
 
     RocRay.drawText! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
+
+    RocRay.endDrawing!
 
     if Keys.down keys KeyUp then
         Task.ok { model & seed, number: Num.addSaturated model.number 10 }

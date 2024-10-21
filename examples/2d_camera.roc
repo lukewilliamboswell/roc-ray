@@ -56,12 +56,7 @@ init =
 render : Model, PlatformState -> Task Model []
 render = \model, { mouse, keys } ->
 
-    # RENDER WORLD
-    RocRay.drawMode2D! model.cameraID (drawWorld model)
-
-    # RENDER SCREEN UI
-    drawScreenUI!
-
+    # UPDATE CAMERA
     rotation =
         (
             if Keys.down keys KeyA then
@@ -87,6 +82,7 @@ render = \model, { mouse, keys } ->
 
     RocRay.updateCamera! model.cameraID cameraSettings
 
+    # UPDATE PLAYER
     player =
         if Keys.down keys KeyLeft then
             { x: model.player.x - 10, y: model.player.y }
@@ -94,6 +90,17 @@ render = \model, { mouse, keys } ->
             { x: model.player.x + 10, y: model.player.y }
         else
             model.player
+
+    # RENDER FRAMEBUFFER
+    RocRay.beginDrawing! White
+
+    # RENDER WORLD
+    RocRay.drawMode2D! model.cameraID (drawWorld model)
+
+    # RENDER SCREEN UI
+    drawScreenUI!
+
+    RocRay.endDrawing!
 
     Task.ok { model & cameraSettings, player }
 

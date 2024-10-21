@@ -21,7 +21,6 @@ init =
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Animated Sprite Example"
-    RocRay.setBackgroundColor! White
 
     dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
 
@@ -39,6 +38,8 @@ init =
 render : Model, PlatformState -> Task Model _
 render = \model, { timestampMillis, keys } ->
 
+    RocRay.beginDrawing! White
+
     dudeAnimation = updateAnimation model.dudeAnimation timestampMillis
 
     RocRay.drawText! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
@@ -50,6 +51,8 @@ render = \model, { timestampMillis, keys } ->
         pos: model.player,
         tint: White,
     }
+
+    RocRay.endDrawing!
 
     (player, direction) =
         if Keys.down keys KeyUp then

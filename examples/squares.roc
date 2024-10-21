@@ -11,12 +11,13 @@ Program : {
 }
 
 Model : {
-    width : F32,
-    height : F32,
     squares : List Rectangle,
     status : [Ready, AfterClick RocRay.Vector2],
     circlePos : RocRay.Vector2,
 }
+
+width = 900
+height = 400
 
 main : Program
 main = { init, render }
@@ -24,15 +25,10 @@ main = { init, render }
 init : Task Model {}
 init =
 
-    width = 900f32
-    height = 400f32
-
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Squares Demo"
 
     Task.ok {
-        width,
-        height,
         circlePos: { x: width / 2, y: height / 2 },
         squares: [],
         status: Ready,
@@ -41,23 +37,27 @@ init =
 render : Model, PlatformState -> Task Model {}
 render = \model, { keys, mouse } ->
 
-    RocRay.drawText! { pos: { x: model.width - 400, y: model.height - 25 }, text: "Click on the screen ...", size: 20, color: White }
+    RocRay.beginDrawing! Black
+
+    RocRay.drawText! { pos: { x: width - 400, y: height - 25 }, text: "Click on the screen ...", size: 20, color: White }
 
     mousePos = mouse.position
 
     RocRay.drawText! {
         pos: {
             x: 10,
-            y: model.height - 25,
+            y: height - 25,
         },
-        text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y), $(Inspect.toStr keys), $(Inspect.toStr mouse.buttons)",
+        text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y)",
         size: 20,
         color: White,
     }
 
     RocRay.drawRectangle! { rect: { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20 }, color: Red }
 
-    RocRay.drawRectangle! { rect: { x: model.circlePos.x, y: model.circlePos.y, width: 50, height: 50 }, color: Aqua }
+    RocRay.drawCircle! { center: model.circlePos, radius: 50, color: Aqua }
+
+    RocRay.endDrawing!
 
     newCirclePos =
         if Keys.down keys KeyUp then

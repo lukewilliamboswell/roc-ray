@@ -2,9 +2,8 @@ app [main, Model] {
     ray: platform "../platform/main.roc",
 }
 
-import ray.RocRay exposing [Vector2]
+import ray.RocRay exposing [Vector2, PlatformState]
 import ray.RocRay.Mouse as Mouse
-import ray.RocRay.Keys as Keys
 
 main = { init, render }
 
@@ -31,7 +30,6 @@ init : Task Model []
 init =
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setBackgroundColor! Navy
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Pong"
 
@@ -67,57 +65,66 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { frameCount, keys, mouse } ->
-
-    screenTask =
-        if Keys.down keys KeyLeftControl && Keys.down keys KeyK then
-            RocRay.takeScreenshot "saved-$(Num.toStr frameCount).png"
-        else
-            Task.ok {}
+render : Model, PlatformState -> Task Model []
+render = \model, state ->
 
     if !model.playing then
-        RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
+        # DRAW START MENU
+        drawGameStartMenu! model
 
-        maxScore = model.maxScore |> Num.toStr
-
-        RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
-
-        score = model.score |> Num.toStr
-
-        RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
-
-        RocRay.drawText! { pos: { x: 50, y: 150 }, text: "Ctrl-K to Screenshot to 'saved.png'", size: 20, color: White }
-
-        screenTask!
-
-        if Mouse.pressed mouse.buttons.left then
+        if Mouse.pressed state.mouse.buttons.left then
             Task.ok { model & playing: Bool.true, score: 0 }
         else
             Task.ok model
     else
         # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
-        RocRay.setTargetFPS! (60 + ((Num.toFrac frameCount) / 60 |> Num.floor |> Num.toI32))
+        RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
 
-        score = model.score |> Num.toStr
-
-        RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
-
-        newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
-
-        RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
-        RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
-
-        drawCrossHair! mouse.position
+        # DRAW GAME
+        drawGamePlaying! model state
 
         ball = bounce (moveBall model.ball) model.pos
-
-        screenTask!
+        newY = model.pos + (Num.toF32 state.mouse.position.y - model.pos) / 5
 
         if ball.pos.x <= 0 then
             Task.ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
         else
             Task.ok { model & pos: newY, ball: ball, score: model.score + 1 }
+
+drawGameStartMenu : Model -> Task {} _
+drawGameStartMenu = \model ->
+
+    RocRay.beginDrawing! Navy
+
+    RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
+
+    maxScore = model.maxScore |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
+
+    score = model.score |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
+
+    RocRay.endDrawing!
+
+drawGamePlaying : Model, PlatformState -> Task {} _
+drawGamePlaying = \model, { mouse } ->
+
+    RocRay.beginDrawing! Navy
+
+    score = model.score |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
+
+    newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
+
+    RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
+    RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
+
+    drawCrossHair! mouse.position
+
+    RocRay.endDrawing!
 
 drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->

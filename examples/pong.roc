@@ -5,6 +5,7 @@ app [main, Model] {
 import ray.RocRay exposing [Vector2, PlatformState]
 import ray.RocRay.Mouse as Mouse
 
+main : RocRay.Program Model []
 main = { init, render }
 
 Ball : { pos : Vector2, vel : Vector2 }

@@ -82,9 +82,9 @@ beginMode2D : U64 -> Task {} {}
 endMode2D : U64 -> Task {} {}
 
 Texture := Box {}
-loadTexture : Str -> Task Texture Str
+loadTexture : Str -> Task Texture {}
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
 
 Sound := Box {}
-loadSound : Str -> Task Sound Str
+loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}

@@ -4,9 +4,10 @@ app [main, Model] {
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
-import ray.RocRay exposing [Sound]
+import ray.RocRay exposing [PlatformState, Sound]
 import ray.RocRay.Keys as Keys
 
+main : RocRay.Program Model []
 main = { init, render }
 
 Model : {
@@ -14,6 +15,7 @@ Model : {
     ogg : Sound,
 }
 
+init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
@@ -30,7 +32,7 @@ init =
 
     Task.ok { wav, ogg }
 
-render : Model, RocRay.PlatformState -> Task Model []
+render : Model, PlatformState -> Task Model []
 render = \model, { keys } ->
 
     RocRay.beginDrawing! White

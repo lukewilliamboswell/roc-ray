@@ -8,6 +8,7 @@ import ray.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
 import ray.RocRay.Keys as Keys
 import rand.Random
 
+main : RocRay.Program Model []
 main = { init, render }
 
 screenWidth = 800

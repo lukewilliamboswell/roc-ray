@@ -52,8 +52,8 @@ import InternalRectangle
 ## }
 ## ```
 Program state err : {
-    init : Task state err,
-    render : state, PlatformState -> Task state err,
+    init : Task state []err,
+    render : state, PlatformState -> Task state []err,
 } where err implements Inspect
 
 PlatformState : {
@@ -298,10 +298,10 @@ drawMode2D = \@Camera camera, drawTask ->
 ## ```
 ## texture = Raylib.loadTexture! "sprites.png"
 ## ```
-loadTexture : Str -> Task Texture [TextureLoadErr Str]_
+loadTexture : Str -> Task Texture *
 loadTexture = \filename ->
     Effect.loadTexture filename
-    |> Task.mapErr \msg -> TextureLoadErr msg
+    |> Task.mapErr \{} -> crash "unreachable loadTexture"
 
 ## Draw part of a texture.
 ## ```
@@ -312,10 +312,10 @@ drawTextureRec = \{ texture, source, pos, tint } ->
     Effect.drawTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
     |> Task.mapErr \{} -> crash "unreachable drawTextureRec"
 
-loadSound : Str -> Task Sound [LoadSoundErr Str]
+loadSound : Str -> Task Sound *
 loadSound = \path ->
     Effect.loadSound path
-    |> Task.mapErr \err -> LoadSoundErr err
+    |> Task.mapErr \{} -> crash "unreachable Sound.load"
 
 playSound : Sound -> Task {} *
 playSound = \sound ->

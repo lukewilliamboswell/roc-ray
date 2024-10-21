@@ -9,6 +9,7 @@ import ray.RocRay.Keys as Keys
 import rand.Random
 import time.DateTime
 
+main : RocRay.Program Model []
 main = { init, render }
 
 Model : {
@@ -18,7 +19,7 @@ Model : {
     number : U64,
 }
 
-init : Task Model {}
+init : Task Model []
 init =
 
     width = 800f32
@@ -39,7 +40,7 @@ init =
         height,
     }
 
-render : Model, PlatformState -> Task Model {}
+render : Model, PlatformState -> Task Model []
 render = \model, { keys, timestampMillis } ->
 
     RocRay.beginDrawing! Black

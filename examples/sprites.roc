@@ -16,6 +16,7 @@ Model : {
 main : RocRay.Program Model _
 main = { init, render }
 
+init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
@@ -35,7 +36,7 @@ init =
         },
     }
 
-render : Model, PlatformState -> Task Model _
+render : Model, PlatformState -> Task Model []
 render = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White

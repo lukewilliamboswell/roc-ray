@@ -16,6 +16,7 @@ thread_local! {
 }
 
 /// use different error codes when the app exits
+#[derive(Debug)]
 enum ExitErrCode {
     ExitEffectNotPermitted = 1,
     ExitHeapFull = 2,
@@ -80,14 +81,8 @@ impl PlatformMode {
         )
     }
 
-    fn is_framebuffer_mode(&self) -> bool {
-        use PlatformMode::*;
-        matches!(self, FramebufferMode)
-    }
-
-    fn is_texture_mode(&self) -> bool {
-        use PlatformMode::*;
-        matches!(self, TextureMode)
+    fn matches(&self, other: PlatformMode) -> bool {
+        *self == other
     }
 
     #[inline]
@@ -156,10 +151,14 @@ fn update_platform_mode_draw_2d() {
     PLATFORM_MODE.with(|m| {
         use PlatformMode::*;
         let mut mode = m.borrow_mut();
-        if mode.is_framebuffer_mode() {
+        if mode.matches(FramebufferMode) {
             *mode = FramebufferModeDraw2D;
-        } else if mode.is_texture_mode() {
+        } else if mode.matches(FramebufferModeDraw2D) {
+            *mode = FramebufferMode;
+        } else if mode.matches(TextureMode) {
             *mode = TextureModeDraw2D;
+        } else if mode.matches(TextureModeDraw2D) {
+            *mode = TextureMode;
         } else {
             // TODO HANDLE GOING THE OTHER WAY TOO
             panic!("unreachable, invalid mode should have been caught by is_effect_permitted")
@@ -240,8 +239,9 @@ unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
     RocResult::ok(())
 }
 
+#[allow(unused_variables)]
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::SetWindowSize) {
         let mode = platform_mode_str();
         exit_with_msg(
@@ -250,7 +250,11 @@ unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<
         );
     }
 
-    bindings::SetWindowSize(width, height);
+    #[cfg(not(test))]
+    unsafe {
+        bindings::SetWindowSize(width, height);
+    }
+
     RocResult::ok(())
 }
 
@@ -602,7 +606,7 @@ extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> 
     if !is_effect_permitted(PlatformEffect::BeginMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(
-            format!("Cannot being drawing in 2D while in {mode}"),
+            format!("Cannot begin drawing in 2D while in {mode}"),
             ExitErrCode::ExitEffectNotPermitted,
         );
     }
@@ -625,7 +629,7 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
     if !is_effect_permitted(PlatformEffect::EndMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(
-            format!("Cannot being drawing in 2D while in {mode}"),
+            format!("Cannot begin drawing in 2D while in {mode}"),
             ExitErrCode::ExitEffectNotPermitted,
         );
     }

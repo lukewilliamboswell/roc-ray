@@ -181,57 +181,20 @@ impl roc_std::RocRefcounted for PlatformState {
 
 pub fn call_roc_init() -> Model {
     extern "C" {
-        #[link_name = "roc__forHost_1_exposed_generic"]
-        fn load_init_captures(init_captures: *mut u8);
+        #[link_name = "roc__init_1_exposed_size"]
+        fn init_size() -> usize;
 
-        #[link_name = "roc__forHost_1_exposed_size"]
-        fn exposed_size() -> usize;
-
-        #[link_name = "roc__forHost_0_caller"]
-        fn init_caller(
-            inputs: *const u8,
-            init_captures: *const u8,
-            model: *mut RocResult<RocBox<()>, ()>,
-        );
-
-        #[link_name = "roc__forHost_0_size"]
-        fn init_captures_size() -> usize;
-
-        #[link_name = "roc__forHost_1_size"]
-        fn respond_captures_size() -> usize;
-
-        #[link_name = "roc__forHost_0_result_size"]
-        fn init_result_size() -> usize;
+        #[allow(improper_ctypes)]
+        #[link_name = "roc__init_1_exposed_generic"]
+        fn init_caller(model: *mut RocResult<RocBox<()>, ()>, void_arg: ());
     }
 
     unsafe {
-        let respond_captures_size = respond_captures_size();
-        if respond_captures_size != 0 {
-            panic!("This platform does not allow for the respond function to have captures, but respond has {} bytes of captures. Ensure respond is a top level function and not a lambda.", respond_captures_size);
-        }
-        // allocate memory for captures
-        let captures_size = init_captures_size();
-        let captures_layout = Layout::array::<u8>(captures_size).unwrap();
-        let captures_ptr = std::alloc::alloc(captures_layout);
-
-        // initialise roc
-        debug_assert_eq!(captures_size, exposed_size());
-        load_init_captures(captures_ptr);
-
         // save stack space for return value
         let mut result: RocResult<RocBox<()>, ()> = RocResult::err(());
-        debug_assert_eq!(std::mem::size_of_val(&result), init_result_size());
+        debug_assert_eq!(std::mem::size_of_val(&result), init_size());
 
-        // call init to get the model RocBox<()>
-        init_caller(
-            // This inputs pointer will never get dereferenced
-            MaybeUninit::uninit().as_ptr(),
-            captures_ptr,
-            &mut result,
-        );
-
-        // deallocate captures
-        std::alloc::dealloc(captures_ptr, captures_layout);
+        init_caller(&mut result, ());
 
         match result.into() {
             Err(()) => {
@@ -244,61 +207,27 @@ pub fn call_roc_init() -> Model {
 
 pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
     extern "C" {
-        #[link_name = "roc__forHost_1_caller"]
-        fn render_fn_caller(
-            model: *const RocBox<()>,
-            inputs: *const ManuallyDrop<PlatformState>,
-            captures: *const u8,
-            output: *mut u8,
+        #[link_name = "roc__render_1_exposed_size"]
+        fn render_size() -> usize;
+
+        #[link_name = "roc__render_1_exposed_generic"]
+        fn render_caller(
+            model_out: *mut RocResult<RocBox<()>, ()>,
+            model_in: *const RocBox<()>,
+            platform_state: *const ManuallyDrop<PlatformState>,
         );
-
-        #[link_name = "roc__forHost_1_result_size"]
-        fn render_fn_result_size() -> usize;
-
-        #[link_name = "roc__forHost_2_caller"]
-        fn render_task_caller(
-            inputs: *const u8,
-            captures: *const u8,
-            model: *mut RocResult<RocBox<()>, ()>,
-        );
-
-        #[link_name = "roc__forHost_2_size"]
-        fn render_task_size() -> usize;
-
-        #[link_name = "roc__forHost_2_result_size"]
-        fn render_task_result_size() -> usize;
     }
 
     unsafe {
-        // allocated memory for return value
-        let intermediate_result_size = render_fn_result_size();
-        let intermediate_result_layout = Layout::array::<u8>(intermediate_result_size).unwrap();
-        let intermediate_result_ptr = std::alloc::alloc(intermediate_result_layout);
-
-        // call the respond function to get the Task
-        debug_assert_eq!(intermediate_result_size, render_task_size());
-        render_fn_caller(
-            &model.model,
-            &ManuallyDrop::new(platform_state),
-            // In init, we ensured that respond never has captures.
-            MaybeUninit::uninit().as_ptr(),
-            intermediate_result_ptr,
-        );
-
         // save stack space for return value
         let mut result: RocResult<RocBox<()>, ()> = RocResult::err(());
-        debug_assert_eq!(std::mem::size_of_val(&result), render_task_result_size());
+        debug_assert_eq!(std::mem::size_of_val(&result), render_size());
 
-        // call the Task
-        render_task_caller(
-            // This inputs pointer will never get dereferenced
-            MaybeUninit::uninit().as_ptr(),
-            intermediate_result_ptr,
+        render_caller(
             &mut result,
+            &model.model,
+            &ManuallyDrop::new(platform_state),
         );
-
-        // deallocate captures
-        std::alloc::dealloc(intermediate_result_ptr, intermediate_result_layout);
 
         match result.into() {
             Err(()) => {

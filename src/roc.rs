@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 use roc_std::{RocBox, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
-use std::alloc::Layout;
-use std::mem::{ManuallyDrop, MaybeUninit};
+use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
@@ -231,7 +230,7 @@ pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
 
         match result.into() {
             Err(()) => {
-                panic!("roc returned an error from init");
+                panic!("roc returned an error from render");
             }
             Ok(model) => Model::init(model),
         }

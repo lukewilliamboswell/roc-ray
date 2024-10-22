@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-use roc_std::{RocBox, RocResult, RocStr};
+use roc_std::{RocBox, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
@@ -185,22 +185,17 @@ pub fn call_roc_init() -> Model {
 
         #[allow(improper_ctypes)]
         #[link_name = "roc__init_1_exposed_generic"]
-        fn init_caller(model: *mut RocResult<RocBox<()>, ()>, void_arg: ());
+        fn init_caller(model: *mut RocBox<()>, void_arg: ());
     }
 
     unsafe {
         // save stack space for return value
-        let mut result: RocResult<RocBox<()>, ()> = RocResult::err(());
+        let mut result: RocBox<()> = RocBox::new(());
         debug_assert_eq!(std::mem::size_of_val(&result), init_size());
 
         init_caller(&mut result, ());
 
-        match result.into() {
-            Err(()) => {
-                panic!("roc returned an error from init");
-            }
-            Ok(model) => Model::init(model),
-        }
+        Model::init(result)
     }
 }
 
@@ -211,7 +206,7 @@ pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
 
         #[link_name = "roc__render_1_exposed_generic"]
         fn render_caller(
-            model_out: *mut RocResult<RocBox<()>, ()>,
+            model_out: *mut RocBox<()>,
             model_in: *const RocBox<()>,
             platform_state: *const ManuallyDrop<PlatformState>,
         );
@@ -219,7 +214,7 @@ pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
 
     unsafe {
         // save stack space for return value
-        let mut result: RocResult<RocBox<()>, ()> = RocResult::err(());
+        let mut result: RocBox<()> = RocBox::new(());
         debug_assert_eq!(std::mem::size_of_val(&result), render_size());
 
         render_caller(
@@ -228,11 +223,6 @@ pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
             &ManuallyDrop::new(platform_state),
         );
 
-        match result.into() {
-            Err(()) => {
-                panic!("roc returned an error from render");
-            }
-            Ok(model) => Model::init(model),
-        }
+        Model::init(result)
     }
 }

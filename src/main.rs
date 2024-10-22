@@ -1,4 +1,4 @@
-use roc_std::{RocBox, RocList, RocResult, RocStr};
+use roc_std::{RocBox, RocList, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::cell::{Cell, RefCell};
@@ -164,36 +164,32 @@ fn exit_with_msg(msg: String) {
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
+pub extern "C" fn roc_fx_exit() {
     SHOULD_EXIT.set(true);
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) {
     let text = CString::new(msg.as_str()).unwrap();
     if level >= 0 && level <= 7 {
         bindings::TraceLog(level, text.as_ptr())
     } else {
         panic!("Invalid log level from roc");
     }
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) {
     if !is_effect_permitted(PlatformEffect::SetWindowSize) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot set the window size while in {mode}"));
     }
 
     bindings::SetWindowSize(width, height);
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) {
     if !is_effect_permitted(PlatformEffect::SetWindowTitle) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot set the window title while in {mode}"));
@@ -201,8 +197,6 @@ unsafe extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
 
     let text = CString::new(text.as_str()).unwrap();
     bindings::SetWindowTitle(text.as_ptr());
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -210,13 +204,12 @@ unsafe extern "C" fn roc_fx_drawCircle(
     center: &glue::RocVector2,
     radius: f32,
     color: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawCircle) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot draw a circle while in {mode}"));
     }
     bindings::DrawCircleV(center.into(), radius, color.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -225,7 +218,7 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
     radius: f32,
     inner: glue::RocColor,
     outer: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawCircleGradient) {
         let mode = platform_mode_str();
         exit_with_msg(format!(
@@ -235,7 +228,6 @@ unsafe extern "C" fn roc_fx_drawCircleGradient(
 
     let (x, y) = center.to_components_c_int();
     bindings::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -243,7 +235,7 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientV(
     rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawRectangleGradientV) {
         let mode = platform_mode_str();
         exit_with_msg(format!(
@@ -253,7 +245,6 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientV(
 
     let (x, y, w, h) = rect.to_components_c_int();
     bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -261,7 +252,7 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientH(
     rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawRectangleGradientH) {
         let mode = platform_mode_str();
         exit_with_msg(format!(
@@ -271,7 +262,6 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientH(
 
     let (x, y, w, h) = rect.to_components_c_int();
     bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -280,7 +270,7 @@ unsafe extern "C" fn roc_fx_drawText(
     size: i32,
     text: &RocStr,
     color: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawText) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot draw text while in {mode}"));
@@ -289,21 +279,16 @@ unsafe extern "C" fn roc_fx_drawText(
     let text = CString::new(text.as_bytes()).unwrap();
     let (x, y) = pos.to_components_c_int();
     bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawRectangle(
-    rect: &glue::RocRectangle,
-    color: glue::RocColor,
-) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_drawRectangle(rect: &glue::RocRectangle, color: glue::RocColor) {
     if !is_effect_permitted(PlatformEffect::DrawRectangle) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot draw rectangle while in {mode}"));
     }
 
     bindings::DrawRectangleRec(rect.into(), color.into());
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -311,14 +296,13 @@ unsafe extern "C" fn roc_fx_drawLine(
     start: &glue::RocVector2,
     end: &glue::RocVector2,
     color: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawLine) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot draw line while in {mode}"));
     }
 
     bindings::DrawLineV(start.into(), end.into(), color.into());
-    RocResult::ok(())
 }
 
 #[repr(C)]
@@ -329,7 +313,7 @@ struct ScreenSize {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
+unsafe extern "C" fn roc_fx_getScreenSize() -> ScreenSize {
     if !is_effect_permitted(PlatformEffect::GetScreenSize) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot get screen size while in {mode}"));
@@ -337,49 +321,45 @@ unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
 
     let height = bindings::GetScreenHeight();
     let width = bindings::GetScreenWidth();
-    RocResult::ok(ScreenSize {
+    ScreenSize {
         height,
         width,
         z: 0,
-    })
+    }
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i64, ()> {
+unsafe extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> i64 {
     // permitted in any mode
     let text = CString::new(text.as_str()).unwrap();
     let width = bindings::MeasureText(text.as_ptr(), size as c_int);
-    RocResult::ok(width as i64)
+    width as i64
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) {
     if !is_effect_permitted(PlatformEffect::SetTargetFPS) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot set target FPS while in {mode}"));
     }
     bindings::SetTargetFPS(rate as c_int);
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) {
     // permitted in any mode
     let path = CString::new(path.as_str()).unwrap();
     bindings::TakeScreenshot(path.as_ptr());
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) {
     // permitted in any mode
     if show {
         DRAW_FPS.set(Some((pos_x, pos_y)));
     } else {
         DRAW_FPS.set(None);
     }
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
@@ -388,7 +368,7 @@ unsafe extern "C" fn roc_fx_createCamera(
     offset: &glue::RocVector2,
     rotation: f32,
     zoom: f32,
-) -> RocResult<RocBox<()>, ()> {
+) -> RocBox<()> {
     if !is_effect_permitted(PlatformEffect::CreateCamera) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot create a camera while in {mode}"));
@@ -405,7 +385,7 @@ unsafe extern "C" fn roc_fx_createCamera(
 
     let alloc_result = heap.alloc_for(camera);
     match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
+        Ok(roc_box) => roc_box,
         Err(_) => {
             exit_with_msg("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into());
             std::process::exit(1);
@@ -420,7 +400,7 @@ unsafe extern "C" fn roc_fx_updateCamera(
     offset: &glue::RocVector2,
     rotation: f32,
     zoom: f32,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::UpdateCamera) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot update camera while in {mode}"));
@@ -433,12 +413,10 @@ unsafe extern "C" fn roc_fx_updateCamera(
     camera.offset = offset.into();
     camera.rotation = rotation;
     camera.zoom = zoom;
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) {
     if !is_effect_permitted(PlatformEffect::BeginDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot begin drawing while in {mode}"));
@@ -448,12 +426,10 @@ unsafe extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResu
 
     bindings::BeginDrawing();
     bindings::ClearBackground(clear_color.into());
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_endDrawing() {
     if !is_effect_permitted(PlatformEffect::EndDrawingFramebuffer) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot end drawing while in {mode}"));
@@ -462,12 +438,10 @@ unsafe extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
     update_platform_mode(PlatformMode::None);
 
     bindings::EndMode2D();
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
     if !is_effect_permitted(PlatformEffect::BeginMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot being drawing in 2D while in {mode}"));
@@ -479,12 +453,10 @@ unsafe extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
     bindings::BeginMode2D(*camera);
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
     if !is_effect_permitted(PlatformEffect::EndMode2D) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot being drawing in 2D while in {mode}"));
@@ -493,8 +465,6 @@ unsafe extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<()
     update_platform_mode(PlatformMode::FramebufferMode);
 
     bindings::EndMode2D();
-
-    RocResult::ok(())
 }
 
 unsafe fn get_mouse_button_states() -> RocList<u8> {
@@ -534,7 +504,7 @@ unsafe fn get_keys_states() -> RocList<u8> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, ()> {
+unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocBox<()> {
     if !is_effect_permitted(PlatformEffect::LoadSound) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot load a sound while in {mode}"));
@@ -548,7 +518,7 @@ unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, ()
 
     let alloc_result = heap.alloc_for(sound);
     match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
+        Ok(roc_box) => roc_box,
         Err(_) => {
             exit_with_msg("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into());
             std::process::exit(1);
@@ -557,18 +527,16 @@ unsafe extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, ()
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
+unsafe extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
     // permitted in any mode
     let sound: &mut bindings::Sound =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
 
     bindings::PlaySound(*sound);
-
-    RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, ()> {
+unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocBox<()> {
     if !is_effect_permitted(PlatformEffect::LoadTexture) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot load a texture while in {mode}"));
@@ -582,7 +550,7 @@ unsafe extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<
 
     let alloc_result = heap.alloc_for(texture);
     match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
+        Ok(roc_box) => roc_box,
         Err(_) => {
             exit_with_msg("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into());
             std::process::exit(1);
@@ -596,7 +564,7 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     source: &glue::RocRectangle,
     position: &glue::RocVector2,
     color: glue::RocColor,
-) -> RocResult<(), ()> {
+) {
     if !is_effect_permitted(PlatformEffect::DrawTextureRectangle) {
         let mode = platform_mode_str();
         exit_with_msg(format!("Cannot draw a texture rectangle while in {mode}"));
@@ -606,6 +574,4 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
     bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
-
-    RocResult::ok(())
 }

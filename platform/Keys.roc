@@ -16,32 +16,38 @@ import InternalKeyboard
 
 KeyboardKey : InternalKeyboard.KeyboardKey
 
-Keys : Dict InternalKeyboard.KeyboardKey InternalKeyboard.KeyState
+Keys : InternalKeyboard.Keys
 
 down : Keys, KeyboardKey -> Bool
 down = \keys, key ->
-    state = Dict.get keys key
-    state == Ok Down || state == Ok PressedRepeat
+    when InternalKeyboard.readKey keys key is
+        Down -> Bool.true
+        PressedRepeat -> Bool.true
+        _ -> Bool.false
 
 up : Keys, KeyboardKey -> Bool
 up = \keys, key ->
-    state = Dict.get keys key
-    state == Ok Up
+    when InternalKeyboard.readKey keys key is
+        Up -> Bool.true
+        _ -> Bool.false
 
 pressed : Keys, KeyboardKey -> Bool
 pressed = \keys, key ->
-    state = Dict.get keys key
-    state == Ok Pressed
+    when InternalKeyboard.readKey keys key is
+        Pressed -> Bool.true
+        _ -> Bool.false
 
 released : Keys, KeyboardKey -> Bool
 released = \keys, key ->
-    state = Dict.get keys key
-    state == Ok Down
+    when InternalKeyboard.readKey keys key is
+        Released -> Bool.true
+        _ -> Bool.false
 
 pressedRepeat : Keys, KeyboardKey -> Bool
 pressedRepeat = \keys, key ->
-    state = Dict.get keys key
-    state == Ok PressedRepeat
+    when InternalKeyboard.readKey keys key is
+        PressedRepeat -> Bool.true
+        _ -> Bool.false
 
 anyDown : Keys, List KeyboardKey -> Bool
 anyDown = \keys, selection -> any keys selection down
@@ -59,3 +65,8 @@ any : Keys, List KeyboardKey, (Keys, KeyboardKey -> Bool) -> Bool
 any = \keys, selection, predicate ->
     List.any selection \k ->
         predicate keys k
+
+expect
+    bytes = List.repeat 2u8 350
+    keys = InternalKeyboard.pack bytes
+    down keys KeyLeft == Bool.true

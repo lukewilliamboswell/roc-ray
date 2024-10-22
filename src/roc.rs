@@ -183,19 +183,23 @@ pub fn call_roc_init() -> Model {
         #[link_name = "roc__init_1_exposed_size"]
         fn init_size() -> usize;
 
-        #[allow(improper_ctypes)]
-        #[link_name = "roc__init_1_exposed_generic"]
-        fn init_caller(model: *mut RocBox<()>, void_arg: ());
+        #[link_name = "roc__init_1_exposed"]
+        fn init_caller(arg_not_used: i32) -> RocBox<()>;
+
+        // maybe it's a *mut RocBox<()> instead?
+        // fn init_caller(arg_not_used: i32) -> *mut RocBox<()>;
+        //
+        // FOR REFERENCE
+        // define void @roc__init_1_exposed_generic(ptr %0, i32 %1) !dbg !447 {
+        // define ptr @roc__init_1_exposed(i32 %0) !dbg !450 {
     }
 
     unsafe {
-        // save stack space for return value
-        let mut result: RocBox<()> = RocBox::new(());
-        debug_assert_eq!(std::mem::size_of_val(&result), init_size());
+        let model: RocBox<()> = init_caller(0);
 
-        init_caller(&mut result, ());
+        debug_assert_eq!(std::mem::size_of_val(&model), init_size());
 
-        Model::init(result)
+        Model::init(model)
     }
 }
 
@@ -204,24 +208,21 @@ pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
         #[link_name = "roc__render_1_exposed_size"]
         fn render_size() -> usize;
 
-        #[link_name = "roc__render_1_exposed_generic"]
+        #[link_name = "roc__render_1_exposed"]
         fn render_caller(
-            model_out: *mut RocBox<()>,
             model_in: *const RocBox<()>,
             platform_state: *const ManuallyDrop<PlatformState>,
-        );
+        ) -> RocBox<()>;
+
+        // define void @roc__render_1_exposed_generic(ptr %0, ptr %1, ptr %2) !dbg !944 {
+        // define ptr @roc__render_1_exposed(ptr %0, ptr %1) !dbg !947 {
+
     }
 
     unsafe {
-        // save stack space for return value
-        let mut result: RocBox<()> = RocBox::new(());
-        debug_assert_eq!(std::mem::size_of_val(&result), render_size());
+        let result = render_caller(&model.model, &ManuallyDrop::new(platform_state));
 
-        render_caller(
-            &mut result,
-            &model.model,
-            &ManuallyDrop::new(platform_state),
-        );
+        debug_assert_eq!(std::mem::size_of_val(&result), render_size());
 
         Model::init(result)
     }

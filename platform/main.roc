@@ -22,8 +22,8 @@ PlatformStateFromHost : {
     mouseWheel : F32,
 }
 
-init! : {} => Box Model
-init! = \{} ->
+init! : I32 => Box Model
+init! = \_x ->
     main.init! {}
     |> \result ->
         when result is

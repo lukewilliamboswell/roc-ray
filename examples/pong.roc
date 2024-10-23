@@ -1,12 +1,8 @@
-app [main, Model] {
-    rr: platform "../platform/main.roc",
-}
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [Vector2, PlatformState]
+import rr.RocRay exposing [Vector2]
 import rr.Mouse
-
-main : RocRay.Program Model []
-main = { init, render }
+import rr.Draw
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -66,7 +62,7 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, state ->
 
     if !model.playing then
@@ -95,47 +91,43 @@ render = \model, state ->
 drawGameStartMenu : Model -> Task {} _
 drawGameStartMenu = \model ->
 
-    RocRay.beginDrawing! Navy
+    Draw.draw! Navy \{} ->
 
-    RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
+        Draw.text! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
 
-    maxScore = model.maxScore |> Num.toStr
+        maxScore = model.maxScore |> Num.toStr
 
-    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
+        Draw.text! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
 
-    score = model.score |> Num.toStr
+        score = model.score |> Num.toStr
 
-    RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
+        Draw.text! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
 
-    RocRay.endDrawing!
-
-drawGamePlaying : Model, PlatformState -> Task {} _
+drawGamePlaying : Model, RocRay.PlatformState -> Task {} _
 drawGamePlaying = \model, { mouse } ->
 
-    RocRay.beginDrawing! Navy
+    Draw.draw! Navy \{} ->
 
-    score = model.score |> Num.toStr
+        score = model.score |> Num.toStr
 
-    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
+        Draw.text! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
 
-    newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
+        newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
 
-    RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
-    RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
+        Draw.rectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
+        Draw.rectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
 
-    drawCrossHair! mouse.position
-
-    RocRay.endDrawing!
+        drawCrossHair! mouse.position
 
 drawCrossHair : Vector2 -> Task {} []
 drawCrossHair = \mousePos ->
-    RocRay.drawLine! {
+    Draw.line! {
         start: { x: mousePos.x, y: 0 },
         end: { x: mousePos.x, y: height },
         color: Yellow,
     }
 
-    RocRay.drawLine! {
+    Draw.line! {
         start: { x: 0, y: Num.toF32 mousePos.y },
         end: { x: width, y: Num.toF32 mousePos.y },
         color: Yellow,

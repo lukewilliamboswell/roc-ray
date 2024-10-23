@@ -1,9 +1,8 @@
-app [main, Model] {
-    rr: platform "../platform/main.roc",
-}
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [PlatformState, Rectangle]
+import rr.RocRay exposing [Rectangle]
 import rr.Keys
+import rr.Draw
 
 Model : {
     squares : List Rectangle,
@@ -13,9 +12,6 @@ Model : {
 
 width = 900
 height = 400
-
-main : RocRay.Program Model []
-main = { init, render }
 
 init : Task Model []
 init =
@@ -29,30 +25,10 @@ init =
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, mouse } ->
 
-    RocRay.beginDrawing! Black
-
-    RocRay.drawText! { pos: { x: width - 400, y: height - 25 }, text: "Click on the screen ...", size: 20, color: White }
-
     mousePos = mouse.position
-
-    RocRay.drawText! {
-        pos: {
-            x: 10,
-            y: height - 25,
-        },
-        text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y)",
-        size: 20,
-        color: White,
-    }
-
-    RocRay.drawRectangle! { rect: { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20 }, color: Red }
-
-    RocRay.drawCircle! { center: model.circlePos, radius: 50, color: Aqua }
-
-    RocRay.endDrawing!
 
     newCirclePos =
         if Keys.down keys KeyUp then
@@ -65,5 +41,20 @@ render = \model, { keys, mouse } ->
             { x: model.circlePos.x + 10, y: model.circlePos.y }
         else
             model.circlePos
+
+    Draw.draw! Black \{} ->
+
+        Draw.text! { pos: { x: width - 400, y: height - 25 }, text: "Mouse the mouse around the screen ...", size: 20, color: White }
+
+        Draw.text! {
+            pos: { x: 10, y: height - 25 },
+            text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y)",
+            size: 20,
+            color: White,
+        }
+
+        Draw.rectangle! { rect: { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20 }, color: Red }
+
+        Draw.circle! { center: model.circlePos, radius: 50, color: Aqua }
 
     Task.ok { model & circlePos: newCirclePos }

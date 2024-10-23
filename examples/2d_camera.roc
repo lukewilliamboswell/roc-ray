@@ -1,15 +1,14 @@
-app [main, Model] {
+app [Model, init, render] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import rr.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
+import rr.RocRay exposing [Vector2, Rectangle, Color, Camera]
 import rr.Keys
+import rr.Draw
+import rr.Camera
 import rand.Random
-
-main : RocRay.Program Model []
-main = { init, render }
 
 screenWidth = 800
 screenHeight = 450
@@ -43,7 +42,7 @@ init =
         zoom: 1,
     }
 
-    camera = RocRay.createCamera! cameraSettings
+    camera = Camera.create! cameraSettings
 
     buildings = generateBuildings
 
@@ -54,7 +53,7 @@ init =
         cameraSettings,
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { mouse, keys } ->
 
     # UPDATE CAMERA
@@ -81,7 +80,7 @@ render = \model, { mouse, keys } ->
         |> &rotation rotation
         |> &zoom zoom
 
-    RocRay.updateCamera! model.camera cameraSettings
+    Camera.update! model.camera cameraSettings
 
     # UPDATE PLAYER
     player =
@@ -93,17 +92,13 @@ render = \model, { mouse, keys } ->
             model.player
 
     # RENDER FRAMEBUFFER
-    RocRay.beginDrawing! White
+    Draw.draw! White \{} ->
 
-    # RENDER WORLD
-    RocRay.beginMode2D! model.camera
-    drawWorld! model
-    RocRay.endMode2D! model.camera
+        # RENDER WORLD
+        Draw.withMode2D! model.camera \{} -> drawWorld! model
 
-    # RENDER SCREEN UI
-    drawScreenUI!
-
-    RocRay.endDrawing!
+        # RENDER SCREEN UI
+        drawScreenUI!
 
     Task.ok { model & cameraSettings, player }
 
@@ -111,16 +106,16 @@ drawWorld : Model -> Task {} _
 drawWorld = \model ->
 
     # BACKGROUND
-    RocRay.drawRectangle! { rect: { x: -6000, y: 320, width: 13000, height: 8000 }, color: Gray }
+    Draw.rectangle! { rect: { x: -6000, y: 320, width: 13000, height: 8000 }, color: Gray }
 
     # BUILDINGS
-    Task.forEach! model.buildings RocRay.drawRectangle
+    Task.forEach! model.buildings Draw.rectangle
 
     # PLAYER
     playerWidth = 40
     playerHeight = 80
 
-    RocRay.drawRectangle! {
+    Draw.rectangle! {
         rect: {
             x: model.player.x - (playerWidth / 2),
             y: model.player.y - (playerHeight / 2),
@@ -131,26 +126,26 @@ drawWorld = \model ->
     }
 
     # PLAYER CROSSHAIR
-    RocRay.drawLine! { start: { x: model.player.x, y: -screenHeight * 10 }, end: { x: model.player.x, y: screenHeight * 10 }, color: Yellow }
-    RocRay.drawLine! { start: { x: -screenWidth * 10, y: model.player.y }, end: { x: screenWidth * 10, y: model.player.y }, color: Yellow }
+    Draw.line! { start: { x: model.player.x, y: -screenHeight * 10 }, end: { x: model.player.x, y: screenHeight * 10 }, color: Yellow }
+    Draw.line! { start: { x: -screenWidth * 10, y: model.player.y }, end: { x: screenWidth * 10, y: model.player.y }, color: Yellow }
 
 drawScreenUI : Task {} _
 drawScreenUI =
 
-    RocRay.drawText! { pos: { x: 640, y: 10 }, text: "SCREEN AREA", size: 20, color: Red }
+    Draw.text! { pos: { x: 640, y: 10 }, text: "SCREEN AREA", size: 20, color: Red }
 
-    RocRay.drawRectangle! { rect: { x: 0, y: 0, width: screenWidth, height: 5 }, color: Red }
-    RocRay.drawRectangle! { rect: { x: 0, y: 5, width: 5, height: screenHeight - 10 }, color: Red }
-    RocRay.drawRectangle! { rect: { x: screenWidth - 5, y: 5, width: 5, height: screenHeight - 10 }, color: Red }
-    RocRay.drawRectangle! { rect: { x: 0, y: screenHeight - 5, width: screenWidth, height: 5 }, color: Red }
+    Draw.rectangle! { rect: { x: 0, y: 0, width: screenWidth, height: 5 }, color: Red }
+    Draw.rectangle! { rect: { x: 0, y: 5, width: 5, height: screenHeight - 10 }, color: Red }
+    Draw.rectangle! { rect: { x: screenWidth - 5, y: 5, width: 5, height: screenHeight - 10 }, color: Red }
+    Draw.rectangle! { rect: { x: 0, y: screenHeight - 5, width: screenWidth, height: 5 }, color: Red }
 
-    RocRay.drawRectangle! { rect: { x: 10, y: 20, width: 250, height: 113 }, color: RGBA 116 255 255 128 }
+    Draw.rectangle! { rect: { x: 10, y: 20, width: 250, height: 113 }, color: RGBA 116 255 255 128 }
 
-    RocRay.drawText! { pos: { x: 20, y: 30 }, text: "Free 2d camera controls:", size: 10, color: Black }
-    RocRay.drawText! { pos: { x: 40, y: 50 }, text: "- Right/Left to move Offset", size: 10, color: Black }
-    RocRay.drawText! { pos: { x: 40, y: 70 }, text: "- Mouse Wheel to Zoom in-out", size: 10, color: Black }
-    RocRay.drawText! { pos: { x: 40, y: 90 }, text: "- A / S to Rotate", size: 10, color: Black }
-    RocRay.drawText! { pos: { x: 40, y: 110 }, text: "- R to reset Zoom and Rotation", size: 10, color: Black }
+    Draw.text! { pos: { x: 20, y: 30 }, text: "Free 2d camera controls:", size: 10, color: Black }
+    Draw.text! { pos: { x: 40, y: 50 }, text: "- Right/Left to move Offset", size: 10, color: Black }
+    Draw.text! { pos: { x: 40, y: 70 }, text: "- Mouse Wheel to Zoom in-out", size: 10, color: Black }
+    Draw.text! { pos: { x: 40, y: 90 }, text: "- A / S to Rotate", size: 10, color: Black }
+    Draw.text! { pos: { x: 40, y: 110 }, text: "- R to reset Zoom and Rotation", size: 10, color: Black }
 
 generateBuildings : List { rect : Rectangle, color : Color }
 generateBuildings =

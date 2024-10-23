@@ -7,12 +7,12 @@ module [
     Camera,
     Texture,
     Sound,
+    setWindowSize,
+    getScreenSize,
     exit,
-    # setWindowSize,
-    # getScreenSize,
-    # setWindowTitle,
-    # setTargetFPS,
-    # setDrawFPS,
+    setWindowTitle,
+    setTargetFPS,
+    setDrawFPS,
     measureText,
     drawText,
     drawLine,
@@ -194,46 +194,46 @@ endDrawing = Effect.endDrawing |> Task.mapErr \{} -> crash "unreachable endDrawi
 ## ```
 ## RocRay.setWindowTitle! "My Roc Game"
 ## ```
-# setWindowTitle : Str -> Task {} *
-# setWindowTitle = \title ->
-#    Effect.setWindowTitle title
-#    |> Task.mapErr \{} -> crash "unreachable setWindowTitle"
+setWindowTitle : Str -> Task {} *
+setWindowTitle = \title ->
+    Effect.setWindowTitle title
+    |> Task.mapErr \{} -> crash "unreachable setWindowTitle"
 
 ## Set the window size.
 ## ```
 ## RocRay.setWindowSize! { width: 800, height: 600 }
 ## ```
-# setWindowSize : { width : F32, height : F32 } -> Task {} *
-# setWindowSize = \{ width, height } ->
-#    Effect.setWindowSize (Num.round width) (Num.round height)
-#    |> Task.mapErr \{} -> crash "unreachable setWindowSize"
+setWindowSize : { width : F32, height : F32 } -> Task {} *
+setWindowSize = \{ width, height } ->
+    Effect.setWindowSize (Num.round width) (Num.round height)
+    |> Task.mapErr \{} -> crash "unreachable setWindowSize"
 
 ## Get the window size.
-# getScreenSize : Task { height : F32, width : F32 } *
-# getScreenSize =
-#    Effect.getScreenSize
-#    |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
-#    |> Task.mapErr \{} -> crash "unreachable getScreenSize"
+getScreenSize : Task { height : F32, width : F32 } *
+getScreenSize =
+    Effect.getScreenSize
+    |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
+    |> Task.mapErr \{} -> crash "unreachable getScreenSize"
 
 ## Set the target frames per second. The default value is 60.
-# setTargetFPS : I32 -> Task {} *
-# setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"
+setTargetFPS : I32 -> Task {} *
+setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"
 
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
 ## Raylib.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
 ## ```
-# setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
-# setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
+setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
+setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
 
-#    showFps =
-#        when fps is
-#            Visible -> Bool.true
-#            Hidden -> Bool.false
+    showFps =
+        when fps is
+            Visible -> Bool.true
+            Hidden -> Bool.false
 
-#    Effect.setDrawFPS showFps posX posY
-#    |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
+    Effect.setDrawFPS showFps posX posY
+    |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
 
 ## Measure the width of a text string using the default font.
 measureText : { text : Str, size : I32 } -> Task I64 *

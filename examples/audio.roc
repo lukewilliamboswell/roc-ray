@@ -4,20 +4,23 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Keys
-import rr.Window exposing [Window]
 
 Model : {
     wav : RocRay.Sound,
     ogg : RocRay.Sound,
 }
 
-init : Task (Model, Window) []
+init : Task Model []
 init =
+
+    RocRay.setTargetFPS! 60
+    RocRay.setWindowSize! { width: 800, height: 450 }
+    RocRay.setWindowTitle! "Making Sounds"
 
     wav = RocRay.loadSound! "resources/sound.wav"
     ogg = RocRay.loadSound! "resources/target.ogg"
 
-    Task.ok ({ wav, ogg }, { Window.default & title: "Making Sounds", width: 800, height: 450 })
+    Task.ok { wav, ogg }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->

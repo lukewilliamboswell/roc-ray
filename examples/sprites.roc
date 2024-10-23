@@ -1,7 +1,6 @@
 app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay exposing [Texture, Rectangle]
-import rr.Window exposing [Window]
 import rr.Keys
 
 width = 800
@@ -14,28 +13,25 @@ Model : {
     dudeAnimation : AnimatedSprite,
 }
 
-init : Task (Model, Window) []
+init : Task Model []
 init =
+
+    RocRay.setTargetFPS! 60
+    RocRay.setWindowSize! { width, height }
+    RocRay.setWindowTitle! "Animated Sprite Example"
 
     dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
 
-    Task.ok (
-        {
-            player: { x: width / 2, y: height / 2 },
-            direction: WalkRight,
-            dude,
-            dudeAnimation: {
-                frame: 0,
-                frameRate: 10,
-                nextAnimationTick: 0,
-            },
+    Task.ok {
+        player: { x: width / 2, y: height / 2 },
+        direction: WalkRight,
+        dude,
+        dudeAnimation: {
+            frame: 0,
+            frameRate: 10,
+            nextAnimationTick: 0,
         },
-        { Window.default &
-            title: "Animated Sprite Example",
-            width,
-            height,
-        },
-    )
+    }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { timestampMillis, keys } ->

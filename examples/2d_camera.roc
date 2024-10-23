@@ -6,7 +6,6 @@ app [Model, init, render] {
 
 import rr.RocRay exposing [Vector2, Rectangle, Color, Camera]
 import rr.Keys
-import rr.Window exposing [Window]
 import rand.Random
 
 screenWidth = 800
@@ -24,8 +23,14 @@ Model : {
     camera : Camera,
 }
 
-init : Task (Model, Window) []
+init : Task Model []
 init =
+
+    RocRay.setTargetFPS! 60
+    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
+    RocRay.setWindowTitle! "2D Camera Example"
+
     player = { x: 400, y: 280 }
 
     cameraSettings = {
@@ -39,20 +44,12 @@ init =
 
     buildings = generateBuildings
 
-    Task.ok (
-        {
-            player,
-            buildings,
-            camera,
-            cameraSettings,
-        },
-        { Window.default &
-            fpsDisplay: Visible 100 100,
-            width: screenWidth,
-            height: screenHeight,
-            title: "2D Camera Example",
-        },
-    )
+    Task.ok {
+        player,
+        buildings,
+        camera,
+        cameraSettings,
+    }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { mouse, keys } ->

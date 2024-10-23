@@ -1,6 +1,6 @@
 platform "roc-ray"
     requires { Model } {
-        init : Task (state, Window.Window) []err,
+        init : Task state []err,
         render : state, RocRay.PlatformState -> Task state []err,
     }
     exposes [RocRay, Keys, Mouse]
@@ -9,7 +9,6 @@ platform "roc-ray"
     provides [forHost]
 
 import RocRay
-import Window
 import Mouse
 import InternalKeyboard
 import InternalMouse
@@ -37,20 +36,7 @@ initForHost : Task (Box Model) {}
 initForHost =
     Task.attempt init \result ->
         when result is
-            Ok (model, window) ->
-                Effect.setWindowTitle! window.title
-                Effect.setWindowSize! (Num.round window.width) (Num.round window.height)
-                Effect.setTargetFPS! window.fpsTarget
-
-                displayFPS =
-                    when window.fpsDisplay is
-                        Visible width height -> Effect.setDrawFPS Bool.true width height
-                        Hidden -> Task.ok {}
-
-                displayFPS!
-
-                Task.ok (Box.box model)
-
+            Ok m -> Task.ok (Box.box m)
             Err err ->
                 Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
                 Effect.exit!

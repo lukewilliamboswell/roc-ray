@@ -63,8 +63,6 @@ log : Str, I32 -> Task {} {}
 drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
 
-setTargetFPS : I32 -> Task {} {}
-setDrawFPS : Bool, I32, I32 -> Task {} {}
 setWindowTitle : Str -> Task {} {}
 
 drawLine : RocVector2, RocVector2, RocColor -> Task {} {}
@@ -74,6 +72,9 @@ drawRectangleGradientV : RocRectangle, RocColor, RocColor -> Task {} {}
 drawRectangleGradientH : RocRectangle, RocColor, RocColor -> Task {} {}
 drawCircle : RocVector2, F32, RocColor -> Task {} {}
 drawCircleGradient : RocVector2, F32, RocColor, RocColor -> Task {} {}
+
+setTargetFPS : I32 -> Task {} {}
+setDrawFPS : Bool, I32, I32 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 

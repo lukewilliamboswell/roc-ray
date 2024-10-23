@@ -6,6 +6,7 @@ app [Model, init, render] {
 
 import rr.RocRay exposing [Rectangle, Color]
 import rr.Keys
+import rr.Window exposing [Window]
 import rand.Random
 import time.DateTime
 
@@ -16,26 +17,26 @@ Model : {
     number : U64,
 }
 
-init : Task Model []
+width = 800
+height = 800
+
+init : Task (Model, Window) []
 init =
-
-    width = 800f32
-    height = 800f32
-    number = 1000
-
-    seed = Random.seed 1234
-
-    RocRay.setTargetFPS! 500
-    RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Random Dots"
-
-    Task.ok {
-        number,
-        seed,
-        width,
-        height,
-    }
+    Task.ok (
+        {
+            number: 1000,
+            seed: Random.seed 1234,
+            width,
+            height,
+        },
+        { Window.default &
+            fpsTarget: 500,
+            fpsDisplay: Visible 100 100,
+            title: "Random Dots",
+            width,
+            height,
+        },
+    )
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, timestampMillis } ->

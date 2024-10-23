@@ -2,6 +2,7 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay exposing [Rectangle]
 import rr.Keys
+import rr.Window exposing [Window]
 
 Model : {
     squares : List Rectangle,
@@ -12,17 +13,20 @@ Model : {
 width = 900
 height = 400
 
-init : Task Model []
+init : Task (Model, Window) []
 init =
-
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Squares Demo"
-
-    Task.ok {
-        circlePos: { x: width / 2, y: height / 2 },
-        squares: [],
-        status: Ready,
-    }
+    Task.ok (
+        {
+            circlePos: { x: width / 2, y: height / 2 },
+            squares: [],
+            status: Ready,
+        },
+        { Window.default &
+            title: "Squares Demo",
+            width,
+            height,
+        },
+    )
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, mouse } ->

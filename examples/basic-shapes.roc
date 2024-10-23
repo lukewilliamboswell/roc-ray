@@ -1,19 +1,15 @@
 app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
+import rr.Window exposing [Window]
 
 width = 800
 height = 600
 
 Model : {}
 
-init : Task Model []
-init =
-
-    RocRay.setWindowSize!  { width, height }
-    RocRay.setWindowTitle! "Basic Shapes"
-
-    Task.ok {}
+init : Task (Model, Window) []
+init = Task.ok ({}, { Window.default & width, height, title: "Basic Shapes" })
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \_, _ ->

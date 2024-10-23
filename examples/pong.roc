@@ -2,6 +2,7 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay exposing [Vector2]
 import rr.Mouse
+import rr.Window exposing [Window]
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -22,20 +23,22 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model []
+init : Task (Model, Window) []
 init =
-    RocRay.setTargetFPS! 60
-    RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Pong"
-
-    Task.ok {
-        ball: newBall,
-        pos: height / 2 - paddle / 2,
-        score: 0,
-        playing: Bool.false,
-        maxScore: 0,
-    }
+    Task.ok (
+        {
+            ball: newBall,
+            pos: height / 2 - paddle / 2,
+            score: 0,
+            playing: Bool.false,
+            maxScore: 0,
+        },
+        { Window.default &
+            title: "Pong",
+            width,
+            height,
+        },
+    )
 
 moveBall : Ball -> Ball
 moveBall = \ball -> { ball & pos: { x: ball.pos.x + ball.vel.x, y: ball.pos.y + ball.vel.y } }
@@ -73,9 +76,6 @@ render = \model, state ->
         else
             Task.ok model
     else
-        # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
-        RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
-
         # DRAW GAME
         drawGamePlaying! model state
 

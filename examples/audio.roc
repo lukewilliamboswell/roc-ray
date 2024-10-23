@@ -4,6 +4,8 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Keys
+import rr.Sound
+import rr.Draw
 
 Model : {
     wav : RocRay.Sound,
@@ -17,29 +19,29 @@ init =
     RocRay.setWindowSize! { width: 800, height: 450 }
     RocRay.setWindowTitle! "Making Sounds"
 
-    wav = RocRay.loadSound! "resources/sound.wav"
-    ogg = RocRay.loadSound! "resources/target.ogg"
+    wav = Sound.load! "resources/sound.wav"
+    ogg = Sound.load! "resources/target.ogg"
 
     Task.ok { wav, ogg }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->
 
-    RocRay.beginDrawing! White
+    Draw.draw! White \{} ->
 
-    RocRay.drawText! {
-        text: "Press SPACE to PLAY the WAV sound",
-        pos: { x: 200, y: 180 },
-        size: 20,
-        color: Gray,
-    }
+        Draw.text! {
+            text: "Press SPACE to PLAY the WAV sound",
+            pos: { x: 200, y: 180 },
+            size: 20,
+            color: Gray,
+        }
 
-    RocRay.drawText! {
-        text: "Press ENTER to PLAY the OGG sound",
-        pos: { x: 200, y: 220 },
-        size: 20,
-        color: Gray,
-    }
+        Draw.text! {
+            text: "Press ENTER to PLAY the OGG sound",
+            pos: { x: 200, y: 220 },
+            size: 20,
+            color: Gray,
+        }
 
     chosenSound =
         if Keys.pressed keys KeySpace then
@@ -49,11 +51,9 @@ render = \model, { keys } ->
         else
             None
 
-    RocRay.endDrawing!
-
     when chosenSound is
         Play sound ->
-            RocRay.playSound! sound
+            Sound.play! sound
             Task.ok model
 
         None ->

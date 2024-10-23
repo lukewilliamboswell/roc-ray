@@ -2,6 +2,8 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay exposing [Texture, Rectangle]
 import rr.Keys
+import rr.Draw
+import rr.Texture
 
 width = 800
 height = 600
@@ -20,7 +22,7 @@ init =
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Animated Sprite Example"
 
-    dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
+    dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
     Task.ok {
         player: { x: width / 2, y: height / 2 },
@@ -36,22 +38,6 @@ init =
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { timestampMillis, keys } ->
 
-    RocRay.beginDrawing! White
-
-    dudeAnimation = updateAnimation model.dudeAnimation timestampMillis
-
-    RocRay.drawText! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
-    RocRay.drawText! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
-
-    RocRay.drawTextureRec! {
-        texture: model.dude,
-        source: dudeSprite model.direction dudeAnimation.frame,
-        pos: model.player,
-        tint: White,
-    }
-
-    RocRay.endDrawing!
-
     (player, direction) =
         if Keys.down keys KeyUp then
             ({ x: model.player.x, y: model.player.y - 10 }, WalkUp)
@@ -63,6 +49,20 @@ render = \model, { timestampMillis, keys } ->
             ({ x: model.player.x + 10, y: model.player.y }, WalkRight)
         else
             (model.player, model.direction)
+
+    dudeAnimation = updateAnimation model.dudeAnimation timestampMillis
+
+    Draw.draw! White \{} ->
+
+        Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
+        Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
+
+        Draw.textureRec! {
+            texture: model.dude,
+            source: dudeSprite model.direction dudeAnimation.frame,
+            pos: model.player,
+            tint: White,
+        }
 
     Task.ok { model & player, dudeAnimation, direction }
 

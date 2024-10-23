@@ -6,6 +6,7 @@ app [Model, init, render] {
 
 import rr.RocRay exposing [Rectangle, Color]
 import rr.Keys
+import rr.Draw
 import rand.Random
 import time.DateTime
 
@@ -40,28 +41,27 @@ init =
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, timestampMillis } ->
 
-    RocRay.beginDrawing! Black
-
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
-    RocRay.drawText! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
+    { seed, lines } = randomList model.seed (Random.u32 0 800) model.number
 
-    generator = Random.u32 0 800
+    number =
+        if Keys.down keys KeyUp then
+            Num.addSaturated model.number 10
+        else if Keys.down keys KeyDown then
+            Num.subSaturated model.number 10
+        else
+            model.number
 
-    { seed, lines } = randomList model.seed generator model.number
+    Draw.draw! Black \{} ->
 
-    Task.forEach! lines RocRay.drawRectangle
+        Draw.text! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
 
-    RocRay.drawText! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
+        Task.forEach! lines Draw.rectangle
 
-    RocRay.endDrawing!
+        Draw.text! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
-    if Keys.down keys KeyUp then
-        Task.ok { model & seed, number: Num.addSaturated model.number 10 }
-    else if Keys.down keys KeyDown then
-        Task.ok { model & seed, number: Num.subSaturated model.number 10 }
-    else
-        Task.ok { model & seed }
+    Task.ok { model & seed, number }
 
 # Generate a list of lines using the seed and generator provided
 randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }

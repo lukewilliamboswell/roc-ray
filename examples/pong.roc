@@ -6,7 +6,7 @@ import rr.RocRay exposing [Vector2, PlatformState]
 import rr.Mouse
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -27,20 +27,96 @@ ballSize = 20
 
 newBall = { pos: { x: width / 2, y: height / 2 }, vel: { x: 5, y: 2 } }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Pong"
 
-    Task.ok {
+    Ok {
         ball: newBall,
         pos: height / 2 - paddle / 2,
         score: 0,
         playing: Bool.false,
         maxScore: 0,
     }
+
+render! : Model, PlatformState => Result Model []
+render! = \model, state ->
+
+    if !model.playing then
+        # DRAW START MENU
+        drawGameStartMenu! model
+
+        if Mouse.pressed state.mouse.buttons.left then
+            Ok { model & playing: Bool.true, score: 0 }
+        else
+            Ok model
+    else
+        # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
+        RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
+
+        # DRAW GAME
+        drawGamePlaying! model state
+
+        ball = bounce (moveBall model.ball) model.pos
+        newY = model.pos + (Num.toF32 state.mouse.position.y - model.pos) / 5
+
+        if ball.pos.x <= 0 then
+            Ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
+        else
+            Ok { model & pos: newY, ball: ball, score: model.score + 1 }
+
+drawGameStartMenu! : Model => {}
+drawGameStartMenu! = \model ->
+
+    RocRay.beginDrawing! Navy
+
+    RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
+
+    maxScore = model.maxScore |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
+
+    score = model.score |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
+
+    RocRay.endDrawing! {}
+
+drawGamePlaying! : Model, PlatformState => {}
+drawGamePlaying! = \model, { mouse } ->
+
+    RocRay.beginDrawing! Navy
+
+    score = model.score |> Num.toStr
+
+    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
+
+    newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
+
+    RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
+    RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
+
+    drawCrossHair! mouse.position
+
+    RocRay.endDrawing! {}
+
+drawCrossHair! : Vector2 => {}
+drawCrossHair! = \mousePos ->
+    RocRay.drawLine! {
+        start: { x: mousePos.x, y: 0 },
+        end: { x: mousePos.x, y: height },
+        color: Yellow,
+    }
+
+    RocRay.drawLine! {
+        start: { x: 0, y: Num.toF32 mousePos.y },
+        end: { x: width, y: Num.toF32 mousePos.y },
+        color: Yellow,
+    }
+
 
 moveBall : Ball -> Ball
 moveBall = \ball -> { ball & pos: { x: ball.pos.x + ball.vel.x, y: ball.pos.y + ball.vel.y } }
@@ -65,78 +141,3 @@ bounce = \ball, pos ->
             (y, vy2)
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
-
-render : Model, PlatformState -> Task Model []
-render = \model, state ->
-
-    if !model.playing then
-        # DRAW START MENU
-        drawGameStartMenu! model
-
-        if Mouse.pressed state.mouse.buttons.left then
-            Task.ok { model & playing: Bool.true, score: 0 }
-        else
-            Task.ok model
-    else
-        # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
-        RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
-
-        # DRAW GAME
-        drawGamePlaying! model state
-
-        ball = bounce (moveBall model.ball) model.pos
-        newY = model.pos + (Num.toF32 state.mouse.position.y - model.pos) / 5
-
-        if ball.pos.x <= 0 then
-            Task.ok { model & pos: newY, ball: newBall, maxScore: Num.max model.score model.maxScore, playing: Bool.false }
-        else
-            Task.ok { model & pos: newY, ball: ball, score: model.score + 1 }
-
-drawGameStartMenu : Model -> Task {} _
-drawGameStartMenu = \model ->
-
-    RocRay.beginDrawing! Navy
-
-    RocRay.drawText! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
-
-    maxScore = model.maxScore |> Num.toStr
-
-    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
-
-    score = model.score |> Num.toStr
-
-    RocRay.drawText! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
-
-    RocRay.endDrawing!
-
-drawGamePlaying : Model, PlatformState -> Task {} _
-drawGamePlaying = \model, { mouse } ->
-
-    RocRay.beginDrawing! Navy
-
-    score = model.score |> Num.toStr
-
-    RocRay.drawText! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
-
-    newY = model.pos + (Num.toF32 mouse.position.y - model.pos) / 5
-
-    RocRay.drawRectangle! { rect: { x: 0, y: newY, width: pw, height: paddle }, color: Aqua }
-    RocRay.drawRectangle! { rect: { x: model.ball.pos.x, y: model.ball.pos.y, width: ballSize, height: ballSize }, color: Green }
-
-    drawCrossHair! mouse.position
-
-    RocRay.endDrawing!
-
-drawCrossHair : Vector2 -> Task {} []
-drawCrossHair = \mousePos ->
-    RocRay.drawLine! {
-        start: { x: mousePos.x, y: 0 },
-        end: { x: mousePos.x, y: height },
-        color: Yellow,
-    }
-
-    RocRay.drawLine! {
-        start: { x: 0, y: Num.toF32 mousePos.y },
-        end: { x: width, y: Num.toF32 mousePos.y },
-        color: Yellow,
-    }

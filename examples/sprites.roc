@@ -13,11 +13,11 @@ Model : {
     dudeAnimation : AnimatedSprite,
 }
 
-main : RocRay.Program Model _
-main = { init, render }
+main : RocRay.Program Model []
+main = { init!, render! }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width, height }
@@ -25,7 +25,7 @@ init =
 
     dude = RocRay.loadTexture! "examples/assets/sprite-dude/sheet.png"
 
-    Task.ok {
+    Ok {
         player: { x: width / 2, y: height / 2 },
         direction: WalkRight,
         dude,
@@ -36,8 +36,8 @@ init =
         },
     }
 
-render : Model, PlatformState -> Task Model []
-render = \model, { timestampMillis, keys } ->
+render! : Model, PlatformState => Result Model []
+render! = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White
 
@@ -53,7 +53,7 @@ render = \model, { timestampMillis, keys } ->
         tint: White,
     }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -67,7 +67,7 @@ render = \model, { timestampMillis, keys } ->
         else
             (model.player, model.direction)
 
-    Task.ok { model & player, dudeAnimation, direction }
+    Ok { model & player, dudeAnimation, direction }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
 dudeSprite = \sequence, frame ->

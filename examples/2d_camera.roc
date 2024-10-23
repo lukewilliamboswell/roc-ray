@@ -9,7 +9,7 @@ import rr.Keys
 import rand.Random
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
 screenWidth = 800
 screenHeight = 450
@@ -26,8 +26,8 @@ Model : {
     camera : Camera,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
@@ -47,15 +47,15 @@ init =
 
     buildings = generateBuildings
 
-    Task.ok {
+    Ok {
         player,
         buildings,
         camera,
         cameraSettings,
     }
 
-render : Model, PlatformState -> Task Model []
-render = \model, { mouse, keys } ->
+render! : Model, PlatformState => Result Model []
+render! = \model, { mouse, keys } ->
 
     # UPDATE CAMERA
     rotation =
@@ -97,24 +97,24 @@ render = \model, { mouse, keys } ->
 
     # RENDER WORLD
     RocRay.beginMode2D! model.camera
-    drawWorld! model
+    (drawWorld model) {}
     RocRay.endMode2D! model.camera
 
     # RENDER SCREEN UI
-    drawScreenUI!
+    drawScreenUI! {}
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
-    Task.ok { model & cameraSettings, player }
+    Ok { model & cameraSettings, player }
 
-drawWorld : Model -> Task {} _
-drawWorld = \model ->
+drawWorld : Model -> ({} => {})
+drawWorld = \model -> \{} ->
 
     # BACKGROUND
     RocRay.drawRectangle! { rect: { x: -6000, y: 320, width: 13000, height: 8000 }, color: Gray }
 
     # BUILDINGS
-    Task.forEach! model.buildings RocRay.drawRectangle
+    (forEach! model.buildings RocRay.drawRectangle!) {}
 
     # PLAYER
     playerWidth = 40
@@ -134,8 +134,8 @@ drawWorld = \model ->
     RocRay.drawLine! { start: { x: model.player.x, y: -screenHeight * 10 }, end: { x: model.player.x, y: screenHeight * 10 }, color: Yellow }
     RocRay.drawLine! { start: { x: -screenWidth * 10, y: model.player.y }, end: { x: screenWidth * 10, y: model.player.y }, color: Yellow }
 
-drawScreenUI : Task {} _
-drawScreenUI =
+drawScreenUI! : {} => {}
+drawScreenUI! = \{} ->
 
     RocRay.drawText! { pos: { x: 640, y: 10 }, text: "SCREEN AREA", size: 20, color: Red }
 
@@ -199,3 +199,12 @@ limit = \value, { upper, lower } ->
         lower
     else
         value
+
+# not sure this is ok, but just trying to replace Task.forEach
+forEach! : List a, (a => {}) => ({} => {})
+forEach! = \things, do -> \{} ->
+    when things is
+        [] -> {}
+        [first, .. as rest] ->
+            do first
+            (forEach! rest do) {}

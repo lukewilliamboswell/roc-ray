@@ -8,15 +8,15 @@ import rr.RocRay exposing [PlatformState, Sound]
 import rr.Keys
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
 Model : {
     wav : Sound,
     ogg : Sound,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.setWindowSize! { width: 800, height: 450 }
@@ -25,10 +25,10 @@ init =
     wav = RocRay.loadSound! "resources/sound.wav"
     ogg = RocRay.loadSound! "resources/target.ogg"
 
-    Task.ok { wav, ogg }
+    Ok { wav, ogg }
 
-render : Model, PlatformState -> Task Model []
-render = \model, { keys } ->
+render! : Model, PlatformState => Result Model []
+render! = \model, { keys } ->
 
     RocRay.beginDrawing! White
 
@@ -54,12 +54,12 @@ render = \model, { keys } ->
         else
             None
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
     when chosenSound is
         Play sound ->
             RocRay.playSound! sound
-            Task.ok model
+            Ok model
 
         None ->
-            Task.ok model
+            Ok model

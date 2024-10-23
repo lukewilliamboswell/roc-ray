@@ -15,22 +15,22 @@ width = 900
 height = 400
 
 main : RocRay.Program Model []
-main = { init, render }
+main = { init!, render! }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setWindowSize! { width, height }
     RocRay.setWindowTitle! "Squares Demo"
 
-    Task.ok {
+    Ok {
         circlePos: { x: width / 2, y: height / 2 },
         squares: [],
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model []
-render = \model, { keys, mouse } ->
+render! : Model, PlatformState => Result Model []
+render! = \model, { keys, mouse } ->
 
     RocRay.beginDrawing! Black
 
@@ -52,7 +52,7 @@ render = \model, { keys, mouse } ->
 
     RocRay.drawCircle! { center: model.circlePos, radius: 50, color: Aqua }
 
-    RocRay.endDrawing!
+    RocRay.endDrawing! {}
 
     newCirclePos =
         if Keys.down keys KeyUp then
@@ -66,4 +66,4 @@ render = \model, { keys, mouse } ->
         else
             model.circlePos
 
-    Task.ok { model & circlePos: newCirclePos }
+    Ok { model & circlePos: newCirclePos }

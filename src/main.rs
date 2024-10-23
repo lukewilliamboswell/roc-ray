@@ -160,7 +160,6 @@ fn update_platform_mode_draw_2d() {
         } else if mode.matches(TextureModeDraw2D) {
             *mode = TextureMode;
         } else {
-            // TODO HANDLE GOING THE OTHER WAY TOO
             panic!("unreachable, invalid mode should have been caught by is_effect_permitted")
         }
     });

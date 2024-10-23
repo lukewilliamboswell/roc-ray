@@ -36,7 +36,7 @@ init! = \{} ->
         },
     }
 
-render! : Model, PlatformState -> Result Model []
+render! : Model, PlatformState => Result Model []
 render! = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White

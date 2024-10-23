@@ -131,27 +131,6 @@ pub unsafe extern "C" fn roc_getppid() -> libc::pid_t {
     libc::getppid()
 }
 
-#[derive(Debug)]
-pub struct Model {
-    model: RocBox<()>,
-}
-impl Model {
-    unsafe fn init(model: RocBox<()>) -> Self {
-        // Set the refcount to constant to ensure this never gets freed.
-        // This also makes it thread-safe.
-        let data_ptr: *mut usize = std::mem::transmute(model);
-        let rc_ptr = data_ptr.offset(-1);
-        let max_refcount = 0;
-        *rc_ptr = max_refcount;
-        Self {
-            model: std::mem::transmute(data_ptr),
-        }
-    }
-}
-
-unsafe impl Send for Model {}
-unsafe impl Sync for Model {}
-
 #[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct PlatformState {
@@ -178,20 +157,13 @@ impl roc_std::RocRefcounted for PlatformState {
     }
 }
 
-pub fn call_roc_init() -> Model {
+pub fn call_roc_init() -> RocBox<()> {
     extern "C" {
         #[link_name = "roc__init_1_exposed_size"]
         fn init_size() -> usize;
 
         #[link_name = "roc__init_1_exposed"]
         fn init_caller(arg_not_used: i32) -> RocBox<()>;
-
-        // maybe it's a *mut RocBox<()> instead?
-        // fn init_caller(arg_not_used: i32) -> *mut RocBox<()>;
-        //
-        // FOR REFERENCE
-        // define void @roc__init_1_exposed_generic(ptr %0, i32 %1) !dbg !447 {
-        // define ptr @roc__init_1_exposed(i32 %0) !dbg !450 {
     }
 
     unsafe {
@@ -199,31 +171,28 @@ pub fn call_roc_init() -> Model {
 
         debug_assert_eq!(std::mem::size_of_val(&model), init_size());
 
-        Model::init(model)
+        model
     }
 }
 
-pub fn call_roc_render(platform_state: PlatformState, model: &Model) -> Model {
+pub fn call_roc_render(platform_state: PlatformState, model: RocBox<()>) -> RocBox<()> {
     extern "C" {
         #[link_name = "roc__render_1_exposed_size"]
         fn render_size() -> usize;
 
         #[link_name = "roc__render_1_exposed"]
         fn render_caller(
-            model_in: *const RocBox<()>,
+            model_in: RocBox<()>,
             platform_state: *const ManuallyDrop<PlatformState>,
         ) -> RocBox<()>;
-
-        // define void @roc__render_1_exposed_generic(ptr %0, ptr %1, ptr %2) !dbg !944 {
-        // define ptr @roc__render_1_exposed(ptr %0, ptr %1) !dbg !947 {
 
     }
 
     unsafe {
-        let result = render_caller(&model.model, &ManuallyDrop::new(platform_state));
+        let model = render_caller(model, &ManuallyDrop::new(platform_state));
 
-        debug_assert_eq!(std::mem::size_of_val(&result), render_size());
+        debug_assert_eq!(std::mem::size_of_val(&model), render_size());
 
-        Model::init(result)
+        model
     }
 }

@@ -142,7 +142,7 @@ fn main() {
                 mouse_wheel: bindings::GetMouseWheelMove(),
             };
 
-            model = roc::call_roc_render(platform_state, &model);
+            model = roc::call_roc_render(platform_state, model);
 
             if let Some((x, y)) = DRAW_FPS.get() {
                 bindings::DrawFPS(x, y);

@@ -830,6 +830,8 @@ unsafe extern "C" fn roc_fx_drawRenderTextureRec(
     let texture: &mut bindings::RenderTexture =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
+    dbg!(&texture, &source, &position, &color);
+
     bindings::DrawTextureRec(
         texture.texture,
         source.into(),

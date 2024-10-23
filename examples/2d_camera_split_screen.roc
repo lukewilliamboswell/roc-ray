@@ -1,15 +1,11 @@
 app [Model, init, render] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
-    time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
 import rr.RocRay exposing [Rectangle]
-#import rr.Keys
 import rr.Draw
 import rr.Camera
 import rr.RenderTexture
-#import rand.Random
 
 screenWidth = 800
 screenHeight = 440
@@ -57,9 +53,6 @@ init =
     screenLeft = RenderTexture.create! { width: screenWidth / 2, height: screenHeight / 2}
     screenRight = RenderTexture.create! { width: screenWidth / 2, height: screenHeight / 2}
 
-    # WHAT IS THIS?
-    #splitScreenRect = { x: 0, y: 0, width: screenWidth / 2, height: screenHeight }
-
     Task.ok {
         playerOne,
         playerTwo,
@@ -74,48 +67,13 @@ init =
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, {  } ->
 
-    ## UPDATE CAMERA
-    #rotation =
-    #    (
-    #        if Keys.down keys KeyA then
-    #            model.cameraSettings.rotation - 1
-    #        else if Keys.down keys KeyS then
-    #            model.cameraSettings.rotation + 1
-    #        else
-    #            model.cameraSettings.rotation
-    #    )
-    #    |> limit { upper: 40, lower: -40 }
-    #    |> \r -> if Keys.pressed keys KeyR then 0 else r
-
-    #zoom =
-    #    (model.cameraSettings.zoom + (mouse.wheel * 0.05))
-    #    |> limit { upper: 3, lower: 0.1 }
-    #    |> \z -> if Keys.pressed keys KeyR then 1 else z
-
-    #cameraSettings =
-    #    model.cameraSettings
-    #    |> &target model.player
-    #    |> &rotation rotation
-    #    |> &zoom zoom
-
-    #Camera.update! model.camera cameraSettings
-
-    ## UPDATE PLAYER
-    #player =
-    #    if Keys.down keys KeyLeft then
-    #        { x: model.player.x - 10, y: model.player.y }
-    #    else if Keys.down keys KeyRight then
-    #        { x: model.player.x + 10, y: model.player.y }
-    #    else
-    #        model.player
-    #
-
     # RENDER THE SCENE INTO THE LEFT SCREEN TEXTURE
     Draw.withTexture! model.screenLeft Aqua \{} ->
 
         Draw.withMode2D! model.cameraLeft \{} ->
 
             Draw.rectangle! { rect: model.playerOne, color: Red }
+            Draw.rectangle! { rect: { x : -1000, y : -1000, width : screenWidth*100, height: screenHeight*100 }, color: Blue}
 
             drawScene!
 
@@ -125,8 +83,8 @@ render = \model, {  } ->
         # DRAW THE LEFT SCREEN TEXTURE INTO THE FRAMEBUFFER
         Draw.renderTextureRec! {
             texture : model.screenLeft,
-            source : { x : 0, y : 0, width : screenWidth / 2, height: screenHeight / 2 },
-            pos : { x: 0, y: 0},
+            source : { x : 50, y : 50, width : screenWidth / 2, height: screenHeight / 2 },
+            pos : { x: 100, y: 100},
             tint : White,
         }
 

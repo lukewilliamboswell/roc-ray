@@ -93,6 +93,12 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
         return;
     }
 
+    let render_texture_heap = render_texture_heap();
+    if render_texture_heap.in_range(c_ptr) {
+        render_texture_heap.dealloc(c_ptr);
+        return;
+    }
+
     libc::free(c_ptr);
 }
 

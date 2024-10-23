@@ -7,7 +7,6 @@ platform "roc-ray"
 
 import RocRay exposing [Program]
 import Mouse
-import Keys
 import InternalKeyboard
 import InternalMouse
 import Effect
@@ -50,7 +49,7 @@ render = \boxedModel, platformState ->
     state = {
         timestampMillis,
         frameCount,
-        keys: keysForApp { keys },
+        keys: InternalKeyboard.pack keys,
         mouse: {
             position: { x: mousePosX, y: mousePosY },
             buttons: mouseButtonsForApp { mouseButtons },
@@ -65,15 +64,6 @@ render = \boxedModel, platformState ->
                 Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
                 Effect.exit!
                 Task.err {}
-
-keysForApp : { keys : List U8 } -> Keys.Keys
-keysForApp = \{ keys } ->
-    keys
-    |> List.map InternalKeyboard.keyStateFromU8
-    |> List.mapWithIndex \s, i -> (InternalKeyboard.keyFromU64 i, s)
-    |> List.keepOks \(recognized, s) ->
-        Result.map recognized \key -> (key, s)
-    |> Dict.fromList
 
 mouseButtonsForApp : { mouseButtons : List U8 } -> Mouse.Buttons
 mouseButtonsForApp = \{ mouseButtons } ->

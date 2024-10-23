@@ -37,7 +37,6 @@ module [
     endDrawing,
 ]
 
-import Keys
 import Mouse
 import Effect
 import InternalKeyboard
@@ -73,7 +72,7 @@ Program state err : {
 PlatformState : {
     timestampMillis : U64,
     frameCount : U64,
-    keys : Keys.Keys,
+    keys : InternalKeyboard.Keys,
     mouse : {
         position : Vector2,
         buttons : Mouse.Buttons,
@@ -379,7 +378,7 @@ beginMode2D = \camera ->
 endMode2D : Camera -> Task {} *
 endMode2D = \camera ->
     Effect.endMode2D camera
-    |> Task.mapErr! \{} -> crash "unreachable endMode2D"
+        |> Task.mapErr! \{} -> crash "unreachable endMode2D"
 
 ## Load a texture from a file.
 ## ```
@@ -412,7 +411,7 @@ drawTextureRec = \{ texture, source, pos, tint } ->
 loadSound : Str -> Task Sound *
 loadSound = \path ->
     Effect.loadSound path
-    |> Task.mapErr \{} -> crash "unreachable Sound.load"
+    |> Task.mapErr \{} -> crash "unreachable loadSound"
 
 ## Play a loaded sound.
 ## ```
@@ -421,4 +420,4 @@ loadSound = \path ->
 playSound : Sound -> Task {} *
 playSound = \sound ->
     Effect.playSound sound
-    |> Task.mapErr \{} -> crash "unreachable Sound.play"
+    |> Task.mapErr \{} -> crash "unreachable playSound"

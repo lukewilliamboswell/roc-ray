@@ -1,8 +1,6 @@
-app [main, Model] {
-    rr: platform "../platform/main.roc",
-}
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [PlatformState, Rectangle]
+import rr.RocRay exposing [Rectangle]
 import rr.Keys
 
 Model : {
@@ -13,9 +11,6 @@ Model : {
 
 width = 900
 height = 400
-
-main : RocRay.Program Model []
-main = { init, render }
 
 init : Task Model []
 init =
@@ -29,7 +24,7 @@ init =
         status: Ready,
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, mouse } ->
 
     RocRay.beginDrawing! Black

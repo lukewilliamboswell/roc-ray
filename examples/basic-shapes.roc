@@ -1,14 +1,11 @@
-app [main, Model] { rr: platform "../platform/main.roc" }
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [PlatformState]
+import rr.RocRay
 
 width = 800
 height = 600
 
 Model : {}
-
-main : RocRay.Program Model []
-main = { init, render }
 
 init : Task Model []
 init =
@@ -18,7 +15,7 @@ init =
 
     Task.ok {}
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \_, _ ->
 
     RocRay.beginDrawing! White

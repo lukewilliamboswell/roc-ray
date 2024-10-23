@@ -1,18 +1,13 @@
-app [main, Model] {
-    rr: platform "../platform/main.roc",
-}
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
-import rr.RocRay exposing [PlatformState, Sound]
+import rr.RocRay
 import rr.Keys
 
-main : RocRay.Program Model []
-main = { init, render }
-
 Model : {
-    wav : Sound,
-    ogg : Sound,
+    wav : RocRay.Sound,
+    ogg : RocRay.Sound,
 }
 
 init : Task Model []
@@ -27,7 +22,7 @@ init =
 
     Task.ok { wav, ogg }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys } ->
 
     RocRay.beginDrawing! White

@@ -1,15 +1,12 @@
-app [main, Model] {
+app [Model, init, render] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import rr.RocRay exposing [PlatformState, Vector2, Rectangle, Color, Camera]
+import rr.RocRay exposing [Vector2, Rectangle, Color, Camera]
 import rr.Keys
 import rand.Random
-
-main : RocRay.Program Model []
-main = { init, render }
 
 screenWidth = 800
 screenHeight = 450
@@ -54,7 +51,7 @@ init =
         cameraSettings,
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { mouse, keys } ->
 
     # UPDATE CAMERA

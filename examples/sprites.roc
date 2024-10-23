@@ -1,6 +1,6 @@
-app [main, Model] { rr: platform "../platform/main.roc" }
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [PlatformState, Texture, Rectangle]
+import rr.RocRay exposing [Texture, Rectangle]
 import rr.Keys
 
 width = 800
@@ -12,9 +12,6 @@ Model : {
     dude : Texture,
     dudeAnimation : AnimatedSprite,
 }
-
-main : RocRay.Program Model _
-main = { init, render }
 
 init : Task Model []
 init =
@@ -36,7 +33,7 @@ init =
         },
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { timestampMillis, keys } ->
 
     RocRay.beginDrawing! White

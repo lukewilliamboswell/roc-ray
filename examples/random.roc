@@ -1,16 +1,13 @@
-app [main, Model] {
+app [Model, init, render] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import rr.RocRay exposing [PlatformState, Rectangle, Color]
+import rr.RocRay exposing [Rectangle, Color]
 import rr.Keys
 import rand.Random
 import time.DateTime
-
-main : RocRay.Program Model []
-main = { init, render }
 
 Model : {
     width : F32,
@@ -40,7 +37,7 @@ init =
         height,
     }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { keys, timestampMillis } ->
 
     RocRay.beginDrawing! Black

@@ -1,5 +1,4 @@
 module [
-    Program,
     PlatformState,
     KeyboardKey,
     Color,
@@ -46,18 +45,6 @@ import InternalKeyboard
 import InternalColor
 import InternalVector
 import InternalRectangle
-
-## Provide an initial state and a render function to the platform.
-## ```
-## {
-##     init : Task state []err,
-##     render : state -> Task state []err,
-## }
-## ```
-Program state err : {
-    init : Task state []err,
-    render : state, PlatformState -> Task state []err,
-} where err implements Inspect
 
 ## A state record provided by platform on each frame.
 ## ```

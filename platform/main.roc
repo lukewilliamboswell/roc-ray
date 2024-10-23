@@ -1,11 +1,14 @@
 platform "roc-ray"
-    requires { Model } { main : Program Model _ }
+    requires { Model } {
+        init : Task state []err,
+        render : state, RocRay.PlatformState -> Task state []err,
+    }
     exposes [RocRay, Keys, Mouse]
     packages {}
     imports []
     provides [forHost]
 
-import RocRay exposing [Program]
+import RocRay
 import Mouse
 import InternalKeyboard
 import InternalMouse
@@ -22,16 +25,16 @@ PlatformStateFromHost : {
 }
 
 ProgramForHost model : {
-    init : Task (Box model) {},
-    render : Box model, PlatformStateFromHost -> Task (Box model) {},
+    initForHost : Task (Box model) {},
+    renderForHost : Box model, PlatformStateFromHost -> Task (Box model) {},
 }
 
 forHost : ProgramForHost _
-forHost = { init, render }
+forHost = { initForHost, renderForHost }
 
-init : Task (Box Model) {}
-init =
-    Task.attempt main.init \result ->
+initForHost : Task (Box Model) {}
+initForHost =
+    Task.attempt init \result ->
         when result is
             Ok m -> Task.ok (Box.box m)
             Err err ->
@@ -39,8 +42,8 @@ init =
                 Effect.exit!
                 Task.err {}
 
-render : Box Model, PlatformStateFromHost -> Task (Box Model) {}
-render = \boxedModel, platformState ->
+renderForHost : Box Model, PlatformStateFromHost -> Task (Box Model) {}
+renderForHost = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
     { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
@@ -57,7 +60,7 @@ render = \boxedModel, platformState ->
         },
     }
 
-    Task.attempt (main.render model state) \result ->
+    Task.attempt (render model state) \result ->
         when result is
             Ok m -> Task.ok (Box.box m)
             Err err ->

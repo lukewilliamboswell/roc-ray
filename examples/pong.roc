@@ -1,12 +1,7 @@
-app [main, Model] {
-    rr: platform "../platform/main.roc",
-}
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [Vector2, PlatformState]
+import rr.RocRay exposing [Vector2]
 import rr.Mouse
-
-main : RocRay.Program Model []
-main = { init, render }
 
 Ball : { pos : Vector2, vel : Vector2 }
 
@@ -66,7 +61,7 @@ bounce = \ball, pos ->
 
     { pos: { x: x2, y: y2 }, vel: { x: vx2, y: vy3 } }
 
-render : Model, PlatformState -> Task Model []
+render : Model, RocRay.PlatformState -> Task Model []
 render = \model, state ->
 
     if !model.playing then
@@ -109,7 +104,7 @@ drawGameStartMenu = \model ->
 
     RocRay.endDrawing!
 
-drawGamePlaying : Model, PlatformState -> Task {} _
+drawGamePlaying : Model, RocRay.PlatformState -> Task {} _
 drawGamePlaying = \model, { mouse } ->
 
     RocRay.beginDrawing! Navy

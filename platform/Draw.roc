@@ -10,6 +10,7 @@ module [
     circle,
     circleGradient,
     textureRec,
+    renderTextureRec,
 ]
 
 import Effect
@@ -154,4 +155,19 @@ circleGradient = \{ center, radius, inner, outer } ->
 textureRec : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } -> Task {} *
 textureRec = \{ texture, source, pos, tint } ->
     Effect.drawTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+    |> Task.mapErr \{} -> crash "unreachable drawTextureRec"
+
+## Draw part of a texture.
+## ```
+## # Draw the sprite at the player's position.
+## Draw.renderTextureRec! {
+##     texture: model.dude,
+##     source: dudeSprite model.direction dudeAnimation.frame,
+##     pos: model.player,
+##     tint: White,
+## }
+## ```
+renderTextureRec : { texture : RenderTexture, source : Rectangle, pos : Vector2, tint : Color } -> Task {} *
+renderTextureRec = \{ texture, source, pos, tint } ->
+    Effect.drawRenderTextureRec texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
     |> Task.mapErr \{} -> crash "unreachable drawTextureRec"

@@ -812,6 +812,34 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     RocResult::ok(())
 }
 
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawRenderTextureRec(
+    boxed_texture: RocBox<()>,
+    source: &glue::RocRectangle,
+    position: &glue::RocVector2,
+    color: glue::RocColor,
+) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawTextureRectangle) {
+        let mode = platform_mode_str();
+        exit_with_msg(
+            format!("Cannot draw a texture rectangle while in {mode}"),
+            ExitErrCode::ExitEffectNotPermitted,
+        );
+    }
+
+    let texture: &mut bindings::RenderTexture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    bindings::DrawTextureRec(
+        texture.texture,
+        source.into(),
+        position.into(),
+        color.into(),
+    );
+
+    RocResult::ok(())
+}
+
 #[cfg(test)]
 mod test_platform_mode_transitions {
     use super::*;

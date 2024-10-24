@@ -7,7 +7,7 @@ import rr.Draw
 Ball : { pos : Vector2, vel : Vector2 }
 
 Model : {
-    screen : [StartMenu, Playing],
+    screen : [StartMenu, Playing, GameOver],
     maxScore : I32,
     score : I32,
     ball : Ball,
@@ -72,22 +72,35 @@ bounce = \ball, pos ->
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, state ->
+    beginGameOnClick = \oldModel ->
+        if Mouse.pressed state.mouse.buttons.left then
+            { oldModel & screen: Playing, score: 0, ball: newBall }
+        else
+            oldModel
+
     when model.screen is
         StartMenu ->
-            # DRAW START MENU
-            drawGameStartMenu! model
+            Draw.draw! Navy \{} ->
+                drawGameStartMenu! model
 
-            if Mouse.pressed state.mouse.buttons.left then
-                Task.ok { model & screen: Playing, score: 0 }
-            else
-                Task.ok model
+            Task.ok (beginGameOnClick model)
+
+        GameOver ->
+            Draw.draw! Navy \{} ->
+                drawGamePlaying! model state
+                drawGameStartMenu! model
+
+            Task.ok (beginGameOnClick model)
 
         Playing ->
             # Increase the speed of the ball, starts getting crazy after a minute... just for a bit of fun
             RocRay.setTargetFPS! (60 + ((Num.toFrac state.frameCount) / 60 |> Num.floor |> Num.toI32))
 
             newModel = update model state
-            drawGamePlaying! newModel state
+
+            Draw.draw! Navy \{} ->
+                drawGamePlaying! newModel state
+
             Task.ok newModel
 
 update : Model, RocRay.PlatformState -> Model
@@ -97,31 +110,30 @@ update = \model, state ->
 
     if ball.pos.x <= 0 then
         maxScore = Num.max model.score model.maxScore
-        { model & pos: newY, ball: newBall, maxScore, screen: StartMenu }
+        { model & pos: newY, maxScore, screen: GameOver }
     else
         { model & pos: newY, ball: ball, score: model.score + 1 }
 
 drawGameStartMenu : Model -> Task {} _
 drawGameStartMenu = \model ->
-    Draw.draw! Navy \{} ->
-        maxScore = model.maxScore |> Num.toStr
-        score = model.score |> Num.toStr
+    # DRAW START MENU
+    maxScore = model.maxScore |> Num.toStr
+    score = model.score |> Num.toStr
 
-        Draw.text! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
-        Draw.text! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
-        Draw.text! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
+    Draw.text! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
+    Draw.text! { pos: { x: 50, y: 50 }, text: "Max Score: $(maxScore)", size: 20, color: White }
+    Draw.text! { pos: { x: 50, y: 80 }, text: "Last Score: $(score)", size: 20, color: White }
 
 drawGamePlaying : Model, RocRay.PlatformState -> Task {} _
 drawGamePlaying = \model, { mouse } ->
-    Draw.draw! Navy \{} ->
-        score = model.score |> Num.toStr
+    score = model.score |> Num.toStr
 
-        Draw.text! { pos: { x: 50, y: 50 }, text: "Score: $(score)", size: 20, color: White }
+    Draw.text! { pos: { x: 650, y: 50 }, text: "Score: $(score)", size: 20, color: White }
 
-        drawPaddle! model
-        drawBall! model.ball
+    drawPaddle! model
+    drawBall! model.ball
 
-        drawCrossHair! mouse.position
+    drawCrossHair! mouse.position
 
 drawPaddle : Model -> Task {} []
 drawPaddle = \{ pos } ->

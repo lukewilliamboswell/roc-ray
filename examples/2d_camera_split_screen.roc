@@ -6,6 +6,7 @@ import rr.RocRay exposing [Rectangle]
 import rr.Draw
 import rr.Camera
 import rr.RenderTexture
+import rr.Keys
 
 screenWidth = 800
 screenHeight = 440
@@ -25,23 +26,21 @@ Model : {
 init : Task Model []
 init =
 
-    RocRay.setTargetFPS! 60
-    RocRay.setDrawFPS! { fps: Visible }
     RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
     RocRay.setWindowTitle! "2D camera split-screen"
 
-    playerOne = { x : 200, y : 200, width : playerSize, height : playerSize }
-    playerTwo = { x : 250, y : 200, width : playerSize, height : playerSize }
+    playerOne = { x: 200, y: 200, width: playerSize, height: playerSize }
+    playerTwo = { x: 250, y: 200, width: playerSize, height: playerSize }
 
     settingsLeft = {
-        target: {x:playerOne.x, y:playerOne.y},
+        target: { x: playerOne.x, y: playerOne.y },
         offset: { x: 200, y: 200 },
         rotation: 0,
         zoom: 1,
     }
 
     settingsRight = {
-        target: {x:playerTwo.x, y:playerTwo.y},
+        target: { x: playerTwo.x, y: playerTwo.y },
         offset: { x: 200, y: 200 },
         rotation: 0,
         zoom: 1,
@@ -50,8 +49,8 @@ init =
     cameraLeft = Camera.create! settingsLeft
     cameraRight = Camera.create! settingsRight
 
-    screenLeft = RenderTexture.create! { width: screenWidth / 2, height: screenHeight / 2}
-    screenRight = RenderTexture.create! { width: screenWidth / 2, height: screenHeight / 2}
+    screenLeft = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
+    screenRight = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
 
     Task.ok {
         playerOne,
@@ -65,36 +64,111 @@ init =
     }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, {  } ->
+render = \model, { keys } ->
 
     # RENDER THE SCENE INTO THE LEFT SCREEN TEXTURE
     Draw.withTexture! model.screenLeft White \{} ->
 
         Draw.withMode2D! model.cameraLeft \{} ->
 
-            Draw.rectangle! { rect: model.playerOne, color: Red }
-            Draw.rectangle! { rect: { x : -1000, y : -1000, width : screenWidth*100, height: screenHeight*100 }, color: Blue}
+            drawGrid!
 
-            drawScene!
+            Draw.rectangle! { rect: model.playerOne, color: Red }
+            Draw.rectangle! { rect: model.playerTwo, color: Blue }
+
+            Draw.text! { pos: { x: 10, y: 10 }, text: "PLAYER1: W/S/A/D to move", size: 10, color: Red }
+
+    # RENDER THE SCENE INTO THE RIGHT SCREEN TEXTURE
+    Draw.withTexture! model.screenRight White \{} ->
+
+        Draw.withMode2D! model.cameraRight \{} ->
+
+            drawGrid!
+
+            Draw.rectangle! { rect: model.playerOne, color: Red }
+            Draw.rectangle! { rect: model.playerTwo, color: Blue }
+
+            Draw.text! { pos: { x: 10, y: 10 }, text: "PLAYER2: UP/DOWN/LEFT/RIGHT to move", size: 10, color: Blue }
 
     # RENDER FRAMEBUFFER
     Draw.draw! White \{} ->
 
         # DRAW THE LEFT SCREEN TEXTURE INTO THE FRAMEBUFFER
         Draw.renderTextureRec! {
-            texture : model.screenLeft,
-            source : { x : 50, y : 50, width : screenWidth / 2, height: screenHeight / 2 },
-            pos : { x: 100, y: 100},
-            tint : White,
+            texture: model.screenLeft,
+            source: { x: 0, y: 0, width: screenWidth / 2, height: -screenHeight },
+            pos: { x: 0, y: 0 },
+            tint: White,
         }
 
-    Task.ok model
+        # DRAW THE RIGHT SCREEN TEXTURE INTO THE FRAMEBUFFER
+        Draw.renderTextureRec! {
+            texture: model.screenRight,
+            source: { x: 0, y: 0, width: screenWidth / 2, height: -screenHeight },
+            pos: { x: screenWidth / 2, y: 0 },
+            tint: White,
+        }
 
-drawScene : Task {} []
-drawScene =
+        # DRAW THE SPLIT LINE
+        Draw.rectangle! { rect: { x: (screenWidth / 2) - 2, y: 0, width: 4, height: screenHeight }, color: Black }
 
-    List.range { start: At 0, end: Before ((screenWidth/playerSize) + 1)}
-    |> List.map \i -> { start: { x: playerSize*i, y: 0 }, end: { x: playerSize*i, y: screenHeight }, color: lightGray }
-    |> Task.forEach! Draw.line
+    playerOne =
+        if Keys.down keys KeyUp then
+            model.playerOne |> &y (model.playerOne.y - 1)
+        else if Keys.down keys KeyDown then
+            model.playerOne |> &y (model.playerOne.y + 1)
+        else if Keys.down keys KeyLeft then
+            model.playerOne |> &x (model.playerOne.x - 1)
+        else if Keys.down keys KeyRight then
+            model.playerOne |> &x (model.playerOne.x + 1)
+        else
+            model.playerOne
+
+    playerTwo =
+        if Keys.down keys KeyW then
+            model.playerTwo |> &y (model.playerTwo.y - 1)
+        else if Keys.down keys KeyS then
+            model.playerTwo |> &y (model.playerTwo.y + 1)
+        else if Keys.down keys KeyA then
+            model.playerTwo |> &x (model.playerTwo.x - 1)
+        else if Keys.down keys KeyD then
+            model.playerTwo |> &x (model.playerTwo.x + 1)
+        else
+            model.playerTwo
+
+    settingsLeft = model.settingsLeft |> &target { x: model.playerOne.x, y: model.playerOne.y }
+
+    settingsRight = model.settingsLeft |> &target { x: model.playerTwo.x, y: model.playerTwo.y }
+
+    Camera.update! model.cameraLeft settingsLeft
+    Camera.update! model.cameraRight settingsRight
+
+    Task.ok { model & playerOne, playerTwo, settingsLeft, settingsRight }
+
+drawGrid : Task {} []
+drawGrid =
+
+    # VERTICAL LINES
+    List.range { start: At 0, end: At (screenWidth / playerSize) }
+        |> List.map \i -> { start: { x: playerSize * i, y: 0 }, end: { x: playerSize * i, y: screenHeight }, color: lightGray }
+        |> Task.forEach! Draw.line
+
+    # HORIZONTAL LINES
+    List.range { start: At 0, end: At (screenHeight / playerSize) }
+        |> List.map \j -> { start: { x: 0, y: playerSize * j }, end: { x: screenWidth, y: playerSize * j }, color: lightGray }
+        |> Task.forEach! Draw.line
+
+    # GRID COORDINATES
+    List.range { start: At 0, end: Before (screenWidth / playerSize) }
+        |> List.map \i ->
+            List.range { start: At 0, end: Before (screenHeight / playerSize) }
+            |> List.map \j -> {
+                pos: { x: 10 + (playerSize * i), y: 15 + (playerSize * j) },
+                text: "[$(Num.toStr (Num.round i)),$(Num.toStr (Num.round j))]",
+                size: 10,
+                color: lightGray,
+            }
+        |> List.join
+        |> Task.forEach! Draw.text
 
 lightGray = RGBA 200 200 200 255

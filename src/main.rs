@@ -174,11 +174,14 @@ fn main() {
             panic!("Attempting to create window failed!");
         }
 
+        let mut frame_count = 0;
+
+        #[cfg(feature = "trace-debug")]
+        bindings::SetTraceLogLevel(bindings::TraceLogLevel_LOG_DEBUG as i32);
+
         bindings::InitAudioDevice();
 
         let mut model = roc::call_roc_init();
-
-        let mut frame_count = 0;
 
         while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             let duration_since_epoch = SystemTime::now()
@@ -186,6 +189,12 @@ fn main() {
                 .unwrap();
 
             let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
+
+            #[cfg(feature = "trace-debug")]
+            trace_log(&format!(
+                "------ RENDER frame: {}, millis: {} ------",
+                frame_count, timestamp
+            ));
 
             let platform_state = roc::PlatformState {
                 frame_count,
@@ -573,6 +582,9 @@ extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), 
 
     #[cfg(not(test))]
     unsafe {
+        #[cfg(feature = "trace-debug")]
+        trace_log("BeginDrawing");
+
         bindings::BeginDrawing();
         bindings::ClearBackground(clear_color.into());
     }
@@ -594,6 +606,9 @@ extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
 
     #[cfg(not(test))]
     unsafe {
+        #[cfg(feature = "trace-debug")]
+        trace_log("EndDrawing");
+
         bindings::EndMode2D();
     }
 
@@ -615,6 +630,9 @@ extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> 
 
     #[cfg(not(test))]
     unsafe {
+        #[cfg(feature = "trace-debug")]
+        trace_log("BeginMode2D");
+
         let camera: &mut bindings::Camera2D =
             ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
@@ -638,6 +656,9 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) -> RocResult<(), ()> {
 
     #[cfg(not(test))]
     unsafe {
+        #[cfg(feature = "trace-debug")]
+        trace_log("EndMode2D");
+
         bindings::EndMode2D();
     }
 
@@ -662,6 +683,9 @@ extern "C" fn roc_fx_beginTexture(
 
     #[cfg(not(test))]
     unsafe {
+        #[cfg(feature = "trace-debug")]
+        trace_log("BeginTexture");
+
         let render_texture: &mut bindings::RenderTexture =
             ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
 
@@ -686,7 +710,10 @@ extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) -> RocResult<
 
     #[cfg(not(test))]
     unsafe {
-        bindings::EndMode2D();
+        #[cfg(feature = "trace-debug")]
+        trace_log("EndTexture");
+
+        bindings::EndTextureMode();
     }
 
     RocResult::ok(())
@@ -810,6 +837,41 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
 
     RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_drawRenderTextureRec(
+    boxed_texture: RocBox<()>,
+    source: &glue::RocRectangle,
+    position: &glue::RocVector2,
+    color: glue::RocColor,
+) -> RocResult<(), ()> {
+    if !is_effect_permitted(PlatformEffect::DrawTextureRectangle) {
+        let mode = platform_mode_str();
+        exit_with_msg(
+            format!("Cannot draw a texture rectangle while in {mode}"),
+            ExitErrCode::ExitEffectNotPermitted,
+        );
+    }
+
+    let texture: &mut bindings::RenderTexture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    bindings::DrawTextureRec(
+        texture.texture,
+        source.into(),
+        position.into(),
+        color.into(),
+    );
+
+    RocResult::ok(())
+}
+
+#[cfg(feature = "trace-debug")]
+unsafe fn trace_log(msg: &str) {
+    let level = bindings::TraceLogLevel_LOG_DEBUG;
+    let text = CString::new(msg).unwrap();
+    bindings::TraceLog(level as i32, text.as_ptr());
 }
 
 #[cfg(test)]

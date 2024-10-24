@@ -34,6 +34,7 @@ hosted Effect
         loadSound,
         playSound,
         createRenderTexture,
+        drawRenderTextureRec,
     ]
     imports []
 
@@ -91,6 +92,7 @@ endMode2D : Camera -> Task {} {}
 Texture := Box {}
 loadTexture : Str -> Task Texture {}
 drawTextureRec : Texture, RocRectangle, RocVector2, RocColor -> Task {} {}
+drawRenderTextureRec : RenderTexture, RocRectangle, RocVector2, RocColor -> Task {} {}
 
 Sound := Box {}
 loadSound : Str -> Task Sound {}

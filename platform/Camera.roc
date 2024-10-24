@@ -1,8 +1,15 @@
-module [create, update]
+module [Settings, create, update]
 
 import Effect
 import InternalVector
 import RocRay exposing [Camera, Vector2]
+
+Settings : {
+    target : Vector2,
+    offset : Vector2,
+    rotation : F32,
+    zoom : F32,
+}
 
 ## Create a new camera. The camera can be used to render a 2D and 3D perspective of the world.
 ## ```
@@ -15,7 +22,7 @@ import RocRay exposing [Camera, Vector2]
 ##
 ## cameraID = Camera.create! cameraSettings
 ## ```
-create : { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task Camera *
+create : Settings -> Task Camera *
 create = \{ target, offset, rotation, zoom } ->
     Effect.createCamera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
     |> Task.map \camera -> camera
@@ -31,7 +38,7 @@ create = \{ target, offset, rotation, zoom } ->
 ##
 ## Camera.update! model.cameraID cameraSettings
 ## ```
-update : Camera, { target : Vector2, offset : Vector2, rotation : F32, zoom : F32 } -> Task {} *
+update : Camera, Settings -> Task {} *
 update = \camera, { target, offset, rotation, zoom } ->
     Effect.updateCamera camera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
     |> Task.mapErr \{} -> crash "unreachable updateCamera"

@@ -19,10 +19,10 @@ setup:
 
 # build and run an executable
 [unix]
-dev app="examples/basic-shapes.roc":
+dev app="examples/basic-shapes.roc" features="default":
     roc check {{app}}
     roc build --no-link --emit-llvm-ir --output app.o {{app}}
-    cargo run
+    cargo run --features {{features}}
 
 # build and run an executable
 [windows]

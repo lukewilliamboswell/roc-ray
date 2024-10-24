@@ -68,7 +68,7 @@ render : Model, RocRay.PlatformState -> Task Model []
 render = \model, {  } ->
 
     # RENDER THE SCENE INTO THE LEFT SCREEN TEXTURE
-    Draw.withTexture! model.screenLeft Aqua \{} ->
+    Draw.withTexture! model.screenLeft White \{} ->
 
         Draw.withMode2D! model.cameraLeft \{} ->
 

@@ -57,10 +57,7 @@ render = \model, { timestampMillis, keys, network } ->
 
     Draw.draw! White \{} ->
 
-        connected = network.peers.connected |> List.map Network.toStr |> Str.joinWith ", "
-        disconnected = network.peers.disconnected |> List.map Network.toStr |> Str.joinWith ", "
-
-        Draw.text! { pos: { x: 10, y: 10 }, text: "Connected: $(connected), Disconnected: $(disconnected)", size: 40, color: Navy }
+        Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
         Draw.textureRec! {
@@ -69,6 +66,8 @@ render = \model, { timestampMillis, keys, network } ->
             pos: model.player,
             tint: White,
         }
+
+        drawPeerConnections! network.peers
 
     Task.ok { model & player, dudeAnimation, direction }
 
@@ -106,3 +105,24 @@ sprite64x64source = \{ row, col } -> {
     width: 64,
     height: 64,
 }
+
+drawPeerConnections : {
+    connected : List Network.UUID,
+    disconnected : List Network.UUID,
+} -> Task {} _
+drawPeerConnections = \{ connected, disconnected } ->
+
+    combined =
+        List.concat
+            (connected |> List.map \uuid -> "CONNECTED: $(Network.toStr uuid)")
+            (disconnected |> List.map \uuid -> "DISCONNECTED: $(Network.toStr uuid)")
+        |> List.append "NETWORK PEERS $(Num.toStr (List.len connected)) connected, $(Num.toStr (List.len disconnected)) disconnected"
+
+    List.range { start: At 0, end: Before (List.len combined)}
+    |> List.map \i -> {
+        pos: { x: 10, y: Num.toFrac (height - 10 - (i*10)) },
+        text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
+        size: 10,
+        color: Black,
+    }
+    |> Task.forEach Draw.text

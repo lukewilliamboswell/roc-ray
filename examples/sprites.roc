@@ -67,7 +67,8 @@ render = \model, { timestampMillis, keys, network } ->
             tint: White,
         }
 
-        drawPeerConnections! network.peers
+        displayPeerConnections! network.peers
+        displayMessages! network.messages
 
     Task.ok { model & player, dudeAnimation, direction }
 
@@ -106,11 +107,11 @@ sprite64x64source = \{ row, col } -> {
     height: 64,
 }
 
-drawPeerConnections : {
+displayPeerConnections : {
     connected : List Network.UUID,
     disconnected : List Network.UUID,
 } -> Task {} _
-drawPeerConnections = \{ connected, disconnected } ->
+displayPeerConnections = \{ connected, disconnected } ->
 
     combined =
         List.concat
@@ -122,6 +123,34 @@ drawPeerConnections = \{ connected, disconnected } ->
     |> List.map \i -> {
         pos: { x: 10, y: Num.toFrac (height - 10 - (i*10)) },
         text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
+        size: 10,
+        color: Black,
+    }
+    |> Task.forEach Draw.text
+
+displayMessages : List {
+    from: Network.UUID,
+    bytes: List U8,
+} -> Task {} _
+displayMessages = \messages ->
+
+    total = List.len messages
+
+    totalMsg = "MESSAGES TOTAL $(Num.toStr total)"
+
+    totalWidth = RocRay.measureText {text: totalMsg, size: 10} |> Task.map! Num.toFrac
+
+    Draw.text! {
+        pos: { x: (width - 10 - totalWidth), y: Num.toFrac (height - 10 - (total*10)) },
+        text: totalMsg,
+        size: 10,
+        color: Black,
+    }
+
+    messages
+    |> List.mapWithIndex \msg, i -> {
+        pos: { x: width  - 10, y: Num.toFrac (height - 10 - (i*10)) },
+        text: "FROM $(Inspect.toStr msg.from), $(msg.bytes |> List.len |> Num.toStr) BYTES",
         size: 10,
         color: Black,
     }

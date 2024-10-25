@@ -23,7 +23,13 @@ PlatformStateFromHost : {
     mousePosX : F32,
     mousePosY : F32,
     mouseWheel : F32,
-    peers: PeerState,
+    peers : PeerState,
+    messages : List PeerMessage,
+}
+
+PeerMessage : {
+    from : Effect.UUID,
+    bytes : List U8,
 }
 
 PeerState : {
@@ -53,7 +59,7 @@ renderForHost : Box Model, PlatformStateFromHost -> Task (Box Model) {}
 renderForHost = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
-    { timestampMillis, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
+    { timestampMillis, messages, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
@@ -66,11 +72,12 @@ renderForHost = \boxedModel, platformState ->
             wheel: mouseWheel,
         },
         network: {
-            peers : {
+            peers: {
                 connected: peers.connected |> List.map Network.fromU64Pair,
                 disconnected: peers.disconnected |> List.map Network.fromU64Pair,
             },
-        }
+            messages: messages |> List.map \{ from, bytes } -> { from: Network.fromU64Pair from, bytes },
+        },
     }
 
     Task.attempt (render model state) \result ->

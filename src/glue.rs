@@ -1,14 +1,15 @@
 use crate::bindings;
 use core::fmt::Debug;
-use roc_std::{roc_refcounted_noop_impl, RocRefcounted};
+use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
 #[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct PlatformState {
     pub frame_count: u64,
-    pub keys: roc_std::RocList<u8>,
-    pub mouse_buttons: roc_std::RocList<u8>,
+    pub keys: RocList<u8>,
+    pub messages: RocList<PeerMessage>,
+    pub mouse_buttons: RocList<u8>,
     pub peers: PeerState,
     pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
@@ -19,11 +20,13 @@ pub struct PlatformState {
 impl RocRefcounted for PlatformState {
     fn inc(&mut self) {
         self.keys.inc();
+        self.messages.inc();
         self.mouse_buttons.inc();
         self.peers.inc();
     }
     fn dec(&mut self) {
         self.keys.dec();
+        self.messages.dec();
         self.mouse_buttons.dec();
         self.peers.dec();
     }
@@ -283,5 +286,24 @@ impl From<&HashMap<matchbox_socket::PeerId, matchbox_socket::PeerState>> for Pee
             connected,
             disconnected,
         }
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[repr(C)]
+pub struct PeerMessage {
+    pub bytes: roc_std::RocList<u8>,
+    pub from: UUID,
+}
+
+impl roc_std::RocRefcounted for PeerMessage {
+    fn inc(&mut self) {
+        self.bytes.inc();
+    }
+    fn dec(&mut self) {
+        self.bytes.dec();
+    }
+    fn is_refcounted() -> bool {
+        true
     }
 }

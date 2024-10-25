@@ -253,6 +253,7 @@ fn main() {
                 frame_count,
                 peers: (&peers).into(),
                 keys: get_keys_states(),
+                messages: RocList::empty(),
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
                 mouse_pos_x: bindings::GetMouseX() as f32,

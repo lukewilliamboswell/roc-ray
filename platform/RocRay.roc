@@ -54,6 +54,10 @@ PlatformState : {
             connected : List UUID,
             disconnected : List UUID,
         },
+        messages : List {
+            from: UUID,
+            bytes: List U8,
+        },
     }
 }
 

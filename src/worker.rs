@@ -1,4 +1,4 @@
-use matchbox_socket::{PeerId, PeerState, WebRtcSocket};
+use matchbox_socket::{Error as SocketError, PeerId, PeerState, WebRtcSocket};
 use std::time::Duration;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::interval;
@@ -16,6 +16,14 @@ pub enum WorkerToMainMsg {
     PeerDisconnected(PeerId),
     MessageReceived(PeerId, Vec<u8>),
     Error(String),
+    ConnectionStatus(ConnectionState),
+}
+
+#[derive(Debug)]
+pub enum ConnectionState {
+    Connected,
+    Disconnected(String),
+    Failed(String),
 }
 
 // Custom error type that implements Send
@@ -31,15 +39,11 @@ impl std::fmt::Display for WorkerError {
 }
 
 pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
-    println!("Worker task started");
-
     println!("Worker connecting to WebRTC server...");
-    let (mut socket, loop_fut) = WebRtcSocket::new_reliable("ws://localhost:3536/");
-
-    // Spawn the message loop future on the current runtime
-    let message_loop_handle = tokio::spawn(loop_fut);
+    let (mut socket, mut loop_fut) = WebRtcSocket::new_reliable("ws://localhost:3536/");
 
     let mut socket_interval = interval(Duration::from_millis(100));
+    let mut connection_established = false;
 
     loop {
         tokio::select! {
@@ -63,24 +67,51 @@ pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender
             }
 
             _ = socket_interval.tick() => {
-                if let Err(e) = process_webrtc_updates(&mut socket, &sender).await {
-                    println!("WebRTC error: {}", e);
-                    let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
-                    break;
+                match process_webrtc_updates(&mut socket, &sender).await {
+                    Ok(_) => {
+                        if !connection_established {
+                            connection_established = true;
+                            let _ = sender.send(WorkerToMainMsg::ConnectionStatus(ConnectionState::Connected)).await;
+                        }
+                    }
+                    Err(e) => {
+                        println!("WebRTC error: {}", e);
+                        let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
+                        // Don't break here - let the loop_fut handle decide if we need to exit
+                    }
+                }
+            }
+
+            msg = &mut loop_fut => {
+                match msg {
+                    Ok(()) => {
+                        println!("WebRTC connection closed cleanly");
+                        let _ = sender.send(WorkerToMainMsg::ConnectionStatus(
+                            ConnectionState::Disconnected("Connection closed".to_string())
+                        )).await;
+
+                        break;
+                    },
+                    Err(e) => {let status = match e {
+                            SocketError::ConnectionFailed(e) => {
+                                ConnectionState::Failed(format!(
+                                    "Failed to connect to signaling server: {}", e
+                                ))
+                            }
+                            SocketError::Disconnected(e) => {
+                                ConnectionState::Disconnected(format!(
+                                    "Connection lost: {}", e
+                                ))
+                            }
+                        };
+
+                        let _ = sender.send(WorkerToMainMsg::ConnectionStatus(status)).await;
+                        break;
+                    },
                 }
             }
         }
     }
-
-    // Clean up
-    message_loop_handle.abort();
-
-    if let Err(e) = message_loop_handle.await {
-        println!("Error waiting for message loop to end: {e}");
-        let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
-    }
-
-    println!("Worker task shutting down");
 }
 
 async fn process_webrtc_updates(
@@ -89,7 +120,7 @@ async fn process_webrtc_updates(
 ) -> Result<(), WorkerError> {
     // Process peer updates
     if let Ok(peers) = socket.try_update_peers() {
-        dbg!(&peers);
+        // dbg!(&peers);
         for (peer, state) in peers {
             match state {
                 PeerState::Connected => {

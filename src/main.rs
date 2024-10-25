@@ -175,10 +175,8 @@ fn main() {
     let (worker_tx, mut main_rx) =
         tokio::sync::mpsc::channel::<worker::WorkerToMainMsg>(WORKER_TO_MAIN_BUFFER_SIZE);
 
-    // Create a single runtime for everything
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
 
-    // Spawn the worker as a task in the runtime instead of a separate thread
     let worker_handle = rt.spawn(worker::worker_loop(worker_rx, worker_tx));
 
     unsafe {
@@ -209,10 +207,11 @@ fn main() {
 
             // Try to receive any pending (non-blocking)
             while let Ok(msg) = main_rx.try_recv() {
+                use worker::ConnectionState::*;
                 use worker::WorkerToMainMsg::*;
                 match msg {
                     Tock => {
-                        println!("Received Tock from worker");
+                        // println!("Received Tock from worker");
                     }
                     PeerConnected(peer) => {
                         println!("Main: Peer connected {peer}");
@@ -228,6 +227,17 @@ fn main() {
                         println!("Main: Worker error: {error}");
                         // Optionally handle worker errors (e.g., reconnect logic)
                     }
+                    ConnectionStatus(status) => match status {
+                        Connected => {
+                            println!("Main: Worker connected");
+                        }
+                        Disconnected(msg) => {
+                            println!("Main: Worker disconnected: {msg}");
+                        }
+                        Failed(msg) => {
+                            println!("Main: Worker connection failed: {msg}");
+                        }
+                    },
                 }
             }
 
@@ -237,7 +247,6 @@ fn main() {
 
             let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
 
-            #[cfg(feature = "trace-debug")]
             trace_log(&format!(
                 "------ RENDER frame: {}, millis: {} ------",
                 frame_count, timestamp
@@ -645,7 +654,6 @@ extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) -> RocResult<(), 
 
     #[cfg(not(test))]
     unsafe {
-        #[cfg(feature = "trace-debug")]
         trace_log("BeginDrawing");
 
         bindings::BeginDrawing();
@@ -669,7 +677,6 @@ extern "C" fn roc_fx_endDrawing() -> RocResult<(), ()> {
 
     #[cfg(not(test))]
     unsafe {
-        #[cfg(feature = "trace-debug")]
         trace_log("EndDrawing");
 
         bindings::EndMode2D();
@@ -693,7 +700,6 @@ extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) -> RocResult<(), ()> 
 
     #[cfg(not(test))]
     unsafe {
-        #[cfg(feature = "trace-debug")]
         trace_log("BeginMode2D");
 
         let camera: &mut bindings::Camera2D =
@@ -746,7 +752,6 @@ extern "C" fn roc_fx_beginTexture(
 
     #[cfg(not(test))]
     unsafe {
-        #[cfg(feature = "trace-debug")]
         trace_log("BeginTexture");
 
         let render_texture: &mut bindings::RenderTexture =
@@ -773,7 +778,6 @@ extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) -> RocResult<
 
     #[cfg(not(test))]
     unsafe {
-        #[cfg(feature = "trace-debug")]
         trace_log("EndTexture");
 
         bindings::EndTextureMode();
@@ -930,11 +934,14 @@ unsafe extern "C" fn roc_fx_drawRenderTextureRec(
     RocResult::ok(())
 }
 
-#[cfg(feature = "trace-debug")]
+#[allow(unused_variables)]
 unsafe fn trace_log(msg: &str) {
-    let level = bindings::TraceLogLevel_LOG_DEBUG;
-    let text = CString::new(msg).unwrap();
-    bindings::TraceLog(level as i32, text.as_ptr());
+    #[cfg(feature = "trace-debug")]
+    {
+        let level = bindings::TraceLogLevel_LOG_DEBUG;
+        let text = CString::new(msg).unwrap();
+        bindings::TraceLog(level as i32, text.as_ptr());
+    }
 }
 
 #[cfg(test)]

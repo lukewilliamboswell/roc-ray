@@ -18,6 +18,7 @@ module [
     measureText,
     takeScreenshot,
     log,
+    loadFileToStr,
 ]
 
 import Mouse
@@ -142,10 +143,10 @@ rgba = \color ->
 exit : Task {} *
 exit = Effect.exit |> Task.mapErr \{} -> crash "unreachable exit"
 
-## Show a Raylib log trace message.
+## Show a RocRay log trace message.
 ##
 ## ```
-## Raylib.log! "Not yet implemented" LogError
+## RocRay.log! "Not yet implemented" LogError
 ## ```
 log : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] -> Task {} *
 log = \message, level ->
@@ -185,7 +186,7 @@ setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unre
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
-## Raylib.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
+## RocRay.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
 ## ```
 setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
 setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
@@ -206,9 +207,18 @@ measureText = \{ text, size } ->
 
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```
-## Raylib.takeScreenshot! "screenshot.png"
+## RocRay.takeScreenshot! "screenshot.png"
 ## ```
 takeScreenshot : Str -> Task {} *
 takeScreenshot = \filename ->
     Effect.takeScreenshot filename
     |> Task.mapErr \{} -> crash "unreachable takeScreenshot"
+
+## Loads a file from disk
+## ```
+## RocRay.loadFileToStr! "resources/example.txt"
+## ```
+loadFileToStr : Str -> Task Str *
+loadFileToStr = \path ->
+    Effect.loadFileToStr path
+    |> Task.mapErr \{} -> crash "unreachable loadFileToStr"

@@ -3,13 +3,14 @@ use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_int, CString};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::channel;
 use std::thread;
 use std::time::SystemTime;
 
 mod bindings;
 mod glue;
 mod roc;
+mod worker;
 
 thread_local! {
     static DRAW_FPS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
@@ -167,25 +168,14 @@ fn update_platform_mode_draw_2d() {
     });
 }
 
-#[derive(Debug)]
-enum MainToWorkerMsg {
-    Tick,
-    Shutdown,
-}
-
-#[derive(Debug)]
-enum WorkerToMainMsg {
-    Tock,
-}
-
 fn main() {
     // Create channels for bidirectional communication
-    let (main_tx, worker_rx) = channel::<MainToWorkerMsg>();
-    let (worker_tx, main_rx) = channel::<WorkerToMainMsg>();
+    let (main_tx, worker_rx) = channel::<worker::MainToWorkerMsg>();
+    let (worker_tx, main_rx) = channel::<worker::WorkerToMainMsg>();
 
     // Spawn worker thread
     let worker_thread = thread::spawn(move || {
-        worker_loop(worker_rx, worker_tx);
+        worker::worker_loop(worker_rx, worker_tx);
     });
 
     unsafe {
@@ -195,6 +185,8 @@ fn main() {
         if !bindings::IsWindowReady() {
             panic!("Attempting to create window failed!");
         }
+
+        bindings::SetTargetFPS(60);
 
         let mut frame_count = 0;
 
@@ -207,16 +199,30 @@ fn main() {
 
         'render_loop: while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
             // Send Tick message to worker
-            if main_tx.send(MainToWorkerMsg::Tick).is_err() {
+            if main_tx.send(worker::MainToWorkerMsg::Tick).is_err() {
                 println!("Worker thread has disconnected");
                 break 'render_loop;
             }
 
-            // Try to receive any pending Tock messages (non-blocking)
+            // Try to receive any pending (non-blocking)
             while let Ok(msg) = main_rx.try_recv() {
+                use worker::WorkerToMainMsg::*;
                 match msg {
-                    WorkerToMainMsg::Tock => {
+                    Tock => {
                         println!("Received Tock from worker");
+                    }
+                    PeerConnected(peer) => {
+                        println!("Main: Peer connected {peer}");
+                        // Handle new peer connection
+                    }
+                    PeerDisconnected(peer) => {
+                        println!("Main: Peer disconnected {peer}");
+                        // Handle peer disconnection
+                    }
+                    MessageReceived(peer, data) => {
+                        let message = String::from_utf8_lossy(&data);
+                        println!("Main: Message from {peer}: {message:?}");
+                        // Handle received message
                     }
                 }
             }
@@ -261,7 +267,7 @@ fn main() {
 
         // Important: Send shutdown message BEFORE closing the window
         println!("Sending shutdown signal to worker...");
-        if let Err(e) = main_tx.send(MainToWorkerMsg::Shutdown) {
+        if let Err(e) = main_tx.send(worker::MainToWorkerMsg::Shutdown) {
             println!("Failed to send shutdown signal: {:?}", e);
         }
 
@@ -275,28 +281,6 @@ fn main() {
         println!("Closing window...");
         bindings::CloseWindow();
     }
-}
-
-fn worker_loop(receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
-    println!("Worker thread started");
-    while let Ok(msg) = receiver.recv() {
-        println!("Worker received message: {:?}", msg); // Debug print
-        match msg {
-            MainToWorkerMsg::Tick => {
-                thread::sleep(std::time::Duration::from_millis(1));
-
-                if sender.send(WorkerToMainMsg::Tock).is_err() {
-                    println!("Main thread has disconnected");
-                    return; // Exit the thread if main disconnects
-                }
-            }
-            MainToWorkerMsg::Shutdown => {
-                println!("Worker received shutdown message, exiting...");
-                return; // Explicitly return instead of break
-            }
-        }
-    }
-    println!("Worker thread shutting down");
 }
 
 /// exit the program with a message and a code, close the window

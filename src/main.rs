@@ -3,6 +3,8 @@ use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_int, CString};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
 use std::time::SystemTime;
 
 mod bindings;
@@ -165,7 +167,27 @@ fn update_platform_mode_draw_2d() {
     });
 }
 
+#[derive(Debug)]
+enum MainToWorkerMsg {
+    Tick,
+    Shutdown,
+}
+
+#[derive(Debug)]
+enum WorkerToMainMsg {
+    Tock,
+}
+
 fn main() {
+    // Create channels for bidirectional communication
+    let (main_tx, worker_rx) = channel::<MainToWorkerMsg>();
+    let (worker_tx, main_rx) = channel::<WorkerToMainMsg>();
+
+    // Spawn worker thread
+    let worker_thread = thread::spawn(move || {
+        worker_loop(worker_rx, worker_tx);
+    });
+
     unsafe {
         let c_title = CString::new("Loading...").unwrap();
 
@@ -183,7 +205,22 @@ fn main() {
 
         let mut model = roc::call_roc_init();
 
-        while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
+        'render_loop: while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
+            // Send Tick message to worker
+            if main_tx.send(MainToWorkerMsg::Tick).is_err() {
+                println!("Worker thread has disconnected");
+                break 'render_loop;
+            }
+
+            // Try to receive any pending Tock messages (non-blocking)
+            while let Ok(msg) = main_rx.try_recv() {
+                match msg {
+                    WorkerToMainMsg::Tock => {
+                        println!("Received Tock from worker");
+                    }
+                }
+            }
+
             let duration_since_epoch = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap();
@@ -216,7 +253,50 @@ fn main() {
 
             bindings::EndDrawing();
         }
+
+        // Clear any pending messages before shutdown
+        while let Ok(_) = main_rx.try_recv() {
+            // Drain any remaining messages
+        }
+
+        // Important: Send shutdown message BEFORE closing the window
+        println!("Sending shutdown signal to worker...");
+        if let Err(e) = main_tx.send(MainToWorkerMsg::Shutdown) {
+            println!("Failed to send shutdown signal: {:?}", e);
+        }
+
+        // Wait for worker thread to finish
+        println!("Waiting for worker thread to finish...");
+        if let Err(e) = worker_thread.join() {
+            println!("Worker thread panicked: {:?}", e);
+        }
+
+        // Now safe to close the window
+        println!("Closing window...");
+        bindings::CloseWindow();
     }
+}
+
+fn worker_loop(receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
+    println!("Worker thread started");
+    while let Ok(msg) = receiver.recv() {
+        println!("Worker received message: {:?}", msg); // Debug print
+        match msg {
+            MainToWorkerMsg::Tick => {
+                thread::sleep(std::time::Duration::from_millis(1));
+
+                if sender.send(WorkerToMainMsg::Tock).is_err() {
+                    println!("Main thread has disconnected");
+                    return; // Exit the thread if main disconnects
+                }
+            }
+            MainToWorkerMsg::Shutdown => {
+                println!("Worker received shutdown message, exiting...");
+                return; // Explicitly return instead of break
+            }
+        }
+    }
+    println!("Worker thread shutting down");
 }
 
 /// exit the program with a message and a code, close the window

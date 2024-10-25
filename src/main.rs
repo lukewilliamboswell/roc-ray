@@ -3,8 +3,6 @@ use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_int, CString};
-use std::sync::mpsc::channel;
-use std::thread;
 use std::time::SystemTime;
 
 mod bindings;
@@ -168,15 +166,21 @@ fn update_platform_mode_draw_2d() {
     });
 }
 
-fn main() {
-    // Create channels for bidirectional communication
-    let (main_tx, worker_rx) = channel::<worker::MainToWorkerMsg>();
-    let (worker_tx, main_rx) = channel::<worker::WorkerToMainMsg>();
+const MAIN_TO_WORKER_BUFFER_SIZE: usize = 100;
+const WORKER_TO_MAIN_BUFFER_SIZE: usize = 1000;
 
-    // Spawn worker thread
-    let worker_thread = thread::spawn(move || {
-        worker::worker_loop(worker_rx, worker_tx);
-    });
+fn main() {
+    // CHANGED FROM `std::sync::mpsc` to `tokio::sync::mpsc`
+    let (main_tx, worker_rx) =
+        tokio::sync::mpsc::channel::<worker::MainToWorkerMsg>(MAIN_TO_WORKER_BUFFER_SIZE);
+    let (worker_tx, mut main_rx) =
+        tokio::sync::mpsc::channel::<worker::WorkerToMainMsg>(WORKER_TO_MAIN_BUFFER_SIZE);
+
+    // Create a single runtime for everything
+    let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+
+    // Spawn the worker as a task in the runtime instead of a separate thread
+    let worker_handle = rt.spawn(worker::worker_loop(worker_rx, worker_tx));
 
     unsafe {
         let c_title = CString::new("Loading...").unwrap();
@@ -198,8 +202,8 @@ fn main() {
         let mut model = roc::call_roc_init();
 
         'render_loop: while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
-            // Send Tick message to worker
-            if main_tx.send(worker::MainToWorkerMsg::Tick).is_err() {
+            // Send Tick message to worker (non-blocking)
+            if main_tx.try_send(worker::MainToWorkerMsg::Tick).is_err() {
                 println!("Worker thread has disconnected");
                 break 'render_loop;
             }
@@ -213,16 +217,17 @@ fn main() {
                     }
                     PeerConnected(peer) => {
                         println!("Main: Peer connected {peer}");
-                        // Handle new peer connection
                     }
                     PeerDisconnected(peer) => {
                         println!("Main: Peer disconnected {peer}");
-                        // Handle peer disconnection
                     }
                     MessageReceived(peer, data) => {
                         let message = String::from_utf8_lossy(&data);
                         println!("Main: Message from {peer}: {message:?}");
-                        // Handle received message
+                    }
+                    Error(error) => {
+                        println!("Main: Worker error: {error}");
+                        // Optionally handle worker errors (e.g., reconnect logic)
                     }
                 }
             }
@@ -260,21 +265,16 @@ fn main() {
             bindings::EndDrawing();
         }
 
-        // Clear any pending messages before shutdown
-        while let Ok(_) = main_rx.try_recv() {
-            // Drain any remaining messages
-        }
-
-        // Important: Send shutdown message BEFORE closing the window
+        // Send shutdown message BEFORE closing the window
         println!("Sending shutdown signal to worker...");
-        if let Err(e) = main_tx.send(worker::MainToWorkerMsg::Shutdown) {
+        if let Err(e) = rt.block_on(main_tx.send(worker::MainToWorkerMsg::Shutdown)) {
             println!("Failed to send shutdown signal: {:?}", e);
         }
 
-        // Wait for worker thread to finish
-        println!("Waiting for worker thread to finish...");
-        if let Err(e) = worker_thread.join() {
-            println!("Worker thread panicked: {:?}", e);
+        // Wait for worker task to complete
+        println!("Waiting for worker task to finish...");
+        if let Err(e) = rt.block_on(worker_handle) {
+            println!("Worker task error: {:?}", e);
         }
 
         // Now safe to close the window

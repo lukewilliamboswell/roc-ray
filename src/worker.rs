@@ -1,8 +1,7 @@
-use matchbox_socket::{PeerState, WebRtcSocket};
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
-use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
+use matchbox_socket::{PeerId, PeerState, WebRtcSocket};
+use std::time::Duration;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::time::interval;
 
 #[derive(Debug)]
 pub enum MainToWorkerMsg {
@@ -13,92 +12,113 @@ pub enum MainToWorkerMsg {
 #[derive(Debug)]
 pub enum WorkerToMainMsg {
     Tock,
-    PeerConnected(matchbox_socket::PeerId),
-    PeerDisconnected(matchbox_socket::PeerId),
-    MessageReceived(matchbox_socket::PeerId, Vec<u8>),
+    PeerConnected(PeerId),
+    PeerDisconnected(PeerId),
+    MessageReceived(PeerId, Vec<u8>),
+    Error(String),
 }
 
-pub fn worker_loop(receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
-    println!("Worker thread started");
+// Custom error type that implements Send
+#[derive(Debug)]
+struct WorkerError(String);
 
-    println!("Worker connecting to WebRTC server...");
-    // Create a minimal runtime
-    let rt = Runtime::new().expect("Failed to create runtime");
+impl std::error::Error for WorkerError {}
+
+impl std::fmt::Display for WorkerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
+    println!("Worker task started");
 
     println!("Worker connecting to WebRTC server...");
     let (mut socket, loop_fut) = WebRtcSocket::new_reliable("ws://localhost:3536/");
 
-    // Spawn the message loop future
-    let message_loop_handle = rt.spawn(loop_fut);
+    // Spawn the message loop future on the current runtime
+    let message_loop_handle = tokio::spawn(loop_fut);
 
-    let mut last_socket_update = Instant::now();
-    let socket_update_interval = Duration::from_millis(100);
+    let mut socket_interval = interval(Duration::from_millis(100));
 
-    'worker: loop {
-        // Check if the message loop is still running
-        if message_loop_handle.is_finished() {
-            println!("WebRTC message loop has ended");
-            break 'worker;
-        }
-
-        // Process messages from main thread without blocking
-        while let Ok(msg) = receiver.try_recv() {
-            match msg {
-                MainToWorkerMsg::Shutdown => {
-                    println!("Worker received shutdown message, exiting...");
-                    break 'worker;
-                }
-                MainToWorkerMsg::Tick => {
-                    if sender.send(WorkerToMainMsg::Tock).is_err() {
-                        println!("Main thread has disconnected");
-                        break 'worker;
+    loop {
+        tokio::select! {
+            msg = receiver.recv() => {
+                match msg {
+                    Some(MainToWorkerMsg::Shutdown) => {
+                        println!("Worker received shutdown message, exiting...");
+                        break;
                     }
-                }
-            }
-        }
-
-        // Process WebRTC
-        let now = Instant::now();
-        if now.duration_since(last_socket_update) >= socket_update_interval {
-            // Update peers
-            for (peer, state) in socket.update_peers() {
-                match state {
-                    PeerState::Connected => {
-                        println!("Peer joined: {peer}");
-                        sender
-                            .send(WorkerToMainMsg::PeerConnected(peer))
-                            .unwrap_or_else(|e| println!("Failed to send peer connected: {e}"));
-
-                        // Example: send welcome message
-                        let packet = "hello friend!".as_bytes().to_vec().into_boxed_slice();
-                        socket.send(packet, peer);
+                    Some(MainToWorkerMsg::Tick) => {
+                        if sender.send(WorkerToMainMsg::Tock).await.is_err() {
+                            println!("Main thread has disconnected");
+                            break;
+                        }
                     }
-                    PeerState::Disconnected => {
-                        println!("Peer left: {peer}");
-                        sender
-                            .send(WorkerToMainMsg::PeerDisconnected(peer))
-                            .unwrap_or_else(|e| println!("Failed to send peer disconnected: {e}"));
+                    None => {
+                        println!("Channel closed");
+                        break;
                     }
                 }
             }
 
-            // Receive messages
-            for (peer, packet) in socket.receive() {
-                sender
-                    .send(WorkerToMainMsg::MessageReceived(peer, packet.to_vec()))
-                    .unwrap_or_else(|e| println!("Failed to send message received: {e}"));
+            _ = socket_interval.tick() => {
+                // Process WebRTC updates
+                if let Err(e) = process_webrtc_updates(&mut socket, &sender).await {
+                    println!("WebRTC error: {}", e);
+                    // Try to notify main thread of the error
+                    let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
+                    break;
+                }
             }
-
-            last_socket_update = now;
         }
-
-        // Small sleep to prevent busy-waiting
-        thread::sleep(Duration::from_millis(1));
     }
 
+    // Clean up
     message_loop_handle.abort();
 
-    rt.shutdown_background();
+    if let Err(e) = message_loop_handle.await {
+        println!("Error waiting for message loop to end: {e}");
+        let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
+    }
 
-    println!("Worker thread shutting down");
+    println!("Worker task shutting down");
+}
+
+async fn process_webrtc_updates(
+    socket: &mut WebRtcSocket,
+    sender: &Sender<WorkerToMainMsg>,
+) -> Result<(), WorkerError> {
+    // Process peer updates
+    for (peer, state) in socket.update_peers() {
+        match state {
+            PeerState::Connected => {
+                println!("Peer joined: {peer}");
+                sender
+                    .send(WorkerToMainMsg::PeerConnected(peer))
+                    .await
+                    .map_err(|e| WorkerError(format!("Failed to send peer connected: {}", e)))?;
+
+                let packet = "hello friend!".as_bytes().to_vec().into_boxed_slice();
+                socket.send(packet, peer);
+            }
+            PeerState::Disconnected => {
+                println!("Peer left: {peer}");
+                sender
+                    .send(WorkerToMainMsg::PeerDisconnected(peer))
+                    .await
+                    .map_err(|e| WorkerError(format!("Failed to send peer disconnected: {}", e)))?;
+            }
+        }
+    }
+
+    // Receive messages
+    for (peer, packet) in socket.receive() {
+        sender
+            .send(WorkerToMainMsg::MessageReceived(peer, packet.to_vec()))
+            .await
+            .map_err(|e| WorkerError(format!("Failed to send message received: {}", e)))?;
+    }
+
+    Ok(())
 }

@@ -35,6 +35,7 @@ hosted Effect
         playSound,
         createRenderTexture,
         drawRenderTextureRec,
+        loadFileToStr,
     ]
     imports []
 
@@ -102,3 +103,5 @@ RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}
 beginTexture : RenderTexture, RocColor -> Task {} {}
 endTexture : RenderTexture -> Task {} {}
+
+loadFileToStr : Str -> Task Str {}

@@ -867,6 +867,19 @@ unsafe extern "C" fn roc_fx_drawRenderTextureRec(
     RocResult::ok(())
 }
 
+#[no_mangle]
+unsafe extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, ()> {
+    let path = path.as_str();
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        panic!("file not found: {path}");
+    };
+
+    let contents = contents.replace("\r\n", "\n");
+    let contents = RocStr::from_slice_unchecked(contents.as_bytes());
+
+    RocResult::ok(contents)
+}
+
 #[cfg(feature = "trace-debug")]
 unsafe fn trace_log(msg: &str) {
     let level = bindings::TraceLogLevel_LOG_DEBUG;

@@ -1,7 +1,9 @@
+use matchbox_socket::{PeerId, PeerState};
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
 
@@ -175,9 +177,10 @@ fn main() {
     let (worker_tx, mut main_rx) =
         tokio::sync::mpsc::channel::<worker::WorkerToMainMsg>(WORKER_TO_MAIN_BUFFER_SIZE);
 
+    // TODO move this into a separate thread
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
-
     let worker_handle = rt.spawn(worker::worker_loop(worker_rx, worker_tx));
+    let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
 
     unsafe {
         let c_title = CString::new("Loading...").unwrap();
@@ -199,12 +202,6 @@ fn main() {
         let mut model = roc::call_roc_init();
 
         'render_loop: while !bindings::WindowShouldClose() && !SHOULD_EXIT.get() {
-            // Send Tick message to worker (non-blocking)
-            if main_tx.try_send(worker::MainToWorkerMsg::Tick).is_err() {
-                println!("Worker thread has disconnected");
-                break 'render_loop;
-            }
-
             // Try to receive any pending (non-blocking)
             while let Ok(msg) = main_rx.try_recv() {
                 use worker::ConnectionState::*;
@@ -214,10 +211,10 @@ fn main() {
                         // println!("Received Tock from worker");
                     }
                     PeerConnected(peer) => {
-                        println!("Main: Peer connected {peer}");
+                        &peers.insert(peer, PeerState::Connected);
                     }
                     PeerDisconnected(peer) => {
-                        println!("Main: Peer disconnected {peer}");
+                        &peers.insert(peer, PeerState::Disconnected);
                     }
                     MessageReceived(peer, data) => {
                         let message = String::from_utf8_lossy(&data);
@@ -248,12 +245,13 @@ fn main() {
             let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
 
             trace_log(&format!(
-                "------ RENDER frame: {}, millis: {} ------",
+                "RENDER frame: {}, millis: {} ------",
                 frame_count, timestamp
             ));
 
-            let platform_state = roc::PlatformState {
+            let platform_state = glue::PlatformState {
                 frame_count,
+                peers: (&peers).into(),
                 keys: get_keys_states(),
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
@@ -271,6 +269,12 @@ fn main() {
             frame_count += 1;
 
             bindings::EndDrawing();
+
+            // Send Tick message to worker (non-blocking)
+            if main_tx.try_send(worker::MainToWorkerMsg::Tick).is_err() {
+                println!("Worker thread has disconnected");
+                break 'render_loop;
+            }
         }
 
         // Send shutdown message BEFORE closing the window
@@ -931,6 +935,11 @@ unsafe extern "C" fn roc_fx_drawRenderTextureRec(
         color.into(),
     );
 
+    RocResult::ok(())
+}
+
+#[no_mangle]
+unsafe extern "C" fn roc_fx_sendNetworkMessage(peer: i32, msg: &RocStr) -> RocResult<(), ()> {
     RocResult::ok(())
 }
 

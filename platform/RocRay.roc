@@ -8,6 +8,7 @@ module [
     Texture,
     RenderTexture,
     Sound,
+    UUID,
     rgba,
     setWindowSize,
     getScreenSize,
@@ -22,6 +23,7 @@ module [
 
 import Mouse
 import Effect
+import Network
 import InternalKeyboard
 import InternalColor
 
@@ -47,6 +49,12 @@ PlatformState : {
         buttons : Mouse.Buttons,
         wheel : F32,
     },
+    network : {
+        peers : {
+            connected : List UUID,
+            disconnected : List UUID,
+        },
+    }
 }
 
 ## Represents a keyboard key, like `KeyA` or `KeyEnter`.
@@ -112,6 +120,8 @@ Sound : Effect.Sound
 
 ## A camera used to render a 2D perspective of the world.
 Camera : Effect.Camera
+
+UUID : Network.UUID
 
 # internal use only
 rgba : Color -> InternalColor.RocColor

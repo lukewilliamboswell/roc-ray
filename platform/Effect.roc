@@ -4,6 +4,7 @@ hosted Effect
         RenderTexture,
         Sound,
         Camera,
+        UUID,
         setWindowSize,
         getScreenSize,
         exit,
@@ -41,6 +42,11 @@ hosted Effect
 import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
+
+UUID : {
+    upper: U64,
+    lower: U64,
+}
 
 setWindowSize : I32, I32 -> Task {} {}
 getScreenSize : Task { height : I32, width : I32, z : I64 } {}

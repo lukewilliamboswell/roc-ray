@@ -13,6 +13,7 @@ import Mouse
 import InternalKeyboard
 import InternalMouse
 import Effect
+import Network
 
 PlatformStateFromHost : {
     frameCount : U64,
@@ -22,6 +23,12 @@ PlatformStateFromHost : {
     mousePosX : F32,
     mousePosY : F32,
     mouseWheel : F32,
+    peers: PeerState,
+}
+
+PeerState : {
+    connected : List Effect.UUID,
+    disconnected : List Effect.UUID,
 }
 
 ProgramForHost model : {
@@ -46,7 +53,7 @@ renderForHost : Box Model, PlatformStateFromHost -> Task (Box Model) {}
 renderForHost = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
-    { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
+    { timestampMillis, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
@@ -58,6 +65,12 @@ renderForHost = \boxedModel, platformState ->
             buttons: mouseButtonsForApp { mouseButtons },
             wheel: mouseWheel,
         },
+        network: {
+            peers : {
+                connected: peers.connected |> List.map Network.fromU64Pair,
+                disconnected: peers.disconnected |> List.map Network.fromU64Pair,
+            },
+        }
     }
 
     Task.attempt (render model state) \result ->

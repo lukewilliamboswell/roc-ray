@@ -4,6 +4,7 @@ import rr.RocRay exposing [Texture, Rectangle]
 import rr.Keys
 import rr.Draw
 import rr.Texture
+import rr.Network
 
 width = 800
 height = 600
@@ -36,7 +37,9 @@ init =
     }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { timestampMillis, keys } ->
+render = \model, { timestampMillis, keys, network } ->
+
+
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -54,7 +57,10 @@ render = \model, { timestampMillis, keys } ->
 
     Draw.draw! White \{} ->
 
-        Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
+        connected = network.peers.connected |> List.map Network.toStr |> Str.joinWith ", "
+        disconnected = network.peers.disconnected |> List.map Network.toStr |> Str.joinWith ", "
+
+        Draw.text! { pos: { x: 10, y: 10 }, text: "Connected: $(connected), Disconnected: $(disconnected)", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
         Draw.textureRec! {

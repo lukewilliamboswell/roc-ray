@@ -1900,6 +1900,7 @@ dependencies = [
  "roc_std_heap",
  "tar",
  "tokio",
+ "uuid",
  "zip",
 ]
 

@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use crate::glue::PlatformState;
 use roc_std::{RocBox, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::alloc::Layout;
@@ -176,32 +177,6 @@ impl Model {
 
 unsafe impl Send for Model {}
 unsafe impl Sync for Model {}
-
-#[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
-#[repr(C)]
-pub struct PlatformState {
-    pub frame_count: u64,
-    pub keys: roc_std::RocList<u8>,
-    pub mouse_buttons: roc_std::RocList<u8>,
-    pub timestamp_millis: u64,
-    pub mouse_pos_x: f32,
-    pub mouse_pos_y: f32,
-    pub mouse_wheel: f32,
-}
-
-impl roc_std::RocRefcounted for PlatformState {
-    fn inc(&mut self) {
-        self.keys.inc();
-        self.mouse_buttons.inc();
-    }
-    fn dec(&mut self) {
-        self.keys.dec();
-        self.mouse_buttons.dec();
-    }
-    fn is_refcounted() -> bool {
-        true
-    }
-}
 
 pub fn call_roc_init() -> Model {
     extern "C" {

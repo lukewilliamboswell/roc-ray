@@ -63,10 +63,8 @@ pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender
             }
 
             _ = socket_interval.tick() => {
-                // Process WebRTC updates
                 if let Err(e) = process_webrtc_updates(&mut socket, &sender).await {
                     println!("WebRTC error: {}", e);
-                    // Try to notify main thread of the error
                     let _ = sender.send(WorkerToMainMsg::Error(e.to_string())).await;
                     break;
                 }
@@ -90,24 +88,31 @@ async fn process_webrtc_updates(
     sender: &Sender<WorkerToMainMsg>,
 ) -> Result<(), WorkerError> {
     // Process peer updates
-    for (peer, state) in socket.update_peers() {
-        match state {
-            PeerState::Connected => {
-                println!("Peer joined: {peer}");
-                sender
-                    .send(WorkerToMainMsg::PeerConnected(peer))
-                    .await
-                    .map_err(|e| WorkerError(format!("Failed to send peer connected: {}", e)))?;
+    if let Ok(peers) = socket.try_update_peers() {
+        dbg!(&peers);
+        for (peer, state) in peers {
+            match state {
+                PeerState::Connected => {
+                    println!("Peer joined: {peer}");
+                    sender
+                        .send(WorkerToMainMsg::PeerConnected(peer))
+                        .await
+                        .map_err(|e| {
+                            WorkerError(format!("Failed to send peer connected: {}", e))
+                        })?;
 
-                let packet = "hello friend!".as_bytes().to_vec().into_boxed_slice();
-                socket.send(packet, peer);
-            }
-            PeerState::Disconnected => {
-                println!("Peer left: {peer}");
-                sender
-                    .send(WorkerToMainMsg::PeerDisconnected(peer))
-                    .await
-                    .map_err(|e| WorkerError(format!("Failed to send peer disconnected: {}", e)))?;
+                    let packet = "hello friend!".as_bytes().to_vec().into_boxed_slice();
+                    socket.send(packet, peer);
+                }
+                PeerState::Disconnected => {
+                    println!("Peer left: {peer}");
+                    sender
+                        .send(WorkerToMainMsg::PeerDisconnected(peer))
+                        .await
+                        .map_err(|e| {
+                            WorkerError(format!("Failed to send peer disconnected: {}", e))
+                        })?;
+                }
             }
         }
     }

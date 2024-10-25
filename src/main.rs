@@ -170,7 +170,6 @@ const MAIN_TO_WORKER_BUFFER_SIZE: usize = 100;
 const WORKER_TO_MAIN_BUFFER_SIZE: usize = 1000;
 
 fn main() {
-    // CHANGED FROM `std::sync::mpsc` to `tokio::sync::mpsc`
     let (main_tx, worker_rx) =
         tokio::sync::mpsc::channel::<worker::MainToWorkerMsg>(MAIN_TO_WORKER_BUFFER_SIZE);
     let (worker_tx, mut main_rx) =

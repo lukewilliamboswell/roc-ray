@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::ffi::{c_int, CString};
 
 thread_local! {
+    // DEFAULT VALUES
     static CONFIG: RefCell<Config> = RefCell::new(Config {
         title: CString::new("Loading roc-ray app...").unwrap(),
         width: 200,

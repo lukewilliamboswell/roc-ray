@@ -11,31 +11,23 @@ import rand.Random
 import time.DateTime
 
 Model : {
-    width : F32,
-    height : F32,
     seed : Random.State U32,
     number : U64,
 }
 
+width = 800
+height = 800
+
 init : Task Model []
 init =
 
-    width = 800f32
-    height = 800f32
-    number = 1000
-
-    seed = Random.seed 1234
-
     RocRay.setTargetFPS! 500
     RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Random Dots"
+    RocRay.initWindow! { title: "Random Dots", width, height }
 
     Task.ok {
-        number,
-        seed,
-        width,
-        height,
+        number: 10000,
+        seed: Random.seed 1234,
     }
 
 render : Model, RocRay.PlatformState -> Task Model []
@@ -59,7 +51,7 @@ render = \model, { keys, timestampMillis } ->
 
         Task.forEach! lines Draw.rectangle
 
-        Draw.text! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
+        Draw.text! { pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
     Task.ok { model & seed, number }
 

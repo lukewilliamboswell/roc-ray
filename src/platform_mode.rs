@@ -43,9 +43,7 @@ pub enum PlatformEffect {
     TakeScreenshot,
     InitWindow,
     EndInitWindow,
-    SetWindowSize,
     LogMsg,
-    SetWindowTitle,
     SetTargetFPS,
     GetScreenSize,
     LoadSound,
@@ -77,26 +75,32 @@ impl PlatformMode {
         !matches!(self, PlatformMode::Init)
     }
 
+    fn after_init(&self) -> bool {
+        !matches!(self, PlatformMode::Init)
+    }
+
     fn is_effect_permitted(&self, e: PlatformEffect) -> bool {
         use PlatformEffect::*;
         use PlatformMode::*;
 
         // we only need to track the "permitted" effects, everything else is "not permitted"
         match (self, e) {
-            // PERMITTED ONLY DURING INIT BEFORE RAYLIB INIT
-            (Init, SetWindowSize) | (Init, SetWindowTitle) => true,
+            // PERMITTED IN ANY MODE
+            (_, SetDrawFPS) | (_, SetTargetFPS) | (_, MeasureText) | (_, LogMsg) => true,
 
-            // PERMITTED ONLY DURING INIT AFTER RAYLIB WINDOW INIT
+            // PERMITTED ONLY AFTER INIT (NEEDS RAYLIB INIT)
+            (mode, LoadFileToStr) if mode.after_init() => true,
+            (mode, UpdateCamera) if mode.after_init() => true,
+
+            // PERMITTED DURING INIT BUT AFTER RAYLIB INIT
             (InitRaylib, CreateCamera)
-            | (InitRaylib, UpdateCamera)
             | (InitRaylib, LoadSound)
             | (InitRaylib, LoadTexture)
-            | (InitRaylib, CreateRenderTexture)
-            | (InitRaylib, LoadFileToStr)
-            | (InitRaylib, EndInitWindow) => true,
+            | (InitRaylib, CreateRenderTexture) => true,
 
             // MODE TRANISITIONS
             (Init, InitWindow)
+            | (InitRaylib, EndInitWindow)
             | (Render, BeginDrawingFramebuffer)
             | (Render, BeginDrawingTexture)
             | (FramebufferMode, BeginMode2D)
@@ -105,6 +109,14 @@ impl PlatformMode {
             | (TextureMode, EndDrawingTexture)
             | (TextureMode, BeginMode2D)
             | (TextureModeDraw2D, EndMode2D) => true,
+
+            // PERMITTED IN RENDER
+            (Render, UpdateCamera) => true,
+
+            // PERMITTED ONLY IN RENDER
+            (mode, PlaySound) if mode.not_init() => true,
+            (mode, TakeScreenshot) if mode.not_init() => true,
+            (mode, GetScreenSize) if mode.not_init() => true,
 
             // PERMITTED ONLY DURING DRAW MODES
             (mode, DrawCircle) if mode.is_draw_mode() => true,
@@ -115,14 +127,6 @@ impl PlatformMode {
             (mode, DrawRectangle) if mode.is_draw_mode() => true,
             (mode, DrawLine) if mode.is_draw_mode() => true,
             (mode, DrawTextureRectangle) if mode.is_draw_mode() => true,
-
-            // PERMITTED ONLY IN RENDER
-            (mode, PlaySound) if mode.not_init() => true,
-            (mode, TakeScreenshot) if mode.not_init() => true,
-            (mode, GetScreenSize) if mode.not_init() => true,
-
-            // PERMITTED IN ANY MODE
-            (_, SetDrawFPS) | (_, SetTargetFPS) | (_, MeasureText) | (_, LogMsg) => true,
 
             // NOT PERMITTED
             (_, _) => false,

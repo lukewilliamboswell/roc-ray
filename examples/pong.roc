@@ -28,10 +28,10 @@ newBall = {
 
 init : Task Model []
 init =
-    RocRay.setTargetFPS! 60
+
+    RocRay.setTargetFPS! 120
     RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Pong"
+    RocRay.initWindow! { title: "Pong", width, height }
 
     Task.ok {
         screen: StartMenu,

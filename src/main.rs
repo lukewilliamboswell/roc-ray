@@ -102,7 +102,13 @@ unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_initWindow() -> RocResult<(), ()> {
+pub extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) -> RocResult<(), ()> {
+    config::update(|c| {
+        c.title = CString::new(title.to_string()).unwrap();
+        c.width = width as i32;
+        c.height = height as i32;
+    });
+
     if let Err(msg) = platform_mode::update(PlatformEffect::InitWindow) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
@@ -124,33 +130,6 @@ pub extern "C" fn roc_fx_initWindow() -> RocResult<(), ()> {
 
         bindings::InitAudioDevice();
     }
-
-    RocResult::ok(())
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_setWindowSize(width: i32, height: i32) -> RocResult<(), ()> {
-    if let Err(msg) = platform_mode::update(PlatformEffect::SetWindowSize) {
-        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    }
-
-    config::update(|c| {
-        c.width = width;
-        c.height = height;
-    });
-
-    RocResult::ok(())
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_setWindowTitle(text: &RocStr) -> RocResult<(), ()> {
-    if let Err(msg) = platform_mode::update(PlatformEffect::SetWindowTitle) {
-        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    }
-
-    config::update(|c| {
-        c.title = CString::new(text.as_str()).unwrap();
-    });
 
     RocResult::ok(())
 }

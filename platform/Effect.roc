@@ -4,12 +4,10 @@ hosted Effect
         RenderTexture,
         Sound,
         Camera,
-        setWindowSize,
         getScreenSize,
         exit,
         drawText,
         measureText,
-        setWindowTitle,
         drawLine,
         drawRectangle,
         drawRectangleGradientV,
@@ -44,7 +42,6 @@ import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
 
-setWindowSize : I32, I32 -> Task {} {}
 getScreenSize : Task { height : I32, width : I32, z : I64 } {}
 
 exit : Task {} {}
@@ -62,12 +59,11 @@ toLogLevel = \level ->
         LogNone -> 7
 
 log : Str, I32 -> Task {} {}
-initWindow : Task {} {}
+
+initWindow : Str, F32, F32 -> Task {} {}
 
 drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
-
-setWindowTitle : Str -> Task {} {}
 
 drawLine : RocVector2, RocVector2, RocColor -> Task {} {}
 

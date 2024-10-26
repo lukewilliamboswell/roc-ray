@@ -9,7 +9,6 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # build and run an executable, ignoring warnings
 [unix]
 dev app="examples/basic-shapes.roc" features="default":
-    rm -f app.o
     # roc build uses an exit code of 2 for warnings; this ignores them
     roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
     cargo run --features {{features}}

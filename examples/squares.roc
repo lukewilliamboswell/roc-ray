@@ -16,8 +16,7 @@ height = 400
 init : Task Model []
 init =
 
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Squares Demo"
+    RocRay.initWindow! { title: "Squares Demo", width, height }
 
     Task.ok {
         circlePos: { x: width / 2, y: height / 2 },

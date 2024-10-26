@@ -30,8 +30,8 @@ init =
 
     RocRay.setTargetFPS! 60
     RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
-    RocRay.setWindowTitle! "2D Camera Example"
+
+    RocRay.initWindow! { title: "2D Camera Example", width: screenWidth, height: screenHeight }
 
     player = { x: 400, y: 280 }
 

@@ -11,8 +11,7 @@ Model : {}
 init : Task Model []
 init =
 
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Basic Shapes"
+    RocRay.initWindow! { title: "Basic Shapes", width, height }
 
     Task.ok {}
 

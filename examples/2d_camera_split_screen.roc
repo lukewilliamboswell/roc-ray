@@ -26,8 +26,11 @@ Model : {
 init : Task Model []
 init =
 
-    RocRay.setWindowSize! { width: screenWidth, height: screenHeight }
-    RocRay.setWindowTitle! "2D camera split-screen"
+    RocRay.initWindow! {
+        title: "2D camera split-screen",
+        width: screenWidth,
+        height: screenHeight,
+    }
 
     playerOne = { x: 200, y: 200, width: playerSize, height: playerSize }
     playerTwo = { x: 250, y: 200, width: playerSize, height: playerSize }
@@ -114,25 +117,25 @@ render = \model, { keys } ->
 
     playerOne =
         if Keys.down keys KeyUp then
-            model.playerOne |> &y (model.playerOne.y - 1)
+            model.playerOne |> &y (model.playerOne.y - 10)
         else if Keys.down keys KeyDown then
-            model.playerOne |> &y (model.playerOne.y + 1)
+            model.playerOne |> &y (model.playerOne.y + 10)
         else if Keys.down keys KeyLeft then
-            model.playerOne |> &x (model.playerOne.x - 1)
+            model.playerOne |> &x (model.playerOne.x - 10)
         else if Keys.down keys KeyRight then
-            model.playerOne |> &x (model.playerOne.x + 1)
+            model.playerOne |> &x (model.playerOne.x + 10)
         else
             model.playerOne
 
     playerTwo =
         if Keys.down keys KeyW then
-            model.playerTwo |> &y (model.playerTwo.y - 1)
+            model.playerTwo |> &y (model.playerTwo.y - 10)
         else if Keys.down keys KeyS then
-            model.playerTwo |> &y (model.playerTwo.y + 1)
+            model.playerTwo |> &y (model.playerTwo.y + 10)
         else if Keys.down keys KeyA then
-            model.playerTwo |> &x (model.playerTwo.x - 1)
+            model.playerTwo |> &x (model.playerTwo.x - 10)
         else if Keys.down keys KeyD then
-            model.playerTwo |> &x (model.playerTwo.x + 1)
+            model.playerTwo |> &x (model.playerTwo.x + 10)
         else
             model.playerTwo
 

@@ -9,10 +9,9 @@ module [
     RenderTexture,
     Sound,
     rgba,
-    setWindowSize,
     getScreenSize,
+    initWindow,
     exit,
-    setWindowTitle,
     setTargetFPS,
     setDrawFPS,
     measureText,
@@ -153,24 +152,16 @@ log = \message, level ->
     Effect.log message (Effect.toLogLevel level)
     |> Task.mapErr \{} -> crash "unreachable log"
 
-## Set the window title.
-##
-## ```
-## RocRay.setWindowTitle! "My Roc Game"
-## ```
-setWindowTitle : Str -> Task {} *
-setWindowTitle = \title ->
-    Effect.setWindowTitle title
-    |> Task.mapErr \{} -> crash "unreachable setWindowTitle"
-
-## Set the window size.
-## ```
-## RocRay.setWindowSize! { width: 800, height: 600 }
-## ```
-setWindowSize : { width : F32, height : F32 } -> Task {} *
-setWindowSize = \{ width, height } ->
-    Effect.setWindowSize (Num.round width) (Num.round height)
-    |> Task.mapErr \{} -> crash "unreachable setWindowSize"
+initWindow :
+    {
+        title ? Str,
+        width ? F32,
+        height ? F32,
+    }
+    -> Task {} *
+initWindow = \{ title ? "RocRay", width ? 800, height ? 600 } ->
+    Effect.initWindow title width height
+    |> Task.mapErr \{} -> crash "unreachable initWindow"
 
 ## Get the window size.
 getScreenSize : Task { height : F32, width : F32 } *

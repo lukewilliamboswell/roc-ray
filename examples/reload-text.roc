@@ -10,16 +10,15 @@ Model : {
 
 init : Task Model []
 init =
-    message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
 
-    RocRay.setWindowSize! { width: 800, height: 600 }
-    RocRay.setWindowTitle! "Reload Text"
+    RocRay.initWindow! { title: "Reload Text" }
+
+    message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
 
     Task.ok { message }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { mouse } ->
-    dbg mouse
 
     buttonRect = {
         x: 100,

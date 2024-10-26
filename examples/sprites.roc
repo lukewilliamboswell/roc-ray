@@ -19,8 +19,7 @@ init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Animated Sprite Example"
+    RocRay.initWindow! { title: "Animated Sprite Example" }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 

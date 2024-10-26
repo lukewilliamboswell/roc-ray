@@ -1,4 +1,5 @@
 use platform_mode::PlatformEffect;
+use roc::music_heap;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
@@ -65,6 +66,9 @@ fn main() {
             frame_count += 1;
 
             bindings::EndDrawing();
+
+            // TODO update all music streams
+            let music_heap = music_heap();
         }
     }
 }

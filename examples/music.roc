@@ -14,7 +14,9 @@ Model : {
 init : Task Model []
 init =
     RocRay.initWindow! { title: "Music" }
-    progress = 0.5
+
+    # specifiying the type here is required; seems like a compiler bug
+    progress = 0.5f32
 
     track = Music.load! "examples/assets/music/benny-hill.mp3"
 

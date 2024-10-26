@@ -21,6 +21,7 @@ hosted Effect
         takeScreenshot,
         createCamera,
         updateCamera,
+        initWindow,
         beginDrawing,
         endDrawing,
         beginTexture,
@@ -61,6 +62,7 @@ toLogLevel = \level ->
         LogNone -> 7
 
 log : Str, I32 -> Task {} {}
+initWindow : Task {} {}
 
 drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}

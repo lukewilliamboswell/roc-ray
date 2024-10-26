@@ -11,6 +11,7 @@ module [
     rgba,
     setWindowSize,
     getScreenSize,
+    initWindow,
     exit,
     setWindowTitle,
     setTargetFPS,
@@ -152,6 +153,9 @@ log : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal,
 log = \message, level ->
     Effect.log message (Effect.toLogLevel level)
     |> Task.mapErr \{} -> crash "unreachable log"
+
+initWindow : Task {} *
+initWindow = Effect.initWindow |> Task.mapErr \{} -> crash "unreachable initWindow"
 
 ## Set the window title.
 ##

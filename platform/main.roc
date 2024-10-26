@@ -28,13 +28,13 @@ PlatformStateFromHost : {
 }
 
 PeerMessage : {
-    from : Effect.UUID,
+    from : Effect.RawUUID,
     bytes : List U8,
 }
 
 PeerState : {
-    connected : List Effect.UUID,
-    disconnected : List Effect.UUID,
+    connected : List Effect.RawUUID,
+    disconnected : List Effect.RawUUID,
 }
 
 ProgramForHost model : {

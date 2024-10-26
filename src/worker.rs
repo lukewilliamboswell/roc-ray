@@ -17,27 +17,27 @@ pub enum WorkerToMainMsg {
     PeerDisconnected(PeerId),
     MessageReceived(PeerId, Vec<u8>),
     Error(String),
-    ConnectionStatus(ConnectionState),
+    // ConnectionStatus(ConnectionState),
 }
 
-#[derive(Debug)]
-pub enum ConnectionState {
-    Connected,
-    Disconnected(String),
-    Failed(String),
-}
+// #[derive(Debug)]
+// pub enum ConnectionState {
+//     Connected,
+//     Disconnected(String),
+//     Failed(String),
+// }
 
 // Custom error type that implements Send
-#[derive(Debug)]
-struct WorkerError(String);
+// #[derive(Debug)]
+// struct WorkerError(String);
 
-impl std::error::Error for WorkerError {}
+// impl std::error::Error for WorkerError {}
 
-impl std::fmt::Display for WorkerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+// impl std::fmt::Display for WorkerError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}", self.0)
+//     }
+// }
 
 pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
     let start = std::time::SystemTime::now();

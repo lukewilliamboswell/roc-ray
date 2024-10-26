@@ -51,11 +51,11 @@ PlatformState : {
     },
     network : {
         peers : {
-            connected : List UUID,
-            disconnected : List UUID,
+            connected : List Network.UUID,
+            disconnected : List Network.UUID,
         },
         messages : List {
-            from: UUID,
+            from: Network.UUID,
             bytes: List U8,
         },
     }

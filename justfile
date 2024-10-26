@@ -6,18 +6,19 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # to download an unofficial windows build of roc
 
 
-# build and run an executable
+# build and run an executable, ignoring warnings
 [unix]
 dev app="examples/basic-shapes.roc" features="default":
     rm -f app.o
-    roc build --no-link --emit-llvm-ir --output app.o {{app}} || true
+    # roc build uses an exit code of 2 for warnings; this ignores them
+    roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
     cargo run --features {{features}}
 
 # build and run an executable
 [windows]
 dev app="examples/basic-shapes.roc":
     rm -f app.obj
-    .\windows\bin\roc.exe build --no-link --output app.obj {{app}} || $(exit 0)
+    .\windows\bin\roc.exe build --no-link --output app.obj {{app}}
     cargo run
 
 

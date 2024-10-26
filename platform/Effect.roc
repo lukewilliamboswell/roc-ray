@@ -3,6 +3,7 @@ hosted Effect
         Texture,
         RenderTexture,
         Sound,
+        Music,
         Camera,
         getScreenSize,
         exit,
@@ -35,6 +36,7 @@ hosted Effect
         createRenderTexture,
         drawRenderTextureRec,
         loadFileToStr,
+        loadMusicStream,
     ]
     imports []
 
@@ -96,6 +98,9 @@ drawRenderTextureRec : RenderTexture, RocRectangle, RocVector2, RocColor -> Task
 Sound := Box {}
 loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}
+
+Music := Box {}
+loadMusicStream : Str -> Task Music {}
 
 RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}

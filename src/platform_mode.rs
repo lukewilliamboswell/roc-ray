@@ -47,6 +47,7 @@ pub enum PlatformEffect {
     SetTargetFPS,
     GetScreenSize,
     LoadSound,
+    LoadMusicStream,
     LoadFileToStr,
     PlaySound,
     DrawCircle,
@@ -95,6 +96,7 @@ impl PlatformMode {
             // PERMITTED DURING INIT BUT AFTER RAYLIB INIT
             (InitRaylib, CreateCamera)
             | (InitRaylib, LoadSound)
+            | (InitRaylib, LoadMusicStream)
             | (InitRaylib, LoadTexture)
             | (InitRaylib, CreateRenderTexture) => true,
 

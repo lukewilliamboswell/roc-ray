@@ -8,6 +8,7 @@ module [
     Texture,
     RenderTexture,
     Sound,
+    Music,
     rgba,
     getScreenSize,
     initWindow,
@@ -109,6 +110,9 @@ RenderTexture : Effect.RenderTexture
 
 ## A loaded sound resource, used to play audio.
 Sound : Effect.Sound
+
+## A loaded music stream, used to play audio.
+Music : Effect.Music
 
 ## A camera used to render a 2D perspective of the world.
 Camera : Effect.Camera

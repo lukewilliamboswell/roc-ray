@@ -1,9 +1,13 @@
 app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [Rectangle]
+# https://www.raylib.com/examples/audio/loader.html?name=audio_music_stream
+
+import rr.RocRay exposing [Rectangle, Music]
+import rr.Music
 import rr.Draw
 
 Model : {
+    track : Music,
     progress : F32,
 }
 
@@ -12,10 +16,12 @@ init =
     RocRay.initWindow! { title: "Music" }
     progress = 0.5
 
-    Task.ok { progress }
+    track = Music.load! "examples/assets/music/benny-hill.mp3"
+
+    Task.ok { track, progress }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, state ->
+render = \model, _state ->
     draw! model
 
     Task.ok model
@@ -37,6 +43,7 @@ draw = \model ->
             width: 600.0,
             height: 20.0,
         }
+
         border : F32
         border = 1.0
 

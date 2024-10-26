@@ -1,5 +1,4 @@
 use platform_mode::PlatformEffect;
-use roc::music_heap;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
@@ -67,8 +66,7 @@ fn main() {
 
             bindings::EndDrawing();
 
-            // TODO update all music streams
-            let music_heap = music_heap();
+            roc::update_music_streams();
         }
     }
 }
@@ -603,9 +601,7 @@ extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<RocBox<()>, ()>
         bindings::LoadMusicStream(path.as_ptr())
     };
 
-    let heap = roc::music_heap();
-
-    let alloc_result = heap.alloc_for(music);
+    let alloc_result = roc::alloc_music_stream(music);
     match alloc_result {
         Ok(roc_box) => RocResult::ok(roc_box),
         Err(_) => {

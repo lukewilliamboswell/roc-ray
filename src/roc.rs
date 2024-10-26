@@ -8,6 +8,9 @@ use std::sync::OnceLock;
 
 use crate::bindings;
 
+mod music_heap;
+pub use music_heap::*;
+
 // note this is checked and deallocated in the roc_dealloc function
 pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Camera2D> {
     static CAMERA_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
@@ -45,23 +48,6 @@ pub fn sound_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Sound
         .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE))
         .unwrap_or(DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE);
     SOUND_HEAP.get_or_init(|| {
-        ThreadSafeRefcountedResourceHeap::new(max_heap_size)
-            .expect("Failed to allocate mmap for heap references.")
-    })
-}
-
-// note this is checked and deallocated in the roc_dealloc function
-pub fn music_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Music> {
-    static MUSIC_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Music>> =
-        OnceLock::new();
-    const DEFAULT_ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE: usize = 1000;
-    let max_heap_size = std::env::var("ROC_RAY_MAX_MUSIC_HEAPS_HEAP_SIZE")
-        .map(|v| {
-            v.parse()
-                .unwrap_or(DEFAULT_ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE)
-        })
-        .unwrap_or(DEFAULT_ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE);
-    MUSIC_HEAP.get_or_init(|| {
         ThreadSafeRefcountedResourceHeap::new(max_heap_size)
             .expect("Failed to allocate mmap for heap references.")
     })
@@ -112,6 +98,8 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
 
     let music_heap = music_heap();
     if music_heap.in_range(c_ptr) {
+        // TODO pop a rocbox
+
         // TODO bindings::UnloadMusicStream();
         music_heap.dealloc(c_ptr);
         return;

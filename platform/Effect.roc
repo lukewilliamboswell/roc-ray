@@ -37,6 +37,7 @@ hosted Effect
         drawRenderTextureRec,
         loadFileToStr,
         loadMusicStream,
+        playMusicStream,
     ]
     imports []
 
@@ -101,6 +102,7 @@ playSound : Sound -> Task {} {}
 
 Music := Box {}
 loadMusicStream : Str -> Task Music {}
+playMusicStream : Music -> Task {} {}
 
 RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}

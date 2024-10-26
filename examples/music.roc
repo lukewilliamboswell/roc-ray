@@ -8,25 +8,34 @@ import rr.Draw
 
 Model : {
     track : Music,
-    progress : F32,
+    trackState : TrackState,
 }
+
+TrackState : [Stopped, Playing]
 
 init : Task Model []
 init =
     RocRay.initWindow! { title: "Music" }
 
-    # specifiying the type here is required; seems like a compiler bug
-    progress = 0.5f32
-
     track = Music.load! "examples/assets/music/benny-hill.mp3"
 
-    Task.ok { track, progress }
+    Task.ok { track, trackState: Stopped }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, _state ->
-    draw! model
+    trackState = Playing
 
-    Task.ok model
+    newModel = { model & trackState }
+
+    draw! newModel
+
+    when (model.trackState, trackState) is
+        (Stopped, Playing) ->
+            Music.play! model.track
+            Task.ok newModel
+
+        _ ->
+            Task.ok newModel
 
 draw : Model -> Task {} []
 draw = \model ->
@@ -68,7 +77,7 @@ draw = \model ->
 
         # progress
         Draw.rectangle! {
-            rect: { bar & width: bar.width * model.progress },
+            rect: { bar & width: bar.width },
             color: Red,
         }
 

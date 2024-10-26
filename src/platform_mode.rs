@@ -50,6 +50,7 @@ pub enum PlatformEffect {
     LoadMusicStream,
     LoadFileToStr,
     PlaySound,
+    PlayMusicStream,
     DrawCircle,
     DrawCircleGradient,
     DrawRectangleGradientV,
@@ -117,6 +118,7 @@ impl PlatformMode {
 
             // PERMITTED ONLY IN RENDER
             (mode, PlaySound) if mode.not_init() => true,
+            (mode, PlayMusicStream) if mode.not_init() => true,
             (mode, TakeScreenshot) if mode.not_init() => true,
             (mode, GetScreenSize) if mode.not_init() => true,
 

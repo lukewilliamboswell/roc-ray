@@ -547,30 +547,6 @@ unsafe fn get_keys_states() -> RocList<u8> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<RocBox<()>, ()> {
-    if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
-        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    }
-
-    let path = CString::new(path.as_str()).unwrap();
-
-    let music = unsafe {
-        trace_log("LoadMusicStream");
-        bindings::LoadMusicStream(path.as_ptr())
-    };
-
-    let heap = roc::music_heap();
-
-    let alloc_result = heap.alloc_for(music);
-    match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
-        Err(_) => {
-            exit_with_msg("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-        }
-    }
-}
-
-#[no_mangle]
 extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadSound) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
@@ -605,6 +581,46 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
 
     unsafe {
         bindings::PlaySound(*sound);
+    }
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<RocBox<()>, ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let path = CString::new(path.as_str()).unwrap();
+
+    let music = unsafe {
+        trace_log("LoadMusicStream");
+        bindings::LoadMusicStream(path.as_ptr())
+    };
+
+    let heap = roc::music_heap();
+
+    let alloc_result = heap.alloc_for(music);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => {
+            exit_with_msg("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    unsafe {
+        bindings::PlayMusicStream(*music);
     }
 
     RocResult::ok(())

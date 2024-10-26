@@ -1,7 +1,13 @@
 use matchbox_socket::{Error as SocketError, PeerId, PeerState, WebRtcSocket};
+use std::cell::RefCell;
 use std::time::Duration;
 use tokio::sync::mpsc::{error::SendError, Receiver, Sender};
 use tokio::time::interval;
+
+thread_local! {
+    static MAIN_TX: RefCell<Option<Sender<MainToWorkerMsg>>> = RefCell::new(None);
+    static MAIN_RX: RefCell<Option<Receiver<WorkerToMainMsg>>> = RefCell::new(None);
+}
 
 #[derive(Debug)]
 pub enum MainToWorkerMsg {
@@ -39,7 +45,51 @@ pub enum WorkerToMainMsg {
 //     }
 // }
 
-pub async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
+pub fn send_message(msg: MainToWorkerMsg) {
+    MAIN_TX.with(|main_tx_cell| {
+        if let Some(tx) = main_tx_cell.borrow().as_ref() {
+            if let Err(..) = tx.try_send(msg) {
+                println!("Main thread has disconnected");
+            }
+        } else {
+            println!("Main sender not initialized");
+        }
+    })
+}
+
+pub fn get_messages() -> Vec<WorkerToMainMsg> {
+    let mut messages = Vec::with_capacity(100);
+    MAIN_RX.with(|main_rx_cell| {
+        if let Some(rx) = main_rx_cell.borrow_mut().as_mut() {
+            while let Ok(msg) = rx.try_recv() {
+                messages.push(msg);
+            }
+        }
+    });
+    messages
+}
+
+const MAIN_TO_WORKER_BUFFER_SIZE: usize = 100;
+const WORKER_TO_MAIN_BUFFER_SIZE: usize = 1000;
+
+pub fn init(rt: &tokio::runtime::Runtime) -> tokio::task::JoinHandle<()> {
+    let (main_tx, worker_rx) =
+        tokio::sync::mpsc::channel::<MainToWorkerMsg>(MAIN_TO_WORKER_BUFFER_SIZE);
+    let (worker_tx, main_rx) =
+        tokio::sync::mpsc::channel::<WorkerToMainMsg>(WORKER_TO_MAIN_BUFFER_SIZE);
+
+    MAIN_TX.with(|main_tx_cell| {
+        *main_tx_cell.borrow_mut() = Some(main_tx);
+    });
+
+    MAIN_RX.with(|main_rx_cell| {
+        *main_rx_cell.borrow_mut() = Some(main_rx);
+    });
+
+    rt.spawn(worker_loop(worker_rx, worker_tx))
+}
+
+async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
     let start = std::time::SystemTime::now();
 
     let room_url = "ws://localhost:3536/yolo?next?2";

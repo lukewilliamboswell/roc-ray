@@ -21,9 +21,6 @@ enum ExitErrCode {
     ExitHeapFull = 2,
 }
 
-const MAIN_TO_WORKER_BUFFER_SIZE: usize = 100;
-const WORKER_TO_MAIN_BUFFER_SIZE: usize = 1000;
-
 fn main() {
     // CALL INTO ROC FOR INITALIZATION
     let mut model = roc::call_roc_init();
@@ -33,26 +30,19 @@ fn main() {
 
     let mut frame_count = 0;
 
-    let (main_tx, worker_rx) =
-        tokio::sync::mpsc::channel::<worker::MainToWorkerMsg>(MAIN_TO_WORKER_BUFFER_SIZE);
-    let (worker_tx, mut main_rx) =
-        tokio::sync::mpsc::channel::<worker::WorkerToMainMsg>(WORKER_TO_MAIN_BUFFER_SIZE);
-
-    // TODO move this into a separate thread
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
-    let worker_handle = rt.spawn(worker::worker_loop(worker_rx, worker_tx));
+    let worker_handle = worker::init(&rt);
+
     let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
 
     unsafe {
-        'render_loop: while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
+        while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
             // Try to receive any pending (non-blocking)
-            while let Ok(msg) = main_rx.try_recv() {
-                // use worker::ConnectionState::*;
+            let messages = worker::get_messages();
+
+            for msg in messages {
                 use worker::WorkerToMainMsg::*;
                 match msg {
-                    Tock => {
-                        // println!("Received Tock from worker");
-                    }
                     PeerConnected(peer) => {
                         peers.insert(peer, PeerState::Connected);
                     }
@@ -66,17 +56,8 @@ fn main() {
                     Error(error) => {
                         println!("Main: Worker error: {error}");
                         // Optionally handle worker errors (e.g., reconnect logic)
-                    } // ConnectionStatus(status) => match status {
-                      //     Connected => {
-                      //         println!("Main: Worker connected");
-                      //     }
-                      //     Disconnected(msg) => {
-                      //         println!("Main: Worker disconnected: {msg}");
-                      //     }
-                      //     Failed(msg) => {
-                      //         println!("Main: Worker connection failed: {msg}");
-                      //     }
-                      // },
+                    }
+                    _ => {}
                 }
             }
 
@@ -119,17 +100,12 @@ fn main() {
             bindings::EndDrawing();
 
             // Send Tick message to worker (non-blocking)
-            if main_tx.try_send(worker::MainToWorkerMsg::Tick).is_err() {
-                println!("Worker thread has disconnected");
-                break 'render_loop;
-            }
+            worker::send_message(worker::MainToWorkerMsg::Tick);
         }
 
         // Send shutdown message BEFORE closing the window
         println!("Sending shutdown signal to worker...");
-        if let Err(e) = rt.block_on(main_tx.send(worker::MainToWorkerMsg::Shutdown)) {
-            println!("Failed to send shutdown signal: {:?}", e);
-        }
+        worker::send_message(worker::MainToWorkerMsg::Shutdown);
 
         // Wait for worker task to complete
         println!("Waiting for worker task to finish...");

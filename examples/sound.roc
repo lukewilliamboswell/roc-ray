@@ -21,8 +21,8 @@ init =
         height: 450,
     }
 
-    wav = Sound.load! "resources/sound.wav"
-    ogg = Sound.load! "resources/target.ogg"
+    wav = Sound.load! "examples/assets/sound/sound.wav"
+    ogg = Sound.load! "examples/assets/sound/target.ogg"
 
     Task.ok { wav, ogg }
 

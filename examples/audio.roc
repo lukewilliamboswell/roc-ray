@@ -15,9 +15,11 @@ Model : {
 init : Task Model []
 init =
 
-    RocRay.setTargetFPS! 60
-    RocRay.setWindowSize! { width: 800, height: 450 }
-    RocRay.setWindowTitle! "Making Sounds"
+    RocRay.initWindow! {
+        title: "Making Sounds",
+        width: 800,
+        height: 450,
+    }
 
     wav = Sound.load! "resources/sound.wav"
     ogg = Sound.load! "resources/target.ogg"

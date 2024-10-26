@@ -4,13 +4,11 @@ hosted Effect
         RenderTexture,
         Sound,
         Camera,
-        UUID,
-        setWindowSize,
+        RawUUID,
         getScreenSize,
         exit,
         drawText,
         measureText,
-        setWindowTitle,
         drawLine,
         drawRectangle,
         drawRectangleGradientV,
@@ -22,6 +20,7 @@ hosted Effect
         takeScreenshot,
         createCamera,
         updateCamera,
+        initWindow,
         beginDrawing,
         endDrawing,
         beginTexture,
@@ -36,6 +35,7 @@ hosted Effect
         playSound,
         createRenderTexture,
         drawRenderTextureRec,
+        loadFileToStr,
     ]
     imports []
 
@@ -43,12 +43,6 @@ import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
 
-UUID : {
-    upper: U64,
-    lower: U64,
-}
-
-setWindowSize : I32, I32 -> Task {} {}
 getScreenSize : Task { height : I32, width : I32, z : I64 } {}
 
 exit : Task {} {}
@@ -65,12 +59,17 @@ toLogLevel = \level ->
         LogFatal -> 6
         LogNone -> 7
 
+RawUUID : {
+    upper: U64,
+    lower: U64,
+}
+
 log : Str, I32 -> Task {} {}
+
+initWindow : Str, F32, F32 -> Task {} {}
 
 drawText : RocVector2, I32, Str, RocColor -> Task {} {}
 measureText : Str, I32 -> Task I64 {}
-
-setWindowTitle : Str -> Task {} {}
 
 drawLine : RocVector2, RocVector2, RocColor -> Task {} {}
 
@@ -108,3 +107,5 @@ RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}
 beginTexture : RenderTexture, RocColor -> Task {} {}
 endTexture : RenderTexture -> Task {} {}
+
+loadFileToStr : Str -> Task Str {}

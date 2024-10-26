@@ -10,15 +10,15 @@ module [
     Sound,
     UUID,
     rgba,
-    setWindowSize,
     getScreenSize,
+    initWindow,
     exit,
-    setWindowTitle,
     setTargetFPS,
     setDrawFPS,
     measureText,
     takeScreenshot,
     log,
+    loadFileToStr,
 ]
 
 import Mouse
@@ -156,34 +156,26 @@ rgba = \color ->
 exit : Task {} *
 exit = Effect.exit |> Task.mapErr \{} -> crash "unreachable exit"
 
-## Show a Raylib log trace message.
+## Show a RocRay log trace message.
 ##
 ## ```
-## Raylib.log! "Not yet implemented" LogError
+## RocRay.log! "Not yet implemented" LogError
 ## ```
 log : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] -> Task {} *
 log = \message, level ->
     Effect.log message (Effect.toLogLevel level)
     |> Task.mapErr \{} -> crash "unreachable log"
 
-## Set the window title.
-##
-## ```
-## RocRay.setWindowTitle! "My Roc Game"
-## ```
-setWindowTitle : Str -> Task {} *
-setWindowTitle = \title ->
-    Effect.setWindowTitle title
-    |> Task.mapErr \{} -> crash "unreachable setWindowTitle"
-
-## Set the window size.
-## ```
-## RocRay.setWindowSize! { width: 800, height: 600 }
-## ```
-setWindowSize : { width : F32, height : F32 } -> Task {} *
-setWindowSize = \{ width, height } ->
-    Effect.setWindowSize (Num.round width) (Num.round height)
-    |> Task.mapErr \{} -> crash "unreachable setWindowSize"
+initWindow :
+    {
+        title ? Str,
+        width ? F32,
+        height ? F32,
+    }
+    -> Task {} *
+initWindow = \{ title ? "RocRay", width ? 800, height ? 600 } ->
+    Effect.initWindow title width height
+    |> Task.mapErr \{} -> crash "unreachable initWindow"
 
 ## Get the window size.
 getScreenSize : Task { height : F32, width : F32 } *
@@ -199,7 +191,7 @@ setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unre
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
-## Raylib.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
+## RocRay.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
 ## ```
 setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
 setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
@@ -220,9 +212,18 @@ measureText = \{ text, size } ->
 
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```
-## Raylib.takeScreenshot! "screenshot.png"
+## RocRay.takeScreenshot! "screenshot.png"
 ## ```
 takeScreenshot : Str -> Task {} *
 takeScreenshot = \filename ->
     Effect.takeScreenshot filename
     |> Task.mapErr \{} -> crash "unreachable takeScreenshot"
+
+## Loads a file from disk
+## ```
+## RocRay.loadFileToStr! "resources/example.txt"
+## ```
+loadFileToStr : Str -> Task Str *
+loadFileToStr = \path ->
+    Effect.loadFileToStr path
+    |> Task.mapErr \{} -> crash "unreachable loadFileToStr"

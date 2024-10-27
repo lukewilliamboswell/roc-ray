@@ -8,6 +8,9 @@ module [
     Texture,
     RenderTexture,
     Sound,
+    NetworkState,
+    NetworkPeers,
+    NetworkMessage,
     UUID,
     rgba,
     getScreenSize,
@@ -50,16 +53,22 @@ PlatformState : {
         buttons : Mouse.Buttons,
         wheel : F32,
     },
-    network : {
-        peers : {
-            connected : List Network.UUID,
-            disconnected : List Network.UUID,
-        },
-        messages : List {
-            id: Network.UUID,
-            bytes: List U8,
-        },
-    }
+    network : NetworkState,
+}
+
+NetworkState : {
+    peers : NetworkPeers,
+    messages : List NetworkMessage,
+}
+
+NetworkPeers : {
+    connected : List Network.UUID,
+    disconnected : List Network.UUID,
+}
+
+NetworkMessage : {
+    id : Network.UUID,
+    bytes : List U8,
 }
 
 ## Represents a keyboard key, like `KeyA` or `KeyEnter`.

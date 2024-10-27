@@ -8,8 +8,7 @@ module [
     Intent,
     Facing,
     frameTicks,
-    new,
-    opponentPositions,
+    init,
     playerFacing,
 ]
 
@@ -19,9 +18,10 @@ import rr.Network exposing [UUID]
 
 World : {
     localPlayer : LocalPlayer,
-    opponent : [Connected RemotePlayer, Disconnected],
+    remotePlayer : RemotePlayer,
     ## the unspent milliseconds remaining after the last tick (or frame)
     remainingMillis : F32,
+    tick : U64,
 }
 
 LocalPlayer : {
@@ -35,6 +35,12 @@ RemotePlayer : {
     pos : Vector2,
 }
 
+PeerUpdate : {
+    id : UUID,
+    x : F32,
+    y : F32,
+}
+
 AnimatedSprite : {
     frame : U8, # frame index, increments each tick
     frameRate : U8, # frames per second
@@ -44,39 +50,25 @@ AnimatedSprite : {
 Intent : [Walk Facing, Idle Facing]
 Facing : [Up, Down, Left, Right]
 
-updateAnimation : AnimatedSprite, F32 -> AnimatedSprite
-updateAnimation = \animation, timestampMillis ->
-    if timestampMillis > animation.nextAnimationTick then
-        frame = Num.addWrap animation.frame 1
-        millisToGo = 1000 / (Num.toF32 animation.frameRate)
-        nextAnimationTick = timestampMillis + millisToGo
-        { animation & frame, nextAnimationTick }
-    else
-        animation
-
 ticksPerSecond : U64
 ticksPerSecond = 120
 
 millisPerTick : F32
 millisPerTick = 1000 / Num.toF32 ticksPerSecond
 
-new : { localPlayer : LocalPlayer } -> World
-new = \{ localPlayer } -> {
-    localPlayer,
-    opponent: Disconnected,
-    remainingMillis: 0,
-}
+init : { localPlayer : LocalPlayer, firstUpdate : PeerUpdate } -> World
+init = \{ localPlayer, firstUpdate } ->
+    remainingMillis = 0
+    tick = 0
+    pos = { x: firstUpdate.x, y: firstUpdate.y }
+    remotePlayer = { id: firstUpdate.id, pos }
+
+    { localPlayer, remotePlayer, remainingMillis, tick }
 
 FrameState : {
     platformState : PlatformState,
     deltaTime : F32,
     inbox : List PeerUpdate,
-}
-
-PeerUpdate : {
-    id : UUID,
-    x : F32,
-    y : F32,
 }
 
 ## use as many physics ticks as the frame duration allows
@@ -85,49 +77,39 @@ frameTicks = \world, { platformState, deltaTime, inbox } ->
     remainingMillis = world.remainingMillis + deltaTime
     newWorld = useAllRemainingTime { world & remainingMillis } platformState
 
-    # TODO use inputs instead of last known position
-    opponent =
-        when (newWorld.opponent, inbox) is
-            (Disconnected, []) -> Disconnected
-            (Connected remotePlayer, []) -> Connected remotePlayer
-            (_, messages) ->
-                when List.last messages is
-                    Ok { id, x, y } -> Connected { id, pos: { x, y } }
-                    Err _ -> crash "bug in frameTicks opponent update"
+    # TODO use recorded inputs instead of last known position
+    remotePlayer : RemotePlayer
+    remotePlayer =
+        when List.last inbox is
+            Ok { id, x, y } -> { id, pos: { x, y } }
+            Err ListWasEmpty -> world.remotePlayer
 
-    { newWorld & opponent }
+    { newWorld & remotePlayer }
 
 useAllRemainingTime : World, PlatformState -> World
 useAllRemainingTime = \world, platformState ->
     if world.remainingMillis <= millisPerTick then
         world
     else
-        tickedWorld = tick world platformState
+        tickedWorld = tickOnce world platformState
         useAllRemainingTime tickedWorld platformState
 
-## a single simulation tick
-tick : World, PlatformState -> World
-tick = \world, state ->
+## execute a single simulation tick
+tickOnce : World, PlatformState -> World
+tickOnce = \world, state ->
     localPlayer =
         oldPlayer = world.localPlayer
         animation = updateAnimation oldPlayer.animation millisPerTick
         intent = readInput state.keys (playerFacing oldPlayer)
 
-        { oldPlayer & animation, intent }
-        |> movePlayer
+        movePlayer { oldPlayer & animation, intent }
 
-    opponent = world.opponent
-
-    # opponent =
-    #     when world.opponent is
-    #         Disconnected -> Disconnected
-    #         Connected remotePlayer ->
-    #             animation = updateAnimation remotePlayer.animation millisPerTick
-    #             Connected { remotePlayer & animation }
+    # TODO animate remotePlayer
 
     remainingMillis = world.remainingMillis - millisPerTick
+    tick = world.tick + 1
 
-    { world & localPlayer, opponent, remainingMillis }
+    { world & localPlayer, remainingMillis, tick }
 
 readInput : Keys.Keys, Facing -> Intent
 readInput = \keys, facing ->
@@ -174,8 +156,12 @@ movePlayer = \player ->
 
     { player & pos: newPos }
 
-opponentPositions : World -> List RemotePlayer
-opponentPositions = \world ->
-    when world.opponent is
-        Connected remotePlayer -> [remotePlayer]
-        Disconnected -> []
+updateAnimation : AnimatedSprite, F32 -> AnimatedSprite
+updateAnimation = \animation, timestampMillis ->
+    if timestampMillis > animation.nextAnimationTick then
+        frame = Num.addWrap animation.frame 1
+        millisToGo = 1000 / (Num.toF32 animation.frameRate)
+        nextAnimationTick = timestampMillis + millisToGo
+        { animation & frame, nextAnimationTick }
+    else
+        animation

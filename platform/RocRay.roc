@@ -55,7 +55,7 @@ PlatformState : {
             disconnected : List Network.UUID,
         },
         messages : List {
-            from: Network.UUID,
+            id: Network.UUID,
             bytes: List U8,
         },
     }

@@ -293,7 +293,7 @@ impl From<&HashMap<matchbox_socket::PeerId, matchbox_socket::PeerState>> for Pee
 #[repr(C)]
 pub struct PeerMessage {
     pub bytes: roc_std::RocList<u8>,
-    pub from: UUID,
+    pub id: UUID,
 }
 
 impl roc_std::RocRefcounted for PeerMessage {

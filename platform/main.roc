@@ -24,12 +24,7 @@ PlatformStateFromHost : {
     mousePosY : F32,
     mouseWheel : F32,
     peers : PeerState,
-    messages : List PeerMessage,
-}
-
-PeerMessage : {
-    from : Effect.RawUUID,
-    bytes : List U8,
+    messages : List Effect.PeerMessage,
 }
 
 PeerState : {
@@ -76,7 +71,7 @@ renderForHost = \boxedModel, platformState ->
                 connected: peers.connected |> List.map Network.fromU64Pair,
                 disconnected: peers.disconnected |> List.map Network.fromU64Pair,
             },
-            messages: messages |> List.map \{ from, bytes } -> { from: Network.fromU64Pair from, bytes },
+            messages: messages |> List.map \{ id, bytes } -> { id: Network.fromU64Pair id, bytes },
         },
     }
 

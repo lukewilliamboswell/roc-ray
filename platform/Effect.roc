@@ -5,6 +5,7 @@ hosted Effect
         Sound,
         Camera,
         RawUUID,
+        PeerMessage,
         getScreenSize,
         exit,
         drawText,
@@ -62,6 +63,11 @@ toLogLevel = \level ->
 RawUUID : {
     upper: U64,
     lower: U64,
+}
+
+PeerMessage : {
+    id : Effect.RawUUID,
+    bytes : List U8,
 }
 
 log : Str, I32 -> Task {} {}

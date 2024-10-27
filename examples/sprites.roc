@@ -128,7 +128,7 @@ displayPeerConnections = \{ connected, disconnected } ->
     |> Task.forEach Draw.text
 
 displayMessages : List {
-    from: Network.UUID,
+    id: Network.UUID,
     bytes: List U8,
 } -> Task {} _
 displayMessages = \messages ->
@@ -149,7 +149,7 @@ displayMessages = \messages ->
     messages
     |> List.mapWithIndex \msg, i -> {
         pos: { x: width  - 10, y: Num.toFrac (height - 10 - (i*10)) },
-        text: "FROM $(Inspect.toStr msg.from), $(msg.bytes |> List.len |> Num.toStr) BYTES",
+        text: "FROM $(Inspect.toStr msg.id), $(msg.bytes |> List.len |> Num.toStr) BYTES",
         size: 10,
         color: Black,
     }

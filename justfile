@@ -17,7 +17,6 @@ dev app="examples/basic-shapes.roc" features="default":
 # build and run an executable
 [windows]
 dev app="examples/basic-shapes.roc":
-    .\windows\bin\roc.exe check {{app}}
     .\windows\bin\roc.exe build --no-link --output app.obj {{app}}
     cargo run
 

@@ -37,6 +37,7 @@ hosted Effect
         createRenderTexture,
         drawRenderTextureRec,
         loadFileToStr,
+        sendToPeer,
     ]
     imports []
 
@@ -63,6 +64,9 @@ toLogLevel = \level ->
 RawUUID : {
     upper: U64,
     lower: U64,
+    zzz1: U64,
+    zzz2: U64,
+    zzz3: U64,
 }
 
 PeerMessage : {
@@ -115,3 +119,5 @@ beginTexture : RenderTexture, RocColor -> Task {} {}
 endTexture : RenderTexture -> Task {} {}
 
 loadFileToStr : Str -> Task Str {}
+
+sendToPeer : List U8, RawUUID -> Task {} {}

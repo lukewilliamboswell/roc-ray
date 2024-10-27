@@ -1,12 +1,18 @@
-module [UUID, fromU64Pair, toStr]
+module [UUID, fromU64Pair, toU64Pair, toStr]
+
+import Effect
 
 UUID := { upper : U64, lower : U64 }
     implements [
+        Eq, Hash,
         Inspect { toInspector: uuidInspector },
     ]
 
-fromU64Pair : { upper : U64, lower : U64 } -> UUID
+fromU64Pair : { upper : U64, lower : U64 }a -> UUID
 fromU64Pair = \{ upper, lower } -> @UUID { upper, lower }
+
+toU64Pair : UUID -> Effect.RawUUID
+toU64Pair = \@UUID { upper, lower } -> { upper, lower, zzz1: 0, zzz2: 0, zzz3: 0 }
 
 uuidInspector : UUID -> Inspector f where f implements InspectFormatter
 uuidInspector = \uuid -> Inspect.str (toStr uuid)

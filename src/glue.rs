@@ -1,5 +1,6 @@
 use crate::bindings;
 use core::fmt::Debug;
+use matchbox_socket::PeerId;
 use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
@@ -228,31 +229,60 @@ roc_refcounted_noop_impl!(RocRectangle);
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
-pub struct UUID {
+pub struct PeerUUID {
     pub lower: u64,
     pub upper: u64,
+    pub zzz1: u64,
+    pub zzz2: u64,
+    pub zzz3: u64,
 }
 
-roc_refcounted_noop_impl!(UUID);
+roc_refcounted_noop_impl!(PeerUUID);
 
-impl From<UUID> for uuid::Uuid {
-    fn from(roc_uuid: UUID) -> uuid::Uuid {
+impl From<matchbox_socket::PeerId> for PeerUUID {
+    fn from(peer_id: matchbox_socket::PeerId) -> PeerUUID {
+        let (upper, lower) = peer_id.0.as_u64_pair();
+        PeerUUID {
+            lower,
+            upper,
+            zzz1: 0,
+            zzz2: 0,
+            zzz3: 0,
+        }
+    }
+}
+
+impl From<&PeerUUID> for uuid::Uuid {
+    fn from(roc_uuid: &PeerUUID) -> uuid::Uuid {
         uuid::Uuid::from_u64_pair(roc_uuid.upper, roc_uuid.lower)
     }
 }
 
-impl From<&matchbox_socket::PeerId> for UUID {
-    fn from(peer_id: &matchbox_socket::PeerId) -> UUID {
+impl From<&PeerUUID> for PeerId {
+    fn from(roc_uuid: &PeerUUID) -> matchbox_socket::PeerId {
+        let uuid = uuid::Uuid::from_u64_pair(roc_uuid.upper, roc_uuid.lower);
+        matchbox_socket::PeerId::from(uuid)
+    }
+}
+
+impl From<&matchbox_socket::PeerId> for PeerUUID {
+    fn from(peer_id: &matchbox_socket::PeerId) -> PeerUUID {
         let (upper, lower) = peer_id.0.as_u64_pair();
-        UUID { lower, upper }
+        PeerUUID {
+            lower,
+            upper,
+            zzz1: 0,
+            zzz2: 0,
+            zzz3: 0,
+        }
     }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[repr(C)]
 pub struct PeerState {
-    pub connected: roc_std::RocList<UUID>,
-    pub disconnected: roc_std::RocList<UUID>,
+    pub connected: roc_std::RocList<PeerUUID>,
+    pub disconnected: roc_std::RocList<PeerUUID>,
 }
 
 impl roc_std::RocRefcounted for PeerState {
@@ -293,7 +323,7 @@ impl From<&HashMap<matchbox_socket::PeerId, matchbox_socket::PeerState>> for Pee
 #[repr(C)]
 pub struct PeerMessage {
     pub bytes: roc_std::RocList<u8>,
-    pub id: UUID,
+    pub id: PeerUUID,
 }
 
 impl roc_std::RocRefcounted for PeerMessage {

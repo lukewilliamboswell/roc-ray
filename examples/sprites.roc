@@ -1,10 +1,15 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init, render] {
+    rr: platform "../platform/main.roc",
+    json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
 
-import rr.RocRay exposing [Texture, Rectangle]
+}
+
+import rr.RocRay exposing [Texture, Rectangle, Vector2]
 import rr.Keys
 import rr.Draw
 import rr.Texture
-import rr.Network
+import rr.Network exposing [UUID]
+import json.Json
 
 width = 800
 height = 600
@@ -14,7 +19,20 @@ Model : {
     direction : [WalkUp, WalkDown, WalkLeft, WalkRight],
     dude : Texture,
     dudeAnimation : AnimatedSprite,
+    others : Dict UUID { x : F32, y : F32 },
 }
+
+updateOtherPlayers : Model, List { id: UUID, bytes: List U8 } -> Dict UUID { x : F32, y : F32 }
+updateOtherPlayers = \{others}, messages ->
+    List.walk messages others \state, { id, bytes } ->
+
+        pos : Result {x : I64, y: I64} _
+        pos = Decode.fromBytes bytes Json.utf8
+
+        when pos is
+            Ok {x,y} -> Dict.insert state id {x: Num.toF32 x, y: Num.toF32 y}
+            Err _ -> Dict.insert state id {x: 50, y: 50}
+
 
 init : Task Model []
 init =
@@ -33,12 +51,16 @@ init =
             frameRate: 10,
             nextAnimationTick: 0,
         },
+        others: Dict.empty {},
     }
 
 render : Model, RocRay.PlatformState -> Task Model []
 render = \model, { timestampMillis, keys, network } ->
 
+    # SEND PLAYER POSITION TO NETWORK
+    sendPlayerPosition! model.player network.peers.connected
 
+    others = updateOtherPlayers model network.messages
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -69,7 +91,11 @@ render = \model, { timestampMillis, keys, network } ->
         displayPeerConnections! network.peers
         displayMessages! network.messages
 
-    Task.ok { model & player, dudeAnimation, direction }
+        # RENDER OTHER PLAYERS
+        drawOtherPlayers! others
+
+
+    Task.ok { model & player, dudeAnimation, direction, others }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
 dudeSprite = \sequence, frame ->
@@ -107,8 +133,8 @@ sprite64x64source = \{ row, col } -> {
 }
 
 displayPeerConnections : {
-    connected : List Network.UUID,
-    disconnected : List Network.UUID,
+    connected : List UUID,
+    disconnected : List UUID,
 } -> Task {} _
 displayPeerConnections = \{ connected, disconnected } ->
 
@@ -128,7 +154,7 @@ displayPeerConnections = \{ connected, disconnected } ->
     |> Task.forEach Draw.text
 
 displayMessages : List {
-    id: Network.UUID,
+    id: UUID,
     bytes: List U8,
 } -> Task {} _
 displayMessages = \messages ->
@@ -154,3 +180,19 @@ displayMessages = \messages ->
         color: Black,
     }
     |> Task.forEach Draw.text
+
+sendPlayerPosition : Vector2, List UUID -> Task {} _
+sendPlayerPosition = \player, peers ->
+
+    bytes = Encode.toBytes player Json.utf8
+
+    Task.forEach peers \peer ->
+        RocRay.sendToPeer bytes peer
+
+drawOtherPlayers : Dict UUID Vector2 -> Task {} _
+drawOtherPlayers = \others ->
+
+    Dict.toList others
+    |> Task.forEach \(id, player) ->
+        Draw.text! { pos: player, text: "$(Inspect.toStr id)", size: 10, color: Red }
+        Draw.rectangle! { rect: { x: player.x - 5, y: player.y + 15, width: 20, height: 40}, color: Red }

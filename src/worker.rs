@@ -122,6 +122,7 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
                         }
                     }
                     Some(SendMessage(peer, bytes)) => {
+                        // dbg!("MESSAGE SENT");
                         socket.send(bytes.into_boxed_slice(), peer);
                     }
                     None => {
@@ -133,8 +134,8 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
 
             _ = socket_interval.tick() => {
                 println!("SOCKET INTERVAL TICK, {:?}", std::time::SystemTime::now().duration_since(start).unwrap().as_millis());
-                dbg!(&socket.is_closed());
-                dbg!(&socket.connected_peers().count());
+                // dbg!(&socket.is_closed());
+                // dbg!(&socket.connected_peers().count());
 
                 match process_webrtc_updates(&mut socket, &sender).await {
                     Ok(()) => (),

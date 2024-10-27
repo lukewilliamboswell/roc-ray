@@ -19,6 +19,7 @@ module [
     takeScreenshot,
     log,
     loadFileToStr,
+    sendToPeer,
 ]
 
 import Mouse
@@ -227,3 +228,9 @@ loadFileToStr : Str -> Task Str *
 loadFileToStr = \path ->
     Effect.loadFileToStr path
     |> Task.mapErr \{} -> crash "unreachable loadFileToStr"
+
+## Send a message to a connected peer.
+sendToPeer : List U8, UUID -> Task {} *
+sendToPeer = \message, peerId ->
+    Effect.sendToPeer message (Network.toU64Pair peerId)
+    |> Task.mapErr \{} -> crash "unreachable sendToPeer"

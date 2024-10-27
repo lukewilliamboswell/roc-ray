@@ -1,3 +1,4 @@
+use glue::PeerMessage;
 use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
@@ -6,6 +7,7 @@ use std::array;
 use std::collections::HashMap;
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
+use worker::MainToWorkerMsg;
 
 mod bindings;
 mod config;
@@ -37,10 +39,12 @@ fn main() {
 
     unsafe {
         while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
-            // Try to receive any pending (non-blocking)
-            let messages = worker::get_messages();
+            let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
 
-            for msg in messages {
+            // Try to receive any pending (non-blocking)
+            let queued_network_messages = worker::get_messages();
+
+            for msg in queued_network_messages {
                 use worker::WorkerToMainMsg::*;
                 match msg {
                     PeerConnected(peer) => {
@@ -49,9 +53,14 @@ fn main() {
                     PeerDisconnected(peer) => {
                         peers.insert(peer, PeerState::Disconnected);
                     }
-                    MessageReceived(peer, data) => {
-                        let message = String::from_utf8_lossy(&data);
-                        println!("Main: Message from {peer}: {message:?}");
+                    MessageReceived(id, bytes) => {
+                        // dbg!("MESSAGE FROM");
+                        // dbg!(&bytes);
+
+                        messages.append(glue::PeerMessage {
+                            id: id.into(),
+                            bytes: RocList::from_slice(bytes.as_slice()),
+                        });
                     }
                     Error(error) => {
                         println!("Main: Worker error: {error}");
@@ -81,7 +90,7 @@ fn main() {
                 frame_count,
                 peers: (&peers).into(),
                 keys: get_keys_states(),
-                messages: RocList::empty(),
+                messages,
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
                 mouse_pos_x: bindings::GetMouseX() as f32,
@@ -737,4 +746,20 @@ fn trace_log(msg: &str) {
         let text = CString::new(msg).unwrap();
         bindings::TraceLog(level as i32, text.as_ptr());
     }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    // dbg!(&bytes);
+    // dbg!(&peer);
+
+    let data = bytes.as_slice().to_vec();
+
+    worker::send_message(MainToWorkerMsg::SendMessage(peer.into(), data));
+
+    RocResult::ok(())
 }

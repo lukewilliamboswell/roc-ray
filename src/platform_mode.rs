@@ -46,6 +46,7 @@ pub enum PlatformEffect {
     LogMsg,
     SetTargetFPS,
     GetScreenSize,
+    SendMsgToPeer,
     LoadSound,
     LoadFileToStr,
     PlaySound,
@@ -86,7 +87,12 @@ impl PlatformMode {
         // we only need to track the "permitted" effects, everything else is "not permitted"
         match (self, e) {
             // PERMITTED IN ANY MODE
-            (_, SetDrawFPS) | (_, SetTargetFPS) | (_, MeasureText) | (_, LogMsg) => true,
+            (_, SetDrawFPS)
+            | (_, SetTargetFPS)
+            | (_, MeasureText)
+            | (_, LogMsg)
+            // TODO SendMsgToPeer should only be if we have initialized the "network"
+            | (_, SendMsgToPeer) => true,
 
             // PERMITTED ONLY AFTER INIT (NEEDS RAYLIB INIT)
             (mode, LoadFileToStr) if mode.after_init() => true,

@@ -62,11 +62,11 @@ toLogLevel = \level ->
         LogNone -> 7
 
 RawUUID : {
-    upper: U64,
-    lower: U64,
-    zzz1: U64,
-    zzz2: U64,
-    zzz3: U64,
+    upper : U64,
+    lower : U64,
+    zzz1 : U64,
+    zzz2 : U64,
+    zzz3 : U64,
 }
 
 PeerMessage : {
@@ -90,7 +90,7 @@ drawCircle : RocVector2, F32, RocColor -> Task {} {}
 drawCircleGradient : RocVector2, F32, RocColor, RocColor -> Task {} {}
 
 setTargetFPS : I32 -> Task {} {}
-setDrawFPS : Bool, I32, I32 -> Task {} {}
+setDrawFPS : Bool, RocVector2 -> Task {} {}
 
 takeScreenshot : Str -> Task {} {}
 

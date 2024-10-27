@@ -49,10 +49,10 @@ pub fn send_message(msg: MainToWorkerMsg) {
     MAIN_TX.with(|main_tx_cell| {
         if let Some(tx) = main_tx_cell.borrow().as_ref() {
             if let Err(..) = tx.try_send(msg) {
-                println!("Main thread has disconnected");
+                eprintln!("Main thread has disconnected");
             }
         } else {
-            println!("Main sender not initialized");
+            eprintln!("Main sender not initialized");
         }
     })
 }
@@ -71,6 +71,7 @@ pub fn get_messages() -> Vec<WorkerToMainMsg> {
 
 const MAIN_TO_WORKER_BUFFER_SIZE: usize = 100;
 const WORKER_TO_MAIN_BUFFER_SIZE: usize = 1000;
+const SOCKET_UPDATE_INTERVAL_MS: u64 = 50;
 
 pub fn init(rt: &tokio::runtime::Runtime) -> tokio::task::JoinHandle<()> {
     let (main_tx, worker_rx) =
@@ -90,18 +91,17 @@ pub fn init(rt: &tokio::runtime::Runtime) -> tokio::task::JoinHandle<()> {
 }
 
 async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<WorkerToMainMsg>) {
-    let start = std::time::SystemTime::now();
-
+    // TODO let's not hardcode this... WIP
     let room_url = "ws://localhost:3536/yolo?next?2";
 
-    println!("Worker connecting to WebRTC {room_url}");
+    eprintln!("Worker connecting to WebRTC {room_url}");
 
     let (mut socket, mut loop_fut) = WebRtcSocket::builder(room_url)
         .reconnect_attempts(Some(3))
         .add_reliable_channel()
         .build();
 
-    let mut socket_interval = interval(Duration::from_millis(500));
+    let mut socket_interval = interval(Duration::from_millis(SOCKET_UPDATE_INTERVAL_MS));
 
     loop {
         tokio::select! {
@@ -109,7 +109,7 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
                 use MainToWorkerMsg::*;
                 match msg {
                     Some(Shutdown) => {
-                        println!("Worker received shutdown message, exiting...");
+                        eprintln!("Worker received shutdown message, exiting...");
                         break;
                     }
                     Some(Tick) => {
@@ -117,32 +117,27 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
                         // 1. the channel is closed, in which case we should break
                         // 2. the channel is full, in which case we should log it??
                         if let Err(..) = sender.try_send(WorkerToMainMsg::Tock) {
-                            println!("Main thread has disconnected");
+                            eprintln!("Main thread has disconnected");
                             break;
                         }
                     }
                     Some(SendMessage(peer, bytes)) => {
-                        // dbg!("MESSAGE SENT");
                         socket.send(bytes.into_boxed_slice(), peer);
                     }
                     None => {
-                        println!("Channel closed");
+                        eprintln!("Channel closed");
                         break;
                     }
                 }
             }
 
             _ = socket_interval.tick() => {
-                println!("SOCKET INTERVAL TICK, {:?}", std::time::SystemTime::now().duration_since(start).unwrap().as_millis());
-                // dbg!(&socket.is_closed());
-                // dbg!(&socket.connected_peers().count());
-
                 match process_webrtc_updates(&mut socket, &sender).await {
                     Ok(()) => (),
                     Err(e) => {
-                        println!("WebRTC error: {}", e);
+                        eprintln!("WebRTC error: {}", e);
                         if let Err(..) = sender.try_send(WorkerToMainMsg::Error(e.to_string())) {
-                            println!("Failed to send error to main thread");
+                            eprintln!("Failed to send error to main thread");
                             break;
                         }
                     }
@@ -152,15 +147,15 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
             msg = &mut loop_fut => {
                 match msg {
                     Ok(()) => {
-                        println!("WebRTC connection closed cleanly");
+                        eprintln!("WebRTC connection closed cleanly");
                         break;
                     },
                     Err(SocketError::ConnectionFailed(e)) => {
-                        println!("WebRTC connection failed: {}", e);
+                        eprintln!("WebRTC connection failed: {}", e);
                         break;
                     }
                     Err(SocketError::Disconnected(e)) => {
-                        println!("WebRTC connection disconnected: {}", e);
+                        eprintln!("WebRTC connection disconnected: {}", e);
                         break;
                     },
                 }
@@ -189,8 +184,7 @@ async fn process_webrtc_updates(
                 }
             }
         }
-        Err(channel_err) => {
-            dbg!(&channel_err);
+        Err(_channel_err) => {
             // https://docs.rs/matchbox_socket/latest/matchbox_socket/enum.ChannelError.html
             todo!("Handle channel error here");
         }

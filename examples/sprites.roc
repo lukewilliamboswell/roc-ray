@@ -1,44 +1,25 @@
-app [Model, init, render] {
-    rr: platform "../platform/main.roc",
-    json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
+app [Model, init, render] { rr: platform "../platform/main.roc" }
 
-}
-
-import rr.RocRay exposing [Texture, Rectangle, Vector2]
+import rr.RocRay exposing [Texture, Rectangle]
 import rr.Keys
 import rr.Draw
 import rr.Texture
-import rr.Network exposing [UUID]
-import json.Json
 
-width = 400
-height = 400
+width = 800
+height = 600
 
 Model : {
     player : { x : F32, y : F32 },
     direction : [WalkUp, WalkDown, WalkLeft, WalkRight],
     dude : Texture,
     dudeAnimation : AnimatedSprite,
-    others : Dict UUID { x : F32, y : F32 },
 }
-
-updateOtherPlayers : Model, List { id: UUID, bytes: List U8 } -> Dict UUID { x : F32, y : F32 }
-updateOtherPlayers = \{others}, messages ->
-    List.walk messages others \state, { id, bytes } ->
-
-        pos : Result {x : I64, y: I64} _
-        pos = Decode.fromBytes bytes Json.utf8
-
-        when pos is
-            Ok {x,y} -> Dict.insert state id {x: Num.toF32 x, y: Num.toF32 y}
-            Err _ -> Dict.insert state id {x: 50, y: 50}
-
 
 init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
-    RocRay.initWindow! { title: "Animated Sprite Example", width, height }
+    RocRay.initWindow! { title: "Animated Sprite Example" }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
@@ -51,16 +32,10 @@ init =
             frameRate: 10,
             nextAnimationTick: 0,
         },
-        others: Dict.empty {},
     }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { timestampMillis, keys, network } ->
-
-    # SEND PLAYER POSITION TO NETWORK
-    sendPlayerPosition! model.player network.peers.connected
-
-    others = updateOtherPlayers model network.messages
+render = \model, { timestampMillis, keys } ->
 
     (player, direction) =
         if Keys.down keys KeyUp then
@@ -88,14 +63,7 @@ render = \model, { timestampMillis, keys, network } ->
             tint: White,
         }
 
-        displayPeerConnections! network.peers
-        displayMessages! network.messages
-
-        # RENDER OTHER PLAYERS
-        drawOtherPlayers! others
-
-
-    Task.ok { model & player, dudeAnimation, direction, others }
+    Task.ok { model & player, dudeAnimation, direction }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
 dudeSprite = \sequence, frame ->
@@ -131,68 +99,3 @@ sprite64x64source = \{ row, col } -> {
     width: 64,
     height: 64,
 }
-
-displayPeerConnections : {
-    connected : List UUID,
-    disconnected : List UUID,
-} -> Task {} _
-displayPeerConnections = \{ connected, disconnected } ->
-
-    combined =
-        List.concat
-            (connected |> List.map \uuid -> "CONNECTED: $(Network.toStr uuid)")
-            (disconnected |> List.map \uuid -> "DISCONNECTED: $(Network.toStr uuid)")
-        |> List.append "NETWORK PEERS $(Num.toStr (List.len connected)) connected, $(Num.toStr (List.len disconnected)) disconnected"
-
-    List.range { start: At 0, end: Before (List.len combined)}
-    |> List.map \i -> {
-        pos: { x: 10, y: height - 10 - (Num.toFrac (i*10)) },
-        text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
-        size: 10,
-        color: Black,
-    }
-    |> Task.forEach Draw.text
-
-displayMessages : List {
-    id: UUID,
-    bytes: List U8,
-} -> Task {} _
-displayMessages = \messages ->
-
-    total = List.len messages
-
-    totalMsg = "MESSAGES TOTAL $(Num.toStr total)"
-
-    totalWidth = RocRay.measureText {text: totalMsg, size: 10} |> Task.map! Num.toFrac
-
-    Draw.text! {
-        pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total*10)) },
-        text: totalMsg,
-        size: 10,
-        color: Black,
-    }
-
-    messages
-    |> List.mapWithIndex \msg, i -> {
-        pos: { x: width  - 10, y: height - 10 - (Num.toFrac (i*10)) },
-        text: "FROM $(Inspect.toStr msg.id), $(msg.bytes |> List.len |> Num.toStr) BYTES",
-        size: 10,
-        color: Black,
-    }
-    |> Task.forEach Draw.text
-
-sendPlayerPosition : Vector2, List UUID -> Task {} _
-sendPlayerPosition = \player, peers ->
-
-    bytes = Encode.toBytes player Json.utf8
-
-    Task.forEach peers \peer ->
-        RocRay.sendToPeer bytes peer
-
-drawOtherPlayers : Dict UUID Vector2 -> Task {} _
-drawOtherPlayers = \others ->
-
-    Dict.toList others
-    |> Task.forEach \(id, player) ->
-        Draw.text! { pos: player, text: "$(Inspect.toStr id)", size: 10, color: Red }
-        Draw.rectangle! { rect: { x: player.x - 5, y: player.y + 15, width: 20, height: 40}, color: Red }

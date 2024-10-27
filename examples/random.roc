@@ -22,7 +22,7 @@ init : Task Model []
 init =
 
     RocRay.setTargetFPS! 500
-    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
     RocRay.initWindow! { title: "Random Dots", width, height }
 
     Task.ok {

@@ -54,9 +54,6 @@ fn main() {
                         peers.insert(peer, PeerState::Disconnected);
                     }
                     MessageReceived(id, bytes) => {
-                        // dbg!("MESSAGE FROM");
-                        // dbg!(&bytes);
-
                         messages.append(glue::PeerMessage {
                             id: id.into(),
                             bytes: RocList::from_slice(bytes.as_slice()),
@@ -387,14 +384,14 @@ extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
     config::update(|c| {
         c.fps_show = show;
-        c.fps_position = (pos_x, pos_y)
+        c.fps_position = pos.to_components_c_int();
     });
 
     RocResult::ok(())
@@ -753,9 +750,6 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) -> R
     if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
-
-    // dbg!(&bytes);
-    // dbg!(&peer);
 
     let data = bytes.as_slice().to_vec();
 

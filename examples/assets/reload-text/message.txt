@@ -1,0 +1,2 @@
+You can edit this message!
+It's in examples/assets/reload-text/message.txt

@@ -1,16 +1,30 @@
 platform "roc-ray"
-    requires { Model } { main : Program Model _ }
-    exposes [RocRay, Keys, Mouse]
+    requires { Model } {
+        init! : {} => Result Model [],
+        render! : Model, RocRay.PlatformState => Result Model [],
+    }
+    exposes [
+        RocRay,
+        Camera,
+        Draw,
+        Keys,
+        Mouse,
+        Music,
+        Network,
+        RenderTexture,
+        Sound,
+        Texture,
+    ]
     packages {}
     imports []
-    provides [init!, render!]
+    provides [initForHost!, renderForHost!]
 
-import RocRay exposing [Program]
+import RocRay
 import Mouse
-import Keys
 import InternalKeyboard
 import InternalMouse
 import Effect
+import Network
 
 PlatformStateFromHost : {
     frameCount : U64,
@@ -20,11 +34,18 @@ PlatformStateFromHost : {
     mousePosX : F32,
     mousePosY : F32,
     mouseWheel : F32,
+    peers : PeerState,
+    messages : List Effect.PeerMessage,
 }
 
-init! : I32 => Box Model
-init! = \_x ->
-    main.init! {}
+PeerState : {
+    connected : List Effect.RawUUID,
+    disconnected : List Effect.RawUUID,
+}
+
+initForHost! : I32 => Box Model
+initForHost! = \_x ->
+    init! {}
     |> \result ->
         when result is
             Ok m -> Box.box m
@@ -33,25 +54,32 @@ init! = \_x ->
                 Effect.exit! {}
                 crash "unreachable"
 
-render! : Box Model, PlatformStateFromHost => Box Model
-render! = \boxedModel, platformState ->
+renderForHost! : Box Model, PlatformStateFromHost => Box Model
+renderForHost! = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
-    { timestampMillis, frameCount, keys, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
+    { timestampMillis, messages, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
         timestampMillis,
         frameCount,
-        keys: keysForApp { keys },
+        keys: InternalKeyboard.pack keys,
         mouse: {
             position: { x: mousePosX, y: mousePosY },
             buttons: mouseButtonsForApp { mouseButtons },
             wheel: mouseWheel,
         },
+        network: {
+            peers: {
+                connected: peers.connected |> List.map Network.fromU64Pair,
+                disconnected: peers.disconnected |> List.map Network.fromU64Pair,
+            },
+            messages: messages |> List.map \{ id, bytes } -> { id: Network.fromU64Pair id, bytes },
+        },
     }
 
-    main.render! model state
+    render! model state
     |> \result ->
         when result is
             Ok m -> Box.box m
@@ -59,15 +87,6 @@ render! = \boxedModel, platformState ->
                 Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
                 Effect.exit! {}
                 crash "unreachable"
-
-keysForApp : { keys : List U8 } -> Keys.Keys
-keysForApp = \{ keys } ->
-    keys
-    |> List.map InternalKeyboard.keyStateFromU8
-    |> List.mapWithIndex \s, i -> (InternalKeyboard.keyFromU64 i, s)
-    |> List.keepOks \(recognized, s) ->
-        Result.map recognized \key -> (key, s)
-    |> Dict.fromList
 
 mouseButtonsForApp : { mouseButtons : List U8 } -> Mouse.Buttons
 mouseButtonsForApp = \{ mouseButtons } ->

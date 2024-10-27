@@ -1,14 +1,17 @@
 hosted Effect
     exposes [
         Texture,
+        RenderTexture,
         Sound,
+        Music,
+        LoadedMusic,
         Camera,
-        setWindowSize!,
+        RawUUID,
+        PeerMessage,
         getScreenSize!,
         exit!,
         drawText!,
         measureText!,
-        setWindowTitle!,
         drawLine!,
         drawRectangle!,
         drawRectangleGradientV!,
@@ -20,8 +23,11 @@ hosted Effect
         takeScreenshot!,
         createCamera!,
         updateCamera!,
+        initWindow!,
         beginDrawing!,
         endDrawing!,
+        beginTexture!,
+        endTexture!,
         beginMode2D!,
         endMode2D!,
         log!,
@@ -30,6 +36,16 @@ hosted Effect
         drawTextureRec!,
         loadSound!,
         playSound!,
+        createRenderTexture!,
+        drawRenderTextureRec!,
+        loadFileToStr!,
+        sendToPeer!,
+        loadMusicStream!,
+        playMusicStream!,
+        getMusicTimePlayed!,
+        stopMusicStream!,
+        pauseMusicStream!,
+        resumeMusicStream!,
     ]
     imports []
 
@@ -37,7 +53,6 @@ import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
 
-setWindowSize! : I32, I32 => {}
 getScreenSize! : {} => { height : I32, width : I32, z : I64 }
 
 exit! : {} => {}
@@ -54,12 +69,25 @@ toLogLevel = \level ->
         LogFatal -> 6
         LogNone -> 7
 
+RawUUID : {
+    upper : U64,
+    lower : U64,
+    zzz1 : U64,
+    zzz2 : U64,
+    zzz3 : U64,
+}
+
+PeerMessage : {
+    id : Effect.RawUUID,
+    bytes : List U8,
+}
+
 log! : Str, I32 => {}
+
+initWindow! : Str, F32, F32 => {}
 
 drawText! : RocVector2, I32, Str, RocColor => {}
 measureText! : Str, I32 => I64
-
-setWindowTitle! : Str => {}
 
 drawLine! : RocVector2, RocVector2, RocColor => {}
 
@@ -70,7 +98,7 @@ drawCircle! : RocVector2, F32, RocColor => {}
 drawCircleGradient! : RocVector2, F32, RocColor, RocColor => {}
 
 setTargetFPS! : I32 => {}
-setDrawFPS! : Bool, I32, I32 => {}
+setDrawFPS! : Bool, RocVector2 => {}
 
 takeScreenshot! : Str => {}
 
@@ -87,7 +115,26 @@ endMode2D! : Camera => {}
 Texture := Box {}
 loadTexture! : Str => Texture
 drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
+drawRenderTextureRec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
 
 Sound := Box {}
 loadSound! : Str => Sound
 playSound! : Sound => {}
+
+Music := Box {}
+LoadedMusic : { music : Music, lenSeconds : F32 }
+loadMusicStream! : Str => LoadedMusic
+playMusicStream! : Music => {}
+stopMusicStream! : Music => {}
+pauseMusicStream! : Music => {}
+resumeMusicStream! : Music => {}
+getMusicTimePlayed! : Music => F32
+
+RenderTexture := Box {}
+createRenderTexture! : RocVector2 => RenderTexture
+beginTexture! : RenderTexture, RocColor => {}
+endTexture! : RenderTexture => {}
+
+loadFileToStr! : Str => Str
+
+sendToPeer! : List U8, RawUUID => {}

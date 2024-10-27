@@ -1,7 +1,40 @@
 use crate::bindings;
 use core::fmt::Debug;
-use roc_std::RocRefcounted;
-use std::ffi::c_int;
+use matchbox_socket::PeerId;
+use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
+use std::{collections::HashMap, ffi::c_int};
+
+#[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct PlatformState {
+    pub frame_count: u64,
+    pub keys: RocList<u8>,
+    pub messages: RocList<PeerMessage>,
+    pub mouse_buttons: RocList<u8>,
+    pub peers: PeerState,
+    pub timestamp_millis: u64,
+    pub mouse_pos_x: f32,
+    pub mouse_pos_y: f32,
+    pub mouse_wheel: f32,
+}
+
+impl RocRefcounted for PlatformState {
+    fn inc(&mut self) {
+        self.keys.inc();
+        self.messages.inc();
+        self.mouse_buttons.inc();
+        self.peers.inc();
+    }
+    fn dec(&mut self) {
+        self.keys.dec();
+        self.messages.dec();
+        self.mouse_buttons.dec();
+        self.peers.dec();
+    }
+    fn is_refcounted() -> bool {
+        true
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -192,4 +225,115 @@ impl From<&RocRectangle> for bindings::Rectangle {
     }
 }
 
-roc_std::roc_refcounted_noop_impl!(RocRectangle);
+roc_refcounted_noop_impl!(RocRectangle);
+
+#[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[repr(C)]
+pub struct PeerUUID {
+    pub lower: u64,
+    pub upper: u64,
+    pub zzz1: u64,
+    pub zzz2: u64,
+    pub zzz3: u64,
+}
+
+roc_refcounted_noop_impl!(PeerUUID);
+
+impl From<matchbox_socket::PeerId> for PeerUUID {
+    fn from(peer_id: matchbox_socket::PeerId) -> PeerUUID {
+        let (upper, lower) = peer_id.0.as_u64_pair();
+        PeerUUID {
+            lower,
+            upper,
+            zzz1: 0,
+            zzz2: 0,
+            zzz3: 0,
+        }
+    }
+}
+
+impl From<&PeerUUID> for uuid::Uuid {
+    fn from(roc_uuid: &PeerUUID) -> uuid::Uuid {
+        uuid::Uuid::from_u64_pair(roc_uuid.upper, roc_uuid.lower)
+    }
+}
+
+impl From<&PeerUUID> for PeerId {
+    fn from(roc_uuid: &PeerUUID) -> matchbox_socket::PeerId {
+        let uuid = uuid::Uuid::from_u64_pair(roc_uuid.upper, roc_uuid.lower);
+        matchbox_socket::PeerId::from(uuid)
+    }
+}
+
+impl From<&matchbox_socket::PeerId> for PeerUUID {
+    fn from(peer_id: &matchbox_socket::PeerId) -> PeerUUID {
+        let (upper, lower) = peer_id.0.as_u64_pair();
+        PeerUUID {
+            lower,
+            upper,
+            zzz1: 0,
+            zzz2: 0,
+            zzz3: 0,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[repr(C)]
+pub struct PeerState {
+    pub connected: roc_std::RocList<PeerUUID>,
+    pub disconnected: roc_std::RocList<PeerUUID>,
+}
+
+impl roc_std::RocRefcounted for PeerState {
+    fn inc(&mut self) {
+        self.connected.inc();
+        self.disconnected.inc();
+    }
+    fn dec(&mut self) {
+        self.connected.dec();
+        self.disconnected.dec();
+    }
+    fn is_refcounted() -> bool {
+        true
+    }
+}
+
+impl From<&HashMap<matchbox_socket::PeerId, matchbox_socket::PeerState>> for PeerState {
+    fn from(value: &HashMap<matchbox_socket::PeerId, matchbox_socket::PeerState>) -> Self {
+        let max_size = value.len();
+        let mut connected = roc_std::RocList::with_capacity(max_size);
+        let mut disconnected = roc_std::RocList::with_capacity(max_size);
+
+        for (peer_id, peer_state) in value {
+            match peer_state {
+                matchbox_socket::PeerState::Connected => connected.push(peer_id.into()),
+                matchbox_socket::PeerState::Disconnected => disconnected.push(peer_id.into()),
+            }
+        }
+
+        PeerState {
+            connected,
+            disconnected,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[repr(C)]
+pub struct PeerMessage {
+    pub bytes: roc_std::RocList<u8>,
+    pub id: PeerUUID,
+}
+
+impl roc_std::RocRefcounted for PeerMessage {
+    fn inc(&mut self) {
+        self.bytes.inc();
+    }
+    fn dec(&mut self) {
+        self.bytes.dec();
+    }
+    fn is_refcounted() -> bool {
+        true
+    }
+}

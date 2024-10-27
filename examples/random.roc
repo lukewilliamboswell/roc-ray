@@ -1,79 +1,59 @@
-app [main, Model] {
+app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
 }
 
-import rr.RocRay exposing [PlatformState, Rectangle, Color]
+import rr.RocRay exposing [Rectangle, Color]
 import rr.Keys
+import rr.Draw
 import rand.Random
 import time.DateTime
 
-main : RocRay.Program Model []
-main = { init!, render! }
-
 Model : {
-    width : F32,
-    height : F32,
     seed : Random.State U32,
     number : U64,
 }
 
+width = 800
+height = 800
+
 init! : {} => Result Model []
 init! = \{} ->
 
-    width = 800f32
-    height = 800f32
-    number = 1000
-
-    seed = Random.seed 1234
-
     RocRay.setTargetFPS! 500
-    RocRay.setDrawFPS! { fps: Visible }
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Random Dots"
+    RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
+    RocRay.initWindow! { title: "Random Dots", width, height }
 
     Ok {
-        number,
-        seed,
-        width,
-        height,
+        number: 10000,
+        seed: Random.seed 1234,
     }
 
-render! : Model, PlatformState => Result Model []
+render! : Model, RocRay.PlatformState => Result Model []
 render! = \model, { keys, timestampMillis } ->
-
-    RocRay.beginDrawing! Black
 
     nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
 
-    RocRay.drawText! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
+    { seed, lines } = randomList model.seed (Random.u32 0 800) model.number
 
-    generator = Random.u32 0 800
+    number =
+        if Keys.down keys KeyUp then
+            Num.addSaturated model.number 10
+        else if Keys.down keys KeyDown then
+            Num.subSaturated model.number 10
+        else
+            model.number
 
-    { seed, lines } = randomList model.seed generator model.number
+    Draw.draw! Black \{} ->
 
-    (forEach! lines RocRay.drawRectangle!) {}
+        Draw.text! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
 
-    RocRay.drawText! { pos: { x: 10, y: model.height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
+        forEach! lines Draw.rectangle!
 
-    RocRay.endDrawing! {}
+        Draw.text! { pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
-    if Keys.down keys KeyUp then
-        Ok { model & seed, number: Num.addSaturated model.number 10 }
-    else if Keys.down keys KeyDown then
-        Ok { model & seed, number: Num.subSaturated model.number 10 }
-    else
-        Ok { model & seed }
-
-# not sure this is ok, but just trying to replace Task.forEach
-forEach! : List a, (a => {}) => ({} => {})
-forEach! = \things, do -> \{} ->
-    when things is
-        [] -> {}
-        [first, .. as rest] ->
-            do first
-            (forEach! rest do) {}
+    Ok { model & seed, number }
 
 # Generate a list of lines using the seed and generator provided
 randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }
@@ -129,3 +109,12 @@ colorFromU32 = \u32 ->
         Purple
     else
         White
+
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

@@ -30,7 +30,7 @@ init : Task Model []
 init =
 
     RocRay.setTargetFPS! 120
-    RocRay.setDrawFPS! { fps: Visible }
+    RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
     RocRay.initWindow! { title: "Pong", width, height }
 
     Task.ok {

@@ -1,16 +1,21 @@
+use glue::PeerMessage;
+use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
 use roc::LoadedMusic;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
+use std::collections::HashMap;
 use std::ffi::{c_int, CString};
 use std::time::SystemTime;
+use worker::MainToWorkerMsg;
 
 mod bindings;
 mod config;
 mod glue;
 mod platform_mode;
 mod roc;
+mod worker;
 
 /// use different error codes when the app exits
 #[derive(Debug)]
@@ -28,8 +33,41 @@ fn main() {
 
     let mut frame_count = 0;
 
+    let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+    let worker_handle = worker::init(&rt);
+
+    let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
+
     unsafe {
         while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
+            let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
+
+            // Try to receive any pending (non-blocking)
+            let queued_network_messages = worker::get_messages();
+
+            for msg in queued_network_messages {
+                use worker::WorkerToMainMsg::*;
+                match msg {
+                    PeerConnected(peer) => {
+                        peers.insert(peer, PeerState::Connected);
+                    }
+                    PeerDisconnected(peer) => {
+                        peers.insert(peer, PeerState::Disconnected);
+                    }
+                    MessageReceived(id, bytes) => {
+                        messages.append(glue::PeerMessage {
+                            id: id.into(),
+                            bytes: RocList::from_slice(bytes.as_slice()),
+                        });
+                    }
+                    Error(error) => {
+                        println!("Main: Worker error: {error}");
+                        // Optionally handle worker errors (e.g., reconnect logic)
+                    }
+                    _ => {}
+                }
+            }
+
             let duration_since_epoch = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap();
@@ -41,15 +79,16 @@ fn main() {
 
             let timestamp = duration_since_epoch.as_millis() as u64; // we are casting to u64 and losing precision
 
-            #[cfg(feature = "trace-debug")]
             trace_log(&format!(
-                "------ RENDER frame: {}, millis: {} ------",
+                "RENDER frame: {}, millis: {} ------",
                 frame_count, timestamp
             ));
 
-            let platform_state = roc::PlatformState {
+            let platform_state = glue::PlatformState {
                 frame_count,
+                peers: (&peers).into(),
                 keys: get_keys_states(),
+                messages,
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
                 mouse_pos_x: bindings::GetMouseX() as f32,
@@ -67,8 +106,25 @@ fn main() {
 
             bindings::EndDrawing();
 
+            // Send Tick message to worker (non-blocking)
+            worker::send_message(worker::MainToWorkerMsg::Tick);
+
             roc::update_music_streams();
         }
+
+        // Send shutdown message BEFORE closing the window
+        println!("Sending shutdown signal to worker...");
+        worker::send_message(worker::MainToWorkerMsg::Shutdown);
+
+        // Wait for worker task to complete
+        println!("Waiting for worker task to finish...");
+        if let Err(e) = rt.block_on(worker_handle) {
+            println!("Worker task error: {:?}", e);
+        }
+
+        // Now safe to close the window
+        println!("Closing window...");
+        bindings::CloseWindow();
     }
 }
 
@@ -83,20 +139,20 @@ fn exit_with_msg(msg: String, code: ExitErrCode) -> ! {
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
+extern "C" fn roc_fx_exit() -> RocResult<(), ()> {
     config::update(|c| c.should_exit = true);
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LogMsg) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
     let text = CString::new(msg.as_str()).unwrap();
     if level >= 0 && level <= 7 {
-        bindings::TraceLog(level, text.as_ptr())
+        unsafe { bindings::TraceLog(level, text.as_ptr()) }
     } else {
         panic!("Invalid log level from roc");
     }
@@ -105,7 +161,7 @@ unsafe extern "C" fn roc_fx_log(msg: &RocStr, level: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-pub extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) -> RocResult<(), ()> {
     config::update(|c| {
         c.title = CString::new(title.to_string()).unwrap();
         c.width = width as i32;
@@ -138,7 +194,7 @@ pub extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) -> 
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawCircle(
+extern "C" fn roc_fx_drawCircle(
     center: &glue::RocVector2,
     radius: f32,
     color: glue::RocColor,
@@ -194,7 +250,7 @@ extern "C" fn roc_fx_drawRectangleGradientV(
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawRectangleGradientH(
+extern "C" fn roc_fx_drawRectangleGradientH(
     rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
@@ -213,7 +269,7 @@ unsafe extern "C" fn roc_fx_drawRectangleGradientH(
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawText(
+extern "C" fn roc_fx_drawText(
     pos: &glue::RocVector2,
     size: i32,
     text: &RocStr,
@@ -274,7 +330,7 @@ struct ScreenSize {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
+extern "C" fn roc_fx_getScreenSize() -> RocResult<ScreenSize, ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
@@ -302,7 +358,7 @@ extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> RocResult<i64, ()>
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
@@ -316,26 +372,29 @@ unsafe extern "C" fn roc_fx_setTargetFPS(rate: i32) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
+extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::TakeScreenshot) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
-    // permitted in any mode
     let path = CString::new(path.as_str()).unwrap();
-    bindings::TakeScreenshot(path.as_ptr());
+
+    unsafe {
+        bindings::TakeScreenshot(path.as_ptr());
+    }
+
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
     config::update(|c| {
         c.fps_show = show;
-        c.fps_position = (pos_x, pos_y)
+        c.fps_position = pos.to_components_c_int();
     });
 
     RocResult::ok(())
@@ -392,7 +451,7 @@ extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocResult<R
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_updateCamera(
+extern "C" fn roc_fx_updateCamera(
     boxed_camera: RocBox<()>,
     target: &glue::RocVector2,
     offset: &glue::RocVector2,
@@ -513,36 +572,40 @@ extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) -> RocResult<
     RocResult::ok(())
 }
 
-unsafe fn get_mouse_button_states() -> RocList<u8> {
+fn get_mouse_button_states() -> RocList<u8> {
     let mouse_buttons: [u8; 7] = array::from_fn(|i| {
-        if bindings::IsMouseButtonPressed(i as c_int) {
-            0
-        } else if bindings::IsMouseButtonReleased(i as c_int) {
-            1
-        } else if bindings::IsMouseButtonDown(i as c_int) {
-            2
-        } else {
-            // Up
-            3
+        unsafe {
+            if bindings::IsMouseButtonPressed(i as c_int) {
+                0
+            } else if bindings::IsMouseButtonReleased(i as c_int) {
+                1
+            } else if bindings::IsMouseButtonDown(i as c_int) {
+                2
+            } else {
+                // Up
+                3
+            }
         }
     });
 
     RocList::from_slice(&mouse_buttons)
 }
 
-unsafe fn get_keys_states() -> RocList<u8> {
+fn get_keys_states() -> RocList<u8> {
     let keys: [u8; 350] = array::from_fn(|i| {
-        if bindings::IsKeyPressed(i as c_int) {
-            0
-        } else if bindings::IsKeyReleased(i as c_int) {
-            1
-        } else if bindings::IsKeyDown(i as c_int) {
-            2
-        } else if bindings::IsKeyUp(i as c_int) {
-            3
-        } else {
-            // PressedRepeat
-            4
+        unsafe {
+            if bindings::IsKeyPressed(i as c_int) {
+                0
+            } else if bindings::IsKeyReleased(i as c_int) {
+                1
+            } else if bindings::IsKeyDown(i as c_int) {
+                2
+            } else if bindings::IsKeyUp(i as c_int) {
+                3
+            } else {
+                // PressedRepeat
+                4
+            }
         }
     });
 
@@ -713,7 +776,7 @@ extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, ()
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawTextureRec(
+extern "C" fn roc_fx_drawTextureRec(
     boxed_texture: RocBox<()>,
     source: &glue::RocRectangle,
     position: &glue::RocVector2,
@@ -726,13 +789,15 @@ unsafe extern "C" fn roc_fx_drawTextureRec(
     let texture: &mut bindings::Texture =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
-    bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+    unsafe {
+        bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+    }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_drawRenderTextureRec(
+extern "C" fn roc_fx_drawRenderTextureRec(
     boxed_texture: RocBox<()>,
     source: &glue::RocRectangle,
     position: &glue::RocVector2,
@@ -745,18 +810,20 @@ unsafe extern "C" fn roc_fx_drawRenderTextureRec(
     let texture: &mut bindings::RenderTexture =
         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
-    bindings::DrawTextureRec(
-        texture.texture,
-        source.into(),
-        position.into(),
-        color.into(),
-    );
+    unsafe {
+        bindings::DrawTextureRec(
+            texture.texture,
+            source.into(),
+            position.into(),
+            color.into(),
+        );
+    }
 
     RocResult::ok(())
 }
 
 #[no_mangle]
-unsafe extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, ()> {
+extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadFileToStr) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
@@ -767,13 +834,30 @@ unsafe extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, ()
     };
 
     let contents = contents.replace("\r\n", "\n");
-    let contents = RocStr::from_slice_unchecked(contents.as_bytes());
+    let contents = unsafe { RocStr::from_slice_unchecked(contents.as_bytes()) };
 
     RocResult::ok(contents)
 }
 
-unsafe fn trace_log(msg: &str) {
-    let level = bindings::TraceLogLevel_LOG_DEBUG;
-    let text = CString::new(msg).unwrap();
-    bindings::TraceLog(level as i32, text.as_ptr());
+#[allow(unused_variables)]
+fn trace_log(msg: &str) {
+    #[cfg(feature = "trace-debug")]
+    unsafe {
+        let level = bindings::TraceLogLevel_LOG_DEBUG;
+        let text = CString::new(msg).unwrap();
+        bindings::TraceLog(level as i32, text.as_ptr());
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let data = bytes.as_slice().to_vec();
+
+    worker::send_message(MainToWorkerMsg::SendMessage(peer.into(), data));
+
+    RocResult::ok(())
 }

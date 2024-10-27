@@ -8,22 +8,26 @@ module [
     Texture,
     RenderTexture,
     Sound,
+    UUID,
     rgba,
     getScreenSize,
     initWindow,
     exit,
     setTargetFPS,
-    setDrawFPS,
+    displayFPS,
     measureText,
     takeScreenshot,
     log,
     loadFileToStr,
+    sendToPeer,
 ]
 
 import Mouse
 import Effect
+import Network
 import InternalKeyboard
 import InternalColor
+import InternalVector
 
 ## A state record provided by platform on each frame.
 ## ```
@@ -46,6 +50,16 @@ PlatformState : {
         position : Vector2,
         buttons : Mouse.Buttons,
         wheel : F32,
+    },
+    network : {
+        peers : {
+            connected : List Network.UUID,
+            disconnected : List Network.UUID,
+        },
+        messages : List {
+            id : Network.UUID,
+            bytes : List U8,
+        },
     },
 }
 
@@ -113,6 +127,8 @@ Sound : Effect.Sound
 ## A camera used to render a 2D perspective of the world.
 Camera : Effect.Camera
 
+UUID : Network.UUID
+
 # internal use only
 rgba : Color -> InternalColor.RocColor
 rgba = \color ->
@@ -177,17 +193,17 @@ setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unre
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
-## RocRay.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
+## RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 }}
 ## ```
-setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
-setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
+displayFPS : { fps : [Visible, Hidden], pos : Vector2 } -> Task {} *
+displayFPS = \{ fps, pos } ->
 
     showFps =
         when fps is
             Visible -> Bool.true
             Hidden -> Bool.false
 
-    Effect.setDrawFPS showFps posX posY
+    Effect.setDrawFPS showFps (InternalVector.fromVector2 pos)
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
 
 ## Measure the width of a text string using the default font.
@@ -213,3 +229,9 @@ loadFileToStr : Str -> Task Str *
 loadFileToStr = \path ->
     Effect.loadFileToStr path
     |> Task.mapErr \{} -> crash "unreachable loadFileToStr"
+
+## Send a message to a connected peer.
+sendToPeer : List U8, UUID -> Task {} *
+sendToPeer = \message, peerId ->
+    Effect.sendToPeer message (Network.toU64Pair peerId)
+    |> Task.mapErr \{} -> crash "unreachable sendToPeer"

@@ -7,6 +7,9 @@ edition = "2021"
 roc_std = { git = "https://github.com/roc-lang/roc.git" }
 roc_std_heap = { git = "https://github.com/roc-lang/roc.git" }
 libc = "0.2"
+matchbox_socket = "0.10.0"
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
+uuid = "1.11.0"
 
 [build-dependencies]
 reqwest = { version = "0.11", default-features = false, features = [

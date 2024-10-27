@@ -1,6 +1,6 @@
 use platform_mode::PlatformEffect;
 use roc::LoadedMusic;
-use roc_std::{RocBox, RocList, RocRefcounted, RocResult, RocStr};
+use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::ffi::{c_int, CString};
@@ -625,6 +625,22 @@ extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) -> RocResult<(), (
     }
 
     RocResult::ok(())
+}
+
+// NOTE: the RocStr in this error type is to work around a compiler bug
+#[no_mangle]
+extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> RocResult<f32, RocStr> {
+    // TODO does this need a separate permissions enum? maybe rename this one to reuse it?
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    let time_played = unsafe { bindings::GetMusicTimePlayed(*music) };
+
+    RocResult::ok(time_played)
 }
 
 #[no_mangle]

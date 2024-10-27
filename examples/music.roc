@@ -17,6 +17,9 @@ init : Task Model []
 init =
     RocRay.initWindow! { title: "Music" }
 
+    # uncomment this to test music deinit:
+    # _track = Music.load! "examples/assets/music/benny-hill.mp3"
+
     track = Music.load! "examples/assets/music/benny-hill.mp3"
 
     Task.ok { track, trackState: Stopped }
@@ -37,8 +40,12 @@ render = \model, _state ->
         _ ->
             Task.ok newModel
 
-draw : Model -> Task {} []
-draw = \_model ->
+draw : Model -> Task {} _
+draw = \model ->
+    timePlayed = Music.getTimePlayed! model.track
+    length = Music.length model.track
+    progress = timePlayed / length
+
     Draw.draw! White \{} ->
         Draw.text! {
             text: "Music should be playing!",
@@ -58,28 +65,21 @@ draw = \_model ->
         border : F32
         border = 1.0
 
-        # border (to be drawn over)
-        Draw.rectangle! {
-            rect: {
-                x: bar.x - border,
-                y: bar.y - border,
-                width: bar.width + border * 2,
-                height: bar.height + border * 2,
-            },
-            color: Black,
+        # border (as rect to be drawn over)
+        borderRect = {
+            x: bar.x - border,
+            y: bar.y - border,
+            width: bar.width + border * 2,
+            height: bar.height + border * 2,
         }
+        Draw.rectangle! { rect: borderRect, color: Black }
 
         # background
-        Draw.rectangle! {
-            rect: bar,
-            color: Silver,
-        }
+        Draw.rectangle! { rect: bar, color: Silver }
 
         # progress
-        Draw.rectangle! {
-            rect: { bar & width: bar.width },
-            color: Red,
-        }
+        progressRect = { bar & width: bar.width * progress }
+        Draw.rectangle! { rect: progressRect, color: Red }
 
         Draw.text! {
             text: "PRESS SPACE TO RESTART MUSIC",

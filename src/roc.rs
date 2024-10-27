@@ -98,7 +98,8 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
 
     let music_heap = music_heap();
     if music_heap.in_range(c_ptr) {
-        // TODO call deinit_music_stream
+        println!("roc_dealloc music: {c_ptr:#?}");
+        deinit_music_stream(c_ptr);
         music_heap.dealloc(c_ptr);
         return;
     }

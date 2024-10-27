@@ -39,6 +39,7 @@ hosted Effect
         loadFileToStr,
         loadMusicStream,
         playMusicStream,
+        getMusicTimePlayed,
     ]
     imports []
 
@@ -105,6 +106,8 @@ Music := Box {}
 LoadedMusic : { music : Music, lenSeconds : F32 }
 loadMusicStream : Str -> Task LoadedMusic {}
 playMusicStream : Music -> Task {} {}
+# NOTE the Str (instead of {}) in this error type is to work around a compiler bug
+getMusicTimePlayed : Music -> Task F32 Str
 
 RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}

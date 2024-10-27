@@ -1,4 +1,13 @@
-module [Music, load, play, length, getTimePlayed]
+module [
+    Music,
+    load,
+    play,
+    stop,
+    pause,
+    resume,
+    length,
+    getTimePlayed,
+]
 
 import Effect
 
@@ -26,14 +35,35 @@ play = \@Music { music } ->
     Effect.playMusicStream music
     |> Task.mapErr \{} -> crash "unreachable Music.play"
 
-## The length of the track in seconds.
+## Stop a playing music stream.
 ## ```
-## Music.length track
+## Music.stop! track
 ## ```
-## maps to Raylib's GetMusicTimeLength
-length : Music -> F32
-length = \@Music { lenSeconds } ->
-    lenSeconds
+## maps to Raylib's StopMusicStream
+stop : Music -> Task {} *
+stop = \@Music { music } ->
+    Effect.stopMusicStream music
+    |> Task.mapErr \{} -> crash "unreachable Music.stop"
+
+## Pause a playing music stream.
+## ```
+## Music.pause! track
+## ```
+## maps to Raylib's PauseMusicStream
+pause : Music -> Task {} *
+pause = \@Music { music } ->
+    Effect.pauseMusicStream music
+    |> Task.mapErr \{} -> crash "unreachable Music.pause"
+
+## Resume a paused music stream.
+## ```
+## Music.resume! track
+## ```
+## maps to Raylib's ResumeMusicStream
+resume : Music -> Task {} *
+resume = \@Music { music } ->
+    Effect.resumeMusicStream music
+    |> Task.mapErr \{} -> crash "unreachable Music.resume"
 
 ## Get the time played so far in seconds.
 ## ```
@@ -44,3 +74,12 @@ getTimePlayed : Music -> Task F32 *
 getTimePlayed = \@Music { music } ->
     Effect.getMusicTimePlayed music
     |> Task.mapErr \_fakeStr -> crash "unreachable Music.getTimePlayed"
+
+## The length of the track in seconds.
+## ```
+## Music.length track
+## ```
+## maps to Raylib's GetMusicTimeLength
+length : Music -> F32
+length = \@Music { lenSeconds } ->
+    lenSeconds

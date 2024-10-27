@@ -5,40 +5,78 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 import rr.RocRay exposing [Rectangle]
 import rr.Music exposing [Music]
 import rr.Draw
+import rr.Keys
 
 Model : {
     track : Music,
     trackState : TrackState,
 }
 
-TrackState : [Stopped, Playing]
+TrackState : [Init, Playing, Paused]
+
+Intent : [Restart, TogglePause, Continue]
 
 init : Task Model []
 init =
     RocRay.initWindow! { title: "Music" }
 
-    # uncomment this to test music deinit:
-    # _track = Music.load! "examples/assets/music/benny-hill.mp3"
-
     track = Music.load! "examples/assets/music/benny-hill.mp3"
 
-    Task.ok { track, trackState: Stopped }
+    Task.ok { track, trackState: Init }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, _state ->
-    trackState = Playing
+render = \model, { keys } ->
+    intent =
+        if Keys.pressed keys KeySpace then
+            Restart
+        else if Keys.pressed keys KeyP then
+            TogglePause
+        else
+            Continue
+
+    trackState = updateMusic! intent model.trackState model.track
 
     newModel = { model & trackState }
 
     draw! newModel
 
-    when (model.trackState, trackState) is
-        (Stopped, Playing) ->
-            Music.play! model.track
-            Task.ok newModel
+    Task.ok newModel
+
+updateMusic : Intent, TrackState, Music -> Task TrackState []
+updateMusic = \intent, trackState, track ->
+    when (intent, trackState) is
+        (Restart, Paused) ->
+            # the extra initial `Music.play!` is necesssary to get raylib to reset
+            # the time played on the track
+            # this avoids a bug in their example linked above
+            Music.play! track
+            Music.stop! track
+            Music.play! track
+            Task.ok Playing
+
+        (Restart, _) ->
+            Music.stop! track
+            Music.play! track
+            Task.ok Playing
+
+        (TogglePause, Playing) ->
+            Music.pause! track
+            Task.ok Paused
+
+        (TogglePause, Paused) ->
+            Music.play! track
+            Task.ok Playing
+
+        (TogglePause, Init) ->
+            Music.play! track
+            Task.ok Playing
+
+        (Continue, Init) ->
+            Music.play! track
+            Task.ok Playing
 
         _ ->
-            Task.ok newModel
+            Task.ok trackState
 
 draw : Model -> Task {} _
 draw = \model ->

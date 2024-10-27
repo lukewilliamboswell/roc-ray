@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::os::raw::c_void;
 use std::sync::OnceLock;
 
 use roc_std::{RocBox, RocRefcounted};
@@ -44,7 +43,7 @@ pub fn alloc_music_stream(music: bindings::Music) -> Result<LoadedMusic, ()> {
                 streams.push(roc_box.clone());
             });
 
-            // don't count our clone as a reference; we clean ours in dealloc
+            // don't count our clone as a reference; we'll clean ours in dealloc
             use roc_std::RocRefcounted;
             roc_box.dec();
 
@@ -56,38 +55,6 @@ pub fn alloc_music_stream(music: bindings::Music) -> Result<LoadedMusic, ()> {
 
         Err(_) => Err(()),
     }
-}
-
-pub(super) unsafe fn deinit_music_stream(c_ptr: *mut c_void) {
-    println!("deinit_music_stream");
-    let roc_box = MUSIC_STREAMS.with_borrow_mut(|streams| {
-        let index_to_drop = streams
-            .iter_mut()
-            .enumerate()
-            .find(|(_index, _roc_box)| {
-                // let is_this_it = {
-                //     // // copied from box_to_resource; this doesn't match c_ptr
-                //     // let box_ptr: usize = unsafe { std::mem::transmute(roc_box) };
-                //     // (box_ptr - std::mem::size_of::<usize>()) as *mut c_void
-                // };
-
-                // println!("c_ptr: {c_ptr:#?}");
-                // println!("is_this_it: {is_this_it:#?}");
-
-                // c_ptr == i_think_this_is_it
-
-                // TODO compare roc_box with c_ptr correctly
-                true
-            })
-            .map(|(index, _roc_box)| index)
-            .expect("tried to deinit an unrecognized music stream");
-
-        streams.swap_remove(index_to_drop)
-    });
-
-    let music: &mut bindings::Music =
-        ThreadSafeRefcountedResourceHeap::box_to_resource(roc_box.clone());
-    bindings::UnloadMusicStream(*music);
 }
 
 pub fn update_music_streams() {

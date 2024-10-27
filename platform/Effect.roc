@@ -40,6 +40,9 @@ hosted Effect
         loadMusicStream,
         playMusicStream,
         getMusicTimePlayed,
+        stopMusicStream,
+        pauseMusicStream,
+        resumeMusicStream,
     ]
     imports []
 
@@ -106,6 +109,9 @@ Music := Box {}
 LoadedMusic : { music : Music, lenSeconds : F32 }
 loadMusicStream : Str -> Task LoadedMusic {}
 playMusicStream : Music -> Task {} {}
+stopMusicStream : Music -> Task {} {}
+pauseMusicStream : Music -> Task {} {}
+resumeMusicStream : Music -> Task {} {}
 # NOTE the Str (instead of {}) in this error type is to work around a compiler bug
 getMusicTimePlayed : Music -> Task F32 Str
 

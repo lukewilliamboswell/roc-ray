@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use roc_std::RocBox;
+use roc_std::{RocBox, RocRefcounted};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 
 use crate::bindings;
@@ -10,8 +10,31 @@ thread_local! {
     static MUSIC_STREAMS: RefCell<Vec<RocBox<()>>> = const { RefCell::new(vec![]) };
 }
 
-pub fn alloc_music_stream(music: bindings::Music) -> Result<RocBox<()>, ()> {
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct LoadedMusic {
+    music: RocBox<()>,
+    len_seconds: f32,
+}
+
+impl RocRefcounted for LoadedMusic {
+    fn inc(&mut self) {
+        self.music.inc();
+    }
+
+    fn dec(&mut self) {
+        self.music.dec();
+    }
+
+    fn is_refcounted() -> bool {
+        true
+    }
+}
+
+pub fn alloc_music_stream(music: bindings::Music) -> Result<LoadedMusic, ()> {
     let heap = music_heap();
+
+    let len_seconds = unsafe { bindings::GetMusicTimeLength(music) };
 
     let alloc_result = heap.alloc_for(music);
     match alloc_result {
@@ -24,8 +47,12 @@ pub fn alloc_music_stream(music: bindings::Music) -> Result<RocBox<()>, ()> {
             use roc_std::RocRefcounted;
             roc_box.dec();
 
-            Ok(roc_box)
+            Ok(LoadedMusic {
+                music: roc_box,
+                len_seconds,
+            })
         }
+
         Err(_) => Err(()),
     }
 }

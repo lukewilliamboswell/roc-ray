@@ -1,5 +1,6 @@
 use platform_mode::PlatformEffect;
-use roc_std::{RocBox, RocList, RocResult, RocStr};
+use roc::LoadedMusic;
+use roc_std::{RocBox, RocList, RocRefcounted, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
 use std::ffi::{c_int, CString};
@@ -589,7 +590,7 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<RocBox<()>, ()> {
+extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<LoadedMusic, ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
@@ -603,7 +604,7 @@ extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<RocBox<()>, ()>
 
     let alloc_result = roc::alloc_music_stream(music);
     match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
+        Ok(loaded_music) => RocResult::ok(loaded_music),
         Err(_) => {
             exit_with_msg("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
         }

@@ -4,6 +4,7 @@ hosted Effect
         RenderTexture,
         Sound,
         Music,
+        LoadedMusic,
         Camera,
         getScreenSize,
         exit,
@@ -101,7 +102,8 @@ loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}
 
 Music := Box {}
-loadMusicStream : Str -> Task Music {}
+LoadedMusic : { music : Music, lenSeconds : F32 }
+loadMusicStream : Str -> Task LoadedMusic {}
 playMusicStream : Music -> Task {} {}
 
 RenderTexture := Box {}

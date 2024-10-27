@@ -2,8 +2,8 @@ app [Model, init, render] { rr: platform "../platform/main.roc" }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_music_stream
 
-import rr.RocRay exposing [Rectangle, Music]
-import rr.Music
+import rr.RocRay exposing [Rectangle]
+import rr.Music exposing [Music]
 import rr.Draw
 
 Model : {
@@ -38,7 +38,7 @@ render = \model, _state ->
             Task.ok newModel
 
 draw : Model -> Task {} []
-draw = \model ->
+draw = \_model ->
     Draw.draw! White \{} ->
         Draw.text! {
             text: "Music should be playing!",

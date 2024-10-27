@@ -3,6 +3,8 @@ hosted Effect
         Texture,
         RenderTexture,
         Sound,
+        Music,
+        LoadedMusic,
         Camera,
         RawUUID,
         PeerMessage,
@@ -38,6 +40,12 @@ hosted Effect
         drawRenderTextureRec,
         loadFileToStr,
         sendToPeer,
+        loadMusicStream,
+        playMusicStream,
+        getMusicTimePlayed,
+        stopMusicStream,
+        pauseMusicStream,
+        resumeMusicStream,
     ]
     imports []
 
@@ -112,6 +120,16 @@ drawRenderTextureRec : RenderTexture, RocRectangle, RocVector2, RocColor -> Task
 Sound := Box {}
 loadSound : Str -> Task Sound {}
 playSound : Sound -> Task {} {}
+
+Music := Box {}
+LoadedMusic : { music : Music, lenSeconds : F32 }
+loadMusicStream : Str -> Task LoadedMusic {}
+playMusicStream : Music -> Task {} {}
+stopMusicStream : Music -> Task {} {}
+pauseMusicStream : Music -> Task {} {}
+resumeMusicStream : Music -> Task {} {}
+# NOTE the Str (instead of {}) in this error type is to work around a compiler bug
+getMusicTimePlayed : Music -> Task F32 Str
 
 RenderTexture := Box {}
 createRenderTexture : RocVector2 -> Task RenderTexture {}

@@ -9,6 +9,9 @@ use std::sync::OnceLock;
 
 use crate::bindings;
 
+mod music_heap;
+pub use music_heap::*;
+
 // note this is checked and deallocated in the roc_dealloc function
 pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Camera2D> {
     static CAMERA_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
@@ -91,6 +94,12 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     let sound_heap = sound_heap();
     if sound_heap.in_range(c_ptr) {
         sound_heap.dealloc(c_ptr);
+        return;
+    }
+
+    let music_heap = music_heap();
+    if music_heap.in_range(c_ptr) {
+        music_heap.dealloc(c_ptr);
         return;
     }
 

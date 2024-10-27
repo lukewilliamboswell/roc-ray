@@ -22,22 +22,21 @@ Model : {
     others : Dict UUID { x : F32, y : F32 },
 }
 
-updateOtherPlayers : Model, List { id: UUID, bytes: List U8 } -> Dict UUID { x : F32, y : F32 }
-updateOtherPlayers = \{others}, messages ->
+updateOtherPlayers : Model, List { id : UUID, bytes : List U8 } -> Dict UUID { x : F32, y : F32 }
+updateOtherPlayers = \{ others }, messages ->
     List.walk messages others \state, { id, bytes } ->
 
-        pos : Result {x : I64, y: I64} _
+        pos : Result { x : I64, y : I64 } _
         pos = Decode.fromBytes bytes Json.utf8
 
         when pos is
-            Ok {x,y} -> Dict.insert state id {x: Num.toF32 x, y: Num.toF32 y}
-            Err _ -> Dict.insert state id {x: 50, y: 50}
-
+            Ok { x, y } -> Dict.insert state id { x: Num.toF32 x, y: Num.toF32 y }
+            Err _ -> Dict.insert state id { x: 50, y: 50 }
 
 init : Task Model []
 init =
 
-    RocRay.setTargetFPS! 60
+    RocRay.setTargetFPS! 120
     RocRay.initWindow! { title: "Animated Sprite Example", width, height }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
@@ -94,7 +93,6 @@ render = \model, { timestampMillis, keys, network } ->
         # RENDER OTHER PLAYERS
         drawOtherPlayers! others
 
-
     Task.ok { model & player, dudeAnimation, direction, others }
 
 dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
@@ -132,10 +130,12 @@ sprite64x64source = \{ row, col } -> {
     height: 64,
 }
 
-displayPeerConnections : {
-    connected : List UUID,
-    disconnected : List UUID,
-} -> Task {} _
+displayPeerConnections :
+    {
+        connected : List UUID,
+        disconnected : List UUID,
+    }
+    -> Task {} _
 displayPeerConnections = \{ connected, disconnected } ->
 
     combined =
@@ -144,9 +144,9 @@ displayPeerConnections = \{ connected, disconnected } ->
             (disconnected |> List.map \uuid -> "DISCONNECTED: $(Network.toStr uuid)")
         |> List.append "NETWORK PEERS $(Num.toStr (List.len connected)) connected, $(Num.toStr (List.len disconnected)) disconnected"
 
-    List.range { start: At 0, end: Before (List.len combined)}
+    List.range { start: At 0, end: Before (List.len combined) }
     |> List.map \i -> {
-        pos: { x: 10, y: height - 10 - (Num.toFrac (i*10)) },
+        pos: { x: 10, y: height - 10 - (Num.toFrac (i * 10)) },
         text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
         size: 10,
         color: Black,
@@ -154,19 +154,20 @@ displayPeerConnections = \{ connected, disconnected } ->
     |> Task.forEach Draw.text
 
 displayMessages : List {
-    id: UUID,
-    bytes: List U8,
-} -> Task {} _
+        id : UUID,
+        bytes : List U8,
+    }
+    -> Task {} _
 displayMessages = \messages ->
 
     total = List.len messages
 
     totalMsg = "MESSAGES TOTAL $(Num.toStr total)"
 
-    totalWidth = RocRay.measureText {text: totalMsg, size: 10} |> Task.map! Num.toFrac
+    totalWidth = RocRay.measureText { text: totalMsg, size: 10 } |> Task.map! Num.toFrac
 
     Draw.text! {
-        pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total*10)) },
+        pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total * 10)) },
         text: totalMsg,
         size: 10,
         color: Black,
@@ -174,7 +175,7 @@ displayMessages = \messages ->
 
     messages
     |> List.mapWithIndex \msg, i -> {
-        pos: { x: width  - 10, y: height - 10 - (Num.toFrac (i*10)) },
+        pos: { x: width - 10, y: height - 10 - (Num.toFrac (i * 10)) },
         text: "FROM $(Inspect.toStr msg.id), $(msg.bytes |> List.len |> Num.toStr) BYTES",
         size: 10,
         color: Black,
@@ -193,6 +194,6 @@ drawOtherPlayers : Dict UUID Vector2 -> Task {} _
 drawOtherPlayers = \others ->
 
     Dict.toList others
-    |> Task.forEach \(id, player) ->
-        Draw.text! { pos: player, text: "$(Inspect.toStr id)", size: 10, color: Red }
-        Draw.rectangle! { rect: { x: player.x - 5, y: player.y + 15, width: 20, height: 40}, color: Red }
+        |> Task.forEach \(id, player) ->
+            Draw.text! { pos: player, text: "$(Inspect.toStr id)", size: 10, color: Red }
+            Draw.rectangle! { rect: { x: player.x - 5, y: player.y + 15, width: 20, height: 40 }, color: Red }

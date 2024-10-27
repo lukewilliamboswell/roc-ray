@@ -101,7 +101,7 @@ async fn worker_loop(mut receiver: Receiver<MainToWorkerMsg>, sender: Sender<Wor
         .add_reliable_channel()
         .build();
 
-    let mut socket_interval = interval(Duration::from_millis(500));
+    let mut socket_interval = interval(Duration::from_millis(50));
 
     loop {
         tokio::select! {

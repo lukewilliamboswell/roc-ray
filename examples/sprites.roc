@@ -5,121 +5,94 @@ app [Model, init, render] {
 }
 
 import rr.RocRay exposing [Texture, Rectangle, Vector2]
-import rr.Keys
 import rr.Draw
 import rr.Texture
 import rr.Network exposing [UUID]
 import json.Json
 
+import World exposing [World]
+
 width = 400
 height = 400
 
 Model : {
-    player : { x : F32, y : F32 },
-    direction : [WalkUp, WalkDown, WalkLeft, WalkRight],
     dude : Texture,
-    dudeAnimation : AnimatedSprite,
-    others : Dict UUID { x : F32, y : F32 },
+    world : World,
+    timestampMillis : [FirstFrame, Timestamp U64],
 }
-
-updateOtherPlayers : Model, List { id : UUID, bytes : List U8 } -> Dict UUID { x : F32, y : F32 }
-updateOtherPlayers = \{ others }, messages ->
-    List.walk messages others \state, { id, bytes } ->
-
-        pos : Result { x : I64, y : I64 } _
-        pos = Decode.fromBytes bytes Json.utf8
-
-        when pos is
-            Ok { x, y } -> Dict.insert state id { x: Num.toF32 x, y: Num.toF32 y }
-            Err _ -> Dict.insert state id { x: 50, y: 50 }
 
 init : Task Model []
 init =
-
     RocRay.setTargetFPS! 120
     RocRay.initWindow! { title: "Animated Sprite Example", width, height }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
-    Task.ok {
-        player: { x: width / 2, y: height / 2 },
-        direction: WalkRight,
-        dude,
-        dudeAnimation: {
+    player = { x: width / 2, y: height / 2 }
+
+    localPlayer = {
+        pos: player,
+        intent: Idle Right,
+        animation: {
             frame: 0,
             frameRate: 10,
             nextAnimationTick: 0,
         },
-        others: Dict.empty {},
     }
+    world = World.new { localPlayer }
+
+    Task.ok { dude, world, timestampMillis: FirstFrame }
 
 render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { timestampMillis, keys, network } ->
+render = \model, state ->
+    { timestampMillis, network } = state
 
-    # SEND PLAYER POSITION TO NETWORK
-    sendPlayerPosition! model.player network.peers.connected
+    deltaMillis =
+        when model.timestampMillis is
+            FirstFrame -> 0
+            Timestamp previous -> timestampMillis - previous
+    deltaTime = Num.toF32 deltaMillis
 
-    others = updateOtherPlayers model network.messages
+    # NOTE assuming only one opponent for now
+    # should we log decode errors? what does it mean? out of date client?
+    inbox : List World.PeerUpdate
+    inbox = List.keepOks network.messages \{ id, bytes } ->
+        decodeResult : Result { x : I64, y : I64 } _
+        decodeResult = Decode.fromBytes bytes Json.utf8
+        Result.map decodeResult \{ x, y } -> { id, x: Num.toF32 x, y: Num.toF32 y }
 
-    (player, direction) =
-        if Keys.down keys KeyUp then
-            ({ x: model.player.x, y: model.player.y - 10 }, WalkUp)
-        else if Keys.down keys KeyDown then
-            ({ x: model.player.x, y: model.player.y + 10 }, WalkDown)
-        else if Keys.down keys KeyLeft then
-            ({ x: model.player.x - 10, y: model.player.y }, WalkLeft)
-        else if Keys.down keys KeyRight then
-            ({ x: model.player.x + 10, y: model.player.y }, WalkRight)
-        else
-            (model.player, model.direction)
+    world = World.frameTicks model.world { platformState: state, deltaTime, inbox }
 
-    dudeAnimation = updateAnimation model.dudeAnimation timestampMillis
+    # SEND NEW PLAYER POSITION TO NETWORK
+    sendPlayerPosition! world.localPlayer.pos network.peers.connected
 
     Draw.draw! White \{} ->
 
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
+        playerFacing = World.playerFacing world.localPlayer
         Draw.textureRec! {
             texture: model.dude,
-            source: dudeSprite model.direction dudeAnimation.frame,
-            pos: model.player,
+            source: dudeSprite playerFacing world.localPlayer.animation.frame,
+            pos: model.world.localPlayer.pos,
             tint: White,
         }
 
         displayPeerConnections! network.peers
         displayMessages! network.messages
 
-        # RENDER OTHER PLAYERS
-        drawOtherPlayers! others
+        drawOtherPlayers! (World.opponentPositions world)
 
-    Task.ok { model & player, dudeAnimation, direction, others }
+    Task.ok { model & world, timestampMillis: Timestamp timestampMillis }
 
-dudeSprite : [WalkUp, WalkDown, WalkLeft, WalkRight], U8 -> Rectangle
+dudeSprite : World.Facing, U8 -> Rectangle
 dudeSprite = \sequence, frame ->
     when sequence is
-        WalkUp -> sprite64x64source { row: 8, col: frame % 9 }
-        WalkDown -> sprite64x64source { row: 10, col: frame % 9 }
-        WalkLeft -> sprite64x64source { row: 9, col: frame % 9 }
-        WalkRight -> sprite64x64source { row: 11, col: frame % 9 }
-
-AnimatedSprite : {
-    frame : U8, # frame index, increments each tick
-    frameRate : U8, # frames per second
-    nextAnimationTick : U64, # milliseconds
-}
-
-updateAnimation : AnimatedSprite, U64 -> AnimatedSprite
-updateAnimation = \{ frame, frameRate, nextAnimationTick }, timestampMillis ->
-
-    if timestampMillis > nextAnimationTick then
-        {
-            frame: Num.addWrap frame 1,
-            frameRate,
-            nextAnimationTick: timestampMillis + (Num.toU64 (Num.round (1000 / (Num.toF64 frameRate)))),
-        }
-    else
-        { frame, frameRate, nextAnimationTick }
+        Up -> sprite64x64source { row: 8, col: frame % 9 }
+        Down -> sprite64x64source { row: 10, col: frame % 9 }
+        Left -> sprite64x64source { row: 9, col: frame % 9 }
+        Right -> sprite64x64source { row: 11, col: frame % 9 }
 
 # get the pixel coordinates of a 64x64 sprite in the spritesheet
 sprite64x64source : { row : U8, col : U8 } -> Rectangle
@@ -190,10 +163,9 @@ sendPlayerPosition = \player, peers ->
     Task.forEach peers \peer ->
         RocRay.sendToPeer bytes peer
 
-drawOtherPlayers : Dict UUID Vector2 -> Task {} _
+drawOtherPlayers : List World.RemotePlayer -> Task {} _
 drawOtherPlayers = \others ->
-
-    Dict.toList others
-        |> Task.forEach \(id, player) ->
-            Draw.text! { pos: player, text: "$(Inspect.toStr id)", size: 10, color: Red }
-            Draw.rectangle! { rect: { x: player.x - 5, y: player.y + 15, width: 20, height: 40 }, color: Red }
+    others
+        |> Task.forEach \{ id, pos } ->
+            Draw.text! { pos, text: "$(Inspect.toStr id)", size: 10, color: Red }
+            Draw.rectangle! { rect: { x: pos.x - 5, y: pos.y + 15, width: 20, height: 40 }, color: Red }

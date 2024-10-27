@@ -1,5 +1,7 @@
-use std::cell::RefCell;
+use std::hash::Hash;
+use std::os::raw::c_void;
 use std::sync::OnceLock;
+use std::{cell::RefCell, fmt::Pointer};
 
 use roc_std::{RocBox, RocRefcounted};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
@@ -55,6 +57,26 @@ pub fn alloc_music_stream(music: bindings::Music) -> Result<LoadedMusic, ()> {
 
         Err(_) => Err(()),
     }
+}
+
+pub(super) unsafe fn deinit_music_stream(c_ptr: *mut c_void) {
+    let roc_box = MUSIC_STREAMS.with_borrow_mut(|streams| {
+        let index_to_drop = streams
+            .iter_mut()
+            .enumerate()
+            .find(|(_index, roc_box)| {
+                // TODO compare with c_ptr
+                true
+            })
+            .map(|(index, _roc_box)| index)
+            .expect("tried to deinit an unrecognized music stream");
+
+        streams.swap_remove(index_to_drop)
+    });
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(roc_box.clone());
+    bindings::UnloadMusicStream(*music);
 }
 
 pub fn update_music_streams() {

@@ -11,8 +11,8 @@ import rr.Texture
 import rr.Network exposing [UUID]
 import json.Json
 
-width = 800
-height = 600
+width = 400
+height = 400
 
 Model : {
     player : { x : F32, y : F32 },
@@ -38,7 +38,7 @@ init : Task Model []
 init =
 
     RocRay.setTargetFPS! 60
-    RocRay.initWindow! { title: "Animated Sprite Example" }
+    RocRay.initWindow! { title: "Animated Sprite Example", width, height }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
@@ -146,7 +146,7 @@ displayPeerConnections = \{ connected, disconnected } ->
 
     List.range { start: At 0, end: Before (List.len combined)}
     |> List.map \i -> {
-        pos: { x: 10, y: Num.toFrac (height - 10 - (i*10)) },
+        pos: { x: 10, y: height - 10 - (Num.toFrac (i*10)) },
         text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
         size: 10,
         color: Black,
@@ -166,7 +166,7 @@ displayMessages = \messages ->
     totalWidth = RocRay.measureText {text: totalMsg, size: 10} |> Task.map! Num.toFrac
 
     Draw.text! {
-        pos: { x: (width - 10 - totalWidth), y: Num.toFrac (height - 10 - (total*10)) },
+        pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total*10)) },
         text: totalMsg,
         size: 10,
         color: Black,
@@ -174,7 +174,7 @@ displayMessages = \messages ->
 
     messages
     |> List.mapWithIndex \msg, i -> {
-        pos: { x: width  - 10, y: Num.toFrac (height - 10 - (i*10)) },
+        pos: { x: width  - 10, y: height - 10 - (Num.toFrac (i*10)) },
         text: "FROM $(Inspect.toStr msg.id), $(msg.bytes |> List.len |> Num.toStr) BYTES",
         size: 10,
         color: Black,

@@ -1,4 +1,4 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_sound_loading
 
@@ -12,8 +12,8 @@ Model : {
     ogg : RocRay.Sound,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.initWindow! {
         title: "Making Sounds",
@@ -24,10 +24,10 @@ init =
     wav = Sound.load! "examples/assets/sound/sound.wav"
     ogg = Sound.load! "examples/assets/sound/target.ogg"
 
-    Task.ok { wav, ogg }
+    Ok { wav, ogg }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { keys } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { keys } ->
 
     Draw.draw! White \{} ->
 
@@ -56,7 +56,7 @@ render = \model, { keys } ->
     when chosenSound is
         Play sound ->
             Sound.play! sound
-            Task.ok model
+            Ok model
 
         None ->
-            Task.ok model
+            Ok model

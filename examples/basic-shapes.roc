@@ -1,4 +1,4 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Draw
@@ -8,15 +8,15 @@ height = 600
 
 Model : {}
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.initWindow! { title: "Basic Shapes", width, height }
 
-    Task.ok {}
+    Ok {}
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \_, _ ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \_, _ ->
 
     Draw.draw! White \{} ->
 
@@ -28,4 +28,4 @@ render = \_, _ ->
         Draw.circleGradient! { center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon }
         Draw.line! { start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }
 
-    Task.ok {}
+    Ok {}

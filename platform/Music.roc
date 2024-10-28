@@ -1,12 +1,12 @@
 module [
     Music,
-    load,
-    play,
-    stop,
-    pause,
-    resume,
     length,
-    getTimePlayed,
+    load!,
+    play!,
+    stop!,
+    pause!,
+    resume!,
+    getTimePlayed!,
 ]
 
 import Effect
@@ -19,65 +19,58 @@ Music := Effect.LoadedMusic
 ## track = Music.load! "resources/green-hill-zone.wav"
 ## ```
 ## maps to Raylib's LoadMusicStream
-load : Str -> Task Music *
-load = \path ->
-    Effect.loadMusicStream path
-    |> Task.map \loaded -> @Music loaded
-    |> Task.mapErr \{} -> crash "unreachable Music.load"
+load! : Str => Music
+load! = \path ->
+    @Music (Effect.loadMusicStream! path)
 
 ## Play a loaded music stream.
 ## ```
 ## Music.play! track
 ## ```
 ## maps to Raylib's PlayMusicStream
-play : Music -> Task {} *
-play = \@Music { music } ->
-    Effect.playMusicStream music
-    |> Task.mapErr \{} -> crash "unreachable Music.play"
+play! : Music => {}
+play! = \@Music { music } ->
+    Effect.playMusicStream! music
 
 ## Stop a playing music stream.
 ## ```
 ## Music.stop! track
 ## ```
 ## maps to Raylib's StopMusicStream
-stop : Music -> Task {} *
-stop = \@Music { music } ->
-    Effect.stopMusicStream music
-    |> Task.mapErr \{} -> crash "unreachable Music.stop"
+stop! : Music => {}
+stop! = \@Music { music } ->
+    Effect.stopMusicStream! music
 
 ## Pause a playing music stream.
 ## ```
 ## Music.pause! track
 ## ```
 ## maps to Raylib's PauseMusicStream
-pause : Music -> Task {} *
-pause = \@Music { music } ->
-    Effect.pauseMusicStream music
-    |> Task.mapErr \{} -> crash "unreachable Music.pause"
+pause! : Music => {}
+pause! = \@Music { music } ->
+    Effect.pauseMusicStream! music
 
 ## Resume a paused music stream.
 ## ```
 ## Music.resume! track
 ## ```
 ## maps to Raylib's ResumeMusicStream
-resume : Music -> Task {} *
-resume = \@Music { music } ->
-    Effect.resumeMusicStream music
-    |> Task.mapErr \{} -> crash "unreachable Music.resume"
+resume! : Music => {}
+resume! = \@Music { music } ->
+    Effect.resumeMusicStream! music
 
 ## Get the time played so far in seconds.
 ## ```
-## Music.getTimePlayed! track
+## duration = Music.getTimePlayed! track
 ## ```
 ## maps to Raylib's GetMusicTimePlayed
-getTimePlayed : Music -> Task F32 *
-getTimePlayed = \@Music { music } ->
-    Effect.getMusicTimePlayed music
-    |> Task.mapErr \_fakeStr -> crash "unreachable Music.getTimePlayed"
+getTimePlayed! : Music => F32
+getTimePlayed! = \@Music { music } ->
+    Effect.getMusicTimePlayed! music
 
 ## The length of the track in seconds.
 ## ```
-## Music.length track
+## length = Music.length track
 ## ```
 ## maps to Raylib's GetMusicTimeLength
 length : Music -> F32

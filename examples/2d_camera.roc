@@ -1,4 +1,4 @@
-app [Model, init, render] {
+app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
@@ -25,8 +25,8 @@ Model : {
     camera : Camera,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
@@ -46,15 +46,15 @@ init =
 
     buildings = generateBuildings
 
-    Task.ok {
+    Ok {
         player,
         buildings,
         camera,
         cameraSettings,
     }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { mouse, keys } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { mouse, keys } ->
 
     # UPDATE CAMERA
     rotation =
@@ -95,21 +95,22 @@ render = \model, { mouse, keys } ->
     Draw.draw! White \{} ->
 
         # RENDER WORLD
-        Draw.withMode2D! model.camera \{} -> drawWorld! model
+        Draw.withMode2D! model.camera \{} ->
+            drawWorld! model
 
         # RENDER SCREEN UI
-        drawScreenUI!
+        drawScreenUI! {}
 
-    Task.ok { model & cameraSettings, player }
+    Ok { model & cameraSettings, player }
 
-drawWorld : Model -> Task {} _
-drawWorld = \model ->
+drawWorld! : Model => {}
+drawWorld! = \model ->
 
     # BACKGROUND
     Draw.rectangle! { rect: { x: -6000, y: 320, width: 13000, height: 8000 }, color: Gray }
 
     # BUILDINGS
-    Task.forEach! model.buildings Draw.rectangle
+    forEach! model.buildings Draw.rectangle!
 
     # PLAYER
     playerWidth = 40
@@ -129,8 +130,8 @@ drawWorld = \model ->
     Draw.line! { start: { x: model.player.x, y: -screenHeight * 10 }, end: { x: model.player.x, y: screenHeight * 10 }, color: Yellow }
     Draw.line! { start: { x: -screenWidth * 10, y: model.player.y }, end: { x: screenWidth * 10, y: model.player.y }, color: Yellow }
 
-drawScreenUI : Task {} _
-drawScreenUI =
+drawScreenUI! : {} => {}
+drawScreenUI! = \{} ->
 
     Draw.text! { pos: { x: 640, y: 10 }, text: "SCREEN AREA", size: 20, color: Red }
 
@@ -194,3 +195,12 @@ limit = \value, { upper, lower } ->
         lower
     else
         value
+
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

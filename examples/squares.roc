@@ -1,31 +1,31 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
-import rr.RocRay exposing [Rectangle]
+import rr.RocRay exposing [Rectangle, Vector2]
 import rr.Keys
 import rr.Draw
 
 Model : {
     squares : List Rectangle,
-    status : [Ready, AfterClick RocRay.Vector2],
-    circlePos : RocRay.Vector2,
+    status : [Ready, AfterClick Vector2],
+    circlePos : Vector2,
 }
 
 width = 900
 height = 400
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.initWindow! { title: "Squares Demo", width, height }
 
-    Task.ok {
+    Ok {
         circlePos: { x: width / 2, y: height / 2 },
         squares: [],
         status: Ready,
     }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { keys, mouse } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { keys, mouse } ->
 
     mousePos = mouse.position
 
@@ -56,4 +56,4 @@ render = \model, { keys, mouse } ->
 
         Draw.circle! { center: model.circlePos, radius: 50, color: Aqua }
 
-    Task.ok { model & circlePos: newCirclePos }
+    Ok { model & circlePos: newCirclePos }

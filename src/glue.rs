@@ -4,7 +4,7 @@ use matchbox_socket::PeerId;
 use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
-#[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct PlatformState {
     pub frame_count: u64,
@@ -12,6 +12,7 @@ pub struct PlatformState {
     pub messages: RocList<PeerMessage>,
     pub mouse_buttons: RocList<u8>,
     pub peers: PeerState,
+    pub timestamp: PlatformTime,
     pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
     pub mouse_pos_y: f32,
@@ -337,3 +338,15 @@ impl roc_std::RocRefcounted for PeerMessage {
         true
     }
 }
+
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct PlatformTime {
+    pub init_end: u64,
+    pub init_start: u64,
+    pub last_render_end: u64,
+    pub last_render_start: u64,
+    pub render_start: u64,
+}
+
+roc_refcounted_noop_impl!(PlatformTime);

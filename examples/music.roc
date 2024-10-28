@@ -1,4 +1,4 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 # https://www.raylib.com/examples/audio/loader.html?name=audio_music_stream
 
@@ -16,16 +16,16 @@ TrackState : [Init, Playing, Paused]
 
 Intent : [Restart, TogglePause, Continue]
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
     RocRay.initWindow! { title: "Music" }
 
     track = Music.load! "examples/assets/music/benny-hill.mp3"
 
-    Task.ok { track, trackState: Init }
+    Ok { track, trackState: Init }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { keys } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { keys } ->
     intent =
         if Keys.pressed keys KeySpace then
             Restart
@@ -40,10 +40,10 @@ render = \model, { keys } ->
 
     draw! newModel
 
-    Task.ok newModel
+    Ok newModel
 
-updateMusic : Intent, TrackState, Music -> Task TrackState []
-updateMusic = \intent, trackState, track ->
+updateMusic! : Intent, TrackState, Music => TrackState
+updateMusic! = \intent, trackState, track ->
     when (intent, trackState) is
         (Restart, Paused) ->
             # the extra initial `Music.play!` is necesssary to get raylib to reset
@@ -52,34 +52,34 @@ updateMusic = \intent, trackState, track ->
             Music.play! track
             Music.stop! track
             Music.play! track
-            Task.ok Playing
+            Playing
 
         (Restart, _) ->
             Music.stop! track
             Music.play! track
-            Task.ok Playing
+            Playing
 
         (TogglePause, Playing) ->
             Music.pause! track
-            Task.ok Paused
+            Paused
 
         (TogglePause, Paused) ->
             Music.play! track
-            Task.ok Playing
+            Playing
 
         (TogglePause, Init) ->
             Music.play! track
-            Task.ok Playing
+            Playing
 
         (Continue, Init) ->
             Music.play! track
-            Task.ok Playing
+            Playing
 
         _ ->
-            Task.ok trackState
+            trackState
 
-draw : Model -> Task {} _
-draw = \model ->
+draw! : Model => {}
+draw! = \model ->
     timePlayed = Music.getTimePlayed! model.track
     length = Music.length model.track
     progress = timePlayed / length
@@ -132,5 +132,3 @@ draw = \model ->
             color: Gray,
             pos: { x: 100, y: 350 },
         }
-
-    Task.ok {}

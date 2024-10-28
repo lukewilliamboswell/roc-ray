@@ -1,7 +1,7 @@
 ## A static image loaded into GPU memory, typically from a file. Once loaded, it can be used
 ## multiple times for efficient rendering. Cannot be modified after creation - for dynamic
 ## textures that can be drawn to, see [RenderTexture] instead.
-module [load]
+module [load!]
 
 import Effect
 import RocRay exposing [Texture]
@@ -10,7 +10,6 @@ import RocRay exposing [Texture]
 ## ```
 ## texture = Texture.load! "sprites.png"
 ## ```
-load : Str -> Task Texture *
-load = \filename ->
-    Effect.loadTexture filename
-    |> Task.mapErr \{} -> crash "unreachable loadTexture"
+load! : Str => Texture
+load! = \filename ->
+    Effect.loadTexture! filename

@@ -2,7 +2,7 @@
   description = "Roc Ray platform flake";
 
   inputs = {
-    roc.url = "github:roc-lang/roc";
+    roc.url = "github:roc-lang/roc?ref=purity-inference";
     nixpkgs.url = "github:nixos/nixpkgs";
   };
 

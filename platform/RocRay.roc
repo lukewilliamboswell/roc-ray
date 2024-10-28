@@ -13,21 +13,23 @@ module [
     NetworkMessage,
     UUID,
     rgba,
-    getScreenSize,
-    initWindow,
-    exit,
-    setTargetFPS,
-    displayFPS,
-    measureText,
-    takeScreenshot,
-    log,
-    loadFileToStr,
-    sendToPeer,
+    initWindow!,
+    exit!,
+    setTargetFPS!,
+    displayFPS!,
+    measureText!,
+    takeScreenshot!,
+    log!,
+    loadFileToStr!,
+    sendToPeer!,
+    getScreenSize!,
+    randomI32!,
 ]
 
 import Mouse
 import Effect
 import Network
+import Time
 import InternalKeyboard
 import InternalColor
 import InternalVector
@@ -35,18 +37,27 @@ import InternalVector
 ## A state record provided by platform on each frame.
 ## ```
 ## {
-##     timestampMillis : U64,
-##     frameCount : U64,
-##     keys : Keys.Keys,
-##     mouse : {
-##         position : Vector2,
-##         buttons : Mouse.Buttons,
-##         wheel : F32,
-##     },
+##    frameCount : U64,
+##    keys : InternalKeyboard.Keys,
+##    mouse : {
+##        position : Vector2,
+##        buttons : Mouse.Buttons,
+##        wheel : F32,
+##    },
+##    timestamp : Time.Time,
+##    network : {
+##        peers : {
+##            connected : List Network.UUID,
+##            disconnected : List Network.UUID,
+##        },
+##        messages : List {
+##            id : Network.UUID,
+##            bytes : List U8,
+##        },
+##    },
 ## }
 ## ```
 PlatformState : {
-    timestampMillis : U64,
     frameCount : U64,
     keys : InternalKeyboard.Keys,
     mouse : {
@@ -54,6 +65,7 @@ PlatformState : {
         buttons : Mouse.Buttons,
         wheel : F32,
     },
+    timestamp : Time.Time,
     network : NetworkState,
 }
 
@@ -164,83 +176,71 @@ rgba = \color ->
 ## ```
 ## RocRay.exit!
 ## ```
-exit : Task {} *
-exit = Effect.exit |> Task.mapErr \{} -> crash "unreachable exit"
+exit! : {} => {}
+exit! = \{} -> Effect.exit! {}
 
 ## Show a RocRay log trace message.
 ##
 ## ```
 ## RocRay.log! "Not yet implemented" LogError
 ## ```
-log : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] -> Task {} *
-log = \message, level ->
-    Effect.log message (Effect.toLogLevel level)
-    |> Task.mapErr \{} -> crash "unreachable log"
+log! : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] => {}
+log! = \message, level ->
+    Effect.log! message (Effect.toLogLevel level)
 
-initWindow :
-    {
-        title ? Str,
-        width ? F32,
-        height ? F32,
-    }
-    -> Task {} *
-initWindow = \{ title ? "RocRay", width ? 800, height ? 600 } ->
-    Effect.initWindow title width height
-    |> Task.mapErr \{} -> crash "unreachable initWindow"
+initWindow! : { title ? Str, width ? F32, height ? F32 } => {}
+initWindow! = \{ title ? "RocRay", width ? 800, height ? 600 } ->
+    Effect.initWindow! title width height
 
 ## Get the window size.
-getScreenSize : Task { height : F32, width : F32 } *
-getScreenSize =
-    Effect.getScreenSize
-    |> Task.map \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
-    |> Task.mapErr \{} -> crash "unreachable getScreenSize"
+getScreenSize! : {} => { height : F32, width : F32 }
+getScreenSize! = \{} ->
+    Effect.getScreenSize! {}
+    |> \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
 
 ## Set the target frames per second. The default value is 60.
-setTargetFPS : I32 -> Task {} *
-setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unreachable setTargetFPS"
+setTargetFPS! : I32 => {}
+setTargetFPS! = \fps -> Effect.setTargetFPS! fps
 
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
 ## RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 }}
 ## ```
-displayFPS : { fps : [Visible, Hidden], pos : Vector2 } -> Task {} *
-displayFPS = \{ fps, pos } ->
+displayFPS! : { fps : [Visible, Hidden], pos : Vector2 } => {}
+displayFPS! = \{ fps, pos } ->
 
     showFps =
         when fps is
             Visible -> Bool.true
             Hidden -> Bool.false
 
-    Effect.setDrawFPS showFps (InternalVector.fromVector2 pos)
-    |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
+    Effect.setDrawFPS! showFps (InternalVector.fromVector2 pos)
 
 ## Measure the width of a text string using the default font.
-measureText : { text : Str, size : I32 } -> Task I64 *
-measureText = \{ text, size } ->
-    Effect.measureText text size
-    |> Task.mapErr \{} -> crash "unreachable measureText"
+measureText! : { text : Str, size : I32 } => I64
+measureText! = \{ text, size } -> Effect.measureText! text size
 
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```
 ## RocRay.takeScreenshot! "screenshot.png"
 ## ```
-takeScreenshot : Str -> Task {} *
-takeScreenshot = \filename ->
-    Effect.takeScreenshot filename
-    |> Task.mapErr \{} -> crash "unreachable takeScreenshot"
+takeScreenshot! : Str => {}
+takeScreenshot! = \filename ->
+    Effect.takeScreenshot! filename
 
 ## Loads a file from disk
 ## ```
 ## RocRay.loadFileToStr! "resources/example.txt"
 ## ```
-loadFileToStr : Str -> Task Str *
-loadFileToStr = \path ->
-    Effect.loadFileToStr path
-    |> Task.mapErr \{} -> crash "unreachable loadFileToStr"
+loadFileToStr! : Str => Str
+loadFileToStr! = \path ->
+    Effect.loadFileToStr! path
 
 ## Send a message to a connected peer.
-sendToPeer : List U8, UUID -> Task {} *
-sendToPeer = \message, peerId ->
-    Effect.sendToPeer message (Network.toU64Pair peerId)
-    |> Task.mapErr \{} -> crash "unreachable sendToPeer"
+sendToPeer! : List U8, UUID => {}
+sendToPeer! = \message, peerId ->
+    Effect.sendToPeer! message (Network.toU64Pair peerId)
+
+randomI32! : { min : I32, max : I32 } => I32
+randomI32! = \{ min, max } -> Effect.randomI32! min max

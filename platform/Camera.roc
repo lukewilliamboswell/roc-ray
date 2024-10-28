@@ -1,4 +1,4 @@
-module [Settings, create, update]
+module [Settings, create!, update!]
 
 import Effect
 import InternalVector
@@ -22,11 +22,9 @@ Settings : {
 ##
 ## cameraID = Camera.create! cameraSettings
 ## ```
-create : Settings -> Task Camera *
-create = \{ target, offset, rotation, zoom } ->
-    Effect.createCamera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
-    |> Task.map \camera -> camera
-    |> Task.mapErr \{} -> crash "unreachable createCamera"
+create! : Settings => Camera
+create! = \{ target, offset, rotation, zoom } ->
+    Effect.createCamera! (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
 
 ## Update a camera's target, offset, rotation, and zoom.
 ## ```
@@ -38,7 +36,6 @@ create = \{ target, offset, rotation, zoom } ->
 ##
 ## Camera.update! model.cameraID cameraSettings
 ## ```
-update : Camera, Settings -> Task {} *
-update = \camera, { target, offset, rotation, zoom } ->
-    Effect.updateCamera camera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
-    |> Task.mapErr \{} -> crash "unreachable updateCamera"
+update! : Camera, Settings => {}
+update! = \camera, { target, offset, rotation, zoom } ->
+    Effect.updateCamera! camera (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom

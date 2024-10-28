@@ -1,4 +1,4 @@
-app [Model, init, render] {
+app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
 }
 
@@ -23,8 +23,8 @@ Model : {
     screenRight : RocRay.RenderTexture,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.initWindow! {
         title: "2D camera split-screen",
@@ -55,7 +55,7 @@ init =
     screenLeft = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
     screenRight = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
 
-    Task.ok {
+    Ok {
         playerOne,
         playerTwo,
         settingsLeft,
@@ -66,15 +66,15 @@ init =
         screenRight,
     }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { keys } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { keys } ->
 
     # RENDER THE SCENE INTO THE LEFT SCREEN TEXTURE
     Draw.withTexture! model.screenLeft White \{} ->
 
         Draw.withMode2D! model.cameraLeft \{} ->
 
-            drawGrid!
+            drawGrid! {}
 
             Draw.rectangle! { rect: model.playerOne, color: Red }
             Draw.rectangle! { rect: model.playerTwo, color: Blue }
@@ -86,7 +86,7 @@ render = \model, { keys } ->
 
         Draw.withMode2D! model.cameraRight \{} ->
 
-            drawGrid!
+            drawGrid! {}
 
             Draw.rectangle! { rect: model.playerOne, color: Red }
             Draw.rectangle! { rect: model.playerTwo, color: Blue }
@@ -146,32 +146,41 @@ render = \model, { keys } ->
     Camera.update! model.cameraLeft settingsLeft
     Camera.update! model.cameraRight settingsRight
 
-    Task.ok { model & playerOne, playerTwo, settingsLeft, settingsRight }
+    Ok { model & playerOne, playerTwo, settingsLeft, settingsRight }
 
-drawGrid : Task {} []
-drawGrid =
+drawGrid! : {} => {}
+drawGrid! = \{} ->
 
     # VERTICAL LINES
     List.range { start: At 0, end: At (screenWidth / playerSize) }
-        |> List.map \i -> { start: { x: playerSize * i, y: 0 }, end: { x: playerSize * i, y: screenHeight }, color: lightGray }
-        |> Task.forEach! Draw.line
+    |> List.map \i -> { start: { x: playerSize * i, y: 0 }, end: { x: playerSize * i, y: screenHeight }, color: lightGray }
+    |> forEach! Draw.line!
 
     # HORIZONTAL LINES
     List.range { start: At 0, end: At (screenHeight / playerSize) }
-        |> List.map \j -> { start: { x: 0, y: playerSize * j }, end: { x: screenWidth, y: playerSize * j }, color: lightGray }
-        |> Task.forEach! Draw.line
+    |> List.map \j -> { start: { x: 0, y: playerSize * j }, end: { x: screenWidth, y: playerSize * j }, color: lightGray }
+    |> forEach! Draw.line!
 
     # GRID COORDINATES
     List.range { start: At 0, end: Before (screenWidth / playerSize) }
-        |> List.map \i ->
-            List.range { start: At 0, end: Before (screenHeight / playerSize) }
-            |> List.map \j -> {
-                pos: { x: 10 + (playerSize * i), y: 15 + (playerSize * j) },
-                text: "[$(Num.toStr (Num.round i)),$(Num.toStr (Num.round j))]",
-                size: 10,
-                color: lightGray,
-            }
-        |> List.join
-        |> Task.forEach! Draw.text
+    |> List.map \i ->
+        List.range { start: At 0, end: Before (screenHeight / playerSize) }
+        |> List.map \j -> {
+            pos: { x: 10 + (playerSize * i), y: 15 + (playerSize * j) },
+            text: "[$(Num.toStr (Num.round i)),$(Num.toStr (Num.round j))]",
+            size: 10,
+            color: lightGray,
+        }
+    |> List.join
+    |> forEach! Draw.text!
 
 lightGray = RGBA 200 200 200 255
+
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

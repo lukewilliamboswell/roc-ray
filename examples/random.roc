@@ -1,4 +1,4 @@
-app [Model, init, render] {
+app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
     rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
     time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
@@ -18,22 +18,22 @@ Model : {
 width = 800
 height = 800
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 500
     RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
     RocRay.initWindow! { title: "Random Dots", width, height }
 
-    Task.ok {
+    Ok {
         number: 10000,
         seed: Random.seed 1234,
     }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { keys, timestampMillis } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { keys, timestamp } ->
 
-    nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
+    nowStr = DateTime.fromNanosSinceEpoch (timestamp.renderStart * 1000) |> DateTime.toIsoStr
 
     { seed, lines } = randomList model.seed (Random.u32 0 800) model.number
 
@@ -49,11 +49,11 @@ render = \model, { keys, timestampMillis } ->
 
         Draw.text! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
 
-        Task.forEach! lines Draw.rectangle
+        forEach! lines Draw.rectangle!
 
         Draw.text! { pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
-    Task.ok { model & seed, number }
+    Ok { model & seed, number }
 
 # Generate a list of lines using the seed and generator provided
 randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }
@@ -109,3 +109,12 @@ colorFromU32 = \u32 ->
         Purple
     else
         White
+
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

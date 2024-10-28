@@ -40,15 +40,11 @@ render! = \model, { timestampMillis, keys, network } ->
         else
             ""
 
-    sendTask! : {} => {}
-    sendTask! = \{} ->
-        if Str.isEmpty message then
-            {}
-        else
-            forEach! network.peers.connected \peer ->
-                Str.toUtf8 message |> RocRay.sendToPeer! peer
-
-    sendTask! {}
+    if !(Str.isEmpty message) then
+        forEach! network.peers.connected \peer ->
+            Str.toUtf8 message |> RocRay.sendToPeer! peer
+    else
+        {}
 
     messageLog =
         List.walk network.messages model.messageLog \log, { id, bytes } ->

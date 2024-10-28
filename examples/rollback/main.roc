@@ -1,4 +1,4 @@
-app [Model, init, render] {
+app [Model, init!, render!] {
     rr: platform "../../platform/main.roc",
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
 }
@@ -7,6 +7,7 @@ import rr.RocRay exposing [Texture, Rectangle, Vector2, PlatformState]
 import rr.Draw
 import rr.Texture
 import rr.Network exposing [UUID]
+
 import json.Json
 
 import World exposing [World]
@@ -27,8 +28,8 @@ ConnectedModel : {
     timestampMillis : U64,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
     RocRay.setTargetFPS! 120
     RocRay.initWindow! { title: "Animated Sprite Example", width, height }
 
@@ -50,16 +51,16 @@ init =
     waiting : WaitingModel
     waiting = { dude, localPlayer }
 
-    Task.ok (Waiting waiting)
+    Ok (Waiting waiting)
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, state ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, state ->
     when model is
-        Waiting waiting -> renderWaiting waiting state
-        Connected connected -> renderConnected connected state
+        Waiting waiting -> renderWaiting! waiting state
+        Connected connected -> renderConnected! connected state
 
-drawConnected : ConnectedModel, PlatformState -> Task {} []
-drawConnected = \{ dude, world }, state ->
+drawConnected! : ConnectedModel, PlatformState => {}
+drawConnected! = \{ dude, world }, state ->
     Draw.draw! White \{} ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
@@ -77,32 +78,35 @@ drawConnected = \{ dude, world }, state ->
 
         drawRemotePlayer! world.remotePlayer
 
-renderWaiting : WaitingModel, PlatformState -> Task Model []
-renderWaiting = \waiting, state ->
+renderWaiting! : WaitingModel, PlatformState => Result Model []
+renderWaiting! = \waiting, state ->
+    # SEND NEW PLAYER POSITION TO NETWORK
+    sendPlayerPosition! waiting.localPlayer.pos state.network.peers.connected
+
     # NOTE silently drops decode error
     when List.last state.network.messages is
         Ok firstMessage ->
             when decodeSingleUpdate firstMessage is
                 Ok firstUpdate ->
-                    waitingToConnected waiting state firstUpdate
+                    waitingToConnected! waiting state firstUpdate
 
                 Err TooShort ->
-                    stayWaiting waiting
+                    stayWaiting! waiting
 
                 Err (Leftover _) ->
-                    stayWaiting waiting
+                    stayWaiting! waiting
 
         Err ListWasEmpty ->
-            stayWaiting waiting
+            stayWaiting! waiting
 
-stayWaiting : WaitingModel -> Task Model []
-stayWaiting = \waiting ->
+stayWaiting! : WaitingModel => Result Model []
+stayWaiting! = \waiting ->
     drawWaiting! waiting
-    Task.ok (Waiting waiting)
+    Ok (Waiting waiting)
 
-waitingToConnected : WaitingModel, PlatformState, World.PeerUpdate -> Task Model []
-waitingToConnected = \waiting, state, firstUpdate ->
-    { timestampMillis } = state
+waitingToConnected! : WaitingModel, PlatformState, World.PeerUpdate => Result Model []
+waitingToConnected! = \waiting, state, firstUpdate ->
+    timestampMillis = state.timestamp.renderStart
     { dude, localPlayer } = waiting
 
     world = World.init { localPlayer, firstUpdate }
@@ -112,10 +116,10 @@ waitingToConnected = \waiting, state, firstUpdate ->
 
     drawConnected! connected state
 
-    Task.ok (Connected connected)
+    Ok (Connected connected)
 
-drawWaiting : WaitingModel -> Task {} []
-drawWaiting = \waiting ->
+drawWaiting! : WaitingModel => {}
+drawWaiting! = \waiting ->
     Draw.draw! Silver \{} ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
@@ -128,9 +132,10 @@ drawWaiting = \waiting ->
             tint: Silver,
         }
 
-renderConnected : ConnectedModel, PlatformState -> Task Model []
-renderConnected = \oldModel, state ->
-    { timestampMillis, network } = state
+renderConnected! : ConnectedModel, PlatformState => Result Model []
+renderConnected! = \oldModel, state ->
+    timestampMillis = state.timestamp.renderStart
+    network = state.network
 
     deltaMillis = timestampMillis - oldModel.timestampMillis
     deltaTime = Num.toF32 deltaMillis
@@ -149,7 +154,7 @@ renderConnected = \oldModel, state ->
 
     drawConnected! model state
 
-    Task.ok (Connected model)
+    Ok (Connected model)
 
 dudeSprite : World.Facing, U8 -> Rectangle
 dudeSprite = \sequence, frame ->
@@ -168,8 +173,8 @@ sprite64x64source = \{ row, col } -> {
     height: 64,
 }
 
-displayPeerConnections : RocRay.NetworkPeers -> Task {} _
-displayPeerConnections = \{ connected, disconnected } ->
+displayPeerConnections! : RocRay.NetworkPeers => {}
+displayPeerConnections! = \{ connected, disconnected } ->
     combined =
         List.concat
             (connected |> List.map \uuid -> "CONNECTED: $(Network.toStr uuid)")
@@ -183,15 +188,17 @@ displayPeerConnections = \{ connected, disconnected } ->
         size: 10,
         color: Black,
     }
-    |> Task.forEach Draw.text
+    |> forEach! Draw.text!
 
-displayMessages : List RocRay.NetworkMessage -> Task {} _
-displayMessages = \messages ->
+displayMessages! : List RocRay.NetworkMessage => {}
+displayMessages! = \messages ->
     total = List.len messages
 
     totalMsg = "MESSAGES TOTAL $(Num.toStr total)"
 
-    totalWidth = RocRay.measureText { text: totalMsg, size: 10 } |> Task.map! Num.toFrac
+    totalWidth =
+        tw = RocRay.measureText! { text: totalMsg, size: 10 }
+        Num.toFrac tw
 
     Draw.text! {
         pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total * 10)) },
@@ -207,15 +214,15 @@ displayMessages = \messages ->
         size: 10,
         color: Black,
     }
-    |> Task.forEach Draw.text
+    |> forEach! Draw.text!
 
-sendPlayerPosition : Vector2, List UUID -> Task {} _
-sendPlayerPosition = \player, peers ->
+sendPlayerPosition! : Vector2, List UUID => {}
+sendPlayerPosition! = \player, peers ->
     bytes = Encode.toBytes player Json.utf8
-    Task.forEach peers \peer -> RocRay.sendToPeer bytes peer
+    forEach! peers \peer -> RocRay.sendToPeer! bytes peer
 
-drawRemotePlayer : World.RemotePlayer -> Task {} _
-drawRemotePlayer = \{ id, pos } ->
+drawRemotePlayer! : World.RemotePlayer => {}
+drawRemotePlayer! = \{ id, pos } ->
     Draw.text! { pos, text: "$(Inspect.toStr id)", size: 10, color: Red }
     Draw.rectangle! { rect: { x: pos.x - 5, y: pos.y + 15, width: 20, height: 40 }, color: Red }
 
@@ -228,3 +235,12 @@ decodeSingleUpdate = \{ id, bytes } ->
     decodeResult : Result { x : I64, y : I64 } _
     decodeResult = Decode.fromBytes bytes Json.utf8
     Result.map decodeResult \{ x, y } -> { id, x: Num.toF32 x, y: Num.toF32 y }
+
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

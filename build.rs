@@ -21,7 +21,7 @@ fn main() {
     // to create a static library from the object file
     let lib_app_path = Path::new(&out_dir).join("libapp.a");
     let output = std::process::Command::new("libtool")
-        .args(&[
+        .args([
             "-static",
             "-o",
             format!("{}", lib_app_path.into_os_string().into_string().unwrap()).as_str(),
@@ -76,7 +76,7 @@ fn main() {
     // Run the `ar rcs libapp.a app.o` command
     let lib_app_path = Path::new(&out_dir).join("libapp.a");
     let output = std::process::Command::new("ar")
-        .args(&[
+        .args([
             "rcs",
             format!("{}", lib_app_path.into_os_string().into_string().unwrap()).as_str(),
             "app.o",

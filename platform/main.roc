@@ -14,6 +14,7 @@ platform "roc-ray"
         RenderTexture,
         Sound,
         Texture,
+        Time,
     ]
     packages {}
     imports []
@@ -26,23 +27,6 @@ import InternalMouse
 import Effect
 import Network
 
-PlatformStateFromHost : {
-    frameCount : U64,
-    keys : List U8,
-    mouseButtons : List U8,
-    timestampMillis : U64,
-    mousePosX : F32,
-    mousePosY : F32,
-    mouseWheel : F32,
-    peers : PeerState,
-    messages : List Effect.PeerMessage,
-}
-
-PeerState : {
-    connected : List Effect.RawUUID,
-    disconnected : List Effect.RawUUID,
-}
-
 initForHost! : I32 => Box Model
 initForHost! = \_x ->
     init! {}
@@ -54,17 +38,17 @@ initForHost! = \_x ->
                 Effect.exit! {}
                 crash "unreachable"
 
-renderForHost! : Box Model, PlatformStateFromHost => Box Model
+renderForHost! : Box Model, Effect.PlatformStateFromHost => Box Model
 renderForHost! = \boxedModel, platformState ->
     model = Box.unbox boxedModel
 
-    { timestampMillis, messages, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
+    { messages, timestamp, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
-        timestampMillis,
         frameCount,
         keys: InternalKeyboard.pack keys,
+        timestamp,
         mouse: {
             position: { x: mousePosX, y: mousePosY },
             buttons: mouseButtonsForApp { mouseButtons },

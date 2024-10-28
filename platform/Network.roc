@@ -4,7 +4,8 @@ import Effect
 
 UUID := { upper : U64, lower : U64 }
     implements [
-        Eq, Hash,
+        Eq,
+        Hash,
         Inspect { toInspector: uuidInspector },
     ]
 

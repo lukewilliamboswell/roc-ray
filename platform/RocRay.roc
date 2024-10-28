@@ -17,7 +17,7 @@ module [
     initWindow,
     exit,
     setTargetFPS,
-    setDrawFPS,
+    displayFPS,
     measureText,
     takeScreenshot,
     log,
@@ -30,6 +30,7 @@ import Effect
 import Network
 import InternalKeyboard
 import InternalColor
+import InternalVector
 
 ## A state record provided by platform on each frame.
 ## ```
@@ -201,17 +202,17 @@ setTargetFPS = \fps -> Effect.setTargetFPS fps |> Task.mapErr \{} -> crash "unre
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
-## RocRay.setDrawFPS! { fps: Visible, posX: 10, posY: 10 }
+## RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 }}
 ## ```
-setDrawFPS : { fps : [Visible, Hidden], posX ? I32, posY ? I32 } -> Task {} *
-setDrawFPS = \{ fps, posX ? 10, posY ? 10 } ->
+displayFPS : { fps : [Visible, Hidden], pos : Vector2 } -> Task {} *
+displayFPS = \{ fps, pos } ->
 
     showFps =
         when fps is
             Visible -> Bool.true
             Hidden -> Bool.false
 
-    Effect.setDrawFPS showFps posX posY
+    Effect.setDrawFPS showFps (InternalVector.fromVector2 pos)
     |> Task.mapErr \{} -> crash "unreachable setDrawFPS"
 
 ## Measure the width of a text string using the default font.

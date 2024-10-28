@@ -1,6 +1,7 @@
 use glue::PeerMessage;
 use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
+use roc::LoadedMusic;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::array;
@@ -54,9 +55,6 @@ fn main() {
                         peers.insert(peer, PeerState::Disconnected);
                     }
                     MessageReceived(id, bytes) => {
-                        // dbg!("MESSAGE FROM");
-                        // dbg!(&bytes);
-
                         messages.append(glue::PeerMessage {
                             id: id.into(),
                             bytes: RocList::from_slice(bytes.as_slice()),
@@ -110,6 +108,8 @@ fn main() {
 
             // Send Tick message to worker (non-blocking)
             worker::send_message(worker::MainToWorkerMsg::Tick);
+
+            roc::update_music_streams();
         }
 
         // Send shutdown message BEFORE closing the window
@@ -387,14 +387,14 @@ extern "C" fn roc_fx_takeScreenshot(path: &RocStr) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_setDrawFPS(show: bool, pos_x: i32, pos_y: i32) -> RocResult<(), ()> {
+extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) -> RocResult<(), ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
     config::update(|c| {
         c.fps_show = show;
-        c.fps_position = (pos_x, pos_y)
+        c.fps_position = pos.to_components_c_int();
     });
 
     RocResult::ok(())
@@ -653,6 +653,107 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) -> RocResult<(), ()> {
 }
 
 #[no_mangle]
+extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<LoadedMusic, ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let path = CString::new(path.as_str()).unwrap();
+
+    let music = unsafe {
+        trace_log("LoadMusicStream");
+        bindings::LoadMusicStream(path.as_ptr())
+    };
+
+    let alloc_result = roc::alloc_music_stream(music);
+    match alloc_result {
+        Ok(loaded_music) => RocResult::ok(loaded_music),
+        Err(_) => {
+            exit_with_msg("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    unsafe {
+        bindings::PlayMusicStream(*music);
+    }
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    unsafe {
+        bindings::StopMusicStream(*music);
+    }
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    unsafe {
+        bindings::PauseMusicStream(*music);
+    }
+
+    RocResult::ok(())
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) -> RocResult<(), ()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    unsafe {
+        bindings::ResumeMusicStream(*music);
+    }
+
+    RocResult::ok(())
+}
+
+// NOTE: the RocStr in this error type is to work around a compiler bug
+#[no_mangle]
+extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> RocResult<f32, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let music: &mut bindings::Music =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+
+    let time_played = unsafe { bindings::GetMusicTimePlayed(*music) };
+
+    RocResult::ok(time_played)
+}
+
+#[no_mangle]
 extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocResult<RocBox<()>, ()> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
@@ -753,9 +854,6 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) -> R
     if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
-
-    // dbg!(&bytes);
-    // dbg!(&peer);
 
     let data = bytes.as_slice().to_vec();
 

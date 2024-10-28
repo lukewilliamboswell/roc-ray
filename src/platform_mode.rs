@@ -48,8 +48,10 @@ pub enum PlatformEffect {
     GetScreenSize,
     SendMsgToPeer,
     LoadSound,
+    LoadMusicStream,
     LoadFileToStr,
     PlaySound,
+    PlayMusicStream,
     DrawCircle,
     DrawCircleGradient,
     DrawRectangleGradientV,
@@ -101,6 +103,7 @@ impl PlatformMode {
             // PERMITTED DURING INIT BUT AFTER RAYLIB INIT
             (InitRaylib, CreateCamera)
             | (InitRaylib, LoadSound)
+            | (InitRaylib, LoadMusicStream)
             | (InitRaylib, LoadTexture)
             | (InitRaylib, CreateRenderTexture) => true,
 
@@ -121,6 +124,7 @@ impl PlatformMode {
 
             // PERMITTED ONLY IN RENDER
             (mode, PlaySound) if mode.not_init() => true,
+            (mode, PlayMusicStream) if mode.not_init() => true,
             (mode, TakeScreenshot) if mode.not_init() => true,
             (mode, GetScreenSize) if mode.not_init() => true,
 

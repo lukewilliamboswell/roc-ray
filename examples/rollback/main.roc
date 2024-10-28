@@ -83,26 +83,13 @@ renderWaiting! = \waiting, state ->
     # SEND NEW PLAYER POSITION TO NETWORK
     sendPlayerPosition! waiting.localPlayer.pos state.network.peers.connected
 
-    # NOTE silently drops decode error
-    when List.last state.network.messages is
-        Ok firstMessage ->
-            when decodeSingleUpdate firstMessage is
-                Ok firstUpdate ->
-                    waitingToConnected! waiting state firstUpdate
+    when List.last state.network.messages |> Result.try decodeSingleUpdate is
+        Ok firstUpdate ->
+            waitingToConnected! waiting state firstUpdate
 
-                Err TooShort ->
-                    stayWaiting! waiting
-
-                Err (Leftover _) ->
-                    stayWaiting! waiting
-
-        Err ListWasEmpty ->
-            stayWaiting! waiting
-
-stayWaiting! : WaitingModel => Result Model []
-stayWaiting! = \waiting ->
-    drawWaiting! waiting
-    Ok (Waiting waiting)
+        Err _ ->
+            drawWaiting! waiting
+            Ok (Waiting waiting)
 
 waitingToConnected! : WaitingModel, PlatformState, World.PeerUpdate => Result Model []
 waitingToConnected! = \waiting, state, firstUpdate ->
@@ -140,8 +127,6 @@ renderConnected! = \oldModel, state ->
     deltaMillis = timestampMillis - oldModel.timestampMillis
     deltaTime = Num.toF32 deltaMillis
 
-    # NOTE assuming only one opponent for now
-    # should we log decode errors? what does it mean? out of date client?
     inbox : List World.PeerUpdate
     inbox = decodePeerUpdates network.messages
 

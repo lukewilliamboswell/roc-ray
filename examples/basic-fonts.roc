@@ -2,16 +2,16 @@ app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Draw
-import rr.Font exposing [Font]
+import rr.Font
 
 Model : {
-    poppins: Font,
+    poppins : Font.Font,
 }
 
 init! : {} => Result Model []
 init! = \{} ->
 
-    RocRay.initWindow! { title: "Basic Fonts" }
+    RocRay.initWindow! { title: "Basic Fonts", width: 900, height: 300 }
 
     poppins = Font.load! "examples/assets/Poppins-Regular.ttf"
 
@@ -20,21 +20,29 @@ init! = \{} ->
 render! : Model, RocRay.PlatformState => Result Model []
 render! = \model, _ ->
 
-    startY = 10
+    startY = 10f32
     quickBrownFox = "The quick brown fox jumps over the lazy dog."
 
     Draw.draw! White \{} ->
 
-        _ = drawTextAt! startY quickBrownFox Default 10
-
+        startY
+        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 10, color: Red }
+        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 20, color: Green }
+        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 30, color: Blue }
+        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 40, color: Black }
+        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 10, color: Red }
+        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 20, color: Green }
+        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 30, color: Blue }
+        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 40, color: Black }
+        |> \_ -> {}
 
     Ok model
 
-drawTextAt! : F32, Str, Font, F32 => F32
-drawTextAt! = \nextY, text, font, size ->
+drawTextNextY! : F32, { text : Str, font : Font.Font, size : F32, color : RocRay.Color } => F32
+drawTextNextY! = \nextY, { text, font, size, color } ->
 
-    { height } = Font.measure! { text, font, size }
+    Draw.text! { font, text, pos: { x: 10, y: nextY }, size, color }
 
-    Draw.text! { font, text, pos: { x: 10, y: nextY }, size }
+    { height } = Font.measure! { text, size }
 
     nextY + height

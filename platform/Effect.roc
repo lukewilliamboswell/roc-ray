@@ -12,7 +12,6 @@ hosted Effect
         PlatformStateFromHost,
         PeerState,
         Font,
-
         toLogLevel,
 
         # EFFECTS
@@ -41,7 +40,6 @@ hosted Effect
         beginMode2D!,
         endMode2D!,
         log!,
-
         loadTexture!,
         drawTextureRec!,
         loadSound!,

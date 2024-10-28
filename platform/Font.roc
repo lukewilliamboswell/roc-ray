@@ -1,4 +1,4 @@
-module [Font, load!, measure!]
+module [Font, default, load!, measure!]
 
 import Effect
 import InternalVector
@@ -10,6 +10,9 @@ load! : Str => Font
 load! = \path ->
     Effect.loadFont! path |> Loaded
 
+default : Font
+default = Default
+
 ## Measure the width of a text string using the default font.
 measure! : { font ? Font, text : Str, size ? F32, spacing ? F32 } => { width : F32, height : F32 }
 measure! = \{ font ? Default, text: t, size ? 20, spacing ? 1 } ->
@@ -17,9 +20,9 @@ measure! = \{ font ? Default, text: t, size ? 20, spacing ? 1 } ->
         Default ->
             Effect.measureText! t size spacing
             |> InternalVector.toVector2
-            |> \{x,y} -> {width: x, height: y}
+            |> \{ x, y } -> { width: x, height: y }
 
         Loaded boxed ->
             Effect.measureTextFont! boxed t size spacing
             |> InternalVector.toVector2
-            |> \{x,y} -> {width: x, height: y}
+            |> \{ x, y } -> { width: x, height: y }

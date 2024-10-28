@@ -64,7 +64,7 @@ withTexture! = \texture, color, cmd! ->
 
 ## Draw text on the screen using the default font.
 text! : { font ? Font, pos : { x : F32, y : F32 }, text : Str, size ? F32, spacing ? F32, color ? Color } => {}
-text! = \{ font ? Default, text: t, pos, size ? 20, spacing ? 1, color ? (RGBA 0 0 0 255) } ->
+text! = \{ font ? Default, text: t, pos, size ? 20, spacing ? 1, color ? RGBA 0 0 0 255 } ->
     when font is
         Default -> Effect.drawText! t (InternalVector.fromVector2 pos) size spacing (rgba color)
         Loaded boxed -> Effect.drawTextFont! boxed t (InternalVector.fromVector2 pos) size spacing (rgba color)

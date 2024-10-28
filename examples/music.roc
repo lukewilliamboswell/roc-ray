@@ -21,6 +21,8 @@ init! = \{} ->
     RocRay.initWindow! { title: "Music" }
 
     track = Music.load!? "examples/assets/music/benny-hill.mp3"
+    # FIXME testing deinit
+    _track = Music.load!? "examples/assets/music/benny-hill.mp3"
 
     Ok { track, trackState: Init }
 

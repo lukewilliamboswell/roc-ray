@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::os::raw::c_void;
 use std::sync::OnceLock;
 
 use roc_std::{RocBox, RocRefcounted};
@@ -51,6 +52,30 @@ pub fn alloc_music_stream(music: raylib::Music) -> Result<LoadedMusic, ()> {
         }
 
         Err(_) => Err(()),
+    }
+}
+
+pub(super) fn deinit_music_stream(c_ptr: *mut c_void) {
+    println!("deinit_music_stream");
+
+    let music_box = MUSIC_STREAMS.with_borrow_mut(|streams| {
+        let index_to_drop = streams
+            .iter_mut()
+            .enumerate()
+            .find(|(_index, roc_box)| {
+                // TODO compare c_ptr against RocBox
+                true
+            })
+            .map(|(index, _stream)| index)
+            .expect("tried to free unrecognized music stream");
+
+        streams.swap_remove(index_to_drop)
+    });
+
+    let music: &mut bindings::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(music_box);
+
+    unsafe {
+        bindings::UnloadMusicStream(*music);
     }
 }
 

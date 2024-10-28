@@ -8,6 +8,9 @@ hosted Effect
         Camera,
         RawUUID,
         PeerMessage,
+        PlatformTime,
+        PlatformStateFromHost,
+        PeerState,
         getScreenSize!,
         exit!,
         drawText!,
@@ -46,6 +49,8 @@ hosted Effect
         stopMusicStream!,
         pauseMusicStream!,
         resumeMusicStream!,
+        sleepMillis!,
+        randomI32!,
     ]
     imports []
 
@@ -80,6 +85,31 @@ RawUUID : {
 PeerMessage : {
     id : Effect.RawUUID,
     bytes : List U8,
+}
+
+PlatformTime : {
+    initStart : U64,
+    initEnd : U64,
+    renderStart : U64,
+    lastRenderStart : U64,
+    lastRenderEnd : U64,
+}
+
+PlatformStateFromHost : {
+    frameCount : U64,
+    keys : List U8,
+    mouseButtons : List U8,
+    timestamp : PlatformTime,
+    mousePosX : F32,
+    mousePosY : F32,
+    mouseWheel : F32,
+    peers : PeerState,
+    messages : List PeerMessage,
+}
+
+PeerState : {
+    connected : List Effect.RawUUID,
+    disconnected : List Effect.RawUUID,
 }
 
 log! : Str, I32 => {}
@@ -138,3 +168,7 @@ endTexture! : RenderTexture => {}
 loadFileToStr! : Str => Str
 
 sendToPeer! : List U8, RawUUID => {}
+
+randomI32! : I32, I32 => I32
+
+sleepMillis! : U64 => {}

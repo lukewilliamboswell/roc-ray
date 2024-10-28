@@ -20,11 +20,13 @@ module [
     loadFileToStr!,
     sendToPeer!,
     getScreenSize!,
+    randomI32!,
 ]
 
 import Mouse
 import Effect
 import Network
+import Time
 import InternalKeyboard
 import InternalColor
 import InternalVector
@@ -32,18 +34,27 @@ import InternalVector
 ## A state record provided by platform on each frame.
 ## ```
 ## {
-##     timestampMillis : U64,
-##     frameCount : U64,
-##     keys : Keys.Keys,
-##     mouse : {
-##         position : Vector2,
-##         buttons : Mouse.Buttons,
-##         wheel : F32,
-##     },
+##    frameCount : U64,
+##    keys : InternalKeyboard.Keys,
+##    mouse : {
+##        position : Vector2,
+##        buttons : Mouse.Buttons,
+##        wheel : F32,
+##    },
+##    timestamp : Time.Time,
+##    network : {
+##        peers : {
+##            connected : List Network.UUID,
+##            disconnected : List Network.UUID,
+##        },
+##        messages : List {
+##            id : Network.UUID,
+##            bytes : List U8,
+##        },
+##    },
 ## }
 ## ```
 PlatformState : {
-    timestampMillis : U64,
     frameCount : U64,
     keys : InternalKeyboard.Keys,
     mouse : {
@@ -51,6 +62,7 @@ PlatformState : {
         buttons : Mouse.Buttons,
         wheel : F32,
     },
+    timestamp : Time.Time,
     network : {
         peers : {
             connected : List Network.UUID,
@@ -220,3 +232,6 @@ loadFileToStr! = \path ->
 sendToPeer! : List U8, UUID => {}
 sendToPeer! = \message, peerId ->
     Effect.sendToPeer! message (Network.toU64Pair peerId)
+
+randomI32! : { min : I32, max : I32 } => I32
+randomI32! = \{ min, max } -> Effect.randomI32! min max

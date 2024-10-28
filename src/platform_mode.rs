@@ -49,10 +49,12 @@ pub enum PlatformEffect {
     SendMsgToPeer,
     LoadSound,
     LoadMusicStream,
+    SleepMillis,
     LoadFileToStr,
     PlaySound,
     PlayMusicStream,
     DrawCircle,
+    RandomValue,
     DrawCircleGradient,
     DrawRectangleGradientV,
     DrawRectangleGradientH,
@@ -93,6 +95,8 @@ impl PlatformMode {
             | (_, SetTargetFPS)
             | (_, MeasureText)
             | (_, LogMsg)
+            | (_, SleepMillis)
+            | (_, RandomValue)
             // TODO SendMsgToPeer should only be if we have initialized the "network"
             | (_, SendMsgToPeer) => true,
 

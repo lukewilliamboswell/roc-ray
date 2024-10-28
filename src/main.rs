@@ -14,6 +14,7 @@ mod bindings;
 mod config;
 mod glue;
 mod platform_mode;
+mod platform_time;
 mod roc;
 mod worker;
 
@@ -26,7 +27,9 @@ enum ExitErrCode {
 
 fn main() {
     // CALL INTO ROC FOR INITALIZATION
+    platform_time::init_start();
     let mut model = roc::call_roc_init();
+    platform_time::init_end();
 
     // MANUALLY TRANSITION TO RENDER MODE
     platform_mode::update(PlatformEffect::EndInitWindow).unwrap();
@@ -34,6 +37,7 @@ fn main() {
     let mut frame_count = 0;
 
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+
     let worker_handle = worker::init(&rt);
 
     let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
@@ -41,6 +45,8 @@ fn main() {
     unsafe {
         while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
             let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
+
+            platform_time::render_start();
 
             // Try to receive any pending (non-blocking)
             let queued_network_messages = worker::get_messages();
@@ -89,6 +95,7 @@ fn main() {
                 peers: (&peers).into(),
                 keys: get_keys_states(),
                 messages,
+                timestamp: platform_time::get_platform_time(),
                 mouse_buttons: get_mouse_button_states(),
                 timestamp_millis: timestamp,
                 mouse_pos_x: bindings::GetMouseX() as f32,
@@ -110,6 +117,8 @@ fn main() {
             worker::send_message(worker::MainToWorkerMsg::Tick);
 
             roc::update_music_streams();
+
+            platform_time::render_end();
         }
 
         // Send shutdown message BEFORE closing the window
@@ -796,4 +805,22 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
     let data = bytes.as_slice().to_vec();
 
     worker::send_message(MainToWorkerMsg::SendMessage(peer.into(), data));
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_sleepMillis(millis: u64) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::SleepMillis) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(millis));
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::RandomValue) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    unsafe { bindings::GetRandomValue(min, max) }
 }

@@ -31,9 +31,9 @@ init! = \{} ->
     }
 
 render! : Model, RocRay.PlatformState => Result Model []
-render! = \model, { keys, timestampMillis } ->
+render! = \model, { keys, timestamp } ->
 
-    nowStr = DateTime.fromNanosSinceEpoch (timestampMillis * 1000) |> DateTime.toIsoStr
+    nowStr = DateTime.fromNanosSinceEpoch (timestamp.renderStart * 1000) |> DateTime.toIsoStr
 
     { seed, lines } = randomList model.seed (Random.u32 0 800) model.number
 

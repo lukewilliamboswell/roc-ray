@@ -18,7 +18,11 @@ init! : {} => Result Model []
 init! = \{} ->
 
     RocRay.setTargetFPS! 30
+
     RocRay.displayFPS! { fps: Visible, pos: { x: width - 80, y: height - 20 } }
+
+    Network.configure! { serverUrl: "ws://localhost:3536/yolo?next=2" }
+
     RocRay.initWindow! { title: "Basic WebRTC Networking", width, height }
 
     Ok {

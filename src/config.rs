@@ -8,11 +8,13 @@ thread_local! {
         width: 200,
         height: 50,
         should_exit: false,
+        should_exit_msg_code: None,
         fps_show: false,
         fps_target: 60,
         fps_target_dirty: false,
         fps_position: (10, 10),
         trace_log_level: TraceLevel::Info,
+        network_web_rtc_url: None,
     });
 }
 
@@ -61,9 +63,20 @@ pub struct Config {
     pub width: c_int,
     pub height: c_int,
     pub should_exit: bool,
+    pub should_exit_msg_code: Option<(String, ExitErrCode)>,
     pub fps_show: bool,
     pub fps_target: c_int,
     pub fps_target_dirty: bool,
     pub fps_position: (c_int, c_int),
     pub trace_log_level: TraceLevel,
+    pub network_web_rtc_url: Option<String>,
+}
+
+/// use different error codes when the app exits
+#[derive(Clone, Copy, Debug)]
+pub enum ExitErrCode {
+    ExitEffectNotPermitted = 1,
+    ExitHeapFull = 2,
+    ExitWebRTCConnectionError = 3,
+    ExitWebRTCConnectionDisconnected = 4,
 }

@@ -53,6 +53,7 @@ pub enum PlatformEffect {
     SleepMillis,
     LoadFileToStr,
     PlaySound,
+    ConfigureNetwork,
     PlayMusicStream,
     DrawCircle,
     RandomValue,
@@ -100,6 +101,9 @@ impl PlatformMode {
             | (_, RandomValue)
             // TODO SendMsgToPeer should only be if we have initialized the "network"
             | (_, SendMsgToPeer) => true,
+
+            // PERMITTED ONL IT INIT BEFORE RAYLIB INIT
+            (Init, ConfigureNetwork) => true,
 
             // PERMITTED ONLY AFTER INIT (NEEDS RAYLIB INIT)
             (mode, LoadFileToStr) if mode.after_init() => true,

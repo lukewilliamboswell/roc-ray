@@ -57,6 +57,7 @@ hosted Effect
         sleepMillis!,
         randomI32!,
         loadFont!,
+        configureWebRTC!,
     ]
     imports []
 
@@ -184,3 +185,5 @@ sleepMillis! : U64 => {}
 
 Font := Box U64
 loadFont! : Str => Font
+
+configureWebRTC! : Str => {}

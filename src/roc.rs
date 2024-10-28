@@ -71,6 +71,19 @@ pub fn render_texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindin
     })
 }
 
+// note this is checked and deallocated in the roc_dealloc function
+pub fn font_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Font> {
+    static FONT_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Font>> = OnceLock::new();
+    const DEFAULT_ROC_RAY_MAX_FONT_HEAP_SIZE: usize = 10;
+    let max_heap_size = std::env::var("ROC_RAY_MAX_FONT_HEAP_SIZE")
+        .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_FONT_HEAP_SIZE))
+        .unwrap_or(DEFAULT_ROC_RAY_MAX_FONT_HEAP_SIZE);
+    FONT_HEAP.get_or_init(|| {
+        ThreadSafeRefcountedResourceHeap::new(max_heap_size)
+            .expect("Failed to allocate mmap for heap references.")
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void {
     libc::malloc(size)
@@ -105,6 +118,12 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     let render_texture_heap = render_texture_heap();
     if render_texture_heap.in_range(c_ptr) {
         render_texture_heap.dealloc(c_ptr);
+        return;
+    }
+
+    let font_heap = font_heap();
+    if font_heap.in_range(c_ptr) {
+        font_heap.dealloc(c_ptr);
         return;
     }
 

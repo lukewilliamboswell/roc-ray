@@ -47,6 +47,7 @@ pub enum PlatformEffect {
     SetTargetFPS,
     GetScreenSize,
     SendMsgToPeer,
+    LoadFont,
     LoadSound,
     LoadMusicStream,
     SleepMillis,
@@ -109,6 +110,7 @@ impl PlatformMode {
             | (InitRaylib, LoadSound)
             | (InitRaylib, LoadMusicStream)
             | (InitRaylib, LoadTexture)
+            | (InitRaylib, LoadFont)
             | (InitRaylib, CreateRenderTexture) => true,
 
             // MODE TRANISITIONS

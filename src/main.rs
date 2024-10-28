@@ -1,3 +1,4 @@
+use bindings::GetFontDefault;
 use glue::PeerMessage;
 use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
@@ -262,9 +263,10 @@ extern "C" fn roc_fx_drawRectangleGradientH(
 
 #[no_mangle]
 extern "C" fn roc_fx_drawText(
-    pos: &glue::RocVector2,
-    size: i32,
     text: &RocStr,
+    pos: &glue::RocVector2,
+    size: f32,
+    spacing: f32,
     color: glue::RocColor,
 ) {
     if let Err(msg) = platform_mode::update(PlatformEffect::DrawText) {
@@ -272,10 +274,46 @@ extern "C" fn roc_fx_drawText(
     }
 
     let text = CString::new(text.as_bytes()).unwrap();
-    let (x, y) = pos.to_components_c_int();
 
     unsafe {
-        bindings::DrawText(text.as_ptr(), x, y, size as c_int, color.into());
+        let default = bindings::GetFontDefault();
+        bindings::DrawTextEx(
+            default,
+            text.as_ptr(),
+            pos.into(),
+            size,
+            spacing,
+            color.into(),
+        );
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_drawTextFont(
+    boxed_font: RocBox<()>,
+    text: &RocStr,
+    pos: &glue::RocVector2,
+    size: f32,
+    spacing: f32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawText) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let text = CString::new(text.as_bytes()).unwrap();
+
+    let font: &mut bindings::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+
+    unsafe {
+        bindings::DrawTextEx(
+            *font,
+            text.as_ptr(),
+            pos.into(),
+            size,
+            spacing,
+            color.into(),
+        );
     }
 }
 
@@ -329,16 +367,37 @@ extern "C" fn roc_fx_getScreenSize() -> ScreenSize {
     }
 }
 
+// measureText! : Str, F32, F32 => Vector2
+// measureTextFont! : Font, Str, F32, F32 => Vector2
 #[no_mangle]
-extern "C" fn roc_fx_measureText(text: &RocStr, size: i32) -> i64 {
+extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
     if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     }
 
     let text = CString::new(text.as_str()).unwrap();
-    let width = unsafe { bindings::MeasureText(text.as_ptr(), size as c_int) };
 
-    width as i64
+    unsafe {
+        let default = GetFontDefault();
+        bindings::MeasureTextEx(default, text.as_ptr(), size, spacing).into()
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_measureTextFont(
+    boxed_font: RocBox<()>,
+    text: &RocStr,
+    size: f32,
+    spacing: f32,
+) -> glue::RocVector2 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let text = CString::new(text.as_str()).unwrap();
+    let font: &mut bindings::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+
+    unsafe { bindings::MeasureTextEx(*font, text.as_ptr(), size, spacing).into() }
 }
 
 #[no_mangle]
@@ -823,4 +882,28 @@ extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
     }
 
     unsafe { bindings::GetRandomValue(min, max) }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_loadFont(path: &RocStr) -> RocBox<()> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadFont) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    let path = CString::new(path.as_str()).unwrap();
+
+    let sound = unsafe {
+        trace_log("LoadFont");
+        bindings::LoadFont(path.as_ptr())
+    };
+
+    let heap = roc::font_heap();
+
+    let alloc_result = heap.alloc_for(sound);
+    match alloc_result {
+        Ok(roc_box) => roc_box,
+        Err(_) => {
+            exit_with_msg("Unable to load font, out of memory in the font heap. Consider using ROC_RAY_MAX_FONT_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+        }
+    }
 }

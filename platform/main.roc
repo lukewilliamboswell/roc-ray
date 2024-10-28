@@ -7,6 +7,7 @@ platform "roc-ray"
         RocRay,
         Camera,
         Draw,
+        Font,
         Keys,
         Mouse,
         Music,

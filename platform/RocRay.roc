@@ -14,7 +14,6 @@ module [
     exit!,
     setTargetFPS!,
     displayFPS!,
-    measureText!,
     takeScreenshot!,
     log!,
     loadFileToStr!,
@@ -207,10 +206,6 @@ displayFPS! = \{ fps, pos } ->
             Hidden -> Bool.false
 
     Effect.setDrawFPS! showFps (InternalVector.fromVector2 pos)
-
-## Measure the width of a text string using the default font.
-measureText! : { text : Str, size : I32 } => I64
-measureText! = \{ text, size } -> Effect.measureText! text size
 
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```

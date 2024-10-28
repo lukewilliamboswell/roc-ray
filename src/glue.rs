@@ -190,6 +190,19 @@ impl From<&RocVector2> for bindings::Vector2 {
     }
 }
 
+impl From<bindings::Vector2> for RocVector2 {
+    fn from(vector: bindings::Vector2) -> RocVector2 {
+        RocVector2 {
+            unused: 0,
+            unused2: 0,
+            unused3: 0,
+            unused4: 0,
+            x: vector.x,
+            y: vector.y,
+        }
+    }
+}
+
 roc_std::roc_refcounted_noop_impl!(RocVector2);
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, PartialOrd)]

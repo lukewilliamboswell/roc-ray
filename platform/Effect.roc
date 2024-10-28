@@ -11,10 +11,16 @@ hosted Effect
         PlatformTime,
         PlatformStateFromHost,
         PeerState,
+        Font,
+        toLogLevel,
+
+        # EFFECTS
         getScreenSize!,
         exit!,
         drawText!,
+        drawTextFont!,
         measureText!,
+        measureTextFont!,
         drawLine!,
         drawRectangle!,
         drawRectangleGradientV!,
@@ -34,7 +40,6 @@ hosted Effect
         beginMode2D!,
         endMode2D!,
         log!,
-        toLogLevel,
         loadTexture!,
         drawTextureRec!,
         loadSound!,
@@ -51,6 +56,7 @@ hosted Effect
         resumeMusicStream!,
         sleepMillis!,
         randomI32!,
+        loadFont!,
     ]
     imports []
 
@@ -116,8 +122,11 @@ log! : Str, I32 => {}
 
 initWindow! : Str, F32, F32 => {}
 
-drawText! : RocVector2, I32, Str, RocColor => {}
-measureText! : Str, I32 => I64
+drawText! : Str, RocVector2, F32, F32, RocColor => {}
+drawTextFont! : Font, Str, RocVector2, F32, F32, RocColor => {}
+
+measureText! : Str, F32, F32 => RocVector2
+measureTextFont! : Font, Str, F32, F32 => RocVector2
 
 drawLine! : RocVector2, RocVector2, RocColor => {}
 
@@ -172,3 +181,6 @@ sendToPeer! : List U8, RawUUID => {}
 randomI32! : I32, I32 => I32
 
 sleepMillis! : U64 => {}
+
+Font := Box U64
+loadFont! : Str => Font

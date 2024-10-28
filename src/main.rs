@@ -1,4 +1,5 @@
 use bindings::GetFontDefault;
+use config::ExitErrCode;
 use glue::PeerMessage;
 use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
@@ -19,13 +20,6 @@ mod platform_time;
 mod roc;
 mod worker;
 
-/// use different error codes when the app exits
-#[derive(Debug)]
-enum ExitErrCode {
-    ExitEffectNotPermitted = 1,
-    ExitHeapFull = 2,
-}
-
 fn main() {
     // CALL INTO ROC FOR INITALIZATION
     platform_time::init_start();
@@ -39,15 +33,13 @@ fn main() {
 
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
 
-    let worker_handle = worker::init(&rt);
+    let worker_handle = worker::init(&rt, config::with(|c| c.network_web_rtc_url.clone()));
 
     let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
 
     unsafe {
-        while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
+        'render_loop: while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
             let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
-
-            platform_time::render_start();
 
             // Try to receive any pending (non-blocking)
             let queued_network_messages = worker::get_messages();
@@ -67,11 +59,33 @@ fn main() {
                             bytes: RocList::from_slice(bytes.as_slice()),
                         });
                     }
-                    Error(error) => {
-                        println!("Main: Worker error: {error}");
-                        // Optionally handle worker errors (e.g., reconnect logic)
+                    ConnectionFailed => {
+                        config::update(|c| {
+                            c.should_exit_msg_code = Some((
+                                format!(
+                                    "Unable to connect to signaling server at {:?}. Exiting...",
+                                    c.network_web_rtc_url
+                                ),
+                                ExitErrCode::ExitWebRTCConnectionError,
+                            ));
+                            c.should_exit = true;
+                        });
+                        break 'render_loop;
                     }
-                    _ => {}
+                    Disconnected => {
+                        // TODO give roc an error somehow, allow for reconnecting to a different server??
+                        config::update(|c| {
+                            c.should_exit_msg_code = Some((
+                                format!(
+                                    "Disconnected from signaling server at {:?}. Exiting...",
+                                    c.network_web_rtc_url
+                                ),
+                                ExitErrCode::ExitWebRTCConnectionDisconnected,
+                            ));
+                            c.should_exit = true;
+                        });
+                        break 'render_loop;
+                    }
                 }
             }
 
@@ -91,6 +105,9 @@ fn main() {
                 frame_count, timestamp
             ));
 
+            // note this is called before we build the PlatformState
+            platform_time::render_start();
+
             let platform_state = glue::PlatformState {
                 frame_count,
                 peers: (&peers).into(),
@@ -106,6 +123,8 @@ fn main() {
 
             model = roc::call_roc_render(platform_state, model);
 
+            platform_time::render_end();
+
             if config::with(|c| c.fps_show) {
                 config::with(|c| bindings::DrawFPS(c.fps_position.0, c.fps_position.1));
             }
@@ -114,27 +133,27 @@ fn main() {
 
             bindings::EndDrawing();
 
-            // Send Tick message to worker (non-blocking)
-            worker::send_message(worker::MainToWorkerMsg::Tick);
-
             roc::update_music_streams();
-
-            platform_time::render_end();
         }
 
-        // Send shutdown message BEFORE closing the window
-        println!("Sending shutdown signal to worker...");
+        // Send shutdown message before closing the window
         worker::send_message(worker::MainToWorkerMsg::Shutdown);
 
-        // Wait for worker task to complete
-        println!("Waiting for worker task to finish...");
-        if let Err(e) = rt.block_on(worker_handle) {
-            println!("Worker task error: {:?}", e);
+        // Wait for worker to complete
+        if let Some(handle) = worker_handle {
+            if let Err(e) = rt.block_on(handle) {
+                panic!("Worker task error: {:?}", e);
+            }
         }
 
-        // Now safe to close the window
-        println!("Closing window...");
+        // TODO CLEANUP SHARED RESOURCES??
+
+        // Now close the window
         bindings::CloseWindow();
+    }
+
+    if let Some((msg, code)) = config::with(|c| c.should_exit_msg_code.clone()) {
+        exit_with_msg(msg, code);
     }
 }
 
@@ -864,6 +883,15 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
     let data = bytes.as_slice().to_vec();
 
     worker::send_message(MainToWorkerMsg::SendMessage(peer.into(), data));
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::ConfigureNetwork) {
+        exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    }
+
+    config::update(|c| c.network_web_rtc_url = Some(url.to_string()));
 }
 
 #[no_mangle]

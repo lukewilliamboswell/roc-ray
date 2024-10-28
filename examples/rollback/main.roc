@@ -10,16 +10,13 @@ import rr.Network exposing [UUID]
 
 import json.Json
 
+import Resolution exposing [width, height]
 import World exposing [World]
-
-width = 400
-height = 400
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
 WaitingModel : {
     dude : Texture,
-    localPlayer : World.LocalPlayer,
 }
 
 ConnectedModel : {
@@ -35,21 +32,8 @@ init! = \{} ->
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
-    pos = { x: width / 2, y: height / 2 }
-
-    localPlayer : World.LocalPlayer
-    localPlayer = {
-        pos,
-        intent: Idle Right,
-        animation: {
-            frame: 0,
-            frameRate: 10,
-            nextAnimationTick: 0,
-        },
-    }
-
     waiting : WaitingModel
-    waiting = { dude, localPlayer }
+    waiting = { dude }
 
     Ok (Waiting waiting)
 
@@ -65,6 +49,7 @@ drawConnected! = \{ dude, world }, state ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
+        # draw local player
         playerFacing = World.playerFacing world.localPlayer
         Draw.textureRec! {
             texture: dude,
@@ -73,15 +58,29 @@ drawConnected! = \{ dude, world }, state ->
             tint: White,
         }
 
+        # draw remote player
+
+        Draw.text! {
+            pos: world.remotePlayer.pos,
+            text: "$(Inspect.toStr world.remotePlayer.id)",
+            size: 10,
+            color: Red,
+        }
+        Draw.textureRec! {
+            texture: dude,
+            source: dudeSprite Down world.remotePlayer.animation.frame,
+            pos: world.remotePlayer.pos,
+            tint: Red,
+        }
+
+        # draw ui
         displayPeerConnections! state.network.peers
         displayMessages! state.network.messages
-
-        drawRemotePlayer! world.remotePlayer
 
 renderWaiting! : WaitingModel, PlatformState => Result Model []
 renderWaiting! = \waiting, state ->
     # SEND NEW PLAYER POSITION TO NETWORK
-    sendPlayerPosition! waiting.localPlayer.pos state.network.peers.connected
+    sendPlayerPosition! World.playerStart.pos state.network.peers.connected
 
     when List.last state.network.messages |> Result.try decodeSingleUpdate is
         Ok firstUpdate ->
@@ -94,9 +93,9 @@ renderWaiting! = \waiting, state ->
 waitingToConnected! : WaitingModel, PlatformState, World.PeerUpdate => Result Model []
 waitingToConnected! = \waiting, state, firstUpdate ->
     timestampMillis = state.timestamp.renderStart
-    { dude, localPlayer } = waiting
+    { dude } = waiting
 
-    world = World.init { localPlayer, firstUpdate }
+    world = World.init { firstUpdate }
 
     connected : ConnectedModel
     connected = { dude, world, timestampMillis }
@@ -111,11 +110,12 @@ drawWaiting! = \waiting ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
-        playerFacing = World.playerFacing waiting.localPlayer
+        localPlayer = World.playerStart
+        playerFacing = World.playerFacing localPlayer
         Draw.textureRec! {
             texture: waiting.dude,
-            source: dudeSprite playerFacing waiting.localPlayer.animation.frame,
-            pos: waiting.localPlayer.pos,
+            source: dudeSprite playerFacing localPlayer.animation.frame,
+            pos: localPlayer.pos,
             tint: Silver,
         }
 
@@ -206,10 +206,10 @@ sendPlayerPosition! = \player, peers ->
     bytes = Encode.toBytes player Json.utf8
     forEach! peers \peer -> RocRay.sendToPeer! bytes peer
 
-drawRemotePlayer! : World.RemotePlayer => {}
-drawRemotePlayer! = \{ id, pos } ->
-    Draw.text! { pos, text: "$(Inspect.toStr id)", size: 10, color: Red }
-    Draw.rectangle! { rect: { x: pos.x - 5, y: pos.y + 15, width: 20, height: 40 }, color: Red }
+GameMessage : {
+    x : I64,
+    y : I64,
+}
 
 decodePeerUpdates : List RocRay.NetworkMessage -> List World.PeerUpdate
 decodePeerUpdates = \messages ->
@@ -217,9 +217,12 @@ decodePeerUpdates = \messages ->
 
 decodeSingleUpdate : RocRay.NetworkMessage -> Result World.PeerUpdate [Leftover (List U8)]DecodeError
 decodeSingleUpdate = \{ id, bytes } ->
-    decodeResult : Result { x : I64, y : I64 } _
+    decodeResult : Result GameMessage _
     decodeResult = Decode.fromBytes bytes Json.utf8
-    Result.map decodeResult \{ x, y } -> { id, x: Num.toF32 x, y: Num.toF32 y }
+
+    Result.map decodeResult \{ x, y } ->
+        pos = { x: Num.toF32 x, y: Num.toF32 y }
+        { id, pos }
 
 # TODO REPLACE WITH BUILTIN
 forEach! : List a, (a => {}) => {}

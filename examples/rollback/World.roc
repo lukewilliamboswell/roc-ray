@@ -10,11 +10,14 @@ module [
     frameTicks,
     init,
     playerFacing,
+    playerStart,
 ]
 
 import rr.Keys
 import rr.RocRay exposing [Vector2, PlatformState]
 import rr.Network exposing [UUID]
+
+import Resolution exposing [width, height]
 
 World : {
     localPlayer : LocalPlayer,
@@ -33,12 +36,12 @@ LocalPlayer : {
 RemotePlayer : {
     id : UUID,
     pos : Vector2,
+    animation : AnimatedSprite,
 }
 
 PeerUpdate : {
     id : UUID,
-    x : F32,
-    y : F32,
+    pos : Vector2,
 }
 
 AnimatedSprite : {
@@ -56,14 +59,27 @@ ticksPerSecond = 120
 millisPerTick : F32
 millisPerTick = 1000 / Num.toF32 ticksPerSecond
 
-init : { localPlayer : LocalPlayer, firstUpdate : PeerUpdate } -> World
-init = \{ localPlayer, firstUpdate } ->
+initialAnimation : AnimatedSprite
+initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
+
+playerStart : LocalPlayer
+playerStart = {
+    pos: { x: width / 2, y: height / 2 },
+    animation: initialAnimation,
+    intent: Idle Right,
+}
+
+init : { firstUpdate : PeerUpdate } -> World
+init = \{ firstUpdate } ->
     remainingMillis = 0
     tick = 0
-    pos = { x: firstUpdate.x, y: firstUpdate.y }
-    remotePlayer = { id: firstUpdate.id, pos }
+    remotePlayer = {
+        id: firstUpdate.id,
+        pos: firstUpdate.pos,
+        animation: initialAnimation,
+    }
 
-    { localPlayer, remotePlayer, remainingMillis, tick }
+    { localPlayer: playerStart, remotePlayer, remainingMillis, tick }
 
 FrameState : {
     platformState : PlatformState,
@@ -80,8 +96,12 @@ frameTicks = \world, { platformState, deltaTime, inbox } ->
     # TODO use recorded inputs instead of last known position
     remotePlayer : RemotePlayer
     remotePlayer =
+        oldRemotePlayer = world.remotePlayer
         when List.last inbox is
-            Ok { id, x, y } -> { id, pos: { x, y } }
+            Ok { id, pos } if id == oldRemotePlayer.id ->
+                { oldRemotePlayer & pos }
+
+            Ok _unrecognized -> world.remotePlayer
             Err ListWasEmpty -> world.remotePlayer
 
     { newWorld & remotePlayer }
@@ -97,20 +117,24 @@ useAllRemainingTime = \world, platformState ->
 ## execute a single simulation tick
 tickOnce : World, PlatformState -> World
 tickOnce = \world, state ->
+    animationTimestamp = (Num.toFrac world.tick) * millisPerTick
+
     localPlayer =
         oldPlayer = world.localPlayer
-        animationTimestamp = (Num.toFrac world.tick) * millisPerTick
         animation = updateAnimation oldPlayer.animation animationTimestamp
         intent = readInput state.keys (playerFacing oldPlayer)
 
         movePlayer { oldPlayer & animation, intent }
 
-    # TODO animate remotePlayer
+    remotePlayer =
+        oldRemotePlayer = world.remotePlayer
+        animation = updateAnimation oldRemotePlayer.animation animationTimestamp
+        { oldRemotePlayer & animation }
 
     remainingMillis = world.remainingMillis - millisPerTick
     tick = world.tick + 1
 
-    { world & localPlayer, remainingMillis, tick }
+    { world & localPlayer, remotePlayer, remainingMillis, tick }
 
 readInput : Keys.Keys, Facing -> Intent
 readInput = \keys, facing ->

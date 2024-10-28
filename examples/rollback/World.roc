@@ -99,7 +99,8 @@ tickOnce : World, PlatformState -> World
 tickOnce = \world, state ->
     localPlayer =
         oldPlayer = world.localPlayer
-        animation = updateAnimation oldPlayer.animation millisPerTick
+        animationTimestamp = (Num.toFrac world.tick) * millisPerTick
+        animation = updateAnimation oldPlayer.animation animationTimestamp
         intent = readInput state.keys (playerFacing oldPlayer)
 
         movePlayer { oldPlayer & animation, intent }

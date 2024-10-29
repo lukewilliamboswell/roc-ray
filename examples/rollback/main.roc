@@ -208,7 +208,7 @@ sendHostWaiting! = \network ->
     message : World.FrameMessage
     message = {
         firstTick: 0,
-        nextTick: 1,
+        lastTick: 1,
         tickAdvantage: 0,
         input: { up: Up, down: Up, left: Up, right: Up },
         pos: World.roundVec World.playerStart.pos,
@@ -218,7 +218,7 @@ sendHostWaiting! = \network ->
 
 sendFrameMessage! : World.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->
-    bytes = Encode.toBytes (worldToJson message) Json.utf8
+    bytes = Encode.toBytes (worldToNetwork message) Json.utf8
     forEach! network.peers.connected \peer -> RocRay.sendToPeer! bytes peer
 
 decodeFrameMessages : List RocRay.NetworkMessage -> List World.PeerMessage
@@ -227,7 +227,7 @@ decodeFrameMessages = \messages ->
 
 FrameMessageJson : {
     firstTick : I64,
-    nextTick : I64,
+    lastTick : I64,
     tickAdvantage : I64,
     up : Bool,
     down : Bool,
@@ -237,8 +237,8 @@ FrameMessageJson : {
     y : I64,
 }
 
-jsonToWorld : FrameMessageJson -> World.FrameMessage
-jsonToWorld = \json ->
+networkToWorld : FrameMessageJson -> World.FrameMessage
+networkToWorld = \json ->
     up = if json.up then Down else Up
     down = if json.down then Down else Up
     left = if json.left then Down else Up
@@ -246,16 +246,16 @@ jsonToWorld = \json ->
 
     {
         firstTick: json.firstTick,
-        nextTick: json.nextTick,
+        lastTick: json.lastTick,
         tickAdvantage: json.tickAdvantage,
         input: { up, down, left, right },
         pos: { x: json.x, y: json.y },
     }
 
-worldToJson : World.FrameMessage -> FrameMessageJson
-worldToJson = \message -> {
+worldToNetwork : World.FrameMessage -> FrameMessageJson
+worldToNetwork = \message -> {
     firstTick: message.firstTick,
-    nextTick: message.nextTick,
+    lastTick: message.lastTick,
     tickAdvantage: message.tickAdvantage,
     up: message.input.up == Down,
     down: message.input.down == Down,
@@ -270,7 +270,7 @@ decodeSingleFrameMessage = \{ id, bytes } ->
     decodeResult : Result FrameMessageJson _
     decodeResult = Decode.fromBytes bytes Json.utf8
     Result.map decodeResult \json ->
-        { id, message: jsonToWorld json }
+        { id, message: networkToWorld json }
 
 # TODO REPLACE WITH BUILTIN
 forEach! : List a, (a => {}) => {}

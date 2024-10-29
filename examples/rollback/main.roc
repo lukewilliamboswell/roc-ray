@@ -28,6 +28,7 @@ ConnectedModel : {
 init! : {} => Result Model []
 init! = \{} ->
     RocRay.setTargetFPS! 120
+    RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
     RocRay.initWindow! { title: "Animated Sprite Example", width, height }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"

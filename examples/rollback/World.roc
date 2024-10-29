@@ -41,6 +41,7 @@ World : {
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
     snapshots : List Snapshot,
+    # TODO instead of this, merge into snapshots
     localInputs : List FrameMessage,
     remoteInputs : List FrameMessage,
 }
@@ -51,6 +52,7 @@ Snapshot : {
     localPlayer : LocalPlayer,
     remotePlayer : RemotePlayer,
     predictedInput : Input,
+    localInput : Input,
 }
 
 LocalPlayer : {
@@ -99,10 +101,10 @@ millisPerTick : F32
 millisPerTick = 1000 / Num.toF32 ticksPerSecond
 
 maxRollbackTicks : I64
-maxRollbackTicks = 8
+maxRollbackTicks = 6
 
 tickAdvantageLimit : I64
-tickAdvantageLimit = 8
+tickAdvantageLimit = 6
 
 initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
@@ -156,8 +158,8 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
             rollbackDone
             |> \w -> { w & remainingMillis: w.remainingMillis + deltaTime }
             |> useAllRemainingTime input #
-            # TODO remove this after rollback is done getting added
-            |> \world -> List.walk inbox world handlePeerUpdate
+            # # TODO remove this after rollback is done getting added
+            # |> \world -> List.walk inbox world handlePeerUpdate
         else
             # Block on network
             rollbackDone
@@ -284,7 +286,7 @@ tickOnce = \world, input ->
         movePlayer { oldRemotePlayer & animation, intent } intent
 
     snapshots =
-        newSnapshot = { tick, localPlayer, remotePlayer, predictedInput }
+        newSnapshot = { tick, localPlayer, remotePlayer, predictedInput, localInput: input }
         List.append world.snapshots newSnapshot
 
     { world & localPlayer, remotePlayer, remainingMillis, tick, snapshots }
@@ -412,16 +414,24 @@ rollForwardFromSyncTick = \world ->
         containsTick = \msg ->
             msg.firstTick >= signedTick && msg.lastTick > signedTick
 
-        localInput =
-            List.findFirst world.localInputs containsTick
-            |> Result.map \msg -> msg.input
-            |> Result.withDefault allUp
+        # actual remote input from received message
+        remoteInput =
+            when List.findFirst world.remoteInputs containsTick is
+                Ok msg -> msg.input
+                Err NotFound -> crash "matching remote input nnot found in roll forward"
+        # |> Result.map \msg -> msg.input
+        # |> Result.withDefault allUp
+
+        snapshot =
+            when List.findFirst snapshots \snap -> snap.tick == tick is
+                Ok snap -> snap
+                Err NotFound -> crash "snapshot not found in roll forward"
 
         # touch up the snapshots to have their 'predictions' match what happened
         snapshots = List.map w.snapshots \snap ->
             if snap.tick == tick then
-                { snap & predictedInput: localInput }
+                { snap & predictedInput: remoteInput }
             else
                 snap
 
-        tickOnce { w & snapshots } localInput
+        tickOnce { w & snapshots } snapshot.localInput

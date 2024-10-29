@@ -3,10 +3,10 @@ app [Model, init!, render!] {
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
 }
 
-import rr.RocRay exposing [Texture, Rectangle, Vector2, PlatformState]
+import rr.RocRay exposing [Texture, Rectangle, PlatformState]
 import rr.Draw
 import rr.Texture
-import rr.Network exposing [UUID]
+import rr.Network
 
 import json.Json
 
@@ -79,23 +79,26 @@ drawConnected! = \{ dude, world }, state ->
 
 renderWaiting! : WaitingModel, PlatformState => Result Model []
 renderWaiting! = \waiting, state ->
-    # SEND NEW PLAYER POSITION TO NETWORK
-    sendPlayerPosition! World.playerStart.pos state.network.peers.connected
+    guestJoinMessage =
+        state.network.messages
+        |> List.last
+        |> Result.try decodeSingleFrameMessage
 
-    when List.last state.network.messages |> Result.try decodeSingleUpdate is
+    when guestJoinMessage is
         Ok firstUpdate ->
             waitingToConnected! waiting state firstUpdate
 
         Err _ ->
+            sendHostWaiting! state.network
             drawWaiting! waiting
             Ok (Waiting waiting)
 
-waitingToConnected! : WaitingModel, PlatformState, World.PeerUpdate => Result Model []
-waitingToConnected! = \waiting, state, firstUpdate ->
+waitingToConnected! : WaitingModel, PlatformState, World.PeerMessage => Result Model []
+waitingToConnected! = \waiting, state, firstMessage ->
     timestampMillis = state.timestamp.renderStart
     { dude } = waiting
 
-    world = World.init { firstUpdate }
+    world = World.init { firstMessage }
 
     connected : ConnectedModel
     connected = { dude, world, timestampMillis }
@@ -127,15 +130,14 @@ renderConnected! = \oldModel, state ->
     deltaMillis = timestampMillis - oldModel.timestampMillis
     deltaTime = Num.toF32 deltaMillis
 
-    inbox : List World.PeerUpdate
-    inbox = decodePeerUpdates network.messages
+    inbox : List World.PeerMessage
+    inbox = decodeFrameMessages network.messages
 
-    world = World.frameTicks oldModel.world { platformState: state, deltaTime, inbox }
+    (world, message) = World.frameTicks oldModel.world { platformState: state, deltaTime, inbox }
 
     model = { oldModel & world, timestampMillis }
 
-    # SEND NEW PLAYER POSITION TO NETWORK
-    sendPlayerPosition! world.localPlayer.pos network.peers.connected
+    sendFrameMessage! message network
 
     drawConnected! model state
 
@@ -201,28 +203,74 @@ displayMessages! = \messages ->
     }
     |> forEach! Draw.text!
 
-sendPlayerPosition! : Vector2, List UUID => {}
-sendPlayerPosition! = \player, peers ->
-    bytes = Encode.toBytes player Json.utf8
-    forEach! peers \peer -> RocRay.sendToPeer! bytes peer
+sendHostWaiting! : RocRay.NetworkState => {}
+sendHostWaiting! = \network ->
+    message : World.FrameMessage
+    message = {
+        firstTick: 0,
+        nextTick: 1,
+        tickAdvantage: 0,
+        input: { up: Up, down: Up, left: Up, right: Up },
+        pos: World.roundVec World.playerStart.pos,
+    }
 
-GameMessage : {
+    sendFrameMessage! message network
+
+sendFrameMessage! : World.FrameMessage, RocRay.NetworkState => {}
+sendFrameMessage! = \message, network ->
+    bytes = Encode.toBytes (worldToJson message) Json.utf8
+    forEach! network.peers.connected \peer -> RocRay.sendToPeer! bytes peer
+
+decodeFrameMessages : List RocRay.NetworkMessage -> List World.PeerMessage
+decodeFrameMessages = \messages ->
+    List.keepOks messages decodeSingleFrameMessage
+
+FrameMessageJson : {
+    firstTick : I64,
+    nextTick : I64,
+    tickAdvantage : I64,
+    up : Bool,
+    down : Bool,
+    left : Bool,
+    right : Bool,
     x : I64,
     y : I64,
 }
 
-decodePeerUpdates : List RocRay.NetworkMessage -> List World.PeerUpdate
-decodePeerUpdates = \messages ->
-    List.keepOks messages decodeSingleUpdate
+jsonToWorld : FrameMessageJson -> World.FrameMessage
+jsonToWorld = \json ->
+    up = if json.up then Down else Up
+    down = if json.down then Down else Up
+    left = if json.left then Down else Up
+    right = if json.right then Down else Up
 
-decodeSingleUpdate : RocRay.NetworkMessage -> Result World.PeerUpdate [Leftover (List U8)]DecodeError
-decodeSingleUpdate = \{ id, bytes } ->
-    decodeResult : Result GameMessage _
+    {
+        firstTick: json.firstTick,
+        nextTick: json.nextTick,
+        tickAdvantage: json.tickAdvantage,
+        input: { up, down, left, right },
+        pos: { x: json.x, y: json.y },
+    }
+
+worldToJson : World.FrameMessage -> FrameMessageJson
+worldToJson = \message -> {
+    firstTick: message.firstTick,
+    nextTick: message.nextTick,
+    tickAdvantage: message.tickAdvantage,
+    up: message.input.up == Down,
+    down: message.input.down == Down,
+    left: message.input.left == Down,
+    right: message.input.right == Down,
+    x: message.pos.x,
+    y: message.pos.y,
+}
+
+decodeSingleFrameMessage : RocRay.NetworkMessage -> Result World.PeerMessage _
+decodeSingleFrameMessage = \{ id, bytes } ->
+    decodeResult : Result FrameMessageJson _
     decodeResult = Decode.fromBytes bytes Json.utf8
-
-    Result.map decodeResult \{ x, y } ->
-        pos = { x: Num.toF32 x, y: Num.toF32 y }
-        { id, pos }
+    Result.map decodeResult \json ->
+        { id, message: jsonToWorld json }
 
 # TODO REPLACE WITH BUILTIN
 forEach! : List a, (a => {}) => {}

@@ -266,8 +266,8 @@ extern "C" fn roc_fx_drawRectangleGradientV(
 #[no_mangle]
 extern "C" fn roc_fx_drawRectangleGradientH(
     rect: &glue::RocRectangle,
-    top: glue::RocColor,
-    bottom: glue::RocColor,
+    left: glue::RocColor,
+    right: glue::RocColor,
 ) {
     if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientH) {
         exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
@@ -276,7 +276,7 @@ extern "C" fn roc_fx_drawRectangleGradientH(
     let (x, y, w, h) = rect.to_components_c_int();
 
     unsafe {
-        bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
+        bindings::DrawRectangleGradientH(x, y, w, h, left.into(), right.into());
     }
 }
 

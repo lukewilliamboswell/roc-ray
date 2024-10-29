@@ -101,13 +101,13 @@ rectangleGradientV! = \{ rect, top, bottom } ->
 ## ```
 ## Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, top: Lime, bottom: Navy }
 ## ```
-rectangleGradientH! : { rect : Rectangle, top : Color, bottom : Color } => {}
-rectangleGradientH! = \{ rect, top, bottom } ->
+rectangleGradientH! : { rect : Rectangle, left : Color, right : Color } => {}
+rectangleGradientH! = \{ rect, left, right } ->
 
-    tc = rgba top
-    bc = rgba bottom
+    lc = rgba left
+    rc = rgba right
 
-    Effect.drawRectangleGradientH! (InternalRectangle.fromRect rect) tc bc
+    Effect.drawRectangleGradientH! (InternalRectangle.fromRect rect) lc rc
 
 ## Draw a circle on the screen.
 ## ```

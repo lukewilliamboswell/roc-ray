@@ -97,11 +97,8 @@ Input : {
     right : [Up, Down],
 }
 
-ticksPerSecond : U64
-ticksPerSecond = 120
-
-millisPerTick : F32
-millisPerTick = 1000 / Num.toF32 ticksPerSecond
+millisPerTick : U64
+millisPerTick = 1000 // 120
 
 maxRollbackTicks : I64
 maxRollbackTicks = 6
@@ -229,7 +226,7 @@ normalUpdate = \world, { input, deltaTime } ->
 
 useAllRemainingTime : World, Input -> World
 useAllRemainingTime = \world, input ->
-    if world.remainingMillis <= millisPerTick then
+    if world.remainingMillis <= Num.toF32 millisPerTick then
         world
     else
         tickedWorld = tickOnce world input
@@ -285,8 +282,8 @@ allUp = { up: Up, down: Up, left: Up, right: Up }
 tickOnce : World, Input -> World
 tickOnce = \world, input ->
     tick = world.tick + 1
-    animationTimestamp = (Num.toFrac world.tick) * millisPerTick
-    remainingMillis = world.remainingMillis - millisPerTick
+    animationTimestamp = world.tick * millisPerTick
+    remainingMillis = world.remainingMillis - Num.toF32 millisPerTick
 
     localPlayer =
         oldPlayer = world.localPlayer
@@ -379,12 +376,13 @@ movePlayer = \player, intent ->
 
     { player & pos: newPos }
 
-updateAnimation : AnimatedSprite, F32 -> AnimatedSprite
+updateAnimation : AnimatedSprite, U64 -> AnimatedSprite
 updateAnimation = \animation, timestampMillis ->
-    if timestampMillis > animation.nextAnimationTick then
+    t = Num.toF32 timestampMillis
+    if t > animation.nextAnimationTick then
         frame = Num.addWrap animation.frame 1
         millisToGo = 1000 / (Num.toF32 animation.frameRate)
-        nextAnimationTick = timestampMillis + millisToGo
+        nextAnimationTick = t + millisToGo
         { animation & frame, nextAnimationTick }
     else
         animation

@@ -1,8 +1,8 @@
-use bindings::GetFontDefault;
 use config::ExitErrCode;
 use glue::PeerMessage;
 use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
+use raylib::GetFontDefault;
 use roc::LoadedMusic;
 use roc_std::{RocBox, RocList, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
@@ -50,7 +50,7 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn on_resize(width: i32, height: i32) {
     unsafe {
-        bindings::SetWindowSize(width, height);
+        raylib::SetWindowSize(width, height);
     }
 }
 
@@ -74,9 +74,9 @@ fn game_loop() {
 fn main() {
     unsafe {
         let text = CString::new("Cross platform Raylib!").unwrap();
-        bindings::SetConfigFlags(bindings::ConfigFlags_FLAG_WINDOW_RESIZABLE);
-        bindings::InitWindow(640, 480, text.as_ptr());
-        bindings::SetTargetFPS(30);
+        raylib::SetConfigFlags(raylib::ConfigFlags_FLAG_WINDOW_RESIZABLE);
+        raylib::InitWindow(640, 480, text.as_ptr());
+        raylib::SetTargetFPS(30);
     }
     //
     _ = roc::call_roc_init();
@@ -90,11 +90,6 @@ extern "C" fn draw_loop() {
     // let model = get_model();
 
     unsafe {
-        // CALL INTO ROC FOR INITALIZATION
-        // platform_time::init_start();
-        // let mut model = roc::call_roc_init();
-        // platform_time::init_end();
-
         // MANUALLY TRANSITION TO RENDER MODE
         // platform_mode::update(PlatformEffect::EndInitWindow).unwrap();
 
@@ -105,7 +100,7 @@ extern "C" fn draw_loop() {
         // let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
 
         // unsafe {
-        // 'render_loop: while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
+        // 'render_loop: while !raylib::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
         // let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
 
         // Try to receive any pending (non-blocking)
@@ -161,7 +156,7 @@ extern "C" fn draw_loop() {
         //     .unwrap();
 
         // if config::with(|c| c.fps_target_dirty) {
-        //     bindings::SetTargetFPS(config::with(|c| c.fps_target));
+        //     raylib::SetTargetFPS(config::with(|c| c.fps_target));
 
         //     config::update(|c| c.fps_target_dirty = false);
         // }
@@ -184,9 +179,9 @@ extern "C" fn draw_loop() {
         //     timestamp: platform_time::get_platform_time(),
         //     mouse_buttons: get_mouse_button_states(),
         //     timestamp_millis: timestamp,
-        //     mouse_pos_x: bindings::GetMouseX() as f32,
-        //     mouse_pos_y: bindings::GetMouseY() as f32,
-        //     mouse_wheel: bindings::GetMouseWheelMove(),
+        //     mouse_pos_x: raylib::GetMouseX() as f32,
+        //     mouse_pos_y: raylib::GetMouseY() as f32,
+        //     mouse_wheel: raylib::GetMouseWheelMove(),
         // };
 
         // let model = roc::call_roc_render(platform_state, model);
@@ -196,23 +191,23 @@ extern "C" fn draw_loop() {
         // platform_time::render_end();
 
         // if config::with(|c| c.fps_show) {
-        //     config::with(|c| bindings::DrawFPS(c.fps_position.0, c.fps_position.1));
+        //     config::with(|c| raylib::DrawFPS(c.fps_position.0, c.fps_position.1));
         // }
 
         // frame_count += 1;
 
-        let width = bindings::GetScreenWidth();
-        let height = bindings::GetScreenHeight();
+        let width = raylib::GetScreenWidth();
+        let height = raylib::GetScreenHeight();
 
-        bindings::BeginDrawing();
-        bindings::ClearBackground(bindings::Color {
+        raylib::BeginDrawing();
+        raylib::ClearBackground(raylib::Color {
             r: 100,
             g: 255,
             b: 100,
             a: 255,
         });
 
-        bindings::EndDrawing();
+        raylib::EndDrawing();
 
         // roc::update_music_streams();
         // }
@@ -221,11 +216,11 @@ extern "C" fn draw_loop() {
         // worker::send_message(worker::MainToWorkerMsg::Shutdown);
 
         // Now close the window
-        // bindings::CloseWindow();
+        // raylib::CloseWindow();
         // }
 
         // if let Some((msg, code)) = config::with(|c| c.should_exit_msg_code.clone()) {
-        //     exit_with_msg(msg, code);
+        //     display_fatal_error_message(msg, code);
         // }
     }
 }
@@ -246,7 +241,7 @@ extern "C" fn draw_loop() {
 //     let mut peers: HashMap<PeerId, PeerState> = HashMap::new();
 
 //     unsafe {
-//         'render_loop: while !bindings::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
+//         'render_loop: while !raylib::WindowShouldClose() && !(config::with(|c| c.should_exit)) {
 //             let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
 
 //             // Try to receive any pending (non-blocking)
@@ -302,7 +297,7 @@ extern "C" fn draw_loop() {
 //                 .unwrap();
 
 //             if config::with(|c| c.fps_target_dirty) {
-//                 bindings::SetTargetFPS(config::with(|c| c.fps_target));
+//                 raylib::SetTargetFPS(config::with(|c| c.fps_target));
 //                 config::update(|c| c.fps_target_dirty = false);
 //             }
 
@@ -324,9 +319,9 @@ extern "C" fn draw_loop() {
 //                 timestamp: platform_time::get_platform_time(),
 //                 mouse_buttons: get_mouse_button_states(),
 //                 timestamp_millis: timestamp,
-//                 mouse_pos_x: bindings::GetMouseX() as f32,
-//                 mouse_pos_y: bindings::GetMouseY() as f32,
-//                 mouse_wheel: bindings::GetMouseWheelMove(),
+//                 mouse_pos_x: raylib::GetMouseX() as f32,
+//                 mouse_pos_y: raylib::GetMouseY() as f32,
+//                 mouse_wheel: raylib::GetMouseWheelMove(),
 //             };
 
 //             model = roc::call_roc_render(platform_state, model);
@@ -334,12 +329,12 @@ extern "C" fn draw_loop() {
 //             platform_time::render_end();
 
 //             if config::with(|c| c.fps_show) {
-//                 config::with(|c| bindings::DrawFPS(c.fps_position.0, c.fps_position.1));
+//                 config::with(|c| raylib::DrawFPS(c.fps_position.0, c.fps_position.1));
 //             }
 
 //             frame_count += 1;
 
-//             bindings::EndDrawing();
+//             raylib::EndDrawing();
 
 //             roc::update_music_streams();
 //         }
@@ -348,11 +343,11 @@ extern "C" fn draw_loop() {
 //         worker::send_message(worker::MainToWorkerMsg::Shutdown);
 
 //         // Now close the window
-//         bindings::CloseWindow();
+//         raylib::CloseWindow();
 //     }
 
 //     if let Some((msg, code)) = config::with(|c| c.should_exit_msg_code.clone()) {
-//         exit_with_msg(msg, code);
+//         display_fatal_error_message(msg, code);
 //     }
 // }
 
@@ -367,63 +362,17 @@ fn setup_networking(room_url: Option<String>) -> Option<()> {
     worker::init(None, room_url)
 }
 
-/// exit the program with a message and a code, close the window
-fn exit_with_msg(msg: String, code: ExitErrCode) -> ! {
-    let c_msg = CString::new(msg).unwrap();
-    unsafe {
-        bindings::TraceLog(bindings::TraceLogLevel_LOG_FATAL as i32, c_msg.as_ptr());
-        bindings::CloseWindow();
-    }
-    std::process::exit(code as i32);
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_exit() {
-    config::update(|c| c.should_exit = true);
-}
-
 #[no_mangle]
 extern "C" fn roc_fx_log(msg: &RocStr, level: i32) {
     // if let Err(msg) = platform_mode::update(PlatformEffect::LogMsg) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let text = CString::new(msg.as_str()).unwrap();
     // if level >= 0 && level <= 7 {
-    //     unsafe { bindings::TraceLog(level, text.as_ptr()) }
+    //     unsafe { raylib::TraceLog(level, text.as_ptr()) }
     // } else {
     //     panic!("Invalid log level from roc");
-    // }
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
-    // config::update(|c| {
-    //     c.title = CString::new(title.to_string()).unwrap();
-    //     c.width = width as i32;
-    //     c.height = height as i32;
-    // });
-
-    // // if let Err(msg) = platform_mode::update(PlatformEffect::InitWindow) {
-    // //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    // // }
-
-    // let title = config::with(|c| c.title.as_ptr());
-    // let width = config::with(|c| c.width);
-    // let height = config::with(|c| c.height);
-
-    // unsafe {
-    //     bindings::InitWindow(width, height, title);
-
-    //     // wait for the window to be ready (blocking)
-    //     if !bindings::IsWindowReady() {
-    //         panic!("Attempting to create window failed!");
-    //     }
-
-    //     bindings::SetTraceLogLevel(config::with(|c| c.trace_log_level.into()));
-    //     bindings::SetTargetFPS(config::with(|c| c.fps_target));
-
-    //     // bindings::InitAudioDevice();
     // }
 }
 
@@ -431,11 +380,11 @@ extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
 extern "C" fn roc_fx_drawCircle(center: &glue::RocVector2, radius: f32, color: glue::RocColor) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawCircle) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
-    //     bindings::DrawCircleV(center.into(), radius, color.into());
+    //     raylib::DrawCircleV(center.into(), radius, color.into());
     // }
 }
 
@@ -448,13 +397,13 @@ extern "C" fn roc_fx_drawCircleGradient(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawCircleGradient) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let (x, y) = center.to_components_c_int();
 
     // unsafe {
-    //     bindings::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
+    //     raylib::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
     // }
 }
 
@@ -466,13 +415,13 @@ extern "C" fn roc_fx_drawRectangleGradientV(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientV) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let (x, y, w, h) = rect.to_components_c_int();
 
     // unsafe {
-    //     bindings::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
+    //     raylib::DrawRectangleGradientV(x, y, w, h, top.into(), bottom.into());
     // }
 }
 
@@ -484,13 +433,13 @@ extern "C" fn roc_fx_drawRectangleGradientH(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientH) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let (x, y, w, h) = rect.to_components_c_int();
 
     // unsafe {
-    //     bindings::DrawRectangleGradientH(x, y, w, h, left.into(), right.into());
+    //     raylib::DrawRectangleGradientH(x, y, w, h, left.into(), right.into());
     // }
 }
 
@@ -503,14 +452,14 @@ extern "C" fn roc_fx_drawText(
     color: glue::RocColor,
 ) {
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawText) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     let text = CString::new(text.as_bytes()).unwrap();
 
     unsafe {
-        let default = bindings::GetFontDefault();
-        bindings::DrawTextEx(
+        let default = raylib::GetFontDefault();
+        raylib::DrawTextEx(
             default,
             text.as_ptr(),
             pos.into(),
@@ -532,15 +481,15 @@ extern "C" fn roc_fx_drawTextFont(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawText) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let text = CString::new(text.as_bytes()).unwrap();
 
-    // let font: &mut bindings::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+    // let font: &mut raylib::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
 
     // unsafe {
-    //     bindings::DrawTextEx(
+    //     raylib::DrawTextEx(
     //         *font,
     //         text.as_ptr(),
     //         pos.into(),
@@ -555,11 +504,11 @@ extern "C" fn roc_fx_drawTextFont(
 extern "C" fn roc_fx_drawRectangle(rect: &glue::RocRectangle, color: glue::RocColor) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangle) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
-    //     bindings::DrawRectangleRec(rect.into(), color.into());
+    //     raylib::DrawRectangleRec(rect.into(), color.into());
     // }
 }
 
@@ -571,11 +520,11 @@ extern "C" fn roc_fx_drawLine(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawLine) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
-    //     bindings::DrawLineV(start.into(), end.into(), color.into());
+    //     raylib::DrawLineV(start.into(), end.into(), color.into());
     // }
 }
 
@@ -589,12 +538,12 @@ struct ScreenSize {
 #[no_mangle]
 extern "C" fn roc_fx_getScreenSize() -> ScreenSize {
     // if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     unsafe {
-        let height = bindings::GetScreenHeight();
-        let width = bindings::GetScreenWidth();
+        let height = raylib::GetScreenHeight();
+        let width = raylib::GetScreenWidth();
         ScreenSize {
             height,
             width,
@@ -609,14 +558,14 @@ extern "C" fn roc_fx_getScreenSize() -> ScreenSize {
 extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let text = CString::new(text.as_str()).unwrap();
 
     // unsafe {
     //     let default = GetFontDefault();
-    //     bindings::MeasureTextEx(default, text.as_ptr(), size, spacing).into()
+    //     raylib::MeasureTextEx(default, text.as_ptr(), size, spacing).into()
     // }
 }
 
@@ -629,19 +578,19 @@ extern "C" fn roc_fx_measureTextFont(
 ) -> glue::RocVector2 {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let text = CString::new(text.as_str()).unwrap();
-    // let font: &mut bindings::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+    // let font: &mut raylib::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
 
-    // unsafe { bindings::MeasureTextEx(*font, text.as_ptr(), size, spacing).into() }
+    // unsafe { raylib::MeasureTextEx(*font, text.as_ptr(), size, spacing).into() }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_setTargetFPS(rate: i32) {
     // if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     config::update(|c| {
@@ -654,20 +603,20 @@ extern "C" fn roc_fx_setTargetFPS(rate: i32) {
 extern "C" fn roc_fx_takeScreenshot(path: &RocStr) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::TakeScreenshot) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let path = CString::new(path.as_str()).unwrap();
 
     // unsafe {
-    //     bindings::TakeScreenshot(path.as_ptr());
+    //     raylib::TakeScreenshot(path.as_ptr());
     // }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) {
     // if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     config::update(|c| {
@@ -685,10 +634,10 @@ extern "C" fn roc_fx_createCamera(
 ) -> RocBox<()> {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::CreateCamera) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let camera = bindings::Camera2D {
+    // let camera = raylib::Camera2D {
     //     target: target.into(),
     //     offset: offset.into(),
     //     rotation,
@@ -701,7 +650,7 @@ extern "C" fn roc_fx_createCamera(
     // match alloc_result {
     //     Ok(roc_box) => roc_box,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }
@@ -710,12 +659,12 @@ extern "C" fn roc_fx_createCamera(
 extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocBox<()> {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::CreateRenderTexture) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let (width, height) = size.to_components_c_int();
 
-    // let render_texture = unsafe { bindings::LoadRenderTexture(width, height) };
+    // let render_texture = unsafe { raylib::LoadRenderTexture(width, height) };
 
     // let heap = roc::render_texture_heap();
 
@@ -723,7 +672,7 @@ extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocBox<()> 
     // match alloc_result {
     //     Ok(roc_box) => roc_box,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load render texture, out of memory in the render texture heap. Consider using ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load render texture, out of memory in the render texture heap. Consider using ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }
@@ -738,10 +687,10 @@ extern "C" fn roc_fx_updateCamera(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::UpdateCamera) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let camera: &mut bindings::Camera2D =
+    // let camera: &mut raylib::Camera2D =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
     // camera.target = target.into();
@@ -750,47 +699,21 @@ extern "C" fn roc_fx_updateCamera(
     // camera.zoom = zoom;
 }
 
-#[no_mangle]
-extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) {
-    // if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingFramebuffer) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    // }
-
-    unsafe {
-        // trace_log("BeginDrawing");
-
-        bindings::BeginDrawing();
-        bindings::ClearBackground(clear_color.into());
-    }
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_endDrawing() {
-    // if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingFramebuffer) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
-    // }
-
-    unsafe {
-        // trace_log("EndDrawing");
-        bindings::EndMode2D();
-    }
-}
-
 #[allow(unused_variables)]
 #[no_mangle]
 extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::BeginMode2D) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
     //     trace_log("BeginMode2D");
 
-    //     let camera: &mut bindings::Camera2D =
+    //     let camera: &mut raylib::Camera2D =
     //         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    //     bindings::BeginMode2D(*camera);
+    //     raylib::BeginMode2D(*camera);
     // }
 }
 
@@ -798,12 +721,12 @@ extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
 extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
     //     trace_log("EndMode2D");
-    //     bindings::EndMode2D();
+    //     raylib::EndMode2D();
     // }
 }
 
@@ -812,16 +735,16 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
 extern "C" fn roc_fx_beginTexture(boxed_render_texture: RocBox<()>, clear_color: glue::RocColor) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingTexture) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
     //     trace_log("BeginTexture");
-    //     let render_texture: &mut bindings::RenderTexture =
+    //     let render_texture: &mut raylib::RenderTexture =
     //         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
 
-    //     bindings::BeginTextureMode(*render_texture);
-    //     bindings::ClearBackground(clear_color.into());
+    //     raylib::BeginTextureMode(*render_texture);
+    //     raylib::ClearBackground(clear_color.into());
     // }
 }
 
@@ -829,23 +752,23 @@ extern "C" fn roc_fx_beginTexture(boxed_render_texture: RocBox<()>, clear_color:
 extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingTexture) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // unsafe {
     //     trace_log("EndTexture");
-    //     bindings::EndTextureMode();
+    //     raylib::EndTextureMode();
     // }
 }
 
 fn get_mouse_button_states() -> RocList<u8> {
     let mouse_buttons: [u8; 7] = array::from_fn(|i| {
         unsafe {
-            if bindings::IsMouseButtonPressed(i as c_int) {
+            if raylib::IsMouseButtonPressed(i as c_int) {
                 0
-            } else if bindings::IsMouseButtonReleased(i as c_int) {
+            } else if raylib::IsMouseButtonReleased(i as c_int) {
                 1
-            } else if bindings::IsMouseButtonDown(i as c_int) {
+            } else if raylib::IsMouseButtonDown(i as c_int) {
                 2
             } else {
                 // Up
@@ -860,13 +783,13 @@ fn get_mouse_button_states() -> RocList<u8> {
 fn get_keys_states() -> RocList<u8> {
     let keys: [u8; 350] = array::from_fn(|i| {
         unsafe {
-            if bindings::IsKeyPressed(i as c_int) {
+            if raylib::IsKeyPressed(i as c_int) {
                 0
-            } else if bindings::IsKeyReleased(i as c_int) {
+            } else if raylib::IsKeyReleased(i as c_int) {
                 1
-            } else if bindings::IsKeyDown(i as c_int) {
+            } else if raylib::IsKeyDown(i as c_int) {
                 2
-            } else if bindings::IsKeyUp(i as c_int) {
+            } else if raylib::IsKeyUp(i as c_int) {
                 3
             } else {
                 // PressedRepeat
@@ -882,14 +805,14 @@ fn get_keys_states() -> RocList<u8> {
 extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocBox<()> {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::LoadSound) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let path = CString::new(path.as_str()).unwrap();
 
     // let sound = unsafe {
     //     trace_log("LoadSound");
-    //     bindings::LoadSound(path.as_ptr())
+    //     raylib::LoadSound(path.as_ptr())
     // };
 
     // let heap = roc::sound_heap();
@@ -898,7 +821,7 @@ extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocBox<()> {
     // match alloc_result {
     //     Ok(roc_box) => roc_box,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }
@@ -907,14 +830,14 @@ extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocBox<()> {
 extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlaySound) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let sound: &mut bindings::Sound =
+    // let sound: &mut raylib::Sound =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
 
     // unsafe {
-    //     bindings::PlaySound(*sound);
+    //     raylib::PlaySound(*sound);
     // }
 }
 
@@ -922,21 +845,21 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
 extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> LoadedMusic {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let path = CString::new(path.as_str()).unwrap();
 
     // let music = unsafe {
     //     trace_log("LoadMusicStream");
-    //     bindings::LoadMusicStream(path.as_ptr())
+    //     raylib::LoadMusicStream(path.as_ptr())
     // };
 
     // let alloc_result = roc::alloc_music_stream(music);
     // match alloc_result {
     //     Ok(loaded_music) => loaded_music,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }
@@ -945,14 +868,14 @@ extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> LoadedMusic {
 extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let music: &mut bindings::Music =
+    // let music: &mut raylib::Music =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
     // unsafe {
-    //     bindings::PlayMusicStream(*music);
+    //     raylib::PlayMusicStream(*music);
     // }
 }
 
@@ -960,14 +883,14 @@ extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) {
 extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let music: &mut bindings::Music =
+    // let music: &mut raylib::Music =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
     // unsafe {
-    //     bindings::StopMusicStream(*music);
+    //     raylib::StopMusicStream(*music);
     // }
 }
 
@@ -975,14 +898,14 @@ extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) {
 extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let music: &mut bindings::Music =
+    // let music: &mut raylib::Music =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
     // unsafe {
-    //     bindings::PauseMusicStream(*music);
+    //     raylib::PauseMusicStream(*music);
     // }
 }
 
@@ -990,14 +913,14 @@ extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) {
 extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let music: &mut bindings::Music =
+    // let music: &mut raylib::Music =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
     // unsafe {
-    //     bindings::ResumeMusicStream(*music);
+    //     raylib::ResumeMusicStream(*music);
     // }
 }
 
@@ -1006,13 +929,13 @@ extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) {
 extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let music: &mut bindings::Music =
+    // let music: &mut raylib::Music =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // let time_played = unsafe { bindings::GetMusicTimePlayed(*music) };
+    // let time_played = unsafe { raylib::GetMusicTimePlayed(*music) };
 
     // time_played
 }
@@ -1021,13 +944,13 @@ extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
 extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocBox<()> {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // // should have a valid utf8 string from roc, no need to check for null bytes
     // let file_path = CString::new(file_path.as_str()).unwrap();
 
-    // let texture: bindings::Texture = unsafe { bindings::LoadTexture(file_path.as_ptr()) };
+    // let texture: raylib::Texture = unsafe { raylib::LoadTexture(file_path.as_ptr()) };
 
     // let heap = roc::texture_heap();
 
@@ -1035,7 +958,7 @@ extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocBox<()> {
     // match alloc_result {
     //     Ok(roc_box) => roc_box,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }
@@ -1049,14 +972,14 @@ extern "C" fn roc_fx_drawTextureRec(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let texture: &mut bindings::Texture =
+    // let texture: &mut raylib::Texture =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
     // unsafe {
-    //     bindings::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+    //     raylib::DrawTextureRec(*texture, source.into(), position.into(), color.into());
     // }
 }
 
@@ -1069,14 +992,14 @@ extern "C" fn roc_fx_drawRenderTextureRec(
 ) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // let texture: &mut bindings::RenderTexture =
+    // let texture: &mut raylib::RenderTexture =
     //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
     // unsafe {
-    //     bindings::DrawTextureRec(
+    //     raylib::DrawTextureRec(
     //         texture.texture,
     //         source.into(),
     //         position.into(),
@@ -1089,7 +1012,7 @@ extern "C" fn roc_fx_drawRenderTextureRec(
 extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocStr {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::LoadFileToStr) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let path = path.as_str();
@@ -1103,22 +1026,11 @@ extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocStr {
     // contents
 }
 
-#[allow(unused_variables)]
-fn trace_log(msg: &str) {
-    todo!()
-    // #[cfg(feature = "trace-debug")]
-    // unsafe {
-    //     let level = bindings::TraceLogLevel_LOG_DEBUG;
-    //     let text = CString::new(msg).unwrap();
-    //     bindings::TraceLog(level as i32, text.as_ptr());
-    // }
-}
-
 #[no_mangle]
 extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let data = bytes.as_slice().to_vec();
@@ -1130,7 +1042,7 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
 extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::ConfigureNetwork) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // config::update(|c| c.network_web_rtc_url = Some(url.to_string()));
@@ -1140,7 +1052,7 @@ extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
 extern "C" fn roc_fx_sleepMillis(millis: u64) {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::SleepMillis) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // std::thread::sleep(std::time::Duration::from_millis(millis));
@@ -1150,24 +1062,24 @@ extern "C" fn roc_fx_sleepMillis(millis: u64) {
 extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::RandomValue) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
-    // unsafe { bindings::GetRandomValue(min, max) }
+    // unsafe { raylib::GetRandomValue(min, max) }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_loadFont(path: &RocStr) -> RocBox<()> {
     todo!()
     // if let Err(msg) = platform_mode::update(PlatformEffect::LoadFont) {
-    //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
+    //     display_fatal_error_message(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
 
     // let path = CString::new(path.as_str()).unwrap();
 
     // let sound = unsafe {
     //     trace_log("LoadFont");
-    //     bindings::LoadFont(path.as_ptr())
+    //     raylib::LoadFont(path.as_ptr())
     // };
 
     // let heap = roc::font_heap();
@@ -1176,7 +1088,7 @@ extern "C" fn roc_fx_loadFont(path: &RocStr) -> RocBox<()> {
     // match alloc_result {
     //     Ok(roc_box) => roc_box,
     //     Err(_) => {
-    //         exit_with_msg("Unable to load font, out of memory in the font heap. Consider using ROC_RAY_MAX_FONT_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
+    //         display_fatal_error_message("Unable to load font, out of memory in the font heap. Consider using ROC_RAY_MAX_FONT_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
     //     }
     // }
 }

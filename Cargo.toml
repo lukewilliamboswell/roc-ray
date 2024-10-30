@@ -36,4 +36,3 @@ build-target = "0.4"
 
 [features]
 default = []
-trace-debug = []

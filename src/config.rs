@@ -46,13 +46,13 @@ pub enum TraceLevel {
 impl From<TraceLevel> for c_int {
     fn from(value: TraceLevel) -> Self {
         match value {
-            TraceLevel::None => crate::bindings::TraceLogLevel_LOG_NONE as c_int,
-            TraceLevel::Error => crate::bindings::TraceLogLevel_LOG_ERROR as c_int,
-            TraceLevel::Warn => crate::bindings::TraceLogLevel_LOG_WARNING as c_int,
-            TraceLevel::Info => crate::bindings::TraceLogLevel_LOG_INFO as c_int,
-            TraceLevel::Debug => crate::bindings::TraceLogLevel_LOG_DEBUG as c_int,
-            TraceLevel::Trace => crate::bindings::TraceLogLevel_LOG_TRACE as c_int,
-            TraceLevel::All => crate::bindings::TraceLogLevel_LOG_ALL as c_int,
+            TraceLevel::None => raylib::TraceLogLevel_LOG_NONE as c_int,
+            TraceLevel::Error => raylib::TraceLogLevel_LOG_ERROR as c_int,
+            TraceLevel::Warn => raylib::TraceLogLevel_LOG_WARNING as c_int,
+            TraceLevel::Info => raylib::TraceLogLevel_LOG_INFO as c_int,
+            TraceLevel::Debug => raylib::TraceLogLevel_LOG_DEBUG as c_int,
+            TraceLevel::Trace => raylib::TraceLogLevel_LOG_TRACE as c_int,
+            TraceLevel::All => raylib::TraceLogLevel_LOG_ALL as c_int,
         }
     }
 }

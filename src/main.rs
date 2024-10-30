@@ -1,12 +1,14 @@
+use config::ExitErrCode;
 use roc_std::{RocBox, RocStr};
 use std::cell::RefCell;
-use std::ffi::CString;
+use std::ffi::{c_int, CString};
 
 #[cfg(target_family = "wasm")]
 extern crate console_error_panic_hook;
 
 extern crate raylib;
 
+mod config;
 mod glue;
 mod roc;
 
@@ -32,7 +34,12 @@ fn set_model(model: RocBox<()>) {
 
 #[cfg(target_family = "wasm")]
 extern "C" {
+
+    // https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_set_main_loop
     fn emscripten_set_main_loop(loop_fn: extern "C" fn(), fps: i32, sim_infinite_loop: i32);
+
+    // https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_force_exit
+    fn emscripten_force_exit(status: c_int);
 }
 
 #[cfg(target_family = "wasm")]
@@ -45,53 +52,107 @@ pub extern "C" fn on_resize(width: i32, height: i32) {
 
 extern "C" fn draw_loop() {
     unsafe {
-        raylib::BeginDrawing();
-        raylib::ClearBackground(raylib::Color {
-            r: 100,
-            g: 255,
-            b: 100,
-            a: 255,
-        });
+        if let Some(msg_code) = config::with(|c| c.should_exit_msg_code.clone()) {
+            raylib::BeginDrawing();
 
-        let mouse_x = raylib::GetMouseX();
-        let mouse_y = raylib::GetMouseY();
-        let blue = raylib::Color {
-            r: 0,
-            g: 0,
-            b: 255,
-            a: 255,
-        };
-
-        raylib::DrawCircle(mouse_x, mouse_y, 10.0, blue);
-
-        let text = CString::new("It's working").unwrap();
-        raylib::DrawText(
-            text.as_ptr(),
-            10,
-            10,
-            20,
-            raylib::Color {
+            raylib::ClearBackground(raylib::Color {
                 r: 255,
+                g: 210,
+                b: 210,
+                a: 255,
+            });
+
+            raylib::DrawCircle(
+                raylib::GetMouseX(),
+                raylib::GetMouseY(),
+                5.0,
+                raylib::Color {
+                    r: 50,
+                    g: 50,
+                    b: 50,
+                    a: 255,
+                },
+            );
+
+            let error_msg = CString::new("FATAL ERROR:").unwrap();
+            raylib::DrawText(
+                error_msg.as_ptr(),
+                10,
+                10,
+                20,
+                raylib::Color {
+                    r: 255,
+                    g: 0,
+                    b: 0,
+                    a: 255,
+                },
+            );
+
+            let error_msg = CString::new(msg_code.0).unwrap();
+            raylib::DrawText(
+                error_msg.as_ptr(),
+                10,
+                30,
+                20,
+                raylib::Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 255,
+                },
+            );
+
+            raylib::EndDrawing();
+        } else {
+            raylib::BeginDrawing();
+
+            raylib::ClearBackground(raylib::Color {
+                r: 100,
                 g: 255,
+                b: 100,
+                a: 255,
+            });
+
+            let mouse_x = raylib::GetMouseX();
+            let mouse_y = raylib::GetMouseY();
+            let blue = raylib::Color {
+                r: 0,
+                g: 0,
                 b: 255,
                 a: 255,
-            },
-        );
+            };
 
-        let platform_state = glue::PlatformState::default();
+            raylib::DrawCircle(mouse_x, mouse_y, 10.0, blue);
 
-        let model = get_model();
-        let model = roc::call_roc_render(platform_state, model);
-        set_model(model);
+            let text = CString::new("It's working").unwrap();
+            raylib::DrawText(
+                text.as_ptr(),
+                10,
+                10,
+                20,
+                raylib::Color {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 255,
+                },
+            );
 
-        raylib::EndDrawing();
+            let platform_state = glue::PlatformState::default();
+
+            let model = get_model();
+            let model = roc::call_roc_render(platform_state, model);
+            set_model(model);
+
+            raylib::EndDrawing();
+        }
     }
 }
 
 fn game_loop() {
     #[cfg(target_family = "wasm")]
     unsafe {
-        emscripten_set_main_loop(draw_loop, 0, 1);
+        emscripten_set_main_loop(draw_loop, 0, 0);
     }
 
     #[cfg(target_family = "unix")]
@@ -126,6 +187,13 @@ fn main() {
     game_loop();
 }
 
+/// exit the program with a message and a code, close the window
+fn display_fatal_error_message(msg: String, code: ExitErrCode) {
+    config::update(|c| {
+        c.should_exit_msg_code = Some((msg, code));
+    });
+}
+
 #[no_mangle]
 extern "C" fn roc_fx_drawText(
     text: &RocStr,
@@ -137,6 +205,11 @@ extern "C" fn roc_fx_drawText(
     // if let Err(msg) = platform_mode::update(PlatformEffect::DrawText) {
     //     exit_with_msg(msg, ExitErrCode::ExitEffectNotPermitted);
     // }
+
+    display_fatal_error_message(
+        "ASDFASDASDF".to_string(),
+        ExitErrCode::ExitEffectNotPermitted,
+    );
 
     let text = CString::new(text.as_bytes()).unwrap();
 

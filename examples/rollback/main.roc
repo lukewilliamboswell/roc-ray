@@ -66,9 +66,11 @@ drawConnected! = \{ dude, world }, state ->
             size: 10,
             color: Red,
         }
+
+        remotePlayerFacing = World.playerFacing world.remotePlayer
         Draw.textureRec! {
             texture: dude,
-            source: dudeSprite Down world.remotePlayer.animation.frame,
+            source: dudeSprite remotePlayerFacing world.remotePlayer.animation.frame,
             pos: world.remotePlayer.pos,
             tint: Red,
         }

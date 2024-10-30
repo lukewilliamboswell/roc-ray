@@ -289,11 +289,9 @@ tickOnce = \world, input ->
         oldPlayer = world.localPlayer
         animation = updateAnimation oldPlayer.animation animationTimestamp
         intent = inputToIntent input (playerFacing oldPlayer)
-
         movePlayer { oldPlayer & animation, intent } intent
 
     predictedInput =
-
         receivedInput =
             world.remoteInputTicks
             |> List.findLast \inputTick -> inputTick.tick == tick
@@ -316,13 +314,8 @@ tickOnce = \world, input ->
         movePlayer { oldRemotePlayer & animation, intent } intent
 
     snapshots =
-        newSnapshot = {
-            tick,
-            localPlayer,
-            remotePlayer,
-            predictedInput,
-            localInput: input,
-        }
+        newSnapshot : Snapshot
+        newSnapshot = { localInput: input, tick, localPlayer, remotePlayer, predictedInput }
         List.append world.snapshots newSnapshot
 
     { world & localPlayer, remotePlayer, remainingMillis, tick, snapshots }
@@ -424,6 +417,7 @@ findMisprediction = \{ snapshots, remoteInputs } ->
 rollbackIfNecessary : World, { input : Input } -> World
 rollbackIfNecessary = \world, { input } ->
     shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
+
     if !shouldRollback then
         world
     else
@@ -445,7 +439,7 @@ rollbackIfNecessary = \world, { input } ->
         rollForwardFromSyncTick restoredToSync { rollForwardRange, input }
 
 rollForwardFromSyncTick : World, { rollForwardRange : (U64, U64), input : Input } -> World
-rollForwardFromSyncTick = \world, { rollForwardRange: (start, end), input } ->
+rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end), input } ->
     rollForwardTicks =
         when Num.compare start end is
             LT -> List.range { start: At start, end: At end }
@@ -456,35 +450,40 @@ rollForwardFromSyncTick = \world, { rollForwardRange: (start, end), input } ->
     fixedWorld : World
     fixedWorld =
         snapshots : List Snapshot
-        snapshots = List.walk world.remoteInputTicks [] \keptSnaps, inputTick ->
-            when List.findFirst world.snapshots \s -> s.tick == inputTick.tick is
-                # they're ahead of us and we haven't mispredicted yet
-                Err NotFound -> keptSnaps
-                # fix our old prediction
-                Ok snap ->
-                    fixedSnap = { snap & predictedInput: inputTick.input }
-                    List.append keptSnaps fixedSnap
-        { world & snapshots }
+        snapshots = List.map wrongFutureWorld.snapshots \questionableSnap ->
+            when List.findFirst wrongFutureWorld.remoteInputTicks \it -> it.tick == questionableSnap.tick is
+                # we're ahead of them; our prediction is fake but not wrong yet
+                Err NotFound -> questionableSnap
+                Ok inputTick ->
+                    # overwrite our prediction with whatever they actually did
+                    { questionableSnap & predictedInput: inputTick.input }
+
+        lastRemoteInputTick =
+            when List.last wrongFutureWorld.remoteInputTicks is
+                Ok last -> last.tick
+                Err ListWasEmpty ->
+                    crashInfo = showCrashInfo wrongFutureWorld
+                    crash "no last input tick during roll forward: $(crashInfo)"
+
+        { wrongFutureWorld & snapshots, remoteTick: lastRemoteInputTick, syncTick: lastRemoteInputTick }
 
     # simulate every tick between syncTick and the present to catch up
-    List.walk rollForwardTicks fixedWorld \w, tick ->
+    List.walk rollForwardTicks fixedWorld \steppingWorld, tick ->
         localInput : Input
         localInput =
             # TODO keep local inputs separate from snapshots, and update them at start of frame
-            if tick == world.tick then
+            if tick == fixedWorld.tick then
                 input
             else
-                # NOTE take care to distinguish between world and w here
-                # TODO use better names
-                when List.findFirst world.snapshots \snap -> snap.tick == tick is
+                when List.findFirst fixedWorld.snapshots \snap -> snap.tick == tick is
                     Ok snap -> snap.localInput
                     Err NotFound ->
-                        crashInfo = showCrashInfo world
+                        crashInfo = showCrashInfo fixedWorld
                         notFoundTick = Inspect.toStr tick
                         displayRange = "($(Inspect.toStr start), $(Inspect.toStr end))"
                         crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
 
-        tickOnce w localInput
+        tickOnce steppingWorld localInput
 
 showCrashInfo : World -> Str
 showCrashInfo = \w ->

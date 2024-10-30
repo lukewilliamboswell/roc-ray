@@ -14,6 +14,7 @@ module [
     playerFacing,
     playerStart,
     roundVec,
+    showCrashInfo,
 ]
 
 import rr.Keys
@@ -41,10 +42,13 @@ World : {
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
     snapshots : List Snapshot,
-    # TODO instead of this, merge into snapshots
-    localInputs : List FrameMessage,
     remoteInputs : List FrameMessage,
+    remoteInputTicks : List InputTick,
+    ## whether we're blocked on remote input and for how long; used for logging
+    blocked : [Unblocked, BlockedFor U64],
 }
+
+InputTick : { tick : U64, input : Input }
 
 ## A previous game state
 Snapshot : {
@@ -120,19 +124,44 @@ init : { firstMessage : PeerMessage } -> World
 init = \{ firstMessage: { id, message } } ->
     remotePos = floatVec message.pos
     remotePlayer = { id, pos: remotePos, animation: initialAnimation, intent: Idle Left }
+    localPlayer = playerStart
+
+    remoteInputs = [message]
+    remoteInputTicks = frameMessagesToTicks remoteInputs
+
+    initialSyncSnapshot : Snapshot
+    initialSyncSnapshot = {
+        tick: 0,
+        localPlayer,
+        remotePlayer,
+        predictedInput: allUp,
+        localInput: allUp,
+    }
 
     {
-        localPlayer: playerStart,
+        localPlayer,
         remotePlayer,
         remainingMillis: 0,
         tick: 0,
         remoteTick: 0,
         syncTick: 0,
         remoteTickAdvantage: 0,
-        snapshots: [],
-        localInputs: [],
-        remoteInputs: [message],
+        snapshots: [initialSyncSnapshot],
+        remoteInputs,
+        remoteInputTicks,
+        blocked: Unblocked,
     }
+
+frameMessagesToTicks : List FrameMessage -> List InputTick
+frameMessagesToTicks = \messages ->
+    List.joinMap messages \msg ->
+        range =
+            when Num.compare msg.firstTick msg.lastTick is
+                LT -> List.range { start: At msg.firstTick, end: At msg.lastTick }
+                GT -> []
+                EQ -> [msg.firstTick]
+
+        List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
 
 FrameState : {
     platformState : PlatformState,
@@ -140,7 +169,6 @@ FrameState : {
     inbox : List PeerMessage,
 }
 
-## use as many physics ticks as the frame duration allows,
 ## then handle any new messages from remotePlayer
 frameTicks : World, FrameState -> (World, FrameMessage)
 frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
@@ -150,19 +178,22 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
         oldWorld
         |> updateRemoteTick inbox
         |> updateSyncTick
-        |> rollbackIfNecessary
+        |> rollbackIfNecessary { input }
 
     newWorld =
         if timeSynced rollbackDone then
             # Normal Update
             rollbackDone
             |> \w -> { w & remainingMillis: w.remainingMillis + deltaTime }
-            |> useAllRemainingTime input #
-            # # TODO remove this after rollback is done getting added
-            # |> \world -> List.walk inbox world handlePeerUpdate
+            |> normalUpdate { input, deltaTime }
+            |> &blocked Unblocked
         else
-            # Block on network
-            rollbackDone
+            # Block on remote updates
+            blocked =
+                when rollbackDone.blocked is
+                    BlockedFor frames -> BlockedFor (frames + 1)
+                    Unblocked -> BlockedFor 1
+            { rollbackDone & blocked }
 
     outgoingMessage : FrameMessage
     outgoingMessage = {
@@ -173,29 +204,54 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
         pos: roundVec newWorld.localPlayer.pos,
     }
 
-    # record input history
-    localInputs =
-        historyWithNew = List.append newWorld.localInputs outgoingMessage
-        cleanAndSortInputs historyWithNew { syncTick: newWorld.syncTick }
+    snapshots = newWorld.snapshots
+    # this caused problems for some reason
+    # newWorld.snapshots
+    # |> List.dropIf \snap -> snap.tick < newWorld.syncTick
 
+    # TODO should these be handled before the normal update?
+    # both local and remote as very first thing maybe
     remoteInputs =
         newMessages = List.map inbox \peerMessage -> peerMessage.message
-        historyWithNew = List.concat newWorld.remoteInputs newMessages
-        cleanAndSortInputs historyWithNew { syncTick: newWorld.syncTick }
+        newWorld.remoteInputs
+        |> List.concat newMessages
+        |> cleanAndSortInputs { syncTick: newWorld.syncTick }
+    remoteInputTicks = frameMessagesToTicks remoteInputs
 
     (
-        { newWorld & localInputs, remoteInputs },
+        { newWorld & remoteInputs, remoteInputTicks, snapshots },
         outgoingMessage,
     )
+
+## use as many physics ticks as the frame duration allows
+normalUpdate : World, { input : Input, deltaTime : F32 } -> World
+normalUpdate = \world, { input, deltaTime } ->
+    useAllRemainingTime
+        { world & remainingMillis: world.remainingMillis + deltaTime }
+        input
+
+useAllRemainingTime : World, Input -> World
+useAllRemainingTime = \world, input ->
+    if world.remainingMillis <= millisPerTick then
+        world
+    else
+        tickedWorld = tickOnce world input
+        useAllRemainingTime tickedWorld input
 
 cleanAndSortInputs : List FrameMessage, { syncTick : U64 } -> List FrameMessage
 cleanAndSortInputs = \history, { syncTick } ->
     last = List.last history
     sorted = List.sortWith history \left, right ->
         Num.compare left.firstTick right.firstTick
+    sortedUnique = List.walk sorted [] \lst, item ->
+        when List.last lst is
+            Ok same if same.firstTick == item.firstTick -> lst
+            _ -> List.append lst item
+
     cleaned =
-        List.keepOks sorted \msg ->
+        List.keepOks sortedUnique \msg ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
+
     when (cleaned, last) is
         ([], Ok l) -> [l]
         ([], Err _) -> []
@@ -231,23 +287,6 @@ floatVec = \{ x, y } -> {
     y: y |> Num.toF32,
 }
 
-handlePeerUpdate : World, PeerMessage -> World
-handlePeerUpdate = \world, { message } ->
-    remotePlayer : RemotePlayer
-    remotePlayer =
-        oldRemotePlayer = world.remotePlayer
-        { oldRemotePlayer & pos: floatVec message.pos }
-
-    { world & remotePlayer }
-
-useAllRemainingTime : World, Input -> World
-useAllRemainingTime = \world, input ->
-    if world.remainingMillis <= millisPerTick then
-        world
-    else
-        tickedWorld = tickOnce world input
-        useAllRemainingTime tickedWorld input
-
 allUp : Input
 allUp = { up: Up, down: Up, left: Up, right: Up }
 
@@ -266,19 +305,22 @@ tickOnce = \world, input ->
         movePlayer { oldPlayer & animation, intent } intent
 
     predictedInput =
-        inRange = \msg ->
-            msg.firstTick <= Num.toI64 tick && msg.lastTick > Num.toI64 tick
-        when List.last world.remoteInputs is
-            Ok last if inRange last -> last.input
-            Ok _ ->
-                world.remoteInputs
-                |> List.findLast inRange
-                |> Result.map \msg -> msg.input
-                |> Result.withDefault allUp
 
-            Err _ -> allUp
+        receivedInput =
+            world.remoteInputTicks
+            |> List.findLast \inputTick -> inputTick.tick == tick
+            |> Result.map \inputTick -> inputTick.input
 
-    # TODO use predicted input if necessary
+        when receivedInput is
+            # confirmed remote input
+            Ok received -> received
+            Err NotFound ->
+                when List.last world.remoteInputTicks is
+                    # predict the last thing they did
+                    Ok last -> last.input
+                    # predict idle on the first frame
+                    Err _ -> allUp
+
     remotePlayer =
         oldRemotePlayer = world.remotePlayer
         animation = updateAnimation oldRemotePlayer.animation animationTimestamp
@@ -286,7 +328,13 @@ tickOnce = \world, input ->
         movePlayer { oldRemotePlayer & animation, intent } intent
 
     snapshots =
-        newSnapshot = { tick, localPlayer, remotePlayer, predictedInput, localInput: input }
+        newSnapshot = {
+            tick,
+            localPlayer,
+            remotePlayer,
+            predictedInput,
+            localInput: input,
+        }
         List.append world.snapshots newSnapshot
 
     { world & localPlayer, remotePlayer, remainingMillis, tick, snapshots }
@@ -384,8 +432,8 @@ findMisprediction = \{ snapshots, remoteInputs } ->
     Result.map misprediction \m -> m.tick
 
 # NOTE this relies on updateSyncTick having been ran
-rollbackIfNecessary : World -> World
-rollbackIfNecessary = \world ->
+rollbackIfNecessary : World, { input : Input } -> World
+rollbackIfNecessary = \world, { input } ->
     shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
     if !shouldRollback then
         world
@@ -393,7 +441,9 @@ rollbackIfNecessary = \world ->
         syncSnapshot =
             when List.findFirst world.snapshots \snap -> snap.tick == world.syncTick is
                 Ok snap -> snap
-                Err _ -> crash "rolled back to before the earliest snapshot"
+                Err NotFound ->
+                    crashInfo = showCrashInfo world
+                    crash "sync tick not present in snapshots; crashInfo: $(crashInfo)"
 
         restoredToSync =
             { world &
@@ -402,36 +452,71 @@ rollbackIfNecessary = \world ->
                 remotePlayer: syncSnapshot.remotePlayer,
             }
 
-        rollForwardFromSyncTick restoredToSync
+        rollForwardRange = (world.syncTick + 1, world.tick) # inclusive
+        rollForwardFromSyncTick restoredToSync { rollForwardRange, input }
 
-rollForwardFromSyncTick : World -> World
-rollForwardFromSyncTick = \world ->
-    ticksTodo = List.range { start: At (world.syncTick + 1), end: At world.tick }
+rollForwardFromSyncTick : World, { rollForwardRange : (U64, U64), input : Input } -> World
+rollForwardFromSyncTick = \world, { rollForwardRange: (start, end), input } ->
+    rollForwardTicks =
+        when Num.compare start end is
+            LT -> List.range { start: At start, end: At end }
+            GT -> []
+            EQ -> [start]
 
-    List.walk ticksTodo world \w, tick ->
-        signedTick = Num.toI64 tick
-        containsTick : FrameMessage -> Bool
-        containsTick = \msg ->
-            msg.firstTick >= signedTick && msg.lastTick > signedTick
+    # touch up the snapshots to have their 'predictions' match what happened
+    fixedWorld : World
+    fixedWorld =
+        snapshots : List Snapshot
+        snapshots = List.walk world.remoteInputTicks [] \keptSnaps, inputTick ->
+            when List.findFirst world.snapshots \s -> s.tick == inputTick.tick is
+                # they're ahead of us and we haven't mispredicted yet
+                Err NotFound -> keptSnaps
+                # fix our old prediction
+                Ok snap ->
+                    fixedSnap = { snap & predictedInput: inputTick.input }
+                    List.append keptSnaps fixedSnap
+        { world & snapshots }
 
-        # actual remote input from received message
-        remoteInput =
-            when List.findFirst world.remoteInputs containsTick is
-                Ok msg -> msg.input
-                Err NotFound -> crash "matching remote input nnot found in roll forward"
-        # |> Result.map \msg -> msg.input
-        # |> Result.withDefault allUp
-
-        snapshot =
-            when List.findFirst snapshots \snap -> snap.tick == tick is
-                Ok snap -> snap
-                Err NotFound -> crash "snapshot not found in roll forward"
-
-        # touch up the snapshots to have their 'predictions' match what happened
-        snapshots = List.map w.snapshots \snap ->
-            if snap.tick == tick then
-                { snap & predictedInput: remoteInput }
+    # simulate every tick between syncTick and the present to catch up
+    List.walk rollForwardTicks fixedWorld \w, tick ->
+        localInput : Input
+        localInput =
+            # TODO keep local inputs separate from snapshots, and update them at start of frame
+            if tick == world.tick then
+                input
             else
-                snap
+                # NOTE take care to distinguish between world and w here
+                # TODO use better names
+                when List.findFirst world.snapshots \snap -> snap.tick == tick is
+                    Ok snap -> snap.localInput
+                    Err NotFound ->
+                        crashInfo = showCrashInfo world
+                        notFoundTick = Inspect.toStr tick
+                        displayRange = "($(Inspect.toStr start), $(Inspect.toStr end))"
+                        crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
 
-        tickOnce { w & snapshots } snapshot.localInput
+        tickOnce w localInput
+
+showCrashInfo : World -> Str
+showCrashInfo = \w ->
+    remoteInputTicksRange =
+        first = List.first w.remoteInputTicks |> Result.map \it -> it.tick
+        last = List.last w.remoteInputTicks |> Result.map \it -> it.tick
+        (first, last)
+
+    snapshotsRange =
+        first = List.first w.snapshots |> Result.map \snap -> snap.tick
+        last = List.last w.snapshots |> Result.map \snap -> snap.tick
+        (first, last)
+
+    crashInfo = {
+        tick: w.tick,
+        remoteTick: w.remoteTick,
+        syncTick: w.syncTick,
+        localPos: w.localPlayer.pos,
+        remotePos: w.remotePlayer.pos,
+        remoteInputTicksRange,
+        snapshotsRange,
+    }
+
+    Inspect.toStr crashInfo

@@ -60,7 +60,6 @@ drawConnected! = \{ dude, world }, state ->
         }
 
         # draw remote player
-
         Draw.text! {
             pos: world.remotePlayer.pos,
             text: "$(Inspect.toStr world.remotePlayer.id)",
@@ -76,7 +75,6 @@ drawConnected! = \{ dude, world }, state ->
 
         # draw ui
         displayPeerConnections! state.network.peers
-        displayMessages! state.network.messages
 
 renderWaiting! : WaitingModel, PlatformState => Result Model []
 renderWaiting! = \waiting, state ->
@@ -142,6 +140,15 @@ renderConnected! = \oldModel, state ->
 
     drawConnected! model state
 
+    when world.blocked is
+        Unblocked -> {}
+        BlockedFor frames ->
+            if frames < 100 then
+                RocRay.log! "Blocked for $(Inspect.toStr frames) frames" LogWarning
+            else
+                crashInfo = World.showCrashInfo world
+                crash "blocked world: $(crashInfo)"
+
     Ok (Connected model)
 
 dudeSprite : World.Facing, U8 -> Rectangle
@@ -173,32 +180,6 @@ displayPeerConnections! = \{ connected, disconnected } ->
     |> List.map \i -> {
         pos: { x: 10, y: height - 10 - (Num.toFrac (i * 10)) },
         text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
-        size: 10,
-        color: Black,
-    }
-    |> forEach! Draw.text!
-
-displayMessages! : List RocRay.NetworkMessage => {}
-displayMessages! = \messages ->
-    total = List.len messages
-
-    totalMsg = "MESSAGES TOTAL $(Num.toStr total)"
-
-    totalWidth =
-        tw = RocRay.measureText! { text: totalMsg, size: 10 }
-        Num.toFrac tw
-
-    Draw.text! {
-        pos: { x: (width - 10 - totalWidth), y: height - 10 - (Num.toFrac (total * 10)) },
-        text: totalMsg,
-        size: 10,
-        color: Black,
-    }
-
-    messages
-    |> List.mapWithIndex \msg, i -> {
-        pos: { x: width - 10, y: height - 10 - (Num.toFrac (i * 10)) },
-        text: "FROM $(Inspect.toStr msg.id), $(msg.bytes |> List.len |> Num.toStr) BYTES",
         size: 10,
         color: Black,
     }

@@ -77,7 +77,6 @@ FrameMessage : {
     lastTick : I64,
     tickAdvantage : I64,
     input : Input,
-    pos : { x : I64, y : I64 },
 }
 
 PeerMessage : { id : UUID, message : FrameMessage }
@@ -122,8 +121,7 @@ playerStart = {
 
 init : { firstMessage : PeerMessage } -> World
 init = \{ firstMessage: { id, message } } ->
-    remotePos = floatVec message.pos
-    remotePlayer = { id, pos: remotePos, animation: initialAnimation, intent: Idle Left }
+    remotePlayer = { id, pos: playerStart.pos, animation: initialAnimation, intent: Idle Left }
     localPlayer = playerStart
 
     remoteInputs = [message]
@@ -201,7 +199,6 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
         lastTick: newWorld.tick |> Num.toI64,
         tickAdvantage: Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick,
         input,
-        pos: roundVec newWorld.localPlayer.pos,
     }
 
     snapshots = newWorld.snapshots
@@ -279,12 +276,6 @@ roundVec : Vector2 -> { x : I64, y : I64 }
 roundVec = \{ x, y } -> {
     x: x |> Num.round |> Num.toI64,
     y: y |> Num.round |> Num.toI64,
-}
-
-floatVec : { x : I64, y : I64 } -> Vector2
-floatVec = \{ x, y } -> {
-    x: x |> Num.toF32,
-    y: y |> Num.toF32,
 }
 
 allUp : Input

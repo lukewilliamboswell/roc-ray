@@ -193,7 +193,6 @@ sendHostWaiting! = \network ->
         lastTick: 1,
         tickAdvantage: 0,
         input: { up: Up, down: Up, left: Up, right: Up },
-        pos: World.roundVec World.playerStart.pos,
     }
 
     sendFrameMessage! message network
@@ -215,8 +214,6 @@ FrameMessageJson : {
     down : Bool,
     left : Bool,
     right : Bool,
-    x : I64,
-    y : I64,
 }
 
 networkToWorld : FrameMessageJson -> World.FrameMessage
@@ -231,7 +228,6 @@ networkToWorld = \json ->
         lastTick: json.lastTick,
         tickAdvantage: json.tickAdvantage,
         input: { up, down, left, right },
-        pos: { x: json.x, y: json.y },
     }
 
 worldToNetwork : World.FrameMessage -> FrameMessageJson
@@ -243,8 +239,6 @@ worldToNetwork = \message -> {
     down: message.input.down == Down,
     left: message.input.left == Down,
     right: message.input.right == Down,
-    x: message.pos.x,
-    y: message.pos.y,
 }
 
 decodeSingleFrameMessage : RocRay.NetworkMessage -> Result World.PeerMessage _

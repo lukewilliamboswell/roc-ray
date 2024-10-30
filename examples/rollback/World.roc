@@ -44,6 +44,7 @@ World : {
     snapshots : List Snapshot,
     remoteInputs : List FrameMessage,
     remoteInputTicks : List InputTick,
+
     ## whether we're blocked on remote input and for how long; used for logging
     blocked : [Unblocked, BlockedFor U64],
 }
@@ -486,23 +487,23 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end), i
         tickOnce steppingWorld localInput
 
 showCrashInfo : World -> Str
-showCrashInfo = \w ->
+showCrashInfo = \world ->
     remoteInputTicksRange =
-        first = List.first w.remoteInputTicks |> Result.map \it -> it.tick
-        last = List.last w.remoteInputTicks |> Result.map \it -> it.tick
+        first = List.first world.remoteInputTicks |> Result.map \it -> it.tick
+        last = List.last world.remoteInputTicks |> Result.map \it -> it.tick
         (first, last)
 
     snapshotsRange =
-        first = List.first w.snapshots |> Result.map \snap -> snap.tick
-        last = List.last w.snapshots |> Result.map \snap -> snap.tick
+        first = List.first world.snapshots |> Result.map \snap -> snap.tick
+        last = List.last world.snapshots |> Result.map \snap -> snap.tick
         (first, last)
 
     crashInfo = {
-        tick: w.tick,
-        remoteTick: w.remoteTick,
-        syncTick: w.syncTick,
-        localPos: w.localPlayer.pos,
-        remotePos: w.remotePlayer.pos,
+        tick: world.tick,
+        remoteTick: world.remoteTick,
+        syncTick: world.syncTick,
+        localPos: world.localPlayer.pos,
+        remotePos: world.remotePlayer.pos,
         remoteInputTicksRange,
         snapshotsRange,
     }

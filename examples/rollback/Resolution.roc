@@ -1,7 +1,7 @@
 module [width, height]
 
-width : F32
+width : I64
 width = 600
 
-height : F32
+height : I64
 height = 800

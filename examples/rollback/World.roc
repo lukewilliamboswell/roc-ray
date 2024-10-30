@@ -22,6 +22,7 @@ import rr.RocRay exposing [Vector2, PlatformState]
 import rr.Network exposing [UUID]
 
 import Resolution exposing [width, height]
+import Pixel exposing [PixelVec]
 
 ## The current game state and rollback metadata
 World : {
@@ -31,7 +32,7 @@ World : {
     remotePlayer : RemotePlayer,
 
     ## the unspent milliseconds remaining after the last tick (or frame)
-    remainingMillis : F32,
+    remainingMillis : U64,
 
     ## the total number of simulation ticks so far
     tick : U64,
@@ -61,14 +62,14 @@ Snapshot : {
 }
 
 LocalPlayer : {
-    pos : Vector2,
+    pos : PixelVec,
     animation : AnimatedSprite,
     intent : Intent,
 }
 
 RemotePlayer : {
     id : UUID,
-    pos : Vector2,
+    pos : PixelVec,
     animation : AnimatedSprite,
     intent : Intent,
 }
@@ -111,11 +112,15 @@ initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
 playerStart : LocalPlayer
-playerStart = {
-    pos: { x: width / 2, y: height / 2 },
-    animation: initialAnimation,
-    intent: Idle Right,
-}
+playerStart =
+    x = Pixel.fromI64 (width // 2)
+    y = Pixel.fromI64 (height // 2)
+
+    {
+        pos: { x, y },
+        animation: initialAnimation,
+        intent: Idle Right,
+    }
 
 init : { firstMessage : PeerMessage } -> World
 init = \{ firstMessage: { id, message } } ->
@@ -161,13 +166,13 @@ frameMessagesToTicks = \messages ->
 
 FrameState : {
     platformState : PlatformState,
-    deltaTime : F32,
+    deltaMillis : U64,
     inbox : List PeerMessage,
 }
 
 ## then handle any new messages from remotePlayer
 frameTicks : World, FrameState -> (World, FrameMessage)
-frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
+frameTicks = \oldWorld, { platformState, deltaMillis, inbox } ->
     input = readInput platformState.keys
 
     rollbackDone =
@@ -180,8 +185,8 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
         if timeSynced rollbackDone then
             # Normal Update
             rollbackDone
-            |> \w -> { w & remainingMillis: w.remainingMillis + deltaTime }
-            |> normalUpdate { input, deltaTime }
+            |> \w -> { w & remainingMillis: w.remainingMillis + deltaMillis }
+            |> normalUpdate { input, deltaMillis }
             |> &blocked Unblocked
         else
             # Block on remote updates
@@ -219,15 +224,15 @@ frameTicks = \oldWorld, { platformState, deltaTime, inbox } ->
     )
 
 ## use as many physics ticks as the frame duration allows
-normalUpdate : World, { input : Input, deltaTime : F32 } -> World
-normalUpdate = \world, { input, deltaTime } ->
+normalUpdate : World, { input : Input, deltaMillis : U64 } -> World
+normalUpdate = \world, { input, deltaMillis } ->
     useAllRemainingTime
-        { world & remainingMillis: world.remainingMillis + deltaTime }
+        { world & remainingMillis: world.remainingMillis + deltaMillis }
         input
 
 useAllRemainingTime : World, Input -> World
 useAllRemainingTime = \world, input ->
-    if world.remainingMillis <= Num.toF32 millisPerTick then
+    if world.remainingMillis <= millisPerTick then
         world
     else
         tickedWorld = tickOnce world input
@@ -284,7 +289,12 @@ tickOnce : World, Input -> World
 tickOnce = \world, input ->
     tick = world.tick + 1
     animationTimestamp = world.tick * millisPerTick
-    remainingMillis = world.remainingMillis - Num.toF32 millisPerTick
+
+    if world.remainingMillis < millisPerTick then
+        crash "tickOnce called without enough remainingMillis"
+    else
+        {}
+    remainingMillis = world.remainingMillis - millisPerTick
 
     localPlayer =
         oldPlayer = world.localPlayer
@@ -355,17 +365,17 @@ playerFacing = \{ intent } ->
         Walk facing -> facing
         Idle facing -> facing
 
-movePlayer : { pos : Vector2 }a, Intent -> { pos : Vector2 }a
+movePlayer : { pos : PixelVec }a, Intent -> { pos : PixelVec }a
 movePlayer = \player, intent ->
     { pos } = player
 
-    moveSpeed = 10.0
+    moveSpeed = { pixels: 10 }
     newPos =
         when intent is
-            Walk Up -> { pos & y: pos.y - moveSpeed }
-            Walk Down -> { pos & y: pos.y + moveSpeed }
-            Walk Right -> { pos & x: pos.x + moveSpeed }
-            Walk Left -> { pos & x: pos.x - moveSpeed }
+            Walk Up -> { pos & y: Pixel.sub pos.y moveSpeed }
+            Walk Down -> { pos & y: Pixel.add pos.y moveSpeed }
+            Walk Right -> { pos & x: Pixel.add pos.x moveSpeed }
+            Walk Left -> { pos & x: Pixel.sub pos.x moveSpeed }
             Idle _ -> pos
 
     { player & pos: newPos }
@@ -468,23 +478,30 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end), i
 
         { wrongFutureWorld & snapshots, remoteTick: lastRemoteInputTick, syncTick: lastRemoteInputTick }
 
-    # simulate every tick between syncTick and the present to catch up
-    List.walk rollForwardTicks fixedWorld \steppingWorld, tick ->
-        localInput : Input
-        localInput =
-            # TODO keep local inputs separate from snapshots, and update them at start of frame
-            if tick == fixedWorld.tick then
-                input
-            else
-                when List.findFirst fixedWorld.snapshots \snap -> snap.tick == tick is
-                    Ok snap -> snap.localInput
-                    Err NotFound ->
-                        crashInfo = showCrashInfo fixedWorld
-                        notFoundTick = Inspect.toStr tick
-                        displayRange = "($(Inspect.toStr start), $(Inspect.toStr end))"
-                        crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
+    remainingMillisBeforeRollForward = fixedWorld.remainingMillis
+    rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
 
-        tickOnce steppingWorld localInput
+    # simulate every tick between syncTick and the present to catch up
+    rolledForwardWorld =
+        List.walk rollForwardTicks rollForwardWorld \steppingWorld, tick ->
+            localInput : Input
+            localInput =
+                # TODO keep local inputs separate from snapshots, and update them at start of frame
+                if tick == rollForwardWorld.tick then
+                    input
+                else
+                    when List.findFirst rollForwardWorld.snapshots \snap -> snap.tick == tick is
+                        Ok snap -> snap.localInput
+                        Err NotFound ->
+                            crashInfo = showCrashInfo rollForwardWorld
+                            notFoundTick = Inspect.toStr tick
+                            displayRange =
+                                "($(Inspect.toStr start), $(Inspect.toStr end))"
+                            crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
+
+            tickOnce steppingWorld localInput
+
+    { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward }
 
 showCrashInfo : World -> Str
 showCrashInfo = \world ->

@@ -12,6 +12,7 @@ import json.Json
 
 import Resolution exposing [width, height]
 import World exposing [World]
+import Pixel
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
@@ -29,7 +30,11 @@ init! : {} => Result Model []
 init! = \{} ->
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
-    RocRay.initWindow! { title: "Animated Sprite Example", width, height }
+    RocRay.initWindow! {
+        title: "Animated Sprite Example",
+        width: Num.toF32 width,
+        height: Num.toF32 height,
+    }
 
     dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
 
@@ -55,13 +60,13 @@ drawConnected! = \{ dude, world }, state ->
         Draw.textureRec! {
             texture: dude,
             source: dudeSprite playerFacing world.localPlayer.animation.frame,
-            pos: world.localPlayer.pos,
+            pos: Pixel.toVector2 world.localPlayer.pos,
             tint: White,
         }
 
         # draw remote player
         Draw.text! {
-            pos: world.remotePlayer.pos,
+            pos: Pixel.toVector2 world.remotePlayer.pos,
             text: "$(Inspect.toStr world.remotePlayer.id)",
             size: 10,
             color: Red,
@@ -71,7 +76,7 @@ drawConnected! = \{ dude, world }, state ->
         Draw.textureRec! {
             texture: dude,
             source: dudeSprite remotePlayerFacing world.remotePlayer.animation.frame,
-            pos: world.remotePlayer.pos,
+            pos: Pixel.toVector2 world.remotePlayer.pos,
             tint: Red,
         }
 
@@ -119,7 +124,7 @@ drawWaiting! = \waiting ->
         Draw.textureRec! {
             texture: waiting.dude,
             source: dudeSprite playerFacing localPlayer.animation.frame,
-            pos: localPlayer.pos,
+            pos: Pixel.toVector2 localPlayer.pos,
             tint: Silver,
         }
 
@@ -129,12 +134,11 @@ renderConnected! = \oldModel, state ->
     network = state.network
 
     deltaMillis = timestampMillis - oldModel.timestampMillis
-    deltaTime = Num.toF32 deltaMillis
 
     inbox : List World.PeerMessage
     inbox = decodeFrameMessages network.messages
 
-    (world, message) = World.frameTicks oldModel.world { platformState: state, deltaTime, inbox }
+    (world, message) = World.frameTicks oldModel.world { platformState: state, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -144,12 +148,15 @@ renderConnected! = \oldModel, state ->
 
     when world.blocked is
         Unblocked -> {}
-        BlockedFor frames ->
-            if frames < 100 then
-                RocRay.log! "Blocked for $(Inspect.toStr frames) frames" LogWarning
-            else
-                crashInfo = World.showCrashInfo world
-                crash "blocked world: $(crashInfo)"
+        BlockedFor blockedFrames ->
+            when blockedFrames is
+                f if f < 5 -> {}
+                f if f < 100 ->
+                    RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
+
+                _f ->
+                    crashInfo = World.showCrashInfo world
+                    crash "blocked world: $(crashInfo)"
 
     Ok (Connected model)
 
@@ -180,7 +187,7 @@ displayPeerConnections! = \{ connected, disconnected } ->
 
     List.range { start: At 0, end: Before (List.len combined) }
     |> List.map \i -> {
-        pos: { x: 10, y: height - 10 - (Num.toFrac (i * 10)) },
+        pos: { x: 10, y: (Num.toF32 height) - 10 - (Num.toFrac (i * 10)) },
         text: List.get combined i |> Result.withDefault "OUT OF BOUNDS",
         size: 10,
         color: Black,

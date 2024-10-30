@@ -1,10 +1,9 @@
-use crate::bindings;
 use core::fmt::Debug;
 use matchbox_socket::PeerId;
 use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 #[repr(C)]
 pub struct PlatformState {
     pub frame_count: u64,
@@ -71,10 +70,10 @@ impl Debug for RocColor {
     }
 }
 
-impl From<RocColor> for bindings::Color {
-    fn from(color: RocColor) -> bindings::Color {
+impl From<RocColor> for raylib::Color {
+    fn from(color: RocColor) -> raylib::Color {
         let (r, g, b, a) = color.to_rgba();
-        bindings::Color { r, g, b, a }
+        raylib::Color { r, g, b, a }
     }
 }
 
@@ -181,17 +180,17 @@ impl RocVector2 {
     }
 }
 
-impl From<&RocVector2> for bindings::Vector2 {
-    fn from(vector: &RocVector2) -> bindings::Vector2 {
-        bindings::Vector2 {
+impl From<&RocVector2> for raylib::Vector2 {
+    fn from(vector: &RocVector2) -> raylib::Vector2 {
+        raylib::Vector2 {
             x: vector.x,
             y: vector.y,
         }
     }
 }
 
-impl From<bindings::Vector2> for RocVector2 {
-    fn from(vector: bindings::Vector2) -> RocVector2 {
+impl From<raylib::Vector2> for RocVector2 {
+    fn from(vector: raylib::Vector2) -> RocVector2 {
         RocVector2 {
             unused: 0,
             unused2: 0,
@@ -228,9 +227,9 @@ impl RocRectangle {
     }
 }
 
-impl From<&RocRectangle> for bindings::Rectangle {
-    fn from(rectangle: &RocRectangle) -> bindings::Rectangle {
-        bindings::Rectangle {
+impl From<&RocRectangle> for raylib::Rectangle {
+    fn from(rectangle: &RocRectangle) -> raylib::Rectangle {
+        raylib::Rectangle {
             x: rectangle.x,
             y: rectangle.y,
             width: rectangle.width,
@@ -352,7 +351,7 @@ impl roc_std::RocRefcounted for PeerMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 #[repr(C)]
 pub struct PlatformTime {
     pub init_end: u64,

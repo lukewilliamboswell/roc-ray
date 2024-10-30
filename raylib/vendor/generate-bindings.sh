@@ -14,4 +14,6 @@ bindgen raylib.h \
   --blocklist-item "false_" \
   --blocklist-item "true_" \
   --blocklist-type "ENUM_PATTERN.*" \
-  --output "../src/bindings/$triple.rs"
+  --merge-extern-blocks \
+  --no-layout-tests \
+  --output "../lib.rs"

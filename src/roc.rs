@@ -6,14 +6,12 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
-use crate::bindings;
-
 mod music_heap;
 pub use music_heap::*;
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Camera2D> {
-    static CAMERA_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Camera2D>> =
+pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::Camera2D> {
+    static CAMERA_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::Camera2D>> =
         OnceLock::new();
     const DEFAULT_ROC_RAY_MAX_CAMERAS_HEAP_SIZE: usize = 100;
     let max_heap_size = std::env::var("ROC_RAY_MAX_CAMERAS_HEAP_SIZE")
@@ -26,8 +24,8 @@ pub fn camera_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Came
 }
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Texture> {
-    static TEXTURE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Texture>> =
+pub fn texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::Texture> {
+    static TEXTURE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::Texture>> =
         OnceLock::new();
     const DEFAULT_ROC_RAY_MAX_TEXTURES_HEAP_SIZE: usize = 1000;
     let max_heap_size = std::env::var("ROC_RAY_MAX_TEXTURES_HEAP_SIZE")
@@ -40,9 +38,8 @@ pub fn texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Tex
 }
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn sound_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Sound> {
-    static SOUND_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Sound>> =
-        OnceLock::new();
+pub fn sound_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::Sound> {
+    static SOUND_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::Sound>> = OnceLock::new();
     const DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE: usize = 1000;
     let max_heap_size = std::env::var("ROC_RAY_MAX_SOUNDS_HEAP_SIZE")
         .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_SOUNDS_HEAP_SIZE))
@@ -54,10 +51,9 @@ pub fn sound_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Sound
 }
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn render_texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::RenderTexture> {
-    static RENDER_TEXTURE_HEAP: OnceLock<
-        ThreadSafeRefcountedResourceHeap<bindings::RenderTexture>,
-    > = OnceLock::new();
+pub fn render_texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::RenderTexture> {
+    static RENDER_TEXTURE_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::RenderTexture>> =
+        OnceLock::new();
     const DEFAULT_ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE: usize = 1000;
     let max_heap_size = std::env::var("ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE")
         .map(|v| {
@@ -72,8 +68,8 @@ pub fn render_texture_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindin
 }
 
 // note this is checked and deallocated in the roc_dealloc function
-pub fn font_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Font> {
-    static FONT_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<bindings::Font>> = OnceLock::new();
+pub fn font_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::Font> {
+    static FONT_HEAP: OnceLock<ThreadSafeRefcountedResourceHeap<raylib::Font>> = OnceLock::new();
     const DEFAULT_ROC_RAY_MAX_FONT_HEAP_SIZE: usize = 10;
     let max_heap_size = std::env::var("ROC_RAY_MAX_FONT_HEAP_SIZE")
         .map(|v| v.parse().unwrap_or(DEFAULT_ROC_RAY_MAX_FONT_HEAP_SIZE))
@@ -87,6 +83,19 @@ pub fn font_heap() -> &'static ThreadSafeRefcountedResourceHeap<bindings::Font> 
 #[no_mangle]
 pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void {
     libc::malloc(size)
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    // {
+    //     libc::malloc(size)
+    // }
+
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     extern "C" {
+    //         fn malloc(size: usize) -> *mut c_void;
+    //     };
+    //     malloc(size)
+    // }
 }
 
 #[no_mangle]
@@ -128,6 +137,19 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     }
 
     libc::free(c_ptr);
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    // {
+
+    // }
+
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     extern "C" {
+    //         fn free(ptr: *mut c_void);
+    //     };
+    //     free(c_ptr);
+    // }
 }
 
 #[no_mangle]
@@ -138,6 +160,19 @@ pub unsafe extern "C" fn roc_realloc(
     _alignment: u32,
 ) -> *mut c_void {
     libc::realloc(c_ptr, new_size)
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    // {
+    //     libc::realloc(c_ptr, new_size)
+    // }
+
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     extern "C" {
+    //         fn realloc(ptr: *mut c_void, size: usize) -> *mut c_void;
+    //     };
+    //     realloc(c_ptr, new_size)
+    // }
 }
 
 #[no_mangle]
@@ -153,6 +188,20 @@ pub unsafe extern "C" fn roc_dbg(loc: &RocStr, msg: &RocStr) {
 #[no_mangle]
 pub unsafe extern "C" fn roc_memset(dst: *mut c_void, c: i32, n: usize) -> *mut c_void {
     libc::memset(dst, c, n)
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    // {
+    //     libc::memset(dst, c, n)
+    // }
+
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     let ptr = dst as *mut u8;
+    //     for i in 0..n {
+    //         *ptr.add(i) = c as u8;
+    //     }
+    //     dst
+    // }
 }
 
 #[cfg(unix)]
@@ -185,6 +234,7 @@ pub unsafe extern "C" fn roc_getppid() -> libc::pid_t {
 }
 
 pub fn call_roc_init() -> RocBox<()> {
+    #[link(name = "app")]
     extern "C" {
         #[link_name = "roc__initForHost_1_exposed_size"]
         fn init_size() -> usize;
@@ -196,6 +246,7 @@ pub fn call_roc_init() -> RocBox<()> {
     unsafe {
         let model: RocBox<()> = init_caller(0);
 
+        #[cfg(not(target_arch = "wasm32"))]
         debug_assert_eq!(std::mem::size_of_val(&model), init_size());
 
         model
@@ -218,6 +269,7 @@ pub fn call_roc_render(platform_state: PlatformState, model: RocBox<()>) -> RocB
     unsafe {
         let model = render_caller(model, &ManuallyDrop::new(platform_state));
 
+        #[cfg(not(target_arch = "wasm32"))]
         debug_assert_eq!(std::mem::size_of_val(&model), render_size());
 
         model

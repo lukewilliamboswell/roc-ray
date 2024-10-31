@@ -236,6 +236,12 @@ impl App {
         #[link(name = "app")]
         extern "C" {
 
+            // NOTE -- we could definitely go back to PlatformState now... I changed to this and broke everything out becuase I was getting a segfault, but now I know it's because I wan't handling the refcounting correctly... PlatformState would be fine as we can just call a single `.inc()` on it to prevent a double free.
+            //
+            // But this is probably ok for now...and potentially more performant even
+            //
+            // The main advantage of PlatformState is having it all in one thing and using roc glue to (re)generate it whenever it change... but this is probably not too bad to maintain also.
+
             #[link_name = "roc__renderForHost_1_exposed"]
             fn render_caller(
                 model_in: *const (),

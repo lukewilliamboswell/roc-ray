@@ -1,5 +1,4 @@
 use config::ExitErrCode;
-use logger::log;
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 // use glue::PeerMessage;
 // use matchbox_socket::{PeerId, PeerState};
@@ -453,9 +452,9 @@ extern "C" fn roc_fx_measureTextFont(
 
 #[no_mangle]
 extern "C" fn roc_fx_setTargetFPS(rate: i32) {
-    // if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
     config::update(|c| {
         c.fps_target_dirty = true;
@@ -465,23 +464,22 @@ extern "C" fn roc_fx_setTargetFPS(rate: i32) {
 
 #[no_mangle]
 extern "C" fn roc_fx_takeScreenshot(path: &RocStr) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::TakeScreenshot) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::TakeScreenshot) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let path = CString::new(path.as_str()).unwrap();
+    let path = CString::new(path.as_str()).unwrap();
 
-    // unsafe {
-    //     raylib::TakeScreenshot(path.as_ptr());
-    // }
+    unsafe {
+        raylib::TakeScreenshot(path.as_ptr());
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) {
-    // if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
     config::update(|c| {
         c.fps_show = show;
@@ -495,28 +493,25 @@ extern "C" fn roc_fx_createCamera(
     offset: &glue::RocVector2,
     rotation: f32,
     zoom: f32,
-) -> RocBox<()> {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::CreateCamera) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::CreateCamera) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let camera = raylib::Camera2D {
-    //     target: target.into(),
-    //     offset: offset.into(),
-    //     rotation,
-    //     zoom,
-    // };
+    let camera = raylib::Camera2D {
+        target: target.into(),
+        offset: offset.into(),
+        rotation,
+        zoom,
+    };
 
-    // let heap = roc::camera_heap();
+    let heap = roc::camera_heap();
 
-    // let alloc_result = heap.alloc_for(camera);
-    // match alloc_result {
-    //     Ok(roc_box) => roc_box,
-    //     Err(_) => {
-    //         display_fatal_error_message("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-    //     }
-    // }
+    let alloc_result = heap.alloc_for(camera);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => RocResult::err("Unable to load camera, out of memory in the camera heap. Consider using ROC_RAY_MAX_CAMERAS_HEAP_SIZE env var to increase the heap size.".into()),
+    }
 }
 
 #[no_mangle]
@@ -549,49 +544,43 @@ extern "C" fn roc_fx_updateCamera(
     rotation: f32,
     zoom: f32,
 ) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::UpdateCamera) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::UpdateCamera) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let camera: &mut raylib::Camera2D =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
+    let camera: &mut raylib::Camera2D =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    // camera.target = target.into();
-    // camera.offset = offset.into();
-    // camera.rotation = rotation;
-    // camera.zoom = zoom;
+    camera.target = target.into();
+    camera.offset = offset.into();
+    camera.rotation = rotation;
+    camera.zoom = zoom;
 }
 
 #[allow(unused_variables)]
 #[no_mangle]
 extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::BeginMode2D) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::BeginMode2D) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // unsafe {
-    //     trace_log("BeginMode2D");
+    unsafe {
+        let camera: &mut raylib::Camera2D =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
 
-    //     let camera: &mut raylib::Camera2D =
-    //         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
-
-    //     raylib::BeginMode2D(*camera);
-    // }
+        raylib::BeginMode2D(*camera);
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // unsafe {
-    //     trace_log("EndMode2D");
-    //     raylib::EndMode2D();
-    // }
+    unsafe {
+        raylib::EndMode2D();
+    }
 }
 
 #[allow(unused_variables)]

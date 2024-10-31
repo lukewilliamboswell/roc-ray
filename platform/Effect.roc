@@ -146,7 +146,7 @@ beginDrawing! : RocColor => {}
 endDrawing! : {} => {}
 
 Camera := Box {}
-createCamera! : RocVector2, RocVector2, F32, F32 => Camera
+createCamera! : RocVector2, RocVector2, F32, F32 => Result Camera Str
 updateCamera! : Camera, RocVector2, RocVector2, F32, F32 => {}
 
 beginMode2D! : Camera => {}

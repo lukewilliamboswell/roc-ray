@@ -25,7 +25,7 @@ Model : {
     camera : Camera,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
 
     RocRay.setTargetFPS! 60
@@ -42,7 +42,7 @@ init! = \{} ->
         zoom: 1,
     }
 
-    camera = Camera.create! cameraSettings
+    camera = Camera.create!? cameraSettings
 
     buildings = generateBuildings
 

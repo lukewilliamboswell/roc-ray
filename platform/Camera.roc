@@ -22,9 +22,10 @@ Settings : {
 ##
 ## cameraID = Camera.create! cameraSettings
 ## ```
-create! : Settings => Camera
+create! : Settings => Result Camera [LoadErr Str]
 create! = \{ target, offset, rotation, zoom } ->
     Effect.createCamera! (InternalVector.fromVector2 target) (InternalVector.fromVector2 offset) rotation zoom
+    |> Result.mapErr LoadErr
 
 ## Update a camera's target, offset, rotation, and zoom.
 ## ```

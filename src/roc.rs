@@ -351,12 +351,11 @@ fn now() -> u64 {
 
     #[cfg(target_family = "wasm")]
     {
+        // implemented in src/web.js
         extern "C" {
-            // https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_get_now
-            // The current time, in milliseconds (ms).
-            fn emscripten_get_now() -> f64;
+            fn date_now() -> f64;
         }
-        unsafe { emscripten_get_now() as u64 }
+        unsafe { date_now() as u64 }
     }
 }
 

@@ -15,4 +15,13 @@ EMCC_CFLAGS = """
 """
 
 [target.wasm32-unknown-emscripten]
-rustflags = ["-C", "link-arg=--preload-file", "-C", "link-arg=examples/assets/"]
+rustflags = [
+    "-C",
+    "link-arg=--preload-file",
+    "-C",
+    "link-arg=examples/assets/",
+    "-C",
+    "link-arg=--js-library",
+    "-C",
+    "link-arg=src/web.js",
+]

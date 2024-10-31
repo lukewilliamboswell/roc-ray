@@ -16,6 +16,9 @@
     <body>
         <canvas id="canvas" oncontextmenu="event.preventDefault()"> </canvas>
         <script>
+            function _date_now() {
+                return Date.now();
+            }
             function on_load() {
                 const dpr = window.devicePixelRatio;
                 let canvas = document.getElementById("canvas");

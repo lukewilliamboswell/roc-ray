@@ -201,6 +201,8 @@ extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
 
         raylib::SetTraceLogLevel(config::with(|c| c.trace_log_level.into()));
         raylib::SetTargetFPS(config::with(|c| c.fps_target));
+
+        raylib::InitAudioDevice();
     }
 }
 
@@ -608,43 +610,44 @@ extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocBox<()> {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::LoadSound) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadSound) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let path = CString::new(path.as_str()).unwrap();
+    // Check the file exists, so we can give a more helpful error message
+    let file_path = std::path::Path::new(path.as_str());
+    if !file_path.exists() {
+        return RocResult::err(
+            format!("Sound file not found: {}", file_path.display())
+                .as_str()
+                .into(),
+        );
+    }
 
-    // let sound = unsafe {
-    //     trace_log("LoadSound");
-    //     raylib::LoadSound(path.as_ptr())
-    // };
+    let path = CString::new(path.as_str()).unwrap();
+    let sound = unsafe { raylib::LoadSound(path.as_ptr()) };
 
-    // let heap = roc::sound_heap();
+    let heap = roc::sound_heap();
 
-    // let alloc_result = heap.alloc_for(sound);
-    // match alloc_result {
-    //     Ok(roc_box) => roc_box,
-    //     Err(_) => {
-    //         display_fatal_error_message("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-    //     }
-    // }
+    let alloc_result = heap.alloc_for(sound);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => RocResult::err("Unable to load sound, out of memory in the sound heap. Consider using ROC_RAY_MAX_SOUNDS_HEAP_SIZE env var to increase the heap size.".into())
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlaySound) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlaySound) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let sound: &mut raylib::Sound =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
+    let sound: &mut raylib::Sound = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_sound);
 
-    // unsafe {
-    //     raylib::PlaySound(*sound);
-    // }
+    unsafe {
+        raylib::PlaySound(*sound);
+    }
 }
 
 #[no_mangle]

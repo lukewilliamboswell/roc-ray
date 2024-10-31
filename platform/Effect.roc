@@ -158,7 +158,7 @@ drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
 drawRenderTextureRec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
 
 Sound := Box {}
-loadSound! : Str => Sound
+loadSound! : Str => Result Sound Str
 playSound! : Sound => {}
 
 Music := Box {}

@@ -813,21 +813,24 @@ extern "C" fn roc_fx_drawRenderTextureRec(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocStr {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::LoadFileToStr) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadFileToStr) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let path = path.as_str();
-    // let Ok(contents) = std::fs::read_to_string(path) else {
-    //     panic!("file not found: {path}");
-    // };
+    let path = path.as_str();
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return RocResult::err(
+            format!("File not found: {}", path.to_string())
+                .as_str()
+                .into(),
+        );
+    };
 
-    // let contents = contents.replace("\r\n", "\n");
-    // let contents = unsafe { RocStr::from_slice_unchecked(contents.as_bytes()) };
+    let contents = contents.replace("\r\n", "\n");
+    let contents = unsafe { RocStr::from_slice_unchecked(contents.as_bytes()) };
 
-    // contents
+    RocResult::ok(contents)
 }
 
 #[no_mangle]

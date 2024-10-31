@@ -175,7 +175,7 @@ createRenderTexture! : RocVector2 => Result RenderTexture Str
 beginTexture! : RenderTexture, RocColor => {}
 endTexture! : RenderTexture => {}
 
-loadFileToStr! : Str => Str
+loadFileToStr! : Str => Result Str Str
 
 sendToPeer! : List U8, RawUUID => {}
 

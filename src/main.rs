@@ -741,26 +741,32 @@ extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadTexture(file_path: &RocStr) -> RocBox<()> {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+extern "C" fn roc_fx_loadTexture(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // // should have a valid utf8 string from roc, no need to check for null bytes
-    // let file_path = CString::new(file_path.as_str()).unwrap();
+    let file_path = std::path::Path::new(path.as_str());
+    if !file_path.exists() {
+        return RocResult::err(
+            format!("Texture file not found: {}", file_path.display())
+                .as_str()
+                .into(),
+        );
+    }
 
-    // let texture: raylib::Texture = unsafe { raylib::LoadTexture(file_path.as_ptr()) };
+    // should have a valid utf8 string from roc, no need to check for null bytes
+    let path = CString::new(path.as_str()).unwrap();
 
-    // let heap = roc::texture_heap();
+    let texture: raylib::Texture = unsafe { raylib::LoadTexture(path.as_ptr()) };
 
-    // let alloc_result = heap.alloc_for(texture);
-    // match alloc_result {
-    //     Ok(roc_box) => roc_box,
-    //     Err(_) => {
-    //         display_fatal_error_message("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-    //     }
-    // }
+    let heap = roc::texture_heap();
+
+    let alloc_result = heap.alloc_for(texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => RocResult::err("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into()),
+    }
 }
 
 #[no_mangle]
@@ -770,17 +776,16 @@ extern "C" fn roc_fx_drawTextureRec(
     position: &glue::RocVector2,
     color: glue::RocColor,
 ) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let texture: &mut raylib::Texture =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+    let texture: &mut raylib::Texture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
-    // unsafe {
-    //     raylib::DrawTextureRec(*texture, source.into(), position.into(), color.into());
-    // }
+    unsafe {
+        raylib::DrawTextureRec(*texture, source.into(), position.into(), color.into());
+    }
 }
 
 #[no_mangle]

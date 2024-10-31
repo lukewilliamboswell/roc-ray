@@ -15,13 +15,13 @@ Model : {
     dudeAnimation : AnimatedSprite,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
 
     RocRay.setTargetFPS! 60
     RocRay.initWindow! { title: "Animated Sprite Example" }
 
-    dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
+    dude = Texture.load!? "examples/assets/sprite-dude/sheet.png"
 
     Ok {
         player: { x: width / 2, y: height / 2 },

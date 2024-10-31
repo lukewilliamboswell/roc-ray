@@ -153,7 +153,7 @@ beginMode2D! : Camera => {}
 endMode2D! : Camera => {}
 
 Texture := Box {}
-loadTexture! : Str => Texture
+loadTexture! : Str => Result Texture Str
 drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
 drawRenderTextureRec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
 

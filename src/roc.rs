@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 use crate::glue::PlatformState;
-use roc_std::{RocBox, RocStr};
+use roc_std::{RocRefcounted, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
-use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
@@ -83,19 +82,6 @@ pub fn font_heap() -> &'static ThreadSafeRefcountedResourceHeap<raylib::Font> {
 #[no_mangle]
 pub unsafe extern "C" fn roc_alloc(size: usize, _alignment: u32) -> *mut c_void {
     libc::malloc(size)
-
-    // #[cfg(not(target_arch = "wasm32"))]
-    // {
-    //     libc::malloc(size)
-    // }
-
-    // #[cfg(target_arch = "wasm32")]
-    // {
-    //     extern "C" {
-    //         fn malloc(size: usize) -> *mut c_void;
-    //     };
-    //     malloc(size)
-    // }
 }
 
 #[no_mangle]
@@ -137,19 +123,6 @@ pub unsafe extern "C" fn roc_dealloc(c_ptr: *mut c_void, _alignment: u32) {
     }
 
     libc::free(c_ptr);
-
-    // #[cfg(not(target_arch = "wasm32"))]
-    // {
-
-    // }
-
-    // #[cfg(target_arch = "wasm32")]
-    // {
-    //     extern "C" {
-    //         fn free(ptr: *mut c_void);
-    //     };
-    //     free(c_ptr);
-    // }
 }
 
 #[no_mangle]
@@ -160,19 +133,6 @@ pub unsafe extern "C" fn roc_realloc(
     _alignment: u32,
 ) -> *mut c_void {
     libc::realloc(c_ptr, new_size)
-
-    // #[cfg(not(target_arch = "wasm32"))]
-    // {
-    //     libc::realloc(c_ptr, new_size)
-    // }
-
-    // #[cfg(target_arch = "wasm32")]
-    // {
-    //     extern "C" {
-    //         fn realloc(ptr: *mut c_void, size: usize) -> *mut c_void;
-    //     };
-    //     realloc(c_ptr, new_size)
-    // }
 }
 
 #[no_mangle]
@@ -188,20 +148,6 @@ pub unsafe extern "C" fn roc_dbg(loc: &RocStr, msg: &RocStr) {
 #[no_mangle]
 pub unsafe extern "C" fn roc_memset(dst: *mut c_void, c: i32, n: usize) -> *mut c_void {
     libc::memset(dst, c, n)
-
-    // #[cfg(not(target_arch = "wasm32"))]
-    // {
-    //     libc::memset(dst, c, n)
-    // }
-
-    // #[cfg(target_arch = "wasm32")]
-    // {
-    //     let ptr = dst as *mut u8;
-    //     for i in 0..n {
-    //         *ptr.add(i) = c as u8;
-    //     }
-    //     dst
-    // }
 }
 
 #[cfg(unix)]
@@ -233,45 +179,48 @@ pub unsafe extern "C" fn roc_getppid() -> libc::pid_t {
     libc::getppid()
 }
 
-pub fn call_roc_init() -> RocBox<()> {
-    #[link(name = "app")]
-    extern "C" {
-        #[link_name = "roc__initForHost_1_exposed_size"]
-        fn init_size() -> usize;
-
-        #[link_name = "roc__initForHost_1_exposed"]
-        fn init_caller(arg_not_used: i32) -> RocBox<()>;
-    }
-
-    unsafe {
-        let model: RocBox<()> = init_caller(0);
-
-        #[cfg(not(target_arch = "wasm32"))]
-        debug_assert_eq!(std::mem::size_of_val(&model), init_size());
-
-        model
-    }
+pub struct App {
+    model: *const (),
+    platform_state: PlatformState,
 }
 
-pub fn call_roc_render(platform_state: PlatformState, model: RocBox<()>) -> RocBox<()> {
-    extern "C" {
-        #[link_name = "roc__renderForHost_1_exposed_size"]
-        fn render_size() -> usize;
+impl App {
+    pub fn init() -> App {
+        #[link(name = "app")]
+        extern "C" {
+            #[link_name = "roc__initForHost_1_exposed"]
+            fn init_caller(arg_not_used: i32) -> *const ();
+        }
 
-        #[link_name = "roc__renderForHost_1_exposed"]
-        fn render_caller(
-            model_in: RocBox<()>,
-            platform_state: *const ManuallyDrop<PlatformState>,
-        ) -> RocBox<()>;
+        unsafe {
+            let model = init_caller(0);
 
+            App {
+                model,
+                platform_state: PlatformState::default(),
+            }
+        }
     }
 
-    unsafe {
-        let model = render_caller(model, &ManuallyDrop::new(platform_state));
+    pub fn render(&mut self) {
+        #[link(name = "app")]
+        extern "C" {
+            #[link_name = "roc__renderForHost_1_exposed"]
+            fn render_caller(model_in: *const (), platform_state: &mut PlatformState) -> *const ();
+        }
 
-        #[cfg(not(target_arch = "wasm32"))]
-        debug_assert_eq!(std::mem::size_of_val(&model), render_size());
+        unsafe {
+            // Increment reference counts
+            self.platform_state.inc();
 
-        model
+            // Call into roc
+            let new_model = render_caller(self.model, &mut self.platform_state);
+
+            // Decrement reference counts
+            self.platform_state.dec();
+
+            // Update our model pointer
+            self.model = new_model;
+        }
     }
 }

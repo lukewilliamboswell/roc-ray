@@ -1938,6 +1938,7 @@ dependencies = [
  "flate2",
  "libc",
  "matchbox_socket",
+ "once_cell",
  "raylib",
  "reqwest",
  "roc_std",
@@ -1945,6 +1946,7 @@ dependencies = [
  "tar",
  "tokio",
  "uuid",
+ "web-sys",
  "zip",
 ]
 

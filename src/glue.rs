@@ -7,15 +7,14 @@ use std::{collections::HashMap, ffi::c_int};
 #[repr(C)]
 pub struct PlatformState {
     pub frame_count: u64,
+    pub timestamp: PlatformTime,
     pub keys: RocList<u8>,
     pub messages: RocList<PeerMessage>,
     pub mouse_buttons: RocList<u8>,
-    pub peers: PeerState,
-    pub timestamp: PlatformTime,
-    pub timestamp_millis: u64,
     pub mouse_pos_x: f32,
     pub mouse_pos_y: f32,
     pub mouse_wheel: f32,
+    pub peers: PeerState,
 }
 
 impl RocRefcounted for PlatformState {
@@ -351,7 +350,7 @@ impl roc_std::RocRefcounted for PeerMessage {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct PlatformTime {
     pub init_end: u64,

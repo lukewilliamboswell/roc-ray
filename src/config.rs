@@ -1,6 +1,21 @@
 use std::cell::RefCell;
 use std::ffi::{c_int, CString};
 
+#[derive(Debug)]
+pub struct Config {
+    pub title: CString,
+    pub width: c_int,
+    pub height: c_int,
+    pub should_exit: bool,
+    pub should_exit_msg_code: Option<(String, ExitErrCode)>,
+    pub fps_show: bool,
+    pub fps_target: c_int,
+    pub fps_target_dirty: bool,
+    pub fps_position: (c_int, c_int),
+    pub trace_log_level: TraceLevel,
+    pub network_web_rtc_url: Option<String>,
+}
+
 thread_local! {
     // DEFAULT VALUES
     static CONFIG: RefCell<Config> = RefCell::new(Config {
@@ -57,26 +72,11 @@ impl From<TraceLevel> for c_int {
     }
 }
 
-#[derive(Debug)]
-pub struct Config {
-    pub title: CString,
-    pub width: c_int,
-    pub height: c_int,
-    pub should_exit: bool,
-    pub should_exit_msg_code: Option<(String, ExitErrCode)>,
-    pub fps_show: bool,
-    pub fps_target: c_int,
-    pub fps_target_dirty: bool,
-    pub fps_position: (c_int, c_int),
-    pub trace_log_level: TraceLevel,
-    pub network_web_rtc_url: Option<String>,
-}
-
 /// use different error codes when the app exits
 #[derive(Clone, Copy, Debug)]
 pub enum ExitErrCode {
-    ExitEffectNotPermitted = 1,
-    ExitHeapFull = 2,
-    ExitWebRTCConnectionError = 3,
-    ExitWebRTCConnectionDisconnected = 4,
+    EffectNotPermitted = 1,
+    HeapFull = 2,
+    WebRTCConnectionError = 3,
+    WebRTCConnectionDisconnected = 4,
 }

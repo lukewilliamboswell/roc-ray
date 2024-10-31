@@ -201,10 +201,7 @@ pub fn update(effect: PlatformEffect) -> Result<(), String> {
                 Ok(())
             }
             current_mode if current_mode.is_effect_permitted(effect) => Ok(()),
-            _ => Err(format!(
-                "Effect {:?} not permitted in mode {:?}",
-                effect, *mode
-            )),
+            _ => Err(format!("{:?} not permitted in mode {:?}", effect, *mode)),
         }
     })
 }

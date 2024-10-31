@@ -68,23 +68,6 @@ fn main() {
     // MANUALLY CHANGE PLATFORM MODE
     _ = platform_mode::update(PlatformEffect::EndInitWindow);
 
-    // CREATE THE RAYLIB WINDOW
-    let title = config::with(|c| c.title.as_ptr());
-    let width = config::with(|c| c.width);
-    let height = config::with(|c| c.height);
-
-    unsafe {
-        raylib::InitWindow(width, height, title);
-
-        // wait for the window to be ready (blocking)
-        if !raylib::IsWindowReady() {
-            panic!("Attempting to create window failed!");
-        }
-
-        raylib::SetTraceLogLevel(config::with(|c| c.trace_log_level.into()));
-        raylib::SetTargetFPS(config::with(|c| c.fps_target));
-    }
-
     #[cfg(target_family = "wasm")]
     unsafe {
         set_main_loop_callback(move || {
@@ -202,6 +185,23 @@ extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
 
     if let Err(msg) = platform_mode::update(PlatformEffect::InitWindow) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    // CREATE THE RAYLIB WINDOW
+    let title = config::with(|c| c.title.as_ptr());
+    let width = config::with(|c| c.width);
+    let height = config::with(|c| c.height);
+
+    unsafe {
+        raylib::InitWindow(width, height, title);
+
+        // wait for the window to be ready (blocking)
+        if !raylib::IsWindowReady() {
+            panic!("Attempting to create window failed!");
+        }
+
+        raylib::SetTraceLogLevel(config::with(|c| c.trace_log_level.into()));
+        raylib::SetTargetFPS(config::with(|c| c.fps_target));
     }
 }
 
@@ -878,19 +878,24 @@ extern "C" fn roc_fx_loadFont(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
 
-    let path = CString::new(path.as_str()).unwrap();
+    if !std::path::Path::new(path.as_str()).exists() {
+        return RocResult::err(format!("Font file not found at {}", path).as_str().into());
+    }
 
-    let sound = unsafe { raylib::LoadFont(path.as_ptr()) };
+    let path = CString::new(path.to_string().as_str()).unwrap();
+
+    let font = unsafe { raylib::LoadFont(path.as_ptr()) };
 
     let heap = roc::font_heap();
 
-    let alloc_result = heap.alloc_for(sound);
+    let alloc_result = heap.alloc_for(font);
+
     match alloc_result {
-        Ok(roc_box) => RocResult::ok(roc_box),
-        Err(_) => {
-            RocResult::err("Unable to load font, out of memory in the font heap. Consider using ROC_RAY_MAX_FONT_HEAP_SIZE env var to increase the heap size.".into())
+            Ok(roc_box) => RocResult::ok(roc_box),
+            Err(_) => {
+                RocResult::err("Unable to load font, out of memory in the font heap. Consider using ROC_RAY_MAX_FONT_HEAP_SIZE env var to increase the heap size.".into())
+            }
         }
-    }
 }
 
 // TODO remove the Level or start using it again...

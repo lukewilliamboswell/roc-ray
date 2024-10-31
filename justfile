@@ -13,7 +13,6 @@ dev app="examples/basic-shapes.roc" features="default":
     roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
     roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
     cargo build --features {{features}}
-    rm app.o ## cleanup the intermediate object file
     ./target/debug/rocray
 
 # build and run an executable
@@ -92,16 +91,16 @@ web app="examples/basic-shapes.roc" features="default":
     # build the roc app
     roc build --target wasm32 --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
 
+    export EMCC_CFLAGS="--preload-file examples/assets/@/assets/"
+
     # build the rust app
     rustup target add wasm32-unknown-emscripten
     cargo build --target wasm32-unknown-emscripten --features {{features}}
 
-    ## cleanup the intermediate object file
-    rm app.o
-
     # copy the wasm and js output to the static directory
     cp target/wasm32-unknown-emscripten/debug/rocray.js static/
     cp target/wasm32-unknown-emscripten/debug/rocray.wasm static/
+    cp target/wasm32-unknown-emscripten/debug/deps/rocray.data static/
 
     # start a http server to serve the static files
     simple-http-server --ip 127.0.0.1 --index --nocache -- static/

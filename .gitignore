@@ -9,6 +9,7 @@
 *.wasm
 *.tar.br
 *.tar.gz
+*.data
 
 examples/gui-counter
 examples/squares

@@ -1,4 +1,5 @@
 use config::ExitErrCode;
+use logger::log;
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 // use glue::PeerMessage;
 // use matchbox_socket::{PeerId, PeerState};
@@ -651,102 +652,95 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> roc::LoadedMusic {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<roc::LoadedMusic, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let path = CString::new(path.as_str()).unwrap();
+    let file_path = std::path::Path::new(path.as_str());
+    if !file_path.exists() {
+        return RocResult::err(
+            format!("Music file not found: {}", file_path.display())
+                .as_str()
+                .into(),
+        );
+    }
 
-    // let music = unsafe {
-    //     trace_log("LoadMusicStream");
-    //     raylib::LoadMusicStream(path.as_ptr())
-    // };
+    let path = CString::new(path.as_str()).unwrap();
 
-    // let alloc_result = roc::alloc_music_stream(music);
-    // match alloc_result {
-    //     Ok(loaded_music) => loaded_music,
-    //     Err(_) => {
-    //         display_fatal_error_message("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-    //     }
-    // }
+    let music = unsafe { raylib::LoadMusicStream(path.as_ptr()) };
+
+    let alloc_result = roc::alloc_music_stream(music);
+    match alloc_result {
+        Ok(loaded_music) => RocResult::ok(loaded_music),
+        Err(_) => RocResult::err("Unable to load music stream, out of memory in the music heap. Consider using ROC_RAY_MAX_MUSIC_STREAMS_HEAP_SIZE env var to increase the heap size.".into()),
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let music: &mut raylib::Music =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // unsafe {
-    //     raylib::PlayMusicStream(*music);
-    // }
+    unsafe {
+        raylib::PlayMusicStream(*music);
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let music: &mut raylib::Music =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // unsafe {
-    //     raylib::StopMusicStream(*music);
-    // }
+    unsafe {
+        raylib::StopMusicStream(*music);
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let music: &mut raylib::Music =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // unsafe {
-    //     raylib::PauseMusicStream(*music);
-    // }
+    unsafe {
+        raylib::PauseMusicStream(*music);
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let music: &mut raylib::Music =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // unsafe {
-    //     raylib::ResumeMusicStream(*music);
-    // }
+    unsafe {
+        raylib::ResumeMusicStream(*music);
+    }
 }
 
 // NOTE: the RocStr in this error type is to work around a compiler bug
 #[no_mangle]
 extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let music: &mut raylib::Music =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    // let time_played = unsafe { raylib::GetMusicTimePlayed(*music) };
+    let time_played = unsafe { raylib::GetMusicTimePlayed(*music) };
 
-    // time_played
+    time_played
 }
 
 #[no_mangle]

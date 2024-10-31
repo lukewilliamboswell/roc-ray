@@ -163,7 +163,7 @@ playSound! : Sound => {}
 
 Music := Box {}
 LoadedMusic : { music : Music, lenSeconds : F32 }
-loadMusicStream! : Str => LoadedMusic
+loadMusicStream! : Str => Result LoadedMusic Str
 playMusicStream! : Music => {}
 stopMusicStream! : Music => {}
 pauseMusicStream! : Music => {}

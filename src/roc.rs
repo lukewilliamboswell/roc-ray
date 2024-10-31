@@ -327,6 +327,8 @@ impl App {
 
             self.model = new_model;
 
+            update_music_streams();
+
             self.timestamps.last_render_end = now();
         }
     }

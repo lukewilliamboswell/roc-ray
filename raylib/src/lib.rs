@@ -679,6 +679,8 @@ pub type AudioCallback = ::std::option::Option<
     unsafe extern "C" fn(bufferData: *mut ::std::os::raw::c_void, frames: ::std::os::raw::c_uint),
 >;
 pub type __builtin_va_list = *mut ::std::os::raw::c_char;
+
+#[link(name = "raylib")]
 extern "C" {
     pub fn InitWindow(
         width: ::std::os::raw::c_int,

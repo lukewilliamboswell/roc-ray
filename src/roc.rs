@@ -327,6 +327,10 @@ impl App {
 
             self.model = new_model;
 
+            if crate::config::with(|c| c.fps_show) {
+                crate::config::with(|c| raylib::DrawFPS(c.fps_position.0, c.fps_position.1));
+            }
+
             update_music_streams();
 
             self.timestamps.last_render_end = now();

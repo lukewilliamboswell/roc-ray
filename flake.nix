@@ -51,14 +51,27 @@
 
         in {
 
-            devShell = pkgs.mkShell {
+            devShell = if pkgs.stdenv.isDarwin then
+                throw ''
+                    HELP WANTED FOR ROC RAY NIX CONFIGURATION
+
+                    Darwin/macOS is not currently supported due to framework linking issues.
+                    If you'd like to help fix this, please check:
+                    https://github.com/your-repo/roc-ray/issues
+
+                    The main issue is with linking Objective-C runtime and macOS frameworks
+                    correctly within the Nix environment. I can't find the right incantation
+                    to make it work. If you have experience with this, please help! :smile:
+                ''
+                else pkgs.mkShell {
 
                 packages = [
-                    rocPkgs.cli
-                    rust
-                    pkgs.emscripten
-                    pkgs.simple-http-server
-                ] ++ linuxDeps ++ macosDeps;
+                        rocPkgs.cli
+                        rust
+                        pkgs.zig # For Web support, used to build roc wasm static library
+                        pkgs.emscripten
+                        pkgs.simple-http-server
+                    ] ++ linuxDeps ++ macosDeps;
 
                 shellHook = ''
                     if [ "$(uname)" = "Darwin" ]; then

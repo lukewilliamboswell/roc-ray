@@ -1,5 +1,4 @@
 use config::ExitErrCode;
-use logger::log;
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 // use glue::PeerMessage;
 // use matchbox_socket::{PeerId, PeerState};
@@ -9,8 +8,6 @@ use std::ffi::{c_int, CString};
 
 #[cfg(target_family = "wasm")]
 extern crate console_error_panic_hook;
-
-extern crate raylib;
 
 mod config;
 mod glue;

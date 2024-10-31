@@ -80,13 +80,6 @@ fn main() {
 
             // Link with the app object file
             println!("cargo:rustc-link-lib=static=app");
-
-            // Link with the required frameworks
-            println!("cargo:rustc-link-lib=framework=CoreFoundation");
-            println!("cargo:rustc-link-lib=framework=CoreGraphics");
-            println!("cargo:rustc-link-lib=framework=IOKit");
-            println!("cargo:rustc-link-lib=framework=AppKit");
-            println!("cargo:rustc-link-lib=framework=Foundation");
         }
     }
 }

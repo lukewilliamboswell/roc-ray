@@ -4,7 +4,17 @@ fn main() {
     // Get the roc ray supported target
     let arch = build_target::target_arch().unwrap();
     let os = build_target::target_os().unwrap();
+
+    println!("cargo:warning=Architecture: {:?}", arch);
+    println!("cargo:warning=OS: {:?}", os);
+
     let target = RocRaySupportedTarget::from_arch_os(arch, os);
+
+    println!(
+        "cargo:warning=Target from env: {:?}",
+        std::env::var("TARGET")
+    );
+    println!("cargo:warning=RocRay Target: {:?}", target);
 
     match target {
         RocRaySupportedTarget::Linux => {
@@ -29,7 +39,19 @@ fn main() {
             println!(
                 "cargo:rustc-link-search=native={}",
                 manifest_dir().join("raylib-5.0_macos").display()
-            )
+            );
+
+            // Link Objective-C runtime first
+            println!("cargo:rustc-link-lib=objc");
+
+            // Then link required frameworks
+            println!("cargo:rustc-link-lib=framework=Foundation");
+            println!("cargo:rustc-link-lib=framework=Cocoa");
+            println!("cargo:rustc-link-lib=framework=IOKit");
+            println!("cargo:rustc-link-lib=framework=CoreFoundation");
+            println!("cargo:rustc-link-lib=framework=CoreVideo");
+            println!("cargo:rustc-link-lib=framework=AppKit");
+            println!("cargo:rustc-link-lib=framework=OpenGL");
         }
     }
 

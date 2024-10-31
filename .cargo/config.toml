@@ -1,5 +1,18 @@
 [env]
-EMCC_CFLAGS = "-s ASYNCIFY -s USE_GLFW=3 -DPLATFORM_WEB -sGL_ENABLE_GET_PROC_ADDRESS -DGRAPHICS_API_OPENGL_ES2 -sEXPORTED_FUNCTIONS=_main,_on_resize -sEXPORTED_RUNTIME_METHODS=ccall,cwrap"
+EMCC_CFLAGS = """
+    -s ASYNCIFY \
+    -s USE_GLFW=3 \
+    -DPLATFORM_WEB \
+    -sGL_ENABLE_GET_PROC_ADDRESS \
+    -DGRAPHICS_API_OPENGL_ES2 \
+    -sEXPORTED_FUNCTIONS=_main,_on_resize \
+    -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
+    -s USE_SDL=2 \
+    -s USE_SDL_IMAGE=2 \
+    -s SDL2_IMAGE_FORMATS='["png"]' \
+    -s STB_IMAGE=1 \
+    -s ALLOW_MEMORY_GROWTH=1
+"""
 
 [target.wasm32-unknown-emscripten]
 rustflags = ["-C", "link-arg=--preload-file", "-C", "link-arg=examples/assets/"]

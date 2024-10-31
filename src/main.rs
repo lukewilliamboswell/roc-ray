@@ -755,10 +755,47 @@ extern "C" fn roc_fx_loadTexture(path: &RocStr) -> RocResult<RocBox<()>, RocStr>
         );
     }
 
-    // should have a valid utf8 string from roc, no need to check for null bytes
-    let path = CString::new(path.as_str()).unwrap();
+    // Check file extension
+    if let Some(extension) = file_path.extension() {
+        // https://github.com/raysan5/raylib/blob/master/FAQ.md#what-file-formats-are-supported-by-raylib
+        // Image/Textures: PNG, BMP, TGA, JPG, GIF, QOI, PSD, DDS, HDR, KTX, ASTC, PKM, PVR
+        let valid_extensions = [
+            "png", "bmp", "tga", "jpg", "gif", "qoi", "psd", "dds", "hdr", "ktx", "astc", "pkm",
+            "pvr",
+        ];
+        if !valid_extensions.contains(&extension.to_str().unwrap_or("").to_lowercase().as_str()) {
+            return RocResult::err(
+                format!(
+                    "Unsupported texture format: {}. Supported formats: {:?}",
+                    extension.to_str().unwrap_or("unknown"),
+                    valid_extensions
+                )
+                .as_str()
+                .into(),
+            );
+        }
+    } else {
+        return RocResult::err("Texture file must have an extension".into());
+    }
+
+    let path = match CString::new(path.as_str()) {
+        Ok(s) => s,
+        Err(_) => return RocResult::err("Invalid characters in texture path".into()),
+    };
 
     let texture: raylib::Texture = unsafe { raylib::LoadTexture(path.as_ptr()) };
+
+    // Validate texture loading success
+    if texture.id == 0 || texture.width == 0 || texture.height == 0 {
+        return RocResult::err(
+            format!(
+                "Failed to load texture: {}. Verify the file is a valid image.",
+                file_path.display()
+            )
+            .as_str()
+            .into(),
+        );
+    }
 
     let heap = roc::texture_heap();
 

@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 use matchbox_socket::PeerId;
-use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
+use roc_std::{roc_refcounted_noop_impl, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -329,3 +329,12 @@ pub struct PlatformTime {
 }
 
 roc_refcounted_noop_impl!(PlatformTime);
+
+#[repr(C)]
+pub struct ScreenSize {
+    pub z: i64,
+    pub height: i32,
+    pub width: i32,
+}
+
+roc_refcounted_noop_impl!(ScreenSize);

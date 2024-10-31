@@ -286,65 +286,6 @@ extern "C" fn roc_fx_log(msg: &RocStr, level: i32) {
     // }
 }
 
-#[repr(C)]
-struct ScreenSize {
-    z: i64,
-    height: i32,
-    width: i32,
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_getScreenSize() -> ScreenSize {
-    // if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
-
-    unsafe {
-        let height = raylib::GetScreenHeight();
-        let width = raylib::GetScreenWidth();
-        ScreenSize {
-            height,
-            width,
-            z: 0,
-        }
-    }
-}
-
-// measureText! : Str, F32, F32 => Vector2
-// measureTextFont! : Font, Str, F32, F32 => Vector2
-#[no_mangle]
-extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
-
-    // let text = CString::new(text.as_str()).unwrap();
-
-    // unsafe {
-    //     let default = GetFontDefault();
-    //     raylib::MeasureTextEx(default, text.as_ptr(), size, spacing).into()
-    // }
-}
-
-#[no_mangle]
-extern "C" fn roc_fx_measureTextFont(
-    boxed_font: RocBox<()>,
-    text: &RocStr,
-    size: f32,
-    spacing: f32,
-) -> glue::RocVector2 {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
-
-    // let text = CString::new(text.as_str()).unwrap();
-    // let font: &mut raylib::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
-
-    // unsafe { raylib::MeasureTextEx(*font, text.as_ptr(), size, spacing).into() }
-}
-
 #[no_mangle]
 extern "C" fn roc_fx_setTargetFPS(rate: i32) {
     // if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {

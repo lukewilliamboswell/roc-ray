@@ -186,15 +186,6 @@ fn display_fatal_error_message(msg: String, code: ExitErrCode) {
     logger::log(msg.as_str());
 }
 
-#[allow(unused_variables)]
-fn trace_log(msg: &str) {
-    unsafe {
-        let level = raylib::TraceLogLevel_LOG_DEBUG;
-        let text = CString::new(msg).unwrap();
-        raylib::TraceLog(level as i32, text.as_ptr());
-    }
-}
-
 #[no_mangle]
 extern "C" fn roc_fx_exit() {
     config::update(|c| c.should_exit = true);
@@ -409,4 +400,52 @@ extern "C" fn roc_fx_drawRectangleGradientH(
     unsafe {
         raylib::DrawRectangleGradientH(x, y, w, h, left.into(), right.into());
     }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_getScreenSize() -> glue::ScreenSize {
+    if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    unsafe {
+        let height = raylib::GetScreenHeight();
+        let width = raylib::GetScreenWidth();
+        glue::ScreenSize {
+            height,
+            width,
+            z: 0,
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    let text = CString::new(text.as_str()).unwrap();
+
+    unsafe {
+        let default = raylib::GetFontDefault();
+        raylib::MeasureTextEx(default, text.as_ptr(), size, spacing).into()
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_measureTextFont(
+    boxed_font: RocBox<()>,
+    text: &RocStr,
+    size: f32,
+    spacing: f32,
+) -> glue::RocVector2 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    let text = CString::new(text.as_str()).unwrap();
+    let font: &mut raylib::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+
+    unsafe { raylib::MeasureTextEx(*font, text.as_ptr(), size, spacing).into() }
 }

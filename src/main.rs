@@ -14,7 +14,6 @@ mod config;
 mod glue;
 mod logger;
 mod platform_mode;
-mod platform_time;
 mod roc;
 
 #[cfg(target_arch = "wasm32")]
@@ -101,6 +100,7 @@ fn main() {
             if let Some(msg_code) = config::with(|c| c.should_exit_msg_code.clone()) {
                 draw_fatal_error(msg_code);
             } else {
+                logger::log("ABOUT TO CALL RENDER");
                 app.render();
             }
         }
@@ -177,7 +177,7 @@ unsafe fn draw_fatal_error(msg_code: (String, ExitErrCode)) {
     raylib::EndDrawing();
 }
 
-/// The draw loop will display a fatal error message
+/// display a fatal error message
 fn display_fatal_error_message(msg: String, code: ExitErrCode) {
     config::update(|c| {
         c.should_exit_msg_code = Some((msg.clone(), code));
@@ -262,42 +262,33 @@ extern "C" fn roc_fx_drawText(
         );
     }
 }
-fn get_mouse_button_states() -> RocList<u8> {
-    let mouse_buttons: [u8; 7] = std::array::from_fn(|i| {
-        unsafe {
-            if raylib::IsMouseButtonPressed(i as c_int) {
-                0
-            } else if raylib::IsMouseButtonReleased(i as c_int) {
-                1
-            } else if raylib::IsMouseButtonDown(i as c_int) {
-                2
-            } else {
-                // Up
-                3
-            }
-        }
-    });
 
-    RocList::from_slice(&mouse_buttons)
+#[no_mangle]
+extern "C" fn roc_fx_sleepMillis(millis: u64) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::SleepMillis) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    std::thread::sleep(std::time::Duration::from_millis(millis));
+
+    #[cfg(target_family = "wasm")]
+    {
+        extern "C" {
+            // https://emscripten.org/docs/api_reference/emscripten.h.html?highlight=sleep#c.emscripten_sleep
+            fn emscripten_sleep(ms: c_int);
+        }
+        unsafe {
+            emscripten_sleep(millis as c_int);
+        }
+    }
 }
 
-fn get_keys_states() -> RocList<u8> {
-    let keys: [u8; 350] = std::array::from_fn(|i| {
-        unsafe {
-            if raylib::IsKeyPressed(i as c_int) {
-                0
-            } else if raylib::IsKeyReleased(i as c_int) {
-                1
-            } else if raylib::IsKeyDown(i as c_int) {
-                2
-            } else if raylib::IsKeyUp(i as c_int) {
-                3
-            } else {
-                // PressedRepeat
-                4
-            }
-        }
-    });
+#[no_mangle]
+extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::RandomValue) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    RocList::from_slice(&keys)
+    unsafe { raylib::GetRandomValue(min, max) }
 }

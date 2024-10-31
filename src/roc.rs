@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
-use crate::glue::PlatformState;
-use roc_std::{RocRefcounted, RocStr};
+use crate::glue::{PeerMessage, PeerState, PlatformTime};
+use crate::logger;
+use roc_std::{RocList, RocRefcounted, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
+use std::ffi::{c_int, CString};
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
@@ -181,7 +183,10 @@ pub unsafe extern "C" fn roc_getppid() -> libc::pid_t {
 
 pub struct App {
     model: *const (),
-    platform_state: PlatformState,
+    frame_count: u64,
+    timestamps: PlatformTime,
+    peers: PeerState,
+    messages: RocList<PeerMessage>,
 }
 
 impl App {
@@ -193,11 +198,20 @@ impl App {
         }
 
         unsafe {
+            let mut timestamps = PlatformTime::default();
+
+            timestamps.init_start = now();
+
             let model = init_caller(0);
+
+            timestamps.init_end = now();
 
             App {
                 model,
-                platform_state: PlatformState::default(),
+                timestamps,
+                frame_count: 0,
+                peers: PeerState::default(),
+                messages: RocList::empty(),
             }
         }
     }
@@ -205,22 +219,140 @@ impl App {
     pub fn render(&mut self) {
         #[link(name = "app")]
         extern "C" {
+
             #[link_name = "roc__renderForHost_1_exposed"]
-            fn render_caller(model_in: *const (), platform_state: &mut PlatformState) -> *const ();
+            fn render_caller(
+                model_in: *const (),
+                frame_count: u64,
+                keys: &RocList<u8>,
+                mouse_buttons: &RocList<u8>,
+                timestamps: &PlatformTime,
+                mousePosX: f32,
+                mousePosY: f32,
+                mouseWheel: f32,
+                peers: &PeerState,
+                messages: &RocList<PeerMessage>,
+            ) -> *const ();
+
+            // API COPIED FROM src/main.rs
+            // renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Box Model
+            // renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages ->
+
+            // LLVM IR GENERTATED USING $ roc build --no-link --emit-llvm-ir examples/basic-shapes.roc
+            // define ptr @roc__renderForHost_1_exposed(ptr %0, i64 %1, ptr %2, ptr %3, ptr %4, float %5, float %6, float %7, ptr %8, ptr %9) !dbg !777 {
+            // entry:
+            //   %load_arg = load %list.RocList, ptr %2, align 8, !dbg !778
+            //   %load_arg1 = load %list.RocList, ptr %3, align 8, !dbg !778
+            //   %load_arg2 = load %list.RocList, ptr %9, align 8, !dbg !778
+            //   %call = call fastcc ptr @"_renderForHost!_1bb73f6fafaa3656a8bf5796e2e6e6bdbd058375237d0b9be5834c8c9f54"(ptr %0, i64 %1, %list.RocList %load_arg, %list.RocList %load_arg1, ptr %4, float %5, float %6, float %7, ptr %8, %list.RocList %load_arg2), !dbg !778
+            //   ret ptr %call, !dbg !778
+            // }
+
         }
 
         unsafe {
-            // Increment reference counts
-            self.platform_state.inc();
+            // Increment frame count
+            self.frame_count += 1;
 
-            // Call into roc
-            let new_model = render_caller(self.model, &mut self.platform_state);
+            // Update timestamps
+            self.timestamps.last_render_start = self.timestamps.render_start;
+            self.timestamps.render_start = now();
 
-            // Decrement reference counts
-            self.platform_state.dec();
+            // Note we increment the refcount of the keys and mouse buttons
+            // so they aren't deallocated before the end of this function
+            // otherwise we'd have a double free
+            let mut mouse_buttons = get_mouse_button_states();
+            mouse_buttons.inc();
 
-            // Update our model pointer
+            let mut key_states = get_keys_states();
+            key_states.inc();
+
+            // Refcount things we dont' want Roc to dealloc...
+            self.peers.inc();
+            self.messages.inc();
+
+            let mouse_x = raylib::GetMouseX() as f32;
+            let mouse_y = raylib::GetMouseY() as f32;
+            let mouse_wheel = raylib::GetMouseWheelMove() as f32;
+
+            let mut new_model = render_caller(
+                self.model,
+                self.frame_count,
+                &key_states,
+                &mouse_buttons,
+                &self.timestamps,
+                mouse_x,
+                mouse_y,
+                mouse_wheel,
+                &self.peers,
+                &self.messages,
+            );
+
             self.model = new_model;
+
+            self.timestamps.last_render_end = now();
         }
     }
+}
+
+fn now() -> u64 {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        use std::time::SystemTime;
+
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    }
+
+    #[cfg(target_family = "wasm")]
+    {
+        extern "C" {
+            // https://emscripten.org/docs/api_reference/emscripten.h.html#c.emscripten_get_now
+            // The current time, in milliseconds (ms).
+            fn emscripten_get_now() -> f64;
+        }
+        unsafe { emscripten_get_now() as u64 }
+    }
+}
+
+fn get_mouse_button_states() -> RocList<u8> {
+    let mouse_buttons: [u8; 7] = std::array::from_fn(|i| {
+        unsafe {
+            if raylib::IsMouseButtonPressed(i as c_int) {
+                0
+            } else if raylib::IsMouseButtonReleased(i as c_int) {
+                1
+            } else if raylib::IsMouseButtonDown(i as c_int) {
+                2
+            } else {
+                // Up
+                3
+            }
+        }
+    });
+
+    RocList::from_slice(&mouse_buttons)
+}
+
+fn get_keys_states() -> RocList<u8> {
+    let keys: [u8; 350] = std::array::from_fn(|i| {
+        unsafe {
+            if raylib::IsKeyPressed(i as c_int) {
+                0
+            } else if raylib::IsKeyReleased(i as c_int) {
+                1
+            } else if raylib::IsKeyDown(i as c_int) {
+                2
+            } else if raylib::IsKeyUp(i as c_int) {
+                3
+            } else {
+                // PressedRepeat
+                4
+            }
+        }
+    });
+
+    RocList::from_slice(&keys)
 }

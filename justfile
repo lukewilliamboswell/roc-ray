@@ -83,6 +83,9 @@ setup:
 # build and run an executable, ignoring warnings
 [unix]
 web app="examples/basic-shapes.roc" features="default":
+    rm -f static/*.wasm # remove previous builds
+    rm -f static/*.js
+
     # roc build & check use 2 as an exit code for warnings
     roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
 
@@ -101,13 +104,4 @@ web app="examples/basic-shapes.roc" features="default":
     cp target/wasm32-unknown-emscripten/debug/rocray.wasm static/
 
     # start a http server to serve the static files
-    simple-http-server --ip 127.0.0.1 --index --open -- static/
-
-# run unit tests
-[unix]
-test app="examples/basic-shapes.roc" features="default":
-    # roc build & check use 2 as an exit code for warnings
-    roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
-    roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
-    cargo test --features {{features}}
-    rm app.o ## cleanup the intermediate object file
+    simple-http-server --ip 127.0.0.1 --index --nocache -- static/

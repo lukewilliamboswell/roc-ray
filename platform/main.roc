@@ -39,11 +39,11 @@ initForHost! = \_x ->
                 Effect.exit! {}
                 crash "unreachable"
 
-renderForHost! : Box Model, Effect.PlatformStateFromHost => Box Model
-renderForHost! = \boxedModel, platformState ->
+renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Box Model
+renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages ->
     model = Box.unbox boxedModel
 
-    { messages, timestamp, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
+    #{ messages, timestamp, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {

@@ -3,38 +3,6 @@ use matchbox_socket::PeerId;
 use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
-#[derive(Clone, Debug, Default)]
-#[repr(C)]
-pub struct PlatformState {
-    pub frame_count: u64,
-    pub timestamp: PlatformTime,
-    pub keys: RocList<u8>,
-    pub messages: RocList<PeerMessage>,
-    pub mouse_buttons: RocList<u8>,
-    pub mouse_pos_x: f32,
-    pub mouse_pos_y: f32,
-    pub mouse_wheel: f32,
-    pub peers: PeerState,
-}
-
-impl RocRefcounted for PlatformState {
-    fn inc(&mut self) {
-        self.keys.inc();
-        self.messages.inc();
-        self.mouse_buttons.inc();
-        self.peers.inc();
-    }
-    fn dec(&mut self) {
-        self.keys.dec();
-        self.messages.dec();
-        self.mouse_buttons.dec();
-        self.peers.dec();
-    }
-    fn is_refcounted() -> bool {
-        true
-    }
-}
-
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct RocColor(i64);

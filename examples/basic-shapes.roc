@@ -16,10 +16,10 @@ init! = \{} ->
     Ok {}
 
 render! : Model, RocRay.PlatformState => Result Model []
-render! = \_, _ ->
+render! = \_, { frameCount } ->
 
     Draw.draw! White \{} ->
-        Draw.text! { pos: { x: 10, y: 10 }, text: "Ahoy there!", size: 40, color: Navy }
+        Draw.text! { pos: { x: 10, y: 10 }, text: "Ahoy there! frame: $(Num.toStr frameCount)", size: 40, color: Navy }
         #Draw.rectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
         #Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, left: Lime, right: Navy }
         #Draw.rectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }

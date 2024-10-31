@@ -6,9 +6,11 @@ import InternalVector
 ## A font that has been loaded into memory and is ready to be used.
 Font : [Default, Loaded Effect.Font]
 
-load! : Str => Font
+load! : Str => Result Font [LoadErr Str]
 load! = \path ->
-    Effect.loadFont! path |> Loaded
+    Effect.loadFont! path
+    |> Result.map Loaded
+    |> Result.mapErr LoadErr
 
 default : Font
 default = Default

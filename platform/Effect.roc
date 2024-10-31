@@ -184,6 +184,6 @@ randomI32! : I32, I32 => I32
 sleepMillis! : U64 => {}
 
 Font := Box U64
-loadFont! : Str => Font
+loadFont! : Str => Result Font Str
 
 configureWebRTC! : Str => {}

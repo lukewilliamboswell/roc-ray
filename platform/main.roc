@@ -1,7 +1,7 @@
 platform "roc-ray"
     requires { Model } {
-        init! : {} => Result Model [],
-        render! : Model, RocRay.PlatformState => Result Model [],
+        init! : {} => Result Model []err,
+        render! : Model, RocRay.PlatformState => Result Model []err,
     }
     exposes [
         RocRay,
@@ -28,18 +28,13 @@ import InternalMouse
 import Effect
 import Network
 
-initForHost! : I32 => Box Model
+initForHost! : I32 => Result (Box Model) Str
 initForHost! = \_x ->
     init! {}
-    |> \result ->
-        when result is
-            Ok m -> Box.box m
-            Err err ->
-                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit! {}
-                crash "unreachable"
+    |> Result.map Box.box
+    |> Result.mapErr Inspect.toStr
 
-renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Box Model
+renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Result (Box Model) Str
 renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages ->
     model = Box.unbox boxedModel
 
@@ -65,13 +60,8 @@ renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePo
     }
 
     render! model state
-    |> \result ->
-        when result is
-            Ok m -> Box.box m
-            Err err ->
-                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit! {}
-                crash "unreachable"
+    |> Result.map Box.box
+    |> Result.mapErr Inspect.toStr
 
 mouseButtonsForApp : { mouseButtons : List U8 } -> Mouse.Buttons
 mouseButtonsForApp = \{ mouseButtons } ->

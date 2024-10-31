@@ -79,4 +79,6 @@ pub enum ExitErrCode {
     HeapFull = 2,
     WebRTCConnectionError = 3,
     WebRTCConnectionDisconnected = 4,
+    ErrFromRocInit = 5,
+    ErrFromRocRender = 6,
 }

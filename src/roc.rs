@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
+use crate::config::ExitErrCode;
 use crate::glue::{PeerMessage, PeerState, PlatformTime};
 use crate::logger;
-use roc_std::{RocList, RocRefcounted, RocStr};
+use roc_std::{RocList, RocRefcounted, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::ffi::{c_int, CString};
 use std::os::raw::c_void;
@@ -139,7 +140,7 @@ pub unsafe extern "C" fn roc_realloc(
 
 #[no_mangle]
 pub unsafe extern "C" fn roc_panic(msg: &RocStr, _tag_id: u32) {
-    panic!("Roc crashed with: {}", msg.as_str());
+    logger::log(format!("Roc crashed with: {}", msg.as_str()).as_str());
 }
 
 #[no_mangle]
@@ -194,7 +195,7 @@ impl App {
         #[link(name = "app")]
         extern "C" {
             #[link_name = "roc__initForHost_1_exposed"]
-            fn init_caller(arg_not_used: i32) -> *const ();
+            fn init_caller(arg_not_used: i32) -> RocResult<*const (), RocStr>;
         }
 
         unsafe {
@@ -202,7 +203,22 @@ impl App {
 
             timestamps.init_start = now();
 
-            let model = init_caller(0);
+            let result = init_caller(0);
+
+            let model = match result.into() {
+                Ok(model) => model,
+                Err(msg) => {
+                    let msg = msg.to_string();
+                    logger::log(msg.as_str());
+                    crate::config::update(|c| {
+                        c.should_exit_msg_code = Some((msg, ExitErrCode::ErrFromRocInit))
+                    });
+
+                    // we return a null pointer to signal to the caller that the model is invalid
+                    // this is ok, the loop will display the error message instead of using this model
+                    &() as *const ()
+                }
+            };
 
             timestamps.init_end = now();
 
@@ -232,7 +248,7 @@ impl App {
                 mouseWheel: f32,
                 peers: &PeerState,
                 messages: &RocList<PeerMessage>,
-            ) -> *const ();
+            ) -> RocResult<*const (), RocStr>;
 
             // API COPIED FROM src/main.rs
             // renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Box Model
@@ -275,7 +291,7 @@ impl App {
             let mouse_y = raylib::GetMouseY() as f32;
             let mouse_wheel = raylib::GetMouseWheelMove() as f32;
 
-            let mut new_model = render_caller(
+            let result = render_caller(
                 self.model,
                 self.frame_count,
                 &key_states,
@@ -287,6 +303,21 @@ impl App {
                 &self.peers,
                 &self.messages,
             );
+
+            let new_model = match result.into() {
+                Ok(model) => model,
+                Err(msg) => {
+                    let msg = msg.to_string();
+                    logger::log(msg.as_str());
+                    crate::config::update(|c| {
+                        c.should_exit_msg_code = Some((msg, ExitErrCode::ErrFromRocRender))
+                    });
+
+                    // we return a null pointer to signal to the caller that the model is invalid
+                    // this is ok, the immediate next loop will display the error message and not use this model
+                    &() as *const ()
+                }
+            };
 
             self.model = new_model;
 

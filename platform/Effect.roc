@@ -171,7 +171,7 @@ resumeMusicStream! : Music => {}
 getMusicTimePlayed! : Music => F32
 
 RenderTexture := Box {}
-createRenderTexture! : RocVector2 => RenderTexture
+createRenderTexture! : RocVector2 => Result RenderTexture Str
 beginTexture! : RenderTexture, RocColor => {}
 endTexture! : RenderTexture => {}
 

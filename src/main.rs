@@ -515,25 +515,22 @@ extern "C" fn roc_fx_createCamera(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocBox<()> {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::CreateRenderTexture) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::CreateRenderTexture) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let (width, height) = size.to_components_c_int();
+    let (width, height) = size.to_components_c_int();
 
-    // let render_texture = unsafe { raylib::LoadRenderTexture(width, height) };
+    let render_texture = unsafe { raylib::LoadRenderTexture(width, height) };
 
-    // let heap = roc::render_texture_heap();
+    let heap = roc::render_texture_heap();
 
-    // let alloc_result = heap.alloc_for(render_texture);
-    // match alloc_result {
-    //     Ok(roc_box) => roc_box,
-    //     Err(_) => {
-    //         display_fatal_error_message("Unable to load render texture, out of memory in the render texture heap. Consider using ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE env var to increase the heap size.".into(), ExitErrCode::ExitHeapFull);
-    //     }
-    // }
+    let alloc_result = heap.alloc_for(render_texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => RocResult::err("Unable to load render texture, out of memory in the render texture heap. Consider using ROC_RAY_MAX_RENDER_TEXTURE_HEAP_SIZE env var to increase the heap size.".into()),
+    }
 }
 
 #[no_mangle]
@@ -586,32 +583,28 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
 #[allow(unused_variables)]
 #[no_mangle]
 extern "C" fn roc_fx_beginTexture(boxed_render_texture: RocBox<()>, clear_color: glue::RocColor) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingTexture) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingTexture) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // unsafe {
-    //     trace_log("BeginTexture");
-    //     let render_texture: &mut raylib::RenderTexture =
-    //         ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
+    unsafe {
+        let render_texture: &mut raylib::RenderTexture =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_render_texture);
 
-    //     raylib::BeginTextureMode(*render_texture);
-    //     raylib::ClearBackground(clear_color.into());
-    // }
+        raylib::BeginTextureMode(*render_texture);
+        raylib::ClearBackground(clear_color.into());
+    }
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingTexture) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingTexture) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // unsafe {
-    //     trace_log("EndTexture");
-    //     raylib::EndTextureMode();
-    // }
+    unsafe {
+        raylib::EndTextureMode();
+    }
 }
 
 #[no_mangle]
@@ -803,22 +796,21 @@ extern "C" fn roc_fx_drawRenderTextureRec(
     position: &glue::RocVector2,
     color: glue::RocColor,
 ) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let texture: &mut raylib::RenderTexture =
-    //     ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+    let texture: &mut raylib::RenderTexture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
 
-    // unsafe {
-    //     raylib::DrawTextureRec(
-    //         texture.texture,
-    //         source.into(),
-    //         position.into(),
-    //         color.into(),
-    //     );
-    // }
+    unsafe {
+        raylib::DrawTextureRec(
+            texture.texture,
+            source.into(),
+            position.into(),
+            color.into(),
+        );
+    }
 }
 
 #[no_mangle]

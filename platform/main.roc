@@ -1,7 +1,7 @@
 platform "roc-ray"
     requires { Model } {
-        init! : {} => Result Model []err,
-        render! : Model, RocRay.PlatformState => Result Model []err,
+        init! : {} => Result Model []_,
+        render! : Model, RocRay.PlatformState => Result Model []_,
     }
     exposes [
         RocRay,

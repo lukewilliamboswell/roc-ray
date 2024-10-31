@@ -23,7 +23,7 @@ Model : {
     screenRight : RocRay.RenderTexture,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
 
     RocRay.initWindow! {
@@ -49,22 +49,20 @@ init! = \{} ->
         zoom: 1,
     }
 
-    cameraLeft = Camera.create! settingsLeft
-    cameraRight = Camera.create! settingsRight
-
-    screenLeft = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
-    screenRight = RenderTexture.create! { width: screenWidth / 2, height: screenHeight }
-
-    Ok {
-        playerOne,
-        playerTwo,
-        settingsLeft,
-        settingsRight,
-        cameraLeft,
-        cameraRight,
-        screenLeft,
-        screenRight,
-    }
+    # TODO replace with something more normal once we have `try` available
+    when (Camera.create! settingsLeft, Camera.create! settingsRight, RenderTexture.create! { width: screenWidth / 2, height: screenHeight }, RenderTexture.create! { width: screenWidth / 2, height: screenHeight }) is
+        (Ok cameraLeft, Ok cameraRight, Ok screenLeft, Ok screenRight) ->
+            Ok {
+                playerOne,
+                playerTwo,
+                settingsLeft,
+                settingsRight,
+                cameraLeft,
+                cameraRight,
+                screenLeft,
+                screenRight,
+            }
+        _ -> crash "Failed to create camera or render texture."
 
 render! : Model, RocRay.PlatformState => Result Model []
 render! = \model, { keys } ->

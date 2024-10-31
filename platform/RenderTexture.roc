@@ -11,6 +11,7 @@ import RocRay exposing [RenderTexture]
 ## ```
 ## RenderTexture.create! { width: 100, height: 100 }
 ## ```
-create! : { width : F32, height : F32 } => RenderTexture
+create! : { width : F32, height : F32 } => Result RenderTexture [LoadErr Str]_
 create! = \{ width, height } ->
     Effect.createRenderTexture! (InternalVector.fromXY width height)
+    |> Result.mapErr \str -> LoadErr str

@@ -1,6 +1,16 @@
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)]
+#[derive(Debug)]
+enum AppType {
+    Static(PathBuf),
+    Dynamic(PathBuf),
+}
+
 fn main() {
+    // Re-run this build script if roc rebuild's the app
+    watch_app_o();
+
     // Get the build cache directory
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let out_dir = Path::new(&out_dir);
@@ -8,17 +18,14 @@ fn main() {
     // Get the roc ray target
     let target = RocRaySupportedTarget::default();
 
-    // Re-run this build script if roc rebuild's the app
-    watch_app_o(&target);
-
-    // Find required static libraries in the build cache
+    // Find required static libraries in the build cache or root directory
     println!("cargo:rustc-link-search={}", out_dir.display());
 
     // Get the roc app object file (ensure it exists)
-    let app_o = get_roc_app_object(&target);
+    let app = get_roc_app_object(&target);
 
-    match target {
-        RocRaySupportedTarget::Linux => {
+    match (target, app) {
+        (RocRaySupportedTarget::Linux, AppType::Static(..)) => {
             // Run the `ar rcs libapp.a app.o` command
             let lib_app = out_dir.join("libapp.a");
             let output = std::process::Command::new("ar")
@@ -33,7 +40,7 @@ fn main() {
             // Link with the app object file
             println!("cargo:rustc-link-lib=static=app");
         }
-        RocRaySupportedTarget::Windows => {
+        (RocRaySupportedTarget::Windows, AppType::Static(app_o)) => {
             // Copy the app object to the build cache
             // NOTE we are changing the file extension to lib... but rust doesn't seem to mind
             // We coulp package this into a library using LIB.exe but that requires Visual Studio which users may not have installed
@@ -46,7 +53,7 @@ fn main() {
             println!("cargo:rustc-link-lib=winmm");
             println!("cargo:rustc-link-lib=shell32");
         }
-        RocRaySupportedTarget::Web => {
+        (RocRaySupportedTarget::Web, AppType::Static(app_o)) => {
             let output = std::process::Command::new("zig")
                 .args([
                     "build-lib",
@@ -65,7 +72,7 @@ fn main() {
 
             println!("cargo:rustc-link-lib=static=app");
         }
-        RocRaySupportedTarget::MacOS => {
+        (RocRaySupportedTarget::MacOS, AppType::Static(..)) => {
             // Run the `libtool -static -o libapp.a app.o` command
             // to create a static library from the object file
             let lib_app = out_dir.join("libapp.a");
@@ -81,6 +88,31 @@ fn main() {
             // Link with the app object file
             println!("cargo:rustc-link-lib=static=app");
         }
+        (RocRaySupportedTarget::MacOS, AppType::Dynamic(app_dylib)) => {
+            // Copy the app dylib to the build cache
+            let out_path = out_dir.join("libapp.dylib");
+            std::fs::copy(app_dylib, out_path).unwrap();
+
+            // Add linking flags to make sure our symbols are visible to roc
+            println!("cargo:rustc-link-arg=-Wl,-export_dynamic");
+
+            // Link with the app object file
+            println!("cargo:rustc-link-lib=dylib=app");
+        }
+        (RocRaySupportedTarget::Linux, AppType::Dynamic(app_so)) => {
+            // Copy the app dylib to the build cache
+            let out_path = out_dir.join("libapp.so");
+            std::fs::copy(app_so, out_path).unwrap();
+
+            // Add linking flags to make sure our symbols are visible to roc
+            println!("cargo:rustc-link-arg=-Wl,-export_dynamic");
+
+            // Link with the app object file
+            println!("cargo:rustc-link-lib=dylib=app");
+        }
+        err => {
+            todo!("Implement build script for {:?}", err)
+        }
     }
 }
 
@@ -94,13 +126,8 @@ enum RocRaySupportedTarget {
 
 impl RocRaySupportedTarget {
     fn default() -> RocRaySupportedTarget {
-        let arch = build_target::target_arch().unwrap();
         let os = build_target::target_os().unwrap();
-        RocRaySupportedTarget::from_arch_os(arch, os)
-    }
-
-    fn from_arch_os(arch: build_target::Arch, os: build_target::Os) -> RocRaySupportedTarget {
-        if matches!(arch, build_target::Arch::WASM32) {
+        if matches!(os, build_target::Os::Emscripten) {
             RocRaySupportedTarget::Web
         } else if matches!(os, build_target::Os::MacOs) {
             RocRaySupportedTarget::MacOS
@@ -109,7 +136,7 @@ impl RocRaySupportedTarget {
         } else if matches!(os, build_target::Os::Windows) {
             RocRaySupportedTarget::Windows
         } else {
-            panic!("Unsupported target");
+            panic!("Unsupported target -- build.rs probably needs updating");
         }
     }
 }
@@ -118,36 +145,83 @@ fn manifest_dir() -> PathBuf {
     PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
 }
 
-fn get_roc_app_object(target: &RocRaySupportedTarget) -> PathBuf {
+// preferences the static library over the dynamic library if both are present
+fn get_roc_app_object(target: &RocRaySupportedTarget) -> AppType {
     match target {
         RocRaySupportedTarget::Windows => {
             // Check if the app.obj built by roc exists
             let app_obj = manifest_dir().join("app.obj");
-            if !app_obj.exists() {
-                panic!("app.obj file not found -- this should have been generated by roc");
+            let app_lib = manifest_dir().join("app.lib");
+            if app_obj.exists() {
+                AppType::Static(app_obj.to_path_buf())
+            } else if app_lib.exists() {
+                AppType::Dynamic(app_lib.to_path_buf())
+            } else {
+                panic!(
+                    "app.obj or app.lib file not found -- this should have been generated by roc"
+                );
             }
-
-            app_obj.to_path_buf()
         }
-        RocRaySupportedTarget::MacOS
-        | RocRaySupportedTarget::Linux
-        | RocRaySupportedTarget::Web => {
+        RocRaySupportedTarget::MacOS => {
+            let app_o = manifest_dir().join("app.o");
+            let app_dylib = manifest_dir().join("libapp.dylib");
+            if app_o.exists() {
+                AppType::Static(app_o.to_path_buf())
+            } else if app_dylib.exists() {
+                AppType::Dynamic(app_dylib.to_path_buf())
+            } else {
+                panic!(
+                    "app.o or libapp.dylib file not found -- this should have been generated by roc"
+                );
+            }
+        }
+        RocRaySupportedTarget::Linux => {
             // Check if the app.o built by roc exists
             let app_o = manifest_dir().join("app.o");
-            if !app_o.exists() {
-                panic!("app.o file not found -- this should have been generated by roc");
+            let app_so = manifest_dir().join("libapp.so");
+            if app_o.exists() {
+                AppType::Static(app_o.to_path_buf())
+            } else if app_so.exists() {
+                AppType::Dynamic(app_so.to_path_buf())
+            } else {
+                panic!(
+                    "app.o or libapp.so file not found -- this should have been generated by roc"
+                );
             }
+        }
+        RocRaySupportedTarget::Web => {
+            let new_target = match std::env::consts::OS {
+                "macos" => RocRaySupportedTarget::MacOS,
+                "windows" => RocRaySupportedTarget::Windows,
+                "linux" => RocRaySupportedTarget::Linux,
+                _ => panic!("Unrecongised OS -- build.rs probably needs updating"),
+            };
 
-            app_o.to_path_buf()
+            get_roc_app_object(&new_target)
         }
     }
 }
 
-fn watch_app_o(target: &RocRaySupportedTarget) {
-    match target {
-        RocRaySupportedTarget::Windows => println!("cargo:rerun-if-changed=app.obj"),
-        RocRaySupportedTarget::MacOS
-        | RocRaySupportedTarget::Linux
-        | RocRaySupportedTarget::Web => println!("cargo:rerun-if-changed=app.o"),
+fn watch_app_o() {
+    let os = build_target::target_os().unwrap();
+    match os {
+        build_target::Os::Windows => {
+            println!("cargo:rerun-if-changed=app.lib");
+            println!("cargo:rerun-if-changed=app.obj");
+        }
+        build_target::Os::MacOs => {
+            println!("cargo:rerun-if-changed=libapp.dylib");
+            println!("cargo:rerun-if-changed=app.o");
+        }
+        build_target::Os::Linux => {
+            println!("cargo:rerun-if-changed=app.o");
+            println!("cargo:rerun-if-changed=libapp.so");
+        }
+        build_target::Os::Emscripten => {
+            // Assume static linking for wasm32
+            println!("cargo:rerun-if-changed=app.o");
+            println!("cargo:rerun-if-changed=app.obj");
+        }
+        _ => panic!("Unrecognised Os ... build.rs probably needs updating to support this"),
     }
 }

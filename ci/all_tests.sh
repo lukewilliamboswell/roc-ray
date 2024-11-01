@@ -45,6 +45,9 @@ done
 
 # run the cargo tests
 # note we need an `app.o` file to build the test runner, so do this after buildings the examples
+rm -f libapp.so
+rm -f libapp.dylib
+$ROC build --no-link --output app.o examples/basic-shapes.roc
 $CARGO test
 
 # test building docs website

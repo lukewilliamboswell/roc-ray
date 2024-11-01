@@ -142,7 +142,7 @@ pub struct RocVector2 {
 }
 
 impl RocVector2 {
-    pub fn to_components_c_int(&self) -> (c_int, c_int) {
+    pub fn to_components_c_int(self) -> (c_int, c_int) {
         (self.x.round() as c_int, self.y.round() as c_int)
     }
 }
@@ -184,7 +184,7 @@ pub struct RocRectangle {
 }
 
 impl RocRectangle {
-    pub fn to_components_c_int(&self) -> (c_int, c_int, c_int, c_int) {
+    pub fn to_components_c_int(self) -> (c_int, c_int, c_int, c_int) {
         (
             self.x as c_int,
             self.y as c_int,

@@ -1,9 +1,7 @@
 use config::ExitErrCode;
-use roc_std_heap::ThreadSafeRefcountedResourceHeap;
-// use glue::PeerMessage;
-// use matchbox_socket::{PeerId, PeerState};
 use platform_mode::PlatformEffect;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
+use roc_std_heap::ThreadSafeRefcountedResourceHeap;
 use std::ffi::{c_int, CString};
 
 #[cfg(target_family = "wasm")]
@@ -14,6 +12,7 @@ mod glue;
 mod logger;
 mod platform_mode;
 mod roc;
+mod worker;
 
 #[cfg(target_arch = "wasm32")]
 thread_local!(static MAIN_LOOP_CALLBACK: std::cell::RefCell<Option<Box<dyn FnMut()>>> = std::cell::RefCell::new(None));
@@ -65,6 +64,9 @@ fn main() {
     // MANUALLY CHANGE PLATFORM MODE
     _ = platform_mode::update(PlatformEffect::EndInitWindow);
 
+    #[cfg(not(target_arch = "wasm32"))]
+    let maybe_rt_handle = setup_networking(config::with(|c| c.network_web_rtc_url.clone()));
+
     #[cfg(target_family = "wasm")]
     unsafe {
         set_main_loop_callback(move || {
@@ -86,6 +88,30 @@ fn main() {
             }
         }
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // Send shutdown message before closing the window
+        worker::send_message(worker::MainToWorkerMsg::Shutdown);
+
+        if let Some((rt, handle)) = maybe_rt_handle {
+            // Wait for the worker to finish
+            rt.block_on(handle).unwrap();
+        }
+    }
+
+    // Now close the window
+    unsafe {
+        raylib::CloseWindow();
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn setup_networking(
+    room_url: Option<String>,
+) -> Option<(tokio::runtime::Runtime, tokio::task::JoinHandle<()>)> {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    worker::init(&rt, room_url).map(|handle| (rt, handle))
 }
 
 unsafe fn draw_fatal_error(msg_code: (String, ExitErrCode)) {
@@ -735,9 +761,7 @@ extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
 
     let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_music);
 
-    let time_played = unsafe { raylib::GetMusicTimePlayed(*music) };
-
-    time_played
+    unsafe { raylib::GetMusicTimePlayed(*music) }
 }
 
 #[no_mangle]
@@ -857,11 +881,7 @@ extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, RocStr> {
 
     let path = path.as_str();
     let Ok(contents) = std::fs::read_to_string(path) else {
-        return RocResult::err(
-            format!("File not found: {}", path.to_string())
-                .as_str()
-                .into(),
-        );
+        return RocResult::err(format!("File not found: {}", path).as_str().into());
     };
 
     let contents = contents.replace("\r\n", "\n");
@@ -872,24 +892,28 @@ extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, RocStr> {
 
 #[no_mangle]
 extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // let data = bytes.as_slice().to_vec();
+    let data = bytes.as_slice().to_vec();
 
-    // worker::send_message(MainToWorkerMsg::SendMessage(peer.into(), data));
+    worker::send_message(worker::MainToWorkerMsg::SendMessage(peer.into(), data));
 }
 
 #[no_mangle]
 extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
-    todo!()
-    // if let Err(msg) = platform_mode::update(PlatformEffect::ConfigureNetwork) {
-    //     display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
-    // }
+    if let Err(msg) = platform_mode::update(PlatformEffect::ConfigureNetwork) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
 
-    // config::update(|c| c.network_web_rtc_url = Some(url.to_string()));
+    #[cfg(target_arch = "wasm32")]
+    display_fatal_error_message(
+        "TODO : Implement WebRTC networking for web targets".to_string(),
+        ExitErrCode::NotYetImplemented,
+    );
+
+    config::update(|c| c.network_web_rtc_url = Some(url.to_string()));
 }
 
 #[no_mangle]

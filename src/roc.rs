@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
 use crate::config::ExitErrCode;
-use crate::glue::{PeerMessage, PeerState, PlatformTime};
+use crate::glue::{self, PeerMessage, PlatformTime};
 use crate::logger;
+use matchbox_socket::{PeerId, PeerState};
 use roc_std::{RocList, RocRefcounted, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
-use std::ffi::{c_int, CString};
+use std::collections::HashMap;
+use std::ffi::c_int;
 use std::os::raw::c_void;
 use std::sync::OnceLock;
 
@@ -186,7 +188,7 @@ pub struct App {
     model: *const (),
     frame_count: u64,
     timestamps: PlatformTime,
-    peers: PeerState,
+    peers: HashMap<PeerId, PeerState>,
     messages: RocList<PeerMessage>,
 }
 
@@ -199,9 +201,10 @@ impl App {
         }
 
         unsafe {
-            let mut timestamps = PlatformTime::default();
-
-            timestamps.init_start = now();
+            let mut timestamps = glue::PlatformTime {
+                init_start: now(),
+                ..Default::default()
+            };
 
             let result = init_caller(0);
 
@@ -226,7 +229,7 @@ impl App {
                 model,
                 timestamps,
                 frame_count: 0,
-                peers: PeerState::default(),
+                peers: HashMap::default(),
                 messages: RocList::empty(),
             }
         }
@@ -252,7 +255,7 @@ impl App {
                 mousePosX: f32,
                 mousePosY: f32,
                 mouseWheel: f32,
-                peers: &PeerState,
+                peers: &glue::PeerState,
                 messages: &RocList<PeerMessage>,
             ) -> RocResult<*const (), RocStr>;
 
@@ -289,9 +292,66 @@ impl App {
             let mut key_states = get_keys_states();
             key_states.inc();
 
+            let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
+
+            // Try to receive any pending (non-blocking)
+            let queued_network_messages = crate::worker::get_messages();
+
+            for msg in queued_network_messages {
+                use crate::worker::WorkerToMainMsg::*;
+                match msg {
+                    PeerConnected(peer) => {
+                        self.peers.insert(peer, PeerState::Connected);
+                    }
+                    PeerDisconnected(peer) => {
+                        self.peers.insert(peer, PeerState::Disconnected);
+                    }
+                    MessageReceived(id, bytes) => {
+                        messages.append(glue::PeerMessage {
+                            id: id.into(),
+                            bytes: RocList::from_slice(bytes.as_slice()),
+                        });
+                    }
+                    ConnectionFailed => {
+                        crate::config::update(|c| {
+                            c.should_exit_msg_code = Some((
+                                format!(
+                                    "Unable to connect to signaling server at {:?}. Exiting...",
+                                    c.network_web_rtc_url
+                                ),
+                                ExitErrCode::WebRTCConnectionError,
+                            ));
+                            c.should_exit = true;
+                        });
+                    }
+                    Disconnected => {
+                        // TODO give roc an error somehow, allow for reconnecting to a different server??
+                        crate::config::update(|c| {
+                            c.should_exit_msg_code = Some((
+                                format!(
+                                    "Disconnected from signaling server at {:?}. Exiting...",
+                                    c.network_web_rtc_url
+                                ),
+                                ExitErrCode::WebRTCConnectionDisconnected,
+                            ));
+                            c.should_exit = true;
+                        });
+                    }
+                }
+            }
+
+            // Update the target FPS if it has changed
+            if crate::config::with(|c| c.fps_target_dirty) {
+                raylib::SetTargetFPS(crate::config::with(|c| c.fps_target));
+
+                crate::config::update(|c| c.fps_target_dirty = false);
+            }
+
+            let mut roc_peers: glue::PeerState = (&self.peers).into();
+
             // Refcount things we dont' want Roc to dealloc...
-            self.peers.inc();
             self.messages.inc();
+            roc_peers.inc();
 
             let mouse_x = raylib::GetMouseX() as f32;
             let mouse_y = raylib::GetMouseY() as f32;
@@ -306,7 +366,7 @@ impl App {
                 mouse_x,
                 mouse_y,
                 mouse_wheel,
-                &self.peers,
+                &roc_peers,
                 &self.messages,
             );
 

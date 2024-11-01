@@ -37,14 +37,14 @@ pub fn with<F, R>(f: F) -> R
 where
     F: FnOnce(&Config) -> R,
 {
-    CONFIG.with(|config| f(&*config.borrow()))
+    CONFIG.with(|config| f(&config.borrow()))
 }
 
 pub fn update<F>(f: F)
 where
     F: FnOnce(&mut Config),
 {
-    CONFIG.with(|config| f(&mut *config.borrow_mut()));
+    CONFIG.with(|config| f(&mut config.borrow_mut()));
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -73,10 +73,11 @@ impl From<TraceLevel> for c_int {
 }
 
 /// use different error codes when the app exits
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub enum ExitErrCode {
     EffectNotPermitted = 1,
-    HeapFull = 2,
+    NotYetImplemented = 2, // only used when things are TODO otherwise dead code
     WebRTCConnectionError = 3,
     WebRTCConnectionDisconnected = 4,
     ErrFromRocInit = 5,

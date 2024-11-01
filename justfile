@@ -103,4 +103,4 @@ web app="examples/basic-shapes.roc" features="default":
     cp target/wasm32-unknown-emscripten/debug/deps/rocray.data static/
 
     # start a http server to serve the static files
-    simple-http-server --ip 127.0.0.1 --index --nocache -- static/
+    simple-http-server --ip 127.0.0.1 --index --open --nocache -- static/

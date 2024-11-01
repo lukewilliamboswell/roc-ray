@@ -43,12 +43,11 @@ render! = \model, { timestamp } ->
 
     renderStart = millisToIsoStr timestamp.renderStart
 
-    # CALCULATE USEFUL TIMING INFORMATION
+    ## CALCULATE USEFUL TIMING INFORMATION
     durationAlive = Num.toStr (timestamp.renderStart - timestamp.initStart)
     durationFrame = Num.toStr (timestamp.renderStart - timestamp.lastRenderStart)
 
     Draw.draw! White \{} ->
-
         Draw.text! { pos: { x: 10, y: 10 }, text: "Platform Timing Information", size: 20, color: Green }
 
         Draw.text! { pos: { x: 10, y: 50 }, text: "Init", size: 20, color: Navy }

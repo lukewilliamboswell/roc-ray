@@ -12,7 +12,7 @@ Model : {
     ogg : RocRay.Sound,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
 
     RocRay.initWindow! {
@@ -21,10 +21,10 @@ init! = \{} ->
         height: 450,
     }
 
-    wav = Sound.load! "examples/assets/sound/sound.wav"
-    ogg = Sound.load! "examples/assets/sound/target.ogg"
-
-    Ok { wav, ogg }
+    # TODO make this more normal once we have `try`
+    when (Sound.load! "examples/assets/sound/sound.wav", Sound.load! "examples/assets/sound/target.ogg") is
+        (Ok wav, Ok ogg) -> Ok { wav, ogg }
+        _ -> Err FailedToLoadSound
 
 render! : Model, RocRay.PlatformState => Result Model []
 render! = \model, { keys } ->

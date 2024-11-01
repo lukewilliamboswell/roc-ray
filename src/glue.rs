@@ -1,41 +1,7 @@
-use crate::bindings;
 use core::fmt::Debug;
 use matchbox_socket::PeerId;
-use roc_std::{roc_refcounted_noop_impl, RocList, RocRefcounted};
+use roc_std::{roc_refcounted_noop_impl, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
-
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct PlatformState {
-    pub frame_count: u64,
-    pub keys: RocList<u8>,
-    pub messages: RocList<PeerMessage>,
-    pub mouse_buttons: RocList<u8>,
-    pub peers: PeerState,
-    pub timestamp: PlatformTime,
-    pub timestamp_millis: u64,
-    pub mouse_pos_x: f32,
-    pub mouse_pos_y: f32,
-    pub mouse_wheel: f32,
-}
-
-impl RocRefcounted for PlatformState {
-    fn inc(&mut self) {
-        self.keys.inc();
-        self.messages.inc();
-        self.mouse_buttons.inc();
-        self.peers.inc();
-    }
-    fn dec(&mut self) {
-        self.keys.dec();
-        self.messages.dec();
-        self.mouse_buttons.dec();
-        self.peers.dec();
-    }
-    fn is_refcounted() -> bool {
-        true
-    }
-}
 
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -71,10 +37,10 @@ impl Debug for RocColor {
     }
 }
 
-impl From<RocColor> for bindings::Color {
-    fn from(color: RocColor) -> bindings::Color {
+impl From<RocColor> for raylib::Color {
+    fn from(color: RocColor) -> raylib::Color {
         let (r, g, b, a) = color.to_rgba();
-        bindings::Color { r, g, b, a }
+        raylib::Color { r, g, b, a }
     }
 }
 
@@ -176,22 +142,22 @@ pub struct RocVector2 {
 }
 
 impl RocVector2 {
-    pub fn to_components_c_int(&self) -> (c_int, c_int) {
+    pub fn to_components_c_int(self) -> (c_int, c_int) {
         (self.x.round() as c_int, self.y.round() as c_int)
     }
 }
 
-impl From<&RocVector2> for bindings::Vector2 {
-    fn from(vector: &RocVector2) -> bindings::Vector2 {
-        bindings::Vector2 {
+impl From<&RocVector2> for raylib::Vector2 {
+    fn from(vector: &RocVector2) -> raylib::Vector2 {
+        raylib::Vector2 {
             x: vector.x,
             y: vector.y,
         }
     }
 }
 
-impl From<bindings::Vector2> for RocVector2 {
-    fn from(vector: bindings::Vector2) -> RocVector2 {
+impl From<raylib::Vector2> for RocVector2 {
+    fn from(vector: raylib::Vector2) -> RocVector2 {
         RocVector2 {
             unused: 0,
             unused2: 0,
@@ -218,7 +184,7 @@ pub struct RocRectangle {
 }
 
 impl RocRectangle {
-    pub fn to_components_c_int(&self) -> (c_int, c_int, c_int, c_int) {
+    pub fn to_components_c_int(self) -> (c_int, c_int, c_int, c_int) {
         (
             self.x as c_int,
             self.y as c_int,
@@ -228,9 +194,9 @@ impl RocRectangle {
     }
 }
 
-impl From<&RocRectangle> for bindings::Rectangle {
-    fn from(rectangle: &RocRectangle) -> bindings::Rectangle {
-        bindings::Rectangle {
+impl From<&RocRectangle> for raylib::Rectangle {
+    fn from(rectangle: &RocRectangle) -> raylib::Rectangle {
+        raylib::Rectangle {
             x: rectangle.x,
             y: rectangle.y,
             width: rectangle.width,
@@ -352,7 +318,7 @@ impl roc_std::RocRefcounted for PeerMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct PlatformTime {
     pub init_end: u64,
@@ -363,3 +329,12 @@ pub struct PlatformTime {
 }
 
 roc_refcounted_noop_impl!(PlatformTime);
+
+#[repr(C)]
+pub struct ScreenSize {
+    pub z: i64,
+    pub height: i32,
+    pub width: i32,
+}
+
+roc_refcounted_noop_impl!(ScreenSize);

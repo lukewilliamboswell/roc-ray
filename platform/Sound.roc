@@ -7,9 +7,10 @@ import RocRay exposing [Sound]
 ## ```
 ## wav = Sound.load! "resources/sound.wav"
 ## ```
-load! : Str => Sound
+load! : Str => Result Sound [LoadErr Str]_
 load! = \path ->
     Effect.loadSound! path
+    |> Result.mapErr LoadErr
 
 ## Play a loaded sound.
 ## ```

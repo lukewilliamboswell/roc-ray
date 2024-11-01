@@ -219,9 +219,10 @@ takeScreenshot! = \filename ->
 ## ```
 ## RocRay.loadFileToStr! "resources/example.txt"
 ## ```
-loadFileToStr! : Str => Str
+loadFileToStr! : Str => Result Str [LoadErr Str]_
 loadFileToStr! = \path ->
     Effect.loadFileToStr! path
+    |> Result.mapErr LoadErr
 
 ## Send a message to a connected peer.
 sendToPeer! : List U8, UUID => {}

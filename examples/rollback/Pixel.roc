@@ -5,6 +5,11 @@ import rr.RocRay exposing [Vector2]
 # A 1-D integer position with a integer sub-pixel component
 # Use instead of floats to avoid rounding errors
 Pixel := { pixels : I64, subpixels : I64 }
+    implements [
+        Eq,
+        Hash,
+        Inspect { toInspector: pixelInspector },
+    ]
 
 PixelVec : { x : Pixel, y : Pixel }
 
@@ -37,3 +42,12 @@ normalize = \@Pixel px ->
 fromI64 : I64 -> Pixel
 fromI64 = \n ->
     @Pixel { pixels: n, subpixels: 0 }
+
+pixelInspector : Pixel -> Inspector f where f implements InspectFormatter
+pixelInspector = \@Pixel px ->
+    # TODO comment in zulip; this causes No borrow signature for LambdaName
+    # Inspect.record [
+    #     { key: "pixels", value: Inspect.i64 px.pixels },
+    #     { key: "subpixels", value: Inspect.i64 px.subpixels },
+    # ]
+    Inspect.str (Inspect.toStr px)

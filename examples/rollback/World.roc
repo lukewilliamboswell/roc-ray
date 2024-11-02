@@ -19,6 +19,14 @@ module [
     InputTick,
 ]
 
+# TODO
+# 1. write local inputTicks to buffer
+# 2. input delay for both local and remote
+# 3. send overlapping HISTORIES of inputs?
+
+# TODO later
+# use ring buffers
+
 import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
 
@@ -194,6 +202,7 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
                 when rollbackDone.blocked is
                     BlockedFor frames -> BlockedFor (frames + 1)
                     Unblocked -> BlockedFor 1
+
             { rollbackDone & blocked }
 
     lastTick = newWorld.tick |> Num.toI64
@@ -233,53 +242,46 @@ normalUpdate = \world, { input, deltaMillis } ->
 
 useAllRemainingTime : World, Input -> World
 useAllRemainingTime = \world, input ->
-    if world.remainingMillis <= millisPerTick then
+    if world.remainingMillis < millisPerTick then
         world
     else
-        tickedWorld = tickOnce world input
+        tickedWorld = tickOnce world { input }
         useAllRemainingTime tickedWorld input
 
 cleanAndSortInputs : List FrameMessage, { syncTick : U64 } -> List FrameMessage
 cleanAndSortInputs = \history, { syncTick } ->
-    last = List.last history
     sorted = List.sortWith history \left, right ->
         Num.compare left.firstTick right.firstTick
-    sortedUnique = List.walk sorted [] \lst, item ->
+    sortedUnique = List.walk sorted [] \lst, fresh ->
+        isMergeable = \lastMessage ->
+            contiguous = lastMessage.lastTick == (fresh.firstTick - 1)
+            equal = lastMessage.input == fresh.input
+            contiguous && equal
+
         when List.last lst is
-            Ok same if same.firstTick == item.firstTick ->
+            # same start tick
+            Ok last if last.firstTick == fresh.firstTick ->
                 # they're blocking or they rolled back;
                 # replace their input with the latest
-                lst |> List.dropLast 1 |> List.append same
+                lst |> List.dropLast 1 |> List.append fresh
 
-            _ -> List.append lst item
+            # contiguous & mergeable
+            Ok last if isMergeable last ->
+                merged = { last & lastTick: fresh.lastTick }
+                lastIndex = List.len lst - 1
+                List.set lst lastIndex merged
 
-    # # assert message frames are continguous before the sync tick
-    # # FIXME only before sync tick!
-    # contiguous =
-    #     beforeSync =
-    #         List.keepOks sortedUnique \msg ->
-    #             if msg.lastTick > Num.toI64 syncTick then Err TooNew else Ok msg
-    #     List.walkUntil beforeSync None \state, message ->
-    #         when state is
-    #             Missing _ -> crash "unreachable"
-    #             None -> Continue (Some message.lastTick)
-    #             Some lastTick ->
-    #                 if message.firstTick - lastTick == 1 then
-    #                     Continue (Some message.lastTick)
-    #                 else
-    #                     Break (Missing (lastTick, message))
-    # when contiguous is
-    #     Missing stuff -> crash "messages not contiguous: $(Inspect.toStr stuff)"
-    #     _ -> {}
+            _ -> List.append lst fresh
 
+    keptLast = List.last sortedUnique
     cleaned =
         List.keepOks sortedUnique \msg ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
 
-    when (cleaned, last) is
-        ([], Ok l) -> [l]
+    when (cleaned, keptLast) is
+        ([], Ok lst) -> [lst]
         ([], Err _) -> []
-        (cleans, _) -> cleans
+        (cleanHistory, _) -> cleanHistory
 
 # pre-rollback network bookkeeping
 updateRemoteTick : World -> World
@@ -301,8 +303,8 @@ roundVec = \{ x, y } -> {
 }
 
 ## execute a single simulation tick
-tickOnce : World, Input -> World
-tickOnce = \world, input ->
+tickOnce : World, { input : Input } -> World
+tickOnce = \world, { input } ->
     tick = world.tick + 1
     animationTimestamp = world.tick * millisPerTick
     remainingMillis = world.remainingMillis - millisPerTick
@@ -342,9 +344,16 @@ tickOnce = \world, input ->
     snapshots =
         newSnapshot : Snapshot
         newSnapshot = { localInput: input, tick, localPlayer, remotePlayer, predictedInput }
-        List.append world.snapshots newSnapshot
+        oldSnapshots = world.snapshots |> List.dropIf \snap -> snap.tick == tick
+        List.append oldSnapshots newSnapshot
 
-    { world & localPlayer, remotePlayer, remainingMillis, tick, snapshots }
+    { world &
+        localPlayer,
+        remotePlayer,
+        remainingMillis,
+        tick,
+        snapshots,
+    }
 
 inputToIntent : Input, Facing -> Intent
 inputToIntent = \{ up, down, left, right }, facing ->
@@ -407,7 +416,6 @@ timeSynced = \{ tick, remoteTick, remoteTickAdvantage } ->
 
 updateSyncTick : World -> World
 updateSyncTick = \world ->
-    # TODO this needs to account for missing frames?
     checkUpTo = Num.min world.tick world.remoteTick
 
     beforeMisprediction : Result U64 [NotFound]
@@ -416,8 +424,7 @@ updateSyncTick = \world ->
         |> Result.map (\mispredictedTick -> mispredictedTick - 1)
 
     beforeInputGap : Result U64 [NotFound]
-    beforeInputGap = Err NotFound
-    # beforeInputGap = findRemoteInputGap world
+    beforeInputGap = findRemoteInputGap world
 
     syncTick =
         when (beforeMisprediction, beforeInputGap) is
@@ -428,21 +435,46 @@ updateSyncTick = \world ->
 
     { world & syncTick }
 
-# findRemoteInputGap : World -> Result U64 [NotFound]
-# findRemoteInputGap = \{ remoteInputTicks } ->
-#     gap =
-#         List.walkUntil remoteInputTicks Start \state, inputTick ->
-#             when state is
-#                 Start -> Continue (Contiguous inputTick)
-#                 Contiguous previous ->
-#                     if inputTick.tick == previous.tick + 1 then
-#                         Continue (Contiguous inputTick)
-#                     else
-#                         Break (Gap previous)
-#                 Gap _ -> crash "unreachable"
-#     when gap is
-#         Gap previous -> Ok previous.tick
-#         _ -> Err NotFound
+findRemoteInputGap : { remoteInputTicks : List InputTick }w -> Result U64 [NotFound]
+findRemoteInputGap = \{ remoteInputTicks } ->
+    gap =
+        List.walkUntil remoteInputTicks Start \state, inputTick ->
+            when state is
+                Start -> Continue (Contiguous inputTick)
+                Contiguous previous ->
+                    if inputTick.tick == previous.tick + 1 then
+                        Continue (Contiguous inputTick)
+                    else
+                        Break (Gap previous)
+
+                Gap _ -> crash "unreachable"
+    when gap is
+        Gap previous -> Ok previous.tick
+        _ -> Err NotFound
+
+expect
+    remoteInputTicks = [
+        { tick: 1, input: Input.blank },
+        { tick: 2, input: Input.blank },
+        { tick: 3, input: Input.blank },
+        { tick: 5, input: Input.blank },
+        { tick: 7, input: Input.blank },
+    ]
+
+    result = findRemoteInputGap { remoteInputTicks }
+
+    result == Ok 3
+
+expect
+    remoteInputTicks = [
+        { tick: 1, input: Input.blank },
+        { tick: 2, input: Input.blank },
+        { tick: 3, input: Input.blank },
+    ]
+
+    result = findRemoteInputGap { remoteInputTicks }
+
+    result == Err NotFound
 
 findMisprediction : World -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputs } ->
@@ -484,7 +516,7 @@ rollbackIfNecessary = \world ->
                 remotePlayer: syncSnapshot.remotePlayer,
             }
 
-        rollForwardRange = (world.syncTick + 1, world.tick - 1) # inclusive
+        rollForwardRange = (world.syncTick, world.tick - 1) # inclusive
 
         # when rollForwardRange is
         #     (start, end) if start > end ->
@@ -506,9 +538,9 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
             when List.findFirst wrongFutureWorld.remoteInputTicks \it -> it.tick == questionableSnap.tick is
                 # we're ahead of them; our prediction is fake but not wrong yet
                 Err NotFound -> questionableSnap
-                Ok inputTick ->
-                    # overwrite our prediction with whatever they actually did
-                    { questionableSnap & predictedInput: inputTick.input }
+                # we found an actual input to overwrite out prediction with
+                # overwrite our prediction with whatever they actually did
+                Ok inputTick -> { questionableSnap & predictedInput: inputTick.input }
 
         lastRemoteInputTick =
             when List.last wrongFutureWorld.remoteInputTicks is
@@ -536,7 +568,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
                             "($(Inspect.toStr start), $(Inspect.toStr end))"
                         crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
 
-            tickOnce steppingWorld localInput
+            tickOnce steppingWorld { input: localInput }
 
     { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward }
 

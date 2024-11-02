@@ -1,4 +1,12 @@
-module [Pixel, PixelVec, add, sub, toVector2, subpixelsPerPixel, fromI64]
+module [
+    Pixel,
+    PixelVec,
+    add,
+    sub,
+    toVector2,
+    subpixelsPerPixel,
+    fromParts,
+]
 
 import rr.RocRay exposing [Vector2]
 
@@ -39,9 +47,9 @@ normalize = \@Pixel px ->
 
     @Pixel { pixels, subpixels }
 
-fromI64 : I64 -> Pixel
-fromI64 = \n ->
-    @Pixel { pixels: n, subpixels: 0 }
+fromParts : { pixels ? I64, subpixels ? I64 } -> Pixel
+fromParts = \{ pixels ? 0, subpixels ? 0 } ->
+    @Pixel { pixels, subpixels }
 
 pixelInspector : Pixel -> Inspector f where f implements InspectFormatter
 pixelInspector = \@Pixel px ->

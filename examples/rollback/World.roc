@@ -30,8 +30,6 @@ module [
 import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
 
-# import json.Json
-
 import Resolution exposing [width, height]
 import Pixel exposing [PixelVec]
 import Input exposing [Input]
@@ -170,9 +168,20 @@ init = \{ firstMessage: { id, message } } ->
 
 frameMessagesToTicks : List FrameMessage -> List InputTick
 frameMessagesToTicks = \messages ->
-    List.joinMap messages \msg ->
+    messages
+    |> List.joinMap \msg ->
         range = List.range { start: At msg.firstTick, end: At msg.lastTick }
         List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
+    |> List.walk [] \kept, inputTick ->
+        when List.last kept is
+            # keep only the last of a run of inputs for the same tick
+            # FIXME this shouldn't happen regularly but it does
+            Ok last if last.tick == inputTick.tick ->
+                lastIndex = List.len kept - 1
+                List.set kept lastIndex inputTick
+
+            _ ->
+                List.append kept inputTick
 
 FrameState : {
     input : Input,
@@ -214,11 +223,11 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
             Unblocked -> Ok { firstTick, lastTick, tickAdvantage, input }
             BlockedFor _ -> Err Blocking
 
-    # cleaning snapshots like this caused problems for some reason
-    # newWorld.snapshots
-    # |> List.dropIf \snap -> snap.tick < newWorld.syncTick
+    snapshots =
+        List.dropIf newWorld.snapshots \snap ->
+            snap.tick < newWorld.syncTick
 
-    (newWorld, outgoingMessage)
+    ({ newWorld & snapshots }, outgoingMessage)
 
 addRemoteInputs : World, List PeerMessage -> World
 addRemoteInputs = \world, inbox ->
@@ -284,10 +293,9 @@ cleanAndSortInputs = \history, { syncTick } ->
         (cleanHistory, _) -> cleanHistory
 
 # pre-rollback network bookkeeping
+# NOTE: this depends on the remote inputs update before this
 updateRemoteTick : World -> World
 updateRemoteTick = \world ->
-    # NOTE: this depends on the remote inputs update before this
-
     (remoteTick, remoteTickAdvantage) =
         world.remoteInputs
         |> List.last
@@ -417,79 +425,39 @@ timeSynced = \{ tick, remoteTick, remoteTickAdvantage } ->
 updateSyncTick : World -> World
 updateSyncTick = \world ->
     checkUpTo = Num.min world.tick world.remoteTick
+    checkRange = (world.syncTick + 1, checkUpTo)
 
     beforeMisprediction : Result U64 [NotFound]
     beforeMisprediction =
-        findMisprediction world
+        findMisprediction world checkRange
         |> Result.map (\mispredictedTick -> mispredictedTick - 1)
 
-    beforeInputGap : Result U64 [NotFound]
-    beforeInputGap = findRemoteInputGap world
-
     syncTick =
-        when (beforeMisprediction, beforeInputGap) is
-            (Ok beforeMiss, Ok beforeGap) -> Num.min beforeMiss beforeGap
-            (Err NotFound, Ok beforeGap) -> beforeGap
-            (Ok beforeMiss, Err NotFound) -> beforeMiss
-            (Err NotFound, Err NotFound) -> checkUpTo
+        when beforeMisprediction is
+            Ok beforeMiss -> beforeMiss
+            Err NotFound -> checkUpTo
+
+    # syncTick should not move backwards
+    expect world.syncTick <= syncTick
 
     { world & syncTick }
 
-findRemoteInputGap : { remoteInputTicks : List InputTick }w -> Result U64 [NotFound]
-findRemoteInputGap = \{ remoteInputTicks } ->
-    gap =
-        List.walkUntil remoteInputTicks Start \state, inputTick ->
-            when state is
-                Start -> Continue (Contiguous inputTick)
-                Contiguous previous ->
-                    if inputTick.tick == previous.tick + 1 then
-                        Continue (Contiguous inputTick)
-                    else
-                        Break (Gap previous)
-
-                Gap _ -> crash "unreachable"
-    when gap is
-        Gap previous -> Ok previous.tick
-        _ -> Err NotFound
-
-expect
-    remoteInputTicks = [
-        { tick: 1, input: Input.blank },
-        { tick: 2, input: Input.blank },
-        { tick: 3, input: Input.blank },
-        { tick: 5, input: Input.blank },
-        { tick: 7, input: Input.blank },
-    ]
-
-    result = findRemoteInputGap { remoteInputTicks }
-
-    result == Ok 3
-
-expect
-    remoteInputTicks = [
-        { tick: 1, input: Input.blank },
-        { tick: 2, input: Input.blank },
-        { tick: 3, input: Input.blank },
-    ]
-
-    result = findRemoteInputGap { remoteInputTicks }
-
-    result == Err NotFound
-
-findMisprediction : World -> Result U64 [NotFound]
-findMisprediction = \{ snapshots, remoteInputs } ->
-    # TODO should this use inputTicks instead?
+findMisprediction : World, (U64, U64) -> Result U64 [NotFound]
+findMisprediction = \{ snapshots, remoteInputs }, (start, end) ->
     findMatch : Snapshot -> Result FrameMessage [NotFound]
     findMatch = \snapshot ->
-        List.findFirst remoteInputs \msg ->
+        remoteInputs
+        |> List.findFirst \msg ->
             snapshotTick = Num.toI64 snapshot.tick
-            snapshotTick >= msg.firstTick && snapshotTick < msg.lastTick
+            snapshotTick >= msg.firstTick && snapshotTick <= msg.lastTick
 
     misprediction : Result Snapshot [NotFound]
     misprediction =
-        List.findFirst snapshots \snapshot ->
+        snapshots
+        |> List.keepIf \snapshot -> snapshot.tick >= start && snapshot.tick <= end
+        |> List.findFirst \snapshot ->
             when findMatch snapshot is
-                Ok match if match.input != snapshot.predictedInput -> Bool.true
+                Ok match -> match.input != snapshot.predictedInput
                 _ -> Bool.false
 
     Result.map misprediction \m -> m.tick
@@ -507,7 +475,7 @@ rollbackIfNecessary = \world ->
                 Ok snap -> snap
                 Err NotFound ->
                     crashInfo = showCrashInfo world
-                    crash "sync tick not present in snapshots; crashInfo: $(crashInfo)"
+                    crash "sync tick not present in snapshots: $(crashInfo)"
 
         restoredToSync =
             { world &
@@ -518,16 +486,12 @@ rollbackIfNecessary = \world ->
 
         rollForwardRange = (world.syncTick, world.tick - 1) # inclusive
 
-        # when rollForwardRange is
-        #     (start, end) if start > end ->
-        #         crashInfo = showCrashInfo world
-        #         crash "end before start in roll forward: $(Inspect.toStr rollForwardRange), $(crashInfo)"
-        #     (_start, _end) -> {}
-
         rollForwardFromSyncTick restoredToSync { rollForwardRange }
 
 rollForwardFromSyncTick : World, { rollForwardRange : (U64, U64) } -> World
 rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } ->
+    expect start <= end
+
     rollForwardTicks = List.range { start: At start, end: At end }
 
     # touch up the snapshots to have their 'predictions' match what happened
@@ -563,10 +527,8 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
                     Ok snap -> snap.localInput
                     Err NotFound ->
                         crashInfo = showCrashInfo rollForwardWorld
-                        notFoundTick = Inspect.toStr tick
-                        displayRange =
-                            "($(Inspect.toStr start), $(Inspect.toStr end))"
-                        crash "snapshot not found in roll forward: notFoundTick: $(notFoundTick) rollForwardRange: $(displayRange), crashInfo: $(crashInfo)"
+                        moreInfo = Inspect.toStr { notFoundTick: tick, rollForwardRange: (start, end) }
+                        crash "snapshot not found in roll forward: $(moreInfo), $(crashInfo)"
 
             tickOnce steppingWorld { input: localInput }
 
@@ -602,44 +564,6 @@ expect
 
     # Worlds are equal after init
     ourPositions == theirPositions
-
-# this causes a compiler crash at crates/repl_eval/src/eval.rs:1444
-# expect
-#     (ourFirstFrame, ourFirstOutgoing) = frameTicks ourStart {
-#         input: { Input.blank & up: Down },
-#         deltaMillis: millisPerTick,
-#         inbox: [],
-#     }
-#     ourFirstMessage : FrameMessage
-#     ourFirstMessage =
-#         when ourFirstOutgoing is
-#             Ok message -> message
-#             Err Blocking -> crash "block in test"
-
-#     (theirFirstFrame, theirFirstOutgoing) = frameTicks theirStart {
-#         input: { Input.blank & down: Down },
-#         deltaMillis: millisPerTick,
-#         inbox: [{ id: ourId, message: ourFirstMessage }],
-#     }
-#     theirFirstMessage : FrameMessage
-#     theirFirstMessage =
-#         when theirFirstOutgoing is
-#             Ok message -> message
-#             Err Blocking -> crash "block in test"
-
-#     (ourSecondFrame, _) = frameTicks ourFirstFrame {
-#         input: Input.blank,
-#         deltaMillis: millisPerTick,
-#         inbox: [{ id: theirId, message: theirFirstMessage }],
-#     }
-
-#     theirPositions : (PixelVec, PixelVec)
-#     theirPositions = (theirFirstFrame.localPlayer.pos, theirFirstFrame.remotePlayer.pos)
-
-#     ourPositions : (PixelVec, PixelVec)
-#     ourPositions = (ourSecondFrame.remotePlayer.pos, ourSecondFrame.localPlayer.pos)
-
-#     theirPositions == ourPositions
 
 # Test Fixtures
 

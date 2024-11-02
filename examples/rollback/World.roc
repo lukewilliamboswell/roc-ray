@@ -6,7 +6,6 @@ module [
     FrameMessage,
     PeerMessage,
     FrameState,
-    Input,
     Intent,
     Facing,
     frameTicks,
@@ -17,18 +16,17 @@ module [
     showCrashInfo,
     lastLocalInput,
     lastRemoteInput,
-    allUp,
     InputTick,
 ]
 
-import rr.Keys
-import rr.RocRay exposing [Vector2, PlatformState]
+import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
 
 # import json.Json
 
 import Resolution exposing [width, height]
 import Pixel exposing [PixelVec]
+import Input exposing [Input]
 
 ## The current game state and rollback metadata
 World : {
@@ -108,13 +106,6 @@ AnimatedSprite : {
 Intent : [Walk Facing, Idle Facing]
 Facing : [Up, Down, Left, Right]
 
-Input : {
-    up : [Up, Down],
-    down : [Up, Down],
-    left : [Up, Down],
-    right : [Up, Down],
-}
-
 millisPerTick : U64
 millisPerTick = 1000 // 120
 
@@ -151,8 +142,8 @@ init = \{ firstMessage: { id, message } } ->
         tick: 0,
         localPlayer,
         remotePlayer,
-        predictedInput: allUp,
-        localInput: allUp,
+        predictedInput: Input.blank,
+        localInput: Input.blank,
     }
 
     {
@@ -176,14 +167,13 @@ frameMessagesToTicks = \messages ->
         List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
 
 FrameState : {
-    platformState : PlatformState,
+    input : Input,
     deltaMillis : U64,
     inbox : List PeerMessage,
 }
 
 frameTicks : World, FrameState -> (World, Result FrameMessage [Blocking])
-frameTicks = \oldWorld, { platformState, deltaMillis, inbox } ->
-    input = readInput platformState.keys
+frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
 
     rollbackDone =
         oldWorld
@@ -318,9 +308,6 @@ roundVec = \{ x, y } -> {
     y: y |> Num.round |> Num.toI64,
 }
 
-allUp : Input
-allUp = { up: Up, down: Up, left: Up, right: Up }
-
 ## execute a single simulation tick
 tickOnce : World, Input -> World
 tickOnce = \world, input ->
@@ -380,7 +367,7 @@ tickOnce = \world, input ->
                         #     crash "defaulting to allUp when there should be remoteInputTicks"
                         # else
                         #     allUp
-                        allUp
+                        Input.blank
 
     remotePlayer =
         oldRemotePlayer = world.remotePlayer
@@ -394,15 +381,6 @@ tickOnce = \world, input ->
         List.append world.snapshots newSnapshot
 
     { world & localPlayer, remotePlayer, remainingMillis, tick, snapshots }
-
-readInput : Keys.Keys -> Input
-readInput = \keys ->
-    up = if Keys.anyDown keys [KeyUp, KeyW] then Down else Up
-    down = if Keys.anyDown keys [KeyDown, KeyS] then Down else Up
-    left = if Keys.anyDown keys [KeyLeft, KeyA] then Down else Up
-    right = if Keys.anyDown keys [KeyRight, KeyD] then Down else Up
-
-    { up, down, left, right }
 
 inputToIntent : Input, Facing -> Intent
 inputToIntent = \{ up, down, left, right }, facing ->
@@ -626,3 +604,67 @@ showCrashInfo = \world ->
     }
 
     Inspect.toStr crashInfo
+
+expect
+    theirPositions = (theirStart.localPlayer.pos, theirStart.remotePlayer.pos)
+    ourPositions = (ourStart.remotePlayer.pos, ourStart.localPlayer.pos)
+
+    # Worlds are equal after init
+    ourPositions == theirPositions
+
+# this causes a compiler crash at crates/repl_eval/src/eval.rs:1444
+# expect
+#     (ourFirstFrame, ourFirstOutgoing) = frameTicks ourStart {
+#         input: { Input.blank & up: Down },
+#         deltaMillis: millisPerTick,
+#         inbox: [],
+#     }
+#     ourFirstMessage : FrameMessage
+#     ourFirstMessage =
+#         when ourFirstOutgoing is
+#             Ok message -> message
+#             Err Blocking -> crash "block in test"
+
+#     (theirFirstFrame, theirFirstOutgoing) = frameTicks theirStart {
+#         input: { Input.blank & down: Down },
+#         deltaMillis: millisPerTick,
+#         inbox: [{ id: ourId, message: ourFirstMessage }],
+#     }
+#     theirFirstMessage : FrameMessage
+#     theirFirstMessage =
+#         when theirFirstOutgoing is
+#             Ok message -> message
+#             Err Blocking -> crash "block in test"
+
+#     (ourSecondFrame, _) = frameTicks ourFirstFrame {
+#         input: Input.blank,
+#         deltaMillis: millisPerTick,
+#         inbox: [{ id: theirId, message: theirFirstMessage }],
+#     }
+
+#     theirPositions : (PixelVec, PixelVec)
+#     theirPositions = (theirFirstFrame.localPlayer.pos, theirFirstFrame.remotePlayer.pos)
+
+#     ourPositions : (PixelVec, PixelVec)
+#     ourPositions = (ourSecondFrame.remotePlayer.pos, ourSecondFrame.localPlayer.pos)
+
+#     theirPositions == ourPositions
+
+# Test Fixtures
+
+ourId = Network.fromU64Pair { upper: 0, lower: 0 }
+theirId = Network.fromU64Pair { upper: 0, lower: 1 }
+
+waitingMessage : FrameMessage
+waitingMessage = {
+    firstTick: 0,
+    lastTick: 0,
+    tickAdvantage: 0,
+    input: { up: Up, down: Up, left: Up, right: Up },
+}
+
+ourStart : World
+ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
+
+theirStart : World
+theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }

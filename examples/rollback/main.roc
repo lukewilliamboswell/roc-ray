@@ -13,6 +13,7 @@ import json.Json
 import Resolution exposing [width, height]
 import World exposing [World]
 import Pixel
+import Input
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
@@ -158,7 +159,8 @@ renderConnected! = \oldModel, state ->
     inbox : List World.PeerMessage
     inbox = decodeFrameMessages network.messages
 
-    (world, outgoing) = World.frameTicks oldModel.world { platformState: state, deltaMillis, inbox }
+    input = Input.read state.keys
+    (world, outgoing) = World.frameTicks oldModel.world { input, deltaMillis, inbox }
 
     lastLocalInput = World.lastLocalInput world
     # TODO This match hits a malloc compiler bug I haven't seen before
@@ -236,9 +238,9 @@ sendHostWaiting! = \network ->
     message : World.FrameMessage
     message = {
         firstTick: 0,
-        lastTick: 1,
+        lastTick: 0,
         tickAdvantage: 0,
-        input: { up: Up, down: Up, left: Up, right: Up },
+        input: Input.blank,
     }
 
     sendFrameMessage! message network

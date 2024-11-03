@@ -1,0 +1,66 @@
+name: Generate builds
+
+on:
+  workflow_dispatch:
+  release:
+    types:
+      - published
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dev-macos:
+    runs-on: macos-latest
+    env:
+      ROC_VERSION: nightly
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Build Essentials
+        run: brew install automake autoconf libtool
+
+      - name: Install Rust and Cargo
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+
+      - name: Install ROC
+        run: |
+          # Install ROC
+          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_apple_silicon-latest.tar.gz
+          mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+          tar -xzf roc_nightly.tar.gz
+          rm roc_nightly.tar.gz
+          mv roc_nightly* roc_nightly
+
+      - name: Check ROC version
+        run: ./roc_nightly/roc version
+
+      - name: Build a debug version of the application
+        run: ROC=./roc_nightly/roc ./ci/dev_build.sh
+
+      - name: Get OS and architecture information
+        id: system-info
+        run: |
+          echo "os_arch=$(uname -sm | tr ' ' '_' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Upload Release Asset
+        if: github.event_name == 'release' # Only run this step for releases
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./target/debug/rocray
+          asset_name: rocray-${{ steps.system-info.outputs.os_arch }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload Artifact (for workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' # Only run this step for manual triggers
+        uses: actions/upload-artifact@v3
+        with:
+          name: rocray-${{ steps.system-info.outputs.os_arch }}
+          path: ./target/debug/rocray

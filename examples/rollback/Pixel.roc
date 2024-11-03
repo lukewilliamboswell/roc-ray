@@ -6,6 +6,7 @@ module [
     toVector2,
     subpixelsPerPixel,
     fromParts,
+    totalSubpixels,
 ]
 
 import rr.RocRay exposing [Vector2]
@@ -40,12 +41,16 @@ sub = \@Pixel px, { pixels ? 0, subpixels ? 0 } ->
 
 normalize : Pixel -> Pixel
 normalize = \@Pixel px ->
-    totalSubpixels = px.pixels * subpixelsPerPixel + px.subpixels
+    total = px.pixels * subpixelsPerPixel + px.subpixels
 
-    pixels = Num.divTrunc totalSubpixels subpixelsPerPixel
+    pixels = Num.divTrunc total subpixelsPerPixel
     subpixels = Num.rem px.subpixels subpixelsPerPixel
 
     @Pixel { pixels, subpixels }
+
+totalSubpixels : Pixel -> I64
+totalSubpixels = \@Pixel px ->
+    px.pixels * subpixelsPerPixel + px.subpixels
 
 fromParts : { pixels ? I64, subpixels ? I64 } -> Pixel
 fromParts = \{ pixels ? 0, subpixels ? 0 } ->

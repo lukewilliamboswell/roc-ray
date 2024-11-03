@@ -241,6 +241,7 @@ sendHostWaiting! = \network ->
         lastTick: 0,
         tickAdvantage: 0,
         input: Input.blank,
+        checksum: -1,
     }
 
     sendFrameMessage! message network
@@ -262,6 +263,7 @@ FrameMessageJson : {
     down : Bool,
     left : Bool,
     right : Bool,
+    checksum : I64,
 }
 
 networkToWorld : FrameMessageJson -> World.FrameMessage
@@ -276,6 +278,7 @@ networkToWorld = \json ->
         lastTick: json.lastTick,
         tickAdvantage: json.tickAdvantage,
         input: { up, down, left, right },
+        checksum: json.checksum,
     }
 
 worldToNetwork : World.FrameMessage -> FrameMessageJson
@@ -287,6 +290,7 @@ worldToNetwork = \message -> {
     down: message.input.down == Down,
     left: message.input.left == Down,
     right: message.input.right == Down,
+    checksum: message.checksum,
 }
 
 decodeSingleFrameMessage : RocRay.NetworkMessage -> Result World.PeerMessage _

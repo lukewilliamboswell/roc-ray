@@ -20,12 +20,13 @@ module [
 ]
 
 # TODO
-# 1. write local inputTicks to buffer
-# 2. input delay for both local and remote
-# 3. send overlapping HISTORIES of inputs?
-
-# TODO later
+# add checksum - detect desyncs
+# add input delay - write local inputTicks to buffer
 # use ring buffers
+# send overlapping histories of inputs to handle packet loss
+# recover from desyncs - request-response?
+# track network event history
+# make rollback stuff configurable (incl off completely)
 
 import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
@@ -79,6 +80,7 @@ Snapshot : {
     remotePlayer : RemotePlayer,
     predictedInput : Input,
     localInput : Input,
+    checksum : I64,
 }
 
 LocalPlayer : {
@@ -99,6 +101,7 @@ FrameMessage : {
     lastTick : I64,
     tickAdvantage : I64,
     input : Input,
+    checksum : I64,
 }
 
 PeerMessage : { id : UUID, message : FrameMessage }
@@ -150,6 +153,7 @@ init = \{ firstMessage: { id, message } } ->
         remotePlayer,
         predictedInput: Input.blank,
         localInput: Input.blank,
+        checksum: makeChecksum { localPlayer, remotePlayer },
     }
 
     {
@@ -182,6 +186,65 @@ frameMessagesToTicks = \messages ->
 
             _ ->
                 List.append kept inputTick
+
+expect
+    leftDown : Input
+    leftDown = { Input.blank & left: Down }
+
+    inputTicks = frameMessagesToTicks [
+        {
+            firstTick: 0,
+            lastTick: 1,
+            tickAdvantage: 0,
+            input: Input.blank,
+            checksum: 0,
+        },
+        {
+            firstTick: 2,
+            lastTick: 3,
+            tickAdvantage: 0,
+            input: leftDown,
+            checksum: 0,
+        },
+    ]
+
+    expected = [
+        { tick: 0, input: Input.blank },
+        { tick: 1, input: Input.blank },
+        { tick: 2, input: leftDown },
+        { tick: 3, input: leftDown },
+    ]
+
+    inputTicks == expected
+
+expect
+    leftDown : Input
+    leftDown = { Input.blank & left: Down }
+
+    inputTicks = frameMessagesToTicks [
+        {
+            firstTick: 0,
+            lastTick: 1,
+            tickAdvantage: 0,
+            input: Input.blank,
+            checksum: 0,
+        },
+        {
+            firstTick: 1,
+            lastTick: 2,
+            tickAdvantage: 0,
+            input: leftDown,
+            checksum: 0,
+        },
+    ]
+
+    expected = [
+        { tick: 0, input: Input.blank },
+        { tick: 1, input: leftDown },
+        { tick: 2, input: leftDown },
+    ]
+
+    inputTicks == expected
 
 FrameState : {
     input : Input,
@@ -217,10 +280,12 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
     lastTick = newWorld.tick |> Num.toI64
     tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
 
+    checksum = makeChecksum newWorld
+
     outgoingMessage : Result FrameMessage [Blocking]
     outgoingMessage =
         when newWorld.blocked is
-            Unblocked -> Ok { firstTick, lastTick, tickAdvantage, input }
+            Unblocked -> Ok { firstTick, lastTick, tickAdvantage, input, checksum }
             BlockedFor _ -> Err Blocking
 
     snapshots =
@@ -228,6 +293,17 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
             snap.tick < newWorld.syncTick
 
     ({ newWorld & snapshots }, outgoingMessage)
+
+makeChecksum : { localPlayer : LocalPlayer, remotePlayer : RemotePlayer }w -> I64
+makeChecksum = \world ->
+    # TODO use a real checksum
+    localX = Pixel.totalSubpixels world.localPlayer.pos.x
+    localY = Pixel.totalSubpixels world.localPlayer.pos.y
+
+    remoteX = Pixel.totalSubpixels world.remotePlayer.pos.x
+    remoteY = Pixel.totalSubpixels world.remotePlayer.pos.y
+
+    localX + 10 * localY + 100 * remoteX + 1000 * remoteY
 
 addRemoteInputs : World, List PeerMessage -> World
 addRemoteInputs = \world, inbox ->
@@ -263,9 +339,9 @@ cleanAndSortInputs = \history, { syncTick } ->
         Num.compare left.firstTick right.firstTick
     sortedUnique = List.walk sorted [] \lst, fresh ->
         isMergeable = \lastMessage ->
-            contiguous = lastMessage.lastTick == (fresh.firstTick - 1)
-            equal = lastMessage.input == fresh.input
-            contiguous && equal
+            contiguous = lastMessage.lastTick == fresh.firstTick - 1
+            equalInput = lastMessage.input == fresh.input
+            contiguous && equalInput
 
         when List.last lst is
             # same start tick
@@ -280,6 +356,7 @@ cleanAndSortInputs = \history, { syncTick } ->
                 lastIndex = List.len lst - 1
                 List.set lst lastIndex merged
 
+            # TODO check for other overlaps?
             _ -> List.append lst fresh
 
     keptLast = List.last sortedUnique
@@ -350,9 +427,13 @@ tickOnce = \world, { input } ->
         movePlayer { oldRemotePlayer & animation, intent } intent
 
     snapshots =
+        checksum = makeChecksum { localPlayer, remotePlayer }
+
         newSnapshot : Snapshot
-        newSnapshot = { localInput: input, tick, localPlayer, remotePlayer, predictedInput }
+        newSnapshot = { localInput: input, tick, localPlayer, remotePlayer, predictedInput, checksum }
+
         oldSnapshots = world.snapshots |> List.dropIf \snap -> snap.tick == tick
+
         List.append oldSnapshots newSnapshot
 
     { world &
@@ -506,14 +587,14 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
                 # overwrite our prediction with whatever they actually did
                 Ok inputTick -> { questionableSnap & predictedInput: inputTick.input }
 
-        lastRemoteInputTick =
+        remoteTick =
             when List.last wrongFutureWorld.remoteInputTicks is
                 Ok last -> last.tick
                 Err ListWasEmpty ->
                     crashInfo = showCrashInfo wrongFutureWorld
                     crash "no last input tick during roll forward: $(crashInfo)"
 
-        { wrongFutureWorld & snapshots, remoteTick: lastRemoteInputTick, syncTick: lastRemoteInputTick }
+        { wrongFutureWorld & snapshots, remoteTick, syncTick: remoteTick }
 
     remainingMillisBeforeRollForward = fixedWorld.remainingMillis
     rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
@@ -532,7 +613,10 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
 
             tickOnce steppingWorld { input: localInput }
 
-    { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward }
+    syncTick =
+        Num.min rolledForwardWorld.tick rolledForwardWorld.remoteTick
+
+    { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward, syncTick }
 
 showCrashInfo : World -> Str
 showCrashInfo = \world ->
@@ -576,6 +660,7 @@ waitingMessage = {
     lastTick: 0,
     tickAdvantage: 0,
     input: { up: Up, down: Up, left: Up, right: Up },
+    checksum: -1,
 }
 
 ourStart : World

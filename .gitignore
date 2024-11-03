@@ -26,3 +26,5 @@ platform/glue.roc
 target/
 
 windows/bin
+
+rocray

@@ -25,8 +25,8 @@ ConnectedModel : {
     dude : Texture,
     world : World,
     timestampMillis : U64,
-    lastRemoteInput : Result World.InputTick [ListWasEmpty],
     lastLocalInput : Result World.InputTick [ListWasEmpty],
+    lastRemoteInput : Result World.InputTick [NotFound],
 }
 
 init! : {} => Result Model []
@@ -128,7 +128,13 @@ waitingToConnected! = \waiting, state, firstMessage ->
     world = World.init { firstMessage }
 
     connected : ConnectedModel
-    connected = { dude, world, timestampMillis, lastLocalInput: Err ListWasEmpty, lastRemoteInput: Err ListWasEmpty }
+    connected = {
+        dude,
+        world,
+        timestampMillis,
+        lastLocalInput: Err ListWasEmpty,
+        lastRemoteInput: Err NotFound,
+    }
 
     drawConnected! connected state
 
@@ -194,8 +200,9 @@ renderConnected! = \oldModel, state ->
                     RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
                 _f ->
-                    crashInfo = World.showCrashInfo world
-                    crash "blocked world: $(crashInfo)"
+                    # crashInfo = World.showCrashInfo world
+                    history = World.writableHistory world
+                    crash "blocked world: $(history)"
 
     Ok (Connected model)
 

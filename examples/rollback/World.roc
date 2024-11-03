@@ -17,6 +17,7 @@ module [
     lastLocalInput,
     lastRemoteInput,
     InputTick,
+    writableHistory,
 ]
 
 # TODO
@@ -30,6 +31,8 @@ module [
 
 import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
+
+import json.Json
 
 import Resolution exposing [width, height]
 import Pixel exposing [PixelVec]
@@ -69,15 +72,20 @@ lastLocalInput = \{ snapshots } ->
     |> List.last
     |> Result.map \snap -> { tick: snap.tick, input: snap.localInput }
 
-lastRemoteInput : World -> Result InputTick [ListWasEmpty]
-lastRemoteInput = \{ remoteInputTicks } ->
-    List.last remoteInputTicks
+lastRemoteInput : World -> Result InputTick [NotFound]
+lastRemoteInput = \{ syncTick, snapshots } ->
+    # TODO remove these?
+    snapshots
+    |> List.findLast \snap -> snap.tick == syncTick
+    |> Result.map \snap -> { tick: snap.tick, input: snap.predictedInput }
 
 ## A previous game state
 Snapshot : {
     tick : U64,
     localPlayer : LocalPlayer,
     remotePlayer : RemotePlayer,
+    # TODO this includes confirmed inputs;
+    # rename it or change the type
     predictedInput : Input,
     localInput : Input,
     checksum : I64,
@@ -289,8 +297,9 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
             BlockedFor _ -> Err Blocking
 
     snapshots =
-        List.dropIf newWorld.snapshots \snap ->
-            snap.tick < newWorld.syncTick
+        # This has been working now, but I want the record
+        # List.dropIf newWorld.snapshots \snap -> snap.tick < newWorld.syncTick
+        newWorld.snapshots
 
     ({ newWorld & snapshots }, outgoingMessage)
 
@@ -616,6 +625,32 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
     syncTick =
         Num.min rolledForwardWorld.tick rolledForwardWorld.remoteTick
 
+    remoteChecksum =
+        rolledForwardWorld.remoteInputs
+        |> List.findLast \msg ->
+            iSyncTick = syncTick |> Num.toI64
+            msg.lastTick >= iSyncTick && msg.firstTick <= iSyncTick
+        |> Result.map \msg -> msg.checksum
+    localChecksum =
+        rolledForwardWorld.snapshots
+        |> List.findLast \snap -> snap.tick == syncTick
+        |> Result.map \snap -> snap.checksum
+    when (localChecksum, remoteChecksum) is
+        (Ok local, Ok remote) if local == remote ->
+            {}
+
+        (Ok local, Ok remote) ->
+            history = writableHistory rolledForwardWorld
+            crashInfo = showCrashInfo rolledForwardWorld
+            checksums = Inspect.toStr (local, remote)
+            crash "different checksums for sync tick: $(checksums), $(crashInfo), history:\n$(history)"
+
+        (local, remote) ->
+            history = writableHistory rolledForwardWorld
+            crashInfo = showCrashInfo rolledForwardWorld
+            checksums = Inspect.toStr (local, remote)
+            crash "missing checksum for sync tick: $(checksums), $(crashInfo), history: \n$(history)"
+
     { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward, syncTick }
 
 showCrashInfo : World -> Str
@@ -668,3 +703,39 @@ ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
 
 theirStart : World
 theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }
+
+writableHistory : World -> Str
+writableHistory = \{ snapshots } ->
+    writeInput : Input -> Str
+    writeInput = \input ->
+        up = if input.up == Down then Ok "Up" else Err Up
+        down = if input.down == Down then Ok "Down" else Err Up
+        left = if input.left == Down then Ok "Left" else Err Up
+        right = if input.right == Down then Ok "Right" else Err Up
+
+        [up, down, left, right]
+        |> List.keepOks \res -> res
+        |> Str.joinWith ", "
+        |> \inputs -> "[$(inputs)]"
+
+    writableSnapshot : Snapshot -> _
+    writableSnapshot = \snap -> {
+        tick: snap.tick,
+        localInput: writeInput snap.localInput,
+        predictedInput: writeInput snap.predictedInput,
+    }
+
+    toUtf8Unchecked = \bytes ->
+        when Str.fromUtf8 bytes is
+            Ok str -> str
+            Err _ -> crash "toUtf8Unchecked"
+
+    writeSnapshot : Snapshot -> Str
+    writeSnapshot = \snap ->
+        writable = writableSnapshot snap
+        bytes = Encode.toBytes writable Json.utf8
+        toUtf8Unchecked bytes
+
+    snapshots
+    |> List.map writeSnapshot
+    |> Str.joinWith "\n"

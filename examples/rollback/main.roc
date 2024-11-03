@@ -185,14 +185,24 @@ renderConnected! = \oldModel, state ->
 
     model = { oldModel & world, timestampMillis, lastLocalInput, lastRemoteInput }
 
-    when outgoing is
-        Ok message -> sendFrameMessage! message network
-        Err Blocking -> {}
+    blocked =
+        when outgoing is
+            Ok message ->
+                sendFrameMessage! message network
+                if message.input != Input.blank then
+                    RocRay.log! "Sent Message:\n$(Inspect.toStr message)" LogInfo
+                else
+                    {}
+
+                Unblocked
+
+            Err e -> e
 
     drawConnected! model state
 
-    when world.blocked is
+    when blocked is
         Unblocked -> {}
+        Skipped -> {}
         BlockedFor blockedFrames ->
             when blockedFrames is
                 f if f < 5 -> {}
@@ -200,9 +210,9 @@ renderConnected! = \oldModel, state ->
                     RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
                 _f ->
-                    # crashInfo = World.showCrashInfo world
+                    crashInfo = World.showCrashInfo world
                     history = World.writableHistory world
-                    crash "blocked world: $(history)"
+                    crash "blocked world:\n$(crashInfo)\n$(history)"
 
     Ok (Connected model)
 

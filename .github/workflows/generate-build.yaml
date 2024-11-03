@@ -27,14 +27,28 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source $HOME/.cargo/env
 
-      - name: Install ROC
+      # - name: Install ROC
+      #   run: |
+      #     # Install ROC
+      #     curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_apple_silicon-latest.tar.gz
+      #     mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+      #     tar -xzf roc_nightly.tar.gz
+      #     rm roc_nightly.tar.gz
+      #     mv roc_nightly* roc_nightly
+      #
+      - name: Install ROC (temoporary from test release)
         run: |
-          # Install ROC
-          curl -fOL https://github.com/roc-lang/roc/releases/download/${ROC_VERSION}/roc_nightly-macos_apple_silicon-latest.tar.gz
-          mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
-          tar -xzf roc_nightly.tar.gz
-          rm roc_nightly.tar.gz
-          mv roc_nightly* roc_nightly
+          # Create a directory to store ROC
+          mkdir roc_nightly
+
+          # Download ROC binary from a test URL
+          curl -fOL https://github.com/lukewilliamboswell/roc/releases/download/test-1/roc
+
+          # Move the downloaded file into roc_nightly directory
+          mv roc roc_nightly/
+
+          # Make the binary executable
+          chmod +x roc_nightly/roc
 
       - name: Check ROC version
         run: ./roc_nightly/roc version

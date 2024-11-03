@@ -130,8 +130,6 @@ web app="examples/basic-shapes.roc" features="default":
     # build the roc app
     roc build --target wasm32 --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
 
-    export EMCC_CFLAGS="--preload-file examples/assets/@/assets/"
-
     # build the rust app
     rustup target add wasm32-unknown-emscripten
     cargo build --target wasm32-unknown-emscripten --features {{features}}
@@ -140,6 +138,30 @@ web app="examples/basic-shapes.roc" features="default":
     cp target/wasm32-unknown-emscripten/debug/rocray.js static/
     cp target/wasm32-unknown-emscripten/debug/rocray.wasm static/
     cp target/wasm32-unknown-emscripten/debug/deps/rocray.data static/
+
+    # start a http server to serve the static files
+    simple-http-server --ip 127.0.0.1 --index --open --nocache -- static/
+
+# build and run an executable, ignoring warnings
+[unix]
+webRelease app="examples/basic-shapes.roc" features="default":
+    rm -f static/*.wasm # remove previous builds
+    rm -f static/*.js
+
+    # roc build & check use 2 as an exit code for warnings
+    roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
+
+    # build the roc app
+    roc build --target wasm32 --no-link --optimize --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
+
+    # build the rust app
+    rustup target add wasm32-unknown-emscripten
+    cargo build --release --target wasm32-unknown-emscripten --features {{features}}
+
+    # copy the wasm and js output to the static directory
+    cp target/wasm32-unknown-emscripten/release/rocray.js static/
+    cp target/wasm32-unknown-emscripten/release/rocray.wasm static/
+    cp target/wasm32-unknown-emscripten/release/deps/rocray.data static/
 
     # start a http server to serve the static files
     simple-http-server --ip 127.0.0.1 --index --open --nocache -- static/

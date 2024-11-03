@@ -71,6 +71,18 @@ fn main() {
             assert!(output.stderr.is_empty(), "{output:#?}");
 
             println!("cargo:rustc-link-lib=static=app");
+
+            if std::env::var("PROFILE").unwrap() == "release" {
+                println!(
+                    "cargo:rustc-env=EMCC_CFLAGS={}",
+                    std::env::var("EMCC_CFLAGS_RELEASE").unwrap()
+                );
+            } else {
+                println!(
+                    "cargo:rustc-env=EMCC_CFLAGS={}",
+                    std::env::var("EMCC_CFLAGS_DEBUG").unwrap()
+                );
+            }
         }
         (RocRaySupportedTarget::MacOS, AppType::Static(..)) => {
             // Run the `libtool -static -o libapp.a app.o` command

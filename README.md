@@ -73,7 +73,8 @@ $ git clone https://github.com/lukewilliamboswell/roc-ray.git
 1. Install [roc](https://www.roc-lang.org)
 2. Install [rust](https://www.rust-lang.org/tools/install)
 3. Install dev tools on linux `sudo apt install build-essential git` or on macOS `xcode-select --install`
-4. Install [just](https://github.com/casey/just?tab=readme-ov-file#packages)
+4. Install [just](https://github.com/casey/just) `cargo install just`
+5. Install [watchexec](https://github.com/watchexec/watchexec) `cargo install watchexec-cli`
 
 Run an example:
 

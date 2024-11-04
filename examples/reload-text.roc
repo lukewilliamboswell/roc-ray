@@ -8,16 +8,16 @@ Model : {
     message : Str,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
 
     RocRay.initWindow! { title: "Reload Text" }
 
-    message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
+    message = RocRay.loadFileToStr!? "examples/assets/reload-text/message.txt"
 
     Ok { message }
 
-render! : Model, RocRay.PlatformState => Result Model []
+render! : Model, RocRay.PlatformState => Result Model _
 render! = \model, { mouse } ->
 
     buttonRect = {
@@ -44,7 +44,7 @@ render! = \model, { mouse } ->
         }
 
     if Mouse.pressed mouse.buttons.left && within mouse.position buttonRect then
-        message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
+        message = RocRay.loadFileToStr!? "examples/assets/reload-text/message.txt"
         Ok { message }
     else
         Ok model

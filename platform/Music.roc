@@ -19,9 +19,11 @@ Music := Effect.LoadedMusic
 ## track = Music.load! "resources/green-hill-zone.wav"
 ## ```
 ## maps to Raylib's LoadMusicStream
-load! : Str => Music
+load! : Str => Result Music [LoadErr Str]_
 load! = \path ->
-    @Music (Effect.loadMusicStream! path)
+    Effect.loadMusicStream! path
+    |> Result.map @Music
+    |> Result.mapErr LoadErr
 
 ## Play a loaded music stream.
 ## ```

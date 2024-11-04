@@ -11,10 +11,16 @@ hosted Effect
         PlatformTime,
         PlatformStateFromHost,
         PeerState,
+        Font,
+        toLogLevel,
+
+        # EFFECTS
         getScreenSize!,
         exit!,
         drawText!,
+        drawTextFont!,
         measureText!,
+        measureTextFont!,
         drawLine!,
         drawRectangle!,
         drawRectangleGradientV!,
@@ -34,7 +40,6 @@ hosted Effect
         beginMode2D!,
         endMode2D!,
         log!,
-        toLogLevel,
         loadTexture!,
         drawTextureRec!,
         loadSound!,
@@ -51,6 +56,8 @@ hosted Effect
         resumeMusicStream!,
         sleepMillis!,
         randomI32!,
+        loadFont!,
+        configureWebRTC!,
     ]
     imports []
 
@@ -116,8 +123,11 @@ log! : Str, I32 => {}
 
 initWindow! : Str, F32, F32 => {}
 
-drawText! : RocVector2, I32, Str, RocColor => {}
-measureText! : Str, I32 => I64
+drawText! : Str, RocVector2, F32, F32, RocColor => {}
+drawTextFont! : Font, Str, RocVector2, F32, F32, RocColor => {}
+
+measureText! : Str, F32, F32 => RocVector2
+measureTextFont! : Font, Str, F32, F32 => RocVector2
 
 drawLine! : RocVector2, RocVector2, RocColor => {}
 
@@ -136,24 +146,24 @@ beginDrawing! : RocColor => {}
 endDrawing! : {} => {}
 
 Camera := Box {}
-createCamera! : RocVector2, RocVector2, F32, F32 => Camera
+createCamera! : RocVector2, RocVector2, F32, F32 => Result Camera Str
 updateCamera! : Camera, RocVector2, RocVector2, F32, F32 => {}
 
 beginMode2D! : Camera => {}
 endMode2D! : Camera => {}
 
 Texture := Box {}
-loadTexture! : Str => Texture
+loadTexture! : Str => Result Texture Str
 drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
 drawRenderTextureRec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
 
 Sound := Box {}
-loadSound! : Str => Sound
+loadSound! : Str => Result Sound Str
 playSound! : Sound => {}
 
 Music := Box {}
 LoadedMusic : { music : Music, lenSeconds : F32 }
-loadMusicStream! : Str => LoadedMusic
+loadMusicStream! : Str => Result LoadedMusic Str
 playMusicStream! : Music => {}
 stopMusicStream! : Music => {}
 pauseMusicStream! : Music => {}
@@ -161,14 +171,19 @@ resumeMusicStream! : Music => {}
 getMusicTimePlayed! : Music => F32
 
 RenderTexture := Box {}
-createRenderTexture! : RocVector2 => RenderTexture
+createRenderTexture! : RocVector2 => Result RenderTexture Str
 beginTexture! : RenderTexture, RocColor => {}
 endTexture! : RenderTexture => {}
 
-loadFileToStr! : Str => Str
+loadFileToStr! : Str => Result Str Str
 
 sendToPeer! : List U8, RawUUID => {}
 
 randomI32! : I32, I32 => I32
 
 sleepMillis! : U64 => {}
+
+Font := Box U64
+loadFont! : Str => Result Font Str
+
+configureWebRTC! : Str => {}

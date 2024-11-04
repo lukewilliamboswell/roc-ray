@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-us">
+    <head>
+        <title>Roc Ray</title>
+        <style>
+            * {
+                padding: 0;
+                margin: 0;
+            }
+            body {
+                overflow: hidden;
+            }
+        </style>
+    </head>
+
+    <body>
+        <canvas id="canvas" oncontextmenu="event.preventDefault()"> </canvas>
+        <script>
+            function _date_now() {
+                return Date.now();
+            }
+            function on_load() {
+                const dpr = window.devicePixelRatio;
+                let canvas = document.getElementById("canvas");
+
+                let on_resize = Module.cwrap("on_resize", null, [
+                    "number",
+                    "number",
+                ]);
+
+                let resize_handler = () => {
+                    const width = (this.canvas.width = window.innerWidth * dpr);
+                    const height = (this.canvas.height =
+                        window.innerHeight * dpr);
+                    on_resize(width, height);
+                };
+
+                window.addEventListener("resize", resize_handler, true);
+
+                resize_handler();
+            }
+
+            var Module = {
+                postRun: [on_load],
+                canvas: document.getElementById("canvas"),
+            };
+        </script>
+        <script src="rocray.js"></script>
+    </body>
+</html>

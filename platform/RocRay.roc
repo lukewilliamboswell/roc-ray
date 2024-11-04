@@ -17,7 +17,6 @@ module [
     exit!,
     setTargetFPS!,
     displayFPS!,
-    measureText!,
     takeScreenshot!,
     log!,
     loadFileToStr!,
@@ -217,10 +216,6 @@ displayFPS! = \{ fps, pos } ->
 
     Effect.setDrawFPS! showFps (InternalVector.fromVector2 pos)
 
-## Measure the width of a text string using the default font.
-measureText! : { text : Str, size : I32 } => I64
-measureText! = \{ text, size } -> Effect.measureText! text size
-
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```
 ## RocRay.takeScreenshot! "screenshot.png"
@@ -233,9 +228,10 @@ takeScreenshot! = \filename ->
 ## ```
 ## RocRay.loadFileToStr! "resources/example.txt"
 ## ```
-loadFileToStr! : Str => Str
+loadFileToStr! : Str => Result Str [LoadErr Str]_
 loadFileToStr! = \path ->
     Effect.loadFileToStr! path
+    |> Result.mapErr LoadErr
 
 ## Send a message to a connected peer.
 sendToPeer! : List U8, UUID => {}

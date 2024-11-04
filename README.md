@@ -4,12 +4,14 @@
 
 We aim to provide a nice experience for the hobby developer or a small team who wants to build a game or graphical application in Roc.
 
+**Status** - Early development, not yet ready for production use. We are looking for contributors to help build out the platform and examples. If you find a bug or have a feature request, please open an issue or start a thread in the [roc zulip](https://roc.zulipchat.com/) where you can find us.
+
 ## Features
 
+- Write games using Roc, the Fast, Friendly, and Functional programming language
+- Cross-platform support for Linux, macOS, Windows, and Web
 - Simple API for 2D graphics (3D coming soon)
 - Built on the awesome Raylib library
-- Cross-platform support for Linux, macOS, and Windows (hopefully Web coming soon)
-- Write games using Roc, the Fast, Friendly, and Functional programming language
 - Designed for beginners, hobby developers and small teams
 
 ## Documentation
@@ -21,7 +23,7 @@ Checkout the docs site at [lukewilliamboswell.github.io/roc-ray](https://lukewil
 (requires cloning the repository locally)
 
 ```roc
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Draw
@@ -31,28 +33,26 @@ height = 600
 
 Model : {}
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
-    RocRay.setWindowSize! { width, height }
-    RocRay.setWindowTitle! "Basic Shapes"
+    RocRay.initWindow! { title: "Basic Shapes", width, height }
 
-    Task.ok {}
+    Ok {}
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \_, _ ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \_, {} ->
 
     Draw.draw! White \{} ->
-
-        Draw.text! { pos: { x: 300, y: 50 }, text: "Hello World", size: 40, color: Navy }
+        Draw.text! { pos: { x: 10, y: 10 }, text: "Hello World!", size: 40, color: Navy }
         Draw.rectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
-        Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, top: Lime, bottom: Navy }
+        Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, left: Lime, right: Navy }
         Draw.rectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }
         Draw.circle! { center: { x: 200, y: 400 }, radius: 75, color: Fuchsia }
         Draw.circleGradient! { center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon }
         Draw.line! { start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }
 
-    Task.ok {}
+    Ok {}
 ```
 
 ![basic shapes example](examples/demo-basic-shapes.png)
@@ -60,6 +60,8 @@ render = \_, _ ->
 ## Getting Started
 
 ### Clone the repository
+
+In future we should be able to provide prebuilt-binaries that work with the Roc cli and writing apps is as simple as `roc run app.roc`, but for now to get started you will need to clone the repository.
 
 ```
 $ git clone https://github.com/lukewilliamboswell/roc-ray.git
@@ -71,7 +73,8 @@ $ git clone https://github.com/lukewilliamboswell/roc-ray.git
 1. Install [roc](https://www.roc-lang.org)
 2. Install [rust](https://www.rust-lang.org/tools/install)
 3. Install dev tools on linux `sudo apt install build-essential git` or on macOS `xcode-select --install`
-4. Install [just](https://github.com/casey/just?tab=readme-ov-file#packages)
+4. Install [just](https://github.com/casey/just) `cargo install just`
+5. Install [watchexec](https://github.com/watchexec/watchexec) `cargo install watchexec-cli`
 
 Run an example:
 
@@ -80,6 +83,8 @@ $ just dev examples/pong.roc
 ```
 
 **OR**
+
+*Currently broken - Help Wanted*
 
 Use the [nix package manager](https://nixos.org/download/) to install the dependencies
 
@@ -107,6 +112,17 @@ PS > roc version
 roc built from commit b5e3c3e441 with additional changes, committed at 2024-10-09 11:34:35 UTC
 ```
 
+### Web
+
+*Required dependencies*
+1. As above for native
+2. Install [zig](https://ziglang.org)
+3. Install [emscripten](https://emscripten.org)
+4. Install simple-http-server `cargo install simple-http-server`
+
+```
+$ just web examples/pong.roc
+```
 
 ## Contributing
 

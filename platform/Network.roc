@@ -1,6 +1,10 @@
-module [UUID, fromU64Pair, toU64Pair, toStr]
+module [UUID, fromU64Pair, toU64Pair, toStr, configure!]
 
 import Effect
+
+## Configure the WebRTC connection to the given server URL.
+configure! : { serverUrl : Str } => {}
+configure! = \{ serverUrl } -> Effect.configureWebRTC! serverUrl
 
 UUID := { upper : U64, lower : U64 }
     implements [

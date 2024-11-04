@@ -47,11 +47,13 @@ pub enum PlatformEffect {
     SetTargetFPS,
     GetScreenSize,
     SendMsgToPeer,
+    LoadFont,
     LoadSound,
     LoadMusicStream,
     SleepMillis,
     LoadFileToStr,
     PlaySound,
+    ConfigureNetwork,
     PlayMusicStream,
     DrawCircle,
     RandomValue,
@@ -100,6 +102,9 @@ impl PlatformMode {
             // TODO SendMsgToPeer should only be if we have initialized the "network"
             | (_, SendMsgToPeer) => true,
 
+            // PERMITTED ONL IT INIT BEFORE RAYLIB INIT
+            (Init, ConfigureNetwork) => true,
+
             // PERMITTED ONLY AFTER INIT (NEEDS RAYLIB INIT)
             (mode, LoadFileToStr) if mode.after_init() => true,
             (mode, UpdateCamera) if mode.after_init() => true,
@@ -109,6 +114,7 @@ impl PlatformMode {
             | (InitRaylib, LoadSound)
             | (InitRaylib, LoadMusicStream)
             | (InitRaylib, LoadTexture)
+            | (InitRaylib, LoadFont)
             | (InitRaylib, CreateRenderTexture) => true,
 
             // MODE TRANISITIONS
@@ -195,10 +201,7 @@ pub fn update(effect: PlatformEffect) -> Result<(), String> {
                 Ok(())
             }
             current_mode if current_mode.is_effect_permitted(effect) => Ok(()),
-            _ => Err(format!(
-                "Effect {:?} not permitted in mode {:?}",
-                effect, *mode
-            )),
+            _ => Err(format!("{:?} not permitted in mode {:?}", effect, *mode)),
         }
     })
 }

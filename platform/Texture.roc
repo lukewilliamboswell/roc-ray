@@ -10,6 +10,7 @@ import RocRay exposing [Texture]
 ## ```
 ## texture = Texture.load! "sprites.png"
 ## ```
-load! : Str => Texture
+load! : Str => Result Texture [LoadErr Str]_
 load! = \filename ->
     Effect.loadTexture! filename
+    |> Result.mapErr LoadErr

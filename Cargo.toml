@@ -1,15 +1,29 @@
 [package]
-name = "roc-ray"
+name = "rocray"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+raylib = { path = "raylib" }
 roc_std = { git = "https://github.com/roc-lang/roc.git" }
 roc_std_heap = { git = "https://github.com/roc-lang/roc.git" }
 libc = "0.2"
 matchbox_socket = "0.10.0"
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
 uuid = "1.11.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+once_cell = "1.18"
+web-sys = { version = "0.3", features = ["console"] }
+tokio = { version = "1.0", default-features = false, features = [
+    "rt",
+    "sync",
+    "time",
+    "macros",
+] }
+console_error_panic_hook = "0.1.7"
 
 [build-dependencies]
 reqwest = { version = "0.11", default-features = false, features = [
@@ -20,7 +34,7 @@ flate2 = "1.0"
 tar = "0.4"
 zip = "0.5"
 bytes = "1"
+build-target = "0.4"
 
 [features]
 default = []
-trace-debug = []

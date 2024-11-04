@@ -16,6 +16,7 @@ module [
 import Effect
 import InternalRectangle
 import InternalVector
+import Font exposing [Font]
 import RocRay exposing [Texture, Camera, Color, Vector2, Rectangle, RenderTexture, rgba]
 
 ## Draw to the framebuffer. Takes a color to clear the screen with.
@@ -62,12 +63,11 @@ withTexture! = \texture, color, cmd! ->
     Effect.endTexture! texture
 
 ## Draw text on the screen using the default font.
-## ```
-## Draw.text! { pos: { x: 50, y: 120 }, text: "Click to start", size: 20, color: White }
-## ```
-text! : { pos : { x : F32, y : F32 }, text : Str, size : I32, color : Color } => {}
-text! = \{ text: t, pos, size, color } ->
-    Effect.drawText! (InternalVector.fromVector2 pos) size t (rgba color)
+text! : { font ? Font, pos : { x : F32, y : F32 }, text : Str, size ? F32, spacing ? F32, color ? Color } => {}
+text! = \{ font ? Default, text: t, pos, size ? 20, spacing ? 1, color ? RGBA 0 0 0 255 } ->
+    when font is
+        Default -> Effect.drawText! t (InternalVector.fromVector2 pos) size spacing (rgba color)
+        Loaded boxed -> Effect.drawTextFont! boxed t (InternalVector.fromVector2 pos) size spacing (rgba color)
 
 ## Draw a line on the screen.
 ## ```
@@ -101,13 +101,13 @@ rectangleGradientV! = \{ rect, top, bottom } ->
 ## ```
 ## Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, top: Lime, bottom: Navy }
 ## ```
-rectangleGradientH! : { rect : Rectangle, top : Color, bottom : Color } => {}
-rectangleGradientH! = \{ rect, top, bottom } ->
+rectangleGradientH! : { rect : Rectangle, left : Color, right : Color } => {}
+rectangleGradientH! = \{ rect, left, right } ->
 
-    tc = rgba top
-    bc = rgba bottom
+    lc = rgba left
+    rc = rgba right
 
-    Effect.drawRectangleGradientH! (InternalRectangle.fromRect rect) tc bc
+    Effect.drawRectangleGradientH! (InternalRectangle.fromRect rect) lc rc
 
 ## Draw a circle on the screen.
 ## ```

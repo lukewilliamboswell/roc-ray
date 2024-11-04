@@ -25,8 +25,6 @@ ConnectedModel : {
     dude : Texture,
     world : World,
     timestampMillis : U64,
-    lastLocalInput : Result World.InputTick [ListWasEmpty],
-    lastRemoteInput : Result World.InputTick [NotFound],
 }
 
 init! : {} => Result Model []
@@ -53,14 +51,13 @@ render! = \model, state ->
         Connected connected -> renderConnected! connected state
 
 drawConnected! : ConnectedModel, PlatformState => {}
-drawConnected! = \{ dude, world, lastLocalInput, lastRemoteInput }, state ->
+drawConnected! = \{ dude, world }, state ->
     Draw.draw! White \{} ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
         # draw local player
         localPlayerFacing = World.playerFacing world.localPlayer
-        localPlayerPos = Pixel.toVector2 world.localPlayer.pos
         Draw.textureRec! {
             texture: dude,
             source: dudeSprite localPlayerFacing world.localPlayer.animation.frame,
@@ -68,27 +65,11 @@ drawConnected! = \{ dude, world, lastLocalInput, lastRemoteInput }, state ->
             tint: White,
         }
 
-        localInputPos = { x: localPlayerPos.x + 10, y: localPlayerPos.y + 10 }
-        Draw.text! {
-            pos: localInputPos,
-            text: "$(Inspect.toStr lastLocalInput)",
-            size: 10,
-            color: Green,
-        }
-
         # draw remote player
         remotePlayerIdPos = Pixel.toVector2 world.remotePlayer.pos
         Draw.text! {
             pos: remotePlayerIdPos,
             text: "$(Inspect.toStr world.remotePlayer.id)",
-            size: 10,
-            color: Red,
-        }
-
-        remoteInputPos = { x: remotePlayerIdPos.x + 10, y: remotePlayerIdPos.y + 10 }
-        Draw.text! {
-            pos: remoteInputPos,
-            text: "$(Inspect.toStr lastRemoteInput)",
             size: 10,
             color: Red,
         }
@@ -128,13 +109,7 @@ waitingToConnected! = \waiting, state, firstMessage ->
     world = World.init { firstMessage }
 
     connected : ConnectedModel
-    connected = {
-        dude,
-        world,
-        timestampMillis,
-        lastLocalInput: Err ListWasEmpty,
-        lastRemoteInput: Err NotFound,
-    }
+    connected = { dude, world, timestampMillis }
 
     drawConnected! connected state
 
@@ -168,22 +143,7 @@ renderConnected! = \oldModel, state ->
     input = Input.read state.keys
     (world, outgoing) = World.frameTicks oldModel.world { input, deltaMillis, inbox }
 
-    lastLocalInput = World.lastLocalInput world
-    # TODO This match hits a malloc compiler bug I haven't seen before
-    # when (oldModel.lastLocalInput, World.lastLocalInput world) is
-    #     (Ok previous, Ok new) if new.input == World.allUp -> Ok previous
-    #     (Ok previous, Err _) -> Ok previous
-    #     (_, Ok something) -> Ok something
-    #     (Err _, Err _) -> Err ListWasEmpty
-
-    lastRemoteInput = World.lastRemoteInput world
-    # when (oldModel.lastRemoteInput, World.lastRemoteInput world) is
-    #     (Ok previous, Ok new) if new.input == World.allUp -> Ok previous
-    #     (Ok previous, Err _) -> Ok previous
-    #     (_, Ok something) -> Ok something
-    #     (Err _, Err _) -> Err ListWasEmpty
-
-    model = { oldModel & world, timestampMillis, lastLocalInput, lastRemoteInput }
+    model = { oldModel & world, timestampMillis }
 
     blocked =
         when outgoing is

@@ -1,33 +1,45 @@
 module [
-    World,
-    LocalPlayer,
-    RemotePlayer,
     AnimatedSprite,
-    FrameMessage,
-    PeerMessage,
-    FrameState,
-    Intent,
     Facing,
+    FrameMessage,
+    FrameState,
+    InputTick,
+    Intent,
+    LocalPlayer,
+    PeerMessage,
+    RemotePlayer,
+    World,
     frameTicks,
     init,
     playerFacing,
     playerStart,
     roundVec,
     showCrashInfo,
-    lastLocalInput,
-    lastRemoteInput,
-    InputTick,
     writableHistory,
 ]
 
-# TODO
-# add input delay - write local inputTicks to buffer
+# TODO: before merge
+# split out a separate module
+# more unit tests
+# address/remove in-code TODOs and FIXMEs
+# explain that the inline expects don't do anything
+#   ask on PR about that
+# figure out checksum assertion failure
 # use ring buffers
+#
+# TODO: later
+# add input delay
+#   use a separate buffer for local inputs from snapshots
+# make rollback stuff configurable (including going fully delay-based)
+#   input delay frames/ticks
+#   rollbackLog max length
+#   maxRollbackTicks and tickAdvantageLimit
 # send overlapping histories of inputs to handle packet loss
 # recover from desyncs - request-response?
 #   maybe just expose to the app/user and make it game's problem?
-# track network event history
-# make rollback stuff configurable (including going full delay-based)
+# allow disabling rollbacks entirely for testing game determinism
+# incorporate fuzz testing?
+# track more network events in rollbackLog
 
 import rr.RocRay exposing [Vector2]
 import rr.Network exposing [UUID]
@@ -54,6 +66,7 @@ World : {
     remoteTick : U64,
     ## the last tick where we synchronized with the remote player
     syncTick : U64,
+    syncTickSnapshot : Snapshot,
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
     snapshots : List Snapshot,
@@ -71,19 +84,6 @@ RollbackEvent : {
 }
 
 InputTick : { tick : U64, input : Input }
-
-lastLocalInput : World -> Result InputTick [ListWasEmpty]
-lastLocalInput = \{ snapshots } ->
-    snapshots
-    |> List.last
-    |> Result.map \snap -> { tick: snap.tick, input: snap.localInput }
-
-lastRemoteInput : World -> Result InputTick [NotFound]
-lastRemoteInput = \{ syncTick, snapshots } ->
-    # TODO remove these?
-    snapshots
-    |> List.findLast \snap -> snap.tick == syncTick
-    |> Result.map \snap -> { tick: snap.tick, input: snap.predictedInput }
 
 ## A previous game state
 Snapshot : {
@@ -179,6 +179,7 @@ init = \{ firstMessage: { id, message } } ->
         tick: 0,
         remoteTick: 0,
         syncTick: 0,
+        syncTickSnapshot: initialSyncSnapshot,
         remoteTickAdvantage: 0,
         snapshots: [initialSyncSnapshot],
         remoteInputs,
@@ -193,18 +194,6 @@ frameMessagesToTicks = \messages ->
     |> List.joinMap \msg ->
         range = List.range { start: At msg.firstTick, end: At msg.lastTick }
         List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
-    |> List.walk [] \kept, inputTick ->
-        when List.last kept is
-            # keep only the last of a run of inputs for the same tick
-            # FIXME this shouldn't happen so regularly
-            # but it was happening almost every frame
-            # TODO retest this with the outgoing message lastTick change
-            Ok last if last.tick == inputTick.tick ->
-                lastIndex = List.len kept - 1
-                List.set kept lastIndex inputTick
-
-            _ ->
-                List.append kept inputTick
 
 expect
     leftDown : Input
@@ -294,11 +283,11 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
 
             { rollbackDone & blocked }
 
-    # TODO get these values from normalUpdate in a reliable way
+    # TODO get this range from normalUpdate in a reliable way
     firstTick = rollbackDone.tick + 1 |> Num.toI64
     lastTick = newWorld.tick |> Num.toI64
-    tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
 
+    tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
     checksum = makeChecksum newWorld
 
     outgoingMessage : Result FrameMessage [BlockedFor U64, Skipped]
@@ -307,22 +296,11 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
             # blocking on remote input
             BlockedFor n -> Err (BlockedFor n)
             # not enough millis for a timestep;
-            # not blocked but didn't do anything besides accumulate millis
+            # not blocked, but didn't do anything besides accumulate millis
             # TODO buffer these inputs? how to handle changes before execution?
             Skipped -> Err Skipped
             # executed at least one tick
-            Unblocked ->
-                # This eliminated (1) for sure
-                # when List.last newWorld.snapshots is
-                #     Ok snap ->
-                #         if snap.localInput == input then
-                #             {}
-                #         else
-                #             info = Inspect.toStr { firstTick, lastTick, input, checksum }
-                #             crashInfo = showCrashInfo newWorld
-                #             crash "sending input that wasn't written:\n$(info)\n$(crashInfo)"
-                #     Err _ -> crash "unreachable"
-                Ok { firstTick, lastTick, tickAdvantage, input, checksum }
+            Unblocked -> Ok { firstTick, lastTick, tickAdvantage, input, checksum }
 
     snapshots =
         # newWorld.snapshots # <- good for debugging a short session but will crash
@@ -331,15 +309,12 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
     ({ newWorld & snapshots }, outgoingMessage)
 
 makeChecksum : { localPlayer : LocalPlayer, remotePlayer : RemotePlayer }w -> I64
-makeChecksum = \world ->
-    # TODO use a real checksum
-    localX = Pixel.totalSubpixels world.localPlayer.pos.x
-    localY = Pixel.totalSubpixels world.localPlayer.pos.y
-
-    remoteX = Pixel.totalSubpixels world.remotePlayer.pos.x
-    remoteY = Pixel.totalSubpixels world.remotePlayer.pos.y
-
-    localX + 10 * localY + 100 * remoteX + 1000 * remoteY
+makeChecksum = \{ localPlayer, remotePlayer } ->
+    { localPlayerPos: localPlayer.pos, remotePlayerPos: remotePlayer.pos }
+    |> Inspect.toStr
+    |> Str.toUtf8
+    |> List.map Num.toI64
+    |> List.sum
 
 addRemoteInputs : World, List PeerMessage -> World
 addRemoteInputs = \world, inbox ->
@@ -571,6 +546,7 @@ tickOnce = \world, { input: newInput } ->
 
     localInput : Input
     localInput =
+        # avoid overwriting inputs that have been published to other players
         when List.findLast world.snapshots \snap -> snap.tick == tick is
             Ok snap -> snap.localInput
             Err NotFound -> newInput
@@ -590,12 +566,17 @@ tickOnce = \world, { input: newInput } ->
         when receivedInput is
             # confirmed remote input
             Ok received -> received
+            # must predict remote input
             Err NotFound ->
                 when (List.last world.remoteInputTicks, tick) is
                     # predict the last thing they did
                     (Ok last, _) -> last.input
+                    # predict idle on the first frame
                     (Err _, 0) -> Input.blank
-                    (Err _, _) -> crash "no remoteInputTicks after first tick"
+                    # crash if we incorrectly threw away the last input after the first frame
+                    (Err _, _) ->
+                        crashInfo = showCrashInfo world
+                        crash "in tickOnce: no remoteInputTicks after first tick:\n$(crashInfo)"
 
     remotePlayer =
         oldRemotePlayer = world.remotePlayer
@@ -606,10 +587,19 @@ tickOnce = \world, { input: newInput } ->
     snapshots =
         checksum = makeChecksum { localPlayer, remotePlayer }
 
+        # NOTE:
+        # We need to use our previously-sent localInput from above.
+        # Changing our own recorded input would break our opponent's rollbacks.
         newSnapshot : Snapshot
-        newSnapshot = { localInput, tick, localPlayer, remotePlayer, predictedInput, checksum }
+        newSnapshot = {
+            localInput,
+            tick,
+            localPlayer,
+            remotePlayer,
+            predictedInput,
+            checksum,
+        }
 
-        # FIXME is it wrong to overwrite this?
         oldSnapshots = world.snapshots |> List.dropIf \snap -> snap.tick == tick
 
         List.append oldSnapshots newSnapshot
@@ -692,14 +682,19 @@ updateSyncTick = \world ->
         |> Result.map (\mispredictedTick -> mispredictedTick - 1)
 
     syncTick =
-        when beforeMisprediction is
-            Ok beforeMiss -> beforeMiss
-            Err NotFound -> checkUpTo
+        Result.withDefault beforeMisprediction checkUpTo
 
     # syncTick should not move backwards
     expect world.syncTick <= syncTick
 
-    { world & syncTick }
+    syncTickSnapshot =
+        when List.findLast world.snapshots \snap -> snap.tick == syncTick is
+            Ok snap -> snap
+            Err _ ->
+                crashInfo = showCrashInfo world
+                crash "snapshot not found for new sync tick: $(Inspect.toStr syncTick)\n$(crashInfo)"
+
+    { world & syncTick, syncTickSnapshot }
 
 findMisprediction : World, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputTicks }, (start, end) ->
@@ -727,14 +722,6 @@ rollbackIfNecessary = \world ->
     if !shouldRollback then
         world
     else
-        syncSnapshot =
-            when List.findFirst world.snapshots \snap -> snap.tick == world.syncTick is
-                Ok snap -> snap
-                Err NotFound ->
-                    crashInfo = showCrashInfo world
-                    crash "sync tick not present in snapshots: $(crashInfo)"
-
-        # TODO should this be syncTick + 1 on the left?
         rollForwardRange = (world.syncTick, world.tick - 1) # inclusive
 
         rollbackEvent : RollbackEvent
@@ -743,8 +730,8 @@ rollbackIfNecessary = \world ->
         restoredToSync =
             { world &
                 tick: world.syncTick,
-                localPlayer: syncSnapshot.localPlayer,
-                remotePlayer: syncSnapshot.remotePlayer,
+                localPlayer: world.syncTickSnapshot.localPlayer,
+                remotePlayer: world.syncTickSnapshot.remotePlayer,
                 rollbackLog: List.append world.rollbackLog rollbackEvent,
             }
 
@@ -778,7 +765,21 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
                     crashInfo = showCrashInfo wrongFutureWorld
                     crash "no last input tick during roll forward: $(crashInfo)"
 
-        { wrongFutureWorld & snapshots, remoteTick, syncTick: remoteTick }
+        lastSnapshotTick =
+            when List.last snapshots is
+                Ok snap -> snap.tick
+                Err _ ->
+                    crashInfo = showCrashInfo wrongFutureWorld
+                    crash "no snapshots in roll forward fixup: $(crashInfo)"
+        syncTick = Num.min remoteTick lastSnapshotTick
+        syncTickSnapshot =
+            when List.findLast snapshots \snap -> snap.tick == syncTick is
+                Ok snap -> snap
+                Err _ ->
+                    crashInfo = showCrashInfo wrongFutureWorld
+                    crash "snapshot not found for new sync tick in roll forward fixup: $(Inspect.toStr syncTick)\n$(crashInfo)"
+
+        { wrongFutureWorld & snapshots, remoteTick, syncTick, syncTickSnapshot }
 
     remainingMillisBeforeRollForward = fixedWorld.remainingMillis
     rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
@@ -800,29 +801,34 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
 
             tickOnce steppingWorld { input: localInput }
 
-    syncTick =
-        Num.min rolledForwardWorld.tick rolledForwardWorld.remoteTick
-
-    remoteChecksum =
-        rolledForwardWorld.remoteInputs
-        |> List.findLast \msg ->
-            iSyncTick = syncTick |> Num.toI64
-            msg.lastTick >= iSyncTick && msg.firstTick <= iSyncTick
-        |> Result.map \msg -> msg.checksum
-    localChecksum =
-        rolledForwardWorld.snapshots
-        |> List.findLast \snap -> snap.tick == syncTick
-        |> Result.map \snap -> snap.checksum
-
+    # # TODO fix or replace these assertions
+    # # it seems like they're not catching a visible desync
+    # # do the two clients have different frame 0s?
+    # remoteChecksum =
+    #     rolledForwardWorld.remoteInputs
+    #     |> List.findLast \msg ->
+    #         iSyncTick = rolledForwardWorld.syncTick |> Num.toI64
+    #         # FIXME this frame message includes multiple ticks;
+    #         # is that a problem for the assertions below?
+    #         msg.lastTick >= iSyncTick && msg.firstTick <= iSyncTick
+    #     |> Result.map \msg -> msg.checksum
+    # localChecksum =
+    #     rolledForwardWorld.snapshots
+    #     |> List.findLast \snap -> snap.tick == rolledForwardWorld.syncTick
+    #     |> Result.map \snap -> snap.checksum
     # when (localChecksum, remoteChecksum) is
     #     (Ok local, Ok remote) if local == remote -> {}
     #     (Ok local, Ok remote) ->
     #         history = writableHistory rolledForwardWorld
     #         crashInfo = showCrashInfo rolledForwardWorld
     #         frameMessages = rolledForwardWorld.remoteInputs
-    #         info = Inspect.toStr { syncTick, checksums: (local, remote), frameMessages }
-    #         # FIXME come up with some assertion for this
-    #         # TODO is this ok? we could be ahead of them
+    #         info = Inspect.toStr {
+    #             syncTick: rolledForwardWorld.syncTick,
+    #             checksums: (local, remote),
+    #             frameMessages,
+    #         }
+    #         # FIXME something is still wrong here; you can consistently hit this crash
+    #         # either with the assertion or the roll forward
     #         crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
     #     (local, remote) ->
     #         history = writableHistory rolledForwardWorld
@@ -830,7 +836,11 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
     #         checksums = Inspect.toStr (local, remote)
     #         crash "missing checksum for sync tick: $(checksums), $(crashInfo), history: \n$(history)"
 
-    { rolledForwardWorld & remainingMillis: remainingMillisBeforeRollForward, syncTick }
+    { rolledForwardWorld &
+        remainingMillis: remainingMillisBeforeRollForward,
+        # syncTick: fixedWorld.syncTick,
+        # syncTickSnapshot: fixedWorld.syncTickSnapshot,
+    }
 
 showCrashInfo : World -> Str
 showCrashInfo = \world ->
@@ -848,6 +858,7 @@ showCrashInfo = \world ->
         tick: world.tick,
         remoteTick: world.remoteTick,
         syncTick: world.syncTick,
+        syncTickSnapshot: world.syncTickSnapshot,
         localPos: world.localPlayer.pos,
         remotePos: world.remotePlayer.pos,
         rollbackLog: world.rollbackLog,
@@ -858,32 +869,32 @@ showCrashInfo = \world ->
     Inspect.toStr crashInfo
 
 expect
+    ourId = Network.fromU64Pair { upper: 0, lower: 0 }
+    theirId = Network.fromU64Pair { upper: 0, lower: 1 }
+
+    waitingMessage : FrameMessage
+    waitingMessage = {
+        firstTick: 0,
+        lastTick: 0,
+        tickAdvantage: 0,
+        input: { up: Up, down: Up, left: Up, right: Up },
+        checksum: -1,
+    }
+
+    ourStart : World
+    ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
+
+    theirStart : World
+    theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }
+
     theirPositions = (theirStart.localPlayer.pos, theirStart.remotePlayer.pos)
     ourPositions = (ourStart.remotePlayer.pos, ourStart.localPlayer.pos)
 
     # Worlds are equal after init
     ourPositions == theirPositions
 
-# Test Fixtures
-
-ourId = Network.fromU64Pair { upper: 0, lower: 0 }
-theirId = Network.fromU64Pair { upper: 0, lower: 1 }
-
-waitingMessage : FrameMessage
-waitingMessage = {
-    firstTick: 0,
-    lastTick: 0,
-    tickAdvantage: 0,
-    input: { up: Up, down: Up, left: Up, right: Up },
-    checksum: -1,
-}
-
-ourStart : World
-ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
-
-theirStart : World
-theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }
-
+## Creates a multi-line json log of snapshotted inputs.
+## This allows creating diffable input logs from multiple clients when debugging.
 writableHistory : World -> Str
 writableHistory = \{ snapshots } ->
     writeInput : Input -> Str

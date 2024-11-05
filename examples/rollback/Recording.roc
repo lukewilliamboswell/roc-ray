@@ -7,10 +7,16 @@ module [
 
 import Input exposing [Input]
 
+import Rollback exposing [Rollback]
+
 Recording state := InternalRecording state
 
 Config : {
+    ## the configured max rollback;
+    ## a client with tick advantage >= this will block
     maxRollbackTicks : I64,
+    ## the configured frame advantage limit;
+    ## a client further ahead of their opponent than this will block
     tickAdvantageLimit : I64,
 }
 
@@ -91,34 +97,31 @@ RollbackEvent : {
     currentTick : U64,
 }
 
-## The game state being recorded
-State s : { checksum : I64 }s
-
 ## named arguments for starting a recording
-StartRecording s : {
+StartRecording state : {
     firstMessage : FrameMessage,
-    state : State s,
+    state : state,
     config : Config,
-}
+} where state implements Rollback
 
-start : StartRecording s -> Recording (State s)
+start : StartRecording state -> Recording state where state implements Rollback
 start = \{ firstMessage, state, config } ->
     remoteMessages = [firstMessage]
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
-    initialSyncSnapshot : Snapshot (State s)
+    initialSyncSnapshot : Snapshot state
     initialSyncSnapshot = {
         tick: 0,
         remoteInput: Input.blank,
         localInput: Input.blank,
-        checksum: state.checksum,
+        checksum: Rollback.checksum state,
         state,
     }
 
     firstLocalInputTick : InputTick
     firstLocalInputTick = { tick: 0, input: Input.blank }
 
-    recording : InternalRecording (State s)
+    recording : InternalRecording state
     recording = {
         tick: 0,
         remoteTick: 0,

@@ -53,6 +53,7 @@ import Pixel exposing [PixelVec]
 import Input exposing [Input]
 
 import Recording exposing [Recording]
+import Rollback exposing [Rollback]
 
 ## The current game state and rollback metadata
 World : {
@@ -81,7 +82,7 @@ World : {
     ## whether we're blocked on remote input and for how long
     blocked : [Advancing, Skipped, BlockedFor U64],
     rollbackLog : List RollbackEvent,
-    recording : Recording { checksum : I64 },
+    recording : Recording FakeGameState,
 }
 
 RollbackEvent : {
@@ -184,6 +185,14 @@ init = \{ firstMessage: { id, message } } ->
     firstLocalInputTick : InputTick
     firstLocalInputTick = { tick: 0, input: Input.blank }
 
+    recording : Recording FakeGameState
+    recording =
+        Recording.start {
+            firstMessage: message,
+            state: @FakeGameState {},
+            config: { maxRollbackTicks, tickAdvantageLimit },
+        }
+
     {
         localPlayer,
         remotePlayer,
@@ -199,12 +208,21 @@ init = \{ firstMessage: { id, message } } ->
         localInputTicks: [firstLocalInputTick],
         blocked: Advancing,
         rollbackLog: [],
-        recording: Recording.start {
-            firstMessage: message,
-            state: { checksum: 0 },
-            config: { maxRollbackTicks, tickAdvantageLimit },
-        },
+        recording,
     }
+
+FakeGameState := {} implements [
+        Rollback {
+            checksum: fakeChecksum,
+            advance: fakeAdvance,
+        },
+    ]
+
+fakeChecksum : FakeGameState -> I64
+fakeChecksum = \_state -> 0
+
+fakeAdvance : FakeGameState, FrameState -> (FakeGameState, U64)
+fakeAdvance = \state, _context -> (state, 0)
 
 frameMessagesToTicks : List FrameMessage -> List InputTick
 frameMessagesToTicks = \messages ->

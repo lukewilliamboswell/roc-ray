@@ -19,6 +19,7 @@ module [
 ]
 
 # TODO: before merge
+# update everywhere using snapshot local input to use localInputTicks
 # split out a separate module
 # more unit tests
 # address/remove in-code TODOs and FIXMEs
@@ -26,6 +27,7 @@ module [
 #   ask on PR about that
 # figure out checksum assertion failure
 # use ring buffers
+# confirm whether we need deduping in frameMessagesToTicks
 #
 # TODO: later
 # add input delay
@@ -72,6 +74,7 @@ World : {
     snapshots : List Snapshot,
     remoteInputs : List FrameMessage,
     remoteInputTicks : List InputTick,
+    localInputTicks : List InputTick,
 
     ## whether we're blocked on remote input and for how long
     blocked : [Unblocked, Skipped, BlockedFor U64],
@@ -117,7 +120,8 @@ FrameMessage : {
     lastTick : I64,
     tickAdvantage : I64,
     input : Input,
-    checksum : I64,
+    syncTick : I64,
+    syncTickChecksum : I64,
 }
 
 PeerMessage : { id : UUID, message : FrameMessage }
@@ -172,6 +176,9 @@ init = \{ firstMessage: { id, message } } ->
         checksum: makeChecksum { localPlayer, remotePlayer },
     }
 
+    firstLocalInputTick : InputTick
+    firstLocalInputTick = { tick: 0, input: Input.blank }
+
     {
         localPlayer,
         remotePlayer,
@@ -184,6 +191,7 @@ init = \{ firstMessage: { id, message } } ->
         snapshots: [initialSyncSnapshot],
         remoteInputs,
         remoteInputTicks,
+        localInputTicks: [firstLocalInputTick],
         blocked: Unblocked,
         rollbackLog: [],
     }
@@ -205,14 +213,16 @@ expect
             lastTick: 4,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 5,
             lastTick: 6,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -221,35 +231,6 @@ expect
         { tick: 4, input: Input.blank },
         { tick: 5, input: leftDown },
         { tick: 6, input: leftDown },
-    ]
-
-    inputTicks == expected
-
-expect
-    leftDown : Input
-    leftDown = { Input.blank & left: Down }
-
-    inputTicks = frameMessagesToTicks [
-        {
-            firstTick: 0,
-            lastTick: 1,
-            tickAdvantage: 0,
-            input: Input.blank,
-            checksum: 0,
-        },
-        {
-            firstTick: 1,
-            lastTick: 2,
-            tickAdvantage: 0,
-            input: leftDown,
-            checksum: 0,
-        },
-    ]
-
-    expected = [
-        { tick: 0, input: Input.blank },
-        { tick: 1, input: leftDown },
-        { tick: 2, input: leftDown },
     ]
 
     inputTicks == expected
@@ -283,12 +264,10 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
 
             { rollbackDone & blocked }
 
-    # TODO get this range from normalUpdate in a reliable way
     firstTick = rollbackDone.tick + 1 |> Num.toI64
     lastTick = newWorld.tick |> Num.toI64
 
     tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
-    checksum = makeChecksum newWorld
 
     outgoingMessage : Result FrameMessage [BlockedFor U64, Skipped]
     outgoingMessage =
@@ -300,21 +279,51 @@ frameTicks = \oldWorld, { input, deltaMillis, inbox } ->
             # TODO buffer these inputs? how to handle changes before execution?
             Skipped -> Err Skipped
             # executed at least one tick
-            Unblocked -> Ok { firstTick, lastTick, tickAdvantage, input, checksum }
+            Unblocked ->
+                frameMessage : FrameMessage
+                frameMessage = {
+                    firstTick,
+                    lastTick,
+                    tickAdvantage,
+                    input,
+                    syncTick: Num.toI64 newWorld.syncTick,
+                    syncTickChecksum: newWorld.syncTickSnapshot.checksum,
+                }
+
+                Ok frameMessage
 
     snapshots =
-        # newWorld.snapshots # <- good for debugging a short session but will crash
-        List.dropIf newWorld.snapshots \snap -> snap.tick < newWorld.syncTick
+        # List.dropIf newWorld.snapshots \snap -> snap.tick < newWorld.syncTick
+        newWorld.snapshots # <- good for debugging a short session but will crash
 
     ({ newWorld & snapshots }, outgoingMessage)
 
-makeChecksum : { localPlayer : LocalPlayer, remotePlayer : RemotePlayer }w -> I64
+makeChecksum : { localPlayer : { pos : PixelVec }l, remotePlayer : { pos : PixelVec }r }w -> I64
 makeChecksum = \{ localPlayer, remotePlayer } ->
     { localPlayerPos: localPlayer.pos, remotePlayerPos: remotePlayer.pos }
     |> Inspect.toStr
     |> Str.toUtf8
     |> List.map Num.toI64
     |> List.sum
+
+checksumFixture =
+    posA = { x: Pixel.fromParts { pixels: 300 }, y: Pixel.fromParts { pixels: 400 } }
+    posB = { x: Pixel.fromParts { pixels: 300 }, y: Pixel.fromParts { pixels: 390 } }
+
+    localChecksum = makeChecksum { localPlayer: { pos: posA }, remotePlayer: { pos: posB } }
+    remoteChecksum = makeChecksum { localPlayer: { pos: posB }, remotePlayer: { pos: posA } }
+
+    (localChecksum, remoteChecksum)
+
+expect
+    (localChecksum, remoteChecksum) = checksumFixture
+
+    localChecksum == remoteChecksum
+
+expect
+    (localChecksum, _remoteChecksum) = checksumFixture
+
+    localChecksum == 14709
 
 addRemoteInputs : World, List PeerMessage -> World
 addRemoteInputs = \world, inbox ->
@@ -394,14 +403,16 @@ expect
             lastTick: 11,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 12,
             lastTick: 13,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -414,14 +425,16 @@ expect
             lastTick: 11,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 12,
             lastTick: 13,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -438,14 +451,16 @@ expect
             lastTick: 11,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 11,
             lastTick: 13,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -460,14 +475,16 @@ expect
             lastTick: 11,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 11,
             lastTick: 13,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -484,14 +501,16 @@ expect
             lastTick: 13,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 11,
             lastTick: 15,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -506,14 +525,16 @@ expect
             lastTick: 13,
             tickAdvantage: 0,
             input: Input.blank,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
         {
             firstTick: 11,
             lastTick: 15,
             tickAdvantage: 0,
             input: leftDown,
-            checksum: 0,
+            syncTick: 0,
+            syncTickChecksum: 0,
         },
     ]
 
@@ -544,12 +565,11 @@ tickOnce = \world, { input: newInput } ->
     animationTimestamp = world.tick * millisPerTick
     remainingMillis = world.remainingMillis - millisPerTick
 
-    localInput : Input
-    localInput =
+    (localInput, localInputIsNew) =
         # avoid overwriting inputs that have been published to other players
-        when List.findLast world.snapshots \snap -> snap.tick == tick is
-            Ok snap -> snap.localInput
-            Err NotFound -> newInput
+        when List.findLast world.localInputTicks \it -> it.tick == tick is
+            Ok it -> (it.input, Bool.false)
+            Err NotFound -> (newInput, Bool.true)
 
     localPlayer =
         oldPlayer = world.localPlayer
@@ -604,12 +624,19 @@ tickOnce = \world, { input: newInput } ->
 
         List.append oldSnapshots newSnapshot
 
+    localInputTicks =
+        if localInputIsNew then
+            List.append world.localInputTicks { tick, input: localInput }
+        else
+            world.localInputTicks
+
     { world &
         localPlayer,
         remotePlayer,
         remainingMillis,
         tick,
         snapshots,
+        localInputTicks,
     }
 
 inputToIntent : Input, Facing -> Intent
@@ -700,8 +727,8 @@ findMisprediction : World, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputTicks }, (start, end) ->
     findMatch : Snapshot -> Result InputTick [NotFound]
     findMatch = \snapshot ->
-        remoteInputTicks
-        |> List.findFirst \inputTick -> inputTick.tick == snapshot.tick
+        List.findLast remoteInputTicks \inputTick ->
+            inputTick.tick == snapshot.tick
 
     misprediction : Result Snapshot [NotFound]
     misprediction =
@@ -756,7 +783,10 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
                 Err NotFound -> questionableSnap
                 # we found an actual input to overwrite out prediction with
                 # overwrite our prediction with whatever they actually did
-                Ok inputTick -> { questionableSnap & predictedInput: inputTick.input }
+                Ok inputTick ->
+                    { questionableSnap &
+                        predictedInput: inputTick.input,
+                    }
 
         remoteTick =
             when List.last wrongFutureWorld.remoteInputTicks is
@@ -792,49 +822,44 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (start, end) } 
             # maybe tickonce could take a config with a variant for how to handle that case?
             localInput : Input
             localInput =
-                when List.findLast rollForwardWorld.snapshots \snap -> snap.tick == tick is
-                    Ok snap -> snap.localInput
+                when List.findLast rollForwardWorld.localInputTicks \it -> it.tick == tick is
+                    Ok it -> it.input
                     Err NotFound ->
                         crashInfo = showCrashInfo rollForwardWorld
                         moreInfo = Inspect.toStr { notFoundTick: tick, rollForwardRange: (start, end) }
-                        crash "snapshot not found in roll forward: $(moreInfo), $(crashInfo)"
+                        crash "local input not found in roll forward: $(moreInfo), $(crashInfo)"
 
             tickOnce steppingWorld { input: localInput }
 
-    # # TODO fix or replace these assertions
-    # # it seems like they're not catching a visible desync
-    # # do the two clients have different frame 0s?
-    # remoteChecksum =
-    #     rolledForwardWorld.remoteInputs
-    #     |> List.findLast \msg ->
-    #         iSyncTick = rolledForwardWorld.syncTick |> Num.toI64
-    #         # FIXME this frame message includes multiple ticks;
-    #         # is that a problem for the assertions below?
-    #         msg.lastTick >= iSyncTick && msg.firstTick <= iSyncTick
-    #     |> Result.map \msg -> msg.checksum
-    # localChecksum =
-    #     rolledForwardWorld.snapshots
-    #     |> List.findLast \snap -> snap.tick == rolledForwardWorld.syncTick
-    #     |> Result.map \snap -> snap.checksum
-    # when (localChecksum, remoteChecksum) is
-    #     (Ok local, Ok remote) if local == remote -> {}
-    #     (Ok local, Ok remote) ->
-    #         history = writableHistory rolledForwardWorld
-    #         crashInfo = showCrashInfo rolledForwardWorld
-    #         frameMessages = rolledForwardWorld.remoteInputs
-    #         info = Inspect.toStr {
-    #             syncTick: rolledForwardWorld.syncTick,
-    #             checksums: (local, remote),
-    #             frameMessages,
-    #         }
-    #         # FIXME something is still wrong here; you can consistently hit this crash
-    #         # either with the assertion or the roll forward
-    #         crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
-    #     (local, remote) ->
-    #         history = writableHistory rolledForwardWorld
-    #         crashInfo = showCrashInfo rolledForwardWorld
-    #         checksums = Inspect.toStr (local, remote)
-    #         crash "missing checksum for sync tick: $(checksums), $(crashInfo), history: \n$(history)"
+    (remoteSyncTick, remoteSyncTickChecksum) =
+        when List.last rolledForwardWorld.remoteInputs is
+            Ok last -> (last.syncTick, last.syncTickChecksum)
+            Err _ ->
+                crashInfo = showCrashInfo rolledForwardWorld
+                crash "no last remote message during roll forward:\n$(crashInfo)"
+
+    localMatchingChecksum =
+        matchingSnap =
+            rolledForwardWorld.snapshots
+            |> List.findLast \snap -> Num.toI64 snap.tick == remoteSyncTick
+        when matchingSnap is
+            Ok snap -> snap.checksum
+            Err _ ->
+                crashInfo = showCrashInfo rolledForwardWorld
+                crash "no matching local snapshot for remote sync tick:\n$(crashInfo)"
+
+    if remoteSyncTickChecksum == localMatchingChecksum then
+        {}
+    else
+        history = writableHistory rolledForwardWorld
+        crashInfo = showCrashInfo rolledForwardWorld
+        frameMessages = rolledForwardWorld.remoteInputs
+        checksums = (remoteSyncTickChecksum, localMatchingChecksum)
+        info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
+
+        # FIXME something is still wrong here; you can consistently hit this crash
+        # either with the assertion or the roll forward
+        crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
 
     { rolledForwardWorld &
         remainingMillis: remainingMillisBeforeRollForward,
@@ -878,7 +903,8 @@ expect
         lastTick: 0,
         tickAdvantage: 0,
         input: { up: Up, down: Up, left: Up, right: Up },
-        checksum: -1,
+        syncTick: 0,
+        syncTickChecksum: -1,
     }
 
     ourStart : World
@@ -909,11 +935,18 @@ writableHistory = \{ snapshots } ->
         |> Str.joinWith ", "
         |> \inputs -> "[$(inputs)]"
 
-    writableSnapshot : Snapshot -> _
-    writableSnapshot = \snap -> {
+    inputSnapshot : Snapshot -> _
+    inputSnapshot = \snap -> {
         tick: snap.tick,
         localInput: writeInput snap.localInput,
         predictedInput: writeInput snap.predictedInput,
+    }
+
+    positionSnapshot : Snapshot -> _
+    positionSnapshot = \snap -> {
+        tick: snap.tick,
+        localPos: Inspect.toStr snap.localPlayer.pos,
+        remotePos: Inspect.toStr snap.remotePlayer.pos,
     }
 
     toUtf8Unchecked = \bytes ->
@@ -923,9 +956,19 @@ writableHistory = \{ snapshots } ->
 
     writeSnapshot : Snapshot -> Str
     writeSnapshot = \snap ->
-        writable = writableSnapshot snap
-        bytes = Encode.toBytes writable Json.utf8
-        toUtf8Unchecked bytes
+        inputJson =
+            snap
+            |> inputSnapshot
+            |> Encode.toBytes Json.utf8
+            |> toUtf8Unchecked
+
+        positionJson =
+            snap
+            |> positionSnapshot
+            |> Encode.toBytes Json.utf8
+            |> toUtf8Unchecked
+
+        "$(inputJson)\n$(positionJson)"
 
     snapshots
     |> List.map writeSnapshot

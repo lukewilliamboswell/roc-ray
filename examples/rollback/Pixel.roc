@@ -64,3 +64,16 @@ pixelInspector = \@Pixel px ->
     #     { key: "subpixels", value: Inspect.i64 px.subpixels },
     # ]
     Inspect.str (Inspect.toStr px)
+
+expect
+    x = fromParts { pixels: 1 }
+    y = fromParts { pixels: 2 }
+    vec = { x, y }
+
+    inspected = Inspect.toStr vec
+    expected =
+        """
+        {x: "{pixels: 1, subpixels: 0}", y: "{pixels: 2, subpixels: 0}"}
+        """
+
+    inspected == expected

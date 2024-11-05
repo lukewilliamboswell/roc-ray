@@ -154,14 +154,14 @@ renderConnected! = \oldModel, state ->
                 else
                     {}
 
-                Unblocked
+                Advancing
 
             Err e -> e
 
     drawConnected! model state
 
     when blocked is
-        Unblocked -> {}
+        Advancing -> {}
         Skipped -> {}
         BlockedFor blockedFrames ->
             when blockedFrames is

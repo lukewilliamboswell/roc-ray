@@ -4,9 +4,13 @@ module [
     Config,
     start,
     advance,
-    writableHistory,
     FrameContext,
     TickContext,
+    PeerMessage,
+    FrameMessage,
+    showCrashInfo,
+    writableHistory,
+    currentState,
 ]
 
 import rr.Network exposing [UUID]
@@ -16,6 +20,10 @@ import json.Json
 import Input exposing [Input]
 
 Recording state := Recorded state
+
+currentState : Recording state -> state
+currentState = \@Recording recording ->
+    recording.state
 
 Config state : {
     ## the milliseconds per simulation frame
@@ -129,7 +137,6 @@ FrameContext : {
     inbox : List PeerMessage,
 }
 
-## the real localInput and sometimes-predicted remoteInput passed to config.tick
 TickContext : {
     tick : U64,
     timestampMillis : U64,
@@ -367,7 +374,7 @@ updateSyncTick = \world ->
         when List.findLast world.snapshots \snap -> snap.tick == syncTick is
             Ok snap -> snap
             Err _ ->
-                crashInfo = showCrashInfo world
+                crashInfo = internalShowCrashInfo world
                 crash "snapshot not found for new sync tick: $(Inspect.toStr syncTick)\n$(crashInfo)"
 
     { world & syncTick, syncTickSnapshot }
@@ -479,7 +486,7 @@ predictRemoteInput = \world, { tick } ->
                 (Err _, 0) -> (Input.blank, Predicted)
                 # crash if we incorrectly threw away their last input after the first frame
                 (Err _, _) ->
-                    crashInfo = showCrashInfo world
+                    crashInfo = internalShowCrashInfo world
                     crash "predictRemoteInput: no remoteInputTicks after first tick:\n$(crashInfo)"
 
 # ROLLBACK
@@ -534,21 +541,21 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
             when List.last wrongFutureWorld.remoteInputTicks is
                 Ok last -> last.tick
                 Err ListWasEmpty ->
-                    crashInfo = showCrashInfo wrongFutureWorld
+                    crashInfo = internalShowCrashInfo wrongFutureWorld
                     crash "no last input tick during roll forward: $(crashInfo)"
 
         lastSnapshotTick =
             when List.last snapshots is
                 Ok snap -> snap.tick
                 Err _ ->
-                    crashInfo = showCrashInfo wrongFutureWorld
+                    crashInfo = internalShowCrashInfo wrongFutureWorld
                     crash "no snapshots in roll forward fixup: $(crashInfo)"
         syncTick = Num.min remoteTick lastSnapshotTick
         syncTickSnapshot =
             when List.findLast snapshots \snap -> snap.tick == syncTick is
                 Ok snap -> snap
                 Err _ ->
-                    crashInfo = showCrashInfo wrongFutureWorld
+                    crashInfo = internalShowCrashInfo wrongFutureWorld
                     crash "snapshot not found for new sync tick in roll forward fixup: $(Inspect.toStr syncTick)\n$(crashInfo)"
 
         { wrongFutureWorld & snapshots, remoteTick, syncTick, syncTickSnapshot }
@@ -567,7 +574,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
                 when List.findLast rollForwardWorld.localInputTicks \it -> it.tick == tick is
                     Ok it -> it.input
                     Err NotFound ->
-                        crashInfo = showCrashInfo rollForwardWorld
+                        crashInfo = internalShowCrashInfo rollForwardWorld
                         moreInfo = Inspect.toStr { notFoundTick: tick, rollForwardRange: (begin, end) }
                         crash "local input not found in roll forward: $(moreInfo), $(crashInfo)"
 
@@ -577,7 +584,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
         when List.last rolledForwardWorld.remoteMessages is
             Ok last -> (last.syncTick, last.syncTickChecksum)
             Err _ ->
-                crashInfo = showCrashInfo rolledForwardWorld
+                crashInfo = internalShowCrashInfo rolledForwardWorld
                 crash "no last remote message during roll forward:\n$(crashInfo)"
 
     localMatchingChecksum =
@@ -588,7 +595,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
             Ok snap -> snap.checksum
             Err _ ->
                 info = Inspect.toStr { remoteSyncTick }
-                crashInfo = showCrashInfo rolledForwardWorld
+                crashInfo = internalShowCrashInfo rolledForwardWorld
                 crash "no matching local snapshot for remote sync tick:$(info)\n$(crashInfo)"
 
     remainingMillis =
@@ -596,8 +603,8 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
             # this is a weird reassignment to avoid the roc warning for a void statement
             remainingMillisBeforeRollForward
         else
-            history = writableHistory rolledForwardWorld
-            crashInfo = showCrashInfo rolledForwardWorld
+            history = internalWritableHistory rolledForwardWorld
+            crashInfo = internalShowCrashInfo rolledForwardWorld
             frameMessages = rolledForwardWorld.remoteMessages
             checksums = (remoteSyncTickChecksum, localMatchingChecksum)
             info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
@@ -608,8 +615,12 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
 # DEBUG HELPERS
 
-showCrashInfo : Recorded state -> Str
-showCrashInfo = \world ->
+showCrashInfo : Recording state -> Str
+showCrashInfo = \@Recording recordedState ->
+    internalShowCrashInfo recordedState
+
+internalShowCrashInfo : Recorded state -> Str
+internalShowCrashInfo = \world ->
     # TODO require that state is Inspect
 
     remoteInputTicksRange =
@@ -638,8 +649,12 @@ showCrashInfo = \world ->
 
 ## Creates a multi-line json log of snapshotted inputs.
 ## This allows creating diffable input logs from multiple clients when debugging.
-writableHistory : Recorded state -> Str
-writableHistory = \{ snapshots } ->
+writableHistory : Recording state -> Str
+writableHistory = \@Recording recordedState ->
+    internalWritableHistory recordedState
+
+internalWritableHistory : Recorded state -> Str
+internalWritableHistory = \{ snapshots } ->
     writeInput : Input -> Str
     writeInput = \input ->
         up = if input.up == Down then Ok "Up" else Err Up

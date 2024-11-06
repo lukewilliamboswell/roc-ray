@@ -12,6 +12,7 @@ import json.Json
 
 import Resolution exposing [width, height]
 import World exposing [World]
+import Recording
 import Pixel
 import Input
 
@@ -56,8 +57,10 @@ drawConnected! = \{ dude, world }, state ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
+        currentState = Recording.currentState world
+
         # draw local player
-        localPlayer = world.state.localPlayer
+        localPlayer = currentState.localPlayer
         localPlayerFacing = World.playerFacing localPlayer
         Draw.textureRec! {
             texture: dude,
@@ -67,7 +70,7 @@ drawConnected! = \{ dude, world }, state ->
         }
 
         # draw remote player
-        remotePlayer = world.state.remotePlayer
+        remotePlayer = currentState.remotePlayer
         remotePlayerIdPos = Pixel.toVector2 remotePlayer.pos
         Draw.text! {
             pos: remotePlayerIdPos,
@@ -102,7 +105,7 @@ renderWaiting! = \waiting, state ->
             drawWaiting! waiting
             Ok (Waiting waiting)
 
-waitingToConnected! : WaitingModel, PlatformState, World.PeerMessage => Result Model []
+waitingToConnected! : WaitingModel, PlatformState, Recording.PeerMessage => Result Model []
 waitingToConnected! = \waiting, state, firstMessage ->
     timestampMillis = state.timestamp.renderStart
     { dude } = waiting
@@ -138,11 +141,11 @@ renderConnected! = \oldModel, state ->
 
     deltaMillis = timestampMillis - oldModel.timestampMillis
 
-    inbox : List World.PeerMessage
+    inbox : List Recording.PeerMessage
     inbox = decodeFrameMessages network.messages
 
     localInput = Input.read state.keys
-    (world, outgoing) = World.frameTicks oldModel.world { localInput, deltaMillis, inbox }
+    (world, outgoing) = World.advance oldModel.world { localInput, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -171,8 +174,8 @@ renderConnected! = \oldModel, state ->
                     RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
                 _f ->
-                    crashInfo = World.showCrashInfo world
-                    history = World.writableHistory world
+                    crashInfo = Recording.showCrashInfo world
+                    history = Recording.writableHistory world
                     crash "blocked world:\n$(crashInfo)\n$(history)"
 
     Ok (Connected model)
@@ -215,12 +218,12 @@ sendHostWaiting! : RocRay.NetworkState => {}
 sendHostWaiting! = \network ->
     sendFrameMessage! World.waitingMessage network
 
-sendFrameMessage! : World.FrameMessage, RocRay.NetworkState => {}
+sendFrameMessage! : Recording.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->
     bytes = Encode.toBytes (worldToNetwork message) Json.utf8
     forEach! network.peers.connected \peer -> RocRay.sendToPeer! bytes peer
 
-decodeFrameMessages : List RocRay.NetworkMessage -> List World.PeerMessage
+decodeFrameMessages : List RocRay.NetworkMessage -> List Recording.PeerMessage
 decodeFrameMessages = \messages ->
     List.keepOks messages decodeSingleFrameMessage
 
@@ -236,7 +239,7 @@ FrameMessageJson : {
     syncTickChecksum : I64,
 }
 
-networkToWorld : FrameMessageJson -> World.FrameMessage
+networkToWorld : FrameMessageJson -> Recording.FrameMessage
 networkToWorld = \json ->
     up = if json.up then Down else Up
     down = if json.down then Down else Up
@@ -252,7 +255,7 @@ networkToWorld = \json ->
         syncTickChecksum: json.syncTickChecksum,
     }
 
-worldToNetwork : World.FrameMessage -> FrameMessageJson
+worldToNetwork : Recording.FrameMessage -> FrameMessageJson
 worldToNetwork = \message -> {
     firstTick: message.firstTick,
     lastTick: message.lastTick,
@@ -265,7 +268,7 @@ worldToNetwork = \message -> {
     syncTickChecksum: message.syncTickChecksum,
 }
 
-decodeSingleFrameMessage : RocRay.NetworkMessage -> Result World.PeerMessage _
+decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Recording.PeerMessage _
 decodeSingleFrameMessage = \{ id, bytes } ->
     decodeResult : Result FrameMessageJson _
     decodeResult = Decode.fromBytes bytes Json.utf8

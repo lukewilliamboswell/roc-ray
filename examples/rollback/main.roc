@@ -57,28 +57,29 @@ drawConnected! = \{ dude, world }, state ->
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
         # draw local player
-        localPlayerFacing = World.playerFacing world.localPlayer
+        localPlayer = world.state.localPlayer
+        localPlayerFacing = World.playerFacing localPlayer
         Draw.textureRec! {
             texture: dude,
-            source: dudeSprite localPlayerFacing world.localPlayer.animation.frame,
-            pos: Pixel.toVector2 world.localPlayer.pos,
+            source: dudeSprite localPlayerFacing localPlayer.animation.frame,
+            pos: Pixel.toVector2 localPlayer.pos,
             tint: White,
         }
 
         # draw remote player
-        remotePlayerIdPos = Pixel.toVector2 world.remotePlayer.pos
+        remotePlayer = world.state.remotePlayer
+        remotePlayerIdPos = Pixel.toVector2 remotePlayer.pos
         Draw.text! {
             pos: remotePlayerIdPos,
-            text: "$(Inspect.toStr world.remotePlayer.id)",
+            text: "$(Inspect.toStr remotePlayer.id)",
             size: 10,
             color: Red,
         }
-
-        remotePlayerFacing = World.playerFacing world.remotePlayer
+        remotePlayerFacing = World.playerFacing remotePlayer
         Draw.textureRec! {
             texture: dude,
-            source: dudeSprite remotePlayerFacing world.remotePlayer.animation.frame,
-            pos: Pixel.toVector2 world.remotePlayer.pos,
+            source: dudeSprite remotePlayerFacing remotePlayer.animation.frame,
+            pos: Pixel.toVector2 remotePlayer.pos,
             tint: Red,
         }
 
@@ -140,8 +141,8 @@ renderConnected! = \oldModel, state ->
     inbox : List World.PeerMessage
     inbox = decodeFrameMessages network.messages
 
-    input = Input.read state.keys
-    (world, outgoing) = World.frameTicks oldModel.world { input, deltaMillis, inbox }
+    localInput = Input.read state.keys
+    (world, outgoing) = World.frameTicks oldModel.world { localInput, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -212,17 +213,7 @@ displayPeerConnections! = \{ connected, disconnected } ->
 
 sendHostWaiting! : RocRay.NetworkState => {}
 sendHostWaiting! = \network ->
-    message : World.FrameMessage
-    message = {
-        firstTick: 0,
-        lastTick: 0,
-        tickAdvantage: 0,
-        input: Input.blank,
-        syncTick: 0,
-        syncTickChecksum: -1,
-    }
-
-    sendFrameMessage! message network
+    sendFrameMessage! World.waitingMessage network
 
 sendFrameMessage! : World.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->

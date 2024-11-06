@@ -58,9 +58,17 @@ fromParts = \{ pixels ? 0, subpixels ? 0 } ->
 
 pixelInspector : Pixel -> Inspector f where f implements InspectFormatter
 pixelInspector = \@Pixel px ->
-    # TODO comment in zulip; this causes No borrow signature for LambdaName
-    # Inspect.record [
-    #     { key: "pixels", value: Inspect.i64 px.pixels },
-    #     { key: "subpixels", value: Inspect.i64 px.subpixels },
-    # ]
     Inspect.str (Inspect.toStr px)
+
+expect
+    x = fromParts { pixels: 1 }
+    y = fromParts { pixels: 2 }
+    vec = { x, y }
+
+    inspected = Inspect.toStr vec
+    expected =
+        """
+        {x: "{pixels: 1, subpixels: 0}", y: "{pixels: 2, subpixels: 0}"}
+        """
+
+    inspected == expected

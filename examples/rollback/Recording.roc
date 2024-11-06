@@ -54,6 +54,10 @@ Recorded : {
     syncTick : U64,
     ## the snapshot for our syncTick
     syncTickSnapshot : Snapshot,
+    ## the most recent syncTick received from remotePlayer
+    remoteSyncTick : U64,
+    ## the checksum remotePlayer sent with their most recent syncTick
+    remoteSyncTickChecksum : I64,
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
 
@@ -160,6 +164,8 @@ start = \{ firstMessage, state, config } ->
         remoteTick: 0u64,
         syncTick: 0u64,
         syncTickSnapshot: initialSyncSnapshot,
+        remoteSyncTick: 0,
+        remoteSyncTickChecksum: checksum,
         remoteTickAdvantage: 0i64,
         state: state,
         snapshots: [initialSyncSnapshot],
@@ -185,7 +191,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
         |> addRemoteInputs inbox
-        |> updateRemoteTick
+        |> updateRemoteTicks
         |> updateSyncTick
         |> rollbackIfNecessary
 
@@ -232,8 +238,8 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
                 Ok frameMessage
 
     snapshots =
-        # newWorld.snapshots # <- good for debugging a short session but will crash
-        List.dropIf newWorld.snapshots \snap -> snap.tick < newWorld.syncTick
+        minSyncTick = Num.min newWorld.syncTick newWorld.remoteSyncTick
+        List.dropIf newWorld.snapshots \snap -> snap.tick < minSyncTick
 
     (@Recording { newWorld & snapshots }, outgoingMessage)
 
@@ -333,15 +339,30 @@ expect
 
     cleans == expected
 
-updateRemoteTick : Recorded -> Recorded
-updateRemoteTick = \world ->
-    (remoteTick, remoteTickAdvantage) =
+updateRemoteTicks : Recorded -> Recorded
+updateRemoteTicks = \world ->
+    { remoteTick, remoteTickAdvantage, remoteSyncTick, remoteSyncTickChecksum } =
         world.remoteMessages
         |> List.last
-        |> Result.map \{ lastTick, tickAdvantage } -> (Num.toU64 lastTick, tickAdvantage)
-        |> Result.withDefault (0, 0)
+        |> Result.map \lastMessage -> {
+            remoteTick: Num.toU64 lastMessage.lastTick,
+            remoteTickAdvantage: lastMessage.tickAdvantage,
+            remoteSyncTick: Num.toU64 lastMessage.syncTick,
+            remoteSyncTickChecksum: lastMessage.syncTickChecksum,
+        }
+        |> Result.withDefault {
+            remoteTick: world.remoteTick,
+            remoteTickAdvantage: world.remoteTickAdvantage,
+            remoteSyncTick: world.remoteSyncTick,
+            remoteSyncTickChecksum: world.remoteSyncTickChecksum,
+        }
 
-    { world & remoteTick, remoteTickAdvantage }
+    { world &
+        remoteTick,
+        remoteTickAdvantage,
+        remoteSyncTick,
+        remoteSyncTickChecksum,
+    }
 
 updateSyncTick : Recorded -> Recorded
 updateSyncTick = \world ->
@@ -570,42 +591,40 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
             tickOnce steppingWorld { localInput }
 
-    (remoteSyncTick, remoteSyncTickChecksum) =
-        when List.last rolledForwardWorld.remoteMessages is
-            Ok last -> (last.syncTick, last.syncTickChecksum)
-            Err _ ->
-                crashInfo = internalShowCrashInfo rolledForwardWorld
-                crash "no last remote message during roll forward:\n$(crashInfo)"
+    # TODO use the remoteSyncTick and checksum we track regularly
+    { remoteSyncTick, remoteSyncTickChecksum } = rolledForwardWorld
 
     localMatchingChecksum : Result I64 _
     localMatchingChecksum =
         rolledForwardWorld.snapshots
-        |> List.findLast \snap -> Num.toI64 snap.tick == remoteSyncTick
+        |> List.findLast \snap -> snap.tick == remoteSyncTick
         |> Result.map \snap -> snap.checksum
 
     # this is a weird reassignment to avoid the roc warning for a void statement
     # the 'when' exists for the crash assertion
     remainingMillis =
+        history = internalWritableHistory rolledForwardWorld
+        crashInfo = internalShowCrashInfo rolledForwardWorld
+        frameMessages = rolledForwardWorld.remoteMessages
+        checksums = (remoteSyncTickChecksum, localMatchingChecksum)
+        info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
+
         when localMatchingChecksum is
             Ok local if local != remoteSyncTickChecksum ->
-                # known wrong checksums
-                history = internalWritableHistory rolledForwardWorld
-                crashInfo = internalShowCrashInfo rolledForwardWorld
-                frameMessages = rolledForwardWorld.remoteMessages
-                checksums = (remoteSyncTickChecksum, localMatchingChecksum)
-                info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
-
+                # Known wrong checksums indicate a desync;
+                # which means packet loss, a determinism bug, or cheating.
+                # In a real game, you'd want to try to resolve missing inputs with request/response,
+                # or end the match and kick both players to the launcher/lobby.
                 crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
 
-            Ok _local ->
-                # matching checksums; the happy path
+            Ok _localMatch ->
+                # matching checksums; this is the normal/happy path
                 remainingMillisBeforeRollForward
 
             Err _ ->
-                # we've already thrown away their sync tick
-                # this is valid if they've sent us enough messages,
-                # but they've gotten behind
-                remainingMillisBeforeRollForward
+                # we should hold on to snapshots long enough to avoid this
+                # hitting this case indicates a bug
+                crash "missing local checksum in roll forward: $(info),\n$(crashInfo),\nhistory:\n$(history)"
 
     { rolledForwardWorld & remainingMillis }
 
@@ -670,12 +689,12 @@ internalWritableHistory = \{ snapshots } ->
         remoteInput: writeInput snap.remoteInput,
     }
 
-    # positionSnapshot : Snapshot state -> _
-    # positionSnapshot = \snap -> {
-    #     tick: snap.tick,
-    #     localPos: Inspect.toStr snap.localPlayer.pos,
-    #     remotePos: Inspect.toStr snap.remotePlayer.pos,
-    # }
+    positionSnapshot : Snapshot -> _
+    positionSnapshot = \snap -> {
+        tick: snap.tick,
+        localPos: Inspect.toStr snap.state.localPlayer.pos,
+        remotePos: Inspect.toStr snap.state.remotePlayer.pos,
+    }
 
     toUtf8Unchecked = \bytes ->
         when Str.fromUtf8 bytes is
@@ -690,14 +709,13 @@ internalWritableHistory = \{ snapshots } ->
             |> Encode.toBytes Json.utf8
             |> toUtf8Unchecked
 
-        # positionJson =
-        #     snap
-        #     |> positionSnapshot
-        #     |> Encode.toBytes Json.utf8
-        #     |> toUtf8Unchecked
+        positionJson =
+            snap
+            |> positionSnapshot
+            |> Encode.toBytes Json.utf8
+            |> toUtf8Unchecked
 
-        # "$(inputJson)\n$(positionJson)"
-        inputJson
+        "$(inputJson)\n$(positionJson)"
 
     snapshots
     |> List.map writeSnapshot

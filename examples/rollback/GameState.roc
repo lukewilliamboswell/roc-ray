@@ -5,7 +5,7 @@ import rr.Network exposing [UUID]
 import Input exposing [Input, TickContext]
 import Pixel exposing [PixelVec]
 
-## the non-rollback parts of the game state
+## the game state unrelated to rollback bookkeeping
 GameState : {
     ## the player on the machine we're running on
     localPlayer : LocalPlayer,

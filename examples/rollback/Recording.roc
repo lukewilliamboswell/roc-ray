@@ -29,7 +29,6 @@ Config state : {
     ## the milliseconds per simulation frame
     ## ie, 1000 / the frame rate
     millisPerTick : U64,
-
     ## the configured max rollback;
     ## a client with tick advantage >= this will block
     maxRollbackTicks : I64,

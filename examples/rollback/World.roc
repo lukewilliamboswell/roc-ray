@@ -129,7 +129,7 @@ init = \{ firstMessage: { id, message } } ->
         maxRollbackTicks,
         tickAdvantageLimit,
         tick: gameStateTick,
-        checksum: makeChecksum,
+        checksum: gameStateChecksum,
     }
 
     initialState : GameState
@@ -143,15 +143,15 @@ init = \{ firstMessage: { id, message } } ->
         },
     }
 
-    recording : Recording GameState
-    recording =
-        Recording.start { config, firstMessage: message, state: initialState }
-
-    recording
+    Recording.start { config, firstMessage: message, state: initialState }
 
 advance : World, FrameContext -> (World, Result FrameMessage _)
 advance = \world, ctx ->
     Recording.advance world ctx
+
+gameStateChecksum : GameState -> I64
+gameStateChecksum = \state ->
+    makeChecksum state
 
 makeChecksum : { localPlayer : { pos : PixelVec }l, remotePlayer : { pos : PixelVec }r }w -> I64
 makeChecksum = \{ localPlayer, remotePlayer } ->

@@ -28,7 +28,7 @@ ConnectedModel : {
     timestampMillis : U64,
 }
 
-init! : {} => Result Model []
+init! : {} => Result Model _
 init! = \{} ->
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
@@ -38,7 +38,7 @@ init! = \{} ->
         height: Num.toF32 height,
     }
 
-    dude = Texture.load! "examples/assets/sprite-dude/sheet.png"
+    dude = Texture.load!? "examples/assets/sprite-dude/sheet.png"
 
     waiting : WaitingModel
     waiting = { dude }

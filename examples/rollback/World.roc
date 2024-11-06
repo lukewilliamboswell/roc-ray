@@ -45,19 +45,12 @@ import rr.Network exposing [UUID]
 
 import Resolution exposing [width, height]
 import Pixel exposing [PixelVec]
-import Input exposing [Input]
+import Input
 
+import GameState exposing [GameState]
 import Recording exposing [Recording, FrameContext, FrameMessage]
 
-World : Recording GameState
-
-## the non-rollback game state
-GameState : {
-    ## the player on the machine we're running on
-    localPlayer : LocalPlayer,
-    ## the player on a remote machine
-    remotePlayer : RemotePlayer,
-}
+World : Recording
 
 LocalPlayer : {
     pos : PixelVec,
@@ -107,9 +100,9 @@ initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
 waitingMessage : FrameMessage
 waitingMessage =
-    syncTickChecksum = makeChecksum {
-        localPlayer: playerStart,
-        remotePlayer: playerStart,
+    syncTickChecksum = GameState.positionsChecksum {
+        localPlayerPos: playerStart.pos,
+        remotePlayerPos: playerStart.pos,
     }
 
     {
@@ -121,15 +114,13 @@ waitingMessage =
         syncTickChecksum,
     }
 
-init : { firstMessage : Recording.PeerMessage } -> Recording GameState
+init : { firstMessage : Recording.PeerMessage } -> Recording
 init = \{ firstMessage: { id, message } } ->
-    config : Recording.Config GameState
+    config : Recording.Config
     config = {
         millisPerTick,
         maxRollbackTicks,
         tickAdvantageLimit,
-        tick: gameStateTick,
-        checksum: gameStateChecksum,
     }
 
     initialState : GameState
@@ -149,77 +140,11 @@ advance : World, FrameContext -> (World, Result FrameMessage _)
 advance = \world, ctx ->
     Recording.advance world ctx
 
-gameStateChecksum : GameState -> I64
-gameStateChecksum = \state ->
-    makeChecksum state
-
-makeChecksum : { localPlayer : { pos : PixelVec }l, remotePlayer : { pos : PixelVec }r }w -> I64
-makeChecksum = \{ localPlayer, remotePlayer } ->
-    { localPlayerPos: localPlayer.pos, remotePlayerPos: remotePlayer.pos }
-    |> Inspect.toStr
-    |> Str.toUtf8
-    |> List.map Num.toI64
-    |> List.sum
-
-checksumFixture =
-    posA = { x: Pixel.fromParts { pixels: 300 }, y: Pixel.fromParts { pixels: 400 } }
-    posB = { x: Pixel.fromParts { pixels: 300 }, y: Pixel.fromParts { pixels: 390 } }
-
-    localChecksum = makeChecksum { localPlayer: { pos: posA }, remotePlayer: { pos: posB } }
-    remoteChecksum = makeChecksum { localPlayer: { pos: posB }, remotePlayer: { pos: posA } }
-
-    (localChecksum, remoteChecksum)
-
-expect
-    (localChecksum, remoteChecksum) = checksumFixture
-
-    localChecksum == remoteChecksum
-
-expect
-    (localChecksum, _remoteChecksum) = checksumFixture
-
-    localChecksum == 14709
-
 roundVec : Vector2 -> { x : I64, y : I64 }
 roundVec = \{ x, y } -> {
     x: x |> Num.round |> Num.toI64,
     y: y |> Num.round |> Num.toI64,
 }
-
-gameStateTick : GameState, Recording.TickContext -> GameState
-gameStateTick = \state, { tick: _tick, timestampMillis, localInput, remoteInput } ->
-    localPlayer =
-        oldPlayer = state.localPlayer
-        animation = updateAnimation oldPlayer.animation timestampMillis
-        intent = inputToIntent localInput (playerFacing oldPlayer)
-        movePlayer { oldPlayer & animation, intent } intent
-
-    remotePlayer =
-        oldRemotePlayer = state.remotePlayer
-        animation = updateAnimation oldRemotePlayer.animation timestampMillis
-        intent = inputToIntent remoteInput (playerFacing oldRemotePlayer)
-        movePlayer { oldRemotePlayer & animation, intent } intent
-
-    { localPlayer, remotePlayer }
-
-inputToIntent : Input, Facing -> Intent
-inputToIntent = \{ up, down, left, right }, facing ->
-    horizontal =
-        when (left, right) is
-            (Down, Up) -> Walk Left
-            (Up, Down) -> Walk Right
-            _same -> Idle facing
-
-    vertical =
-        when (up, down) is
-            (Down, Up) -> Walk Up
-            (Up, Down) -> Walk Down
-            _same -> Idle facing
-
-    when (horizontal, vertical) is
-        (Walk horizontalFacing, _) -> Walk horizontalFacing
-        (Idle _, Walk verticalFacing) -> Walk verticalFacing
-        (Idle idleFacing, _) -> Idle idleFacing
 
 playerFacing : { intent : Intent }a -> Facing
 playerFacing = \{ intent } ->
@@ -227,41 +152,14 @@ playerFacing = \{ intent } ->
         Walk facing -> facing
         Idle facing -> facing
 
-movePlayer : { pos : PixelVec }a, Intent -> { pos : PixelVec }a
-movePlayer = \player, intent ->
-    { pos } = player
-
-    moveSpeed = { subpixels: 80 }
-
-    newPos =
-        when intent is
-            Walk Up -> { pos & y: Pixel.sub pos.y moveSpeed }
-            Walk Down -> { pos & y: Pixel.add pos.y moveSpeed }
-            Walk Right -> { pos & x: Pixel.add pos.x moveSpeed }
-            Walk Left -> { pos & x: Pixel.sub pos.x moveSpeed }
-            Idle _ -> pos
-
-    { player & pos: newPos }
-
-updateAnimation : AnimatedSprite, U64 -> AnimatedSprite
-updateAnimation = \animation, timestampMillis ->
-    t = Num.toF32 timestampMillis
-    if t > animation.nextAnimationTick then
-        frame = Num.addWrap animation.frame 1
-        millisToGo = 1000 / (Num.toF32 animation.frameRate)
-        nextAnimationTick = t + millisToGo
-        { animation & frame, nextAnimationTick }
-    else
-        animation
-
 expect
     ourId = Network.fromU64Pair { upper: 0, lower: 0 }
     theirId = Network.fromU64Pair { upper: 0, lower: 1 }
 
-    ourStart : Recording GameState
+    ourStart : Recording
     ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
 
-    theirStart : Recording GameState
+    theirStart : Recording
     theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }
 
     theirState = Recording.currentState theirStart

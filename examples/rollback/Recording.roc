@@ -5,7 +5,6 @@ module [
     start,
     advance,
     FrameContext,
-    TickContext,
     PeerMessage,
     FrameMessage,
     showCrashInfo,
@@ -18,14 +17,16 @@ import rr.Network exposing [UUID]
 import json.Json
 
 import Input exposing [Input]
+import GameState exposing [GameState]
 
-Recording state := Recorded state
+# TODO better name for internal record
+Recording := Recorded
 
-currentState : Recording state -> state
+currentState : Recording -> GameState
 currentState = \@Recording recording ->
     recording.state
 
-Config state : {
+Config : {
     ## the milliseconds per simulation frame
     ## ie, 1000 / the frame rate
     millisPerTick : U64,
@@ -35,17 +36,13 @@ Config state : {
     ## the configured frame advantage limit;
     ## a client further ahead of their opponent than this will block
     tickAdvantageLimit : I64,
-
-    ## TODO docs
-    tick : state, TickContext -> state,
-    checksum : state -> I64,
 }
 
-Recorded state : {
+Recorded : {
     config : Config,
 
     ## the live game state this frame
-    state : state,
+    state : GameState,
     ## the unspent milliseconds remaining after the last tick (or frame)
     remainingMillis : U64,
 
@@ -56,7 +53,7 @@ Recorded state : {
     ## the last tick where we synchronized with the remote player
     syncTick : U64,
     ## the snapshot for our syncTick
-    syncTickSnapshot : Snapshot state,
+    syncTickSnapshot : Snapshot,
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
 
@@ -66,7 +63,7 @@ Recorded state : {
     ## this is a smaller duplicate of information in remoteMessaages
     remoteInputTicks : List InputTick,
     ## the recent history of snapshots (since syncTick)
-    snapshots : List (Snapshot state),
+    snapshots : List Snapshot,
     ## the recent history of local player inputs (since syncTick)
     ## this is a smaller duplicate of information in snapshots
     localInputTicks : List InputTick,
@@ -82,7 +79,7 @@ Recorded state : {
 InputTick : { tick : U64, input : Input }
 
 ## the record of what happened on a previous simulation frame
-Snapshot state : {
+Snapshot : {
     ## the simulation frame this occurred on
     tick : U64,
     ## a hash or digest for comparing snapshots to detect desyncs
@@ -92,7 +89,7 @@ Snapshot state : {
     ## the local player's input; this is always known and set in stone
     localInput : Input,
     ## the previous game state to restore during a rollback
-    state : state,
+    state : GameState,
 }
 
 ## message for broadcasting input for a frame range with rollback-related metadata
@@ -123,10 +120,10 @@ RollbackEvent : {
 }
 
 ## named arguments for starting a recording
-StartRecording state : {
+StartRecording : {
     firstMessage : FrameMessage,
-    state : state,
-    config : Config state,
+    state : GameState,
+    config : Config,
 }
 
 ## information about the current frame required by Recording.advance
@@ -136,21 +133,14 @@ FrameContext : {
     inbox : List PeerMessage,
 }
 
-TickContext : {
-    tick : U64,
-    timestampMillis : U64,
-    localInput : Input,
-    remoteInput : Input,
-}
-
-start : StartRecording state -> Recording state
+start : StartRecording -> Recording
 start = \{ firstMessage, state, config } ->
     remoteMessages = [firstMessage]
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
-    checksum = config.checksum state
+    checksum = GameState.checksum state
 
-    initialSyncSnapshot : Snapshot state
+    initialSyncSnapshot : Snapshot
     initialSyncSnapshot = {
         tick: 0,
         remoteInput: Input.blank,
@@ -162,7 +152,7 @@ start = \{ firstMessage, state, config } ->
     firstLocalInputTick : InputTick
     firstLocalInputTick = { tick: 0, input: Input.blank }
 
-    recording : Recorded state
+    recording : Recorded
     recording = {
         config,
         remainingMillis: 0,
@@ -190,7 +180,7 @@ frameMessagesToTicks = \messages ->
 
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if necessary
-advance : Recording state, FrameContext -> (Recording state, Result FrameMessage _)
+advance : Recording, FrameContext -> (Recording, Result FrameMessage _)
 advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
@@ -199,7 +189,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
         |> updateSyncTick
         |> rollbackIfNecessary
 
-    newWorld : Recorded state
+    newWorld : Recorded
     newWorld =
         if timeSynced rollbackDone then
             (updatedWorld, ticksTicked) =
@@ -247,7 +237,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
 
     (@Recording { newWorld & snapshots }, outgoingMessage)
 
-addRemoteInputs : Recorded state, List PeerMessage -> Recorded state
+addRemoteInputs : Recorded, List PeerMessage -> Recorded
 addRemoteInputs = \world, inbox ->
     remoteMessages =
         newMessages = List.map inbox \peerMessage -> peerMessage.message
@@ -343,7 +333,7 @@ expect
 
     cleans == expected
 
-updateRemoteTick : Recorded state -> Recorded state
+updateRemoteTick : Recorded -> Recorded
 updateRemoteTick = \world ->
     (remoteTick, remoteTickAdvantage) =
         world.remoteMessages
@@ -353,9 +343,10 @@ updateRemoteTick = \world ->
 
     { world & remoteTick, remoteTickAdvantage }
 
-updateSyncTick : Recorded state -> Recorded state
+updateSyncTick : Recorded -> Recorded
 updateSyncTick = \world ->
     checkUpTo = Num.min world.tick world.remoteTick
+    # checkRange = (world.syncTick, checkUpTo)
     checkRange = (world.syncTick + 1, checkUpTo)
 
     beforeMisprediction : Result U64 [NotFound]
@@ -378,14 +369,14 @@ updateSyncTick = \world ->
 
     { world & syncTick, syncTickSnapshot }
 
-findMisprediction : Recorded state, (U64, U64) -> Result U64 [NotFound]
+findMisprediction : Recorded, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
-    findMatch : Snapshot state -> Result InputTick [NotFound]
+    findMatch : Snapshot -> Result InputTick [NotFound]
     findMatch = \snapshot ->
         List.findLast remoteInputTicks \inputTick ->
             inputTick.tick == snapshot.tick
 
-    misprediction : Result (Snapshot state) [NotFound]
+    misprediction : Result Snapshot [NotFound]
     misprediction =
         snapshots
         |> List.keepIf \snapshot -> snapshot.tick >= begin && snapshot.tick <= end
@@ -397,20 +388,20 @@ findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
     Result.map misprediction \m -> m.tick
 
 ## true if we're in sync enough with remote player to continue updates
-timeSynced : Recorded state -> Bool
+timeSynced : Recorded -> Bool
 timeSynced = \{ config, tick, remoteTick, remoteTickAdvantage } ->
     localTickAdvantage = Num.toI64 tick - Num.toI64 remoteTick
     tickAdvantageDifference = localTickAdvantage - remoteTickAdvantage
     localTickAdvantage < config.maxRollbackTicks && tickAdvantageDifference <= config.tickAdvantageLimit
 
 ## use as many physics ticks as the frame duration allows
-normalUpdate : Recorded state, { localInput : Input, deltaMillis : U64 } -> (Recorded state, U64)
+normalUpdate : Recorded, { localInput : Input, deltaMillis : U64 } -> (Recorded, U64)
 normalUpdate = \initialWorld, { localInput, deltaMillis } ->
     millisToUse = initialWorld.remainingMillis + deltaMillis
     tickingWorld = { initialWorld & remainingMillis: millisToUse }
     useAllRemainingTime tickingWorld { localInput } 0
 
-useAllRemainingTime : Recorded state, { localInput : Input }, U64 -> (Recorded state, U64)
+useAllRemainingTime : Recorded, { localInput : Input }, U64 -> (Recorded, U64)
 useAllRemainingTime = \world, inputs, ticksTicked ->
     if world.remainingMillis < world.config.millisPerTick then
         (world, ticksTicked)
@@ -418,7 +409,7 @@ useAllRemainingTime = \world, inputs, ticksTicked ->
         tickedWorld = tickOnce world inputs
         useAllRemainingTime tickedWorld inputs (ticksTicked + 1)
 
-tickOnce : Recorded state, { localInput : Input } -> Recorded state
+tickOnce : Recorded, { localInput : Input } -> Recorded
 tickOnce = \world, { localInput: newInput } ->
     tick = world.tick + 1
     timestampMillis = world.tick * world.config.millisPerTick
@@ -432,7 +423,7 @@ tickOnce = \world, { localInput: newInput } ->
 
     (remoteInput, _predicted) = predictRemoteInput world { tick }
 
-    state = world.config.tick world.state {
+    state = GameState.tick world.state {
         tick,
         timestampMillis,
         localInput,
@@ -440,12 +431,12 @@ tickOnce = \world, { localInput: newInput } ->
     }
 
     snapshots =
-        checksum = world.config.checksum state
+        checksum = GameState.checksum state
 
         # NOTE:
         # We need to use our previously-sent localInput from above.
         # Changing our own recorded input would break our opponent's rollbacks.
-        newSnapshot : Snapshot state
+        newSnapshot : Snapshot
         newSnapshot = { localInput, tick, remoteInput, checksum, state }
 
         oldSnapshots = world.snapshots |> List.dropIf \snap -> snap.tick == tick
@@ -466,7 +457,7 @@ tickOnce = \world, { localInput: newInput } ->
         localInputTicks,
     }
 
-predictRemoteInput : Recorded state, { tick : U64 } -> (Input, [Predicted, Confirmed])
+predictRemoteInput : Recorded, { tick : U64 } -> (Input, [Predicted, Confirmed])
 predictRemoteInput = \world, { tick } ->
     receivedInput =
         world.remoteInputTicks
@@ -490,7 +481,7 @@ predictRemoteInput = \world, { tick } ->
 
 # ROLLBACK
 
-rollbackIfNecessary : Recorded state -> Recorded state
+rollbackIfNecessary : Recorded -> Recorded
 rollbackIfNecessary = \world ->
     shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
 
@@ -512,16 +503,16 @@ rollbackIfNecessary = \world ->
 
         rollForwardFromSyncTick restoredToSync { rollForwardRange }
 
-rollForwardFromSyncTick : Recorded state, { rollForwardRange : (U64, U64) } -> Recorded state
+rollForwardFromSyncTick : Recorded, { rollForwardRange : (U64, U64) } -> Recorded
 rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } ->
     expect begin <= end
 
     rollForwardTicks = List.range { start: At begin, end: At end }
 
     # touch up the snapshots to have their 'predictions' match what happened
-    fixedWorld : Recorded state
+    fixedWorld : Recorded
     fixedWorld =
-        snapshots : List (Snapshot state)
+        snapshots : List Snapshot
         snapshots = List.map wrongFutureWorld.snapshots \questionableSnap ->
             matchingInputTick = List.findFirst wrongFutureWorld.remoteInputTicks \inputTick ->
                 inputTick.tick == questionableSnap.tick
@@ -586,39 +577,45 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
                 crashInfo = internalShowCrashInfo rolledForwardWorld
                 crash "no last remote message during roll forward:\n$(crashInfo)"
 
+    localMatchingChecksum : Result I64 _
     localMatchingChecksum =
-        matchingSnap =
-            rolledForwardWorld.snapshots
-            |> List.findLast \snap -> Num.toI64 snap.tick == remoteSyncTick
-        when matchingSnap is
-            Ok snap -> snap.checksum
-            Err _ ->
-                info = Inspect.toStr { remoteSyncTick }
-                crashInfo = internalShowCrashInfo rolledForwardWorld
-                crash "no matching local snapshot for remote sync tick:$(info)\n$(crashInfo)"
+        rolledForwardWorld.snapshots
+        |> List.findLast \snap -> Num.toI64 snap.tick == remoteSyncTick
+        |> Result.map \snap -> snap.checksum
 
+    # this is a weird reassignment to avoid the roc warning for a void statement
+    # the 'when' exists for the crash assertion
     remainingMillis =
-        if remoteSyncTickChecksum == localMatchingChecksum then
-            # this is a weird reassignment to avoid the roc warning for a void statement
-            remainingMillisBeforeRollForward
-        else
-            history = internalWritableHistory rolledForwardWorld
-            crashInfo = internalShowCrashInfo rolledForwardWorld
-            frameMessages = rolledForwardWorld.remoteMessages
-            checksums = (remoteSyncTickChecksum, localMatchingChecksum)
-            info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
+        when localMatchingChecksum is
+            Ok local if local != remoteSyncTickChecksum ->
+                # known wrong checksums
+                history = internalWritableHistory rolledForwardWorld
+                crashInfo = internalShowCrashInfo rolledForwardWorld
+                frameMessages = rolledForwardWorld.remoteMessages
+                checksums = (remoteSyncTickChecksum, localMatchingChecksum)
+                info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
 
-            crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
+                crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
+
+            Ok _local ->
+                # matching checksums; the happy path
+                remainingMillisBeforeRollForward
+
+            Err _ ->
+                # we've already thrown away their sync tick
+                # this is valid if they've sent us enough messages,
+                # but they've gotten behind
+                remainingMillisBeforeRollForward
 
     { rolledForwardWorld & remainingMillis }
 
 # DEBUG HELPERS
 
-showCrashInfo : Recording state -> Str
+showCrashInfo : Recording -> Str
 showCrashInfo = \@Recording recordedState ->
     internalShowCrashInfo recordedState
 
-internalShowCrashInfo : Recorded state -> Str
+internalShowCrashInfo : Recorded -> Str
 internalShowCrashInfo = \world ->
     # TODO require that state is Inspect
 
@@ -648,11 +645,11 @@ internalShowCrashInfo = \world ->
 
 ## Creates a multi-line json log of snapshotted inputs.
 ## This allows creating diffable input logs from multiple clients when debugging.
-writableHistory : Recording state -> Str
+writableHistory : Recording -> Str
 writableHistory = \@Recording recordedState ->
     internalWritableHistory recordedState
 
-internalWritableHistory : Recorded state -> Str
+internalWritableHistory : Recorded -> Str
 internalWritableHistory = \{ snapshots } ->
     writeInput : Input -> Str
     writeInput = \input ->
@@ -666,7 +663,7 @@ internalWritableHistory = \{ snapshots } ->
         |> Str.joinWith ", "
         |> \inputs -> "[$(inputs)]"
 
-    inputSnapshot : Snapshot state -> _
+    inputSnapshot : Snapshot -> _
     inputSnapshot = \snap -> {
         tick: snap.tick,
         localInput: writeInput snap.localInput,
@@ -685,7 +682,7 @@ internalWritableHistory = \{ snapshots } ->
             Ok str -> str
             Err _ -> crash "toUtf8Unchecked"
 
-    writeSnapshot : Snapshot state -> Str
+    writeSnapshot : Snapshot -> Str
     writeSnapshot = \snap ->
         inputJson =
             snap

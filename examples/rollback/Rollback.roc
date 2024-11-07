@@ -259,34 +259,17 @@ addRemoteInputs = \world, inbox ->
 
     { world & remoteMessages, remoteInputTicks }
 
+# TODO is the sorting required? it would be with UDP
+#   does ringbuffer need a way to add sorted? require that internal items have a tick?
+#   that'd require changing the name in FrameMessage; or storing a wrapping record
 cleanAndSortInputs : List FrameMessage, { syncTick : U64 } -> List FrameMessage
 cleanAndSortInputs = \history, { syncTick } ->
     sorted = List.sortWith history \left, right ->
         Num.compare left.firstTick right.firstTick
-    sortedUnique = List.walk sorted [] \lst, fresh ->
-        isMergeable = \lastMessage ->
-            contiguous = lastMessage.lastTick == fresh.firstTick - 1
-            equalInput = lastMessage.input == fresh.input
-            contiguous && equalInput
 
-        when List.last lst is
-            # same start tick
-            Ok last if last.firstTick == fresh.firstTick ->
-                # they're blocking or they rolled back;
-                # replace their input with the latest
-                lst |> List.dropLast 1 |> List.append fresh
-
-            # contiguous & mergeable
-            Ok last if isMergeable last ->
-                merged = { fresh & firstTick: last.firstTick }
-                lastIndex = List.len lst - 1
-                List.set lst lastIndex merged
-
-            _ -> List.append lst fresh
-
-    keptLast = List.last sortedUnique
+    keptLast = List.last sorted
     cleaned =
-        List.keepOks sortedUnique \msg ->
+        List.keepOks sorted \msg ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
 
     when (cleaned, keptLast) is

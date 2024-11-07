@@ -48,9 +48,9 @@ import Pixel exposing [PixelVec]
 import Input
 
 import GameState exposing [GameState]
-import Recording exposing [Recording, FrameContext, FrameMessage]
+import Rollback
 
-World : Recording
+World : Rollback.Recording
 
 LocalPlayer : {
     pos : PixelVec,
@@ -98,7 +98,7 @@ playerStart =
 initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
-waitingMessage : FrameMessage
+waitingMessage : Rollback.FrameMessage
 waitingMessage =
     syncTickChecksum = GameState.positionsChecksum {
         localPlayerPos: playerStart.pos,
@@ -114,9 +114,9 @@ waitingMessage =
         syncTickChecksum,
     }
 
-init : { firstMessage : Recording.PeerMessage } -> Recording
+init : { firstMessage : Rollback.PeerMessage } -> Rollback.Recording
 init = \{ firstMessage: { id, message } } ->
-    config : Recording.Config
+    config : Rollback.Config
     config = {
         millisPerTick,
         maxRollbackTicks,
@@ -134,11 +134,11 @@ init = \{ firstMessage: { id, message } } ->
         },
     }
 
-    Recording.start { config, firstMessage: message, state: initialState }
+    Rollback.start { config, firstMessage: message, state: initialState }
 
-advance : World, FrameContext -> (World, Result FrameMessage _)
+advance : World, Rollback.FrameContext -> (World, Result Rollback.FrameMessage _)
 advance = \world, ctx ->
-    Recording.advance world ctx
+    Rollback.advance world ctx
 
 roundVec : Vector2 -> { x : I64, y : I64 }
 roundVec = \{ x, y } -> {
@@ -156,16 +156,16 @@ expect
     ourId = Network.fromU64Pair { upper: 0, lower: 0 }
     theirId = Network.fromU64Pair { upper: 0, lower: 1 }
 
-    ourStart : Recording
+    ourStart : Rollback.Recording
     ourStart = init { firstMessage: { id: theirId, message: waitingMessage } }
 
-    theirStart : Recording
+    theirStart : Rollback.Recording
     theirStart = init { firstMessage: { id: ourId, message: waitingMessage } }
 
-    theirState = Recording.currentState theirStart
+    theirState = Rollback.currentState theirStart
     theirPositions = (theirState.localPlayer.pos, theirState.remotePlayer.pos)
 
-    ourState = Recording.currentState ourStart
+    ourState = Rollback.currentState ourStart
     ourPositions = (ourState.remotePlayer.pos, ourState.localPlayer.pos)
 
     # Worlds are equal after init

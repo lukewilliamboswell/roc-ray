@@ -430,6 +430,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-target"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "832133bbabbbaa9fbdba793456a2827627a7d2b8fb96032fa1e7666d7895832b"
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -521,6 +527,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1770,6 +1786,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "raylib"
+version = "0.1.0"
+dependencies = [
+ "build-target",
+]
+
+[[package]]
 name = "rcgen"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1888,26 +1911,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "roc-ray"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "flate2",
- "libc",
- "matchbox_socket",
- "reqwest",
- "roc_std",
- "roc_std_heap",
- "tar",
- "tokio",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "roc_std"
 version = "0.0.1"
-source = "git+https://github.com/roc-lang/roc.git#367911d73a3d9eccb4d991fe661ed5381c374c13"
+source = "git+https://github.com/roc-lang/roc.git#589ec1d453643ea437817bda1b9d79b008477d37"
 dependencies = [
  "arrayvec",
  "static_assertions",
@@ -1916,10 +1922,32 @@ dependencies = [
 [[package]]
 name = "roc_std_heap"
 version = "0.0.1"
-source = "git+https://github.com/roc-lang/roc.git#367911d73a3d9eccb4d991fe661ed5381c374c13"
+source = "git+https://github.com/roc-lang/roc.git#589ec1d453643ea437817bda1b9d79b008477d37"
 dependencies = [
  "memmap2",
  "roc_std",
+]
+
+[[package]]
+name = "rocray"
+version = "0.1.0"
+dependencies = [
+ "build-target",
+ "bytes",
+ "console_error_panic_hook",
+ "flate2",
+ "libc",
+ "matchbox_socket",
+ "once_cell",
+ "raylib",
+ "reqwest",
+ "roc_std",
+ "roc_std_heap",
+ "tar",
+ "tokio",
+ "uuid",
+ "web-sys",
+ "zip",
 ]
 
 [[package]]

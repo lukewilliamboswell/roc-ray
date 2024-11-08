@@ -1,0 +1,43 @@
+[env]
+EMCC_CFLAGS_DEBUG = """
+    -s ASYNCIFY \
+    -s USE_GLFW=3 \
+    -DPLATFORM_WEB \
+    -sGL_ENABLE_GET_PROC_ADDRESS \
+    -DGRAPHICS_API_OPENGL_ES2 \
+    -sEXPORTED_FUNCTIONS=_main,_on_resize \
+    -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
+    -s USE_SDL=2 \
+    -s USE_SDL_IMAGE=2 \
+    -s SDL2_IMAGE_FORMATS='["png"]' \
+    -s STB_IMAGE=1 \
+    --preload-file examples/assets/@/assets/ \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -g \
+    -s ASSERTIONS=1
+    -O0
+"""
+
+EMCC_CFLAGS_RELEASE = """
+    -s ASYNCIFY \
+    -s USE_GLFW=3 \
+    -DPLATFORM_WEB \
+    -sGL_ENABLE_GET_PROC_ADDRESS \
+    -DGRAPHICS_API_OPENGL_ES2 \
+    -sEXPORTED_FUNCTIONS=_main,_on_resize \
+    -sEXPORTED_RUNTIME_METHODS=ccall,cwrap \
+    -s USE_SDL=2 \
+    -s USE_SDL_IMAGE=2 \
+    -s SDL2_IMAGE_FORMATS='["png"]' \
+    -s STB_IMAGE=1 \
+    --preload-file examples/assets/@/assets/ \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s ASSERTIONS=0 \
+    -s ELIMINATE_DUPLICATE_FUNCTIONS=1 \
+    -s ENVIRONMENT=web \
+    -s TEXTDECODER=2 \
+    -O3
+"""
+
+[target.wasm32-unknown-emscripten]
+rustflags = ["-C", "link-arg=--js-library", "-C", "link-arg=src/web.js"]

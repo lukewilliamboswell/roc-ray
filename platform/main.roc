@@ -1,12 +1,25 @@
 platform "roc-ray"
     requires { Model } {
-        init : Task state []err,
-        render : state, RocRay.PlatformState -> Task state []err,
+        init! : {} => Result Model []_,
+        render! : Model, RocRay.PlatformState => Result Model []_,
     }
-    exposes [RocRay, Keys, Mouse]
+    exposes [
+        RocRay,
+        Camera,
+        Draw,
+        Font,
+        Keys,
+        Mouse,
+        Music,
+        Network,
+        RenderTexture,
+        Sound,
+        Texture,
+        Time,
+    ]
     packages {}
     imports []
-    provides [forHost]
+    provides [initForHost!, renderForHost!]
 
 import RocRay
 import Mouse
@@ -15,52 +28,21 @@ import InternalMouse
 import Effect
 import Network
 
-PlatformStateFromHost : {
-    frameCount : U64,
-    keys : List U8,
-    mouseButtons : List U8,
-    timestampMillis : U64,
-    mousePosX : F32,
-    mousePosY : F32,
-    mouseWheel : F32,
-    peers : PeerState,
-    messages : List Effect.PeerMessage,
-}
+initForHost! : I32 => Result (Box Model) Str
+initForHost! = \_x ->
+    init! {}
+    |> Result.map Box.box
+    |> Result.mapErr Inspect.toStr
 
-PeerState : {
-    connected : List Effect.RawUUID,
-    disconnected : List Effect.RawUUID,
-}
-
-ProgramForHost model : {
-    initForHost : Task (Box model) {},
-    renderForHost : Box model, PlatformStateFromHost -> Task (Box model) {},
-}
-
-forHost : ProgramForHost _
-forHost = { initForHost, renderForHost }
-
-initForHost : Task (Box Model) {}
-initForHost =
-    Task.attempt init \result ->
-        when result is
-            Ok m -> Task.ok (Box.box m)
-            Err err ->
-                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit!
-                Task.err {}
-
-renderForHost : Box Model, PlatformStateFromHost -> Task (Box Model) {}
-renderForHost = \boxedModel, platformState ->
+renderForHost! : Box Model, Effect.PlatformStateFromHost => Result (Box Model) Str
+renderForHost! = \boxedModel, { frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages } ->
     model = Box.unbox boxedModel
-
-    { timestampMillis, messages, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {
-        timestampMillis,
         frameCount,
         keys: InternalKeyboard.pack keys,
+        timestamp,
         mouse: {
             position: { x: mousePosX, y: mousePosY },
             buttons: mouseButtonsForApp { mouseButtons },
@@ -75,13 +57,9 @@ renderForHost = \boxedModel, platformState ->
         },
     }
 
-    Task.attempt (render model state) \result ->
-        when result is
-            Ok m -> Task.ok (Box.box m)
-            Err err ->
-                Effect.log! (Inspect.toStr err) (Effect.toLogLevel LogError)
-                Effect.exit!
-                Task.err {}
+    render! model state
+    |> Result.map Box.box
+    |> Result.mapErr Inspect.toStr
 
 mouseButtonsForApp : { mouseButtons : List U8 } -> Mouse.Buttons
 mouseButtonsForApp = \{ mouseButtons } ->

@@ -5,6 +5,11 @@
 *.dylib
 *.ll
 *.obj
+*.js
+*.wasm
+*.tar.br
+*.tar.gz
+*.data
 
 examples/gui-counter
 examples/squares
@@ -12,17 +17,11 @@ examples/pong
 examples/basic-shapes
 
 generated-docs/
-raygui/
-raylib/
-
-*.tar.br
-*.tar.gz
 
 .DS_Store
-
-test-platform.roc
-platform/glue.roc
 
 target/
 
 windows/bin
+
+rocray

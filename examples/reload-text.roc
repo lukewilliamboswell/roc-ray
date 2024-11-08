@@ -1,4 +1,4 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay exposing [Vector2, Rectangle]
 import rr.Draw
@@ -8,17 +8,17 @@ Model : {
     message : Str,
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model _
+init! = \{} ->
 
     RocRay.initWindow! { title: "Reload Text" }
 
-    message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
+    message = RocRay.loadFileToStr!? "examples/assets/reload-text/message.txt"
 
-    Task.ok { message }
+    Ok { message }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { mouse } ->
+render! : Model, RocRay.PlatformState => Result Model _
+render! = \model, { mouse } ->
 
     buttonRect = {
         x: 100,
@@ -44,10 +44,10 @@ render = \model, { mouse } ->
         }
 
     if Mouse.pressed mouse.buttons.left && within mouse.position buttonRect then
-        message = RocRay.loadFileToStr! "examples/assets/reload-text/message.txt"
-        Task.ok { message }
+        message = RocRay.loadFileToStr!? "examples/assets/reload-text/message.txt"
+        Ok { message }
     else
-        Task.ok model
+        Ok model
 
 within : Vector2, Rectangle -> Bool
 within = \pos, rect ->

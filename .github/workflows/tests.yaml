@@ -81,12 +81,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ROC
-        run: |
-          # Install ROC
-          Invoke-WebRequest -Uri "https://github.com/lukewilliamboswell/roc/releases/download/windows-20241011/roc.exe" -OutFile "roc.exe"
+        run: .\windows\setup.ps1
 
       - name: Check ROC version
-        run: .\roc.exe version
+        run: .\windows\bin\roc.exe version
 
       - name: Install GLFW
         run: |
@@ -102,15 +100,15 @@ jobs:
 
       - name: Build the basic-shapes example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
+          .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
           cargo build
 
       - name: Build the 2d_camera example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
+          .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
           cargo build
 
       - name: Build the pong example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\pong.roc
+          .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\pong.roc
           cargo build

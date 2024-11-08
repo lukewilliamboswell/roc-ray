@@ -1,4 +1,4 @@
-app [Model, init, render] { rr: platform "../platform/main.roc" }
+app [Model, init!, render!] { rr: platform "../platform/main.roc" }
 
 import rr.RocRay
 import rr.Keys
@@ -14,19 +14,23 @@ Model : {
     messageLog : List (TimeStampMillis, Network.UUID, Str),
 }
 
-init : Task Model []
-init =
+init! : {} => Result Model []
+init! = \{} ->
 
     RocRay.setTargetFPS! 30
+
     RocRay.displayFPS! { fps: Visible, pos: { x: width - 80, y: height - 20 } }
+
+    Network.configure! { serverUrl: "ws://localhost:3536/yolo?next=2" }
+
     RocRay.initWindow! { title: "Basic WebRTC Networking", width, height }
 
-    Task.ok {
+    Ok {
         messageLog: [],
     }
 
-render : Model, RocRay.PlatformState -> Task Model []
-render = \model, { timestampMillis, keys, network } ->
+render! : Model, RocRay.PlatformState => Result Model []
+render! = \model, { timestamp, keys, network } ->
 
     message =
         if Keys.pressed keys KeyUp then
@@ -40,19 +44,16 @@ render = \model, { timestampMillis, keys, network } ->
         else
             ""
 
-    sendTask =
-        if Str.isEmpty message then
-            Task.ok {}
-        else
-            Task.forEach network.peers.connected \peer ->
-                Str.toUtf8 message |> RocRay.sendToPeer peer
-
-    sendTask!
+    if !(Str.isEmpty message) then
+        forEach! network.peers.connected \peer ->
+            Str.toUtf8 message |> RocRay.sendToPeer! peer
+    else
+        {}
 
     messageLog =
         List.walk network.messages model.messageLog \log, { id, bytes } ->
             msgStr = bytes |> Str.fromUtf8 |> Result.withDefault "BAD UTF-8"
-            msg = (timestampMillis, id, msgStr)
+            msg = (timestamp.renderStart, id, msgStr)
 
             List.append log msg
 
@@ -66,15 +67,10 @@ render = \model, { timestampMillis, keys, network } ->
         displayPeerConnections! network.peers
         displayMessages! model.messageLog
 
-    Task.ok { model & messageLog }
+    Ok { model & messageLog }
 
-displayPeerConnections :
-    {
-        connected : List UUID,
-        disconnected : List UUID,
-    }
-    -> Task {} _
-displayPeerConnections = \{ connected, disconnected } ->
+displayPeerConnections! : { connected : List UUID, disconnected : List UUID } => {}
+displayPeerConnections! = \{ connected, disconnected } ->
 
     combined =
         List.concat
@@ -90,18 +86,25 @@ displayPeerConnections = \{ connected, disconnected } ->
         size: 10,
         color: Black,
     }
-    |> Task.forEach Draw.text
+    |> forEach! Draw.text!
 
-displayMessages : List (TimeStampMillis, Network.UUID, Str) -> Task {} _
-displayMessages = \messages ->
+displayMessages! : List (TimeStampMillis, Network.UUID, Str) => {}
+displayMessages! = \messages ->
 
     messages
-        |> List.mapWithIndex \(time, peer, str), i -> {
-            pos: { x: 10, y: 100 + Num.toFrac (i * 10) },
-            text: "$(Num.toStr time) $(Network.toStr peer): $(str)",
-            size: 10,
-            color: Black,
-        }
-        |> Task.forEach! Draw.text
+    |> List.mapWithIndex \(time, peer, str), i -> {
+        pos: { x: 10, y: 100 + Num.toFrac (i * 10) },
+        text: "$(Num.toStr time) $(Network.toStr peer): $(str)",
+        size: 10,
+        color: Black,
+    }
+    |> forEach! Draw.text!
 
-    Task.ok {}
+# TODO REPLACE WITH BUILTIN
+forEach! : List a, (a => {}) => {}
+forEach! = \l, f! ->
+    when l is
+        [] -> {}
+        [x, .. as xs] ->
+            f! x
+            forEach! xs f!

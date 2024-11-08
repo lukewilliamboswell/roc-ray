@@ -1,0 +1,7 @@
+[package]
+name = "raylib"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+build-target = "0.4"

@@ -26,7 +26,17 @@ for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     fi
 done
 
-# build the example
+# TODO restore this when we have emscripten and zig setup for CI
+# build the example web
+# note we do web first, so the app.o that is left around is the native one for `cargo test`
+# for ROC_FILE in $EXAMPLES_DIR/*.roc; do
+#     if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
+#         $ROC build --target wasm32 --no-link --output app.o $ROC_FILE
+#         $CARGO build --target wasm32-unknown-emscripten
+#     fi
+# done
+
+# build the example native
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
     if [[ " ${IGNORED_FILES[*]} " != *" ${ROC_FILE##*/} "* ]]; then
         $ROC build --no-link --output app.o $ROC_FILE
@@ -36,6 +46,9 @@ done
 
 # run the cargo tests
 # note we need an `app.o` file to build the test runner, so do this after buildings the examples
+rm -f libapp.so
+rm -f libapp.dylib
+$ROC build --no-link --output app.o examples/basic-shapes.roc
 $CARGO test
 
 # test building docs website

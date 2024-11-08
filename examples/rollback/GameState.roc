@@ -9,12 +9,13 @@ module [
     checksum,
     positionsChecksum,
     playerFacing,
+    initial,
+    playerStart,
 ]
-
-import rr.Network exposing [UUID]
 
 import Input exposing [Input, TickContext]
 import Pixel exposing [PixelVec]
+import Resolution exposing [width, height]
 
 ## the game state unrelated to rollback bookkeeping
 GameState : {
@@ -30,8 +31,8 @@ LocalPlayer : {
     intent : Intent,
 }
 
+# TODO remove?
 RemotePlayer : {
-    id : UUID,
     pos : PixelVec,
     animation : AnimatedSprite,
     intent : Intent,
@@ -46,6 +47,30 @@ AnimatedSprite : {
 Intent : [Walk Facing, Idle Facing]
 
 Facing : [Up, Down, Left, Right]
+
+initial : GameState
+initial = {
+    localPlayer: playerStart,
+    remotePlayer: {
+        pos: playerStart.pos,
+        animation: playerStart.animation,
+        intent: playerStart.intent,
+    },
+}
+
+playerStart : LocalPlayer
+playerStart =
+    x = Pixel.fromParts { pixels: (width // 2) }
+    y = Pixel.fromParts { pixels: (height // 2) }
+
+    {
+        pos: { x, y },
+        animation: initialAnimation,
+        intent: Idle Right,
+    }
+
+initialAnimation : AnimatedSprite
+initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
 checksum : GameState -> I64
 checksum = \{ localPlayer, remotePlayer } ->

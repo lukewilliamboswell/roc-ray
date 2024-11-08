@@ -10,6 +10,7 @@ module [
     showCrashInfo,
     writableHistory,
     currentState,
+    waitingMessage,
 ]
 
 import rr.Network exposing [UUID]
@@ -708,3 +709,19 @@ internalWritableHistory = \{ snapshots } ->
     snapshots
     |> List.map writeSnapshot
     |> Str.joinWith "\n"
+
+waitingMessage : Rollback.FrameMessage
+waitingMessage =
+    syncTickChecksum = GameState.positionsChecksum {
+        localPlayerPos: GameState.playerStart.pos,
+        remotePlayerPos: GameState.playerStart.pos,
+    }
+
+    {
+        firstTick: 0,
+        lastTick: 0,
+        tickAdvantage: 0,
+        input: Input.blank,
+        syncTick: 0,
+        syncTickChecksum,
+    }

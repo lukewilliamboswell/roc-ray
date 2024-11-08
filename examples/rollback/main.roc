@@ -11,7 +11,6 @@ import rr.Network
 import json.Json
 
 import Resolution exposing [width, height]
-import World exposing [World]
 import Rollback
 import Pixel
 import Input
@@ -25,7 +24,7 @@ WaitingModel : {
 
 ConnectedModel : {
     dude : Texture,
-    world : World,
+    world : Rollback.Recording,
     timestampMillis : U64,
 }
 
@@ -75,7 +74,7 @@ drawConnected! = \{ dude, world }, state ->
         remotePlayerIdPos = Pixel.toVector2 remotePlayer.pos
         Draw.text! {
             pos: remotePlayerIdPos,
-            text: "$(Inspect.toStr remotePlayer.id)",
+            text: "remote player",
             size: 10,
             color: Red,
         }
@@ -111,7 +110,18 @@ waitingToConnected! = \waiting, state, firstMessage ->
     timestampMillis = state.timestamp.renderStart
     { dude } = waiting
 
-    world = World.init { firstMessage }
+    config : Rollback.Config
+    config = {
+        millisPerTick: 1000 // 120,
+        maxRollbackTicks: 6,
+        tickAdvantageLimit: 6,
+    }
+
+    world = Rollback.start {
+        config,
+        firstMessage: firstMessage.message,
+        state: GameState.initial,
+    }
 
     connected : ConnectedModel
     connected = { dude, world, timestampMillis }
@@ -126,7 +136,7 @@ drawWaiting! = \waiting ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
-        localPlayer = World.playerStart
+        localPlayer = GameState.playerStart
         playerFacing = GameState.playerFacing localPlayer
         Draw.textureRec! {
             texture: waiting.dude,
@@ -146,7 +156,8 @@ renderConnected! = \oldModel, state ->
     inbox = decodeFrameMessages network.messages
 
     localInput = Input.read state.keys
-    (world, outgoing) = World.advance oldModel.world { localInput, deltaMillis, inbox }
+    (world, outgoing) =
+        Rollback.advance oldModel.world { localInput, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -217,7 +228,7 @@ displayPeerConnections! = \{ connected, disconnected } ->
 
 sendHostWaiting! : RocRay.NetworkState => {}
 sendHostWaiting! = \network ->
-    sendFrameMessage! World.waitingMessage network
+    sendFrameMessage! Rollback.waitingMessage network
 
 sendFrameMessage! : Rollback.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->
@@ -284,3 +295,4 @@ forEach! = \l, f! ->
         [x, .. as xs] ->
             f! x
             forEach! xs f!
+

@@ -1,5 +1,5 @@
 $url = "https://github.com/lukewilliamboswell/roc/releases/download/windows-20241108/roc.exe"
-$binDir = "$PSScriptRoot\bin\"
+$binDir = "$PSScriptRoot\bin\" 
 $path = "$binDir\roc.exe"
 
 # download roc to /windows/bin

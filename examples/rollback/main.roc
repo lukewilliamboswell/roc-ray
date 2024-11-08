@@ -101,7 +101,13 @@ renderWaiting! = \waiting, state ->
         Ok firstUpdate ->
             waitingToConnected! waiting state firstUpdate
 
-        Err _ ->
+        Err ListWasEmpty ->
+            sendHostWaiting! state.network
+            drawWaiting! waiting
+            Ok (Waiting waiting)
+
+        Err (Leftover _) | Err TooShort ->
+            RocRay.log! "decode error" LogError
             sendHostWaiting! state.network
             drawWaiting! waiting
             Ok (Waiting waiting)
@@ -238,7 +244,15 @@ sendFrameMessage! = \message, network ->
 
 decodeFrameMessages : List RocRay.NetworkMessage -> List Rollback.PeerMessage
 decodeFrameMessages = \messages ->
-    List.keepOks messages decodeSingleFrameMessage
+    List.map messages \networkMsg ->
+        when decodeSingleFrameMessage networkMsg is
+            Ok msg -> msg
+            Err e ->
+                crashInfo = Inspect.toStr {
+                    decodeError: e,
+                    networkMessage: Str.fromUtf8 networkMsg.bytes,
+                }
+                crash "decode error: $(crashInfo)"
 
 FrameMessageJson : {
     firstTick : I64,

@@ -19,7 +19,7 @@ import json.Json
 import Input exposing [Input]
 import GameState exposing [GameState]
 
-import NonEmptyRingBuffer
+import InputBuffer
 
 # TODO better name for internal record
 Recording := RecordedWorld

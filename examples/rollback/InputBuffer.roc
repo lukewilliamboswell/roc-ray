@@ -1,17 +1,19 @@
 module [
-    NonEmptyRingBuffer,
+    InputBuffer,
     capacity,
     contents,
     new,
-    get,
+    fromList,
     first,
     last,
     push,
+    pushAll,
     dropOldestWhile,
     findLatest,
 ]
 
-NonEmptyRingBuffer a := Buffer a
+## A non-empty ring buffer for player inputs
+InputBuffer a := Buffer a
 
 Buffer a : {
     ## the backing list
@@ -30,34 +32,35 @@ Buffer a : {
 capacity : U64
 capacity = 256
 
-new : a -> NonEmptyRingBuffer a
+new : a -> InputBuffer a
 new = \item ->
+    fromList item []
+
+fromList : a, List a -> InputBuffer a
+fromList = \firstItem, rest ->
     oldest = 0
-    latest = 0
-    list =
-        List.repeat (Err EmptySlot) capacity
-        |> List.set latest (Ok item)
+    latest = List.len rest
 
-    @NonEmptyRingBuffer { oldest, latest, list }
+    original = List.prepend rest firstItem
+    fullSlots =
+        List.takeFirst original capacity
+        |> List.map Ok
+    emptySlots =
+        List.repeat (Err EmptySlot) (capacity - List.len fullSlots)
+    list = List.concat fullSlots emptySlots
 
-get : NonEmptyRingBuffer a, U64 -> Result a [OutOfBounds]
-get = \@NonEmptyRingBuffer buffer, i ->
-    offset = (buffer.oldest + i) % capacity
-    when List.get buffer.list offset is
-        Ok (Ok item) -> Ok item
-        Ok (Err EmptySlot) -> Err OutOfBounds
-        Err _ -> crash "invalid offset"
+    @InputBuffer { oldest, latest, list }
 
 ## access the first / oldest item, which is guaranteed to be present
-first : NonEmptyRingBuffer a -> a
-first = \@NonEmptyRingBuffer buffer ->
+first : InputBuffer a -> a
+first = \@InputBuffer buffer ->
     when List.get buffer.list buffer.oldest is
         Ok (Ok item) -> item
         _ -> crash "invalid buffer"
 
 ## access the last / latest item, which is guaranteed to be present
-last : NonEmptyRingBuffer a -> a
-last = \@NonEmptyRingBuffer buffer ->
+last : InputBuffer a -> a
+last = \@InputBuffer buffer ->
     when List.get buffer.list buffer.latest is
         Ok (Ok item) -> item
         _ -> crash "invalid buffer"
@@ -65,20 +68,32 @@ last = \@NonEmptyRingBuffer buffer ->
 ## Add a new item, which will become the last / latest.
 ## If adding an item would overflow capacity, the same buffer is returned instead.
 ## Letting a player get 256 frames ahead of their opponent is not advised.
-push : NonEmptyRingBuffer a, a -> NonEmptyRingBuffer a
-push = \@NonEmptyRingBuffer buffer, item ->
+push : InputBuffer a, a -> InputBuffer a
+push = \@InputBuffer buffer, item ->
+    buffer
+    |> pushOneUnsorted item
+    |> @InputBuffer
+
+pushAll : InputBuffer a, List a -> InputBuffer a
+pushAll = \@InputBuffer initialBuffer, items ->
+    items
+    |> List.walk initialBuffer pushOneUnsorted
+    |> @InputBuffer
+
+pushOneUnsorted : Buffer a, a -> Buffer a
+pushOneUnsorted = \buffer, item ->
     latest = (buffer.latest + 1) % capacity
     if latest == buffer.oldest then
-        @NonEmptyRingBuffer buffer
+        buffer
     else
         list = List.set buffer.list latest (Ok item)
-        @NonEmptyRingBuffer { buffer & list, latest }
+        { buffer & list, latest }
 
 ## Drop the oldest items while they meet the condition.
 ## Stops dropping when either condition returns false,
 ## or there is one latest item left in the buffer.
-dropOldestWhile : NonEmptyRingBuffer a, (a -> Bool) -> NonEmptyRingBuffer a
-dropOldestWhile = \@NonEmptyRingBuffer initialBuffer, shouldDrop ->
+dropOldestWhile : InputBuffer a, (a -> Bool) -> InputBuffer a
+dropOldestWhile = \@InputBuffer initialBuffer, shouldDrop ->
     indexes = deletableIndexes initialBuffer
 
     newBuffer =
@@ -94,10 +109,10 @@ dropOldestWhile = \@NonEmptyRingBuffer initialBuffer, shouldDrop ->
                     else
                         Break buffer
 
-    @NonEmptyRingBuffer newBuffer
+    @InputBuffer newBuffer
 
-findLatest : NonEmptyRingBuffer a, (a -> Bool) -> Result a [NotFound]
-findLatest = \@NonEmptyRingBuffer buffer, isMatch ->
+findLatest : InputBuffer a, (a -> Bool) -> Result a [NotFound]
+findLatest = \@InputBuffer buffer, isMatch ->
     findLast = \range ->
         List.walkBackwardsUntil range (Err NotFound) \res, i ->
             when List.get buffer.list i is
@@ -128,53 +143,48 @@ deletableIndexes = \buffer ->
         secondChunk = List.range { start: At 0, end: Before buffer.latest }
         List.concat firstChunk secondChunk
 
-contents : NonEmptyRingBuffer a -> List a
-contents = \@NonEmptyRingBuffer buffer ->
-    allButLatest = List.map (deletableIndexes buffer) \i ->
+allIndexes : Buffer a -> List U64
+allIndexes = \buffer ->
+    if buffer.oldest <= buffer.latest then
+        List.range { start: At buffer.oldest, end: At buffer.latest }
+    else
+        firstChunk = List.range { start: At buffer.oldest, end: Before capacity }
+        secondChunk = List.range { start: At 0, end: At buffer.latest }
+        List.concat firstChunk secondChunk
+
+contents : InputBuffer a -> List a
+contents = \@InputBuffer buffer ->
+    List.map (allIndexes buffer) \i ->
         when List.get buffer.list i is
             Ok (Ok item) -> item
             _ -> crash "invalid buffer"
 
-    latest : a
-    latest =
-        when List.get buffer.list buffer.latest is
-            Ok (Ok item) -> item
-            _ -> crash "invalid buffer"
-
-    List.append allButLatest latest
+newIntBuffer : U64 -> InputBuffer U64
+newIntBuffer = \num ->
+    new num
 
 expect
-    justOne = new 1
-    result = get justOne 0
-    result == Ok 1
-
-expect
-    justOne = new 1
-    result = get justOne 1
-    result == Err OutOfBounds
-
-expect
-    justOne = new 1
+    justOne = newIntBuffer 1
     firstItem = first justOne
     firstItem == 1
 
 expect
-    justOne = new 1
+    justOne = newIntBuffer 1
     lastItem = last justOne
     lastItem == 1
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3
     firstItem = first ringBuffer
     firstItem == 1
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3
     lastItem = last ringBuffer
     lastItem == 3
 
 expect
-    ringBuffer = new 0
+    ringBuffer = newIntBuffer 0
     fullBuffer =
         List.range { start: At 1, end: At (capacity - 1) }
         |> List.walk ringBuffer push
@@ -186,7 +196,7 @@ expect
     actual == expected
 
 expect
-    ringBuffer = new 0
+    ringBuffer = newIntBuffer 0
     almostFullBuffer =
         List.range { start: At 1, end: At (capacity - 2) }
         |> List.walk ringBuffer push
@@ -197,16 +207,16 @@ expect
 
     actual != almostExpected
 
-getInternalBuffer : NonEmptyRingBuffer a -> Buffer a
-getInternalBuffer = \@NonEmptyRingBuffer buffer -> buffer
+getInternalBuffer : InputBuffer a -> Buffer a
+getInternalBuffer = \@InputBuffer buffer -> buffer
 
 expect
-    justOne = getInternalBuffer (new 1)
+    justOne = getInternalBuffer (newIntBuffer 1)
     deletable = deletableIndexes justOne
     deletable == []
 
 expect
-    justOne = new 1 |> push 2 |> push 3 |> getInternalBuffer
+    justOne = newIntBuffer 1 |> push 2 |> push 3 |> getInternalBuffer
     deletable = deletableIndexes justOne
     deletable == [0, 1]
 
@@ -229,7 +239,7 @@ expect
     deletable == expected
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3 |> push 4 |> push 5
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3 |> push 4 |> push 5
     freshBuffer = ringBuffer |> dropOldestWhile \n -> n < 3
 
     actual = contents freshBuffer
@@ -238,7 +248,7 @@ expect
     actual == expected
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3 |> push 4 |> push 5
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3 |> push 4 |> push 5
     freshBuffer = ringBuffer |> dropOldestWhile \_ -> Bool.true
 
     actual = contents freshBuffer
@@ -247,7 +257,7 @@ expect
     actual == expected
 
 expect
-    ringBuffer = new 0
+    ringBuffer = newIntBuffer 0
 
     fullBuffer =
         List.range { start: At 1, end: At (capacity - 1) }
@@ -256,12 +266,12 @@ expect
     freshBuffer = fullBuffer |> dropOldestWhile \_ -> Bool.true
 
     actual = contents freshBuffer
-    expected = contents (new (capacity - 1))
+    expected = contents (newIntBuffer (capacity - 1))
 
     actual == expected
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3 |> push 4 |> push 5
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3 |> push 4 |> push 5
 
     actual = findLatest ringBuffer \n -> n <= 2
     expected = Ok 2
@@ -269,7 +279,7 @@ expect
     actual == expected
 
 expect
-    ringBuffer = new 1 |> push 2 |> push 3 |> push 4 |> push 5
+    ringBuffer = newIntBuffer 1 |> push 2 |> push 3 |> push 4 |> push 5
 
     actual = findLatest ringBuffer \_ -> Bool.false
     expected = Err NotFound
@@ -286,8 +296,8 @@ expect
         |> List.set 0 (Ok 3)
         |> List.set 1 (Ok 4)
 
-    ringBuffer : NonEmptyRingBuffer U64
-    ringBuffer = @NonEmptyRingBuffer { list, oldest, latest }
+    ringBuffer : InputBuffer U64
+    ringBuffer = @InputBuffer { list, oldest, latest }
 
     actual = findLatest ringBuffer \n -> n <= 2
     expected = Ok 2
@@ -304,10 +314,16 @@ expect
         |> List.set 0 (Ok 3)
         |> List.set 1 (Ok 4)
 
-    ringBuffer : NonEmptyRingBuffer U64
-    ringBuffer = @NonEmptyRingBuffer { list, oldest, latest }
+    ringBuffer : InputBuffer U64
+    ringBuffer = @InputBuffer { list, oldest, latest }
 
     actual = findLatest ringBuffer \_ -> Bool.false
     expected = Err NotFound
 
     actual == expected
+
+expect
+    ringBuffer = fromList 1 [2, 3]
+    list = contents ringBuffer
+
+    list == [1, 2, 3]

@@ -1,80 +1,56 @@
 module [
     World,
-    AnimatedSprite,
-    Facing,
-    Intent,
-    LocalPlayer,
-    RemotePlayer,
     advance,
     init,
-    playerFacing,
     playerStart,
     roundVec,
     waitingMessage,
 ]
 
 # TODO: before merge
-# split out a separate module
-# try using bytes instead of json
-# more unit tests
+# finish module cleanup
+#   split out current World, rename GameState
+# use ring buffers
+# use bytes instead of json
 # address/remove in-code TODOs
+# more unit tests
 # explain that the inline expects don't do anything
 #   ask on PR about that
-# use ring buffers
-# confirm whether we need deduping in frameMessagesToTicks
-#   if we do it's a bug
-#
+
 # TODO: later
-# add input delay
-#   use a separate buffer for local inputs from snapshots
+# add configurable input delay
+#   need an input delay buffer for specifically not-yet-applied local inputs
 # make rollback stuff configurable (including going fully delay-based)
-#   input delay frames/ticks
 #   rollbackLog max length
-#   maxRollbackTicks and tickAdvantageLimit
-# send overlapping histories of inputs to handle packet loss
-# recover from desyncs - request-response?
-#   maybe just expose to the app/user and make it game's problem?
+#
 # allow disabling rollbacks entirely for testing game determinism
-# incorporate fuzz testing?
-# track more network events in rollbackLog
+#   does configuring max rollback 0 do this already?
+#
 # when skipping inputs based on fixed timestep (ie, when returning Skipped),
 #   provide some way for the game to access those inputs
+#   or just leave a comment and make it a non-example problem
+#
+# UDP:
+#   handle out of order messages
+#     sort messages/inputs when added to ring buffer
+#     updateSyncTick needs to handle late messages
+#   handle/mitigate packet loss
+#     have FrameMessages include overlapping windows
+#   desync recovery? out of scope for example
 
 import rr.RocRay exposing [Vector2]
-import rr.Network exposing [UUID]
+import rr.Network
 
 import Resolution exposing [width, height]
-import Pixel exposing [PixelVec]
+import Pixel
 import Input
 
-import GameState exposing [GameState]
+import GameState exposing [GameState, LocalPlayer, AnimatedSprite]
 import Rollback
 
 World : Rollback.Recording
 
-LocalPlayer : {
-    pos : PixelVec,
-    animation : AnimatedSprite,
-    intent : Intent,
-}
-
-RemotePlayer : {
-    id : UUID,
-    pos : PixelVec,
-    animation : AnimatedSprite,
-    intent : Intent,
-}
-
-AnimatedSprite : {
-    frame : U8, # frame index, increments each tick
-    frameRate : U8, # frames per second
-    nextAnimationTick : F32, # milliseconds
-}
-
-Intent : [Walk Facing, Idle Facing]
-
-Facing : [Up, Down, Left, Right]
-
+# TODO move these to main
 millisPerTick : U64
 millisPerTick = 1000 // 120
 
@@ -84,6 +60,7 @@ maxRollbackTicks = 6
 tickAdvantageLimit : I64
 tickAdvantageLimit = 6
 
+# TODO move this to GameState
 playerStart : LocalPlayer
 playerStart =
     x = Pixel.fromParts { pixels: (width // 2) }
@@ -95,9 +72,11 @@ playerStart =
         intent: Idle Right,
     }
 
+# TODO move this to GameState
 initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
+# TODO move this to Rollback
 waitingMessage : Rollback.FrameMessage
 waitingMessage =
     syncTickChecksum = GameState.positionsChecksum {
@@ -114,6 +93,7 @@ waitingMessage =
         syncTickChecksum,
     }
 
+# TODO move this to Rollback
 init : { firstMessage : Rollback.PeerMessage } -> Rollback.Recording
 init = \{ firstMessage: { id, message } } ->
     config : Rollback.Config
@@ -136,21 +116,17 @@ init = \{ firstMessage: { id, message } } ->
 
     Rollback.start { config, firstMessage: message, state: initialState }
 
+# TODO call this directly in main
 advance : World, Rollback.FrameContext -> (World, Result Rollback.FrameMessage _)
 advance = \world, ctx ->
     Rollback.advance world ctx
 
+# TODO move this to main
 roundVec : Vector2 -> { x : I64, y : I64 }
 roundVec = \{ x, y } -> {
     x: x |> Num.round |> Num.toI64,
     y: y |> Num.round |> Num.toI64,
 }
-
-playerFacing : { intent : Intent }a -> Facing
-playerFacing = \{ intent } ->
-    when intent is
-        Walk facing -> facing
-        Idle facing -> facing
 
 expect
     ourId = Network.fromU64Pair { upper: 0, lower: 0 }

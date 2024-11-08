@@ -1,4 +1,15 @@
-module [GameState, tick, checksum, positionsChecksum]
+module [
+    GameState,
+    LocalPlayer,
+    RemotePlayer,
+    AnimatedSprite,
+    Facing,
+    Intent,
+    tick,
+    checksum,
+    positionsChecksum,
+    playerFacing,
+]
 
 import rr.Network exposing [UUID]
 

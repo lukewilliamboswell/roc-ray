@@ -32,8 +32,9 @@ init! : {} => Result Model _
 init! = \{} ->
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
+    Network.configure! { serverUrl: "ws://localhost:3536/yolo?next=2" }
     RocRay.initWindow! {
-        title: "Animated Sprite Example",
+        title: "Rollback Example",
         width: Num.toF32 width,
         height: Num.toF32 height,
     }

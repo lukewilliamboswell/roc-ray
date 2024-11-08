@@ -11,10 +11,10 @@ import rr.Network
 import json.Json
 
 import Resolution exposing [width, height]
-import World exposing [World]
-import Recording
+import Rollback
 import Pixel
 import Input
+import World
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
@@ -24,7 +24,7 @@ WaitingModel : {
 
 ConnectedModel : {
     dude : Texture,
-    world : World,
+    world : Rollback.Recording,
     timestampMillis : U64,
 }
 
@@ -57,7 +57,7 @@ drawConnected! = \{ dude, world }, state ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
-        currentState = Recording.currentState world
+        currentState = Rollback.currentState world
 
         # draw local player
         localPlayer = currentState.localPlayer
@@ -74,7 +74,7 @@ drawConnected! = \{ dude, world }, state ->
         remotePlayerIdPos = Pixel.toVector2 remotePlayer.pos
         Draw.text! {
             pos: remotePlayerIdPos,
-            text: "$(Inspect.toStr remotePlayer.id)",
+            text: "remote player",
             size: 10,
             color: Red,
         }
@@ -105,12 +105,23 @@ renderWaiting! = \waiting, state ->
             drawWaiting! waiting
             Ok (Waiting waiting)
 
-waitingToConnected! : WaitingModel, PlatformState, Recording.PeerMessage => Result Model []
+waitingToConnected! : WaitingModel, PlatformState, Rollback.PeerMessage => Result Model []
 waitingToConnected! = \waiting, state, firstMessage ->
     timestampMillis = state.timestamp.renderStart
     { dude } = waiting
 
-    world = World.init { firstMessage }
+    config : Rollback.Config
+    config = {
+        millisPerTick: 1000 // 120,
+        maxRollbackTicks: 6,
+        tickAdvantageLimit: 6,
+    }
+
+    world = Rollback.start {
+        config,
+        firstMessage: firstMessage.message,
+        state: World.initial,
+    }
 
     connected : ConnectedModel
     connected = { dude, world, timestampMillis }
@@ -141,11 +152,12 @@ renderConnected! = \oldModel, state ->
 
     deltaMillis = timestampMillis - oldModel.timestampMillis
 
-    inbox : List Recording.PeerMessage
+    inbox : List Rollback.PeerMessage
     inbox = decodeFrameMessages network.messages
 
     localInput = Input.read state.keys
-    (world, outgoing) = World.advance oldModel.world { localInput, deltaMillis, inbox }
+    (world, outgoing) =
+        Rollback.advance oldModel.world { localInput, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -174,8 +186,8 @@ renderConnected! = \oldModel, state ->
                     RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
                 _f ->
-                    crashInfo = Recording.showCrashInfo world
-                    history = Recording.writableHistory world
+                    crashInfo = Rollback.showCrashInfo world
+                    history = Rollback.writableHistory world
                     crash "blocked world:\n$(crashInfo)\n$(history)"
 
     Ok (Connected model)
@@ -216,14 +228,14 @@ displayPeerConnections! = \{ connected, disconnected } ->
 
 sendHostWaiting! : RocRay.NetworkState => {}
 sendHostWaiting! = \network ->
-    sendFrameMessage! World.waitingMessage network
+    sendFrameMessage! Rollback.waitingMessage network
 
-sendFrameMessage! : Recording.FrameMessage, RocRay.NetworkState => {}
+sendFrameMessage! : Rollback.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->
     bytes = Encode.toBytes (worldToNetwork message) Json.utf8
     forEach! network.peers.connected \peer -> RocRay.sendToPeer! bytes peer
 
-decodeFrameMessages : List RocRay.NetworkMessage -> List Recording.PeerMessage
+decodeFrameMessages : List RocRay.NetworkMessage -> List Rollback.PeerMessage
 decodeFrameMessages = \messages ->
     List.keepOks messages decodeSingleFrameMessage
 
@@ -239,7 +251,7 @@ FrameMessageJson : {
     syncTickChecksum : I64,
 }
 
-networkToWorld : FrameMessageJson -> Recording.FrameMessage
+networkToWorld : FrameMessageJson -> Rollback.FrameMessage
 networkToWorld = \json ->
     up = if json.up then Down else Up
     down = if json.down then Down else Up
@@ -255,7 +267,7 @@ networkToWorld = \json ->
         syncTickChecksum: json.syncTickChecksum,
     }
 
-worldToNetwork : Recording.FrameMessage -> FrameMessageJson
+worldToNetwork : Rollback.FrameMessage -> FrameMessageJson
 worldToNetwork = \message -> {
     firstTick: message.firstTick,
     lastTick: message.lastTick,
@@ -268,7 +280,7 @@ worldToNetwork = \message -> {
     syncTickChecksum: message.syncTickChecksum,
 }
 
-decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Recording.PeerMessage _
+decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Rollback.PeerMessage _
 decodeSingleFrameMessage = \{ id, bytes } ->
     decodeResult : Result FrameMessageJson _
     decodeResult = Decode.fromBytes bytes Json.utf8
@@ -283,3 +295,4 @@ forEach! = \l, f! ->
         [x, .. as xs] ->
             f! x
             forEach! xs f!
+

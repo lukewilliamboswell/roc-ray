@@ -10,6 +10,7 @@ module [
     showCrashInfo,
     writableHistory,
     currentState,
+    waitingMessage,
 ]
 
 import rr.Network exposing [UUID]
@@ -17,12 +18,11 @@ import rr.Network exposing [UUID]
 import json.Json
 
 import Input exposing [Input]
-import GameState exposing [GameState]
+import World exposing [World]
 
-# TODO better name for internal record
-Recording := Recorded
+Recording := RecordedWorld
 
-currentState : Recording -> GameState
+currentState : Recording -> World
 currentState = \@Recording recording ->
     recording.state
 
@@ -38,11 +38,12 @@ Config : {
     tickAdvantageLimit : I64,
 }
 
-Recorded : {
+## a World with rollback and timestep related bookkeeping
+RecordedWorld : {
     config : Config,
 
     ## the live game state this frame
-    state : GameState,
+    state : World,
     ## the unspent milliseconds remaining after the last tick (or frame)
     remainingMillis : U64,
 
@@ -64,7 +65,7 @@ Recorded : {
     ## the recent history of received network messages (since syncTick)
     remoteMessages : List FrameMessage,
     ## the recent history of remote player inputs (since syncTick)
-    ## this is a smaller duplicate of information in remoteMessaages
+    ## this is a smaller duplicate of information in remoteMessages
     remoteInputTicks : List InputTick,
     ## the recent history of snapshots (since syncTick)
     snapshots : List Snapshot,
@@ -93,7 +94,7 @@ Snapshot : {
     ## the local player's input; this is always known and set in stone
     localInput : Input,
     ## the previous game state to restore during a rollback
-    state : GameState,
+    state : World,
 }
 
 ## message for broadcasting input for a frame range with rollback-related metadata
@@ -126,7 +127,7 @@ RollbackEvent : {
 ## named arguments for starting a recording
 StartRecording : {
     firstMessage : FrameMessage,
-    state : GameState,
+    state : World,
     config : Config,
 }
 
@@ -142,7 +143,7 @@ start = \{ firstMessage, state, config } ->
     remoteMessages = [firstMessage]
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
-    checksum = GameState.checksum state
+    checksum = World.checksum state
 
     initialSyncSnapshot : Snapshot
     initialSyncSnapshot = {
@@ -156,17 +157,17 @@ start = \{ firstMessage, state, config } ->
     firstLocalInputTick : InputTick
     firstLocalInputTick = { tick: 0, input: Input.blank }
 
-    recording : Recorded
+    recording : RecordedWorld
     recording = {
         config,
         remainingMillis: 0,
-        tick: 0u64,
-        remoteTick: 0u64,
-        syncTick: 0u64,
+        tick: 0,
+        remoteTick: 0,
+        syncTick: 0,
         syncTickSnapshot: initialSyncSnapshot,
         remoteSyncTick: 0,
         remoteSyncTickChecksum: checksum,
-        remoteTickAdvantage: 0i64,
+        remoteTickAdvantage: 0,
         state: state,
         snapshots: [initialSyncSnapshot],
         remoteMessages,
@@ -195,7 +196,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
         |> updateSyncTick
         |> rollbackIfNecessary
 
-    newWorld : Recorded
+    newWorld : RecordedWorld
     newWorld =
         if timeSynced rollbackDone then
             (updatedWorld, ticksTicked) =
@@ -243,7 +244,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
 
     (@Recording { newWorld & snapshots }, outgoingMessage)
 
-addRemoteInputs : Recorded, List PeerMessage -> Recorded
+addRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
 addRemoteInputs = \world, inbox ->
     remoteMessages =
         newMessages = List.map inbox \peerMessage -> peerMessage.message
@@ -256,34 +257,17 @@ addRemoteInputs = \world, inbox ->
 
     { world & remoteMessages, remoteInputTicks }
 
+# TODO is the sorting required? it would be with UDP
+#   does ringbuffer need a way to add sorted? require that internal items have a tick?
+#   that'd require changing the name in FrameMessage; or storing a wrapping record
 cleanAndSortInputs : List FrameMessage, { syncTick : U64 } -> List FrameMessage
 cleanAndSortInputs = \history, { syncTick } ->
     sorted = List.sortWith history \left, right ->
         Num.compare left.firstTick right.firstTick
-    sortedUnique = List.walk sorted [] \lst, fresh ->
-        isMergeable = \lastMessage ->
-            contiguous = lastMessage.lastTick == fresh.firstTick - 1
-            equalInput = lastMessage.input == fresh.input
-            contiguous && equalInput
 
-        when List.last lst is
-            # same start tick
-            Ok last if last.firstTick == fresh.firstTick ->
-                # they're blocking or they rolled back;
-                # replace their input with the latest
-                lst |> List.dropLast 1 |> List.append fresh
-
-            # contiguous & mergeable
-            Ok last if isMergeable last ->
-                merged = { fresh & firstTick: last.firstTick }
-                lastIndex = List.len lst - 1
-                List.set lst lastIndex merged
-
-            _ -> List.append lst fresh
-
-    keptLast = List.last sortedUnique
+    keptLast = List.last sorted
     cleaned =
-        List.keepOks sortedUnique \msg ->
+        List.keepOks sorted \msg ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
 
     when (cleaned, keptLast) is
@@ -339,7 +323,7 @@ expect
 
     cleans == expected
 
-updateRemoteTicks : Recorded -> Recorded
+updateRemoteTicks : RecordedWorld -> RecordedWorld
 updateRemoteTicks = \world ->
     { remoteTick, remoteTickAdvantage, remoteSyncTick, remoteSyncTickChecksum } =
         world.remoteMessages
@@ -364,7 +348,7 @@ updateRemoteTicks = \world ->
         remoteSyncTickChecksum,
     }
 
-updateSyncTick : Recorded -> Recorded
+updateSyncTick : RecordedWorld -> RecordedWorld
 updateSyncTick = \world ->
     checkUpTo = Num.min world.tick world.remoteTick
     # checkRange = (world.syncTick, checkUpTo)
@@ -390,7 +374,7 @@ updateSyncTick = \world ->
 
     { world & syncTick, syncTickSnapshot }
 
-findMisprediction : Recorded, (U64, U64) -> Result U64 [NotFound]
+findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
     findMatch : Snapshot -> Result InputTick [NotFound]
     findMatch = \snapshot ->
@@ -409,20 +393,20 @@ findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
     Result.map misprediction \m -> m.tick
 
 ## true if we're in sync enough with remote player to continue updates
-timeSynced : Recorded -> Bool
+timeSynced : RecordedWorld -> Bool
 timeSynced = \{ config, tick, remoteTick, remoteTickAdvantage } ->
     localTickAdvantage = Num.toI64 tick - Num.toI64 remoteTick
     tickAdvantageDifference = localTickAdvantage - remoteTickAdvantage
     localTickAdvantage < config.maxRollbackTicks && tickAdvantageDifference <= config.tickAdvantageLimit
 
 ## use as many physics ticks as the frame duration allows
-normalUpdate : Recorded, { localInput : Input, deltaMillis : U64 } -> (Recorded, U64)
+normalUpdate : RecordedWorld, { localInput : Input, deltaMillis : U64 } -> (RecordedWorld, U64)
 normalUpdate = \initialWorld, { localInput, deltaMillis } ->
     millisToUse = initialWorld.remainingMillis + deltaMillis
     tickingWorld = { initialWorld & remainingMillis: millisToUse }
     useAllRemainingTime tickingWorld { localInput } 0
 
-useAllRemainingTime : Recorded, { localInput : Input }, U64 -> (Recorded, U64)
+useAllRemainingTime : RecordedWorld, { localInput : Input }, U64 -> (RecordedWorld, U64)
 useAllRemainingTime = \world, inputs, ticksTicked ->
     if world.remainingMillis < world.config.millisPerTick then
         (world, ticksTicked)
@@ -430,7 +414,7 @@ useAllRemainingTime = \world, inputs, ticksTicked ->
         tickedWorld = tickOnce world inputs
         useAllRemainingTime tickedWorld inputs (ticksTicked + 1)
 
-tickOnce : Recorded, { localInput : Input } -> Recorded
+tickOnce : RecordedWorld, { localInput : Input } -> RecordedWorld
 tickOnce = \world, { localInput: newInput } ->
     tick = world.tick + 1
     timestampMillis = world.tick * world.config.millisPerTick
@@ -444,7 +428,7 @@ tickOnce = \world, { localInput: newInput } ->
 
     (remoteInput, _predicted) = predictRemoteInput world { tick }
 
-    state = GameState.tick world.state {
+    state = World.tick world.state {
         tick,
         timestampMillis,
         localInput,
@@ -452,7 +436,7 @@ tickOnce = \world, { localInput: newInput } ->
     }
 
     snapshots =
-        checksum = GameState.checksum state
+        checksum = World.checksum state
 
         # NOTE:
         # We need to use our previously-sent localInput from above.
@@ -478,7 +462,7 @@ tickOnce = \world, { localInput: newInput } ->
         localInputTicks,
     }
 
-predictRemoteInput : Recorded, { tick : U64 } -> (Input, [Predicted, Confirmed])
+predictRemoteInput : RecordedWorld, { tick : U64 } -> (Input, [Predicted, Confirmed])
 predictRemoteInput = \world, { tick } ->
     receivedInput =
         world.remoteInputTicks
@@ -502,7 +486,7 @@ predictRemoteInput = \world, { tick } ->
 
 # ROLLBACK
 
-rollbackIfNecessary : Recorded -> Recorded
+rollbackIfNecessary : RecordedWorld -> RecordedWorld
 rollbackIfNecessary = \world ->
     shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
 
@@ -524,14 +508,14 @@ rollbackIfNecessary = \world ->
 
         rollForwardFromSyncTick restoredToSync { rollForwardRange }
 
-rollForwardFromSyncTick : Recorded, { rollForwardRange : (U64, U64) } -> Recorded
+rollForwardFromSyncTick : RecordedWorld, { rollForwardRange : (U64, U64) } -> RecordedWorld
 rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } ->
     expect begin <= end
 
     rollForwardTicks = List.range { start: At begin, end: At end }
 
     # touch up the snapshots to have their 'predictions' match what happened
-    fixedWorld : Recorded
+    fixedWorld : RecordedWorld
     fixedWorld =
         snapshots : List Snapshot
         snapshots = List.map wrongFutureWorld.snapshots \questionableSnap ->
@@ -591,7 +575,9 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
             tickOnce steppingWorld { localInput }
 
-    # TODO use the remoteSyncTick and checksum we track regularly
+    # TODO why is this assertion part of roll forward?
+    # that's where my bug was, but the assertion could be more often;
+    # to catch if the opponent is rolling back a lot or having packet loss but we're not
     { remoteSyncTick, remoteSyncTickChecksum } = rolledForwardWorld
 
     localMatchingChecksum : Result I64 _
@@ -634,10 +620,8 @@ showCrashInfo : Recording -> Str
 showCrashInfo = \@Recording recordedState ->
     internalShowCrashInfo recordedState
 
-internalShowCrashInfo : Recorded -> Str
+internalShowCrashInfo : RecordedWorld -> Str
 internalShowCrashInfo = \world ->
-    # TODO require that state is Inspect
-
     remoteInputTicksRange =
         first = List.first world.remoteInputTicks |> Result.map \it -> it.tick
         last = List.last world.remoteInputTicks |> Result.map \it -> it.tick
@@ -652,9 +636,9 @@ internalShowCrashInfo = \world ->
         tick: world.tick,
         remoteTick: world.remoteTick,
         syncTick: world.syncTick,
-        # syncTickSnapshot: world.syncTickSnapshot,
-        # localPos: world.localPlayer.pos,
-        # remotePos: world.remotePlayer.pos,
+        syncTickSnapshot: world.syncTickSnapshot,
+        localPos: world.state.localPlayer.pos,
+        remotePos: world.state.remotePlayer.pos,
         rollbackLog: world.rollbackLog,
         remoteInputTicksRange,
         snapshotsRange,
@@ -668,7 +652,7 @@ writableHistory : Recording -> Str
 writableHistory = \@Recording recordedState ->
     internalWritableHistory recordedState
 
-internalWritableHistory : Recorded -> Str
+internalWritableHistory : RecordedWorld -> Str
 internalWritableHistory = \{ snapshots } ->
     writeInput : Input -> Str
     writeInput = \input ->
@@ -720,3 +704,19 @@ internalWritableHistory = \{ snapshots } ->
     snapshots
     |> List.map writeSnapshot
     |> Str.joinWith "\n"
+
+waitingMessage : Rollback.FrameMessage
+waitingMessage =
+    syncTickChecksum = World.positionsChecksum {
+        localPlayerPos: World.playerStart.pos,
+        remotePlayerPos: World.playerStart.pos,
+    }
+
+    {
+        firstTick: 0,
+        lastTick: 0,
+        tickAdvantage: 0,
+        input: Input.blank,
+        syncTick: 0,
+        syncTickChecksum,
+    }

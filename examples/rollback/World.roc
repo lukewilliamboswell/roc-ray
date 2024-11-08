@@ -1,7 +1,6 @@
 module [
     World,
-    LocalPlayer,
-    RemotePlayer,
+    Player,
     AnimatedSprite,
     Facing,
     Intent,
@@ -20,19 +19,12 @@ import Resolution exposing [width, height]
 ## the game state unrelated to rollback bookkeeping
 World : {
     ## the player on the machine we're running on
-    localPlayer : LocalPlayer,
+    localPlayer : Player,
     ## the player on a remote machine
-    remotePlayer : RemotePlayer,
+    remotePlayer : Player,
 }
 
-LocalPlayer : {
-    pos : PixelVec,
-    animation : AnimatedSprite,
-    intent : Intent,
-}
-
-# TODO remove?
-RemotePlayer : {
+Player : {
     pos : PixelVec,
     animation : AnimatedSprite,
     intent : Intent,
@@ -58,7 +50,7 @@ initial = {
     },
 }
 
-playerStart : LocalPlayer
+playerStart : Player
 playerStart =
     x = Pixel.fromParts { pixels: (width // 2) }
     y = Pixel.fromParts { pixels: (height // 2) }

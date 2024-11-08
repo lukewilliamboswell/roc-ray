@@ -20,8 +20,6 @@ import json.Json
 import Input exposing [Input]
 import World exposing [World]
 
-import InputBuffer
-
 Recording := RecordedWorld
 
 currentState : Recording -> World

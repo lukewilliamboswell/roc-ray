@@ -34,11 +34,9 @@ initForHost! = \_x ->
     |> Result.map Box.box
     |> Result.mapErr Inspect.toStr
 
-renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Result (Box Model) Str
-renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages ->
+renderForHost! : Box Model, Effect.PlatformStateFromHost => Result (Box Model) Str
+renderForHost! = \boxedModel, { frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages } ->
     model = Box.unbox boxedModel
-
-    #{ messages, timestamp, frameCount, keys, peers, mouseButtons, mousePosX, mousePosY, mouseWheel } = platformState
 
     state : RocRay.PlatformState
     state = {

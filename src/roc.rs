@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use crate::config::ExitErrCode;
-use crate::glue::{self, PeerMessage, PlatformTime};
+use crate::glue::{self, PeerMessage};
 use crate::logger;
 use matchbox_socket::{PeerId, PeerState};
 use roc_std::{RocList, RocRefcounted, RocResult, RocStr};
@@ -186,10 +186,8 @@ pub unsafe extern "C" fn roc_getppid() -> libc::pid_t {
 
 pub struct App {
     model: *const (),
-    frame_count: u64,
-    timestamps: PlatformTime,
+    state: glue::PlatformState,
     peers: HashMap<PeerId, PeerState>,
-    messages: RocList<PeerMessage>,
 }
 
 impl App {
@@ -201,10 +199,9 @@ impl App {
         }
 
         unsafe {
-            let mut timestamps = glue::PlatformTime {
-                init_start: now(),
-                ..Default::default()
-            };
+            let mut state = glue::PlatformState::default();
+
+            state.timestamps.init_start = now();
 
             let result = init_caller(0);
 
@@ -223,74 +220,33 @@ impl App {
                 }
             };
 
-            timestamps.init_end = now();
+            state.timestamps.init_end = now();
 
             App {
                 model,
-                timestamps,
-                frame_count: 0,
+                state,
                 peers: HashMap::default(),
-                messages: RocList::empty(),
             }
         }
     }
 
     pub fn render(&mut self) {
-        #[link(name = "app")]
         extern "C" {
-
-            // NOTE -- we could definitely go back to PlatformState now... I changed to this and broke everything out becuase I was getting a segfault, but now I know it's because I wan't handling the refcounting correctly... PlatformState would be fine as we can just call a single `.inc()` on it to prevent a double free.
-            //
-            // But this is probably ok for now...and potentially more performant even
-            //
-            // The main advantage of PlatformState is having it all in one thing and using roc glue to (re)generate it whenever it change... but this is probably not too bad to maintain also.
-
             #[link_name = "roc__renderForHost_1_exposed"]
             fn render_caller(
                 model_in: *const (),
-                frame_count: u64,
-                keys: &RocList<u8>,
-                mouse_buttons: &RocList<u8>,
-                timestamps: &PlatformTime,
-                mousePosX: f32,
-                mousePosY: f32,
-                mouseWheel: f32,
-                peers: &glue::PeerState,
-                messages: &RocList<PeerMessage>,
+                state: *mut glue::PlatformState,
             ) -> RocResult<*const (), RocStr>;
-
-            // API COPIED FROM src/main.rs
-            // renderForHost! : Box Model, U64, List U8, List U8, Effect.PlatformTime, F32, F32, F32, Effect.PeerState, List Effect.PeerMessage  => Box Model
-            // renderForHost! = \boxedModel, frameCount, keys, mouseButtons, timestamp, mousePosX, mousePosY, mouseWheel, peers, messages ->
-
-            // LLVM IR GENERTATED USING $ roc build --no-link --emit-llvm-ir examples/basic-shapes.roc
-            // define ptr @roc__renderForHost_1_exposed(ptr %0, i64 %1, ptr %2, ptr %3, ptr %4, float %5, float %6, float %7, ptr %8, ptr %9) !dbg !777 {
-            // entry:
-            //   %load_arg = load %list.RocList, ptr %2, align 8, !dbg !778
-            //   %load_arg1 = load %list.RocList, ptr %3, align 8, !dbg !778
-            //   %load_arg2 = load %list.RocList, ptr %9, align 8, !dbg !778
-            //   %call = call fastcc ptr @"_renderForHost!_1bb73f6fafaa3656a8bf5796e2e6e6bdbd058375237d0b9be5834c8c9f54"(ptr %0, i64 %1, %list.RocList %load_arg, %list.RocList %load_arg1, ptr %4, float %5, float %6, float %7, ptr %8, %list.RocList %load_arg2), !dbg !778
-            //   ret ptr %call, !dbg !778
-            // }
-
         }
 
         unsafe {
-            // Increment frame count
-            self.frame_count += 1;
+            self.state.frame_count += 1;
 
-            // Update timestamps
-            self.timestamps.last_render_start = self.timestamps.render_start;
-            self.timestamps.render_start = now();
+            self.state.timestamps.last_render_start = self.state.timestamps.render_start;
+            self.state.timestamps.render_start = now();
 
-            // Note we increment the refcount of the keys and mouse buttons
-            // so they aren't deallocated before the end of this function
-            // otherwise we'd have a double free
-            let mut mouse_buttons = get_mouse_button_states();
-            mouse_buttons.inc();
-
-            let mut key_states = get_keys_states();
-            key_states.inc();
+            self.state.mouse_buttons = get_mouse_button_states();
+            self.state.keys = get_keys_states();
 
             let mut messages: RocList<PeerMessage> = RocList::with_capacity(100);
 
@@ -347,28 +303,16 @@ impl App {
                 crate::config::update(|c| c.fps_target_dirty = false);
             }
 
-            let mut roc_peers: glue::PeerState = (&self.peers).into();
+            self.state.peers = (&self.peers).into();
 
-            // Refcount things we dont' want Roc to dealloc...
-            self.messages.inc();
-            roc_peers.inc();
+            self.state.mouse_pos_x = raylib::GetMouseX() as f32;
+            self.state.mouse_pos_y = raylib::GetMouseY() as f32;
+            self.state.mouse_wheel = raylib::GetMouseWheelMove() as f32;
 
-            let mouse_x = raylib::GetMouseX() as f32;
-            let mouse_y = raylib::GetMouseY() as f32;
-            let mouse_wheel = raylib::GetMouseWheelMove() as f32;
+            // Refcount so we Roc doesn't deallocate our state (so we can re-use it next frame)
+            self.state.inc();
 
-            let result = render_caller(
-                self.model,
-                self.frame_count,
-                &key_states,
-                &mouse_buttons,
-                &self.timestamps,
-                mouse_x,
-                mouse_y,
-                mouse_wheel,
-                &roc_peers,
-                &self.messages,
-            );
+            let result = render_caller(self.model, &mut self.state);
 
             let new_model = match result.into() {
                 Ok(model) => model,
@@ -393,7 +337,7 @@ impl App {
 
             update_music_streams();
 
-            self.timestamps.last_render_end = now();
+            self.state.timestamps.last_render_end = now();
         }
     }
 }

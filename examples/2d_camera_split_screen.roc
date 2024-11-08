@@ -62,6 +62,7 @@ init! = \{} ->
                 screenLeft,
                 screenRight,
             }
+
         _ -> crash "Failed to create camera or render texture."
 
 render! : Model, RocRay.PlatformState => Result Model []

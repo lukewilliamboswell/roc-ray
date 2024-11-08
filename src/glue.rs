@@ -3,6 +3,38 @@ use matchbox_socket::PeerId;
 use roc_std::{roc_refcounted_noop_impl, RocRefcounted};
 use std::{collections::HashMap, ffi::c_int};
 
+#[derive(Clone, Default, Debug, PartialEq, PartialOrd)]
+#[repr(C)]
+pub struct PlatformState {
+    pub frame_count: u64,
+    pub keys: roc_std::RocList<u8>,
+    pub messages: roc_std::RocList<PeerMessage>,
+    pub mouse_buttons: roc_std::RocList<u8>,
+    pub peers: PeerState,
+    pub timestamps: PlatformTime,
+    pub mouse_pos_x: f32,
+    pub mouse_pos_y: f32,
+    pub mouse_wheel: f32,
+}
+
+impl roc_std::RocRefcounted for PlatformState {
+    fn inc(&mut self) {
+        self.keys.inc();
+        self.messages.inc();
+        self.mouse_buttons.inc();
+        self.peers.inc();
+    }
+    fn dec(&mut self) {
+        self.keys.dec();
+        self.messages.dec();
+        self.mouse_buttons.dec();
+        self.peers.dec();
+    }
+    fn is_refcounted() -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct RocColor(i64);
@@ -318,7 +350,7 @@ impl roc_std::RocRefcounted for PeerMessage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct PlatformTime {
     pub init_end: u64,

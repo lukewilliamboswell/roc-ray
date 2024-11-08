@@ -304,7 +304,7 @@ impl App {
             }
 
             self.state.peers = (&self.peers).into();
-
+            self.state.messages = messages;
             self.state.mouse_pos_x = raylib::GetMouseX() as f32;
             self.state.mouse_pos_y = raylib::GetMouseY() as f32;
             self.state.mouse_wheel = raylib::GetMouseWheelMove() as f32;

@@ -18,14 +18,13 @@ import rr.Network exposing [UUID]
 import json.Json
 
 import Input exposing [Input]
-import GameState exposing [GameState]
+import World exposing [World]
 
 import InputBuffer
 
-# TODO better name for internal record
 Recording := RecordedWorld
 
-currentState : Recording -> GameState
+currentState : Recording -> World
 currentState = \@Recording recording ->
     recording.state
 
@@ -41,12 +40,12 @@ Config : {
     tickAdvantageLimit : I64,
 }
 
-## a GameState with rollback and timestep related bookkeeping
+## a World with rollback and timestep related bookkeeping
 RecordedWorld : {
     config : Config,
 
     ## the live game state this frame
-    state : GameState,
+    state : World,
     ## the unspent milliseconds remaining after the last tick (or frame)
     remainingMillis : U64,
 
@@ -97,7 +96,7 @@ Snapshot : {
     ## the local player's input; this is always known and set in stone
     localInput : Input,
     ## the previous game state to restore during a rollback
-    state : GameState,
+    state : World,
 }
 
 ## message for broadcasting input for a frame range with rollback-related metadata
@@ -130,7 +129,7 @@ RollbackEvent : {
 ## named arguments for starting a recording
 StartRecording : {
     firstMessage : FrameMessage,
-    state : GameState,
+    state : World,
     config : Config,
 }
 
@@ -146,7 +145,7 @@ start = \{ firstMessage, state, config } ->
     remoteMessages = [firstMessage]
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
-    checksum = GameState.checksum state
+    checksum = World.checksum state
 
     initialSyncSnapshot : Snapshot
     initialSyncSnapshot = {
@@ -431,7 +430,7 @@ tickOnce = \world, { localInput: newInput } ->
 
     (remoteInput, _predicted) = predictRemoteInput world { tick }
 
-    state = GameState.tick world.state {
+    state = World.tick world.state {
         tick,
         timestampMillis,
         localInput,
@@ -439,7 +438,7 @@ tickOnce = \world, { localInput: newInput } ->
     }
 
     snapshots =
-        checksum = GameState.checksum state
+        checksum = World.checksum state
 
         # NOTE:
         # We need to use our previously-sent localInput from above.
@@ -625,8 +624,6 @@ showCrashInfo = \@Recording recordedState ->
 
 internalShowCrashInfo : RecordedWorld -> Str
 internalShowCrashInfo = \world ->
-    # TODO require that state is Inspect
-
     remoteInputTicksRange =
         first = List.first world.remoteInputTicks |> Result.map \it -> it.tick
         last = List.last world.remoteInputTicks |> Result.map \it -> it.tick
@@ -641,9 +638,9 @@ internalShowCrashInfo = \world ->
         tick: world.tick,
         remoteTick: world.remoteTick,
         syncTick: world.syncTick,
-        # syncTickSnapshot: world.syncTickSnapshot,
-        # localPos: world.localPlayer.pos,
-        # remotePos: world.remotePlayer.pos,
+        syncTickSnapshot: world.syncTickSnapshot,
+        localPos: world.state.localPlayer.pos,
+        remotePos: world.state.remotePlayer.pos,
         rollbackLog: world.rollbackLog,
         remoteInputTicksRange,
         snapshotsRange,
@@ -712,9 +709,9 @@ internalWritableHistory = \{ snapshots } ->
 
 waitingMessage : Rollback.FrameMessage
 waitingMessage =
-    syncTickChecksum = GameState.positionsChecksum {
-        localPlayerPos: GameState.playerStart.pos,
-        remotePlayerPos: GameState.playerStart.pos,
+    syncTickChecksum = World.positionsChecksum {
+        localPlayerPos: World.playerStart.pos,
+        remotePlayerPos: World.playerStart.pos,
     }
 
     {

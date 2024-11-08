@@ -1,5 +1,5 @@
 module [
-    GameState,
+    World,
     LocalPlayer,
     RemotePlayer,
     AnimatedSprite,
@@ -18,7 +18,7 @@ import Pixel exposing [PixelVec]
 import Resolution exposing [width, height]
 
 ## the game state unrelated to rollback bookkeeping
-GameState : {
+World : {
     ## the player on the machine we're running on
     localPlayer : LocalPlayer,
     ## the player on a remote machine
@@ -48,7 +48,7 @@ Intent : [Walk Facing, Idle Facing]
 
 Facing : [Up, Down, Left, Right]
 
-initial : GameState
+initial : World
 initial = {
     localPlayer: playerStart,
     remotePlayer: {
@@ -72,7 +72,7 @@ playerStart =
 initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
-checksum : GameState -> I64
+checksum : World -> I64
 checksum = \{ localPlayer, remotePlayer } ->
     positionsChecksum {
         localPlayerPos: localPlayer.pos,
@@ -87,7 +87,7 @@ positionsChecksum = \positions ->
     |> List.map Num.toI64
     |> List.sum
 
-tick : GameState, TickContext -> GameState
+tick : World, TickContext -> World
 tick = \state, { timestampMillis, localInput, remoteInput } ->
     localPlayer =
         oldPlayer = state.localPlayer

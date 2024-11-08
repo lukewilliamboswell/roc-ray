@@ -14,7 +14,7 @@ import Resolution exposing [width, height]
 import Rollback
 import Pixel
 import Input
-import GameState
+import World
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
@@ -61,7 +61,7 @@ drawConnected! = \{ dude, world }, state ->
 
         # draw local player
         localPlayer = currentState.localPlayer
-        localPlayerFacing = GameState.playerFacing localPlayer
+        localPlayerFacing = World.playerFacing localPlayer
         Draw.textureRec! {
             texture: dude,
             source: dudeSprite localPlayerFacing localPlayer.animation.frame,
@@ -78,7 +78,7 @@ drawConnected! = \{ dude, world }, state ->
             size: 10,
             color: Red,
         }
-        remotePlayerFacing = GameState.playerFacing remotePlayer
+        remotePlayerFacing = World.playerFacing remotePlayer
         Draw.textureRec! {
             texture: dude,
             source: dudeSprite remotePlayerFacing remotePlayer.animation.frame,
@@ -120,7 +120,7 @@ waitingToConnected! = \waiting, state, firstMessage ->
     world = Rollback.start {
         config,
         firstMessage: firstMessage.message,
-        state: GameState.initial,
+        state: World.initial,
     }
 
     connected : ConnectedModel
@@ -136,8 +136,8 @@ drawWaiting! = \waiting ->
         Draw.text! { pos: { x: 10, y: 10 }, text: "Rocci the Cool Dude", size: 40, color: Navy }
         Draw.text! { pos: { x: 10, y: 50 }, text: "Use arrow keys to walk around", size: 20, color: Green }
 
-        localPlayer = GameState.playerStart
-        playerFacing = GameState.playerFacing localPlayer
+        localPlayer = World.playerStart
+        playerFacing = World.playerFacing localPlayer
         Draw.textureRec! {
             texture: waiting.dude,
             source: dudeSprite playerFacing localPlayer.animation.frame,
@@ -192,7 +192,7 @@ renderConnected! = \oldModel, state ->
 
     Ok (Connected model)
 
-dudeSprite : GameState.Facing, U8 -> Rectangle
+dudeSprite : World.Facing, U8 -> Rectangle
 dudeSprite = \sequence, frame ->
     when sequence is
         Up -> sprite64x64source { row: 8, col: frame % 9 }

@@ -84,7 +84,7 @@ jobs:
         run: ./windows/setup.ps1
 
       - name: Check ROC version
-        run: .\roc.exe version
+        run: roc version
 
       - name: Install GLFW
         run: |
@@ -100,15 +100,15 @@ jobs:
 
       - name: Build the basic-shapes example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
+          roc build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
           cargo build
 
       - name: Build the 2d_camera example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
+          roc build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
           cargo build
 
       - name: Build the pong example
         run: |
-          .\roc.exe build --no-link --optimize --output=app.obj .\examples\pong.roc
+          roc build --no-link --optimize --output=app.obj .\examples\pong.roc
           cargo build

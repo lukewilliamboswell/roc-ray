@@ -47,6 +47,13 @@ fn main() {
             let out_path = out_dir.join("app.lib");
             std::fs::copy(app_o, out_path).unwrap();
 
+
+            // TODO Investigate why we need this... we this error when linking raylib
+            // this seems to be an acceptable workaround.
+            // = note: libraylib-69fe326be1a79017.rlib(rcore.obj) : error LNK2005: CloseWindow already defined in user32.lib(USER32.dll)␍
+            // libraylib-69fe326be1a79017.rlib(raudio.obj) : error LNK2005: PlaySound already defined in winmm.lib(WINMM.dll)␍
+            println!("cargo:rustc-link-arg=/FORCE:MULTIPLE");
+
             // Link the Windows libraries
             println!("cargo:rustc-link-lib=user32");
             println!("cargo:rustc-link-lib=gdi32");

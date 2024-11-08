@@ -81,9 +81,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ROC
-        run: |
-          # Install ROC
-          Invoke-WebRequest -Uri "https://github.com/lukewilliamboswell/roc/releases/download/windows-20241011/roc.exe" -OutFile "roc.exe"
+        run: ./windows/setup.ps1
 
       - name: Check ROC version
         run: .\roc.exe version

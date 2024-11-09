@@ -73,7 +73,10 @@ RecordedWorld : {
     ## this is a smaller duplicate of information in snapshots
     localInputTicks : List InputTick,
 
-    # TODO rename and docs
+    ## whether the simulation advanced this frame
+    ## Advancing - the simulation advanced at least one frame
+    ## Skipped - the simulation advanced 0 ticks this frame due to the fixed timestep
+    ## BlockedFor frames - the simulation is blocked waiting for remote player inputs
     blocked : [Advancing, Skipped, BlockedFor U64],
 
     ## a record of rollback events for debugging purposes
@@ -187,7 +190,7 @@ frameMessagesToTicks = \messages ->
 
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if necessary
-advance : Recording, FrameContext -> (Recording, Result FrameMessage _)
+advance : Recording, FrameContext -> (Recording, Result FrameMessage [Skipped, BlockedFor U64])
 advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
@@ -251,77 +254,24 @@ addRemoteInputs = \world, inbox ->
 
         world.remoteMessages
         |> List.concat newMessages
-        |> cleanAndSortInputs { syncTick: world.syncTick }
+        |> dropOldMessages { syncTick: world.syncTick }
 
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
     { world & remoteMessages, remoteInputTicks }
 
-# TODO is the sorting required? it would be with UDP
-#   does ringbuffer need a way to add sorted? require that internal items have a tick?
-#   that'd require changing the name in FrameMessage; or storing a wrapping record
-cleanAndSortInputs : List FrameMessage, { syncTick : U64 } -> List FrameMessage
-cleanAndSortInputs = \history, { syncTick } ->
-    sorted = List.sortWith history \left, right ->
-        Num.compare left.firstTick right.firstTick
+dropOldMessages : List FrameMessage, { syncTick : U64 } -> List FrameMessage
+dropOldMessages = \history, { syncTick } ->
+    keptLast = List.last history
 
-    keptLast = List.last sorted
     cleaned =
-        List.keepOks sorted \msg ->
+        List.keepOks history \msg ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
 
     when (cleaned, keptLast) is
         ([], Ok lst) -> [lst]
         ([], Err _) -> []
         (cleanHistory, _) -> cleanHistory
-
-expect
-    leftDown : Input
-    leftDown = { Input.blank & left: Down }
-
-    messages : List FrameMessage
-    messages = [
-        {
-            firstTick: 10,
-            lastTick: 11,
-            tickAdvantage: 0,
-            input: Input.blank,
-            syncTick: 0,
-            syncTickChecksum: 0,
-        },
-        {
-            firstTick: 12,
-            lastTick: 13,
-            tickAdvantage: 0,
-            input: leftDown,
-            syncTick: 0,
-            syncTickChecksum: 0,
-        },
-    ]
-
-    cleans = cleanAndSortInputs messages { syncTick: 10 }
-
-    expected : List FrameMessage
-    expected = [
-        {
-            firstTick: 10,
-            lastTick: 11,
-            tickAdvantage: 0,
-            input: Input.blank,
-            syncTick: 0,
-            syncTickChecksum: 0,
-        },
-        {
-            firstTick: 12,
-            lastTick: 13,
-            tickAdvantage: 0,
-            input: leftDown,
-            syncTick: 0,
-            syncTickChecksum: 0,
-        },
-    ]
-
-    cleans == expected
 
 updateRemoteTicks : RecordedWorld -> RecordedWorld
 updateRemoteTicks = \world ->
@@ -351,7 +301,6 @@ updateRemoteTicks = \world ->
 updateSyncTick : RecordedWorld -> RecordedWorld
 updateSyncTick = \world ->
     checkUpTo = Num.min world.tick world.remoteTick
-    # checkRange = (world.syncTick, checkUpTo)
     checkRange = (world.syncTick + 1, checkUpTo)
 
     beforeMisprediction : Result U64 [NotFound]
@@ -493,7 +442,6 @@ rollbackIfNecessary = \world ->
     if !shouldRollback then
         world
     else
-        # TODO replace this with rollbackEvent?
         rollForwardRange = (world.syncTick, world.tick - 1) # inclusive
 
         rollbackEvent : RollbackEvent
@@ -518,19 +466,18 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
     fixedWorld : RecordedWorld
     fixedWorld =
         snapshots : List Snapshot
-        snapshots = List.map wrongFutureWorld.snapshots \questionableSnap ->
+        snapshots = List.map wrongFutureWorld.snapshots \wrongFutureSnap ->
             matchingInputTick = List.findFirst wrongFutureWorld.remoteInputTicks \inputTick ->
-                inputTick.tick == questionableSnap.tick
+                inputTick.tick == wrongFutureSnap.tick
 
             when matchingInputTick is
                 # we're ahead of them; our prediction is fake but not wrong yet
-                Err NotFound -> questionableSnap
+                Err NotFound -> wrongFutureSnap
                 # we found an actual input to overwrite out prediction with
                 # overwrite our prediction with whatever they actually did
                 Ok inputTick ->
-                    { questionableSnap &
-                        remoteInput: inputTick.input,
-                    }
+                    remoteInput = inputTick.input
+                    { wrongFutureSnap & remoteInput }
 
         remoteTick =
             when List.last wrongFutureWorld.remoteInputTicks is
@@ -555,7 +502,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
         { wrongFutureWorld & snapshots, remoteTick, syncTick, syncTickSnapshot }
 
-    remainingMillisBeforeRollForward = fixedWorld.remainingMillis
+    remainingMillis = fixedWorld.remainingMillis
     rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
 
     # simulate every tick between syncTick and the present to catch up
@@ -575,44 +522,42 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
             tickOnce steppingWorld { localInput }
 
-    # TODO why is this assertion part of roll forward?
-    # that's where my bug was, but the assertion could be more often;
-    # to catch if the opponent is rolling back a lot or having packet loss but we're not
-    { remoteSyncTick, remoteSyncTickChecksum } = rolledForwardWorld
+    checkedWorld = assertValidChecksum rolledForwardWorld
 
-    localMatchingChecksum : Result I64 _
+    { checkedWorld & remainingMillis }
+
+assertValidChecksum : RecordedWorld -> RecordedWorld
+assertValidChecksum = \world ->
+    { remoteSyncTick, remoteSyncTickChecksum } = world
+
+    localMatchingChecksum : Result I64 [NotFound]
     localMatchingChecksum =
-        rolledForwardWorld.snapshots
+        world.snapshots
         |> List.findLast \snap -> snap.tick == remoteSyncTick
         |> Result.map \snap -> snap.checksum
 
-    # this is a weird reassignment to avoid the roc warning for a void statement
-    # the 'when' exists for the crash assertion
-    remainingMillis =
-        history = internalWritableHistory rolledForwardWorld
-        crashInfo = internalShowCrashInfo rolledForwardWorld
-        frameMessages = rolledForwardWorld.remoteMessages
-        checksums = (remoteSyncTickChecksum, localMatchingChecksum)
-        info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
+    history = internalWritableHistory world
+    crashInfo = internalShowCrashInfo world
+    frameMessages = world.remoteMessages
+    checksums = (remoteSyncTickChecksum, localMatchingChecksum)
+    info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
 
-        when localMatchingChecksum is
-            Ok local if local != remoteSyncTickChecksum ->
-                # Known wrong checksums indicate a desync;
-                # which means packet loss, a determinism bug, or cheating.
-                # In a real game, you'd want to try to resolve missing inputs with request/response,
-                # or end the match and kick both players to the launcher/lobby.
-                crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
+    when localMatchingChecksum is
+        Ok local if local == remoteSyncTickChecksum ->
+            # matching checksums; this is the normal/happy path
+            world
 
-            Ok _localMatch ->
-                # matching checksums; this is the normal/happy path
-                remainingMillisBeforeRollForward
+        Ok _noMatch ->
+            # Known wrong checksums indicate a desync,
+            # which means packet loss, a determinism bug, or cheating.
+            # In a real game, you'd want to try to resolve missing inputs with request/response,
+            # or end the match and kick both players to the launcher/lobby.
+            crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
 
-            Err _ ->
-                # we should hold on to snapshots long enough to avoid this
-                # hitting this case indicates a bug
-                crash "missing local checksum in roll forward: $(info),\n$(crashInfo),\nhistory:\n$(history)"
-
-    { rolledForwardWorld & remainingMillis }
+        Err NotFound ->
+            # we should hold on to snapshots long enough to avoid this
+            # hitting this case indicates a bug
+            crash "missing local checksum in roll forward: $(info),\n$(crashInfo),\nhistory:\n$(history)"
 
 # DEBUG HELPERS
 

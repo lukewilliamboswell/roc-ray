@@ -1,4 +1,4 @@
-module [Input, read, blank, TickContext]
+module [Input, read, blank]
 
 import rr.Keys exposing [Keys]
 
@@ -21,10 +21,3 @@ read = \keys ->
 blank : Input
 blank =
     { up: Up, down: Up, left: Up, right: Up }
-
-TickContext : {
-    tick : U64,
-    timestampMillis : U64,
-    localInput : Input,
-    remoteInput : Input,
-}

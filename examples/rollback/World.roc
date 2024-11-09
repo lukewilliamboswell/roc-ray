@@ -12,7 +12,7 @@ module [
     playerStart,
 ]
 
-import Input exposing [Input, TickContext]
+import Input exposing [Input]
 import Pixel exposing [PixelVec]
 import Resolution exposing [width, height]
 
@@ -39,6 +39,13 @@ AnimatedSprite : {
 Intent : [Walk Facing, Idle Facing]
 
 Facing : [Up, Down, Left, Right]
+
+TickContext : {
+    tick : U64,
+    timestampMillis : U64,
+    localInput : Input,
+    remoteInput : Input,
+}
 
 initial : World
 initial = {

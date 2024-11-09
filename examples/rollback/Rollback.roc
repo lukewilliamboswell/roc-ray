@@ -20,6 +20,8 @@ import json.Json
 import Input exposing [Input]
 import World exposing [World]
 
+import NonEmptyList exposing [NonEmptyList]
+
 Recording := RecordedWorld
 
 currentState : Recording -> World
@@ -68,7 +70,7 @@ RecordedWorld : {
     ## this is a smaller duplicate of information in remoteMessages
     remoteInputTicks : List InputTick,
     ## the recent history of snapshots (since syncTick)
-    snapshots : List Snapshot,
+    snapshots : NonEmptyList Snapshot,
     ## the recent history of local player inputs (since syncTick)
     ## this is a smaller duplicate of information in snapshots
     localInputTicks : List InputTick,
@@ -172,7 +174,7 @@ start = \{ firstMessage, state, config } ->
         remoteSyncTickChecksum: checksum,
         remoteTickAdvantage: 0,
         state: state,
-        snapshots: [initialSyncSnapshot],
+        snapshots: NonEmptyList.new initialSyncSnapshot,
         remoteMessages,
         remoteInputTicks,
         localInputTicks: [firstLocalInputTick],
@@ -241,11 +243,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
 
                 Ok frameMessage
 
-    snapshots =
-        minSyncTick = Num.min newWorld.syncTick newWorld.remoteSyncTick
-        List.dropIf newWorld.snapshots \snap -> snap.tick < minSyncTick
-
-    (@Recording { newWorld & snapshots }, outgoingMessage)
+    (@Recording newWorld, outgoingMessage)
 
 addRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
 addRemoteInputs = \world, inbox ->
@@ -269,8 +267,11 @@ dropOldMessages = \history, { syncTick } ->
             if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
 
     when (cleaned, keptLast) is
-        ([], Ok lst) -> [lst]
+        # TODO this should be unnecessary
         ([], Err _) -> []
+        # sync tick caught up, still keep one message for input prediction
+        ([], Ok lst) -> [lst]
+        # normal case; we have inputs for prediction
         (cleanHistory, _) -> cleanHistory
 
 updateRemoteTicks : RecordedWorld -> RecordedWorld
@@ -315,13 +316,17 @@ updateSyncTick = \world ->
     expect world.syncTick <= syncTick
 
     syncTickSnapshot =
-        when List.findLast world.snapshots \snap -> snap.tick == syncTick is
+        when NonEmptyList.findLast world.snapshots \snap -> snap.tick == syncTick is
             Ok snap -> snap
             Err _ ->
                 crashInfo = internalShowCrashInfo world
                 crash "snapshot not found for new sync tick: $(Inspect.toStr syncTick)\n$(crashInfo)"
 
-    { world & syncTick, syncTickSnapshot }
+    snapshots =
+        minSyncTick = Num.min syncTick world.remoteSyncTick
+        NonEmptyList.dropNonLastIf world.snapshots \snap -> snap.tick < minSyncTick
+
+    { world & syncTick, syncTickSnapshot, snapshots }
 
 findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
@@ -333,6 +338,7 @@ findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
     misprediction : Result Snapshot [NotFound]
     misprediction =
         snapshots
+        |> NonEmptyList.toList
         |> List.keepIf \snapshot -> snapshot.tick >= begin && snapshot.tick <= end
         |> List.findFirst \snapshot ->
             when findMatch snapshot is
@@ -387,15 +393,15 @@ tickOnce = \world, { localInput: newInput } ->
     snapshots =
         checksum = World.checksum state
 
-        # NOTE:
-        # We need to use our previously-sent localInput from above.
-        # Changing our own recorded input would break our opponent's rollbacks.
-        newSnapshot : Snapshot
-        newSnapshot = { localInput, tick, remoteInput, checksum, state }
-
-        oldSnapshots = world.snapshots |> List.dropIf \snap -> snap.tick == tick
-
-        List.append oldSnapshots newSnapshot
+        NonEmptyList.map world.snapshots \snap ->
+            if snap.tick != tick then
+                snap
+            else
+                # NOTE:
+                # We need to use our previously-sent localInput from above.
+                # Changing our own recorded input would break our opponent's rollbacks.
+                # However, we do want to overwrite the rest in case we're in a roll forward
+                { localInput, tick, remoteInput, checksum, state }
 
     localInputTicks =
         if localInputIsNew then
@@ -465,8 +471,8 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
     # touch up the snapshots to have their 'predictions' match what happened
     fixedWorld : RecordedWorld
     fixedWorld =
-        snapshots : List Snapshot
-        snapshots = List.map wrongFutureWorld.snapshots \wrongFutureSnap ->
+        snapshots : NonEmptyList Snapshot
+        snapshots = NonEmptyList.map wrongFutureWorld.snapshots \wrongFutureSnap ->
             matchingInputTick = List.findFirst wrongFutureWorld.remoteInputTicks \inputTick ->
                 inputTick.tick == wrongFutureSnap.tick
 
@@ -486,15 +492,11 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
                     crashInfo = internalShowCrashInfo wrongFutureWorld
                     crash "no last input tick during roll forward: $(crashInfo)"
 
-        lastSnapshotTick =
-            when List.last snapshots is
-                Ok snap -> snap.tick
-                Err _ ->
-                    crashInfo = internalShowCrashInfo wrongFutureWorld
-                    crash "no snapshots in roll forward fixup: $(crashInfo)"
-        syncTick = Num.min remoteTick lastSnapshotTick
+        lastSnapshot = NonEmptyList.last snapshots
+
+        syncTick = Num.min remoteTick lastSnapshot.tick
         syncTickSnapshot =
-            when List.findLast snapshots \snap -> snap.tick == syncTick is
+            when NonEmptyList.findLast snapshots \snap -> snap.tick == syncTick is
                 Ok snap -> snap
                 Err _ ->
                     crashInfo = internalShowCrashInfo wrongFutureWorld
@@ -516,9 +518,9 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
                 when List.findLast rollForwardWorld.localInputTicks \it -> it.tick == tick is
                     Ok it -> it.input
                     Err NotFound ->
+                        info = Inspect.toStr { notFoundTick: tick, rollForwardRange: (begin, end) }
                         crashInfo = internalShowCrashInfo rollForwardWorld
-                        moreInfo = Inspect.toStr { notFoundTick: tick, rollForwardRange: (begin, end) }
-                        crash "local input not found in roll forward: $(moreInfo), $(crashInfo)"
+                        crash "local input not found in roll forward: $(info), $(crashInfo)"
 
             tickOnce steppingWorld { localInput }
 
@@ -526,6 +528,8 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
     { checkedWorld & remainingMillis }
 
+## crashes if we detect a desync at our opponent's latest sent sync tick
+## you'd what to handle desyncs more gracefully in a real game
 assertValidChecksum : RecordedWorld -> RecordedWorld
 assertValidChecksum = \world ->
     { remoteSyncTick, remoteSyncTickChecksum } = world
@@ -533,7 +537,7 @@ assertValidChecksum = \world ->
     localMatchingChecksum : Result I64 [NotFound]
     localMatchingChecksum =
         world.snapshots
-        |> List.findLast \snap -> snap.tick == remoteSyncTick
+        |> NonEmptyList.findLast \snap -> snap.tick == remoteSyncTick
         |> Result.map \snap -> snap.checksum
 
     history = internalWritableHistory world
@@ -549,7 +553,7 @@ assertValidChecksum = \world ->
 
         Ok _noMatch ->
             # Known wrong checksums indicate a desync,
-            # which means packet loss, a determinism bug, or cheating.
+            # which means unmanaged packet loss, a determinism bug, or cheating.
             # In a real game, you'd want to try to resolve missing inputs with request/response,
             # or end the match and kick both players to the launcher/lobby.
             crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
@@ -573,8 +577,8 @@ internalShowCrashInfo = \world ->
         (first, last)
 
     snapshotsRange =
-        first = List.first world.snapshots |> Result.map \snap -> snap.tick
-        last = List.last world.snapshots |> Result.map \snap -> snap.tick
+        first = NonEmptyList.first world.snapshots |> .tick
+        last = NonEmptyList.last world.snapshots |> .tick
         (first, last)
 
     crashInfo = {
@@ -647,6 +651,7 @@ internalWritableHistory = \{ snapshots } ->
         "$(inputJson)\n$(positionJson)"
 
     snapshots
+    |> NonEmptyList.toList
     |> List.map writeSnapshot
     |> Str.joinWith "\n"
 

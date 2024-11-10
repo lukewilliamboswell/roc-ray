@@ -142,7 +142,12 @@ pub unsafe extern "C" fn roc_realloc(
 
 #[no_mangle]
 pub unsafe extern "C" fn roc_panic(msg: &RocStr, _tag_id: u32) {
-    logger::log(format!("Roc crashed with: {}", msg.as_str()).as_str());
+    let msg = msg.as_str().to_string();
+    logger::log(&format!("Roc crashed with: {}", &msg));
+    crate::config::update(|c| {
+        c.should_exit = true;
+        c.should_exit_msg_code = Some((msg, ExitErrCode::ErrFromRocRender));
+    });
 }
 
 #[no_mangle]

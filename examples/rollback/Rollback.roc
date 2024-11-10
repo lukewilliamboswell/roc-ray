@@ -230,11 +230,11 @@ updateRemoteInputs = \world, inbox ->
         minSyncTick = Num.min world.syncTick world.remoteSyncTick
         threshold =
             configInputAge = Num.max world.config.maxRollbackTicks world.config.tickAdvantageLimit
-            Num.min minSyncTick (world.tick - Num.toU64 configInputAge)
+            Num.min (Num.toI64 minSyncTick) (Num.toI64 world.tick - configInputAge)
 
         world.remoteMessages
         |> NonEmptyList.appendAll newMessages
-        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 threshold
+        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < threshold
 
     { world & remoteMessages }
 

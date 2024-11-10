@@ -39,9 +39,11 @@ ConnectedModel : {
 
 init! : {} => Result Model _
 init! = \{} ->
+    serverUrl = "ws://localhost:3536/yolo?next=2"
+
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
-    Network.configure! { serverUrl: "ws://localhost:3536/yolo?next=2" }
+    Network.configure! { serverUrl }
     RocRay.initWindow! {
         title: "Rollback Example",
         width: Num.toF32 width,
@@ -123,9 +125,6 @@ renderWaiting! = \waiting, state ->
 
 waitingToConnected! : WaitingModel, PlatformState, Rollback.PeerMessage => Result Model []
 waitingToConnected! = \waiting, state, firstMessage ->
-    timestampMillis = state.timestamp.renderStart
-    { dude } = waiting
-
     config : Rollback.Config
     config = {
         millisPerTick: 1000 // 120,
@@ -133,6 +132,7 @@ waitingToConnected! = \waiting, state, firstMessage ->
         tickAdvantageLimit: 6,
     }
 
+    world : Rollback.Recording
     world = Rollback.start {
         config,
         firstMessage: firstMessage.message,
@@ -140,7 +140,11 @@ waitingToConnected! = \waiting, state, firstMessage ->
     }
 
     connected : ConnectedModel
-    connected = { dude, world, timestampMillis }
+    connected = {
+        world,
+        dude: waiting.dude,
+        timestampMillis: state.timestamp.renderStart,
+    }
 
     drawConnected! connected state
 

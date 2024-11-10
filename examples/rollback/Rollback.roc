@@ -78,9 +78,6 @@ RecordedWorld : {
     rollbackLog : List RollbackEvent,
 }
 
-## a player input and the simulation frame it was polled on
-InputTick : { tick : U64, input : Input }
-
 ## the record of what happened on a previous simulation frame
 Snapshot : {
     ## the simulation frame this occurred on
@@ -231,10 +228,13 @@ updateRemoteInputs = \world, inbox ->
         newMessages = List.map inbox \peerMessage -> peerMessage.message
 
         minSyncTick = Num.min world.syncTick world.remoteSyncTick
+        threshold =
+            configInputAge = Num.max world.config.maxRollbackTicks world.config.tickAdvantageLimit
+            Num.min minSyncTick (world.tick - Num.toU64 configInputAge)
 
         world.remoteMessages
         |> NonEmptyList.appendAll newMessages
-        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 minSyncTick
+        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 threshold
 
     { world & remoteMessages }
 
@@ -293,11 +293,9 @@ messageIncludesTick = \msg, tick ->
 
 findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
 findMisprediction = \{ snapshots, remoteMessages }, (begin, end) ->
-    findMatch : Snapshot -> Result InputTick [NotFound]
+    findMatch : Snapshot -> Result FrameMessage [NotFound]
     findMatch = \snap ->
-        remoteMessages
-        |> NonEmptyList.findLast \msg -> messageIncludesTick msg snap.tick
-        |> Result.map \msg -> { tick: snap.tick, input: msg.input }
+        NonEmptyList.findLast remoteMessages \msg -> messageIncludesTick msg snap.tick
 
     misprediction : Result Snapshot [NotFound]
     misprediction =

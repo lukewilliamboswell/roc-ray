@@ -5,6 +5,8 @@ app [Model, init!, render!] {
 
 ### This is an example of using RocRay's matchbox networking integration for a peer-to-peer multiplayer game.
 ### The Rollback module is based on pseudocode from the Guilty Gear Strive team.
+### Note that this version relies on TCP for handling message ordering and packet loss.
+### In a real game or polished networking library, you'd likely do many things differently.
 ###
 ### Matchbox WebRTC: https://github.com/johanhelsing/matchbox
 ### GGST's Rollback Pseudocode: https://gist.github.com/rcmagic/f8d76bca32b5609e85ab156db38387e9

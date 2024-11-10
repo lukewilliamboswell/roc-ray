@@ -66,9 +66,6 @@ RecordedWorld : {
 
     ## the recent history of received network messages (since syncTick)
     remoteMessages : NonEmptyList FrameMessage,
-    ## the recent history of remote player inputs (since syncTick)
-    ## this is a smaller duplicate of information in remoteMessages
-    remoteInputTicks : List InputTick,
     ## the recent history of snapshots (since syncTick)
     snapshots : NonEmptyList Snapshot,
     ## the recent history of local player inputs (since syncTick)
@@ -146,7 +143,6 @@ FrameContext : {
 start : StartRecording -> Recording
 start = \{ firstMessage, state, config } ->
     remoteMessages = NonEmptyList.new firstMessage
-    remoteInputTicks = frameMessagesToTicks remoteMessages
 
     checksum = World.checksum state
 
@@ -176,21 +172,12 @@ start = \{ firstMessage, state, config } ->
         state: state,
         snapshots: NonEmptyList.new initialSyncSnapshot,
         remoteMessages,
-        remoteInputTicks,
         localInputTicks: [firstLocalInputTick],
         blocked: Advancing,
         rollbackLog: [],
     }
 
     @Recording recording
-
-frameMessagesToTicks : NonEmptyList FrameMessage -> List InputTick
-frameMessagesToTicks = \messages ->
-    messages
-    |> NonEmptyList.toList
-    |> List.joinMap \msg ->
-        range = List.range { start: At msg.firstTick, end: At msg.lastTick }
-        List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
 
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if necessary
@@ -256,9 +243,7 @@ addRemoteInputs = \world, inbox ->
         |> NonEmptyList.appendAll newMessages
         |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 world.syncTick
 
-    remoteInputTicks = frameMessagesToTicks remoteMessages
-
-    { world & remoteMessages, remoteInputTicks }
+    { world & remoteMessages }
 
 updateRemoteTicks : RecordedWorld -> RecordedWorld
 updateRemoteTicks = \world ->
@@ -551,9 +536,9 @@ showCrashInfo = \@Recording recordedState ->
 
 internalShowCrashInfo : RecordedWorld -> Str
 internalShowCrashInfo = \world ->
-    remoteInputTicksRange =
-        first = List.first world.remoteInputTicks |> Result.map \it -> it.tick
-        last = List.last world.remoteInputTicks |> Result.map \it -> it.tick
+    remoteMessagesRange =
+        first = NonEmptyList.first world.remoteMessages |> .firstTick
+        last = NonEmptyList.last world.remoteMessages |> .lastTick
         (first, last)
 
     snapshotsRange =
@@ -569,7 +554,7 @@ internalShowCrashInfo = \world ->
         localPos: world.state.localPlayer.pos,
         remotePos: world.state.remotePlayer.pos,
         rollbackLog: world.rollbackLog,
-        remoteInputTicksRange,
+        remoteMessagesRange,
         snapshotsRange,
     }
 

@@ -65,7 +65,7 @@ RecordedWorld : {
     remoteTickAdvantage : I64,
 
     ## the recent history of received network messages (since syncTick)
-    remoteMessages : List FrameMessage,
+    remoteMessages : NonEmptyList FrameMessage,
     ## the recent history of remote player inputs (since syncTick)
     ## this is a smaller duplicate of information in remoteMessages
     remoteInputTicks : List InputTick,
@@ -145,7 +145,7 @@ FrameContext : {
 
 start : StartRecording -> Recording
 start = \{ firstMessage, state, config } ->
-    remoteMessages = [firstMessage]
+    remoteMessages = NonEmptyList.new firstMessage
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
     checksum = World.checksum state
@@ -184,9 +184,11 @@ start = \{ firstMessage, state, config } ->
 
     @Recording recording
 
-frameMessagesToTicks : List FrameMessage -> List InputTick
+frameMessagesToTicks : NonEmptyList FrameMessage -> List InputTick
 frameMessagesToTicks = \messages ->
-    List.joinMap messages \msg ->
+    messages
+    |> NonEmptyList.toList
+    |> List.joinMap \msg ->
         range = List.range { start: At msg.firstTick, end: At msg.lastTick }
         List.map range \tick -> { tick: Num.toU64 tick, input: msg.input }
 
@@ -251,45 +253,23 @@ addRemoteInputs = \world, inbox ->
         newMessages = List.map inbox \peerMessage -> peerMessage.message
 
         world.remoteMessages
-        |> List.concat newMessages
-        |> dropOldMessages { syncTick: world.syncTick }
+        |> NonEmptyList.appendAll newMessages
+        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 world.syncTick
 
     remoteInputTicks = frameMessagesToTicks remoteMessages
 
     { world & remoteMessages, remoteInputTicks }
 
-dropOldMessages : List FrameMessage, { syncTick : U64 } -> List FrameMessage
-dropOldMessages = \history, { syncTick } ->
-    keptLast = List.last history
-
-    cleaned =
-        List.keepOks history \msg ->
-            if msg.lastTick < Num.toI64 syncTick then Err TooOld else Ok msg
-
-    when (cleaned, keptLast) is
-        # TODO this should be unnecessary
-        ([], Err _) -> []
-        # sync tick caught up, still keep one message for input prediction
-        ([], Ok lst) -> [lst]
-        # normal case; we have inputs for prediction
-        (cleanHistory, _) -> cleanHistory
-
 updateRemoteTicks : RecordedWorld -> RecordedWorld
 updateRemoteTicks = \world ->
     { remoteTick, remoteTickAdvantage, remoteSyncTick, remoteSyncTickChecksum } =
         world.remoteMessages
-        |> List.last
-        |> Result.map \lastMessage -> {
+        |> NonEmptyList.last
+        |> \lastMessage -> {
             remoteTick: Num.toU64 lastMessage.lastTick,
             remoteTickAdvantage: lastMessage.tickAdvantage,
             remoteSyncTick: Num.toU64 lastMessage.syncTick,
             remoteSyncTickChecksum: lastMessage.syncTickChecksum,
-        }
-        |> Result.withDefault {
-            remoteTick: world.remoteTick,
-            remoteTickAdvantage: world.remoteTickAdvantage,
-            remoteSyncTick: world.remoteSyncTick,
-            remoteSyncTickChecksum: world.remoteSyncTickChecksum,
         }
 
     { world &

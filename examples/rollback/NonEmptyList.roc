@@ -9,6 +9,7 @@ module [
     toList,
     dropNonLastIf,
     append,
+    appendAll,
 ]
 
 NonEmptyList a := Inner a
@@ -71,3 +72,14 @@ append = \@NonEmptyList inner, item ->
         last: item,
         list: List.append inner.list inner.last,
     }
+
+appendAll : NonEmptyList a, List a -> NonEmptyList a
+appendAll = \@NonEmptyList inner, items ->
+    when List.last items is
+        Err ListWasEmpty -> @NonEmptyList inner
+        Ok newLast ->
+            newNonLast = List.takeFirst items (List.len items - 1)
+            @NonEmptyList {
+                last: newLast,
+                list: List.concat inner.list newNonLast,
+            }

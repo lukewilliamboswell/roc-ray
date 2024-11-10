@@ -10,6 +10,7 @@ module [
     showCrashInfo,
     writableHistory,
     currentState,
+    recentMessages,
 ]
 
 import rr.Network exposing [UUID]
@@ -26,6 +27,12 @@ Recording := RecordedWorld
 currentState : Recording -> World
 currentState = \@Recording recording ->
     recording.state
+
+recentMessages : Recording, U64 -> List FrameMessage
+recentMessages = \@Recording recording, n ->
+    recording.outgoingMessages
+    |> List.keepOks \res -> res
+    |> List.takeLast n
 
 Config : {
     ## the milliseconds per simulation frame
@@ -50,12 +57,13 @@ RecordedWorld : {
 
     ## the total number of simulation ticks so far
     tick : U64,
-    ## the most recent tick received from the remote player
-    remoteTick : U64,
     ## the last tick where we synchronized with the remote player
     syncTick : U64,
     ## the snapshot for our syncTick
     syncTickSnapshot : Snapshot,
+
+    ## the most recent tick received from the remote player
+    remoteTick : U64,
     ## the most recent syncTick received from remotePlayer
     remoteSyncTick : U64,
     ## the checksum remotePlayer sent with their most recent syncTick
@@ -63,8 +71,8 @@ RecordedWorld : {
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
 
-    ## the recent history of received network messages (since syncTick/remoteSyncTick)
-    remoteMessages : NonEmptyList FrameMessage,
+    ## the recent history of received network messages
+    receivedInputs : NonEmptyList ReceivedInput,
     ## the recent history of snapshots (since syncTick/remoteSyncTick)
     snapshots : NonEmptyList Snapshot,
 
@@ -76,6 +84,7 @@ RecordedWorld : {
 
     ## a record of rollback events for debugging purposes
     rollbackLog : List RollbackEvent,
+    outgoingMessages : List PublishedMessage,
 }
 
 ## the record of what happened on a previous simulation frame
@@ -134,7 +143,9 @@ FrameContext : {
 }
 
 start : StartRecording -> Recording
-start = \{ firstMessage, state, config } ->
+start = \{ firstMessage: _, state, config } ->
+    # TODO use first message for input, or don't require it
+
     checksum = World.checksum state
 
     initialSyncSnapshot : Snapshot
@@ -144,6 +155,13 @@ start = \{ firstMessage, state, config } ->
         localInput: Input.blank,
         checksum,
         state,
+    }
+
+    firstReceivedInput : ReceivedInput
+    firstReceivedInput = {
+        inputTick: 0,
+        receivedTick: 0,
+        input: Input.blank,
     }
 
     recording : RecordedWorld
@@ -159,22 +177,26 @@ start = \{ firstMessage, state, config } ->
         remoteTickAdvantage: 0,
         state: state,
         snapshots: NonEmptyList.new initialSyncSnapshot,
-        remoteMessages: NonEmptyList.new firstMessage,
+        receivedInputs: NonEmptyList.new firstReceivedInput,
         blocked: Advancing,
         rollbackLog: [],
+        outgoingMessages: [],
     }
 
     @Recording recording
 
+PublishedMessage : Result FrameMessage [Skipped, BlockedFor U64]
+
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if the game state advanced
-advance : Recording, FrameContext -> (Recording, Result FrameMessage [Skipped, BlockedFor U64])
+advance : Recording, FrameContext -> (Recording, PublishedMessage)
 advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
         |> updateRemoteInputs inbox
-        |> updateRemoteTicks
+        |> updateRemoteMeta inbox
         |> updateSyncTick
+        |> dropOldData
         |> rollbackIfNecessary
 
     newWorld : RecordedWorld
@@ -197,7 +219,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     lastTick = newWorld.tick |> Num.toI64
     tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
 
-    outgoingMessage : Result FrameMessage [BlockedFor U64, Skipped]
+    outgoingMessage : PublishedMessage
     outgoingMessage =
         when newWorld.blocked is
             # blocking on remote input
@@ -207,6 +229,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
             Skipped -> Err Skipped
             # executed at least one tick
             Advancing ->
+                # TODO remove this from return?
                 frameMessage : FrameMessage
                 frameMessage = {
                     firstTick,
@@ -219,41 +242,146 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
 
                 Ok frameMessage
 
-    (@Recording newWorld, outgoingMessage)
+    outgoingMessages =
+        List.append newWorld.outgoingMessages outgoingMessage
+
+    (@Recording { newWorld & outgoingMessages }, outgoingMessage)
+
+ReceivedInput : { receivedTick : U64, inputTick : U64, input : Input }
 
 ## add new remote messages, and drop any older than sync ticks
 updateRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
 updateRemoteInputs = \world, inbox ->
-    remoteMessages =
-        newMessages = List.map inbox \peerMessage -> peerMessage.message
+    receivedTick = world.tick
 
-        minSyncTick = Num.min world.syncTick world.remoteSyncTick
-        threshold =
-            configInputAge = Num.max world.config.maxRollbackTicks world.config.tickAdvantageLimit
-            Num.min (Num.toI64 minSyncTick) (Num.toI64 world.tick - configInputAge)
+    newReceivedInputs : List ReceivedInput
+    newReceivedInputs =
+        inbox
+        |> List.map .message
+        |> List.joinMap \{ firstTick, lastTick, input } ->
+            tickRange = List.range { start: At firstTick, end: At lastTick }
+            List.map tickRange \tick ->
+                inputTick = Num.toU64 tick
+                { receivedTick, input, inputTick }
 
-        world.remoteMessages
-        |> NonEmptyList.appendAll newMessages
-        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < threshold
+    # drop the older copies of duplicate ticks
+    deduplicate : List ReceivedInput -> List ReceivedInput
+    deduplicate = \received ->
+        initialInputsByTick : Dict U64 ReceivedInput
+        initialInputsByTick = Dict.empty {}
 
-    { world & remoteMessages }
+        received
+        |> List.walkBackwards initialInputsByTick \inputsByTick, recInput ->
+            Dict.update inputsByTick recInput.inputTick \entry ->
+                when entry is
+                    Err Missing -> Ok recInput
+                    Ok current ->
+                        newer = recInput.receivedTick > current.receivedTick
+                        Ok (if newer then recInput else current)
+        |> Dict.values
 
-## update remote ticks based on the latest received message
-updateRemoteTicks : RecordedWorld -> RecordedWorld
-updateRemoteTicks = \world ->
-    lastMessage = NonEmptyList.last world.remoteMessages
+    deduplicateNonEmpty : NonEmptyList ReceivedInput -> NonEmptyList ReceivedInput
+    deduplicateNonEmpty = \withDuplicates ->
+        deduped =
+            withDuplicates
+            |> NonEmptyList.toList
+            |> deduplicate
+            |> NonEmptyList.fromList
 
-    remoteTick = Num.toU64 lastMessage.lastTick
-    remoteTickAdvantage = lastMessage.tickAdvantage
-    remoteSyncTick = Num.toU64 lastMessage.syncTick
-    remoteSyncTickChecksum = lastMessage.syncTickChecksum
+        when deduped is
+            Err ListWasEmpty -> crash "empty list in received input deduplicate"
+            Ok nonEmpty -> nonEmpty
 
-    { world &
-        remoteTick,
-        remoteTickAdvantage,
-        remoteSyncTick,
-        remoteSyncTickChecksum,
-    }
+    receivedInputs =
+        world.receivedInputs
+        |> NonEmptyList.appendAll newReceivedInputs
+        |> deduplicateNonEmpty
+        |> NonEmptyList.sortWith \left, right ->
+            Num.compare left.inputTick right.inputTick
+
+    { world & receivedInputs }
+
+dropOldData : RecordedWorld -> RecordedWorld
+dropOldData = \world ->
+    beforeLastGap =
+        initialState : [Empty, LastSeen U64]
+        initialState = Empty
+
+        walked =
+            world.receivedInputs
+            |> NonEmptyList.toList
+            |> List.walkUntil initialState \state, received ->
+                when state is
+                    Empty -> Continue (LastSeen received.inputTick)
+                    LastSeen lastSeen ->
+                        if lastSeen + 1 == received.inputTick then
+                            Continue (LastSeen received.inputTick)
+                        else
+                            Break (LastSeen lastSeen)
+
+        when walked is
+            Empty -> crash "unreachable"
+            LastSeen lastSeen -> lastSeen
+
+    beforeMaxRollback =
+        (Num.toI64 world.tick - world.config.maxRollbackTicks)
+        |> Num.max 0
+        |> Num.toU64
+
+    beforeTickAdvantageLimit =
+        (Num.toI64 world.tick - world.config.tickAdvantageLimit)
+        |> Num.max 0
+        |> Num.toU64
+
+    # avoid discarding received inputs newer than this minimum
+    dropThreshold =
+        thresholds = [
+            world.syncTick,
+            world.remoteSyncTick,
+            beforeLastGap,
+            beforeMaxRollback,
+            beforeTickAdvantageLimit,
+        ]
+
+        List.walk thresholds Num.maxU64 Num.min
+
+    receivedInputs =
+        NonEmptyList.dropNonLastIf world.receivedInputs \received ->
+            received.inputTick < dropThreshold
+    snapshots =
+        NonEmptyList.dropNonLastIf world.snapshots \snap ->
+            snap.tick < dropThreshold
+
+    # TODO
+    { world & receivedInputs, snapshots }
+
+updateRemoteMeta : RecordedWorld, List PeerMessage -> RecordedWorld
+updateRemoteMeta = \world, inbox ->
+    # TODO
+    # find the the temporally last message in the inbox
+    # if empty, or if older than meta, keep current remote meta
+
+    maybeLatest =
+        inbox
+        |> List.map .message
+        |> List.sortWith \left, right -> Num.compare left.lastTick right.lastTick
+        |> List.last
+
+    when maybeLatest is
+        Err ListWasEmpty -> world
+        Ok outOfDate if Num.toU64 outOfDate.lastTick < world.remoteTick -> world
+        Ok latestMessage ->
+            remoteTick = Num.toU64 latestMessage.lastTick
+            remoteTickAdvantage = latestMessage.tickAdvantage
+            remoteSyncTick = Num.toU64 latestMessage.syncTick
+            remoteSyncTickChecksum = latestMessage.syncTickChecksum
+
+            { world &
+                remoteTick,
+                remoteTickAdvantage,
+                remoteSyncTick,
+                remoteSyncTickChecksum,
+            }
 
 ## moves forward the local syncTick to one tick before the earliest misprediction,
 ## based on received remote inputs
@@ -280,22 +408,14 @@ updateSyncTick = \world ->
                 crashInfo = internalShowCrashInfo world
                 crash "snapshot not found for new sync tick: $(Inspect.toStr syncTick)\n$(crashInfo)"
 
-    snapshots =
-        minSyncTick = Num.min syncTick world.remoteSyncTick
-        NonEmptyList.dropNonLastIf world.snapshots \snap -> snap.tick < minSyncTick
-
-    { world & syncTick, syncTickSnapshot, snapshots }
-
-messageIncludesTick : FrameMessage, U64 -> Bool
-messageIncludesTick = \msg, tick ->
-    signedTick = Num.toI64 tick
-    msg.firstTick <= signedTick && msg.lastTick >= signedTick
+    { world & syncTick, syncTickSnapshot }
 
 findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
-findMisprediction = \{ snapshots, remoteMessages }, (begin, end) ->
-    findMatch : Snapshot -> Result FrameMessage [NotFound]
+findMisprediction = \{ snapshots, receivedInputs }, (begin, end) ->
+    findMatch : Snapshot -> Result ReceivedInput [NotFound]
     findMatch = \snap ->
-        NonEmptyList.findLast remoteMessages \msg -> messageIncludesTick msg snap.tick
+        NonEmptyList.findLast receivedInputs \received ->
+            received.inputTick == snap.tick
 
     misprediction : Result Snapshot [NotFound]
     misprediction =
@@ -380,17 +500,20 @@ tickOnce = \{ world, localInput: inputSource } ->
 
 predictRemoteInput : { world : RecordedWorld, tick : U64 } -> Input
 predictRemoteInput = \{ world, tick } ->
-    receivedInput =
-        world.remoteMessages
-        |> NonEmptyList.findLast \msg -> messageIncludesTick msg tick
-        |> Result.map \msg -> msg.input
+    # TODO why shoul
+    # if the specific tick we want is missing, predict the last thing they did
+    predictedInput =
+        world.receivedInputs
+        |> NonEmptyList.findLast \received -> received.inputTick <= tick
+        |> Result.map .input
 
-    when receivedInput is
-        # confirmed remote input
-        Ok received -> received
-        # must predict remote input
-        # predict the last thing they did
-        Err NotFound -> world.remoteMessages |> NonEmptyList.last |> .input
+    when predictedInput is
+        Err NotFound ->
+            # we need to hold onto old snapshots long enough to prevent this
+            crashInfo = internalShowCrashInfo world
+            crash "no input snapshot found for tick: $(Inspect.toStr tick)\n$(crashInfo)"
+
+        Ok input -> input
 
 # ROLLBACK
 
@@ -427,23 +550,21 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
     fixedWorld =
         snapshots : NonEmptyList Snapshot
         snapshots = NonEmptyList.map wrongFutureWorld.snapshots \wrongFutureSnap ->
-            matchingMessage =
-                NonEmptyList.findLast wrongFutureWorld.remoteMessages \msg ->
-                    messageIncludesTick msg wrongFutureSnap.tick
+            recentReceived =
+                NonEmptyList.findLast wrongFutureWorld.receivedInputs \received ->
+                    received.inputTick <= wrongFutureSnap.tick
 
-            when matchingMessage is
-                # we're ahead of them; our previous prediction isn't wrong yet
+            when recentReceived is
                 Err NotFound -> wrongFutureSnap
-                # we have a real remote input; overwrite our prediction with it
                 Ok { input: remoteInput } -> { wrongFutureSnap & remoteInput }
 
-        remoteTick =
-            lastMessage = NonEmptyList.last wrongFutureWorld.remoteMessages
-            Num.toU64 lastMessage.lastTick
-
+        # TODO is this necessary? or would it already be updated in the normal flow?
+        # remoteTick =
+        #     lastReceived = NonEmptyList.last wrongFutureWorld.receivedInputs
+        #     Num.toU64 lastReceived.inputTick
+        remoteTick = wrongFutureWorld.remoteTick
         lastSnapshot = NonEmptyList.last snapshots
-
-        syncTick = Num.min remoteTick lastSnapshot.tick
+        syncTick = Num.min wrongFutureWorld.remoteTick lastSnapshot.tick
         syncTickSnapshot =
             when NonEmptyList.findLast snapshots \snap -> snap.tick == syncTick is
                 Ok snap -> snap
@@ -463,9 +584,9 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
             tickOnce { world, localInput: Recorded }
 
     # FIXME fix the checksum or remove the assertion
-    # checkedWorld = assertValidChecksum rolledForwardWorld
+    checkedWorld = assertValidChecksum rolledForwardWorld
 
-    { rolledForwardWorld & remainingMillis }
+    { checkedWorld & remainingMillis }
 
 ## Crashes if we detect a desync at our opponent's latest sent sync tick.
 ## You'd what to handle desyncs more gracefully in a real game,
@@ -482,9 +603,9 @@ assertValidChecksum = \world ->
 
     history = internalWritableHistory world
     crashInfo = internalShowCrashInfo world
-    frameMessages = world.remoteMessages
+    receivedInputs = world.receivedInputs
     checksums = (remoteSyncTickChecksum, localMatchingChecksum)
-    info = Inspect.toStr { remoteSyncTick, checksums, frameMessages }
+    info = Inspect.toStr { remoteSyncTick, checksums, receivedInputs }
 
     when localMatchingChecksum is
         Ok local if local == remoteSyncTickChecksum ->
@@ -511,9 +632,9 @@ showCrashInfo = \@Recording recordedState ->
 
 internalShowCrashInfo : RecordedWorld -> Str
 internalShowCrashInfo = \world ->
-    remoteMessagesRange =
-        first = NonEmptyList.first world.remoteMessages |> .firstTick
-        last = NonEmptyList.last world.remoteMessages |> .lastTick
+    receivedInputsRange =
+        first = NonEmptyList.first world.receivedInputs |> .inputTick
+        last = NonEmptyList.last world.receivedInputs |> .inputTick
         (first, last)
 
     snapshotsRange =
@@ -529,7 +650,7 @@ internalShowCrashInfo = \world ->
         localPos: world.state.localPlayer.pos,
         remotePos: world.state.remotePlayer.pos,
         rollbackLog: world.rollbackLog,
-        remoteMessagesRange,
+        receivedInputsRange,
         snapshotsRange,
     }
 

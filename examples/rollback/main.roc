@@ -103,12 +103,12 @@ drawConnected! = \{ dude, world }, state ->
 
 renderWaiting! : WaitingModel, PlatformState => Result Model []
 renderWaiting! = \waiting, state ->
-    guestJoinMessage =
-        state.network.messages
-        |> List.last
-        |> Result.try decodeSingleFrameMessage
+    inbox : List Rollback.PeerMessage
+    inbox = decodeFrameMessages state.network.messages
 
-    when guestJoinMessage is
+    joinMessage = List.last inbox
+
+    when joinMessage is
         Ok firstUpdate ->
             waitingToConnected! waiting state firstUpdate
 
@@ -128,8 +128,8 @@ waitingToConnected! = \waiting, state, firstMessage ->
     config : Rollback.Config
     config = {
         millisPerTick: 1000 // 120,
-        maxRollbackTicks: 16 * 10,
-        tickAdvantageLimit: 10 * 10,
+        maxRollbackTicks: 16,
+        tickAdvantageLimit: 10,
     }
 
     world : Rollback.Recording
@@ -181,34 +181,26 @@ renderConnected! = \oldModel, state ->
 
     model = { oldModel & world, timestampMillis }
 
-    blocked =
-        when outgoing is
-            Ok message ->
-                sendFrameMessage! message network
-                if message.input != Input.blank then
-                    RocRay.log! "Sent Message:\n$(Inspect.toStr message)" LogInfo
-                else
-                    {}
-
-                Advancing
-
-            Err e -> e
+    messages = Rollback.recentMessages world 10
+    sendFrameMessages! messages network
 
     drawConnected! model state
 
-    when blocked is
-        Advancing -> {}
-        Skipped -> {}
-        BlockedFor blockedFrames ->
-            when blockedFrames is
-                f if f < 100 -> {}
-                f if f < 1000 ->
-                    RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
+    blockedWarning = 10
+    blockedCrash = 100
 
-                _f ->
-                    crashInfo = Rollback.showCrashInfo world
-                    history = Rollback.writableHistory world
-                    crash "blocked world:\n$(crashInfo)\n$(history)"
+    when outgoing is
+        Ok _ -> {}
+        Err Skipped -> {}
+        Err (BlockedFor blockedFrames) ->
+            if blockedFrames < blockedWarning then
+                {}
+            else if blockedFrames < blockedCrash then
+                RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
+            else
+                crashInfo = Rollback.showCrashInfo world
+                history = Rollback.writableHistory world
+                crash "blocked world:\n$(crashInfo)\n$(history)"
 
     Ok (Connected model)
 
@@ -264,18 +256,25 @@ sendHostWaiting! = \network ->
             syncTickChecksum,
         }
 
-    sendFrameMessage! waitingMessage network
+    sendFrameMessages! [waitingMessage] network
 
-sendFrameMessage! : Rollback.FrameMessage, RocRay.NetworkState => {}
-sendFrameMessage! = \message, network ->
-    bytes = Encode.toBytes (worldToNetwork message) Json.utf8
+sendFrameMessages! : List Rollback.FrameMessage, RocRay.NetworkState => {}
+sendFrameMessages! = \messages, network ->
+    jsonMessages = List.map messages worldToNetwork
+    bytes = Encode.toBytes jsonMessages Json.utf8
     forEach! network.peers.connected \peer -> RocRay.sendToPeer! bytes peer
 
 decodeFrameMessages : List RocRay.NetworkMessage -> List Rollback.PeerMessage
 decodeFrameMessages = \messages ->
-    List.map messages \networkMsg ->
-        when decodeSingleFrameMessage networkMsg is
-            Ok msg -> msg
+    List.joinMap messages \networkMsg ->
+        decodeResult : Result (List FrameMessageJson) _
+        decodeResult = Decode.fromBytes networkMsg.bytes Json.utf8
+
+        when decodeResult is
+            Ok jsonArray ->
+                List.map jsonArray \json ->
+                    { id: networkMsg.id, message: networkToWorld json }
+
             Err e ->
                 crashInfo = Inspect.toStr {
                     decodeError: e,
@@ -324,12 +323,12 @@ worldToNetwork = \message -> {
     syncTickChecksum: message.syncTickChecksum,
 }
 
-decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Rollback.PeerMessage _
-decodeSingleFrameMessage = \{ id, bytes } ->
-    decodeResult : Result FrameMessageJson _
-    decodeResult = Decode.fromBytes bytes Json.utf8
-    Result.map decodeResult \json ->
-        { id, message: networkToWorld json }
+# decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Rollback.PeerMessage _
+# decodeSingleFrameMessage = \{ id, bytes } ->
+#     decodeResult : Result FrameMessageJson _
+#     decodeResult = Decode.fromBytes bytes Json.utf8
+#     Result.map decodeResult \json ->
+#         { id, message: networkToWorld json }
 
 # TODO REPLACE WITH BUILTIN
 forEach! : List a, (a => {}) => {}

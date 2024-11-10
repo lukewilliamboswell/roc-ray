@@ -11,6 +11,7 @@ module [
 
 import rr.RocRay exposing [Vector2]
 
+# TODO get rid of subpixels altogether
 # A 1-D integer position with a integer sub-pixel component
 # Use instead of floats to avoid rounding errors
 Pixel := { pixels : I64, subpixels : I64 }

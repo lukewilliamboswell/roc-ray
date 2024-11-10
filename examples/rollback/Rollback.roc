@@ -68,9 +68,6 @@ RecordedWorld : {
     remoteMessages : NonEmptyList FrameMessage,
     ## the recent history of snapshots (since syncTick)
     snapshots : NonEmptyList Snapshot,
-    ## the recent history of local player inputs (since syncTick)
-    ## this is a smaller duplicate of information in snapshots
-    localInputTicks : List InputTick,
 
     ## whether the simulation advanced this frame
     ## Advancing - the simulation advanced at least one frame
@@ -155,9 +152,6 @@ start = \{ firstMessage, state, config } ->
         state,
     }
 
-    firstLocalInputTick : InputTick
-    firstLocalInputTick = { tick: 0, input: Input.blank }
-
     recording : RecordedWorld
     recording = {
         config,
@@ -172,7 +166,6 @@ start = \{ firstMessage, state, config } ->
         state: state,
         snapshots: NonEmptyList.new initialSyncSnapshot,
         remoteMessages,
-        localInputTicks: [firstLocalInputTick],
         blocked: Advancing,
         rollbackLog: [],
     }
@@ -348,11 +341,11 @@ tickOnce = \world, { localInput: newInput } ->
 
     (localInput, tickKind) =
         # avoid overwriting inputs that have been published to other players
-        when List.findLast world.localInputTicks \it -> it.tick == tick is
+        when NonEmptyList.findLast world.snapshots \snap -> snap.tick == tick is
             # we're executing a new, normal game tick
             Err NotFound -> (newInput, NormalTick)
             # we're re-executing a previous tick in a roll forward
-            Ok it -> (it.input, RollForward)
+            Ok snap -> (snap.localInput, RollForward)
 
     (remoteInput, _predicted) = predictRemoteInput world { tick }
 
@@ -379,18 +372,11 @@ tickOnce = \world, { localInput: newInput } ->
                 NonEmptyList.map world.snapshots \snap ->
                     if snap.tick != tick then snap else newSnapshot
 
-    localInputTicks : List InputTick
-    localInputTicks =
-        when tickKind is
-            NormalTick -> List.append world.localInputTicks { tick, input: localInput }
-            RollForward -> world.localInputTicks
-
     { world &
         state,
         remainingMillis,
         tick,
         snapshots,
-        localInputTicks,
     }
 
 predictRemoteInput : RecordedWorld, { tick : U64 } -> (Input, [Predicted, Confirmed])
@@ -480,8 +466,8 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
             # maybe tickonce could take a config with a variant for how to handle that case?
             localInput : Input
             localInput =
-                when List.findLast rollForwardWorld.localInputTicks \it -> it.tick == tick is
-                    Ok it -> it.input
+                when NonEmptyList.findLast rollForwardWorld.snapshots \snap -> snap.tick == tick is
+                    Ok snap -> snap.localInput
                     Err NotFound ->
                         info = Inspect.toStr { notFoundTick: tick, rollForwardRange: (begin, end) }
                         crashInfo = internalShowCrashInfo rollForwardWorld

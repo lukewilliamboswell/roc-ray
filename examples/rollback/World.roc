@@ -80,13 +80,13 @@ checksum = \{ localPlayer, remotePlayer } ->
     }
 
 positionsChecksum : { localPlayerPos : PixelVec, remotePlayerPos : PixelVec } -> I64
-positionsChecksum = \positions ->
-    # you'd probably want to do this differently in a real game
-    positions
-    |> Inspect.toStr
-    |> Str.toUtf8
-    |> List.map Num.toI64
-    |> List.sum
+positionsChecksum = \{ localPlayerPos, remotePlayerPos } ->
+    # you would want to use a real checksum in a real game
+
+    xSum = Pixel.totalSubpixels localPlayerPos.x + Pixel.totalSubpixels remotePlayerPos.x
+    ySum = Pixel.totalSubpixels localPlayerPos.y + Pixel.totalSubpixels remotePlayerPos.y
+
+    xSum + 10 * ySum
 
 ## advance the game state one discrete step
 tick : World, TickContext -> World

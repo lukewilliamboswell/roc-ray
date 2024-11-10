@@ -71,6 +71,7 @@ playerStart =
 initialAnimation : AnimatedSprite
 initialAnimation = { frame: 0, frameRate: 10, nextAnimationTick: 0 }
 
+## used by Rollback for checking desyncs
 checksum : World -> I64
 checksum = \{ localPlayer, remotePlayer } ->
     positionsChecksum {
@@ -80,12 +81,14 @@ checksum = \{ localPlayer, remotePlayer } ->
 
 positionsChecksum : { localPlayerPos : PixelVec, remotePlayerPos : PixelVec } -> I64
 positionsChecksum = \positions ->
+    # you'd probably want to do this differently in a real game
     positions
     |> Inspect.toStr
     |> Str.toUtf8
     |> List.map Num.toI64
     |> List.sum
 
+## advance the game state one discrete step
 tick : World, TickContext -> World
 tick = \state, { timestampMillis, localInput, remoteInput } ->
     localPlayer =

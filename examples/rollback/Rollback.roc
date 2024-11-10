@@ -323,38 +323,39 @@ normalUpdate : RecordedWorld, { localInput : Input, deltaMillis : U64 } -> (Reco
 normalUpdate = \initialWorld, { localInput, deltaMillis } ->
     millisToUse = initialWorld.remainingMillis + deltaMillis
     tickingWorld = { initialWorld & remainingMillis: millisToUse }
-    useAllRemainingTime tickingWorld { localInput } 0
+    useAllRemainingTime tickingWorld { localInput, ticksTicked: 0 }
 
-useAllRemainingTime : RecordedWorld, { localInput : Input }, U64 -> (RecordedWorld, U64)
-useAllRemainingTime = \world, inputs, ticksTicked ->
+useAllRemainingTime : RecordedWorld, { localInput : Input, ticksTicked : U64 } -> (RecordedWorld, U64)
+useAllRemainingTime = \world, { localInput, ticksTicked } ->
     if world.remainingMillis < world.config.millisPerTick then
         (world, ticksTicked)
     else
-        tickedWorld = tickOnce world inputs
-        useAllRemainingTime tickedWorld inputs (ticksTicked + 1)
+        tickedWorld = tickOnce { world, localInput: Fresh localInput }
+        useAllRemainingTime tickedWorld { localInput, ticksTicked: ticksTicked + 1 }
 
-tickOnce : RecordedWorld, { localInput : Input } -> RecordedWorld
-tickOnce = \world, { localInput: newInput } ->
+tickOnce : { world : RecordedWorld, localInput : [Fresh Input, Recorded] } -> RecordedWorld
+tickOnce = \{ world, localInput: inputSource } ->
     tick = world.tick + 1
     timestampMillis = world.tick * world.config.millisPerTick
     remainingMillis = world.remainingMillis - world.config.millisPerTick
 
-    (localInput, tickKind) =
-        # avoid overwriting inputs that have been published to other players
-        when NonEmptyList.findLast world.snapshots \snap -> snap.tick == tick is
+    localInput : Input
+    localInput =
+        when inputSource is
             # we're executing a new, normal game tick
-            Err NotFound -> (newInput, NormalTick)
+            Fresh input -> input
             # we're re-executing a previous tick in a roll forward
-            Ok snap -> (snap.localInput, RollForward)
+            # we need to avoid changing our inputs that have been sent to other players
+            Recorded ->
+                when NonEmptyList.findLast world.snapshots \s -> s.tick == tick is
+                    Ok snap -> snap.localInput
+                    Err NotFound ->
+                        crashInfo = internalShowCrashInfo world
+                        crash "local input not found in roll forward:\n$(crashInfo)"
 
-    (remoteInput, _predicted) = predictRemoteInput world { tick }
+    remoteInput = predictRemoteInput { world, tick }
 
-    state = World.tick world.state {
-        tick,
-        timestampMillis,
-        localInput,
-        remoteInput,
-    }
+    state = World.tick world.state { tick, timestampMillis, localInput, remoteInput }
 
     snapshots =
         checksum = World.checksum state
@@ -366,9 +367,9 @@ tickOnce = \world, { localInput: newInput } ->
         newSnapshot : Snapshot
         newSnapshot = { localInput, tick, remoteInput, checksum, state }
 
-        when tickKind is
-            NormalTick -> NonEmptyList.append world.snapshots newSnapshot
-            RollForward ->
+        when inputSource is
+            Fresh _ -> NonEmptyList.append world.snapshots newSnapshot
+            Recorded ->
                 NonEmptyList.map world.snapshots \snap ->
                     if snap.tick != tick then snap else newSnapshot
 
@@ -379,8 +380,8 @@ tickOnce = \world, { localInput: newInput } ->
         snapshots,
     }
 
-predictRemoteInput : RecordedWorld, { tick : U64 } -> (Input, [Predicted, Confirmed])
-predictRemoteInput = \world, { tick } ->
+predictRemoteInput : { world : RecordedWorld, tick : U64 } -> Input
+predictRemoteInput = \{ world, tick } ->
     receivedInput =
         world.remoteMessages
         |> NonEmptyList.findLast \msg -> messageIncludesTick msg tick
@@ -388,12 +389,10 @@ predictRemoteInput = \world, { tick } ->
 
     when receivedInput is
         # confirmed remote input
-        Ok received -> (received, Confirmed)
+        Ok received -> received
         # must predict remote input
-        Err NotFound ->
-            # predict the last thing they did
-            lastMessage = NonEmptyList.last world.remoteMessages
-            (lastMessage.input, Predicted)
+        # predict the last thing they did
+        Err NotFound -> world.remoteMessages |> NonEmptyList.last |> .input
 
 # ROLLBACK
 
@@ -421,8 +420,6 @@ rollbackIfNecessary = \world ->
 rollForwardFromSyncTick : RecordedWorld, { rollForwardRange : (U64, U64) } -> RecordedWorld
 rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } ->
     expect begin <= end
-
-    rollForwardTicks = List.range { start: At begin, end: At end }
 
     # touch up the snapshots to have their 'predictions' match what happened
     fixedWorld : RecordedWorld
@@ -459,21 +456,10 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
     rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
 
     # simulate every tick between syncTick and the present to catch up
+    rollForwardTicks = List.range { start: At begin, end: At end }
     rolledForwardWorld =
-        List.walk rollForwardTicks rollForwardWorld \steppingWorld, tick ->
-            # TODO will this be necessary if tickOnce just always works this way
-            # yes, because the not found behavior is different
-            # maybe tickonce could take a config with a variant for how to handle that case?
-            localInput : Input
-            localInput =
-                when NonEmptyList.findLast rollForwardWorld.snapshots \snap -> snap.tick == tick is
-                    Ok snap -> snap.localInput
-                    Err NotFound ->
-                        info = Inspect.toStr { notFoundTick: tick, rollForwardRange: (begin, end) }
-                        crashInfo = internalShowCrashInfo rollForwardWorld
-                        crash "local input not found in roll forward: $(info), $(crashInfo)"
-
-            tickOnce steppingWorld { localInput }
+        List.walk rollForwardTicks rollForwardWorld \world, _tick ->
+            tickOnce { world, localInput: Recorded }
 
     checkedWorld = assertValidChecksum rolledForwardWorld
 

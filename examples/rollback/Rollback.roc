@@ -375,11 +375,13 @@ tickOnce = \world, { localInput: newInput } ->
     timestampMillis = world.tick * world.config.millisPerTick
     remainingMillis = world.remainingMillis - world.config.millisPerTick
 
-    (localInput, localInputIsNew) =
+    (localInput, tickKind) =
         # avoid overwriting inputs that have been published to other players
         when List.findLast world.localInputTicks \it -> it.tick == tick is
-            Ok it -> (it.input, Bool.false)
-            Err NotFound -> (newInput, Bool.true)
+            # we're executing a new, normal game tick
+            Err NotFound -> (newInput, NormalTick)
+            # we're re-executing a previous tick in a roll forward
+            Ok it -> (it.input, RollForward)
 
     (remoteInput, _predicted) = predictRemoteInput world { tick }
 
@@ -393,21 +395,24 @@ tickOnce = \world, { localInput: newInput } ->
     snapshots =
         checksum = World.checksum state
 
-        NonEmptyList.map world.snapshots \snap ->
-            if snap.tick != tick then
-                snap
-            else
-                # NOTE:
-                # We need to use our previously-sent localInput from above.
-                # Changing our own recorded input would break our opponent's rollbacks.
-                # However, we do want to overwrite the rest in case we're in a roll forward
-                { localInput, tick, remoteInput, checksum, state }
+        # NOTE:
+        # We need to use our previously-sent localInput from above.
+        # Changing our own recorded input would break our opponent's rollbacks.
+        # But we do want to overwrite the rest of the snapshot if we're rolling forward.
+        newSnapshot : Snapshot
+        newSnapshot = { localInput, tick, remoteInput, checksum, state }
 
+        when tickKind is
+            NormalTick -> NonEmptyList.append world.snapshots newSnapshot
+            RollForward ->
+                NonEmptyList.map world.snapshots \snap ->
+                    if snap.tick != tick then snap else newSnapshot
+
+    localInputTicks : List InputTick
     localInputTicks =
-        if localInputIsNew then
-            List.append world.localInputTicks { tick, input: localInput }
-        else
-            world.localInputTicks
+        when tickKind is
+            NormalTick -> List.append world.localInputTicks { tick, input: localInput }
+            RollForward -> world.localInputTicks
 
     { world &
         state,

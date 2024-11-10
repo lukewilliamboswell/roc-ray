@@ -8,6 +8,7 @@ module [
     map,
     toList,
     dropNonLastIf,
+    append,
 ]
 
 NonEmptyList a := Inner a
@@ -63,3 +64,10 @@ dropNonLastIf : NonEmptyList a, (a -> Bool) -> NonEmptyList a
 dropNonLastIf = \@NonEmptyList inner, shouldDrop ->
     list = List.dropIf inner.list shouldDrop
     @NonEmptyList { inner & list }
+
+append : NonEmptyList a, a -> NonEmptyList a
+append = \@NonEmptyList inner, item ->
+    @NonEmptyList {
+        last: item,
+        list: List.append inner.list inner.last,
+    }

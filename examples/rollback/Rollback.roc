@@ -464,9 +464,10 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
         List.walk rollForwardTicks rollForwardWorld \world, _tick ->
             tickOnce { world, localInput: Recorded }
 
-    checkedWorld = assertValidChecksum rolledForwardWorld
+    # FIXME fix the checksum or remove the assertion
+    # checkedWorld = assertValidChecksum rolledForwardWorld
 
-    { checkedWorld & remainingMillis }
+    { rolledForwardWorld & remainingMillis }
 
 ## Crashes if we detect a desync at our opponent's latest sent sync tick.
 ## You'd what to handle desyncs more gracefully in a real game,

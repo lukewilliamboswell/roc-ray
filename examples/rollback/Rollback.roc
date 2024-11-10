@@ -308,12 +308,18 @@ updateSyncTick = \world ->
 
     { world & syncTick, syncTickSnapshot, snapshots }
 
+messageIncludesTick : FrameMessage, U64 -> Bool
+messageIncludesTick = \msg, tick ->
+    signedTick = Num.toI64 tick
+    msg.firstTick <= signedTick && msg.lastTick >= signedTick
+
 findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
-findMisprediction = \{ snapshots, remoteInputTicks }, (begin, end) ->
+findMisprediction = \{ snapshots, remoteMessages }, (begin, end) ->
     findMatch : Snapshot -> Result InputTick [NotFound]
-    findMatch = \snapshot ->
-        List.findLast remoteInputTicks \inputTick ->
-            inputTick.tick == snapshot.tick
+    findMatch = \snap ->
+        remoteMessages
+        |> NonEmptyList.findLast \msg -> messageIncludesTick msg snap.tick
+        |> Result.map \msg -> { tick: snap.tick, input: msg.input }
 
     misprediction : Result Snapshot [NotFound]
     misprediction =
@@ -405,24 +411,18 @@ tickOnce = \world, { localInput: newInput } ->
 predictRemoteInput : RecordedWorld, { tick : U64 } -> (Input, [Predicted, Confirmed])
 predictRemoteInput = \world, { tick } ->
     receivedInput =
-        world.remoteInputTicks
-        |> List.findLast \inputTick -> inputTick.tick == tick
-        |> Result.map \inputTick -> inputTick.input
+        world.remoteMessages
+        |> NonEmptyList.findLast \msg -> messageIncludesTick msg tick
+        |> Result.map \msg -> msg.input
 
     when receivedInput is
         # confirmed remote input
         Ok received -> (received, Confirmed)
         # must predict remote input
         Err NotFound ->
-            when (List.last world.remoteInputTicks, tick) is
-                # predict the last thing they did
-                (Ok last, _) -> (last.input, Predicted)
-                # predict idle on the first frame
-                (Err _, 0) -> (Input.blank, Predicted)
-                # crash if we incorrectly threw away their last input after the first frame
-                (Err _, _) ->
-                    crashInfo = internalShowCrashInfo world
-                    crash "predictRemoteInput: no remoteInputTicks after first tick:\n$(crashInfo)"
+            # predict the last thing they did
+            lastMessage = NonEmptyList.last world.remoteMessages
+            (lastMessage.input, Predicted)
 
 # ROLLBACK
 
@@ -458,24 +458,19 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
     fixedWorld =
         snapshots : NonEmptyList Snapshot
         snapshots = NonEmptyList.map wrongFutureWorld.snapshots \wrongFutureSnap ->
-            matchingInputTick = List.findFirst wrongFutureWorld.remoteInputTicks \inputTick ->
-                inputTick.tick == wrongFutureSnap.tick
+            matchingMessage =
+                NonEmptyList.findLast wrongFutureWorld.remoteMessages \msg ->
+                    messageIncludesTick msg wrongFutureSnap.tick
 
-            when matchingInputTick is
-                # we're ahead of them; our prediction is fake but not wrong yet
+            when matchingMessage is
+                # we're ahead of them; our previous prediction isn't wrong yet
                 Err NotFound -> wrongFutureSnap
-                # we found an actual input to overwrite out prediction with
-                # overwrite our prediction with whatever they actually did
-                Ok inputTick ->
-                    remoteInput = inputTick.input
-                    { wrongFutureSnap & remoteInput }
+                # we have a real remote input; overwrite our prediction with it
+                Ok { input: remoteInput } -> { wrongFutureSnap & remoteInput }
 
         remoteTick =
-            when List.last wrongFutureWorld.remoteInputTicks is
-                Ok last -> last.tick
-                Err ListWasEmpty ->
-                    crashInfo = internalShowCrashInfo wrongFutureWorld
-                    crash "no last input tick during roll forward: $(crashInfo)"
+            lastMessage = NonEmptyList.last wrongFutureWorld.remoteMessages
+            Num.toU64 lastMessage.lastTick
 
         lastSnapshot = NonEmptyList.last snapshots
 

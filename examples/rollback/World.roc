@@ -102,7 +102,7 @@ tick = \state, { timestampMillis, localInput, remoteInput } ->
 
     { localPlayer, remotePlayer }
 
-movePlayer : { pos : PixelVec }a, Intent -> { pos : PixelVec }a
+movePlayer : Player, Intent -> Player
 movePlayer = \player, intent ->
     { pos } = player
 

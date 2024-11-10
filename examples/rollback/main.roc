@@ -3,6 +3,13 @@ app [Model, init!, render!] {
     json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
 }
 
+### This is an example of using RocRay's matchbox networking integration for a peer-to-peer multiplayer game.
+### The Rollback module is based on pseudocode from the Guilty Gear Strive team.
+###
+### Matchbox WebRTC: https://github.com/johanhelsing/matchbox
+### GGST's Rollback Pseudocode: https://gist.github.com/rcmagic/f8d76bca32b5609e85ab156db38387e9
+### An explanation of fixed timestep: https://gafferongames.com/post/fix_your_timestep/
+
 import rr.RocRay exposing [Texture, Rectangle, PlatformState]
 import rr.Draw
 import rr.Texture
@@ -235,7 +242,23 @@ displayPeerConnections! = \{ connected, disconnected } ->
 
 sendHostWaiting! : RocRay.NetworkState => {}
 sendHostWaiting! = \network ->
-    sendFrameMessage! Rollback.waitingMessage network
+    waitingMessage : Rollback.FrameMessage
+    waitingMessage =
+        syncTickChecksum = World.positionsChecksum {
+            localPlayerPos: World.playerStart.pos,
+            remotePlayerPos: World.playerStart.pos,
+        }
+
+        {
+            firstTick: 0,
+            lastTick: 0,
+            tickAdvantage: 0,
+            input: Input.blank,
+            syncTick: 0,
+            syncTickChecksum,
+        }
+
+    sendFrameMessage! waitingMessage network
 
 sendFrameMessage! : Rollback.FrameMessage, RocRay.NetworkState => {}
 sendFrameMessage! = \message, network ->

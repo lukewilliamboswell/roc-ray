@@ -12,6 +12,7 @@ module [
     appendAll,
 ]
 
+## A List guaranteed to contain at least one item
 NonEmptyList a := Inner a
 
 Inner a : {
@@ -61,6 +62,8 @@ toList = \@NonEmptyList inner ->
     inner.list
     |> List.append inner.last
 
+## Drop items from the list matching a predicate
+## But keep the last item in the list regardless of whether it passes
 dropNonLastIf : NonEmptyList a, (a -> Bool) -> NonEmptyList a
 dropNonLastIf = \@NonEmptyList inner, shouldDrop ->
     list = List.dropIf inner.list shouldDrop

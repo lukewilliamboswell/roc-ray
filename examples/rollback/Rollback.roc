@@ -10,7 +10,6 @@ module [
     showCrashInfo,
     writableHistory,
     currentState,
-    waitingMessage,
 ]
 
 import rr.Network exposing [UUID]
@@ -40,7 +39,7 @@ Config : {
     tickAdvantageLimit : I64,
 }
 
-## a World with rollback and timestep related bookkeeping
+## a World with rollback and fixed timestep related bookkeeping
 RecordedWorld : {
     config : Config,
 
@@ -64,9 +63,9 @@ RecordedWorld : {
     ## the latest tick advantage received from the remote player
     remoteTickAdvantage : I64,
 
-    ## the recent history of received network messages (since syncTick)
+    ## the recent history of received network messages (since syncTick/remoteSyncTick)
     remoteMessages : NonEmptyList FrameMessage,
-    ## the recent history of snapshots (since syncTick)
+    ## the recent history of snapshots (since syncTick/remoteSyncTick)
     snapshots : NonEmptyList Snapshot,
 
     ## whether the simulation advanced this frame
@@ -139,8 +138,6 @@ FrameContext : {
 
 start : StartRecording -> Recording
 start = \{ firstMessage, state, config } ->
-    remoteMessages = NonEmptyList.new firstMessage
-
     checksum = World.checksum state
 
     initialSyncSnapshot : Snapshot
@@ -165,7 +162,7 @@ start = \{ firstMessage, state, config } ->
         remoteTickAdvantage: 0,
         state: state,
         snapshots: NonEmptyList.new initialSyncSnapshot,
-        remoteMessages,
+        remoteMessages: NonEmptyList.new firstMessage,
         blocked: Advancing,
         rollbackLog: [],
     }
@@ -173,12 +170,12 @@ start = \{ firstMessage, state, config } ->
     @Recording recording
 
 ## ticks the game state forward 0 or more times based on deltaMillis
-## returns a new game state and an optional network message to publish if necessary
+## returns a new game state and an optional network message to publish if the game state advanced
 advance : Recording, FrameContext -> (Recording, Result FrameMessage [Skipped, BlockedFor U64])
 advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
-        |> addRemoteInputs inbox
+        |> updateRemoteInputs inbox
         |> updateRemoteTicks
         |> updateSyncTick
         |> rollbackIfNecessary
@@ -227,8 +224,9 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
 
     (@Recording newWorld, outgoingMessage)
 
-addRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
-addRemoteInputs = \world, inbox ->
+## add new remote messages, and drop any older than sync ticks
+updateRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
+updateRemoteInputs = \world, inbox ->
     remoteMessages =
         newMessages = List.map inbox \peerMessage -> peerMessage.message
 
@@ -238,17 +236,15 @@ addRemoteInputs = \world, inbox ->
 
     { world & remoteMessages }
 
+## update remote ticks based on the latest received message
 updateRemoteTicks : RecordedWorld -> RecordedWorld
 updateRemoteTicks = \world ->
-    { remoteTick, remoteTickAdvantage, remoteSyncTick, remoteSyncTickChecksum } =
-        world.remoteMessages
-        |> NonEmptyList.last
-        |> \lastMessage -> {
-            remoteTick: Num.toU64 lastMessage.lastTick,
-            remoteTickAdvantage: lastMessage.tickAdvantage,
-            remoteSyncTick: Num.toU64 lastMessage.syncTick,
-            remoteSyncTickChecksum: lastMessage.syncTickChecksum,
-        }
+    lastMessage = NonEmptyList.last world.remoteMessages
+
+    remoteTick = Num.toU64 lastMessage.lastTick
+    remoteTickAdvantage = lastMessage.tickAdvantage
+    remoteSyncTick = Num.toU64 lastMessage.syncTick
+    remoteSyncTickChecksum = lastMessage.syncTickChecksum
 
     { world &
         remoteTick,
@@ -257,6 +253,8 @@ updateRemoteTicks = \world ->
         remoteSyncTickChecksum,
     }
 
+## moves forward the local syncTick to one tick before the earliest misprediction,
+## based on received remote inputs
 updateSyncTick : RecordedWorld -> RecordedWorld
 updateSyncTick = \world ->
     checkUpTo = Num.min world.tick world.remoteTick
@@ -396,8 +394,11 @@ predictRemoteInput = \{ world, tick } ->
 
 # ROLLBACK
 
+## if we had a misprediction,
+## rolls back and resimulates the game state with newly received remote inputs
 rollbackIfNecessary : RecordedWorld -> RecordedWorld
 rollbackIfNecessary = \world ->
+    # we need to roll back if both players have progressed since the last sync point
     shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
 
     if !shouldRollback then
@@ -465,8 +466,9 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
     { checkedWorld & remainingMillis }
 
-## crashes if we detect a desync at our opponent's latest sent sync tick
-## you'd what to handle desyncs more gracefully in a real game
+## Crashes if we detect a desync at our opponent's latest sent sync tick.
+## You'd what to handle desyncs more gracefully in a real game,
+## and might want to check for them periodically outside of rollback as well.
 assertValidChecksum : RecordedWorld -> RecordedWorld
 assertValidChecksum = \world ->
     { remoteSyncTick, remoteSyncTickChecksum } = world
@@ -592,18 +594,3 @@ internalWritableHistory = \{ snapshots } ->
     |> List.map writeSnapshot
     |> Str.joinWith "\n"
 
-waitingMessage : Rollback.FrameMessage
-waitingMessage =
-    syncTickChecksum = World.positionsChecksum {
-        localPlayerPos: World.playerStart.pos,
-        remotePlayerPos: World.playerStart.pos,
-    }
-
-    {
-        firstTick: 0,
-        lastTick: 0,
-        tickAdvantage: 0,
-        input: Input.blank,
-        syncTick: 0,
-        syncTickChecksum,
-    }

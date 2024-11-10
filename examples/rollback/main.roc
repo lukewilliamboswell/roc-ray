@@ -201,8 +201,8 @@ renderConnected! = \oldModel, state ->
         Skipped -> {}
         BlockedFor blockedFrames ->
             when blockedFrames is
-                f if f < 5 -> {}
-                f if f < 100 ->
+                f if f < 100 -> {}
+                f if f < 1000 ->
                     RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
                 _f ->

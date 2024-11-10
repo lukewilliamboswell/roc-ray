@@ -128,7 +128,7 @@ waitingToConnected! = \waiting, state, firstMessage ->
     config : Rollback.Config
     config = {
         millisPerTick: 1000 // 120,
-        maxRollbackTicks: 6,
+        maxRollbackTicks: 10,
         tickAdvantageLimit: 6,
     }
 

@@ -230,9 +230,11 @@ updateRemoteInputs = \world, inbox ->
     remoteMessages =
         newMessages = List.map inbox \peerMessage -> peerMessage.message
 
+        minSyncTick = Num.min world.syncTick world.remoteSyncTick
+
         world.remoteMessages
         |> NonEmptyList.appendAll newMessages
-        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 world.syncTick
+        |> NonEmptyList.dropNonLastIf \msg -> msg.lastTick < Num.toI64 minSyncTick
 
     { world & remoteMessages }
 

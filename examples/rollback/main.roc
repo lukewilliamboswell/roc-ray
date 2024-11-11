@@ -37,9 +37,12 @@ ConnectedModel : {
     timestampMillis : U64,
 }
 
+serverBaseUrl : Str
+serverBaseUrl = "ws://localhost:3536"
+
 init! : {} => Result Model _
 init! = \{} ->
-    serverUrl = "ws://localhost:3536/yolo?next=2"
+    serverUrl = "$(serverBaseUrl)/yolo?next=2"
 
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }

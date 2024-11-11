@@ -335,19 +335,19 @@ dropOldData = \world ->
 
     # avoid discarding received inputs newer than this minimum
     dropThreshold =
-        thresholds = [
+        [
             world.syncTick,
             world.remoteSyncTick,
             beforeLastGap,
             beforeMaxRollback,
             beforeTickAdvantageLimit,
         ]
-
-        List.walk thresholds Num.maxU64 Num.min
+        |> List.walk Num.maxU64 Num.min
 
     receivedInputs =
         NonEmptyList.dropNonLastIf world.receivedInputs \received ->
             received.inputTick < dropThreshold
+
     snapshots =
         NonEmptyList.dropNonLastIf world.snapshots \snap ->
             snap.tick < dropThreshold

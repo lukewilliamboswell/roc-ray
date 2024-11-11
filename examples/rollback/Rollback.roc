@@ -130,7 +130,6 @@ RollbackEvent : {
 
 ## named arguments for starting a recording
 StartRecording : {
-    firstMessage : FrameMessage,
     state : World,
     config : Config,
 }
@@ -143,9 +142,7 @@ FrameContext : {
 }
 
 start : StartRecording -> Recording
-start = \{ firstMessage: _, state, config } ->
-    # TODO use first message for input, or don't require it
-
+start = \{ state, config } ->
     checksum = World.checksum state
 
     initialSyncSnapshot : Snapshot

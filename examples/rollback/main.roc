@@ -110,8 +110,8 @@ renderWaiting! = \waiting, state ->
     joinMessage = List.last inbox
 
     when joinMessage is
-        Ok firstUpdate ->
-            waitingToConnected! waiting state firstUpdate
+        Ok _message ->
+            waitingToConnected! waiting state
 
         Err ListWasEmpty ->
             sendHostWaiting! state.network
@@ -124,12 +124,11 @@ renderWaiting! = \waiting, state ->
             drawWaiting! waiting
             Ok (Waiting waiting)
 
-waitingToConnected! : WaitingModel, PlatformState, Rollback.PeerMessage => Result Model []
-waitingToConnected! = \waiting, state, firstMessage ->
+waitingToConnected! : WaitingModel, PlatformState => Result Model []
+waitingToConnected! = \waiting, state ->
     world : Rollback.Recording
     world = Rollback.start {
         config: Config.rollback,
-        firstMessage: firstMessage.message,
         state: World.initial,
     }
 

@@ -100,6 +100,17 @@ drawConnected! = \{ dude, world }, state ->
         }
 
         # draw ui
+
+        when Rollback.desyncStatus world is
+            Synced -> {}
+            Desynced _ ->
+                Draw.text! {
+                    pos: { x: 10, y: Num.toF32 height - 50 },
+                    text: "DESYNC DETECTED",
+                    size: 16,
+                    color: Red,
+                }
+
         displayPeerConnections! state.network.peers
 
 renderWaiting! : WaitingModel, PlatformState => Result Model []

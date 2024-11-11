@@ -11,6 +11,7 @@ module [
     writableHistory,
     currentState,
     recentMessages,
+    desyncStatus,
 ]
 
 import rr.Network exposing [UUID]
@@ -33,6 +34,10 @@ recentMessages = \@Recording recording, n ->
     recording.outgoingMessages
     |> List.keepOks \res -> res
     |> List.takeLast n
+
+desyncStatus : Recording -> [Synced, Desynced DesyncBugReport]
+desyncStatus = \@Recording recording ->
+    recording.desync
 
 Config : {
     ## the milliseconds per simulation frame
@@ -85,6 +90,9 @@ RecordedWorld : {
     ## a record of rollback events for debugging purposes
     rollbackLog : List RollbackEvent,
     outgoingMessages : List PublishedMessage,
+
+    ## whether we've detected a desync with the remote player
+    desync : [Synced, Desynced DesyncBugReport],
 }
 
 ## the record of what happened on a previous simulation frame
@@ -178,6 +186,7 @@ start = \{ state, config } ->
         blocked: Advancing,
         rollbackLog: [],
         outgoingMessages: [],
+        desync: Synced,
     }
 
     @Recording recording
@@ -191,10 +200,11 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
         |> updateRemoteInputs inbox
-        |> updateRemoteMeta inbox
+        |> updateRemoteTicks inbox
         |> updateSyncTick
-        |> dropOldData
+        |> dropOldInputs
         |> rollbackIfNecessary
+        |> detectDesync
 
     newWorld : RecordedWorld
     newWorld =
@@ -298,8 +308,8 @@ updateRemoteInputs = \world, inbox ->
 
     { world & receivedInputs }
 
-dropOldData : RecordedWorld -> RecordedWorld
-dropOldData = \world ->
+dropOldInputs : RecordedWorld -> RecordedWorld
+dropOldInputs = \world ->
     beforeLastGap =
         initialState : [Empty, LastSeen U64]
         initialState = Empty
@@ -352,8 +362,8 @@ dropOldData = \world ->
     # TODO
     { world & receivedInputs, snapshots }
 
-updateRemoteMeta : RecordedWorld, List PeerMessage -> RecordedWorld
-updateRemoteMeta = \world, inbox ->
+updateRemoteTicks : RecordedWorld, List PeerMessage -> RecordedWorld
+updateRemoteTicks = \world, inbox ->
     # TODO
     # find the the temporally last message in the inbox
     # if empty, or if older than meta, keep current remote meta
@@ -580,16 +590,11 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
         List.walk rollForwardTicks rollForwardWorld \world, _tick ->
             tickOnce { world, localInput: Recorded }
 
-    # FIXME fix the checksum or remove the assertion
-    checkedWorld = assertValidChecksum rolledForwardWorld
+    { rolledForwardWorld & remainingMillis }
 
-    { checkedWorld & remainingMillis }
-
-## Crashes if we detect a desync at our opponent's latest sent sync tick.
-## You'd what to handle desyncs more gracefully in a real game,
-## and might want to check for them periodically outside of rollback as well.
-assertValidChecksum : RecordedWorld -> RecordedWorld
-assertValidChecksum = \world ->
+## Returns an error if we detect a desync at our opponent's latest sent sync tick.
+detectDesync : RecordedWorld -> RecordedWorld
+detectDesync = \world ->
     { remoteSyncTick, remoteSyncTickChecksum } = world
 
     localMatchingChecksum : Result I64 [NotFound]
@@ -600,26 +605,42 @@ assertValidChecksum = \world ->
 
     history = internalWritableHistory world
     crashInfo = internalShowCrashInfo world
-    receivedInputs = world.receivedInputs
-    checksums = (remoteSyncTickChecksum, localMatchingChecksum)
-    info = Inspect.toStr { remoteSyncTick, checksums, receivedInputs }
+
+    report : [Desync, MissingChecksum] -> DesyncBugReport
+    report = \kind -> {
+        kind,
+        remoteSyncTick,
+        remoteSyncTickChecksum,
+        localMatchingChecksum,
+        history,
+        crashInfo,
+    }
 
     when localMatchingChecksum is
         Ok local if local == remoteSyncTickChecksum ->
             # matching checksums; this is the normal/happy path
-            world
+            { world & desync: Synced }
 
         Ok _noMatch ->
             # Known wrong checksums indicate a desync,
             # which means unmanaged packet loss, a determinism bug, or cheating.
             # In a real game, you'd want to try to resolve missing inputs with request/response,
             # or end the match and kick both players to the launcher/lobby.
-            crash "different checksums for sync tick: $(info),\n$(crashInfo),\nhistory:\n$(history)"
+            { world & desync: Desynced (report Desync) }
 
         Err NotFound ->
             # we should hold on to snapshots long enough to avoid this
             # hitting this case indicates a bug
-            crash "missing local checksum in roll forward: $(info),\n$(crashInfo),\nhistory:\n$(history)"
+            { world & desync: Desynced (report MissingChecksum) }
+
+DesyncBugReport : {
+    kind : [Desync, MissingChecksum],
+    remoteSyncTick : U64,
+    remoteSyncTickChecksum : I64,
+    localMatchingChecksum : Result I64 [NotFound],
+    history : Str,
+    crashInfo : Str,
+}
 
 # DEBUG HELPERS
 

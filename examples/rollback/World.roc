@@ -59,8 +59,8 @@ initial = {
 
 playerStart : Player
 playerStart =
-    x = Pixel.fromParts { pixels: (width // 2) }
-    y = Pixel.fromParts { pixels: (height // 2) }
+    x = Pixel.fromPixels (width // 2)
+    y = Pixel.fromPixels (height // 2)
 
     {
         pos: { x, y },

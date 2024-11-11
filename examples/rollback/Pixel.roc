@@ -7,11 +7,11 @@ module [
     subpixelsPerPixel,
     fromParts,
     totalSubpixels,
+    fromPixels,
 ]
 
 import rr.RocRay exposing [Vector2]
 
-# TODO get rid of subpixels altogether
 # A 1-D integer position with a integer sub-pixel component
 # Use instead of floats to avoid rounding errors
 Pixel := { pixels : I64, subpixels : I64 }
@@ -53,23 +53,28 @@ totalSubpixels : Pixel -> I64
 totalSubpixels = \@Pixel px ->
     px.pixels * subpixelsPerPixel + px.subpixels
 
-fromParts : { pixels ? I64, subpixels ? I64 } -> Pixel
-fromParts = \{ pixels ? 0, subpixels ? 0 } ->
+fromPixels : I64 -> Pixel
+fromPixels = \pixels ->
+    fromParts { pixels, subpixels: 0 }
+
+fromParts : { pixels : I64, subpixels : I64 } -> Pixel
+fromParts = \{ pixels, subpixels } ->
     @Pixel { pixels, subpixels }
+    |> normalize
 
 pixelInspector : Pixel -> Inspector f where f implements InspectFormatter
 pixelInspector = \@Pixel px ->
     Inspect.str (Inspect.toStr px)
 
 expect
-    x = fromParts { pixels: 1 }
-    y = fromParts { pixels: 2 }
+    x = fromParts { pixels: 1, subpixels: 0 }
+    y = fromParts { pixels: 2, subpixels: 2 }
     vec = { x, y }
 
     inspected = Inspect.toStr vec
     expected =
         """
-        {x: "{pixels: 1, subpixels: 0}", y: "{pixels: 2, subpixels: 0}"}
+        {x: "{pixels: 1, subpixels: 0}", y: "{pixels: 2, subpixels: 2}"}
         """
 
     inspected == expected

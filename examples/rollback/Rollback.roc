@@ -626,7 +626,12 @@ detectDesync = \world ->
             # which means unmanaged packet loss, a determinism bug, or cheating.
             # In a real game, you'd want to try to resolve missing inputs with request/response,
             # or end the match and kick both players to the launcher/lobby.
-            { world & desync: Desynced (report Desync) }
+            desync =
+                when world.desync is
+                    Desynced previousReport -> Desynced previousReport
+                    _other -> Desynced (report Desync)
+
+            { world & desync }
 
         Err NotFound ->
             # we should hold on to snapshots long enough to avoid this

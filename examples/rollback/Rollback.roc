@@ -29,11 +29,11 @@ currentState : Recording -> World
 currentState = \@Recording recording ->
     recording.state
 
-recentMessages : Recording, U64 -> List FrameMessage
-recentMessages = \@Recording recording, n ->
+recentMessages : Recording -> List FrameMessage
+recentMessages = \@Recording recording ->
     recording.outgoingMessages
     |> List.keepOks \res -> res
-    |> List.takeLast n
+    |> List.takeLast recording.config.sendMostRecent
 
 desyncStatus : Recording -> [Synced, Desynced DesyncBugReport]
 desyncStatus = \@Recording recording ->
@@ -49,6 +49,8 @@ Config : {
     ## the configured frame advantage limit;
     ## a client further ahead of their opponent than this will block
     tickAdvantageLimit : I64,
+    ## how many recent frames of inputs to send each frame
+    sendMostRecent : U64,
 }
 
 ## a World with rollback and fixed timestep related bookkeeping

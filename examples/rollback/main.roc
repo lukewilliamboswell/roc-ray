@@ -191,7 +191,7 @@ renderConnected! = \oldModel, state ->
 
     model = { oldModel & world, timestampMillis }
 
-    messages = Rollback.recentMessages world 10
+    messages = Rollback.recentMessages world
     sendFrameMessages! messages network
 
     drawConnected! model state
@@ -332,13 +332,6 @@ worldToNetwork = \message -> {
     syncTick: message.syncTick,
     syncTickChecksum: message.syncTickChecksum,
 }
-
-# decodeSingleFrameMessage : RocRay.NetworkMessage -> Result Rollback.PeerMessage _
-# decodeSingleFrameMessage = \{ id, bytes } ->
-#     decodeResult : Result FrameMessageJson _
-#     decodeResult = Decode.fromBytes bytes Json.utf8
-#     Result.map decodeResult \json ->
-#         { id, message: networkToWorld json }
 
 # TODO REPLACE WITH BUILTIN
 forEach! : List a, (a => {}) => {}

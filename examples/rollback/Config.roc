@@ -10,4 +10,5 @@ rollback = {
     millisPerTick: 1000 // 120,
     maxRollbackTicks: 16,
     tickAdvantageLimit: 10,
+    sendMostRecent: 20,
 }

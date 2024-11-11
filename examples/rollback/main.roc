@@ -24,6 +24,7 @@ import Rollback
 import Pixel
 import Input
 import World
+import Config
 
 Model : [Waiting WaitingModel, Connected ConnectedModel]
 
@@ -37,12 +38,9 @@ ConnectedModel : {
     timestampMillis : U64,
 }
 
-serverBaseUrl : Str
-serverBaseUrl = "ws://localhost:3536"
-
 init! : {} => Result Model _
 init! = \{} ->
-    serverUrl = "$(serverBaseUrl)/yolo?next=2"
+    serverUrl = "$(Config.baseUrl)/yolo?next=2"
 
     RocRay.setTargetFPS! 120
     RocRay.displayFPS! { fps: Visible, pos: { x: 100, y: 100 } }
@@ -128,16 +126,9 @@ renderWaiting! = \waiting, state ->
 
 waitingToConnected! : WaitingModel, PlatformState, Rollback.PeerMessage => Result Model []
 waitingToConnected! = \waiting, state, firstMessage ->
-    config : Rollback.Config
-    config = {
-        millisPerTick: 1000 // 120,
-        maxRollbackTicks: 16,
-        tickAdvantageLimit: 10,
-    }
-
     world : Rollback.Recording
     world = Rollback.start {
-        config,
+        config: Config.rollback,
         firstMessage: firstMessage.message,
         state: World.initial,
     }

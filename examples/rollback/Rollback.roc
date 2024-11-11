@@ -12,6 +12,7 @@ module [
     currentState,
     recentMessages,
     desyncStatus,
+    blockStatus,
 ]
 
 import rr.Network exposing [UUID]
@@ -38,6 +39,10 @@ recentMessages = \@Recording recording ->
 desyncStatus : Recording -> [Synced, Desynced DesyncBugReport]
 desyncStatus = \@Recording recording ->
     recording.desync
+
+blockStatus : Recording -> _
+blockStatus = \@Recording recording ->
+    recording.blocked
 
 Config : {
     ## the milliseconds per simulation frame
@@ -197,7 +202,7 @@ PublishedMessage : Result FrameMessage [Skipped, BlockedFor U64]
 
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if the game state advanced
-advance : Recording, FrameContext -> (Recording, PublishedMessage)
+advance : Recording, FrameContext -> Recording
 advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     rollbackDone =
         oldWorld
@@ -238,7 +243,6 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
             Skipped -> Err Skipped
             # executed at least one tick
             Advancing ->
-                # TODO remove this from return?
                 frameMessage : FrameMessage
                 frameMessage = {
                     firstTick,
@@ -254,7 +258,7 @@ advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
     outgoingMessages =
         List.append newWorld.outgoingMessages outgoingMessage
 
-    (@Recording { newWorld & outgoingMessages }, outgoingMessage)
+    @Recording { newWorld & outgoingMessages }
 
 ReceivedInput : { receivedTick : U64, inputTick : U64, input : Input }
 
@@ -494,7 +498,6 @@ tickOnce = \{ world, localInput: inputSource } ->
 
 predictRemoteInput : { world : RecordedWorld, tick : U64 } -> Input
 predictRemoteInput = \{ world, tick } ->
-    # TODO why shoul
     # if the specific tick we want is missing, predict the last thing they did
     predictedInput =
         world.receivedInputs

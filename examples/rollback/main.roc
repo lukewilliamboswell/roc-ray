@@ -186,8 +186,8 @@ renderConnected! = \oldModel, state ->
     inbox = decodeFrameMessages network.messages
 
     localInput = Input.read state.keys
-    (world, outgoing) =
-        Rollback.advance oldModel.world { localInput, deltaMillis, inbox }
+
+    world = Rollback.advance oldModel.world { localInput, deltaMillis, inbox }
 
     model = { oldModel & world, timestampMillis }
 
@@ -196,21 +196,19 @@ renderConnected! = \oldModel, state ->
 
     drawConnected! model state
 
-    blockedWarning = 10
-    blockedCrash = 100
+    when Rollback.blockStatus world is
+        Advancing -> {}
+        Skipped -> {}
+        BlockedFor blockedFrames if blockedFrames < 50 ->
+            {}
 
-    when outgoing is
-        Ok _ -> {}
-        Err Skipped -> {}
-        Err (BlockedFor blockedFrames) ->
-            if blockedFrames < blockedWarning then
-                {}
-            else if blockedFrames < blockedCrash then
-                RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
-            else
-                crashInfo = Rollback.showCrashInfo world
-                history = Rollback.writableHistory world
-                crash "blocked world:\n$(crashInfo)\n$(history)"
+        BlockedFor blockedFrames if blockedFrames < 500 ->
+            RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
+
+        BlockedFor blockedFrames ->
+            crashInfo = Rollback.showCrashInfo world
+            history = Rollback.writableHistory world
+            crash "blocked world:\n$(crashInfo)\n$(history)"
 
     Ok (Connected model)
 

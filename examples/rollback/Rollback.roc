@@ -578,7 +578,7 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
 
     { rolledForwardWorld & remainingMillis }
 
-## Returns an error if we detect a desync at our opponent's latest sent sync tick.
+## Updates desync status if we detect a desync at our opponent's latest sent sync tick
 detectDesync : RecordedWorld -> RecordedWorld
 detectDesync = \world ->
     { remoteSyncTick, remoteSyncTickChecksum } = world

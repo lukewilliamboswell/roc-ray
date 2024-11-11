@@ -205,7 +205,7 @@ renderConnected! = \oldModel, state ->
         BlockedFor blockedFrames if blockedFrames < 500 ->
             RocRay.log! "Blocked for $(Inspect.toStr blockedFrames) frames" LogWarning
 
-        BlockedFor blockedFrames ->
+        BlockedFor _blockedFrames ->
             crashInfo = Rollback.showCrashInfo world
             history = Rollback.writableHistory world
             crash "blocked world:\n$(crashInfo)\n$(history)"
@@ -294,39 +294,27 @@ FrameMessageJson : {
     firstTick : I64,
     lastTick : I64,
     tickAdvantage : I64,
-    up : Bool,
-    down : Bool,
-    left : Bool,
-    right : Bool,
+    inputByte : I64,
     syncTick : I64,
     syncTickChecksum : I64,
 }
 
 networkToWorld : FrameMessageJson -> Rollback.FrameMessage
-networkToWorld = \json ->
-    up = if json.up then Down else Up
-    down = if json.down then Down else Up
-    left = if json.left then Down else Up
-    right = if json.right then Down else Up
-
-    {
-        firstTick: json.firstTick,
-        lastTick: json.lastTick,
-        tickAdvantage: json.tickAdvantage,
-        input: { up, down, left, right },
-        syncTick: json.syncTick,
-        syncTickChecksum: json.syncTickChecksum,
-    }
+networkToWorld = \json -> {
+    input: json.inputByte |> Num.toU8 |> Input.fromByte,
+    firstTick: json.firstTick,
+    lastTick: json.lastTick,
+    tickAdvantage: json.tickAdvantage,
+    syncTick: json.syncTick,
+    syncTickChecksum: json.syncTickChecksum,
+}
 
 worldToNetwork : Rollback.FrameMessage -> FrameMessageJson
 worldToNetwork = \message -> {
+    inputByte: message.input |> Input.toByte |> Num.toI64,
     firstTick: message.firstTick,
     lastTick: message.lastTick,
     tickAdvantage: message.tickAdvantage,
-    up: message.input.up == Down,
-    down: message.input.down == Down,
-    left: message.input.left == Down,
-    right: message.input.right == Down,
     syncTick: message.syncTick,
     syncTickChecksum: message.syncTickChecksum,
 }

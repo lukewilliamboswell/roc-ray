@@ -310,25 +310,15 @@ updateRemoteInputs = \world, inbox ->
 
 dropOldInputs : RecordedWorld -> RecordedWorld
 dropOldInputs = \world ->
-    beforeLastGap =
-        initialState : [Empty, LastSeen U64]
-        initialState = Empty
-
-        walked =
-            world.receivedInputs
-            |> NonEmptyList.toList
-            |> List.walkUntil initialState \state, received ->
-                when state is
-                    Empty -> Continue (LastSeen received.inputTick)
-                    LastSeen lastSeen ->
-                        if lastSeen + 1 == received.inputTick then
-                            Continue (LastSeen received.inputTick)
-                        else
-                            Break (LastSeen lastSeen)
-
-        when walked is
-            Empty -> crash "unreachable"
-            LastSeen lastSeen -> lastSeen
+    beforeFirstGap =
+        world.receivedInputs
+        |> NonEmptyList.walkUntil
+            \firstReceived -> Continue firstReceived.inputTick
+            \lastSeen, received ->
+                if lastSeen + 1 == received.inputTick then
+                    Continue received.inputTick
+                else
+                    Break lastSeen
 
     beforeMaxRollback =
         (Num.toI64 world.tick - world.config.maxRollbackTicks)
@@ -340,12 +330,12 @@ dropOldInputs = \world ->
         |> Num.max 0
         |> Num.toU64
 
-    # avoid discarding received inputs newer than this minimum
+    # avoid discarding any inputs past than this minimum tick
     dropThreshold =
         [
             world.syncTick,
             world.remoteSyncTick,
-            beforeLastGap,
+            beforeFirstGap,
             beforeMaxRollback,
             beforeTickAdvantageLimit,
         ]
@@ -359,15 +349,10 @@ dropOldInputs = \world ->
         NonEmptyList.dropNonLastIf world.snapshots \snap ->
             snap.tick < dropThreshold
 
-    # TODO
     { world & receivedInputs, snapshots }
 
 updateRemoteTicks : RecordedWorld, List PeerMessage -> RecordedWorld
 updateRemoteTicks = \world, inbox ->
-    # TODO
-    # find the the temporally last message in the inbox
-    # if empty, or if older than meta, keep current remote meta
-
     maybeLatest =
         inbox
         |> List.map .message
@@ -565,10 +550,6 @@ rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } 
                 Err NotFound -> wrongFutureSnap
                 Ok { input: remoteInput } -> { wrongFutureSnap & remoteInput }
 
-        # TODO is this necessary? or would it already be updated in the normal flow?
-        # remoteTick =
-        #     lastReceived = NonEmptyList.last wrongFutureWorld.receivedInputs
-        #     Num.toU64 lastReceived.inputTick
         remoteTick = wrongFutureWorld.remoteTick
         lastSnapshot = NonEmptyList.last snapshots
         syncTick = Num.min wrongFutureWorld.remoteTick lastSnapshot.tick

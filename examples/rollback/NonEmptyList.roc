@@ -13,6 +13,7 @@ module [
     updateNonLast,
     sortWith,
     fromList,
+    walkUntil,
 ]
 
 ## A List guaranteed to contain at least one item
@@ -115,3 +116,31 @@ sortWith = \nonEmpty, compare ->
             Ok item -> item
 
     @NonEmptyList { list: nonLast, last: lastItem }
+
+Step state : [Break state, Continue state]
+
+walkUntil : NonEmptyList item, (item -> Step state), (state, item -> Step state) -> state
+walkUntil = \nonEmpty, fromFirst, step ->
+    list = toList nonEmpty
+
+    WrappedState s : [Empty, SeenOne s]
+
+    wrappedInitial : WrappedState state
+    wrappedInitial = Empty
+
+    walked =
+        List.walkUntil list wrappedInitial \wrappedState, item ->
+            when wrappedState is
+                Empty ->
+                    when fromFirst item is
+                        Break s -> Break (SeenOne s)
+                        Continue s -> Continue (SeenOne s)
+
+                SeenOne state ->
+                    when step state item is
+                        Break s -> Break (SeenOne s)
+                        Continue s -> Continue (SeenOne s)
+
+    when walked is
+        Empty -> crash "unreachable"
+        SeenOne state -> state

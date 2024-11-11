@@ -103,10 +103,16 @@ drawConnected! = \{ dude, world }, state ->
 
         when Rollback.desyncStatus world is
             Synced -> {}
-            Desynced _ ->
+            Desynced report ->
+                text =
+                    tick = Inspect.toStr report.remoteSyncTick
+                    when report.kind is
+                        Desync -> "DESYNC DETECTED ON TICK: $(tick)"
+                        MissingChecksum -> "MISSING CHECKSUM FOR TICK: $(tick)"
+
                 Draw.text! {
+                    text,
                     pos: { x: 10, y: Num.toF32 height - 50 },
-                    text: "DESYNC DETECTED",
                     size: 16,
                     color: Red,
                 }

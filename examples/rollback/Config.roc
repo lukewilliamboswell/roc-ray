@@ -3,7 +3,7 @@ module [baseUrl, rollback]
 import Rollback
 
 baseUrl : Str
-baseUrl = "ws://localhost:3536"
+baseUrl = "wss://matchbox-10.fly.dev"
 
 rollback : Rollback.Config
 rollback = {

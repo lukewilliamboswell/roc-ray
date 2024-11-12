@@ -105,7 +105,7 @@ mod platform {
     ) {
         let (mut socket, mut loop_fut) = WebRtcSocket::builder(room_url)
             .reconnect_attempts(Some(3))
-            .add_reliable_channel()
+            .add_unreliable_channel()
             .build();
 
         let mut socket_update_interval =

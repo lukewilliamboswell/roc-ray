@@ -18,8 +18,8 @@ fn main() {
     // Get the roc ray target
     let target = RocRaySupportedTarget::default();
 
-    // Find required static libraries in the build cache or root directory
-    println!("cargo:rustc-link-search={}", out_dir.display());
+    // Find required libraries in the build cache
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
 
     // Get the roc app object file (ensure it exists)
     let app = get_roc_app_object(&target);
@@ -120,11 +120,11 @@ fn main() {
         }
         (RocRaySupportedTarget::Linux, AppType::Dynamic(app_so)) => {
             // Copy the app dylib to the build cache
-            let out_path = out_dir.join("libapp.so");
-            std::fs::copy(app_so, out_path).unwrap();
+            // let out_path = out_dir.join("libapp.so");
+            // std::fs::copy(app_so, out_path).unwrap();
 
-            // Add linking flags to make sure our symbols are visible to roc
-            println!("cargo:rustc-link-arg=-Wl,-export_dynamic");
+            // // Add linking flags to make sure our symbols are visible to roc
+            // println!("cargo:rustc-link-arg=-Wl,-export_dynamic");
 
             // Link with the app object file
             println!("cargo:rustc-link-lib=dylib=app");
@@ -195,12 +195,28 @@ fn get_roc_app_object(target: &RocRaySupportedTarget) -> AppType {
             }
         }
         RocRaySupportedTarget::Linux => {
+            // TODO come up with a new way to choose static linking
+            // since we need a .o for dynamic as well as static
+
             // Check if the app.o built by roc exists
             let app_o = manifest_dir().join("app.o");
             let app_so = manifest_dir().join("libapp.so");
             if app_o.exists() {
-                AppType::Static(app_o.to_path_buf())
+                let out_dir = std::env::var("OUT_DIR").unwrap();
+                let lib_app_out_path = Path::new(&out_dir).join("libapp.so");
+
+                let output = std::process::Command::new("ld")
+                    .args(&["-shared", "-o", &lib_app_out_path.to_string_lossy(), "app.o"])
+                    .output()
+                    .expect("Failed to execute linker command");
+
+                assert!(output.status.success(), "{output:#?}");
+                assert!(output.stdout.is_empty(), "{output:#?}");
+                assert!(output.stderr.is_empty(), "{output:#?}");
+
+                AppType::Dynamic(lib_app_out_path)
             } else if app_so.exists() {
+                // TODO remove/replace this
                 AppType::Dynamic(app_so.to_path_buf())
             } else {
                 panic!(

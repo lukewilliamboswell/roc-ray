@@ -62,7 +62,9 @@ pub(super) fn deinit_music_stream(c_ptr: *mut c_void) {
         let index_to_drop = streams
             .iter_mut()
             .enumerate()
-            .find(|(_index, roc_box)| {
+            .find(|(index, roc_box)| {
+                println!("index: {index:#?}");
+                println!("roc_box: {roc_box:#?}");
                 // TODO compare c_ptr against RocBox
                 true
             })
@@ -72,11 +74,17 @@ pub(super) fn deinit_music_stream(c_ptr: *mut c_void) {
         streams.swap_remove(index_to_drop)
     });
 
-    let music: &mut bindings::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(music_box);
+    println!("got music_box: {music_box:#?}");
+
+    let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(music_box);
+
+    println!("got music to drop");
 
     unsafe {
-        bindings::UnloadMusicStream(*music);
+        raylib::UnloadMusicStream(*music);
     }
+
+    println!("leaving deinit_music_stream");
 }
 
 pub fn update_music_streams() {

@@ -80,7 +80,8 @@ fn main() {
 
     #[cfg(not(target_family = "wasm"))]
     unsafe {
-        while !raylib::WindowShouldClose() {
+        while !raylib::WindowShouldClose() && !config::with(|c| c.should_exit)
+        {
             if let Some(msg_code) = config::with(|c| c.should_exit_msg_code.clone()) {
                 draw_fatal_error(msg_code);
             } else {

@@ -1,6 +1,6 @@
 app [Model, init!, render!] {
     rr: platform "../../platform/main.roc",
-    json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.10.2/FH4N0Sw-JSFXJfG3j54VEDPtXOoN-6I9v_IA8S18IGk.tar.br",
+    json: "https://github.com/lukewilliamboswell/roc-json/releases/download/0.11.0/z45Wzc-J39TLNweQUoLw3IGZtkQiEN3lTBv3BXErRjQ.tar.br",
 }
 
 ### This is an example of using RocRay's matchbox networking integration for a peer-to-peer multiplayer game.

@@ -35,22 +35,18 @@ dev app="examples/basic-shapes.roc" features="default":
 [linux]
 dev app="examples/basic-shapes.roc" features="default":
     # remove previous builds
-    rm -f app.o
-    rm -f rocray
+    rm -f *.o
+    rm -f *.so
 
     # roc check use 2 as an exit code for warnings
     roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
 
     # build once to ensure we have a dylib to link against
-    roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
+    roc build --lib --emit-llvm-ir --output libapp.so {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
 
     # build the host app
-    cargo build
+    cargo run --features {{features}}
 
-    # copy the app to the cwd directory
-    cp target/debug/rocray .
-
-    ./rocray
 
 # build and run an executable
 [windows]

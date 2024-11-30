@@ -56,35 +56,25 @@ pub fn alloc_music_stream(music: raylib::Music) -> Result<LoadedMusic, ()> {
 }
 
 pub(super) fn deinit_music_stream(c_ptr: *mut c_void) {
-    println!("deinit_music_stream");
-
     let music_box = MUSIC_STREAMS.with_borrow_mut(|streams| {
         let index_to_drop = streams
             .iter_mut()
             .enumerate()
-            .find(|(index, roc_box)| {
-                println!("index: {index:#?}");
-                println!("roc_box: {roc_box:#?}");
-                // TODO compare c_ptr against RocBox
-                true
+            .find(|(_index, roc_box)| {
+                let roc_box_ptr = unsafe { roc_box.as_refcount_ptr() };
+                roc_box_ptr == c_ptr
             })
-            .map(|(index, _stream)| index)
+            .map(|(index, _roc_box)| index)
             .expect("tried to free unrecognized music stream");
 
         streams.swap_remove(index_to_drop)
     });
 
-    println!("got music_box: {music_box:#?}");
-
     let music: &mut raylib::Music = ThreadSafeRefcountedResourceHeap::box_to_resource(music_box);
-
-    println!("got music to drop");
 
     unsafe {
         raylib::UnloadMusicStream(*music);
     }
-
-    println!("leaving deinit_music_stream");
 }
 
 pub fn update_music_streams() {

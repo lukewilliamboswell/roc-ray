@@ -45,7 +45,7 @@ render! = \model, { timestamp, keys, network } ->
             ""
 
     if !(Str.isEmpty message) then
-        forEach! network.peers.connected \peer ->
+        List.forEach! network.peers.connected \peer ->
             Str.toUtf8 message |> RocRay.sendToPeer! peer
     else
         {}
@@ -86,7 +86,7 @@ displayPeerConnections! = \{ connected, disconnected } ->
         size: 10,
         color: Black,
     }
-    |> forEach! Draw.text!
+    |> List.forEach! Draw.text!
 
 displayMessages! : List (TimeStampMillis, Network.UUID, Str) => {}
 displayMessages! = \messages ->
@@ -98,13 +98,4 @@ displayMessages! = \messages ->
         size: 10,
         color: Black,
     }
-    |> forEach! Draw.text!
-
-# TODO REPLACE WITH BUILTIN
-forEach! : List a, (a => {}) => {}
-forEach! = \l, f! ->
-    when l is
-        [] -> {}
-        [x, .. as xs] ->
-            f! x
-            forEach! xs f!
+    |> List.forEach! Draw.text!

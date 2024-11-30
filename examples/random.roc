@@ -1,17 +1,15 @@
 app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
-    time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
+    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.4.0/Ai2KfHOqOYXZmwdHX3g3ytbOUjTmZQmy0G2R9NuPBP0.tar.br",
 }
 
 import rr.RocRay exposing [Rectangle, Color]
 import rr.Keys
 import rr.Draw
 import rand.Random
-import time.DateTime
 
 Model : {
-    seed : Random.State U32,
+    seed : Random.State,
     number : U64,
 }
 
@@ -32,10 +30,9 @@ init! = \{} ->
 
 render! : Model, RocRay.PlatformState => Result Model []
 render! = \model, { keys, timestamp } ->
+    nowStr = Inspect.toStr timestamp.renderStart
 
-    nowStr = DateTime.fromNanosSinceEpoch (timestamp.renderStart * 1000) |> DateTime.toIsoStr
-
-    { seed, lines } = randomList model.seed (Random.u32 0 800) model.number
+    { seed, lines } = randomList model.seed (Random.boundedU32 0 800) model.number
 
     number =
         if Keys.down keys KeyUp then
@@ -47,7 +44,7 @@ render! = \model, { keys, timestamp } ->
 
     Draw.draw! Black \{} ->
 
-        Draw.text! { pos: { x: 10, y: 50 }, text: "DateTime $(nowStr)", size: 20, color: White }
+        Draw.text! { pos: { x: 10, y: 50 }, text: "RenderStart: $(nowStr)", size: 20, color: White }
 
         forEach! lines Draw.rectangle!
 
@@ -56,7 +53,7 @@ render! = \model, { keys, timestamp } ->
     Ok { model & seed, number }
 
 # Generate a list of lines using the seed and generator provided
-randomList : Random.State U32, Random.Generator U32 U32, U64 -> { seed : Random.State U32, lines : List { rect : Rectangle, color : Color } }
+randomList : Random.State, Random.Generator U32, U64 -> { seed : Random.State, lines : List { rect : Rectangle, color : Color } }
 randomList = \initialSeed, generator, number ->
     List.range { start: At 0, end: Before number }
     |> List.walk { seed: initialSeed, lines: [] } \state, _ ->

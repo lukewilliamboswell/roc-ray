@@ -153,12 +153,12 @@ drawGrid! = \{} ->
     # VERTICAL LINES
     List.range { start: At 0, end: At (screenWidth / playerSize) }
     |> List.map \i -> { start: { x: playerSize * i, y: 0 }, end: { x: playerSize * i, y: screenHeight }, color: lightGray }
-    |> forEach! Draw.line!
+    |> List.forEach! Draw.line!
 
     # HORIZONTAL LINES
     List.range { start: At 0, end: At (screenHeight / playerSize) }
     |> List.map \j -> { start: { x: 0, y: playerSize * j }, end: { x: screenWidth, y: playerSize * j }, color: lightGray }
-    |> forEach! Draw.line!
+    |> List.forEach! Draw.line!
 
     # GRID COORDINATES
     List.range { start: At 0, end: Before (screenWidth / playerSize) }
@@ -171,15 +171,7 @@ drawGrid! = \{} ->
             color: lightGray,
         }
     |> List.join
-    |> forEach! Draw.text!
+    |> List.forEach! Draw.text!
 
 lightGray = RGBA 200 200 200 255
 
-# TODO REPLACE WITH BUILTIN
-forEach! : List a, (a => {}) => {}
-forEach! = \l, f! ->
-    when l is
-        [] -> {}
-        [x, .. as xs] ->
-            f! x
-            forEach! xs f!

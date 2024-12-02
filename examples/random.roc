@@ -46,7 +46,7 @@ render! = \model, { keys, timestamp } ->
 
         Draw.text! { pos: { x: 10, y: 50 }, text: "RenderStart: $(nowStr)", size: 20, color: White }
 
-        forEach! lines Draw.rectangle!
+        List.forEach! lines Draw.rectangle!
 
         Draw.text! { pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
 
@@ -107,11 +107,3 @@ colorFromU32 = \u32 ->
     else
         White
 
-# TODO REPLACE WITH BUILTIN
-forEach! : List a, (a => {}) => {}
-forEach! = \l, f! ->
-    when l is
-        [] -> {}
-        [x, .. as xs] ->
-            f! x
-            forEach! xs f!

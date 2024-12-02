@@ -110,7 +110,7 @@ drawWorld! = \model ->
     Draw.rectangle! { rect: { x: -6000, y: 320, width: 13000, height: 8000 }, color: Gray }
 
     # BUILDINGS
-    forEach! model.buildings Draw.rectangle!
+    List.forEach! model.buildings Draw.rectangle!
 
     # PLAYER
     playerWidth = 40
@@ -195,12 +195,3 @@ limit = \value, { upper, lower } ->
         lower
     else
         value
-
-# TODO REPLACE WITH BUILTIN
-forEach! : List a, (a => {}) => {}
-forEach! = \l, f! ->
-    when l is
-        [] -> {}
-        [x, .. as xs] ->
-            f! x
-            forEach! xs f!

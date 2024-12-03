@@ -102,6 +102,7 @@ fn main() {
 
     // Now close the window
     unsafe {
+        raylib::CloseAudioDevice();
         raylib::CloseWindow();
     }
 }

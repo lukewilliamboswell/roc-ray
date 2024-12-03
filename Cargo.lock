@@ -1913,7 +1913,7 @@ dependencies = [
 [[package]]
 name = "roc_std"
 version = "0.0.1"
-source = "git+https://github.com/roc-lang/roc.git#589ec1d453643ea437817bda1b9d79b008477d37"
+source = "git+https://github.com/roc-lang/roc.git#d7825428df72e3685be7291284c5eeeb1300a7f6"
 dependencies = [
  "arrayvec",
  "static_assertions",
@@ -1922,7 +1922,7 @@ dependencies = [
 [[package]]
 name = "roc_std_heap"
 version = "0.0.1"
-source = "git+https://github.com/roc-lang/roc.git#589ec1d453643ea437817bda1b9d79b008477d37"
+source = "git+https://github.com/roc-lang/roc.git#d7825428df72e3685be7291284c5eeeb1300a7f6"
 dependencies = [
  "memmap2",
  "roc_std",

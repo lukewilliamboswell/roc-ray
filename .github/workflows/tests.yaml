@@ -57,6 +57,11 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source $HOME/.cargo/env
 
+      - name: Export Homebrew paths for roc
+        run: |
+          brew install z3 zstd
+          export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+
       - name: Install ROC
         run: |
           # Install ROC

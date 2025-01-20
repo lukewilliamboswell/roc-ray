@@ -3,7 +3,7 @@ platform "not-used"
     exposes []
     packages {}
     imports []
-    provides [mainForHost!]
+    provides [main_for_host!]
 
 import Effect
 
@@ -11,5 +11,5 @@ import Effect
 ## ```
 ## $ roc glue ../roc/crates/glue/src/RustGlue.roc asdf platform/glue.roc
 ## ```
-mainForHost! : {} => Effect.PlatformStateFromHost
-mainForHost! = \{} -> main
+main_for_host! : {} => Effect.PlatformStateFromHost
+main_for_host! = |{}| main

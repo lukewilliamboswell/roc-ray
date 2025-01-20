@@ -15,7 +15,7 @@ Buttons : {
 }
 
 up : ButtonState -> Bool
-up = \state ->
+up = |state|
     when state is
         Up -> true
         Released -> true
@@ -23,7 +23,7 @@ up = \state ->
         Pressed -> false
 
 down : ButtonState -> Bool
-down = \state ->
+down = |state|
     when state is
         Down -> true
         Pressed -> true
@@ -31,13 +31,13 @@ down = \state ->
         Released -> false
 
 pressed : ButtonState -> Bool
-pressed = \state ->
+pressed = |state|
     when state is
         Pressed -> true
         _ -> false
 
 released : ButtonState -> Bool
-released = \state ->
+released = |state|
     when state is
         Released -> true
         _ -> false

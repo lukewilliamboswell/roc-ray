@@ -1,7 +1,7 @@
 module [
     Time,
-    sleepMillis!,
-    toNanos,
+    sleep_millis!,
+    to_nanos,
 ]
 
 import Effect
@@ -18,9 +18,9 @@ import Effect
 ## ```
 Time : Effect.PlatformTime
 
-toNanos : U64 -> U64
-toNanos = \millis -> millis * 1_000_000
+to_nanos : U64 -> U64
+to_nanos = |millis| millis * 1_000_000
 
 ## Sleep the main thread for a given number of milliseconds.
-sleepMillis! : U64 => {}
-sleepMillis! = \millis -> Effect.sleepMillis! millis
+sleep_millis! : U64 => {}
+sleep_millis! = |millis| Effect.sleep_millis!(millis)

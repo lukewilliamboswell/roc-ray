@@ -7,53 +7,60 @@ import rr.Draw
 Model : {
     squares : List Rectangle,
     status : [Ready, AfterClick Vector2],
-    circlePos : Vector2,
+    circle_pos : Vector2,
 }
 
 width = 900
 height = 400
 
 init! : {} => Result Model []
-init! = \{} ->
+init! = |{}|
 
-    RocRay.initWindow! { title: "Squares Demo", width, height }
+    RocRay.init_window!({ title: "Squares Demo", width, height })
 
-    Ok {
-        circlePos: { x: width / 2, y: height / 2 },
-        squares: [],
-        status: Ready,
-    }
+    Ok(
+        {
+            circle_pos: { x: width / 2, y: height / 2 },
+            squares: [],
+            status: Ready,
+        },
+    )
 
 render! : Model, RocRay.PlatformState => Result Model []
-render! = \model, { keys, mouse } ->
+render! = |model, { keys, mouse }|
 
-    mousePos = mouse.position
+    mouse_pos = mouse.position
 
-    newCirclePos =
-        if Keys.down keys KeyUp then
-            { x: model.circlePos.x, y: model.circlePos.y - 10 }
-        else if Keys.down keys KeyDown then
-            { x: model.circlePos.x, y: model.circlePos.y + 10 }
-        else if Keys.down keys KeyLeft then
-            { x: model.circlePos.x - 10, y: model.circlePos.y }
-        else if Keys.down keys KeyRight then
-            { x: model.circlePos.x + 10, y: model.circlePos.y }
+    new_circle_pos =
+        if Keys.down(keys, KeyUp) then
+            { x: model.circle_pos.x, y: model.circle_pos.y - 10 }
+        else if Keys.down(keys, KeyDown) then
+            { x: model.circle_pos.x, y: model.circle_pos.y + 10 }
+        else if Keys.down(keys, KeyLeft) then
+            { x: model.circle_pos.x - 10, y: model.circle_pos.y }
+        else if Keys.down(keys, KeyRight) then
+            { x: model.circle_pos.x + 10, y: model.circle_pos.y }
         else
-            model.circlePos
+            model.circle_pos
 
-    Draw.draw! Black \{} ->
+    Draw.draw!(
+        Black,
+        |{}|
 
-        Draw.text! { pos: { x: width - 400, y: height - 25 }, text: "Mouse the mouse around the screen ...", size: 20, color: White }
+            Draw.text!({ pos: { x: width - 400, y: height - 25 }, text: "Mouse the mouse around the screen ...", size: 20, color: White })
 
-        Draw.text! {
-            pos: { x: 10, y: height - 25 },
-            text: "Mouse $(Num.toStr mousePos.x),$(Num.toStr mousePos.y)",
-            size: 20,
-            color: White,
-        }
+            Draw.text!(
+                {
+                    pos: { x: 10, y: height - 25 },
+                    text: "Mouse ${Num.to_str(mouse_pos.x)},${Num.to_str(mouse_pos.y)}",
+                    size: 20,
+                    color: White,
+                },
+            )
 
-        Draw.rectangle! { rect: { x: Num.toF32 mousePos.x - 10, y: Num.toF32 mousePos.y - 10, width: 20, height: 20 }, color: Red }
+            Draw.rectangle!({ rect: { x: Num.to_f32(mouse_pos.x) - 10, y: Num.to_f32(mouse_pos.y) - 10, width: 20, height: 20 }, color: Red })
 
-        Draw.circle! { center: model.circlePos, radius: 50, color: Aqua }
+            Draw.circle!({ center: model.circle_pos, radius: 50, color: Aqua }),
+    )
 
-    Ok { model & circlePos: newCirclePos }
+    Ok({ model & circle_pos: new_circle_pos })

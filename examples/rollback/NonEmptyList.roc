@@ -3,17 +3,17 @@ module [
     new,
     first,
     last,
-    findLast,
-    findFirst,
+    find_last,
+    find_first,
     map,
-    toList,
-    dropNonLastIf,
+    to_list,
+    drop_non_last_if,
     append,
-    appendAll,
-    updateNonLast,
-    sortWith,
-    fromList,
-    walkUntil,
+    append_all,
+    update_non_last,
+    sort_with,
+    from_list,
+    walk_until,
 ]
 
 ## A List guaranteed to contain at least one item
@@ -25,122 +25,130 @@ Inner a : {
 }
 
 new : a -> NonEmptyList a
-new = \item ->
-    @NonEmptyList { list: [], last: item }
+new = |item|
+    @NonEmptyList({ list: [], last: item })
 
 first : NonEmptyList a -> a
-first = \@NonEmptyList inner ->
-    when List.first inner.list is
-        Ok f -> f
-        Err ListWasEmpty -> inner.last
+first = |@NonEmptyList(inner)|
+    when List.first(inner.list) is
+        Ok(f) -> f
+        Err(ListWasEmpty) -> inner.last
 
 last : NonEmptyList a -> a
-last = \@NonEmptyList inner ->
+last = |@NonEmptyList(inner)|
     inner.last
 
-findLast : NonEmptyList a, (a -> Bool) -> Result a [NotFound]
-findLast = \@NonEmptyList inner, isMatch ->
-    if isMatch inner.last then
-        Ok inner.last
+find_last : NonEmptyList a, (a -> Bool) -> Result a [NotFound]
+find_last = |@NonEmptyList(inner), is_match|
+    if is_match(inner.last) then
+        Ok(inner.last)
     else
-        List.findLast inner.list isMatch
+        List.find_last(inner.list, is_match)
 
-findFirst : NonEmptyList a, (a -> Bool) -> Result a [NotFound]
-findFirst = \@NonEmptyList inner, isMatch ->
-    when List.findFirst inner.list isMatch is
-        Ok found -> Ok found
-        Err NotFound ->
-            if isMatch inner.last then
-                Ok inner.last
+find_first : NonEmptyList a, (a -> Bool) -> Result a [NotFound]
+find_first = |@NonEmptyList(inner), is_match|
+    when List.find_first(inner.list, is_match) is
+        Ok(found) -> Ok(found)
+        Err(NotFound) ->
+            if is_match(inner.last) then
+                Ok(inner.last)
             else
-                Err NotFound
+                Err(NotFound)
 
 map : NonEmptyList a, (a -> b) -> NonEmptyList b
-map = \@NonEmptyList inner, transform ->
-    newList = List.map inner.list transform
-    newLast = transform inner.last
-    @NonEmptyList { list: newList, last: newLast }
+map = |@NonEmptyList(inner), transform|
+    new_list = List.map(inner.list, transform)
+    new_last = transform(inner.last)
+    @NonEmptyList({ list: new_list, last: new_last })
 
-toList : NonEmptyList a -> List a
-toList = \@NonEmptyList inner ->
+to_list : NonEmptyList a -> List a
+to_list = |@NonEmptyList(inner)|
     inner.list
-    |> List.append inner.last
+    |> List.append(inner.last)
 
-fromList : List a -> Result (NonEmptyList a) [ListWasEmpty]
-fromList = \original ->
-    when List.last original is
-        Err ListWasEmpty -> Err ListWasEmpty
-        Ok lastItem ->
-            nonLast = List.dropLast original 1
-            Ok (@NonEmptyList { list: nonLast, last: lastItem })
+from_list : List a -> Result (NonEmptyList a) [ListWasEmpty]
+from_list = |original|
+    when List.last(original) is
+        Err(ListWasEmpty) -> Err(ListWasEmpty)
+        Ok(last_item) ->
+            non_last = List.drop_last(original, 1)
+            Ok(@NonEmptyList({ list: non_last, last: last_item }))
 
 ## Drop items from the list matching a predicate
 ## But keep the last item in the list regardless of whether it passes
-dropNonLastIf : NonEmptyList a, (a -> Bool) -> NonEmptyList a
-dropNonLastIf = \@NonEmptyList inner, shouldDrop ->
-    list = List.dropIf inner.list shouldDrop
-    @NonEmptyList { inner & list }
+drop_non_last_if : NonEmptyList a, (a -> Bool) -> NonEmptyList a
+drop_non_last_if = |@NonEmptyList(inner), should_drop|
+    list = List.drop_if(inner.list, should_drop)
+    @NonEmptyList({ inner & list })
 
-updateNonLast : NonEmptyList a, (List a -> List a) -> NonEmptyList a
-updateNonLast = \@NonEmptyList inner, update ->
-    list = update inner.list
-    @NonEmptyList { inner & list }
+update_non_last : NonEmptyList a, (List a -> List a) -> NonEmptyList a
+update_non_last = |@NonEmptyList(inner), update|
+    list = update(inner.list)
+    @NonEmptyList({ inner & list })
 
 append : NonEmptyList a, a -> NonEmptyList a
-append = \@NonEmptyList inner, item ->
-    @NonEmptyList {
-        last: item,
-        list: List.append inner.list inner.last,
-    }
+append = |@NonEmptyList(inner), item|
+    @NonEmptyList(
+        {
+            last: item,
+            list: List.append(inner.list, inner.last),
+        },
+    )
 
-appendAll : NonEmptyList a, List a -> NonEmptyList a
-appendAll = \@NonEmptyList inner, items ->
-    when List.last items is
-        Err ListWasEmpty -> @NonEmptyList inner
-        Ok newLast ->
-            newNonLast = List.takeFirst items (List.len items - 1)
-            @NonEmptyList {
-                last: newLast,
-                list: List.concat inner.list newNonLast,
-            }
+append_all : NonEmptyList a, List a -> NonEmptyList a
+append_all = |@NonEmptyList(inner), items|
+    when List.last(items) is
+        Err(ListWasEmpty) -> @NonEmptyList(inner)
+        Ok(new_last) ->
+            new_non_last = List.take_first(items, (List.len(items) - 1))
+            @NonEmptyList(
+                {
+                    last: new_last,
+                    list: List.concat(inner.list, new_non_last),
+                },
+            )
 
-sortWith : NonEmptyList a, (a, a -> [LT, EQ, GT]) -> NonEmptyList a
-sortWith = \nonEmpty, compare ->
-    fullList = toList nonEmpty
-    sorted = List.sortWith fullList compare
+sort_with : NonEmptyList a, (a, a -> [LT, EQ, GT]) -> NonEmptyList a
+sort_with = |non_empty, compare|
+    full_list = to_list(non_empty)
+    sorted = List.sort_with(full_list, compare)
 
-    nonLast = List.dropLast sorted 1
-    lastItem =
-        when List.last sorted is
-            Err _ -> crash "unreachable"
-            Ok item -> item
+    non_last = List.drop_last(sorted, 1)
+    last_item =
+        when List.last(sorted) is
+            Err(_) -> crash("unreachable")
+            Ok(item) -> item
 
-    @NonEmptyList { list: nonLast, last: lastItem }
+    @NonEmptyList({ list: non_last, last: last_item })
 
 Step state : [Break state, Continue state]
 
-walkUntil : NonEmptyList item, (item -> Step state), (state, item -> Step state) -> state
-walkUntil = \nonEmpty, fromFirst, step ->
-    list = toList nonEmpty
+walk_until : NonEmptyList item, (item -> Step state), (state, item -> Step state) -> state
+walk_until = |non_empty, from_first, step|
+    list = to_list(non_empty)
 
     WrappedState s : [Empty, SeenOne s]
 
-    wrappedInitial : WrappedState state
-    wrappedInitial = Empty
+    wrapped_initial : WrappedState state
+    wrapped_initial = Empty
 
     walked =
-        List.walkUntil list wrappedInitial \wrappedState, item ->
-            when wrappedState is
-                Empty ->
-                    when fromFirst item is
-                        Break s -> Break (SeenOne s)
-                        Continue s -> Continue (SeenOne s)
+        List.walk_until(
+            list,
+            wrapped_initial,
+            |wrapped_state, item|
+                when wrapped_state is
+                    Empty ->
+                        when from_first(item) is
+                            Break(s) -> Break(SeenOne(s))
+                            Continue(s) -> Continue(SeenOne(s))
 
-                SeenOne state ->
-                    when step state item is
-                        Break s -> Break (SeenOne s)
-                        Continue s -> Continue (SeenOne s)
+                    SeenOne(state) ->
+                        when step(state, item) is
+                            Break(s) -> Break(SeenOne(s))
+                            Continue(s) -> Continue(SeenOne(s)),
+        )
 
     when walked is
-        Empty -> crash "unreachable"
-        SeenOne state -> state
+        Empty -> crash("unreachable")
+        SeenOne(state) -> state

@@ -5,11 +5,26 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # the windows commands include a 'setup' recipe,
 # to download an unofficial windows build of roc
 
+[macos]
+dev app="examples/basic-shapes.roc" features="default":
+    # remove previous builds
+    rm -f app.o
+    rm -f libapp.dylib
+    rm -f rocray
+
+    # roc check use 2 as an exit code for warnings
+    roc check {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
+
+    # build once to ensure we have a dylib to link against
+    roc build --no-link --emit-llvm-ir --output app.o {{app}} || [ $? -eq 2 ] && exit 0 || exit 1
+
+    # build the host app
+    cargo run
 
 # watch an app and rebuild on any changes, ignoring warnings
 # run the app manually using ./rocray
 [macos]
-dev app="examples/basic-shapes.roc" features="default":
+watch app="examples/basic-shapes.roc" features="default":
     # remove previous builds
     rm -f app.o
     rm -f libapp.dylib

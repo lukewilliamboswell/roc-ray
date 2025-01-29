@@ -1,6 +1,6 @@
 app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.4.0/Ai2KfHOqOYXZmwdHX3g3ytbOUjTmZQmy0G2R9NuPBP0.tar.br",
+    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.5.0/yDUoWipuyNeJ-euaij4w_ozQCWtxCsywj68H0PlJAdE.tar.br",
 }
 
 import rr.RocRay exposing [Rectangle, Color]
@@ -114,4 +114,3 @@ color_from_u32 = |u32|
         Purple
     else
         White
-

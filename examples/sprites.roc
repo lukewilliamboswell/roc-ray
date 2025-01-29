@@ -21,7 +21,7 @@ init! = |{}|
     RocRay.set_target_fps!(60)
     RocRay.init_window!({ title: "Animated Sprite Example" })
 
-    dude = Texture.load!?("examples/assets/sprite-dude/sheet.png")
+    dude = Texture.load!("examples/assets/sprite-dude/sheet.png")?
 
     Ok(
         {

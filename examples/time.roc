@@ -1,6 +1,6 @@
 app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.2.2/cfMw9d_uxoqozMTg7Rvk-By3k1RscEDoR1sZIPVBRKQ.tar.br",
+    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.5.0/yDUoWipuyNeJ-euaij4w_ozQCWtxCsywj68H0PlJAdE.tar.br",
 }
 
 import rr.RocRay
@@ -9,7 +9,7 @@ import rr.Time
 import rand.Random
 
 Model : {
-    seed : Random.State U32,
+    seed : Random.State,
 }
 
 init! : {} => Result Model []
@@ -28,7 +28,7 @@ render! : Model, RocRay.PlatformState => Result Model []
 render! = |model, { timestamp }|
 
     # GENERATE A RANDOM NUMBER BETWEEN 0 AND 100 TO SLEEP FOR
-    { value, state: seed } = Random.step(model.seed, Random.u32(0, 100))
+    { value, state: seed } = Random.step(model.seed, Random.bounded_u32(0, 100))
 
     Time.sleep_millis!(Num.to_u64(value))
 

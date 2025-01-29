@@ -13,7 +13,7 @@ init! = |{}|
 
     RocRay.init_window!({ title: "Reload Text" })
 
-    message = RocRay.load_file_to_str!?("examples/assets/reload-text/message.txt")
+    message = RocRay.load_file_to_str!("examples/assets/reload-text/message.txt")?
 
     Ok({ message })
 
@@ -51,7 +51,7 @@ render! = |model, { mouse }|
     )
 
     if Mouse.pressed(mouse.buttons.left) and within(mouse.position, button_rect) then
-        message = RocRay.load_file_to_str!?("examples/assets/reload-text/message.txt")
+        message = RocRay.load_file_to_str!("examples/assets/reload-text/message.txt")?
         Ok({ message })
     else
         Ok(model)

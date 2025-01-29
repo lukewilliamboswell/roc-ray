@@ -1,7 +1,7 @@
 app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.3.0/hPlOciYUhWMU7BefqNzL89g84-30fTE6l2_6Y3cxIcE.tar.br",
-    time: "https://github.com/imclerran/roc-isodate/releases/download/v0.5.0/ptg0ElRLlIqsxMDZTTvQHgUSkNrUSymQaGwTfv0UEmk.tar.br",
+    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.5.0/yDUoWipuyNeJ-euaij4w_ozQCWtxCsywj68H0PlJAdE.tar.br",
+    time: "https://github.com/imclerran/roc-isodate/releases/download/v0.6.0/79DATSmwkFXMsS0dF7w1RTHeQCGwFNzh9zylic4Fw9w.tar.br",
 }
 
 import rr.RocRay exposing [Vector2, Rectangle, Color, Camera]
@@ -42,7 +42,7 @@ init! = |{}|
         zoom: 1,
     }
 
-    camera = Camera.create!?(camera_settings)
+    camera = Camera.create!(camera_settings)?
 
     buildings = generate_buildings
 
@@ -99,7 +99,7 @@ render! = |model, { mouse, keys }|
         |{}|
 
             # RENDER WORLD
-            Draw.with_mode2_d!(
+            Draw.with_mode_2d!(
                 model.camera,
                 |{}|
                     draw_world!(model),

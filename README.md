@@ -4,7 +4,7 @@
 
 We aim to provide a nice experience for the hobby developer or a small team who wants to build a game or graphical application in Roc.
 
-**Status** - Early development, not yet ready for production use. We are looking for contributors to help build out the platform and examples. If you find a bug or have a feature request, please open an issue or start a thread in the [roc zulip](https://roc.zulipchat.com/) where you can find us.
+**Status** - Early development, not yet ready for production use. If you find a bug or have a feature request, please open an issue or start a thread in the [roc zulip](https://roc.zulipchat.com/) where you can find us.
 
 ## Features
 

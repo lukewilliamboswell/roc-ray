@@ -13,7 +13,7 @@ init! = |{}|
 
     RocRay.init_window!({ title: "Basic Fonts", width: 900, height: 300 })
 
-    poppins = Font.load!?("examples/assets/Poppins-Regular.ttf")
+    poppins = Font.load!("examples/assets/Poppins-Regular.ttf")?
 
     Ok({ poppins })
 

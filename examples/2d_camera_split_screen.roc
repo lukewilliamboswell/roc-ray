@@ -78,7 +78,7 @@ render! = |model, { keys }|
         White,
         |{}|
 
-            Draw.with_mode2_d!(
+            Draw.with_mode_2d!(
                 model.camera_left,
                 |{}|
 
@@ -97,7 +97,7 @@ render! = |model, { keys }|
         White,
         |{}|
 
-            Draw.with_mode2_d!(
+            Draw.with_mode_2d!(
                 model.camera_right,
                 |{}|
 
@@ -203,4 +203,3 @@ draw_grid! = |{}|
     |> List.for_each!(Draw.text!)
 
 light_gray = RGBA(200, 200, 200, 255)
-

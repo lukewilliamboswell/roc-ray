@@ -1,14 +1,14 @@
-module [baseUrl, rollback]
+module [base_url, rollback]
 
 import Rollback
 
-baseUrl : Str
-baseUrl = "wss://matchbox-10.fly.dev"
+base_url : Str
+base_url = "wss://matchbox-10.fly.dev"
 
 rollback : Rollback.Config
 rollback = {
-    millisPerTick: 1000 // 120,
-    maxRollbackTicks: 16,
-    tickAdvantageLimit: 10,
-    sendMostRecent: 20,
+    millis_per_tick: 1000 // 120,
+    max_rollback_ticks: 16,
+    tick_advantage_limit: 10,
+    send_most_recent: 20,
 }

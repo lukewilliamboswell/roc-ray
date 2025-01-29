@@ -7,12 +7,12 @@ module [
     FrameContext,
     PeerMessage,
     FrameMessage,
-    showCrashInfo,
-    writableHistory,
-    currentState,
-    recentMessages,
-    desyncStatus,
-    blockStatus,
+    show_crash_info,
+    writable_history,
+    current_state,
+    recent_messages,
+    desync_status,
+    block_status,
 ]
 
 import rr.Network exposing [UUID]
@@ -26,36 +26,36 @@ import NonEmptyList exposing [NonEmptyList]
 
 Recording := RecordedWorld
 
-currentState : Recording -> World
-currentState = \@Recording recording ->
+current_state : Recording -> World
+current_state = |@Recording(recording)|
     recording.state
 
-recentMessages : Recording -> List FrameMessage
-recentMessages = \@Recording recording ->
-    recording.outgoingMessages
-    |> List.keepOks \res -> res
-    |> List.takeLast recording.config.sendMostRecent
+recent_messages : Recording -> List FrameMessage
+recent_messages = |@Recording(recording)|
+    recording.outgoing_messages
+    |> List.keep_oks(|res| res)
+    |> List.take_last(recording.config.send_most_recent)
 
-desyncStatus : Recording -> [Synced, Desynced DesyncBugReport]
-desyncStatus = \@Recording recording ->
+desync_status : Recording -> [Synced, Desynced DesyncBugReport]
+desync_status = |@Recording(recording)|
     recording.desync
 
-blockStatus : Recording -> _
-blockStatus = \@Recording recording ->
+block_status : Recording -> _
+block_status = |@Recording(recording)|
     recording.blocked
 
 Config : {
     ## the milliseconds per simulation frame
     ## ie, 1000 / the frame rate
-    millisPerTick : U64,
+    millis_per_tick : U64,
     ## the configured max rollback;
     ## a client with tick advantage >= this will block
-    maxRollbackTicks : I64,
+    max_rollback_ticks : I64,
     ## the configured frame advantage limit;
     ## a client further ahead of their opponent than this will block
-    tickAdvantageLimit : I64,
+    tick_advantage_limit : I64,
     ## how many recent frames of inputs to send each frame
-    sendMostRecent : U64,
+    send_most_recent : U64,
 }
 
 ## a World with rollback and fixed timestep related bookkeeping
@@ -65,26 +65,26 @@ RecordedWorld : {
     ## the live game state this frame
     state : World,
     ## the unspent milliseconds remaining after the last tick (or frame)
-    remainingMillis : U64,
+    remaining_millis : U64,
 
     ## the total number of simulation ticks so far
     tick : U64,
     ## the last tick where we synchronized with the remote player
-    syncTick : U64,
+    sync_tick : U64,
     ## the snapshot for our syncTick
-    syncTickSnapshot : Snapshot,
+    sync_tick_snapshot : Snapshot,
 
     ## the most recent tick received from the remote player
-    remoteTick : U64,
+    remote_tick : U64,
     ## the most recent syncTick received from remotePlayer
-    remoteSyncTick : U64,
+    remote_sync_tick : U64,
     ## the checksum remotePlayer sent with their most recent syncTick
-    remoteSyncTickChecksum : I64,
+    remote_sync_tick_checksum : I64,
     ## the latest tick advantage received from the remote player
-    remoteTickAdvantage : I64,
+    remote_tick_advantage : I64,
 
     ## the recent history of received network messages
-    receivedInputs : NonEmptyList ReceivedInput,
+    received_inputs : NonEmptyList ReceivedInput,
     ## the recent history of snapshots (since syncTick/remoteSyncTick)
     snapshots : NonEmptyList Snapshot,
 
@@ -95,8 +95,8 @@ RecordedWorld : {
     blocked : [Advancing, Skipped, BlockedFor U64],
 
     ## a record of rollback events for debugging purposes
-    rollbackLog : List RollbackEvent,
-    outgoingMessages : List PublishedMessage,
+    rollback_log : List RollbackEvent,
+    outgoing_messages : List PublishedMessage,
 
     ## whether we've detected a desync with the remote player
     desync : [Synced, Desynced DesyncBugReport],
@@ -109,9 +109,9 @@ Snapshot : {
     ## a hash or digest for comparing snapshots to detect desyncs
     checksum : I64,
     ## the remote player's input; this can be predicted or confirmed
-    remoteInput : Input,
+    remote_input : Input,
     ## the local player's input; this is always known and set in stone
-    localInput : Input,
+    local_input : Input,
     ## the previous game state to restore during a rollback
     state : World,
 }
@@ -122,15 +122,15 @@ FrameMessage : {
     ## the sender's local input for this range being broadcast
     input : Input,
     ## the first simulated tick
-    firstTick : I64,
+    first_tick : I64,
     ## the last simulated tick, inclusive
-    lastTick : I64,
+    last_tick : I64,
     ## how far ahead the sender is of their known remote inputs
-    tickAdvantage : I64,
+    tick_advantage : I64,
     ## the sender's most recent syncTick
-    syncTick : I64,
+    sync_tick : I64,
     ## the checksum for the sender's most recent syncTick
-    syncTickChecksum : I64,
+    sync_tick_checksum : I64,
 }
 
 PeerMessage : { id : UUID, message : FrameMessage }
@@ -138,9 +138,9 @@ PeerMessage : { id : UUID, message : FrameMessage }
 ## a rollback frame range recorded for debugging purposes
 RollbackEvent : {
     ## the syncTick we rolled back to
-    syncTick : U64,
+    sync_tick : U64,
     ## the current local tick we rolled forward to
-    currentTick : U64,
+    current_tick : U64,
 }
 
 ## named arguments for starting a recording
@@ -151,577 +151,615 @@ StartRecording : {
 
 ## information about the current frame required by Recording.advance
 FrameContext : {
-    localInput : Input,
-    deltaMillis : U64,
+    local_input : Input,
+    delta_millis : U64,
     inbox : List PeerMessage,
 }
 
 start : StartRecording -> Recording
-start = \{ state, config } ->
-    checksum = World.checksum state
+start = |{ state, config }|
+    checksum = World.checksum(state)
 
-    initialSyncSnapshot : Snapshot
-    initialSyncSnapshot = {
+    initial_sync_snapshot : Snapshot
+    initial_sync_snapshot = {
         tick: 0,
-        remoteInput: Input.blank,
-        localInput: Input.blank,
+        remote_input: Input.blank,
+        local_input: Input.blank,
         checksum,
         state,
     }
 
-    firstReceivedInput : ReceivedInput
-    firstReceivedInput = {
-        inputTick: 0,
-        receivedTick: 0,
+    first_received_input : ReceivedInput
+    first_received_input = {
+        input_tick: 0,
+        received_tick: 0,
         input: Input.blank,
     }
 
     recording : RecordedWorld
     recording = {
         config,
-        remainingMillis: 0,
+        remaining_millis: 0,
         tick: 0,
-        remoteTick: 0,
-        syncTick: 0,
-        syncTickSnapshot: initialSyncSnapshot,
-        remoteSyncTick: 0,
-        remoteSyncTickChecksum: checksum,
-        remoteTickAdvantage: 0,
+        remote_tick: 0,
+        sync_tick: 0,
+        sync_tick_snapshot: initial_sync_snapshot,
+        remote_sync_tick: 0,
+        remote_sync_tick_checksum: checksum,
+        remote_tick_advantage: 0,
         state: state,
-        snapshots: NonEmptyList.new initialSyncSnapshot,
-        receivedInputs: NonEmptyList.new firstReceivedInput,
+        snapshots: NonEmptyList.new(initial_sync_snapshot),
+        received_inputs: NonEmptyList.new(first_received_input),
         blocked: Advancing,
-        rollbackLog: [],
-        outgoingMessages: [],
+        rollback_log: [],
+        outgoing_messages: [],
         desync: Synced,
     }
 
-    @Recording recording
+    @Recording(recording)
 
 PublishedMessage : Result FrameMessage [Skipped, BlockedFor U64]
 
 ## ticks the game state forward 0 or more times based on deltaMillis
 ## returns a new game state and an optional network message to publish if the game state advanced
 advance : Recording, FrameContext -> Recording
-advance = \@Recording oldWorld, { localInput, deltaMillis, inbox } ->
-    rollbackDone =
-        oldWorld
-        |> updateRemoteInputs inbox
-        |> updateRemoteTicks inbox
-        |> updateSyncTick
-        |> dropOldInputs
-        |> rollbackIfNecessary
-        |> detectDesync
+advance = |@Recording(old_world), { local_input, delta_millis, inbox }|
+    rollback_done =
+        old_world
+        |> update_remote_inputs(inbox)
+        |> update_remote_ticks(inbox)
+        |> update_sync_tick
+        |> drop_old_inputs
+        |> rollback_if_necessary
+        |> detect_desync
 
-    newWorld : RecordedWorld
-    newWorld =
-        if timeSynced rollbackDone then
-            (updatedWorld, ticksTicked) =
-                normalUpdate rollbackDone { localInput, deltaMillis }
-            blocked = if ticksTicked == 0 then Skipped else Advancing
-            { updatedWorld & blocked }
+    new_world : RecordedWorld
+    new_world =
+        if time_synced(rollback_done) then
+            (updated_world, ticks_ticked) =
+                normal_update(rollback_done, { local_input, delta_millis })
+            blocked = if ticks_ticked == 0 then Skipped else Advancing
+            { updated_world & blocked }
         else
             # Block on remote updates
             blocked =
-                when rollbackDone.blocked is
-                    BlockedFor frames -> BlockedFor (frames + 1)
-                    Advancing | Skipped -> BlockedFor 1
+                when rollback_done.blocked is
+                    BlockedFor(frames) -> BlockedFor((frames + 1))
+                    Advancing | Skipped -> BlockedFor(1)
 
-            { rollbackDone & blocked }
+            { rollback_done & blocked }
 
-    firstTick = rollbackDone.tick + 1 |> Num.toI64
-    lastTick = newWorld.tick |> Num.toI64
-    tickAdvantage = Num.toI64 newWorld.tick - Num.toI64 newWorld.remoteTick
+    first_tick = rollback_done.tick + 1 |> Num.to_i64
+    last_tick = new_world.tick |> Num.to_i64
+    tick_advantage = Num.to_i64(new_world.tick) - Num.to_i64(new_world.remote_tick)
 
-    outgoingMessage : PublishedMessage
-    outgoingMessage =
-        when newWorld.blocked is
+    outgoing_message : PublishedMessage
+    outgoing_message =
+        when new_world.blocked is
             # blocking on remote input
-            BlockedFor n -> Err (BlockedFor n)
+            BlockedFor(n) -> Err(BlockedFor(n))
             # not enough millis for a timestep;
             # not blocked, but didn't do anything besides accumulate millis
-            Skipped -> Err Skipped
+            Skipped -> Err(Skipped)
             # executed at least one tick
             Advancing ->
-                frameMessage : FrameMessage
-                frameMessage = {
-                    firstTick,
-                    lastTick,
-                    tickAdvantage,
-                    input: localInput,
-                    syncTick: Num.toI64 newWorld.syncTick,
-                    syncTickChecksum: newWorld.syncTickSnapshot.checksum,
+                frame_message : FrameMessage
+                frame_message = {
+                    first_tick,
+                    last_tick,
+                    tick_advantage,
+                    input: local_input,
+                    sync_tick: Num.to_i64(new_world.sync_tick),
+                    sync_tick_checksum: new_world.sync_tick_snapshot.checksum,
                 }
 
-                Ok frameMessage
+                Ok(frame_message)
 
-    outgoingMessages =
-        List.append newWorld.outgoingMessages outgoingMessage
+    outgoing_messages =
+        List.append(new_world.outgoing_messages, outgoing_message)
 
-    @Recording { newWorld & outgoingMessages }
+    @Recording({ new_world & outgoing_messages })
 
-ReceivedInput : { receivedTick : U64, inputTick : U64, input : Input }
+ReceivedInput : { received_tick : U64, input_tick : U64, input : Input }
 
 ## add new remote messages, and drop any older than sync ticks
-updateRemoteInputs : RecordedWorld, List PeerMessage -> RecordedWorld
-updateRemoteInputs = \world, inbox ->
-    receivedTick = world.tick
+update_remote_inputs : RecordedWorld, List PeerMessage -> RecordedWorld
+update_remote_inputs = |world, inbox|
+    received_tick = world.tick
 
-    newReceivedInputs : List ReceivedInput
-    newReceivedInputs =
+    new_received_inputs : List ReceivedInput
+    new_received_inputs =
         inbox
-        |> List.map .message
-        |> List.joinMap \{ firstTick, lastTick, input } ->
-            tickRange = List.range { start: At firstTick, end: At lastTick }
-            List.map tickRange \tick ->
-                inputTick = Num.toU64 tick
-                { receivedTick, input, inputTick }
+        |> List.map(.message)
+        |> List.join_map(
+            |{ first_tick, last_tick, input }|
+                tick_range = List.range({ start: At(first_tick), end: At(last_tick) })
+                List.map(
+                    tick_range,
+                    |tick|
+                        input_tick = Num.to_u64(tick)
+                        { received_tick, input, input_tick },
+                ),
+        )
 
     # drop the older copies of duplicate ticks
     deduplicate : List ReceivedInput -> List ReceivedInput
-    deduplicate = \received ->
-        initialInputsByTick : Dict U64 ReceivedInput
-        initialInputsByTick = Dict.empty {}
+    deduplicate = |received|
+        initial_inputs_by_tick : Dict U64 ReceivedInput
+        initial_inputs_by_tick = Dict.empty({})
 
         received
-        |> List.walkBackwards initialInputsByTick \inputsByTick, recInput ->
-            Dict.update inputsByTick recInput.inputTick \entry ->
-                when entry is
-                    Err Missing -> Ok recInput
-                    Ok current ->
-                        newer = recInput.receivedTick > current.receivedTick
-                        Ok (if newer then recInput else current)
+        |> List.walk_backwards(
+            initial_inputs_by_tick,
+            |inputs_by_tick, rec_input|
+                Dict.update(
+                    inputs_by_tick,
+                    rec_input.input_tick,
+                    |entry|
+                        when entry is
+                            Err(Missing) -> Ok(rec_input)
+                            Ok(current) ->
+                                newer = rec_input.received_tick > current.received_tick
+                                Ok((if newer then rec_input else current)),
+                ),
+        )
         |> Dict.values
 
-    deduplicateNonEmpty : NonEmptyList ReceivedInput -> NonEmptyList ReceivedInput
-    deduplicateNonEmpty = \withDuplicates ->
+    deduplicate_non_empty : NonEmptyList ReceivedInput -> NonEmptyList ReceivedInput
+    deduplicate_non_empty = |with_duplicates|
         deduped =
-            withDuplicates
-            |> NonEmptyList.toList
+            with_duplicates
+            |> NonEmptyList.to_list
             |> deduplicate
-            |> NonEmptyList.fromList
+            |> NonEmptyList.from_list
 
         when deduped is
-            Err ListWasEmpty -> crash "empty list in received input deduplicate"
-            Ok nonEmpty -> nonEmpty
+            Err(ListWasEmpty) -> crash("empty list in received input deduplicate")
+            Ok(non_empty) -> non_empty
 
-    receivedInputs =
-        world.receivedInputs
-        |> NonEmptyList.appendAll newReceivedInputs
-        |> deduplicateNonEmpty
-        |> NonEmptyList.sortWith \left, right ->
-            Num.compare left.inputTick right.inputTick
+    received_inputs =
+        world.received_inputs
+        |> NonEmptyList.append_all(new_received_inputs)
+        |> deduplicate_non_empty
+        |> NonEmptyList.sort_with(
+            |left, right|
+                Num.compare(left.input_tick, right.input_tick),
+        )
 
-    { world & receivedInputs }
+    { world & received_inputs }
 
-dropOldInputs : RecordedWorld -> RecordedWorld
-dropOldInputs = \world ->
-    beforeFirstGap =
-        world.receivedInputs
-        |> NonEmptyList.walkUntil
-            \firstReceived -> Continue firstReceived.inputTick
-            \lastSeen, received ->
-                if lastSeen + 1 == received.inputTick then
-                    Continue received.inputTick
+drop_old_inputs : RecordedWorld -> RecordedWorld
+drop_old_inputs = |world|
+    before_first_gap =
+        world.received_inputs
+        |> NonEmptyList.walk_until(
+            |first_received| Continue(first_received.input_tick),
+            |last_seen, received|
+                if last_seen + 1 == received.input_tick then
+                    Continue(received.input_tick)
                 else
-                    Break lastSeen
+                    Break(last_seen),
+        )
 
-    beforeMaxRollback =
-        (Num.toI64 world.tick - world.config.maxRollbackTicks)
-        |> Num.max 0
-        |> Num.toU64
+    before_max_rollback =
+        (Num.to_i64(world.tick) - world.config.max_rollback_ticks)
+        |> Num.max(0)
+        |> Num.to_u64
 
-    beforeTickAdvantageLimit =
-        (Num.toI64 world.tick - world.config.tickAdvantageLimit)
-        |> Num.max 0
-        |> Num.toU64
+    before_tick_advantage_limit =
+        (Num.to_i64(world.tick) - world.config.tick_advantage_limit)
+        |> Num.max(0)
+        |> Num.to_u64
 
     # avoid discarding any inputs past than this minimum tick
-    dropThreshold =
+    drop_threshold =
         [
-            world.syncTick,
-            world.remoteSyncTick,
-            beforeFirstGap,
-            beforeMaxRollback,
-            beforeTickAdvantageLimit,
+            world.sync_tick,
+            world.remote_sync_tick,
+            before_first_gap,
+            before_max_rollback,
+            before_tick_advantage_limit,
         ]
-        |> List.walk Num.maxU64 Num.min
+        |> List.walk(Num.max_u64, Num.min)
 
-    receivedInputs =
-        NonEmptyList.dropNonLastIf world.receivedInputs \received ->
-            received.inputTick < dropThreshold
+    received_inputs =
+        NonEmptyList.drop_non_last_if(
+            world.received_inputs,
+            |received|
+                received.input_tick < drop_threshold,
+        )
 
     snapshots =
-        NonEmptyList.dropNonLastIf world.snapshots \snap ->
-            snap.tick < dropThreshold
+        NonEmptyList.drop_non_last_if(
+            world.snapshots,
+            |snap|
+                snap.tick < drop_threshold,
+        )
 
-    { world & receivedInputs, snapshots }
+    { world & received_inputs, snapshots }
 
-updateRemoteTicks : RecordedWorld, List PeerMessage -> RecordedWorld
-updateRemoteTicks = \world, inbox ->
-    maybeLatest =
+update_remote_ticks : RecordedWorld, List PeerMessage -> RecordedWorld
+update_remote_ticks = |world, inbox|
+    maybe_latest =
         inbox
-        |> List.map .message
-        |> List.sortWith \left, right -> Num.compare left.lastTick right.lastTick
+        |> List.map(.message)
+        |> List.sort_with(|left, right| Num.compare(left.last_tick, right.last_tick))
         |> List.last
 
-    when maybeLatest is
-        Err ListWasEmpty -> world
-        Ok outOfDate if Num.toU64 outOfDate.lastTick < world.remoteTick -> world
-        Ok latestMessage ->
-            remoteTick = Num.toU64 latestMessage.lastTick
-            remoteTickAdvantage = latestMessage.tickAdvantage
-            remoteSyncTick = Num.toU64 latestMessage.syncTick
-            remoteSyncTickChecksum = latestMessage.syncTickChecksum
+    when maybe_latest is
+        Err(ListWasEmpty) -> world
+        Ok(out_of_date) if Num.to_u64(out_of_date.last_tick) < world.remote_tick -> world
+        Ok(latest_message) ->
+            remote_tick = Num.to_u64(latest_message.last_tick)
+            remote_tick_advantage = latest_message.tick_advantage
+            remote_sync_tick = Num.to_u64(latest_message.sync_tick)
+            remote_sync_tick_checksum = latest_message.sync_tick_checksum
 
             { world &
-                remoteTick,
-                remoteTickAdvantage,
-                remoteSyncTick,
-                remoteSyncTickChecksum,
+                remote_tick,
+                remote_tick_advantage,
+                remote_sync_tick,
+                remote_sync_tick_checksum,
             }
 
 ## moves forward the local syncTick to one tick before the earliest misprediction,
 ## based on received remote inputs
-updateSyncTick : RecordedWorld -> RecordedWorld
-updateSyncTick = \world ->
-    checkUpTo = Num.min world.tick world.remoteTick
-    checkRange = (world.syncTick + 1, checkUpTo)
+update_sync_tick : RecordedWorld -> RecordedWorld
+update_sync_tick = |world|
+    check_up_to = Num.min(world.tick, world.remote_tick)
+    check_range = (world.sync_tick + 1, check_up_to)
 
-    beforeMisprediction : Result U64 [NotFound]
-    beforeMisprediction =
-        findMisprediction world checkRange
-        |> Result.map (\mispredictedTick -> mispredictedTick - 1)
+    before_misprediction : Result U64 [NotFound]
+    before_misprediction =
+        find_misprediction(world, check_range)
+        |> Result.map_ok(|mispredicted_tick| mispredicted_tick - 1)
 
-    syncTick =
-        Result.withDefault beforeMisprediction checkUpTo
+    sync_tick =
+        Result.with_default(before_misprediction, check_up_to)
 
     # syncTick should not move backwards
-    expect world.syncTick <= syncTick
+    expect world.sync_tick <= sync_tick
 
-    syncTickSnapshot =
-        when NonEmptyList.findLast world.snapshots \snap -> snap.tick == syncTick is
-            Ok snap -> snap
-            Err _ ->
-                crashInfo = internalShowCrashInfo world
-                crash "snapshot not found for new sync tick: $(Inspect.toStr syncTick)\n$(crashInfo)"
+    sync_tick_snapshot =
+        when NonEmptyList.find_last(world.snapshots, |snap| snap.tick == sync_tick) is
+            Ok(snap) -> snap
+            Err(_) ->
+                crash_info = internal_show_crash_info(world)
+                crash("snapshot not found for new sync tick: ${Inspect.to_str(sync_tick)}\n${crash_info}")
 
-    { world & syncTick, syncTickSnapshot }
+    { world & sync_tick, sync_tick_snapshot }
 
-findMisprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
-findMisprediction = \{ snapshots, receivedInputs }, (begin, end) ->
-    findMatch : Snapshot -> Result ReceivedInput [NotFound]
-    findMatch = \snap ->
-        NonEmptyList.findLast receivedInputs \received ->
-            received.inputTick == snap.tick
+find_misprediction : RecordedWorld, (U64, U64) -> Result U64 [NotFound]
+find_misprediction = |{ snapshots, received_inputs }, (begin, end)|
+    find_match : Snapshot -> Result ReceivedInput [NotFound]
+    find_match = |snap|
+        NonEmptyList.find_last(
+            received_inputs,
+            |received|
+                received.input_tick == snap.tick,
+        )
 
     misprediction : Result Snapshot [NotFound]
     misprediction =
         snapshots
-        |> NonEmptyList.toList
-        |> List.keepIf \snapshot -> snapshot.tick >= begin && snapshot.tick <= end
-        |> List.findFirst \snapshot ->
-            when findMatch snapshot is
-                Ok match -> match.input != snapshot.remoteInput
-                _ -> Bool.false
+        |> NonEmptyList.to_list
+        |> List.keep_if(|snapshot| snapshot.tick >= begin and snapshot.tick <= end)
+        |> List.find_first(
+            |snapshot|
+                when find_match(snapshot) is
+                    Ok(match) -> match.input != snapshot.remote_input
+                    _ -> Bool.false,
+        )
 
-    Result.map misprediction \m -> m.tick
+    Result.map_ok(misprediction, |m| m.tick)
 
 ## true if we're in sync enough with remote player to continue updates
-timeSynced : RecordedWorld -> Bool
-timeSynced = \{ config, tick, remoteTick, remoteTickAdvantage } ->
-    localTickAdvantage = Num.toI64 tick - Num.toI64 remoteTick
-    tickAdvantageDifference = localTickAdvantage - remoteTickAdvantage
-    localTickAdvantage < config.maxRollbackTicks && tickAdvantageDifference <= config.tickAdvantageLimit
+time_synced : RecordedWorld -> Bool
+time_synced = |{ config, tick, remote_tick, remote_tick_advantage }|
+    local_tick_advantage = Num.to_i64(tick) - Num.to_i64(remote_tick)
+    tick_advantage_difference = local_tick_advantage - remote_tick_advantage
+    local_tick_advantage < config.max_rollback_ticks and tick_advantage_difference <= config.tick_advantage_limit
 
 ## use as many physics ticks as the frame duration allows
-normalUpdate : RecordedWorld, { localInput : Input, deltaMillis : U64 } -> (RecordedWorld, U64)
-normalUpdate = \initialWorld, { localInput, deltaMillis } ->
-    millisToUse = initialWorld.remainingMillis + deltaMillis
-    tickingWorld = { initialWorld & remainingMillis: millisToUse }
-    useAllRemainingTime tickingWorld { localInput, ticksTicked: 0 }
+normal_update : RecordedWorld, { local_input : Input, delta_millis : U64 } -> (RecordedWorld, U64)
+normal_update = |initial_world, { local_input, delta_millis }|
+    millis_to_use = initial_world.remaining_millis + delta_millis
+    ticking_world = { initial_world & remaining_millis: millis_to_use }
+    use_all_remaining_time(ticking_world, { local_input, ticks_ticked: 0 })
 
-useAllRemainingTime : RecordedWorld, { localInput : Input, ticksTicked : U64 } -> (RecordedWorld, U64)
-useAllRemainingTime = \world, { localInput, ticksTicked } ->
-    if world.remainingMillis < world.config.millisPerTick then
-        (world, ticksTicked)
+use_all_remaining_time : RecordedWorld, { local_input : Input, ticks_ticked : U64 } -> (RecordedWorld, U64)
+use_all_remaining_time = |world, { local_input, ticks_ticked }|
+    if world.remaining_millis < world.config.millis_per_tick then
+        (world, ticks_ticked)
     else
-        tickedWorld = tickOnce { world, localInput: Fresh localInput }
-        useAllRemainingTime tickedWorld { localInput, ticksTicked: ticksTicked + 1 }
+        ticked_world = tick_once({ world, local_input: Fresh(local_input) })
+        use_all_remaining_time(ticked_world, { local_input, ticks_ticked: ticks_ticked + 1 })
 
-tickOnce : { world : RecordedWorld, localInput : [Fresh Input, Recorded] } -> RecordedWorld
-tickOnce = \{ world, localInput: inputSource } ->
+tick_once : { world : RecordedWorld, local_input : [Fresh Input, Recorded] } -> RecordedWorld
+tick_once = |{ world, local_input: input_source }|
     tick = world.tick + 1
-    timestampMillis = world.tick * world.config.millisPerTick
-    remainingMillis = world.remainingMillis - world.config.millisPerTick
+    timestamp_millis = world.tick * world.config.millis_per_tick
+    remaining_millis = world.remaining_millis - world.config.millis_per_tick
 
-    localInput : Input
-    localInput =
-        when inputSource is
+    local_input : Input
+    local_input =
+        when input_source is
             # we're executing a new, normal game tick
-            Fresh input -> input
+            Fresh(input) -> input
             # we're re-executing a previous tick in a roll forward
             # we need to avoid changing our inputs that have been sent to other players
             Recorded ->
-                when NonEmptyList.findLast world.snapshots \s -> s.tick == tick is
-                    Ok snap -> snap.localInput
-                    Err NotFound ->
-                        crashInfo = internalShowCrashInfo world
-                        crash "local input not found in roll forward:\n$(crashInfo)"
+                when NonEmptyList.find_last(world.snapshots, |s| s.tick == tick) is
+                    Ok(snap) -> snap.local_input
+                    Err(NotFound) ->
+                        crash_info = internal_show_crash_info(world)
+                        crash("local input not found in roll forward:\n${crash_info}")
 
-    remoteInput = predictRemoteInput { world, tick }
+    remote_input = predict_remote_input({ world, tick })
 
-    state = World.tick world.state { tick, timestampMillis, localInput, remoteInput }
+    state = World.tick(world.state, { tick, timestamp_millis, local_input, remote_input })
 
     snapshots =
-        checksum = World.checksum state
+        checksum = World.checksum(state)
 
         # NOTE:
         # We need to use our previously-sent localInput from above.
         # Changing our own recorded input would break our opponent's rollbacks.
         # But we do want to overwrite the rest of the snapshot if we're rolling forward.
-        newSnapshot : Snapshot
-        newSnapshot = { localInput, tick, remoteInput, checksum, state }
+        new_snapshot : Snapshot
+        new_snapshot = { local_input, tick, remote_input, checksum, state }
 
-        when inputSource is
-            Fresh _ -> NonEmptyList.append world.snapshots newSnapshot
+        when input_source is
+            Fresh(_) -> NonEmptyList.append(world.snapshots, new_snapshot)
             Recorded ->
-                NonEmptyList.map world.snapshots \snap ->
-                    if snap.tick != tick then snap else newSnapshot
+                NonEmptyList.map(
+                    world.snapshots,
+                    |snap|
+                        if snap.tick != tick then snap else new_snapshot,
+                )
 
     { world &
         state,
-        remainingMillis,
+        remaining_millis,
         tick,
         snapshots,
     }
 
-predictRemoteInput : { world : RecordedWorld, tick : U64 } -> Input
-predictRemoteInput = \{ world, tick } ->
+predict_remote_input : { world : RecordedWorld, tick : U64 } -> Input
+predict_remote_input = |{ world, tick }|
     # if the specific tick we want is missing, predict the last thing they did
-    predictedInput =
-        world.receivedInputs
-        |> NonEmptyList.findLast \received -> received.inputTick <= tick
-        |> Result.map .input
+    predicted_input =
+        world.received_inputs
+        |> NonEmptyList.find_last(|received| received.input_tick <= tick)
+        |> Result.map_ok(.input)
 
-    when predictedInput is
-        Err NotFound ->
+    when predicted_input is
+        Err(NotFound) ->
             # we need to hold onto old snapshots long enough to prevent this
-            crashInfo = internalShowCrashInfo world
-            crash "no input snapshot found for tick: $(Inspect.toStr tick)\n$(crashInfo)"
+            crash_info = internal_show_crash_info(world)
+            crash("no input snapshot found for tick: ${Inspect.to_str(tick)}\n${crash_info}")
 
-        Ok input -> input
+        Ok(input) -> input
 
 # ROLLBACK
 
 ## if we had a misprediction,
 ## rolls back and resimulates the game state with newly received remote inputs
-rollbackIfNecessary : RecordedWorld -> RecordedWorld
-rollbackIfNecessary = \world ->
+rollback_if_necessary : RecordedWorld -> RecordedWorld
+rollback_if_necessary = |world|
     # we need to roll back if both players have progressed since the last sync point
-    shouldRollback = world.tick > world.syncTick && world.remoteTick > world.syncTick
+    should_rollback = world.tick > world.sync_tick and world.remote_tick > world.sync_tick
 
-    if !shouldRollback then
+    if !should_rollback then
         world
     else
-        rollForwardRange = (world.syncTick, world.tick - 1) # inclusive
+        roll_forward_range = (world.sync_tick, world.tick - 1) # inclusive
 
-        rollbackEvent : RollbackEvent
-        rollbackEvent = { syncTick: world.syncTick, currentTick: world.tick - 1 }
+        rollback_event : RollbackEvent
+        rollback_event = { sync_tick: world.sync_tick, current_tick: world.tick - 1 }
 
-        restoredToSync =
+        restored_to_sync =
             { world &
-                tick: world.syncTick,
-                state: world.syncTickSnapshot.state,
-                rollbackLog: List.append world.rollbackLog rollbackEvent,
+                tick: world.sync_tick,
+                state: world.sync_tick_snapshot.state,
+                rollback_log: List.append(world.rollback_log, rollback_event),
             }
 
-        rollForwardFromSyncTick restoredToSync { rollForwardRange }
+        roll_forward_from_sync_tick(restored_to_sync, { roll_forward_range })
 
-rollForwardFromSyncTick : RecordedWorld, { rollForwardRange : (U64, U64) } -> RecordedWorld
-rollForwardFromSyncTick = \wrongFutureWorld, { rollForwardRange: (begin, end) } ->
+roll_forward_from_sync_tick : RecordedWorld, { roll_forward_range : (U64, U64) } -> RecordedWorld
+roll_forward_from_sync_tick = |wrong_future_world, { roll_forward_range: (begin, end) }|
     expect begin <= end
 
     # touch up the snapshots to have their 'predictions' match what happened
-    fixedWorld : RecordedWorld
-    fixedWorld =
+    fixed_world : RecordedWorld
+    fixed_world =
         snapshots : NonEmptyList Snapshot
-        snapshots = NonEmptyList.map wrongFutureWorld.snapshots \wrongFutureSnap ->
-            recentReceived =
-                NonEmptyList.findLast wrongFutureWorld.receivedInputs \received ->
-                    received.inputTick <= wrongFutureSnap.tick
+        snapshots = NonEmptyList.map(
+            wrong_future_world.snapshots,
+            |wrong_future_snap|
+                recent_received =
+                    NonEmptyList.find_last(
+                        wrong_future_world.received_inputs,
+                        |received|
+                            received.input_tick <= wrong_future_snap.tick,
+                    )
 
-            when recentReceived is
-                Err NotFound -> wrongFutureSnap
-                Ok { input: remoteInput } -> { wrongFutureSnap & remoteInput }
+                when recent_received is
+                    Err(NotFound) -> wrong_future_snap
+                    Ok({ input: remote_input }) -> { wrong_future_snap & remote_input },
+        )
 
-        remoteTick = wrongFutureWorld.remoteTick
-        lastSnapshot = NonEmptyList.last snapshots
-        syncTick = Num.min wrongFutureWorld.remoteTick lastSnapshot.tick
-        syncTickSnapshot =
-            when NonEmptyList.findLast snapshots \snap -> snap.tick == syncTick is
-                Ok snap -> snap
-                Err _ ->
-                    crashInfo = internalShowCrashInfo wrongFutureWorld
-                    crash "snapshot not found for new sync tick in roll forward fixup: $(Inspect.toStr syncTick)\n$(crashInfo)"
+        remote_tick = wrong_future_world.remote_tick
+        last_snapshot = NonEmptyList.last(snapshots)
+        sync_tick = Num.min(wrong_future_world.remote_tick, last_snapshot.tick)
+        sync_tick_snapshot =
+            when NonEmptyList.find_last(snapshots, |snap| snap.tick == sync_tick) is
+                Ok(snap) -> snap
+                Err(_) ->
+                    crash_info = internal_show_crash_info(wrong_future_world)
+                    crash("snapshot not found for new sync tick in roll forward fixup: ${Inspect.to_str(sync_tick)}\n${crash_info}")
 
-        { wrongFutureWorld & snapshots, remoteTick, syncTick, syncTickSnapshot }
+        { wrong_future_world & snapshots, remote_tick, sync_tick, sync_tick_snapshot }
 
-    remainingMillis = fixedWorld.remainingMillis
-    rollForwardWorld = { fixedWorld & remainingMillis: Num.maxU64 }
+    remaining_millis = fixed_world.remaining_millis
+    roll_forward_world = { fixed_world & remaining_millis: Num.max_u64 }
 
     # simulate every tick between syncTick and the present to catch up
-    rollForwardTicks = List.range { start: At begin, end: At end }
-    rolledForwardWorld =
-        List.walk rollForwardTicks rollForwardWorld \world, _tick ->
-            tickOnce { world, localInput: Recorded }
+    roll_forward_ticks = List.range({ start: At(begin), end: At(end) })
+    rolled_forward_world =
+        List.walk(
+            roll_forward_ticks,
+            roll_forward_world,
+            |world, _tick|
+                tick_once({ world, local_input: Recorded }),
+        )
 
-    { rolledForwardWorld & remainingMillis }
+    { rolled_forward_world & remaining_millis }
 
 ## Updates desync status if we detect a desync at our opponent's latest sent sync tick
-detectDesync : RecordedWorld -> RecordedWorld
-detectDesync = \world ->
-    { remoteSyncTick, remoteSyncTickChecksum } = world
+detect_desync : RecordedWorld -> RecordedWorld
+detect_desync = |world|
+    { remote_sync_tick, remote_sync_tick_checksum } = world
 
-    localMatchingChecksum : Result I64 [NotFound]
-    localMatchingChecksum =
+    local_matching_checksum : Result I64 [NotFound]
+    local_matching_checksum =
         world.snapshots
-        |> NonEmptyList.findLast \snap -> snap.tick == remoteSyncTick
-        |> Result.map \snap -> snap.checksum
+        |> NonEmptyList.find_last(|snap| snap.tick == remote_sync_tick)
+        |> Result.map_ok(|snap| snap.checksum)
 
-    history = internalWritableHistory world
-    crashInfo = internalShowCrashInfo world
+    history = internal_writable_history(world)
+    crash_info = internal_show_crash_info(world)
 
     report : [Desync, MissingChecksum] -> DesyncBugReport
-    report = \kind -> {
+    report = |kind| {
         kind,
-        remoteSyncTick,
-        remoteSyncTickChecksum,
-        localMatchingChecksum,
+        remote_sync_tick,
+        remote_sync_tick_checksum,
+        local_matching_checksum,
         history,
-        crashInfo,
+        crash_info,
     }
 
-    when localMatchingChecksum is
-        Ok local if local == remoteSyncTickChecksum ->
+    when local_matching_checksum is
+        Ok(local) if local == remote_sync_tick_checksum ->
             # matching checksums; this is the normal/happy path
             { world & desync: Synced }
 
-        Ok _noMatch ->
+        Ok(_noMatch) ->
             # Known wrong checksums indicate a desync,
             # which means unmanaged packet loss, a determinism bug, or cheating.
             # In a real game, you'd want to try to resolve missing inputs with request/response,
             # or end the match and kick both players to the launcher/lobby.
             desync =
                 when world.desync is
-                    Desynced previousReport -> Desynced previousReport
-                    _other -> Desynced (report Desync)
+                    Desynced(previous_report) -> Desynced(previous_report)
+                    _other -> Desynced(report(Desync))
 
             { world & desync }
 
-        Err NotFound ->
+        Err(NotFound) ->
             # we should hold on to snapshots long enough to avoid this
             # hitting this case indicates a bug
-            { world & desync: Desynced (report MissingChecksum) }
+            { world & desync: Desynced(report(MissingChecksum)) }
 
 DesyncBugReport : {
     kind : [Desync, MissingChecksum],
-    remoteSyncTick : U64,
-    remoteSyncTickChecksum : I64,
-    localMatchingChecksum : Result I64 [NotFound],
+    remote_sync_tick : U64,
+    remote_sync_tick_checksum : I64,
+    local_matching_checksum : Result I64 [NotFound],
     history : Str,
-    crashInfo : Str,
+    crash_info : Str,
 }
 
 # DEBUG HELPERS
 
-showCrashInfo : Recording -> Str
-showCrashInfo = \@Recording recordedState ->
-    internalShowCrashInfo recordedState
+show_crash_info : Recording -> Str
+show_crash_info = |@Recording(recorded_state)|
+    internal_show_crash_info(recorded_state)
 
-internalShowCrashInfo : RecordedWorld -> Str
-internalShowCrashInfo = \world ->
-    receivedInputsRange =
-        first = NonEmptyList.first world.receivedInputs |> .inputTick
-        last = NonEmptyList.last world.receivedInputs |> .inputTick
+internal_show_crash_info : RecordedWorld -> Str
+internal_show_crash_info = |world|
+    received_inputs_range =
+        first = NonEmptyList.first(world.received_inputs) |> .input_tick
+        last = NonEmptyList.last(world.received_inputs) |> .input_tick
         (first, last)
 
-    snapshotsRange =
-        first = NonEmptyList.first world.snapshots |> .tick
-        last = NonEmptyList.last world.snapshots |> .tick
+    snapshots_range =
+        first = NonEmptyList.first(world.snapshots) |> .tick
+        last = NonEmptyList.last(world.snapshots) |> .tick
         (first, last)
 
-    crashInfo = {
+    crash_info = {
         tick: world.tick,
-        remoteTick: world.remoteTick,
-        syncTick: world.syncTick,
-        syncTickSnapshot: world.syncTickSnapshot,
-        localPos: world.state.localPlayer.pos,
-        remotePos: world.state.remotePlayer.pos,
-        rollbackLog: world.rollbackLog,
-        receivedInputsRange,
-        snapshotsRange,
+        remote_tick: world.remote_tick,
+        sync_tick: world.sync_tick,
+        sync_tick_snapshot: world.sync_tick_snapshot,
+        local_pos: world.state.local_player.pos,
+        remote_pos: world.state.remote_player.pos,
+        rollback_log: world.rollback_log,
+        received_inputs_range,
+        snapshots_range,
     }
 
-    Inspect.toStr crashInfo
+    Inspect.to_str(crash_info)
 
 ## Creates a multi-line json log of snapshotted inputs.
 ## This allows creating diffable input logs from multiple clients when debugging.
-writableHistory : Recording -> Str
-writableHistory = \@Recording recordedState ->
-    internalWritableHistory recordedState
+writable_history : Recording -> Str
+writable_history = |@Recording(recorded_state)|
+    internal_writable_history(recorded_state)
 
-internalWritableHistory : RecordedWorld -> Str
-internalWritableHistory = \{ snapshots } ->
-    writeInput : Input -> Str
-    writeInput = \input ->
-        up = if input.up == Down then Ok "Up" else Err Up
-        down = if input.down == Down then Ok "Down" else Err Up
-        left = if input.left == Down then Ok "Left" else Err Up
-        right = if input.right == Down then Ok "Right" else Err Up
+internal_writable_history : RecordedWorld -> Str
+internal_writable_history = |{ snapshots }|
+    write_input : Input -> Str
+    write_input = |input|
+        up = if input.up == Down then Ok("Up") else Err(Up)
+        down = if input.down == Down then Ok("Down") else Err(Up)
+        left = if input.left == Down then Ok("Left") else Err(Up)
+        right = if input.right == Down then Ok("Right") else Err(Up)
 
         [up, down, left, right]
-        |> List.keepOks \res -> res
-        |> Str.joinWith ", "
-        |> \inputs -> "[$(inputs)]"
+        |> List.keep_oks(|res| res)
+        |> Str.join_with(", ")
+        |> |inputs| "[${inputs}]"
 
-    inputSnapshot : Snapshot -> _
-    inputSnapshot = \snap -> {
+    input_snapshot : Snapshot -> _
+    input_snapshot = |snap| {
         tick: snap.tick,
-        localInput: writeInput snap.localInput,
-        remoteInput: writeInput snap.remoteInput,
+        local_input: write_input(snap.local_input),
+        remote_input: write_input(snap.remote_input),
     }
 
-    positionSnapshot : Snapshot -> _
-    positionSnapshot = \snap -> {
+    position_snapshot : Snapshot -> _
+    position_snapshot = |snap| {
         tick: snap.tick,
-        localPos: Inspect.toStr snap.state.localPlayer.pos,
-        remotePos: Inspect.toStr snap.state.remotePlayer.pos,
+        local_pos: Inspect.to_str(snap.state.local_player.pos),
+        remote_pos: Inspect.to_str(snap.state.remote_player.pos),
     }
 
-    toUtf8Unchecked = \bytes ->
-        when Str.fromUtf8 bytes is
-            Ok str -> str
-            Err _ -> crash "toUtf8Unchecked"
+    to_utf8_unchecked = |bytes|
+        when Str.from_utf8(bytes) is
+            Ok(str) -> str
+            Err(_) -> crash("toUtf8Unchecked")
 
-    writeSnapshot : Snapshot -> Str
-    writeSnapshot = \snap ->
-        inputJson =
+    write_snapshot : Snapshot -> Str
+    write_snapshot = |snap|
+        input_json =
             snap
-            |> inputSnapshot
-            |> Encode.toBytes Json.utf8
-            |> toUtf8Unchecked
+            |> input_snapshot
+            |> Encode.to_bytes(Json.utf8)
+            |> to_utf8_unchecked
 
-        positionJson =
+        position_json =
             snap
-            |> positionSnapshot
-            |> Encode.toBytes Json.utf8
-            |> toUtf8Unchecked
+            |> position_snapshot
+            |> Encode.to_bytes(Json.utf8)
+            |> to_utf8_unchecked
 
-        "$(inputJson)\n$(positionJson)"
+        "${input_json}\n${position_json}"
 
     snapshots
-    |> NonEmptyList.toList
-    |> List.map writeSnapshot
-    |> Str.joinWith "\n"
-
+    |> NonEmptyList.to_list
+    |> List.map(write_snapshot)
+    |> Str.join_with("\n")

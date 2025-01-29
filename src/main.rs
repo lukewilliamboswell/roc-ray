@@ -396,7 +396,7 @@ extern "C" fn roc_fx_draw_circle_gradient(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_draw_rectangle_gradientV(
+extern "C" fn roc_fx_draw_rectangle_gradient_v(
     rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
@@ -413,7 +413,7 @@ extern "C" fn roc_fx_draw_rectangle_gradientV(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_draw_rectangle_gradientH(
+extern "C" fn roc_fx_draw_rectangle_gradient_h(
     rect: &glue::RocRectangle,
     left: glue::RocColor,
     right: glue::RocColor,
@@ -599,7 +599,7 @@ extern "C" fn roc_fx_begin_mode_2d(boxed_camera: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_end_mode2d(_boxed_camera: RocBox<()>) {
+extern "C" fn roc_fx_end_mode_2d(_boxed_camera: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }

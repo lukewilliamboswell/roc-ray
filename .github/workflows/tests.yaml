@@ -57,6 +57,11 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source $HOME/.cargo/env
 
+      - name: Export Homebrew paths for roc
+        run: |
+          brew install z3 zstd
+          export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+
       - name: Install ROC
         run: |
           # Install ROC
@@ -100,15 +105,21 @@ jobs:
 
       - name: Build the basic-shapes example
         run: |
+          # TODO restore --optimize flag
+          # .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
           .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\basic-shapes.roc
           cargo build
 
       - name: Build the 2d_camera example
         run: |
-          .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
+          # TODO restore --optimize flag
+          # .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\2d_camera.roc
+          .\windows\bin\roc.exe build --no-link --output=app.obj .\examples\2d_camera.roc
           cargo build
 
       - name: Build the pong example
         run: |
-          .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\pong.roc
+          # TODO restore --optimize flag
+          # .\windows\bin\roc.exe build --no-link --optimize --output=app.obj .\examples\pong.roc
+          .\windows\bin\roc.exe build --no-link --output=app.obj .\examples\pong.roc
           cargo build

@@ -2,15 +2,15 @@ module [
     draw!,
     text!,
     line!,
-    withMode2D!,
-    withTexture!,
+    with_mode_2d!,
+    with_texture!,
     rectangle!,
-    rectangleGradientV!,
-    rectangleGradientH!,
+    rectangle_gradient_v!,
+    rectangle_gradient_h!,
     circle!,
-    circleGradient!,
-    textureRec!,
-    renderTextureRec!,
+    circle_gradient!,
+    texture_rec!,
+    render_texture_rec!,
 ]
 
 import Effect
@@ -26,12 +26,12 @@ import RocRay exposing [Texture, Camera, Color, Vector2, Rectangle, RenderTextur
 ##     Draw.rectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
 ## ```
 draw! : Color, ({} => {}) => {}
-draw! = \color, cmd! ->
-    Effect.beginDrawing! (rgba color)
+draw! = |color, cmd!|
+    Effect.begin_drawing!(rgba(color))
 
-    cmd! {}
+    cmd!({})
 
-    Effect.endDrawing! {}
+    Effect.end_drawing!({})
 
 ## Draw a 2D scene using a camera perspective.
 ## ```
@@ -45,89 +45,89 @@ draw! = \color, cmd! ->
 ##     # RENDER SCREEN UI
 ##     drawScreenUI!
 ## ```
-withMode2D! : Camera, ({} => {}) => {}
-withMode2D! = \camera, cmd! ->
-    Effect.beginMode2D! camera
+with_mode_2d! : Camera, ({} => {}) => {}
+with_mode_2d! = |camera, cmd!|
+    Effect.begin_mode_2d!(camera)
 
-    cmd! {}
+    cmd!({})
 
-    Effect.endMode2D! camera
+    Effect.end_mode_2d!(camera)
 
 ## Draw to a render texture. Takes a color to clear the texture with.
-withTexture! : RenderTexture, Color, ({} => {}) => {}
-withTexture! = \texture, color, cmd! ->
-    Effect.beginTexture! texture (rgba color)
+with_texture! : RenderTexture, Color, ({} => {}) => {}
+with_texture! = |texture, color, cmd!|
+    Effect.begin_texture!(texture, rgba(color))
 
-    cmd! {}
+    cmd!({})
 
-    Effect.endTexture! texture
+    Effect.end_texture!(texture)
 
 ## Draw text on the screen using the default font.
-text! : { font ? Font, pos : { x : F32, y : F32 }, text : Str, size ? F32, spacing ? F32, color ? Color } => {}
-text! = \{ font ? Default, text: t, pos, size ? 20, spacing ? 1, color ? RGBA 0 0 0 255 } ->
+text! : { font ?? Font, pos : { x : F32, y : F32 }, text : Str, size ?? F32, spacing ?? F32, color ?? Color } => {}
+text! = |{ font ?? Default, text: t, pos, size ?? 20, spacing ?? 1, color ?? RGBA(0, 0, 0, 255) }|
     when font is
-        Default -> Effect.drawText! t (InternalVector.fromVector2 pos) size spacing (rgba color)
-        Loaded boxed -> Effect.drawTextFont! boxed t (InternalVector.fromVector2 pos) size spacing (rgba color)
+        Default -> Effect.draw_text!(t, InternalVector.from_vector2(pos), size, spacing, rgba(color))
+        Loaded(boxed) -> Effect.draw_text_font!(boxed, t, InternalVector.from_vector2(pos), size, spacing, rgba(color))
 
 ## Draw a line on the screen.
 ## ```
 ## Draw.line! { start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }
 ## ```
 line! : { start : Vector2, end : Vector2, color : Color } => {}
-line! = \{ start, end, color } ->
-    Effect.drawLine! (InternalVector.fromVector2 start) (InternalVector.fromVector2 end) (rgba color)
+line! = |{ start, end, color }|
+    Effect.draw_line!(InternalVector.from_vector2(start), InternalVector.from_vector2(end), rgba(color))
 
 ## Draw a rectangle on the screen.
 ## ```
 ## Draw.rectangle! { rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua }
 ## ```
 rectangle! : { rect : Rectangle, color : Color } => {}
-rectangle! = \{ rect, color } ->
-    Effect.drawRectangle! (InternalRectangle.fromRect rect) (rgba color)
+rectangle! = |{ rect, color }|
+    Effect.draw_rectangle!(InternalRectangle.from_rect(rect), rgba(color))
 
 ## Draw a rectangle with a vertical-gradient fill on the screen.
 ## ```
 ## Draw.rectangleGradientV! { rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green }
 ## ```
-rectangleGradientV! : { rect : Rectangle, top : Color, bottom : Color } => {}
-rectangleGradientV! = \{ rect, top, bottom } ->
+rectangle_gradient_v! : { rect : Rectangle, top : Color, bottom : Color } => {}
+rectangle_gradient_v! = |{ rect, top, bottom }|
 
-    tc = rgba top
-    bc = rgba bottom
+    tc = rgba(top)
+    bc = rgba(bottom)
 
-    Effect.drawRectangleGradientV! (InternalRectangle.fromRect rect) tc bc
+    Effect.draw_rectangle_gradient_v!(InternalRectangle.from_rect(rect), tc, bc)
 
 ## Draw a rectangle with a horizontal-gradient fill on the screen.
 ## ```
 ## Draw.rectangleGradientH! { rect: { x: 400, y: 150, width: 250, height: 100 }, top: Lime, bottom: Navy }
 ## ```
-rectangleGradientH! : { rect : Rectangle, left : Color, right : Color } => {}
-rectangleGradientH! = \{ rect, left, right } ->
+rectangle_gradient_h! : { rect : Rectangle, left : Color, right : Color } => {}
+rectangle_gradient_h! = |{ rect, left, right }|
 
-    lc = rgba left
-    rc = rgba right
+    lc = rgba(left)
+    rc = rgba(right)
 
-    Effect.drawRectangleGradientH! (InternalRectangle.fromRect rect) lc rc
+    Effect.draw_rectangle_gradient_h!(InternalRectangle.from_rect(rect), lc, rc)
 
 ## Draw a circle on the screen.
 ## ```
 ## Draw.circle! { center: { x: 200, y: 400 }, radius: 75, color: Fuchsia }
 ## ```
 circle! : { center : Vector2, radius : F32, color : Color } => {}
-circle! = \{ center, radius, color } ->
-    Effect.drawCircle! (InternalVector.fromVector2 center) radius (rgba color)
+circle! = |{ center, radius, color }|
+    Effect.draw_circle!(InternalVector.from_vector2(center), radius, rgba(color))
 
 ## Draw a circle with a gradient on the screen.
 ## ```
 ## Draw.circleGradient! { center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon }
 ## ```
-circleGradient! : { center : Vector2, radius : F32, inner : Color, outer : Color } => {}
-circleGradient! = \{ center, radius, inner, outer } ->
+circle_gradient! : { center : Vector2, radius : F32, inner : Color, outer : Color } => {}
+circle_gradient! = |{ center, radius, inner, outer }|
 
-    ic = rgba inner
-    oc = rgba outer
+    ic = rgba(inner)
+    oc = rgba(outer)
 
-    Effect.drawCircleGradient! (InternalVector.fromVector2 center) radius ic oc
+    Effect.draw_circle_gradient!(InternalVector.from_vector2(center), radius, ic, oc)
 
 ## Draw part of a texture.
 ## ```
@@ -139,9 +139,9 @@ circleGradient! = \{ center, radius, inner, outer } ->
 ##     tint: White,
 ## }
 ## ```
-textureRec! : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } => {}
-textureRec! = \{ texture, source, pos, tint } ->
-    Effect.drawTextureRec! texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+texture_rec! : { texture : Texture, source : Rectangle, pos : Vector2, tint : Color } => {}
+texture_rec! = |{ texture, source, pos, tint }|
+    Effect.draw_texture_rec!(texture, InternalRectangle.from_rect(source), InternalVector.from_vector2(pos), rgba(tint))
 
 ## Draw part of a texture.
 ## ```
@@ -153,6 +153,6 @@ textureRec! = \{ texture, source, pos, tint } ->
 ##     tint: White,
 ## }
 ## ```
-renderTextureRec! : { texture : RenderTexture, source : Rectangle, pos : Vector2, tint : Color } => {}
-renderTextureRec! = \{ texture, source, pos, tint } ->
-    Effect.drawRenderTextureRec! texture (InternalRectangle.fromRect source) (InternalVector.fromVector2 pos) (rgba tint)
+render_texture_rec! : { texture : RenderTexture, source : Rectangle, pos : Vector2, tint : Color } => {}
+render_texture_rec! = |{ texture, source, pos, tint }|
+    Effect.draw_render_texture_rec!(texture, InternalRectangle.from_rect(source), InternalVector.from_vector2(pos), rgba(tint))

@@ -1,6 +1,6 @@
 app [Model, init!, render!] {
     rr: platform "../platform/main.roc",
-    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.4.0/Ai2KfHOqOYXZmwdHX3g3ytbOUjTmZQmy0G2R9NuPBP0.tar.br",
+    rand: "https://github.com/lukewilliamboswell/roc-random/releases/download/0.5.0/yDUoWipuyNeJ-euaij4w_ozQCWtxCsywj68H0PlJAdE.tar.br",
 }
 
 import rr.RocRay exposing [Rectangle, Color]
@@ -17,61 +17,69 @@ width = 800
 height = 800
 
 init! : {} => Result Model []
-init! = \{} ->
+init! = |{}|
 
-    RocRay.setTargetFPS! 500
-    RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 } }
-    RocRay.initWindow! { title: "Random Dots", width, height }
+    RocRay.set_target_fps!(500)
+    RocRay.display_fps!({ fps: Visible, pos: { x: 10, y: 10 } })
+    RocRay.init_window!({ title: "Random Dots", width, height })
 
-    Ok {
-        number: 10000,
-        seed: Random.seed 1234,
-    }
+    Ok(
+        {
+            number: 10000,
+            seed: Random.seed(1234),
+        },
+    )
 
 render! : Model, RocRay.PlatformState => Result Model []
-render! = \model, { keys, timestamp } ->
-    nowStr = Inspect.toStr timestamp.renderStart
+render! = |model, { keys, timestamp }|
+    now_str = Inspect.to_str(timestamp.render_start)
 
-    { seed, lines } = randomList model.seed (Random.boundedU32 0 800) model.number
+    { seed, lines } = random_list(model.seed, Random.bounded_u32(0, 800), model.number)
 
     number =
-        if Keys.down keys KeyUp then
-            Num.addSaturated model.number 10
-        else if Keys.down keys KeyDown then
-            Num.subSaturated model.number 10
+        if Keys.down(keys, KeyUp) then
+            Num.add_saturated(model.number, 10)
+        else if Keys.down(keys, KeyDown) then
+            Num.sub_saturated(model.number, 10)
         else
             model.number
 
-    Draw.draw! Black \{} ->
+    Draw.draw!(
+        Black,
+        |{}|
 
-        Draw.text! { pos: { x: 10, y: 50 }, text: "RenderStart: $(nowStr)", size: 20, color: White }
+            Draw.text!({ pos: { x: 10, y: 50 }, text: "RenderStart: ${now_str}", size: 20, color: White })
 
-        List.forEach! lines Draw.rectangle!
+            List.for_each!(lines, Draw.rectangle!)
 
-        Draw.text! { pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is $(Num.toStr model.number)", size: 20, color: White }
+            Draw.text!({ pos: { x: 10, y: height - 25 }, text: "Up-Down to change number of random dots, current value is ${Num.to_str(model.number)}", size: 20, color: White }),
+    )
 
-    Ok { model & seed, number }
+    Ok({ model & seed, number })
 
 # Generate a list of lines using the seed and generator provided
-randomList : Random.State, Random.Generator U32, U64 -> { seed : Random.State, lines : List { rect : Rectangle, color : Color } }
-randomList = \initialSeed, generator, number ->
-    List.range { start: At 0, end: Before number }
-    |> List.walk { seed: initialSeed, lines: [] } \state, _ ->
+random_list : Random.State, Random.Generator U32, U64 -> { seed : Random.State, lines : List { rect : Rectangle, color : Color } }
+random_list = |initial_seed, generator, number|
+    List.range({ start: At(0), end: Before(number) })
+    |> List.walk(
+        { seed: initial_seed, lines: [] },
+        |state, _|
 
-        random = generator state.seed
+            random = generator(state.seed)
 
-        x = Num.toF32 random.value
+            x = Num.to_f32(random.value)
 
-        random2 = generator random.state
+            random2 = generator(random.state)
 
-        y = Num.toF32 random2.value
+            y = Num.to_f32(random2.value)
 
-        lines = List.append state.lines { rect: { x, y, width: 1, height: 1 }, color: colorFromU32 random2.value }
+            lines = List.append(state.lines, { rect: { x, y, width: 1, height: 1 }, color: color_from_u32(random2.value) })
 
-        { seed: random2.state, lines }
+            { seed: random2.state, lines },
+    )
 
-colorFromU32 : U32 -> Color
-colorFromU32 = \u32 ->
+color_from_u32 : U32 -> Color
+color_from_u32 = |u32|
     if u32 % 10 == 0 then
         White
     else if u32 % 10 == 1 then
@@ -106,4 +114,3 @@ colorFromU32 = \u32 ->
         Purple
     else
         White
-

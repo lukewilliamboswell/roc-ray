@@ -9,39 +9,42 @@ Model : {
 }
 
 init! : {} => Result Model _
-init! = \{} ->
+init! = |{}|
 
-    RocRay.initWindow! { title: "Basic Fonts", width: 900, height: 300 }
+    RocRay.init_window!({ title: "Basic Fonts", width: 900, height: 300 })
 
-    poppins = Font.load!? "examples/assets/Poppins-Regular.ttf"
+    poppins = Font.load!("examples/assets/Poppins-Regular.ttf")?
 
-    Ok { poppins }
+    Ok({ poppins })
 
 render! : Model, RocRay.PlatformState => Result Model []
-render! = \model, _ ->
+render! = |model, _|
 
-    startY = 10f32
-    quickBrownFox = "The quick brown fox jumps over the lazy dog."
+    start_y = 10f32
+    quick_brown_fox = "The quick brown fox jumps over the lazy dog."
 
-    Draw.draw! White \{} ->
-        startY
-        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 10, color: Red }
-        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 20, color: Green }
-        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 30, color: Blue }
-        |> drawTextNextY! { text: quickBrownFox, font: Font.default, size: 40, color: Black }
-        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 10, color: Red }
-        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 20, color: Green }
-        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 30, color: Blue }
-        |> drawTextNextY! { text: quickBrownFox, font: model.poppins, size: 40, color: Black }
-        |> \_ -> {}
+    Draw.draw!(
+        White,
+        |{}|
+            start_y
+            |> draw_text_next_y!({ text: quick_brown_fox, font: Font.default, size: 10, color: Red })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: Font.default, size: 20, color: Green })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: Font.default, size: 30, color: Blue })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: Font.default, size: 40, color: Black })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: model.poppins, size: 10, color: Red })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: model.poppins, size: 20, color: Green })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: model.poppins, size: 30, color: Blue })
+            |> draw_text_next_y!({ text: quick_brown_fox, font: model.poppins, size: 40, color: Black })
+            |> |_| {},
+    )
 
-    Ok model
+    Ok(model)
 
-drawTextNextY! : F32, { text : Str, font : Font.Font, size : F32, color : RocRay.Color } => F32
-drawTextNextY! = \nextY, { text, font, size, color } ->
+draw_text_next_y! : F32, { text : Str, font : Font.Font, size : F32, color : RocRay.Color } => F32
+draw_text_next_y! = |next_y, { text, font, size, color }|
 
-    Draw.text! { font, text, pos: { x: 10, y: nextY }, size, color }
+    Draw.text!({ font, text, pos: { x: 10, y: next_y }, size, color })
 
-    { height } = Font.measure! { text, size }
+    { height } = Font.measure!({ text, size })
 
-    nextY + height
+    next_y + height

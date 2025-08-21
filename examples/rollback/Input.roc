@@ -1,4 +1,4 @@
-module [Input, read, blank, toByte, fromByte]
+module [Input, read, blank, to_byte, from_byte]
 
 import rr.Keys exposing [Keys]
 
@@ -10,11 +10,11 @@ Input : {
 }
 
 read : Keys -> Input
-read = \keys ->
-    up = if Keys.anyDown keys [KeyUp, KeyW] then Down else Up
-    down = if Keys.anyDown keys [KeyDown, KeyS] then Down else Up
-    left = if Keys.anyDown keys [KeyLeft, KeyA] then Down else Up
-    right = if Keys.anyDown keys [KeyRight, KeyD] then Down else Up
+read = |keys|
+    up = if Keys.any_down(keys, [KeyUp, KeyW]) then Down else Up
+    down = if Keys.any_down(keys, [KeyDown, KeyS]) then Down else Up
+    left = if Keys.any_down(keys, [KeyLeft, KeyA]) then Down else Up
+    right = if Keys.any_down(keys, [KeyRight, KeyD]) then Down else Up
 
     { up, down, left, right }
 
@@ -22,61 +22,61 @@ blank : Input
 blank =
     { up: Up, down: Up, left: Up, right: Up }
 
-upMask : U8
-upMask = Num.shiftLeftBy 1 0
+up_mask : U8
+up_mask = Num.shift_left_by(1, 0)
 
-downMask : U8
-downMask = Num.shiftLeftBy 1 1
+down_mask : U8
+down_mask = Num.shift_left_by(1, 1)
 
-leftMask : U8
-leftMask = Num.shiftLeftBy 1 2
+left_mask : U8
+left_mask = Num.shift_left_by(1, 2)
 
-rightMask : U8
-rightMask = Num.shiftLeftBy 1 3
+right_mask : U8
+right_mask = Num.shift_left_by(1, 3)
 
-toByte : Input -> U8
-toByte = \input ->
-    merge = \previous, direction, mask ->
-        when direction input is
+to_byte : Input -> U8
+to_byte = |input|
+    merge = |previous, direction, mask|
+        when direction(input) is
             Up -> previous
-            Down -> Num.bitwiseOr previous mask
+            Down -> Num.bitwise_or(previous, mask)
 
     0
-    |> merge .up upMask
-    |> merge .down downMask
-    |> merge .left leftMask
-    |> merge .right rightMask
+    |> merge(.up, up_mask)
+    |> merge(.down, down_mask)
+    |> merge(.left, left_mask)
+    |> merge(.right, right_mask)
 
-fromByte : U8 -> Input
-fromByte = \byte ->
-    lookup = \mask ->
-        if (Num.bitwiseAnd mask byte) != 0 then
+from_byte : U8 -> Input
+from_byte = |byte|
+    lookup = |mask|
+        if (Num.bitwise_and(mask, byte)) != 0 then
             Down
         else
             Up
 
     {
-        up: lookup upMask,
-        down: lookup downMask,
-        left: lookup leftMask,
-        right: lookup rightMask,
+        up: lookup(up_mask),
+        down: lookup(down_mask),
+        left: lookup(left_mask),
+        right: lookup(right_mask),
     }
 
 expect
-    cycled = blank |> toByte |> fromByte
+    cycled = blank |> to_byte |> from_byte
     cycled == blank
 
 expect
-    justUp = { Input.blank & up: Down }
-    cycled = justUp |> toByte |> fromByte
-    cycled == justUp
+    just_up = { Input.blank & up: Down }
+    cycled = just_up |> to_byte |> from_byte
+    cycled == just_up
 
 expect
-    upLeft = { Input.blank & up: Down, left: Down }
-    cycled = upLeft |> toByte |> fromByte
-    cycled == upLeft
+    up_left = { Input.blank & up: Down, left: Down }
+    cycled = up_left |> to_byte |> from_byte
+    cycled == up_left
 
 expect
-    allDown = { up: Down, left: Down, right: Down, down: Down }
-    cycled = allDown |> toByte |> fromByte
-    cycled == allDown
+    all_down = { up: Down, left: Down, right: Down, down: Down }
+    cycled = all_down |> to_byte |> from_byte
+    cycled == all_down

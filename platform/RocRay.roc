@@ -13,16 +13,16 @@ module [
     NetworkMessage,
     UUID,
     rgba,
-    initWindow!,
+    init_window!,
     exit!,
-    setTargetFPS!,
-    displayFPS!,
-    takeScreenshot!,
+    set_target_fps!,
+    display_fps!,
+    take_screenshot!,
     log!,
-    loadFileToStr!,
-    sendToPeer!,
-    getScreenSize!,
-    randomI32!,
+    load_file_to_str!,
+    send_to_peer!,
+    get_screen_size!,
+    random_i32!,
 ]
 
 import Mouse
@@ -57,7 +57,7 @@ import InternalVector
 ## }
 ## ```
 PlatformState : {
-    frameCount : U64,
+    frame_count : U64,
     keys : InternalKeyboard.Keys,
     mouse : {
         position : Vector2,
@@ -151,32 +151,32 @@ UUID : Network.UUID
 
 # internal use only
 rgba : Color -> InternalColor.RocColor
-rgba = \color ->
+rgba = |color|
     when color is
-        RGBA r g b a -> InternalColor.fromRGBA { r, g, b, a }
-        White -> InternalColor.fromRGBA { r: 255, g: 255, b: 255, a: 255 }
-        Silver -> InternalColor.fromRGBA { r: 192, g: 192, b: 192, a: 255 }
-        Gray -> InternalColor.fromRGBA { r: 128, g: 128, b: 128, a: 255 }
-        Black -> InternalColor.fromRGBA { r: 0, g: 0, b: 0, a: 255 }
-        Red -> InternalColor.fromRGBA { r: 255, g: 0, b: 0, a: 255 }
-        Maroon -> InternalColor.fromRGBA { r: 128, g: 0, b: 0, a: 255 }
-        Yellow -> InternalColor.fromRGBA { r: 255, g: 255, b: 0, a: 255 }
-        Olive -> InternalColor.fromRGBA { r: 128, g: 128, b: 0, a: 255 }
-        Lime -> InternalColor.fromRGBA { r: 0, g: 255, b: 0, a: 255 }
-        Green -> InternalColor.fromRGBA { r: 0, g: 128, b: 0, a: 255 }
-        Aqua -> InternalColor.fromRGBA { r: 0, g: 255, b: 255, a: 255 }
-        Teal -> InternalColor.fromRGBA { r: 0, g: 128, b: 128, a: 255 }
-        Blue -> InternalColor.fromRGBA { r: 0, g: 0, b: 255, a: 255 }
-        Navy -> InternalColor.fromRGBA { r: 0, g: 0, b: 128, a: 255 }
-        Fuchsia -> InternalColor.fromRGBA { r: 255, g: 0, b: 255, a: 255 }
-        Purple -> InternalColor.fromRGBA { r: 128, g: 0, b: 128, a: 255 }
+        RGBA(r, g, b, a) -> InternalColor.from_rgba({ r, g, b, a })
+        White -> InternalColor.from_rgba({ r: 255, g: 255, b: 255, a: 255 })
+        Silver -> InternalColor.from_rgba({ r: 192, g: 192, b: 192, a: 255 })
+        Gray -> InternalColor.from_rgba({ r: 128, g: 128, b: 128, a: 255 })
+        Black -> InternalColor.from_rgba({ r: 0, g: 0, b: 0, a: 255 })
+        Red -> InternalColor.from_rgba({ r: 255, g: 0, b: 0, a: 255 })
+        Maroon -> InternalColor.from_rgba({ r: 128, g: 0, b: 0, a: 255 })
+        Yellow -> InternalColor.from_rgba({ r: 255, g: 255, b: 0, a: 255 })
+        Olive -> InternalColor.from_rgba({ r: 128, g: 128, b: 0, a: 255 })
+        Lime -> InternalColor.from_rgba({ r: 0, g: 255, b: 0, a: 255 })
+        Green -> InternalColor.from_rgba({ r: 0, g: 128, b: 0, a: 255 })
+        Aqua -> InternalColor.from_rgba({ r: 0, g: 255, b: 255, a: 255 })
+        Teal -> InternalColor.from_rgba({ r: 0, g: 128, b: 128, a: 255 })
+        Blue -> InternalColor.from_rgba({ r: 0, g: 0, b: 255, a: 255 })
+        Navy -> InternalColor.from_rgba({ r: 0, g: 0, b: 128, a: 255 })
+        Fuchsia -> InternalColor.from_rgba({ r: 255, g: 0, b: 255, a: 255 })
+        Purple -> InternalColor.from_rgba({ r: 128, g: 0, b: 128, a: 255 })
 
 ## Exit the program.
 ## ```
 ## RocRay.exit!
 ## ```
 exit! : {} => {}
-exit! = \{} -> Effect.exit! {}
+exit! = |{}| Effect.exit!({})
 
 ## Show a RocRay log trace message.
 ##
@@ -184,59 +184,59 @@ exit! = \{} -> Effect.exit! {}
 ## RocRay.log! "Not yet implemented" LogError
 ## ```
 log! : Str, [LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal, LogNone] => {}
-log! = \message, level ->
-    Effect.log! message (Effect.toLogLevel level)
+log! = |message, level|
+    Effect.log!(message, Effect.to_log_level(level))
 
-initWindow! : { title ? Str, width ? F32, height ? F32 } => {}
-initWindow! = \{ title ? "RocRay", width ? 800, height ? 600 } ->
-    Effect.initWindow! title width height
+init_window! : { title ?? Str, width ?? F32, height ?? F32 } => {}
+init_window! = |{ title ?? "RocRay", width ?? 800, height ?? 600 }|
+    Effect.init_window!(title, width, height)
 
 ## Get the window size.
-getScreenSize! : {} => { height : F32, width : F32 }
-getScreenSize! = \{} ->
-    Effect.getScreenSize! {}
-    |> \{ width, height } -> { width: Num.toFrac width, height: Num.toFrac height }
+get_screen_size! : {} => { height : F32, width : F32 }
+get_screen_size! = |{}|
+    Effect.get_screen_size!({})
+    |> |{ width, height }| { width: Num.to_frac(width), height: Num.to_frac(height) }
 
 ## Set the target frames per second. The default value is 60.
-setTargetFPS! : I32 => {}
-setTargetFPS! = \fps -> Effect.setTargetFPS! fps
+set_target_fps! : I32 => {}
+set_target_fps! = |fps| Effect.set_target_fps!(fps)
 
 ## Display the frames per second, and set the location.
 ## The default values are Hidden, 10, 10.
 ## ```
 ## RocRay.displayFPS! { fps: Visible, pos: { x: 10, y: 10 }}
 ## ```
-displayFPS! : { fps : [Visible, Hidden], pos : Vector2 } => {}
-displayFPS! = \{ fps, pos } ->
+display_fps! : { fps : [Visible, Hidden], pos : Vector2 } => {}
+display_fps! = |{ fps, pos }|
 
-    showFps =
+    show_fps =
         when fps is
             Visible -> Bool.true
             Hidden -> Bool.false
 
-    Effect.setDrawFPS! showFps (InternalVector.fromVector2 pos)
+    Effect.set_draw_fps!(show_fps, InternalVector.from_vector2(pos))
 
 ## Takes a screenshot of current screen (filename extension defines format)
 ## ```
 ## RocRay.takeScreenshot! "screenshot.png"
 ## ```
-takeScreenshot! : Str => {}
-takeScreenshot! = \filename ->
-    Effect.takeScreenshot! filename
+take_screenshot! : Str => {}
+take_screenshot! = |filename|
+    Effect.take_screenshot!(filename)
 
 ## Loads a file from disk
 ## ```
 ## RocRay.loadFileToStr! "resources/example.txt"
 ## ```
-loadFileToStr! : Str => Result Str [LoadErr Str]_
-loadFileToStr! = \path ->
-    Effect.loadFileToStr! path
-    |> Result.mapErr LoadErr
+load_file_to_str! : Str => Result Str [LoadErr Str]_
+load_file_to_str! = |path|
+    Effect.load_file_to_str!(path)
+    |> Result.map_err(LoadErr)
 
 ## Send a message to a connected peer.
-sendToPeer! : List U8, UUID => {}
-sendToPeer! = \message, peerId ->
-    Effect.sendToPeer! message (Network.toU64Pair peerId)
+send_to_peer! : List U8, UUID => {}
+send_to_peer! = |message, peer_id|
+    Effect.send_to_peer!(message, Network.to_u64_pair(peer_id))
 
-randomI32! : { min : I32, max : I32 } => I32
-randomI32! = \{ min, max } -> Effect.randomI32! min max
+random_i32! : { min : I32, max : I32 } => I32
+random_i32! = |{ min, max }| Effect.random_i32!(min, max)

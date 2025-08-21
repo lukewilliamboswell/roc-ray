@@ -1,76 +1,74 @@
-hosted Effect
-    exposes [
-        Texture,
-        RenderTexture,
-        Sound,
-        Music,
-        LoadedMusic,
-        Camera,
-        RawUUID,
-        PeerMessage,
-        PlatformTime,
-        PlatformStateFromHost,
-        PeerState,
-        Font,
-        toLogLevel,
+hosted [
+    Texture,
+    RenderTexture,
+    Sound,
+    Music,
+    LoadedMusic,
+    Camera,
+    RawUUID,
+    PeerMessage,
+    PlatformTime,
+    PlatformStateFromHost,
+    PeerState,
+    Font,
+    to_log_level,
 
-        # EFFECTS
-        getScreenSize!,
-        exit!,
-        drawText!,
-        drawTextFont!,
-        measureText!,
-        measureTextFont!,
-        drawLine!,
-        drawRectangle!,
-        drawRectangleGradientV!,
-        drawRectangleGradientH!,
-        drawCircle!,
-        drawCircleGradient!,
-        setTargetFPS!,
-        setDrawFPS!,
-        takeScreenshot!,
-        createCamera!,
-        updateCamera!,
-        initWindow!,
-        beginDrawing!,
-        endDrawing!,
-        beginTexture!,
-        endTexture!,
-        beginMode2D!,
-        endMode2D!,
-        log!,
-        loadTexture!,
-        drawTextureRec!,
-        loadSound!,
-        playSound!,
-        createRenderTexture!,
-        drawRenderTextureRec!,
-        loadFileToStr!,
-        sendToPeer!,
-        loadMusicStream!,
-        playMusicStream!,
-        getMusicTimePlayed!,
-        stopMusicStream!,
-        pauseMusicStream!,
-        resumeMusicStream!,
-        sleepMillis!,
-        randomI32!,
-        loadFont!,
-        configureWebRTC!,
-    ]
-    imports []
+    # EFFECTS
+    get_screen_size!,
+    exit!,
+    draw_text!,
+    draw_text_font!,
+    measure_text!,
+    measure_text_font!,
+    draw_line!,
+    draw_rectangle!,
+    draw_rectangle_gradient_v!,
+    draw_rectangle_gradient_h!,
+    draw_circle!,
+    draw_circle_gradient!,
+    set_target_fps!,
+    set_draw_fps!,
+    take_screenshot!,
+    create_camera!,
+    update_camera!,
+    init_window!,
+    begin_drawing!,
+    end_drawing!,
+    begin_texture!,
+    end_texture!,
+    begin_mode_2d!,
+    end_mode_2d!,
+    log!,
+    load_texture!,
+    draw_texture_rec!,
+    load_sound!,
+    play_sound!,
+    create_render_texture!,
+    draw_render_texture_rec!,
+    load_file_to_str!,
+    send_to_peer!,
+    load_music_stream!,
+    play_music_stream!,
+    get_music_time_played!,
+    stop_music_stream!,
+    pause_music_stream!,
+    resume_music_stream!,
+    sleep_millis!,
+    random_i32!,
+    load_font!,
+    configure_web_rtc!,
+]
 
 import InternalColor exposing [RocColor]
 import InternalVector exposing [RocVector2]
 import InternalRectangle exposing [RocRectangle]
 
-getScreenSize! : {} => { height : I32, width : I32, z : I64 }
+get_screen_size! : {} => { height : I32, width : I32, z : I64 }
 
 exit! : {} => {}
 
-toLogLevel : _ -> I32
-toLogLevel = \level ->
+to_log_level : _ -> I32
+to_log_level = |level|
     when level is
         LogAll -> 0
         LogTrace -> 1
@@ -95,21 +93,21 @@ PeerMessage : {
 }
 
 PlatformTime : {
-    initStart : U64,
-    initEnd : U64,
-    renderStart : U64,
-    lastRenderStart : U64,
-    lastRenderEnd : U64,
+    init_start : U64,
+    init_end : U64,
+    render_start : U64,
+    last_render_start : U64,
+    last_render_end : U64,
 }
 
 PlatformStateFromHost : {
-    frameCount : U64,
+    frame_count : U64,
     keys : List U8,
-    mouseButtons : List U8,
+    mouse_buttons : List U8,
     timestamp : PlatformTime,
-    mousePosX : F32,
-    mousePosY : F32,
-    mouseWheel : F32,
+    mouse_pos_x : F32,
+    mouse_pos_y : F32,
+    mouse_wheel : F32,
     peers : PeerState,
     messages : List PeerMessage,
 }
@@ -121,69 +119,69 @@ PeerState : {
 
 log! : Str, I32 => {}
 
-initWindow! : Str, F32, F32 => {}
+init_window! : Str, F32, F32 => {}
 
-drawText! : Str, RocVector2, F32, F32, RocColor => {}
-drawTextFont! : Font, Str, RocVector2, F32, F32, RocColor => {}
+draw_text! : Str, RocVector2, F32, F32, RocColor => {}
+draw_text_font! : Font, Str, RocVector2, F32, F32, RocColor => {}
 
-measureText! : Str, F32, F32 => RocVector2
-measureTextFont! : Font, Str, F32, F32 => RocVector2
+measure_text! : Str, F32, F32 => RocVector2
+measure_text_font! : Font, Str, F32, F32 => RocVector2
 
-drawLine! : RocVector2, RocVector2, RocColor => {}
+draw_line! : RocVector2, RocVector2, RocColor => {}
 
-drawRectangle! : RocRectangle, RocColor => {}
-drawRectangleGradientV! : RocRectangle, RocColor, RocColor => {}
-drawRectangleGradientH! : RocRectangle, RocColor, RocColor => {}
-drawCircle! : RocVector2, F32, RocColor => {}
-drawCircleGradient! : RocVector2, F32, RocColor, RocColor => {}
+draw_rectangle! : RocRectangle, RocColor => {}
+draw_rectangle_gradient_v! : RocRectangle, RocColor, RocColor => {}
+draw_rectangle_gradient_h! : RocRectangle, RocColor, RocColor => {}
+draw_circle! : RocVector2, F32, RocColor => {}
+draw_circle_gradient! : RocVector2, F32, RocColor, RocColor => {}
 
-setTargetFPS! : I32 => {}
-setDrawFPS! : Bool, RocVector2 => {}
+set_target_fps! : I32 => {}
+set_draw_fps! : Bool, RocVector2 => {}
 
-takeScreenshot! : Str => {}
+take_screenshot! : Str => {}
 
-beginDrawing! : RocColor => {}
-endDrawing! : {} => {}
+begin_drawing! : RocColor => {}
+end_drawing! : {} => {}
 
 Camera := Box {}
-createCamera! : RocVector2, RocVector2, F32, F32 => Result Camera Str
-updateCamera! : Camera, RocVector2, RocVector2, F32, F32 => {}
+create_camera! : RocVector2, RocVector2, F32, F32 => Result Camera Str
+update_camera! : Camera, RocVector2, RocVector2, F32, F32 => {}
 
-beginMode2D! : Camera => {}
-endMode2D! : Camera => {}
+begin_mode_2d! : Camera => {}
+end_mode_2d! : Camera => {}
 
 Texture := Box {}
-loadTexture! : Str => Result Texture Str
-drawTextureRec! : Texture, RocRectangle, RocVector2, RocColor => {}
-drawRenderTextureRec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
+load_texture! : Str => Result Texture Str
+draw_texture_rec! : Texture, RocRectangle, RocVector2, RocColor => {}
+draw_render_texture_rec! : RenderTexture, RocRectangle, RocVector2, RocColor => {}
 
 Sound := Box {}
-loadSound! : Str => Result Sound Str
-playSound! : Sound => {}
+load_sound! : Str => Result Sound Str
+play_sound! : Sound => {}
 
 Music := Box {}
-LoadedMusic : { music : Music, lenSeconds : F32 }
-loadMusicStream! : Str => Result LoadedMusic Str
-playMusicStream! : Music => {}
-stopMusicStream! : Music => {}
-pauseMusicStream! : Music => {}
-resumeMusicStream! : Music => {}
-getMusicTimePlayed! : Music => F32
+LoadedMusic : { music : Music, len_seconds : F32 }
+load_music_stream! : Str => Result LoadedMusic Str
+play_music_stream! : Music => {}
+stop_music_stream! : Music => {}
+pause_music_stream! : Music => {}
+resume_music_stream! : Music => {}
+get_music_time_played! : Music => F32
 
 RenderTexture := Box {}
-createRenderTexture! : RocVector2 => Result RenderTexture Str
-beginTexture! : RenderTexture, RocColor => {}
-endTexture! : RenderTexture => {}
+create_render_texture! : RocVector2 => Result RenderTexture Str
+begin_texture! : RenderTexture, RocColor => {}
+end_texture! : RenderTexture => {}
 
-loadFileToStr! : Str => Result Str Str
+load_file_to_str! : Str => Result Str Str
 
-sendToPeer! : List U8, RawUUID => {}
+send_to_peer! : List U8, RawUUID => {}
 
-randomI32! : I32, I32 => I32
+random_i32! : I32, I32 => I32
 
-sleepMillis! : U64 => {}
+sleep_millis! : U64 => {}
 
 Font := Box U64
-loadFont! : Str => Result Font Str
+load_font! : Str => Result Font Str
 
-configureWebRTC! : Str => {}
+configure_web_rtc! : Str => {}

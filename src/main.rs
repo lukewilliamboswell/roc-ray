@@ -200,7 +200,7 @@ extern "C" fn roc_fx_exit() {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
+extern "C" fn roc_fx_init_window(title: &RocStr, width: f32, height: f32) {
     config::update(|c| {
         c.title = CString::new(title.to_string()).unwrap();
         c.width = width as i32;
@@ -232,7 +232,7 @@ extern "C" fn roc_fx_initWindow(title: &RocStr, width: f32, height: f32) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) {
+extern "C" fn roc_fx_begin_drawing(clear_color: glue::RocColor) {
     if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingFramebuffer) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -244,7 +244,7 @@ extern "C" fn roc_fx_beginDrawing(clear_color: glue::RocColor) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_endDrawing() {
+extern "C" fn roc_fx_end_drawing() {
     if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingFramebuffer) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -255,7 +255,7 @@ extern "C" fn roc_fx_endDrawing() {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_sleepMillis(millis: u64) {
+extern "C" fn roc_fx_sleep_millis(millis: u64) {
     if let Err(msg) = platform_mode::update(PlatformEffect::SleepMillis) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -276,7 +276,7 @@ extern "C" fn roc_fx_sleepMillis(millis: u64) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
+extern "C" fn roc_fx_random_i32(min: i32, max: i32) -> i32 {
     if let Err(msg) = platform_mode::update(PlatformEffect::RandomValue) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -285,7 +285,7 @@ extern "C" fn roc_fx_randomI32(min: i32, max: i32) -> i32 {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawText(
+extern "C" fn roc_fx_draw_text(
     text: &RocStr,
     pos: &glue::RocVector2,
     size: f32,
@@ -312,7 +312,7 @@ extern "C" fn roc_fx_drawText(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawTextFont(
+extern "C" fn roc_fx_draw_text_font(
     boxed_font: RocBox<()>,
     text: &RocStr,
     pos: &glue::RocVector2,
@@ -341,7 +341,7 @@ extern "C" fn roc_fx_drawTextFont(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawRectangle(rect: &glue::RocRectangle, color: glue::RocColor) {
+extern "C" fn roc_fx_draw_rectangle(rect: &glue::RocRectangle, color: glue::RocColor) {
     if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangle) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -352,7 +352,7 @@ extern "C" fn roc_fx_drawRectangle(rect: &glue::RocRectangle, color: glue::RocCo
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawLine(
+extern "C" fn roc_fx_draw_line(
     start: &glue::RocVector2,
     end: &glue::RocVector2,
     color: glue::RocColor,
@@ -367,7 +367,7 @@ extern "C" fn roc_fx_drawLine(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawCircle(center: &glue::RocVector2, radius: f32, color: glue::RocColor) {
+extern "C" fn roc_fx_draw_circle(center: &glue::RocVector2, radius: f32, color: glue::RocColor) {
     if let Err(msg) = platform_mode::update(PlatformEffect::DrawCircle) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -378,7 +378,7 @@ extern "C" fn roc_fx_drawCircle(center: &glue::RocVector2, radius: f32, color: g
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawCircleGradient(
+extern "C" fn roc_fx_draw_circle_gradient(
     center: &glue::RocVector2,
     radius: f32,
     inner: glue::RocColor,
@@ -396,7 +396,7 @@ extern "C" fn roc_fx_drawCircleGradient(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawRectangleGradientV(
+extern "C" fn roc_fx_draw_rectangle_gradient_v(
     rect: &glue::RocRectangle,
     top: glue::RocColor,
     bottom: glue::RocColor,
@@ -413,7 +413,7 @@ extern "C" fn roc_fx_drawRectangleGradientV(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawRectangleGradientH(
+extern "C" fn roc_fx_draw_rectangle_gradient_h(
     rect: &glue::RocRectangle,
     left: glue::RocColor,
     right: glue::RocColor,
@@ -430,7 +430,7 @@ extern "C" fn roc_fx_drawRectangleGradientH(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_getScreenSize() -> glue::ScreenSize {
+extern "C" fn roc_fx_get_screen_size() -> glue::ScreenSize {
     if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -447,7 +447,7 @@ extern "C" fn roc_fx_getScreenSize() -> glue::ScreenSize {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
+extern "C" fn roc_fx_measure_text(text: &RocStr, size: f32, spacing: f32) -> glue::RocVector2 {
     if let Err(msg) = platform_mode::update(PlatformEffect::MeasureText) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -461,7 +461,7 @@ extern "C" fn roc_fx_measureText(text: &RocStr, size: f32, spacing: f32) -> glue
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_measureTextFont(
+extern "C" fn roc_fx_measure_text_font(
     boxed_font: RocBox<()>,
     text: &RocStr,
     size: f32,
@@ -478,7 +478,7 @@ extern "C" fn roc_fx_measureTextFont(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_setTargetFPS(rate: i32) {
+extern "C" fn roc_fx_set_target_fps(rate: i32) {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetTargetFPS) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -490,7 +490,7 @@ extern "C" fn roc_fx_setTargetFPS(rate: i32) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_takeScreenshot(path: &RocStr) {
+extern "C" fn roc_fx_take_screenshot(path: &RocStr) {
     if let Err(msg) = platform_mode::update(PlatformEffect::TakeScreenshot) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -503,7 +503,7 @@ extern "C" fn roc_fx_takeScreenshot(path: &RocStr) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) {
+extern "C" fn roc_fx_set_draw_fps(show: bool, pos: &glue::RocVector2) {
     if let Err(msg) = platform_mode::update(PlatformEffect::SetDrawFPS) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -515,7 +515,7 @@ extern "C" fn roc_fx_setDrawFPS(show: bool, pos: &glue::RocVector2) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_createCamera(
+extern "C" fn roc_fx_create_camera(
     target: &glue::RocVector2,
     offset: &glue::RocVector2,
     rotation: f32,
@@ -542,7 +542,9 @@ extern "C" fn roc_fx_createCamera(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocResult<RocBox<()>, RocStr> {
+extern "C" fn roc_fx_create_render_texture(
+    size: &glue::RocVector2,
+) -> RocResult<RocBox<()>, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::CreateRenderTexture) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -561,7 +563,7 @@ extern "C" fn roc_fx_createRenderTexture(size: &glue::RocVector2) -> RocResult<R
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_updateCamera(
+extern "C" fn roc_fx_update_camera(
     boxed_camera: RocBox<()>,
     target: &glue::RocVector2,
     offset: &glue::RocVector2,
@@ -583,7 +585,7 @@ extern "C" fn roc_fx_updateCamera(
 
 #[allow(unused_variables)]
 #[no_mangle]
-extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
+extern "C" fn roc_fx_begin_mode_2d(boxed_camera: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::BeginMode2D) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -597,7 +599,7 @@ extern "C" fn roc_fx_beginMode2D(boxed_camera: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
+extern "C" fn roc_fx_end_mode_2d(_boxed_camera: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -609,7 +611,7 @@ extern "C" fn roc_fx_endMode2D(_boxed_camera: RocBox<()>) {
 
 #[allow(unused_variables)]
 #[no_mangle]
-extern "C" fn roc_fx_beginTexture(boxed_render_texture: RocBox<()>, clear_color: glue::RocColor) {
+extern "C" fn roc_fx_begin_texture(boxed_render_texture: RocBox<()>, clear_color: glue::RocColor) {
     if let Err(msg) = platform_mode::update(PlatformEffect::BeginDrawingTexture) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -624,7 +626,7 @@ extern "C" fn roc_fx_beginTexture(boxed_render_texture: RocBox<()>, clear_color:
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) {
+extern "C" fn roc_fx_end_texture(_boxed_render_texture: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::EndDrawingTexture) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -635,7 +637,7 @@ extern "C" fn roc_fx_endTexture(_boxed_render_texture: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+extern "C" fn roc_fx_load_sound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadSound) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -663,7 +665,7 @@ extern "C" fn roc_fx_loadSound(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
+extern "C" fn roc_fx_play_sound(boxed_sound: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlaySound) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -676,7 +678,7 @@ extern "C" fn roc_fx_playSound(boxed_sound: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<roc::LoadedMusic, RocStr> {
+extern "C" fn roc_fx_load_music_stream(path: &RocStr) -> RocResult<roc::LoadedMusic, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -702,7 +704,7 @@ extern "C" fn roc_fx_loadMusicStream(path: &RocStr) -> RocResult<roc::LoadedMusi
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) {
+extern "C" fn roc_fx_play_music_stream(boxed_music: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -715,7 +717,7 @@ extern "C" fn roc_fx_playMusicStream(boxed_music: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) {
+extern "C" fn roc_fx_stop_music_stream(boxed_music: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -728,7 +730,7 @@ extern "C" fn roc_fx_stopMusicStream(boxed_music: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) {
+extern "C" fn roc_fx_pause_music_stream(boxed_music: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -741,7 +743,7 @@ extern "C" fn roc_fx_pauseMusicStream(boxed_music: RocBox<()>) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) {
+extern "C" fn roc_fx_resume_music_stream(boxed_music: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -755,7 +757,7 @@ extern "C" fn roc_fx_resumeMusicStream(boxed_music: RocBox<()>) {
 
 // NOTE: the RocStr in this error type is to work around a compiler bug
 #[no_mangle]
-extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
+extern "C" fn roc_fx_get_music_time_played(boxed_music: RocBox<()>) -> f32 {
     if let Err(msg) = platform_mode::update(PlatformEffect::PlayMusicStream) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -766,7 +768,7 @@ extern "C" fn roc_fx_getMusicTimePlayed(boxed_music: RocBox<()>) -> f32 {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadTexture(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+extern "C" fn roc_fx_load_texture(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -832,7 +834,7 @@ extern "C" fn roc_fx_loadTexture(path: &RocStr) -> RocResult<RocBox<()>, RocStr>
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawTextureRec(
+extern "C" fn roc_fx_draw_texture_rec(
     boxed_texture: RocBox<()>,
     source: &glue::RocRectangle,
     position: &glue::RocVector2,
@@ -851,7 +853,7 @@ extern "C" fn roc_fx_drawTextureRec(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_drawRenderTextureRec(
+extern "C" fn roc_fx_draw_render_texture_rec(
     boxed_texture: RocBox<()>,
     source: &glue::RocRectangle,
     position: &glue::RocVector2,
@@ -875,7 +877,7 @@ extern "C" fn roc_fx_drawRenderTextureRec(
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, RocStr> {
+extern "C" fn roc_fx_load_file_to_str(path: &RocStr) -> RocResult<RocStr, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadFileToStr) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -892,7 +894,7 @@ extern "C" fn roc_fx_loadFileToStr(path: &RocStr) -> RocResult<RocStr, RocStr> {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
+extern "C" fn roc_fx_send_to_peer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
     if let Err(msg) = platform_mode::update(PlatformEffect::SendMsgToPeer) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -903,7 +905,7 @@ extern "C" fn roc_fx_sendToPeer(bytes: &RocList<u8>, peer: &glue::PeerUUID) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
+extern "C" fn roc_fx_configure_web_rtc(url: &RocStr) {
     if let Err(msg) = platform_mode::update(PlatformEffect::ConfigureNetwork) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }
@@ -918,7 +920,7 @@ extern "C" fn roc_fx_configureWebRTC(url: &RocStr) {
 }
 
 #[no_mangle]
-extern "C" fn roc_fx_loadFont(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+extern "C" fn roc_fx_load_font(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
     if let Err(msg) = platform_mode::update(PlatformEffect::LoadFont) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
     }

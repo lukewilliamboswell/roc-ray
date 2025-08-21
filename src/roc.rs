@@ -200,7 +200,7 @@ impl App {
     pub fn init() -> App {
         #[link(name = "app")]
         extern "C" {
-            #[link_name = "roc__initForHost_1_exposed"]
+            #[link_name = "roc__init_for_host_1_exposed"]
             fn init_caller(arg_not_used: i32) -> RocResult<*const (), RocStr>;
         }
 
@@ -238,7 +238,7 @@ impl App {
 
     pub fn render(&mut self) {
         extern "C" {
-            #[link_name = "roc__renderForHost_1_exposed"]
+            #[link_name = "roc__render_for_host_1_exposed"]
             fn render_caller(
                 model_in: *const (),
                 state: *mut glue::PlatformState,

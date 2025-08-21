@@ -3,19 +3,19 @@ module [
     KeyState,
     KeyboardKey,
     pack,
-    readKey,
+    read_key,
 ]
 
 Keys := List U8
 
 pack : List U8 -> Keys
-pack = \bytes -> @Keys bytes
+pack = |bytes| @Keys(bytes)
 
-readKey : Keys, KeyboardKey -> KeyState
-readKey = \@Keys bytes, requestedKey ->
-    when List.get bytes (keyToU64 requestedKey) is
-        Ok byte -> keyStateFromU8 byte
-        Err OutOfBounds -> crash "bug in key bytes encoding"
+read_key : Keys, KeyboardKey -> KeyState
+read_key = |@Keys(bytes), requested_key|
+    when List.get(bytes, key_to_u64(requested_key)) is
+        Ok(byte) -> key_state_from_u8(byte)
+        Err(OutOfBounds) -> crash("bug in key bytes encoding")
 
 KeyboardKey : [
     KeyApostrophe, # = 39,
@@ -136,18 +136,18 @@ KeyState : [
     PressedRepeat,
 ]
 
-keyStateFromU8 : U8 -> KeyState
-keyStateFromU8 = \n ->
+key_state_from_u8 : U8 -> KeyState
+key_state_from_u8 = |n|
     when n is
         0 -> Pressed
         1 -> Released
         2 -> Down
         3 -> Up
         4 -> PressedRepeat
-        _ -> crash "unreachable key state from host"
+        _ -> crash("unreachable key state from host")
 
-keyToU64 : KeyboardKey -> U64
-keyToU64 = \key ->
+key_to_u64 : KeyboardKey -> U64
+key_to_u64 = |key|
     when key is
         KeyApostrophe -> 39
         KeyComma -> 44
@@ -258,130 +258,136 @@ keyToU64 = \key ->
         KeyVolumeUp -> 24
         KeyVolumeDown -> 25
 
-keyFromU64 : U64 -> Result KeyboardKey [Ignored]
-keyFromU64 = \key ->
+key_from_u64 : U64 -> Result KeyboardKey [Ignored]
+key_from_u64 = |key|
     when key is
-        39 -> Ok KeyApostrophe
-        44 -> Ok KeyComma
-        45 -> Ok KeyMinus
-        46 -> Ok KeyPeriod
-        47 -> Ok KeySlash
-        48 -> Ok KeyZero
-        49 -> Ok KeyOne
-        50 -> Ok KeyTwo
-        51 -> Ok KeyThree
-        52 -> Ok KeyFour
-        53 -> Ok KeyFive
-        54 -> Ok KeySix
-        55 -> Ok KeySeven
-        56 -> Ok KeyEight
-        57 -> Ok KeyNine
-        59 -> Ok KeySemicolon
-        61 -> Ok KeyEqual
-        65 -> Ok KeyA
-        66 -> Ok KeyB
-        67 -> Ok KeyC
-        68 -> Ok KeyD
-        69 -> Ok KeyE
-        70 -> Ok KeyF
-        71 -> Ok KeyG
-        72 -> Ok KeyH
-        73 -> Ok KeyI
-        74 -> Ok KeyJ
-        75 -> Ok KeyK
-        76 -> Ok KeyL
-        77 -> Ok KeyM
-        78 -> Ok KeyN
-        79 -> Ok KeyO
-        80 -> Ok KeyP
-        81 -> Ok KeyQ
-        82 -> Ok KeyR
-        83 -> Ok KeyS
-        84 -> Ok KeyT
-        85 -> Ok KeyU
-        86 -> Ok KeyV
-        87 -> Ok KeyW
-        88 -> Ok KeyX
-        89 -> Ok KeyY
-        90 -> Ok KeyZ
-        32 -> Ok KeySpace
-        256 -> Ok KeyEscape
-        257 -> Ok KeyEnter
-        258 -> Ok KeyTab
-        259 -> Ok KeyBackspace
-        260 -> Ok KeyInsert
-        261 -> Ok KeyDelete
-        262 -> Ok KeyRight
-        263 -> Ok KeyLeft
-        264 -> Ok KeyDown
-        265 -> Ok KeyUp
-        266 -> Ok KeyPageUp
-        267 -> Ok KeyPageDown
-        268 -> Ok KeyHome
-        269 -> Ok KeyEnd
-        280 -> Ok KeyCapsLock
-        281 -> Ok KeyScrollLock
-        282 -> Ok KeyNumLock
-        283 -> Ok KeyPrintScreen
-        284 -> Ok KeyPause
-        290 -> Ok KeyF1
-        291 -> Ok KeyF2
-        292 -> Ok KeyF3
-        293 -> Ok KeyF4
-        294 -> Ok KeyF5
-        295 -> Ok KeyF6
-        296 -> Ok KeyF7
-        297 -> Ok KeyF8
-        298 -> Ok KeyF9
-        299 -> Ok KeyF10
-        300 -> Ok KeyF11
-        301 -> Ok KeyF12
-        340 -> Ok KeyLeftShift
-        341 -> Ok KeyLeftControl
-        342 -> Ok KeyLeftAlt
-        343 -> Ok KeyLeftSuper
-        344 -> Ok KeyRightShift
-        345 -> Ok KeyRightControl
-        346 -> Ok KeyRightAlt
-        347 -> Ok KeyRightSuper
-        348 -> Ok KeyKBMenu
-        91 -> Ok KeyLeftBracket
-        92 -> Ok KeyBackslash
-        93 -> Ok KeyRightBracket
-        96 -> Ok KeyGrave
-        320 -> Ok KeyKP0
-        321 -> Ok KeyKP1
-        322 -> Ok KeyKP2
-        323 -> Ok KeyKP3
-        324 -> Ok KeyKP4
-        325 -> Ok KeyKP5
-        326 -> Ok KeyKP6
-        327 -> Ok KeyKP7
-        328 -> Ok KeyKP8
-        329 -> Ok KeyKP9
-        330 -> Ok KeyKPDecimal
-        331 -> Ok KeyKPDivide
-        332 -> Ok KeyKPMultiply
-        333 -> Ok KeyKPSubtract
-        334 -> Ok KeyKPAdd
-        335 -> Ok KeyKPEnter
-        336 -> Ok KeyKPEqual
-        4 -> Ok KeyBack
-        24 -> Ok KeyVolumeUp
-        25 -> Ok KeyVolumeDown
-        _ -> Err Ignored
+        39 -> Ok(KeyApostrophe)
+        44 -> Ok(KeyComma)
+        45 -> Ok(KeyMinus)
+        46 -> Ok(KeyPeriod)
+        47 -> Ok(KeySlash)
+        48 -> Ok(KeyZero)
+        49 -> Ok(KeyOne)
+        50 -> Ok(KeyTwo)
+        51 -> Ok(KeyThree)
+        52 -> Ok(KeyFour)
+        53 -> Ok(KeyFive)
+        54 -> Ok(KeySix)
+        55 -> Ok(KeySeven)
+        56 -> Ok(KeyEight)
+        57 -> Ok(KeyNine)
+        59 -> Ok(KeySemicolon)
+        61 -> Ok(KeyEqual)
+        65 -> Ok(KeyA)
+        66 -> Ok(KeyB)
+        67 -> Ok(KeyC)
+        68 -> Ok(KeyD)
+        69 -> Ok(KeyE)
+        70 -> Ok(KeyF)
+        71 -> Ok(KeyG)
+        72 -> Ok(KeyH)
+        73 -> Ok(KeyI)
+        74 -> Ok(KeyJ)
+        75 -> Ok(KeyK)
+        76 -> Ok(KeyL)
+        77 -> Ok(KeyM)
+        78 -> Ok(KeyN)
+        79 -> Ok(KeyO)
+        80 -> Ok(KeyP)
+        81 -> Ok(KeyQ)
+        82 -> Ok(KeyR)
+        83 -> Ok(KeyS)
+        84 -> Ok(KeyT)
+        85 -> Ok(KeyU)
+        86 -> Ok(KeyV)
+        87 -> Ok(KeyW)
+        88 -> Ok(KeyX)
+        89 -> Ok(KeyY)
+        90 -> Ok(KeyZ)
+        32 -> Ok(KeySpace)
+        256 -> Ok(KeyEscape)
+        257 -> Ok(KeyEnter)
+        258 -> Ok(KeyTab)
+        259 -> Ok(KeyBackspace)
+        260 -> Ok(KeyInsert)
+        261 -> Ok(KeyDelete)
+        262 -> Ok(KeyRight)
+        263 -> Ok(KeyLeft)
+        264 -> Ok(KeyDown)
+        265 -> Ok(KeyUp)
+        266 -> Ok(KeyPageUp)
+        267 -> Ok(KeyPageDown)
+        268 -> Ok(KeyHome)
+        269 -> Ok(KeyEnd)
+        280 -> Ok(KeyCapsLock)
+        281 -> Ok(KeyScrollLock)
+        282 -> Ok(KeyNumLock)
+        283 -> Ok(KeyPrintScreen)
+        284 -> Ok(KeyPause)
+        290 -> Ok(KeyF1)
+        291 -> Ok(KeyF2)
+        292 -> Ok(KeyF3)
+        293 -> Ok(KeyF4)
+        294 -> Ok(KeyF5)
+        295 -> Ok(KeyF6)
+        296 -> Ok(KeyF7)
+        297 -> Ok(KeyF8)
+        298 -> Ok(KeyF9)
+        299 -> Ok(KeyF10)
+        300 -> Ok(KeyF11)
+        301 -> Ok(KeyF12)
+        340 -> Ok(KeyLeftShift)
+        341 -> Ok(KeyLeftControl)
+        342 -> Ok(KeyLeftAlt)
+        343 -> Ok(KeyLeftSuper)
+        344 -> Ok(KeyRightShift)
+        345 -> Ok(KeyRightControl)
+        346 -> Ok(KeyRightAlt)
+        347 -> Ok(KeyRightSuper)
+        348 -> Ok(KeyKBMenu)
+        91 -> Ok(KeyLeftBracket)
+        92 -> Ok(KeyBackslash)
+        93 -> Ok(KeyRightBracket)
+        96 -> Ok(KeyGrave)
+        320 -> Ok(KeyKP0)
+        321 -> Ok(KeyKP1)
+        322 -> Ok(KeyKP2)
+        323 -> Ok(KeyKP3)
+        324 -> Ok(KeyKP4)
+        325 -> Ok(KeyKP5)
+        326 -> Ok(KeyKP6)
+        327 -> Ok(KeyKP7)
+        328 -> Ok(KeyKP8)
+        329 -> Ok(KeyKP9)
+        330 -> Ok(KeyKPDecimal)
+        331 -> Ok(KeyKPDivide)
+        332 -> Ok(KeyKPMultiply)
+        333 -> Ok(KeyKPSubtract)
+        334 -> Ok(KeyKPAdd)
+        335 -> Ok(KeyKPEnter)
+        336 -> Ok(KeyKPEqual)
+        4 -> Ok(KeyBack)
+        24 -> Ok(KeyVolumeUp)
+        25 -> Ok(KeyVolumeDown)
+        _ -> Err(Ignored)
 
 expect
-    bytes = List.repeat 2u8 350
-    keys = pack bytes
-    state = readKey keys KeyLeft
+    bytes = List.repeat(2u8, 350)
+    keys = pack(bytes)
+    state = read_key(keys, KeyLeft)
     state == Down
 
 expect
-    range = List.range { start: At 0, end: At 350 }
-    allKeys = List.keepOks range \i ->
-        when keyFromU64 i is
-            Ok key -> Ok (key, i)
-            Err Ignored -> Err Ignored
-    List.all allKeys \(key, i) ->
-        keyToU64 key == i
+    range = List.range({ start: At(0), end: At(350) })
+    all_keys = List.keep_oks(
+        range,
+        |i|
+            when key_from_u64(i) is
+                Ok(key) -> Ok((key, i))
+                Err(Ignored) -> Err(Ignored),
+    )
+    List.all(
+        all_keys,
+        |(key, i)|
+            key_to_u64(key) == i,
+    )

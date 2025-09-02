@@ -1,7 +1,20 @@
 #!/bin/bash
 
-# e.g. 'aarch64-apple-darwin'
-triple=$(rustc -vV | sed -n 's|host: ||p' | sed 's|-|_|g')
+# # e.g. 'aarch64-apple-darwin'
+# triple=$(rustc -vV | sed -n 's|host: ||p' | sed 's|-|_|g')
+
+OUTPUT_DIR="../src"
+OUTPUT_FILE="$OUTPUT_DIR/lib.rs"
+
+[[ -d "$OUTPUT_DIR" ]] || mkdir "$OUTPUT_DIR"
+
+# The output of bindgen will be appended to the following header for warning suppression.
+FLAGS_HEADER="#![allow(dead_code)]
+#![allow(nonstandard_style)]
+#![allow(unused_variables)]
+"
+
+echo "$FLAGS_HEADER" > "$OUTPUT_FILE"
 
 # Generate bindings
 # install binidgen with `cargo install bindgen-cli`
@@ -16,4 +29,7 @@ bindgen raylib.h \
   --blocklist-type "ENUM_PATTERN.*" \
   --merge-extern-blocks \
   --no-layout-tests \
-  --output "../lib.rs"
+  >> "$OUTPUT_FILE"
+  #--output "$OUTPUT_DIR/lib.rs"
+
+

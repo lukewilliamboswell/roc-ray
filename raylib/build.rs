@@ -1,3 +1,5 @@
+// NB: this file has been created following the rust-bindgen tutorial: https://rust-lang.github.io/rust-bindgen/tutorial-3.html
+
 use std::path::PathBuf;
 
 fn main() {
@@ -18,27 +20,27 @@ fn main() {
 
     match target {
         RocRaySupportedTarget::Linux => {
-             println!(
-                 "cargo:rustc-link-search=native={}",
-                 manifest_dir().join("raylib-5.0_linux_amd64").display()
-             )
+            println!(
+                "cargo:rustc-link-search=native={}",
+                manifest_dir().join("raylib-5.5_linux_amd64").display()
+            )
         }
         RocRaySupportedTarget::Windows => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_win64_msvc16").display()
+                manifest_dir().join("raylib-5.5_win64_msvc16").display()
             )
         }
         RocRaySupportedTarget::Web => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_webassembly").display()
+                manifest_dir().join("raylib-5.5_webassembly").display()
             )
         }
         RocRaySupportedTarget::MacOS => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_macos").display()
+                manifest_dir().join("raylib-5.5_macos").display()
             );
 
             // Link Objective-C runtime first
@@ -57,6 +59,19 @@ fn main() {
 
     // println!("cargo:rustc-link-lib=static=raylib");
     println!("cargo:rustc-link-lib=dylib=raylib");
+
+    // NOTA BENE: the section below was intended to replace the manual creation
+    // of rust-bindings via bindgen. However, it is, as of yet, not functional!
+    // let bindings = bindgen::Builder::default()
+    // .header("wrapper.h")
+    // .parse_callbacks(Box::new(bindgen::CargoCallbacks::new())) .generate()
+    // .expect("Unable to generate bindings");
+
+    // let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    // bindings
+    //     .write_to_file(out_path.join("bindings.rs"))
+    //     .expect("Couldn't write bindings!");
+
 }
 
 #[derive(Debug)]

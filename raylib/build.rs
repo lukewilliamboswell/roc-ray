@@ -18,10 +18,10 @@ fn main() {
 
     match target {
         RocRaySupportedTarget::Linux => {
-            // println!(
-            //     "cargo:rustc-link-search=native={}",
-            //     manifest_dir().join("raylib-5.0_linux_amd64").display()
-            // )
+             println!(
+                 "cargo:rustc-link-search=native={}",
+                 manifest_dir().join("raylib-5.0_linux_amd64").display()
+             )
         }
         RocRaySupportedTarget::Windows => {
             println!(

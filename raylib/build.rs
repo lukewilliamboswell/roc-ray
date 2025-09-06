@@ -1,8 +1,10 @@
 // NB: this file has been created following the rust-bindgen tutorial: https://rust-lang.github.io/rust-bindgen/tutorial-3.html
 
+use std::env;
 use std::path::PathBuf;
 
 fn main() {
+
     // Get the roc ray supported target
     let arch = build_target::target_arch().unwrap();
     let os = build_target::target_os().unwrap();
@@ -60,18 +62,34 @@ fn main() {
     // println!("cargo:rustc-link-lib=static=raylib");
     println!("cargo:rustc-link-lib=dylib=raylib");
 
-    // NOTA BENE: the section below was intended to replace the manual creation
-    // of rust-bindings via bindgen. However, it is, as of yet, not functional!
-    // let bindings = bindgen::Builder::default()
-    // .header("wrapper.h")
-    // .parse_callbacks(Box::new(bindgen::CargoCallbacks::new())) .generate()
-    // .expect("Unable to generate bindings");
+    // NB: The following section replaces the shell script "vendor/generate-bindngs.sh"
+    let bindings = bindgen::Builder::default()
+    .blocklist_item("DEG2RAD")
+    .blocklist_item("PI")
+    .blocklist_item("RAD2DEG")
+    .blocklist_item("__GNUC_VA_LIST")
+    .blocklist_item("__bool_true_false_are_defined")
+    .blocklist_item("false_")
+    .blocklist_item("true_")
+    .blocklist_type("ENUM_PATTERN.*")
+    .merge_extern_blocks(true)
+    .layout_tests(false)
+    .header("vendor/raylib.h")
+    .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+    .generate()
+    .expect("Unable to generate bindings");
 
-    // let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    // bindings
-    //     .write_to_file(out_path.join("bindings.rs"))
-    //     .expect("Couldn't write bindings!");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+
+    let key = "OUT_DIR";
+    match env::var(key) {
+        Ok(val) => println!("Bindings stored at {key}: {val:?}"),
+        Err(e) => println!("couldn't interpret {key}: {e}"),
+    }
 }
 
 #[derive(Debug)]

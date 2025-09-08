@@ -5,3 +5,4 @@ edition = "2021"
 
 [build-dependencies]
 build-target = "0.4"
+bindgen = "0.72"

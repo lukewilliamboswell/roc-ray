@@ -1,6 +1,10 @@
+// NB: this file has been created following the rust-bindgen tutorial: https://rust-lang.github.io/rust-bindgen/tutorial-3.html
+
+use std::env;
 use std::path::PathBuf;
 
 fn main() {
+
     // Get the roc ray supported target
     let arch = build_target::target_arch().unwrap();
     let os = build_target::target_os().unwrap();
@@ -18,27 +22,27 @@ fn main() {
 
     match target {
         RocRaySupportedTarget::Linux => {
-            // println!(
-            //     "cargo:rustc-link-search=native={}",
-            //     manifest_dir().join("raylib-5.0_linux_amd64").display()
-            // )
+            println!(
+                "cargo:rustc-link-search=native={}",
+                manifest_dir().join("raylib-5.5_linux_amd64").display()
+            )
         }
         RocRaySupportedTarget::Windows => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_win64_msvc16").display()
+                manifest_dir().join("raylib-5.5_win64_msvc16").display()
             )
         }
         RocRaySupportedTarget::Web => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_webassembly").display()
+                manifest_dir().join("raylib-5.5_webassembly").display()
             )
         }
         RocRaySupportedTarget::MacOS => {
             println!(
                 "cargo:rustc-link-search=native={}",
-                manifest_dir().join("raylib-5.0_macos").display()
+                manifest_dir().join("raylib-5.5_macos").display()
             );
 
             // Link Objective-C runtime first
@@ -57,6 +61,35 @@ fn main() {
 
     // println!("cargo:rustc-link-lib=static=raylib");
     println!("cargo:rustc-link-lib=dylib=raylib");
+
+    // NB: The following section replaces the shell script "vendor/generate-bindngs.sh"
+    let bindings = bindgen::Builder::default()
+    .blocklist_item("DEG2RAD")
+    .blocklist_item("PI")
+    .blocklist_item("RAD2DEG")
+    .blocklist_item("__GNUC_VA_LIST")
+    .blocklist_item("__bool_true_false_are_defined")
+    .blocklist_item("false_")
+    .blocklist_item("true_")
+    .blocklist_type("ENUM_PATTERN.*")
+    .merge_extern_blocks(true)
+    .layout_tests(false)
+    .header("vendor/raylib.h")
+    .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+    .generate()
+    .expect("Unable to generate bindings");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+
+    let key = "OUT_DIR";
+    match env::var(key) {
+        Ok(val) => println!("Bindings stored at {key}: {val:?}"),
+        Err(e) => println!("couldn't interpret {key}: {e}"),
+    }
 }
 
 #[derive(Debug)]

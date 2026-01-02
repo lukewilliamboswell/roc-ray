@@ -2,7 +2,7 @@ use config::ExitErrCode;
 use platform_mode::PlatformEffect;
 use roc_std::{RocBox, RocList, RocResult, RocStr};
 use roc_std_heap::ThreadSafeRefcountedResourceHeap;
-use std::ffi::{c_int, CString};
+use std::ffi::{CString, c_int, c_void};
 
 #[cfg(target_family = "wasm")]
 extern crate console_error_panic_hook;
@@ -352,6 +352,17 @@ extern "C" fn roc_fx_draw_rectangle(rect: &glue::RocRectangle, color: glue::RocC
 }
 
 #[no_mangle]
+extern "C" fn roc_fx_draw_rectangle_pro(rect: &glue::RocRectangle, origin: &glue::RocVector2, rotation: f32, color: glue::RocColor) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangle) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    unsafe {
+        raylib::DrawRectanglePro(rect.into(), origin.into(), rotation, color.into());
+    }
+}
+
+#[no_mangle]
 extern "C" fn roc_fx_draw_line(
     start: &glue::RocVector2,
     end: &glue::RocVector2,
@@ -365,6 +376,23 @@ extern "C" fn roc_fx_draw_line(
         raylib::DrawLineV(start.into(), end.into(), color.into());
     }
 }
+
+#[no_mangle]
+extern "C" fn roc_fx_draw_line_ex(
+    start: &glue::RocVector2,
+    end: &glue::RocVector2,
+    thickness: f32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawLine) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    unsafe {
+        raylib::DrawLineEx(start.into(), end.into(), thickness, color.into());
+    }
+}
+
 
 #[no_mangle]
 extern "C" fn roc_fx_draw_circle(center: &glue::RocVector2, radius: f32, color: glue::RocColor) {
@@ -392,6 +420,18 @@ extern "C" fn roc_fx_draw_circle_gradient(
 
     unsafe {
         raylib::DrawCircleGradient(x, y, radius, inner.into(), outer.into());
+    }
+}
+
+// RLAPI void DrawCircleLinesV(Vector2 center, float radius, Color color);                                  // Draw circle outline (Vector version)
+#[no_mangle]
+extern "C" fn roc_fx_draw_circle_lines(center: &glue::RocVector2, radius: f32, color: glue::RocColor) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawCircleGradient) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    unsafe {
+        raylib::DrawCircleLinesV(center.into(), radius, color.into());
     }
 }
 
@@ -430,6 +470,57 @@ extern "C" fn roc_fx_draw_rectangle_gradient_h(
 }
 
 #[no_mangle]
+extern "C" fn roc_fx_draw_ellipse(
+    center: &glue::RocVector2,
+    h: f32,
+    v: f32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientH) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+    let (x, y) = center.to_components_c_int();
+    unsafe {
+        raylib::DrawEllipse(x, y, h, v, color.into());
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_draw_ellipse_lines(
+    center: &glue::RocVector2,
+    h: f32,
+    v: f32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientH) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+    let (x, y) = center.to_components_c_int();
+    unsafe {
+        raylib::DrawEllipseLines(x, y, h, v, color.into());
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_draw_ring(
+    center: &glue::RocVector2,
+    inner: f32,
+    outer: f32,
+    start_angle: f32,
+    end_angle: f32,
+    segments: i32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawRectangleGradientH) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+    unsafe {
+        raylib::DrawRing(center.into(), inner, outer, start_angle, end_angle, segments, color.into());
+    }
+}
+
+
+#[no_mangle]
 extern "C" fn roc_fx_get_screen_size() -> glue::ScreenSize {
     if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
         display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
@@ -443,6 +534,18 @@ extern "C" fn roc_fx_get_screen_size() -> glue::ScreenSize {
             width,
             z: 0,
         }
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_get_screen_to_world_2d (point: &glue::RocVector2, boxed_camera: RocBox<()>) -> glue::RocVector2 {
+    if let Err(msg) = platform_mode::update(PlatformEffect::GetScreenSize) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+    unsafe {
+        let camera: &mut raylib::Camera2D =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_camera);
+        raylib::GetScreenToWorld2D(point.into(), *camera).into()
     }
 }
 
@@ -512,6 +615,16 @@ extern "C" fn roc_fx_set_draw_fps(show: bool, pos: &glue::RocVector2) {
         c.fps_show = show;
         c.fps_position = pos.to_components_c_int();
     });
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_get_camera_matrix_2d(_boxed_camera: RocBox<()>) -> glue::RocMatrix {
+    let camera: &mut raylib::Camera2D =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(_boxed_camera);
+
+    let matrix = unsafe { raylib::GetCameraMatrix2D(*camera) };
+
+    return matrix.into();
 }
 
 #[no_mangle]
@@ -598,6 +711,90 @@ extern "C" fn roc_fx_begin_mode_2d(boxed_camera: RocBox<()>) {
     }
 }
 
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_begin_shader_mode(boxed_shader: RocBox<()>) {
+
+    unsafe {
+        let shader: &mut raylib::Shader =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+
+        raylib::BeginShaderMode(*shader);
+    }
+}
+
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_get_shader_location(boxed_shader: RocBox<()>, uniform_name: &RocStr) -> RocResult<i32, RocStr> {
+    let uniform = CString::new(uniform_name.to_string().as_str()).unwrap();
+
+    let location = unsafe {
+        let shader: &mut raylib::Shader =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+        let location = raylib::GetShaderLocation(*shader, uniform.as_ptr());
+        if location < 0 {
+            return RocResult::err(
+            format!("Uniform location for '{}' not found", uniform_name.to_string())
+                .as_str()
+                .into(),
+            )
+        } else {
+            return RocResult::ok(location);
+        }
+    };
+}
+
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_set_shader_value(boxed_shader: RocBox<()>, loc_index: i32, value: f32) {
+    let f = &value as *const f32 as *const c_void;
+    return unsafe {
+        let shader: &mut raylib::Shader =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+        raylib::SetShaderValue(*shader, loc_index, f, raylib::ShaderUniformDataType_SHADER_UNIFORM_FLOAT.try_into().unwrap());
+    }
+}
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_set_shader_value_int(boxed_shader: RocBox<()>, loc_index: i32, value: i32) {
+    let f = &value as *const i32 as *const c_void;
+    return unsafe {
+        let shader: &mut raylib::Shader =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+        raylib::SetShaderValue(*shader, loc_index, f, raylib::ShaderUniformDataType_SHADER_UNIFORM_INT.try_into().unwrap());
+    }
+}
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_set_shader_value_vec2(boxed_shader: RocBox<()>, loc_index: i32, value: &glue::RocVector2) {
+    let shader: &mut raylib::Shader = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+    let value_ : raylib::Vector2 = value.into();
+    let ptr_ = &value_ as *const raylib::Vector2 as *const c_void;
+    return unsafe {
+        raylib::SetShaderValue(*shader, loc_index, ptr_, raylib::ShaderUniformDataType_SHADER_UNIFORM_VEC2.try_into().unwrap());
+    }
+}
+
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_set_shader_value_matrix(boxed_shader: RocBox<()>, loc_index: i32,
+     m0: f32,  m4: f32,  m8: f32,  m12: f32,
+     m1: f32,  m5: f32,  m9: f32,  m13: f32,
+     m2: f32,  m6: f32,  m10: f32,  m14: f32,
+     m3: f32,  m7: f32,  m11: f32,  m15: f32,
+) {
+    let mat4 = raylib::Matrix {
+            m0 : m0, m4 : m4, m8 : m8, m12 : m8,
+            m1 : m1, m5 : m5, m9 : m9, m13 : m13,
+            m2 : m2, m6 : m6, m10 : m10, m14 : m14,
+            m3 : m3, m7 : m7, m11 : m11, m15 : m15,
+        };
+    return unsafe {
+        let shader: &mut raylib::Shader =
+            ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+        raylib::SetShaderValueMatrix(*shader, loc_index, mat4);
+    }
+}
 #[no_mangle]
 extern "C" fn roc_fx_end_mode_2d(_boxed_camera: RocBox<()>) {
     if let Err(msg) = platform_mode::update(PlatformEffect::EndMode2D) {
@@ -633,6 +830,13 @@ extern "C" fn roc_fx_end_texture(_boxed_render_texture: RocBox<()>) {
 
     unsafe {
         raylib::EndTextureMode();
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_end_shader_mode() {
+    unsafe {
+        raylib::EndShaderMode();
     }
 }
 
@@ -853,6 +1057,34 @@ extern "C" fn roc_fx_draw_texture_rec(
 }
 
 #[no_mangle]
+extern "C" fn roc_fx_draw_texture_pro(
+    boxed_texture: RocBox<()>,
+    source: &glue::RocRectangle,
+    dest: &glue::RocRectangle,
+    position: &glue::RocVector2,
+    rotation: f32,
+    color: glue::RocColor,
+) {
+    if let Err(msg) = platform_mode::update(PlatformEffect::DrawTextureRectangle) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    let texture: &mut raylib::Texture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    unsafe {
+        raylib::DrawTexturePro(
+            *texture,
+            source.into(),
+            dest.into(),
+            position.into(),
+            rotation,
+            color.into()
+        );
+    }
+}
+
+#[no_mangle]
 extern "C" fn roc_fx_draw_render_texture_rec(
     boxed_texture: RocBox<()>,
     source: &glue::RocRectangle,
@@ -874,6 +1106,61 @@ extern "C" fn roc_fx_draw_render_texture_rec(
             color.into(),
         );
     }
+}
+#[no_mangle]
+extern "C" fn roc_fx_draw_render_texture_pro(
+    boxed_texture: RocBox<()>,
+    source: &glue::RocRectangle,
+    dest: &glue::RocRectangle,
+    origin: &glue::RocVector2,
+    rotation: f32,
+    color: glue::RocColor,
+) {
+    let texture: &mut raylib::RenderTexture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    unsafe {
+        raylib::DrawTexturePro(
+            texture.texture,
+            source.into(),
+            dest.into(),
+            origin.into(),
+            rotation,
+            color.into(),
+        );
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_draw_poly(
+    center: &glue::RocVector2,
+    sides: i32,
+    radius: f32,
+    rotation: f32,
+    color: glue::RocColor,
+) {
+    unsafe {
+        raylib::DrawPoly(
+            center.into(),
+            sides,
+            radius,
+            rotation,
+            color.into(),
+        );
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_set_render_texture_filter(
+    boxed_texture: RocBox<()>,
+    filter_mode: i32,
+) {
+    let texture: &mut raylib::RenderTexture =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+    unsafe {
+        raylib::SetTextureFilter(texture.texture, filter_mode);
+    }
+
 }
 
 #[no_mangle]
@@ -945,6 +1232,27 @@ extern "C" fn roc_fx_load_font(path: &RocStr) -> RocResult<RocBox<()>, RocStr> {
         }
 }
 
+#[no_mangle]
+extern "C" fn roc_fx_load_shader(vertex_shader: &RocStr, fragment_shader: &RocStr) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadFont) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+
+    let v_shader_path = CString::new(vertex_shader.to_string().as_str()).unwrap();
+    let f_shader_path = CString::new(fragment_shader.to_string().as_str()).unwrap();
+    let shader = unsafe { raylib::LoadShader(v_shader_path.as_ptr(), f_shader_path.as_ptr()) };
+
+    let heap = roc::shader_heap();
+    let alloc_result = heap.alloc_for(shader);
+
+    match alloc_result {
+            Ok(roc_box) => RocResult::ok(roc_box),
+            Err(err) => {
+                RocResult::err("Unable to load shader, out of memory in the shader heap. Consider using ROC_RAY_MAX_SHADER_HEAP_SIZE env var to increase the heap size.".into())
+            }
+        }
+}
+
 // TODO remove the Level or start using it again...
 #[no_mangle]
 extern "C" fn roc_fx_log(msg: &RocStr, _level: i32) {
@@ -953,4 +1261,176 @@ extern "C" fn roc_fx_log(msg: &RocStr, _level: i32) {
     }
 
     logger::log(msg.to_string().as_str());
+}
+
+//#[no_mangle]
+//extern "C" fn roc_fx_update_texture(boxed_texture: RocBox<()>, pixel_ptr: *const u8, byte_len: usize,) {
+//    if pixel_ptr.is_null() || byte_len == 0 {
+//        return;
+//    }
+//    unsafe {
+//        let texture: &mut raylib::Texture = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+//    //let font: &mut raylib::Font = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_font);
+//        let void_ptr = pixel_ptr as *const std::ffi::c_void;
+//        raylib::UpdateTexture(*texture, void_ptr);
+//    }
+//}
+
+// #[repr(C)]
+// pub enum RocPixelFormat {
+//     UncompressedGrayScale =1,
+//     UncompressedGrayAlpha = 2,
+//     UncompressedR5G6B5 = 3,
+//     UncompressedR8G8B8 = 4,
+//     UncompressedR8G8B8A8 = 5,
+// }
+
+#[no_mangle]
+extern "C" fn roc_fx_texture_format(boxed_texture: RocBox<()>) -> u32 {
+    let tex: &raylib::Texture = ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+    tex.format as u32
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_draw_triangle_fan(points: &RocList<glue::RocVector2>, color: glue::RocColor) {
+    let tmp: Vec<raylib::Vector2> =
+        points.iter().map(|p| p.into()).collect();
+    unsafe {
+        raylib::DrawTriangleFan(
+            tmp.as_ptr() as *const raylib::Vector2,
+            points.len() as i32,
+            color.into(),
+        );
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_begin_blend_mode(mode: i32) {
+    unsafe {
+        raylib::BeginBlendMode(mode);
+    }
+}
+#[no_mangle]
+extern "C" fn roc_fx_end_blend_mode() {
+    unsafe {
+        raylib::EndBlendMode();
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_gen_image_color(width: i32, height: i32, color: glue::RocColor) -> RocResult<RocBox<()>, RocStr> {
+    let image = unsafe {
+        raylib::GenImageColor(width.into(), height.into(), color.into())
+    };
+
+    if image.height != height || image.width != width {
+        return RocResult::err(
+            "failed to generate image".into()
+        )
+    }
+
+    let heap = roc::image_heap();
+    let alloc_result = heap.alloc_for(image);
+
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(err) =>
+            RocResult::err(
+                format!(
+                    "Unble to generate image heap: {}", err.to_string()
+                )
+                .as_str().into()
+        )
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_gen_image_perlin_noise(width: i32, height: i32, offset_x: i32, offset_y: i32, scale: f32) -> RocResult<RocBox<()>, RocStr> {
+    let image = unsafe {
+        raylib::GenImagePerlinNoise(width.into(), height.into(), offset_x.into(), offset_y.into(), scale.into())
+    };
+
+    if image.height != height || image.width != width {
+        return RocResult::err(
+            "failed to generate image, invalid height and/or width do not match".into()
+        )
+    }
+
+    let heap = roc::image_heap();
+    let alloc_result = heap.alloc_for(image);
+
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(err) =>
+            RocResult::err(
+            format!(
+                "Failed to generate image heap for Perlin Noise: {}", err.to_string()
+            ).as_str().into()
+        )
+    }
+}
+
+#[no_mangle]
+extern "C" fn roc_fx_load_texture_from_image(boxed_image: RocBox<()>) -> RocResult<RocBox<()>, RocStr> {
+    if let Err(msg) = platform_mode::update(PlatformEffect::LoadTexture) {
+        display_fatal_error_message(msg, ExitErrCode::EffectNotPermitted);
+    }
+    let image: &mut raylib::Image =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_image);
+
+    let texture: raylib::Texture = unsafe { raylib::LoadTextureFromImage(*image) };
+    // Validate texture loading success
+    if texture.id == 0 || texture.width == 0 || texture.height == 0 {
+        return RocResult::err(
+            format!(
+                "Failed to load texture. Verify the image is valid.",
+            )
+            .as_str()
+            .into(),
+        );
+    }
+    let heap = roc::texture_heap();
+    let alloc_result = heap.alloc_for(texture);
+    match alloc_result {
+        Ok(roc_box) => RocResult::ok(roc_box),
+        Err(_) => RocResult::err("Unable to load texture, out of memory in the texture heap. Consider using ROC_RAY_MAX_TEXTURES_HEAP_SIZE env var to increase the heap size.".into()),
+    }
+}
+
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_update_texture_from_image(
+    boxed_texture: RocBox<()>,
+    boxed_image: RocBox<()>,
+) {
+    let texture: &raylib::Texture2D =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    let image: &raylib::Image =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_image);
+
+    unsafe {
+        raylib::UpdateTexture(
+            *texture,
+            image.data,
+        );
+    }
+}
+
+#[allow(unused_variables)]
+#[no_mangle]
+extern "C" fn roc_fx_set_shader_value_texture(
+    boxed_shader: RocBox<()>,
+    loc_index: i32,
+    boxed_texture: RocBox<()>,
+) {
+    let shader: &mut raylib::Shader =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_shader);
+
+    let texture: &raylib::Texture2D =
+        ThreadSafeRefcountedResourceHeap::box_to_resource(boxed_texture);
+
+    unsafe {
+        raylib::SetShaderValueTexture(*shader, loc_index, *texture);
+    }
 }

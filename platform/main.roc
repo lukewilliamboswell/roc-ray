@@ -1,22 +1,6 @@
 platform "roc-ray"
-    requires { Model } {
-        init! : {} => Result Model []_,
-        render! : Model, RocRay.PlatformState => Result Model []_,
-    }
-    exposes [
-        RocRay,
-        Camera,
-        Draw,
-        Font,
-        Keys,
-        Mouse,
-        Music,
-        Network,
-        RenderTexture,
-        Sound,
-        Texture,
-        Time,
-    ]
+    requires { Model } { init! : {} => Result Model []_, render! : Model, RocRay.PlatformState => Result Model []_ }
+    exposes [RocRay, Camera, Draw, Font, Keys, Mouse, Music, Network, RenderTexture, Sound, Texture, Time]
     packages {}
     imports []
     provides [init_for_host!, render_for_host!]

@@ -1,7 +1,8 @@
-module [Settings, create!, update!]
+module [Settings, create!, update!, to_matrix!]
 
 import Effect
 import InternalVector
+import InternalMatrix
 import RocRay exposing [Camera, Vector2]
 
 Settings : {
@@ -40,3 +41,7 @@ create! = |{ target, offset, rotation, zoom }|
 update! : Camera, Settings => {}
 update! = |camera, { target, offset, rotation, zoom }|
     Effect.update_camera!(camera, InternalVector.from_vector2(target), InternalVector.from_vector2(offset), rotation, zoom)
+
+to_matrix! = |camera|
+    Effect.get_camera_matrix_2d! camera
+    |> InternalMatrix.to_matrix

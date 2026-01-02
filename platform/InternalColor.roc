@@ -33,3 +33,4 @@ expect
 expect
     d = from_rgba({ r: 0, g: 0, b: 0, a: 255 })
     d == @RocColor(0x00000000_FF000000)
+

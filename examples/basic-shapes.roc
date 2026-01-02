@@ -24,9 +24,11 @@ render! = |_, {}|
             Draw.text!({ pos: { x: 10, y: 10 }, text: "Hello World!", size: 40, color: Navy })
             Draw.rectangle!({ rect: { x: 100, y: 150, width: 250, height: 100 }, color: Aqua })
             Draw.rectangle_gradient_h!({ rect: { x: 400, y: 150, width: 250, height: 100 }, left: Lime, right: Navy })
-            Draw.rectangle_gradient_v!({ rect: { x: 300, y: 250, width: 250, height: 100 }, top: Maroon, bottom: Green })
+            Draw.rectangle_gradient_v!({ rect: { x: 300, y: 50, width: 250, height: 100 }, top: Maroon, bottom: Green })
             Draw.circle!({ center: { x: 200, y: 400 }, radius: 75, color: Fuchsia })
             Draw.circle_gradient!({ center: { x: 600, y: 400 }, radius: 75, inner: Yellow, outer: Maroon })
+            Draw.ellipse_lines! { center: { x: 400, y: 450 - 16 }, v: 24, h: 56, color: Black }
+            Draw.ellipse! { center: { x: 400, y: 450 - 32 * 2 + 16 }, v: 32, h: 64, color: Teal }
             Draw.line!({ start: { x: 100, y: 500 }, end: { x: 500, y: 500 }, color: Red }),
     )
 

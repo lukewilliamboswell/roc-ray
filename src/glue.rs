@@ -370,3 +370,36 @@ pub struct ScreenSize {
 }
 
 roc_refcounted_noop_impl!(ScreenSize);
+
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct RocMatrix {
+    pub m0: f32, pub m4: f32, pub m8: f32, pub m12: f32,
+    pub m1: f32, pub m5: f32, pub m9: f32, pub m13: f32,
+    pub m2: f32, pub m6: f32, pub m10: f32, pub m14: f32,
+    pub m3: f32, pub m7: f32, pub m11: f32, pub m15: f32,
+}
+
+impl From<&RocMatrix> for raylib::Matrix {
+    fn from(m: &RocMatrix) -> raylib::Matrix {
+        raylib::Matrix {
+            m0: m.m0, m4: m.m4,  m8: m.m8,  m12: m.m12,
+            m1: m.m1, m5: m.m5,  m9: m.m9,  m13: m.m13,
+            m2: m.m2, m6: m.m6, m10: m.m10, m14: m.m14,
+            m3: m.m3, m7: m.m7, m11: m.m11, m15: m.m15,
+        }
+    }
+}
+
+impl From<raylib::Matrix> for RocMatrix {
+    fn from(m: raylib::Matrix) -> RocMatrix {
+        RocMatrix {
+            m0: m.m0, m4: m.m4,  m8: m.m8,  m12: m.m12,
+            m1: m.m1, m5: m.m5,  m9: m.m9,  m13: m.m13,
+            m2: m.m2, m6: m.m6, m10: m.m10, m14: m.m14,
+            m3: m.m3, m7: m.m7, m11: m.m11, m15: m.m15,
+        }
+    }
+}
+roc_refcounted_noop_impl!(RocMatrix);

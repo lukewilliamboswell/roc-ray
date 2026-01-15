@@ -1,4 +1,4 @@
-# Roc Raylib Platform
+# RocRay Platform
 
 A [Roc platform](https://www.roc-lang.org/platforms) for creating simple graphics applications.
 

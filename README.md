@@ -1,27 +1,54 @@
-# Roc platform template for Zig
+# Roc Raylib Platform
 
-A template for building [Roc platforms](https://www.roc-lang.org/platforms) using [Zig](https://ziglang.org).
+A [Roc platform](https://www.roc-lang.org/platforms) for creating simple graphics applications.
+
+> **Work in Progress:** This branch (`new-compiler`) is actively porting features from the `main` branch while upgrading to new Roc semantics. Expect breaking changes and incomplete functionality.
+
+## Features
+
+- 2D drawing primitives (rectangles, circles, lines, text)
+- Mouse input handling (position, buttons, wheel)
+- Cross-platform support (macOS, Linux, Web/WASM)
+- Native rendering via raylib, web rendering via Canvas 2D
 
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.15.2 or later
-- [Roc](https://www.roc-lang.org/) (for bundling)
+- [Roc](https://www.roc-lang.org/)
 
-## Examples
+## Running Examples
 
-Run examples with interpreter: `roc examples/<name>.roc`
-
-Build standalone executable: `roc build examples/<name>.roc`
-
-## Building
+First, build the platform and cross-compile the pre-built host libraries for all supported targets:
 
 ```bash
-# Build for all supported targets (cross-compilation)
-zig build -Doptimize=ReleaseSafe
-
-# Build for native platform only
-zig build native -Doptimize=ReleaseSafe
+zig build
 ```
+
+Then run an example:
+
+```bash
+roc examples/hello_world.roc
+```
+
+For web/WASM, build with the wasm32 target and serve the files:
+
+```bash
+roc build --target=wasm32 examples/hello_world.roc
+```
+
+A helper script is available to build and serve WASM using `python3`:
+
+```bash
+./build_wasm.sh examples/hello_world.roc
+```
+
+## Testing
+
+```bash
+zig build test
+```
+
+This runs both Zig unit tests and WASM integration tests.
 
 ## Bundling
 
@@ -29,17 +56,16 @@ zig build native -Doptimize=ReleaseSafe
 ./bundle.sh
 ```
 
-This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host libraries.
+This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host libraries. To use a Roc package bundle it should be hosted online with a `https:` url.
 
 ## Supported Targets
 
-| Target | Library |
-|--------|---------|
-| x64mac | `platform/targets/x64mac/libhost.a` |
-| x64win | `platform/targets/x64win/host.lib` |
-| x64musl | `platform/targets/x64musl/libhost.a` |
-| arm64mac | `platform/targets/arm64mac/libhost.a` |
-| arm64win | `platform/targets/arm64win/host.lib` |
-| arm64musl | `platform/targets/arm64musl/libhost.a` |
+| Target | Description |
+|--------|-------------|
+| x64mac | macOS Intel |
+| arm64mac | macOS Apple Silicon |
+| x64glibc | Linux x64 |
+| wasm32 | Web/WASM |
 
-Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables.
+- We vender the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5) and Arm Linux not available.
+- Windows support *coming soon*

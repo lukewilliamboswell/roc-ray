@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/alpha-0-test/DasrJTsDZnnDhvbpD3qnnXXEy1zKxiV4Ad76y1CYyqtc.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.Draw
 import rr.Color

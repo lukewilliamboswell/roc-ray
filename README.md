@@ -8,7 +8,7 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple graphic
 
 - 2D drawing primitives (rectangles, circles, lines, text)
 - Mouse input handling (position, buttons, wheel)
-- Cross-platform support (macOS, Linux, Web/WASM)
+- Cross-platform support (macOS, Linux, Windows, Web/WASM)
 - Native rendering via raylib, web rendering via Canvas 2D
 
 ## Requirements
@@ -36,10 +36,14 @@ For web/WASM, build with the wasm32 target and serve the files:
 roc build --target=wasm32 examples/hello_world.roc
 ```
 
-A helper script is available to build and serve WASM using `python3`:
+Helper scripts are available to build and serve WASM:
 
 ```bash
+# Linux/macOS
 ./build_wasm.sh examples/hello_world.roc
+
+# Windows (PowerShell)
+.\build_wasm.ps1 examples\hello_world.roc
 ```
 
 ## Testing
@@ -65,7 +69,8 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | x64mac | macOS Intel |
 | arm64mac | macOS Apple Silicon |
 | x64glibc | Linux x64 |
+| x64win | Windows x64 |
 | wasm32 | Web/WASM |
 
-- We vender the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5) and Arm Linux not available.
-- Windows support *coming soon*
+- We vendor the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5)
+- ARM Linux is not available (raylib doesn't provide pre-built libraries)

@@ -15,7 +15,7 @@ const RocTarget = enum {
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
-            .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
+            .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .msvc },
             .x64glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
         };
@@ -45,6 +45,14 @@ const RocTarget = enum {
             .x64win => "windows-x64",
         };
     }
+
+    /// Get the raylib library filename for this target
+    fn raylibFilename(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64win => "raylib.lib",
+            else => "libraylib.a",
+        };
+    }
 };
 
 /// All cross-compilation targets for `zig build`
@@ -53,7 +61,7 @@ const all_native_targets = [_]RocTarget{
     .x64mac,
     .arm64mac,
     .x64glibc,
-    // Note: arm64glibc, arm64win, x64win excluded - missing raylib libraries
+    .x64win,
 };
 
 pub fn build(b: *std.Build) void {
@@ -92,6 +100,9 @@ pub fn build(b: *std.Build) void {
     const copy_all = b.addUpdateSourceFiles();
     all_step.dependOn(&copy_all.step);
 
+    // Generate Windows import libraries (needed for Windows cross-compilation)
+    generateWindowsImportLibs(b, copy_all);
+
     // Build for each native Roc target
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
@@ -108,10 +119,10 @@ pub fn build(b: *std.Build) void {
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
 
-        // Copy vendored libraylib.a to platform/targets/{target}/
+        // Copy vendored raylib library to platform/targets/{target}/
         copy_all.addCopyFileToSource(
             build_result.raylib_archive,
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libraylib.a" }),
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.raylibFilename() }),
         );
 
         // Copy libc.so stub for Linux targets
@@ -293,6 +304,12 @@ const x11_libs = [_][]const u8{
     "GLX", "X11", "Xcursor", "Xext", "Xfixes", "Xi", "Xinerama", "Xrandr", "Xrender",
 };
 
+/// Windows system libraries that raylib depends on (need import libs for cross-compilation)
+/// These are generated from MinGW DEF files (ZPL licensed) bundled with Zig
+const windows_import_libs = [_][]const u8{
+    "gdi32", "user32", "winmm", "opengl32", "shell32",
+};
+
 /// Generate X11 stub libraries for Linux cross-compilation
 fn generateX11Stubs(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     const copy_stubs = b.addUpdateSourceFiles();
@@ -324,6 +341,36 @@ fn generateX11Stubs(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.
     }
 
     return &copy_stubs.step;
+}
+
+/// Generate Windows import libraries from MinGW DEF files for cross-compilation.
+/// The DEF files are vendored from MinGW-w64 (Zope Public License) in
+/// platform/targets/windows-def/ and are used to generate import libraries.
+fn generateWindowsImportLibs(b: *std.Build, copy_step: *std.Build.Step.UpdateSourceFiles) void {
+    for (windows_import_libs) |lib_name| {
+        // DEF file path in our vendored directory
+        const def_filename = std.fmt.allocPrint(b.allocator, "{s}.def", .{lib_name}) catch @panic("OOM");
+        const def_path = b.path(b.pathJoin(&.{ "platform", "targets", "windows-def", def_filename }));
+
+        // Output library name
+        const lib_filename = std.fmt.allocPrint(b.allocator, "{s}.lib", .{lib_name}) catch @panic("OOM");
+
+        // Use zig dlltool to generate import library from DEF file
+        // dlltool creates a minimal import library that references the Windows DLL
+        const gen_lib = b.addSystemCommand(&.{"zig"});
+        gen_lib.addArg("dlltool");
+        gen_lib.addArg("-m");
+        gen_lib.addArg("i386:x86-64");
+        gen_lib.addArg("-d");
+        gen_lib.addFileArg(def_path);
+        gen_lib.addArg("-l");
+        const output_lib = gen_lib.addOutputFileArg(lib_filename);
+
+        copy_step.addCopyFileToSource(
+            output_lib,
+            b.pathJoin(&.{ "platform", "targets", "x64win", lib_filename }),
+        );
+    }
 }
 
 /// Generate libc stub shared library with SONAME libc.so.6
@@ -410,9 +457,10 @@ fn buildHostLib(
         host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
-    host_lib.bundle_compiler_rt = true;
+    // Bundle compiler_rt for non-Windows targets. Windows gets compiler_rt from Roc's shim.
+    host_lib.bundle_compiler_rt = (target.result.os.tag != .windows);
 
-    const raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, "libraylib.a" }));
+    const raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, roc_target.raylibFilename() }));
 
     const libc_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
         const stub = generateLibcStub(b, target);

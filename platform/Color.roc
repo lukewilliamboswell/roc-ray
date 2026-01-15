@@ -1,0 +1,15 @@
+Color := [
+    Black,
+    Blue,
+    DarkGray,
+    Gray,
+    Green,
+    LightGray,
+    Orange,
+    Pink,
+    Purple,
+    RayWhite,
+    Red,
+    White,
+    Yellow,
+].{}

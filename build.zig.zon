@@ -1,0 +1,17 @@
+.{
+    .name = .roc_platform_template_zig,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .roc = .{
+            .url = "git+https://github.com/roc-lang/roc#2c2c1d1745392982c9fe575929ff5c94306adf4c",
+            .hash = "roc-0.0.0-NAC9wxOemgBT7iBlgi-QM__Nroz_aUd4YS4ohKre_ZRM",
+        },
+    },
+    .fingerprint = 0xb91745a94628a7e0,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "platform",
+    },
+}

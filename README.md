@@ -1,5 +1,7 @@
 # Roc Ray Graphics Platform
 
+> **New Version Available:** Active development has moved to the [`new-compiler`](https://github.com/lukewilliamboswell/roc-ray/tree/new-compiler) branch, which uses the new Roc compiler and Zig-based platform. This `main` branch will be replaced soon. For the latest features and updates, please switch to the new branch.
+
 [Roc](https://www.roc-lang.org) platform for building graphics applications, like games and simulations, while using the [Raylib](https://www.raylib.com) graphics library.
 
 We aim to provide a nice experience for the hobby developer or a small team who wants to build a game or graphical application in Roc.

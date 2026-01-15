@@ -86,7 +86,6 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-15-large   # x64mac
           - macos-15         # arm64mac
           - ubuntu-24.04     # x64glibc
           - windows-2022     # x64win

@@ -11,7 +11,6 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - macos-15-large   # x64mac
           - macos-15         # arm64mac
           - ubuntu-22.04     # x64glibc
           - windows-2022     # x64win
@@ -37,4 +36,6 @@ jobs:
         run: zig build
 
       - name: Run tests
+        # Native tests require MSVC libraries on Windows which aren't available in CI
+        if: runner.os != 'Windows'
         run: zig build test

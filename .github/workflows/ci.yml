@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15-large   # x64mac
+          - macos-15         # arm64mac
+          - ubuntu-22.04     # x64glibc
+          - windows-2022     # x64win
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.15.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build platform
+        run: zig build
+
+      - name: Run tests
+        run: zig build test

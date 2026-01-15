@@ -19,6 +19,7 @@ platform ""
 			## libm.so must come after libraylib.a (which uses it) or --as-needed drops it
 			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
 			## arm64glibc not supported - raylib doesn't provide pre-built libraries for Linux ARM
+			x64win: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app],
 		}
 		static_lib: {
 			wasm32: ["libhost.a", app],

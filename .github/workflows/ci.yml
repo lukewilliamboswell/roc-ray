@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15         # arm64mac
+          - ubuntu-22.04     # x64glibc
+          - windows-2022     # x64win
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.15.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Roc from pinned commit
+        run: |
+          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+          echo "Building Roc from commit: $ROC_COMMIT"
+
+          git init roc-src
+          cd roc-src
+          git remote add origin https://github.com/roc-lang/roc
+          git fetch --depth 1 origin "$ROC_COMMIT"
+          git checkout FETCH_HEAD
+
+          zig build roc
+
+          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+
+      - name: Build platform
+        run: zig build
+
+      - name: Run Zig tests
+        # Native tests require MSVC libraries on Windows which aren't available in CI
+        if: runner.os != 'Windows'
+        run: zig build test
+
+      - name: Bundle platform
+        run: ./bundle.sh
+
+      - name: Start HTTP server for bundle
+        run: |
+          python3 -m http.server 8000 &
+          sleep 3
+
+          BUNDLE_FILE=$(ls *.tar.zst 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_FILE" ]; then
+            echo "Error: No bundle file found"
+            exit 1
+          fi
+
+          if ! curl -sf "http://localhost:8000/$BUNDLE_FILE" -o /dev/null; then
+            echo "Error: Bundle not accessible at http://localhost:8000/$BUNDLE_FILE"
+            exit 1
+          fi
+          echo "Bundle accessible at http://localhost:8000/$BUNDLE_FILE"
+
+          echo "BUNDLE_URL=http://localhost:8000/$BUNDLE_FILE" >> "$GITHUB_ENV"
+
+      - name: Update examples to use bundled platform
+        run: |
+          for example in examples/*.roc; do
+            echo "Updating: $example"
+            sed -i.bak "s|platform \"../platform/main.roc\"|platform \"$BUNDLE_URL\"|g" "$example"
+            rm -f "$example.bak"
+          done
+
+      # TODO: Re-enable once https://github.com/roc-lang/roc/issues/9034 is resolved
+      # - name: Check examples (roc check)
+      #   run: |
+      #     for example in examples/*.roc; do
+      #       echo "Checking: $example"
+      #       roc check "$example"
+      #     done
+
+      - name: Test examples (roc test)
+        run: |
+          for example in examples/*.roc; do
+            echo "Testing: $example"
+            roc test "$example"
+          done
+
+      - name: Build examples (roc build)
+        run: |
+          for example in examples/*.roc; do
+            echo "Building: $example"
+            roc build "$example"
+          done

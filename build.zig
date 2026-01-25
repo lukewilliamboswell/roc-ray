@@ -154,7 +154,7 @@ pub fn build(b: *std.Build) void {
         .name = "host",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host_web.zig"),
+            .root_source_file = b.path("src/host_web.zig"),
             .target = wasm_target,
             .optimize = optimize,
             .strip = false, // Preserve debug info for better error messages
@@ -188,7 +188,7 @@ pub fn build(b: *std.Build) void {
 
         const native_tests = b.addTest(.{
             .root_module = b.createModule(.{
-                .root_source_file = b.path("platform/host_native.zig"),
+                .root_source_file = b.path("src/host_native.zig"),
                 .target = native_target,
                 .optimize = optimize,
                 .imports = &.{
@@ -207,7 +207,7 @@ pub fn build(b: *std.Build) void {
     // Zig unit tests for host_web.zig (runs natively, tests pure command buffer logic)
     const web_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host_web.zig"),
+            .root_source_file = b.path("src/host_web.zig"),
             .target = native_target,
             .optimize = optimize,
             .imports = &.{
@@ -222,7 +222,7 @@ pub fn build(b: *std.Build) void {
     const wasm_test_exe = b.addExecutable(.{
         .name = "host_web",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host_web.zig"),
+            .root_source_file = b.path("src/host_web.zig"),
             .target = wasm_target,
             .optimize = optimize,
             .strip = false,
@@ -430,7 +430,7 @@ fn buildHostLib(
         .name = "host",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host_native.zig"),
+            .root_source_file = b.path("src/host_native.zig"),
             .target = target,
             .optimize = optimize,
             .strip = optimize != .Debug,

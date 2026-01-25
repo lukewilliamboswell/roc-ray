@@ -348,7 +348,6 @@ fn forceIncludeGLFunctions() void {
     _ = rl.rlUnloadFramebuffer;
     _ = rl.rlFramebufferAttach;
     _ = rl.rlFramebufferComplete;
-    _ = rl.rlBindFramebuffer;
     _ = rl.rlEnableFramebuffer;
     _ = rl.rlDisableFramebuffer;
 
@@ -380,7 +379,6 @@ fn forceIncludeGLFunctions() void {
     // Shader uniform functions (glUniform1fv, glUniform2fv, glUniform3fv, glUniform4fv, etc.)
     _ = rl.rlSetUniform;
     _ = rl.rlSetUniformMatrix;
-    _ = rl.rlSetUniformMatrices;
     _ = rl.rlSetUniformSampler;
     _ = rl.rlLoadShaderCode;
     _ = rl.rlLoadShaderProgram;
@@ -409,12 +407,11 @@ fn forceIncludeGLFunctions() void {
     _ = rl.rlEnableVertexBufferElement;
     _ = rl.rlDisableVertexBufferElement;
 
-    // Depth/stencil functions (glDepthMask, glColorMask)
+    // Depth/stencil functions (glDepthMask)
     _ = rl.rlEnableDepthTest;
     _ = rl.rlDisableDepthTest;
     _ = rl.rlEnableDepthMask;
     _ = rl.rlDisableDepthMask;
-    _ = rl.rlColorMask;
 
     // Scissor functions (glScissor)
     _ = rl.rlEnableScissorTest;

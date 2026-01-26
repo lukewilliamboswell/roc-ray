@@ -86,10 +86,11 @@ jobs:
           done
 
       - name: Run all Roc tests
-        # Skip simulation tests on Windows due to MSVC library requirements
+        # Simulation tests are platform-specific (.rrsim files recorded on macOS)
+        # Skip on Windows (MSVC requirements) and Linux (different platform)
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            python3 ci/all_tests.py --skip-sim
-          else
+          if [ "$RUNNER_OS" = "macOS" ]; then
             python3 ci/all_tests.py
+          else
+            python3 ci/all_tests.py --skip-sim
           fi

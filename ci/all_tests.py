@@ -19,10 +19,13 @@ TODO replace me with a Roc script when basic-cli is implemented
 
 import argparse
 import os
+import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+IS_WINDOWS = platform.system() == "Windows"
 
 
 def run_cmd(
@@ -33,12 +36,15 @@ def run_cmd(
         print(f"  Running: {' '.join(cmd)}" + (f" (in {cwd})" if cwd else ""))
 
     merged_env = {**os.environ, **(env or {})}
+
+    # On Windows, use shell=True so subprocess can find executables in PATH
     result = subprocess.run(
         cmd,
         capture_output=not verbose,
         text=True,
         env=merged_env,
         cwd=cwd,
+        shell=IS_WINDOWS,
     )
 
     if result.returncode != 0:

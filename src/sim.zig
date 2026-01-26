@@ -14,8 +14,21 @@ pub const RocPlatformState = roc_types.RocPlatformState;
 /// Magic bytes for .rrsim file format
 pub const MAGIC = [4]u8{ 'R', 'R', 'S', 'M' };
 
-/// Current format version
-pub const VERSION: u32 = 1;
+/// Current format version (v2: u64 frame_count, epsilon-based float comparison)
+pub const VERSION: u32 = 2;
+
+/// Epsilon for floating-point comparisons.
+/// Set to 0.001 (1/1000th of a pixel) which is:
+/// - Large enough to absorb FP rounding errors across platforms (~1e-5 for values in 0-1000 range)
+/// - Small enough to catch intentional 1-pixel changes
+/// This enables cross-platform simulation tests where ARM64 and x64 may produce
+/// slightly different float values for identical visual output.
+pub const FLOAT_EPSILON: f32 = 0.001;
+
+/// Compare two floats with epsilon tolerance for cross-platform compatibility
+fn floatEq(a: f32, b: f32) bool {
+    return @abs(a - b) < FLOAT_EPSILON;
+}
 
 /// Simulation mode
 pub const SimMode = enum {
@@ -94,22 +107,22 @@ pub const DrawCommand = union(DrawCommandTag) {
         return switch (self) {
             .BeginFrame, .EndFrame => true,
             .Clear => |c| c == other.Clear,
-            .Circle => |c| c.center_x == other.Circle.center_x and
-                c.center_y == other.Circle.center_y and
-                c.radius == other.Circle.radius and
+            .Circle => |c| floatEq(c.center_x, other.Circle.center_x) and
+                floatEq(c.center_y, other.Circle.center_y) and
+                floatEq(c.radius, other.Circle.radius) and
                 c.color == other.Circle.color,
-            .Line => |l| l.start_x == other.Line.start_x and
-                l.start_y == other.Line.start_y and
-                l.end_x == other.Line.end_x and
-                l.end_y == other.Line.end_y and
+            .Line => |l| floatEq(l.start_x, other.Line.start_x) and
+                floatEq(l.start_y, other.Line.start_y) and
+                floatEq(l.end_x, other.Line.end_x) and
+                floatEq(l.end_y, other.Line.end_y) and
                 l.color == other.Line.color,
-            .Rectangle => |r| r.x == other.Rectangle.x and
-                r.y == other.Rectangle.y and
-                r.width == other.Rectangle.width and
-                r.height == other.Rectangle.height and
+            .Rectangle => |r| floatEq(r.x, other.Rectangle.x) and
+                floatEq(r.y, other.Rectangle.y) and
+                floatEq(r.width, other.Rectangle.width) and
+                floatEq(r.height, other.Rectangle.height) and
                 r.color == other.Rectangle.color,
-            .Text => |t| t.pos_x == other.Text.pos_x and
-                t.pos_y == other.Text.pos_y and
+            .Text => |t| floatEq(t.pos_x, other.Text.pos_x) and
+                floatEq(t.pos_y, other.Text.pos_y) and
                 t.size == other.Text.size and
                 t.color == other.Text.color and
                 t.text_offset == other.Text.text_offset and
@@ -265,14 +278,33 @@ pub const SimState = struct {
         }
     }
 
+    /// Find existing text in string buffer, returns offset or null if not found
+    fn findExistingText(self: *const SimState, text: []const u8) ?u32 {
+        if (text.len == 0 or self.string_buffer.items.len < text.len) return null;
+
+        // Search for existing occurrence
+        const haystack = self.string_buffer.items;
+        var i: usize = 0;
+        while (i + text.len <= haystack.len) : (i += 1) {
+            if (std.mem.eql(u8, haystack[i..][0..text.len], text)) {
+                return @intCast(i);
+            }
+        }
+        return null;
+    }
+
     /// Record a text output - handles text specially to avoid string_buffer issues in Test mode
+    /// Deduplicates text strings to save space in recordings
     pub fn recordTextOutput(self: *SimState, text_slice: []const u8, pos_x: f32, pos_y: f32, size: i32, color: u8) !void {
         if (self.mode == .Normal) return;
 
         if (self.mode == .Record) {
-            // In Record mode, append text and record command with offset
-            const text_offset: u32 = @intCast(self.string_buffer.items.len);
-            try self.string_buffer.appendSlice(self.allocator, text_slice);
+            // In Record mode, deduplicate text and record command with offset
+            const text_offset: u32 = self.findExistingText(text_slice) orelse blk: {
+                const offset: u32 = @intCast(self.string_buffer.items.len);
+                try self.string_buffer.appendSlice(self.allocator, text_slice);
+                break :blk offset;
+            };
             const cmd = DrawCommand{ .Text = .{
                 .pos_x = pos_x,
                 .pos_y = pos_y,
@@ -293,7 +325,7 @@ pub const SimState = struct {
                     if (std.meta.activeTag(expected) == .Text) {
                         const e = expected.Text;
                         const expected_text = self.getText(e.text_offset, e.text_len);
-                        matches = (pos_x == e.pos_x and pos_y == e.pos_y and
+                        matches = (floatEq(pos_x, e.pos_x) and floatEq(pos_y, e.pos_y) and
                             size == e.size and color == e.color and
                             std.mem.eql(u8, text_slice, expected_text));
                     }
@@ -365,6 +397,7 @@ pub const SimState = struct {
     }
 
     /// Compare two commands, using text content comparison for Text commands
+    /// Uses epsilon-based float comparison for cross-platform compatibility
     fn commandsEqual(self: *const SimState, actual: DrawCommand, expected: DrawCommand) bool {
         const actual_tag = std.meta.activeTag(actual);
         const expected_tag = std.meta.activeTag(expected);
@@ -375,23 +408,23 @@ pub const SimState = struct {
             .Clear => |a| a == expected.Clear,
             .Circle => |a| {
                 const e = expected.Circle;
-                return a.center_x == e.center_x and a.center_y == e.center_y and
-                    a.radius == e.radius and a.color == e.color;
+                return floatEq(a.center_x, e.center_x) and floatEq(a.center_y, e.center_y) and
+                    floatEq(a.radius, e.radius) and a.color == e.color;
             },
             .Line => |a| {
                 const e = expected.Line;
-                return a.start_x == e.start_x and a.start_y == e.start_y and
-                    a.end_x == e.end_x and a.end_y == e.end_y and a.color == e.color;
+                return floatEq(a.start_x, e.start_x) and floatEq(a.start_y, e.start_y) and
+                    floatEq(a.end_x, e.end_x) and floatEq(a.end_y, e.end_y) and a.color == e.color;
             },
             .Rectangle => |a| {
                 const e = expected.Rectangle;
-                return a.x == e.x and a.y == e.y and a.width == e.width and
-                    a.height == e.height and a.color == e.color;
+                return floatEq(a.x, e.x) and floatEq(a.y, e.y) and floatEq(a.width, e.width) and
+                    floatEq(a.height, e.height) and a.color == e.color;
             },
             .Text => |a| {
                 const e = expected.Text;
-                // Compare position, size, color
-                if (a.pos_x != e.pos_x or a.pos_y != e.pos_y or
+                // Compare position, size, color (floats with epsilon)
+                if (!floatEq(a.pos_x, e.pos_x) or !floatEq(a.pos_y, e.pos_y) or
                     a.size != e.size or a.color != e.color) return false;
                 // Compare text content (not offsets)
                 if (a.text_len != e.text_len) return false;
@@ -463,7 +496,7 @@ pub const SimState = struct {
         // Frames
         for (self.frames.items) |frame| {
             // Write inputs field by field for portability
-            try writer.writeInt(u32, @intCast(frame.inputs.frame_count), .little);
+            try writer.writeInt(u64, frame.inputs.frame_count, .little);
             try writer.writeAll(std.mem.asBytes(&frame.inputs.mouse_wheel));
             try writer.writeAll(std.mem.asBytes(&frame.inputs.mouse_x));
             try writer.writeAll(std.mem.asBytes(&frame.inputs.mouse_y));
@@ -518,7 +551,7 @@ pub const SimState = struct {
         var size: usize = 16; // Header
         size += self.string_buffer.items.len; // String table
         for (self.frames.items) |frame| {
-            size += 19; // InputState fields: u32 + 3*f32 + 3*u8
+            size += 23; // InputState fields: u64 + 3*f32 + 3*u8
             size += 4; // output_count
             for (frame.outputs.items) |cmd| {
                 size += 1; // command tag
@@ -584,6 +617,16 @@ pub const SimState = struct {
             }
         }.read;
 
+        // Helper to read u64 little-endian
+        const readU64 = struct {
+            fn read(d: []const u8, p: *usize) !u64 {
+                if (p.* + 8 > d.len) return error.UnexpectedEof;
+                const result = std.mem.readInt(u64, d[p.*..][0..8], .little);
+                p.* += 8;
+                return result;
+            }
+        }.read;
+
         // Helper to read f32 little-endian
         const readF32 = struct {
             fn read(d: []const u8, p: *usize) !f32 {
@@ -631,7 +674,7 @@ pub const SimState = struct {
             errdefer frame.deinit(allocator);
 
             // Read inputs (read each field individually for portability)
-            frame.inputs.frame_count = try readU32(data, &pos);
+            frame.inputs.frame_count = try readU64(data, &pos);
             frame.inputs.mouse_wheel = try readF32(data, &pos);
             frame.inputs.mouse_x = try readF32(data, &pos);
             frame.inputs.mouse_y = try readF32(data, &pos);

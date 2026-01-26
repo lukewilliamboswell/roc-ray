@@ -60,10 +60,10 @@ Run all Roc example tests (check, format, test, build, simulation):
 python3 ci/all_tests.py
 ```
 
-Install the pre-commit hook to run checks before each commit:
+Enable the pre-commit hook (run once after cloning):
 
 ```bash
-ln -sf ../../ci/pre-commit .git/hooks/pre-commit
+git config core.hooksPath .githooks
 ```
 
 ## Simulation Testing

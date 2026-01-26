@@ -4,8 +4,8 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .roc = .{
-            .url = "git+https://github.com/roc-lang/roc#2c2c1d1745392982c9fe575929ff5c94306adf4c",
-            .hash = "roc-0.0.0-NAC9w8VXqwB8kRfYior_SLlN4cp2wGq6V8W5hU6SlD4L",
+            .url = "git+https://github.com/roc-lang/roc#6d99d4964bfe3ba8f47dc079b5197821b9a609fd",
+            .hash = "roc-0.0.0-NAC9w28LugCgzFdm0Jws0ZMzLVIEFbU9yROs-KnmFXnq",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,

@@ -1,0 +1,17 @@
+#!/bin/bash
+# Pre-commit hook for roc-ray
+#
+# Install with:
+#   ln -sf ../../ci/pre-commit .git/hooks/pre-commit
+#
+# Or copy:
+#   cp ci/pre-commit .git/hooks/pre-commit
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Run all tests
+python3 ci/all_tests.py
+
+echo "Pre-commit checks passed!"

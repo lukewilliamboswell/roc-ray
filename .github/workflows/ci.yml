@@ -85,24 +85,13 @@ jobs:
             rm -f "$example.bak"
           done
 
-      # TODO: Re-enable once https://github.com/roc-lang/roc/issues/9034 is resolved
-      # - name: Check examples (roc check)
-      #   run: |
-      #     for example in examples/*.roc; do
-      #       echo "Checking: $example"
-      #       roc check "$example"
-      #     done
-
-      - name: Test examples (roc test)
+      - name: Run all Roc tests
+        # Skip on Windows - roc executable PATH issues and MSVC requirements
+        # Simulation tests only run on macOS (where .rrsim files were recorded)
+        if: runner.os != 'Windows'
         run: |
-          for example in examples/*.roc; do
-            echo "Testing: $example"
-            roc test "$example"
-          done
-
-      - name: Build examples (roc build)
-        run: |
-          for example in examples/*.roc; do
-            echo "Building: $example"
-            roc build "$example"
-          done
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            python3 ci/all_tests.py
+          else
+            python3 ci/all_tests.py --skip-sim
+          fi

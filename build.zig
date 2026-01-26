@@ -175,12 +175,40 @@ pub fn build(b: *std.Build) void {
     copy_all.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
 
     // ========================================================================
-    // Test step: Zig unit tests + WASM integration tests
+    // Test step: Zig unit tests + WASM integration tests + Lints
     // ========================================================================
     const test_step = b.step("test", "Run all tests");
+    const lint_step = b.step("lint", "Run code quality lints");
+
+    // Run lints as part of tests
+    test_step.dependOn(lint_step);
 
     // Zig unit tests for host_native.zig
     const native_target = b.standardTargetOptions(.{});
+
+    // Build and run tidy.zig (tidiness checks: CRLF, banned patterns, dead code, etc.)
+    const tidy = b.addExecutable(.{
+        .name = "tidy",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci/tidy.zig"),
+            .target = native_target,
+            .optimize = .Debug,
+        }),
+    });
+    const run_tidy = b.addRunArtifact(tidy);
+    lint_step.dependOn(&run_tidy.step);
+
+    // Build and run zig_lints.zig (style checks: doc comments, separator comments)
+    const zig_lints = b.addExecutable(.{
+        .name = "zig_lints",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci/zig_lints.zig"),
+            .target = native_target,
+            .optimize = .Debug,
+        }),
+    });
+    const run_lints = b.addRunArtifact(zig_lints);
+    lint_step.dependOn(&run_lints.step);
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {

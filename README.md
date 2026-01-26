@@ -80,17 +80,17 @@ RocRay includes a simulation recording and replay system for deterministic testi
 
 | Variable | Description |
 |----------|-------------|
-| `RRSIM_RECORD=path.rrsim` | Record session to file |
-| `RRSIM_REPLAY=path.rrsim` | Replay visually |
-| `RRSIM_TEST=path.rrsim` | Headless test mode (verify Roc app behaviour) |
-| `RRSIM_LOG=path.log` | Write all mismatches to file (no limit) |
+| `SIM_RECORD=path.rrsim` | Record session to file |
+| `SIM_REPLAY=path.rrsim` | Replay visually |
+| `SIM_TEST=path.rrsim` | Headless test mode (verify Roc app behaviour) |
+| `SIM_LOG=path.log` | Write all mismatches to file (no limit) |
 
 ### Recording a Session
 
 ```bash
 # Build and run the app with recording enabled
 roc build examples/hello_world.roc
-RRSIM_RECORD=examples/hello_world_1.rrsim ./examples/hello_world
+SIM_RECORD=examples/hello_world_1.rrsim ./examples/hello_world
 
 # Interact with the app, then close the window
 # The .rrsim file is written on exit
@@ -100,10 +100,10 @@ RRSIM_RECORD=examples/hello_world_1.rrsim ./examples/hello_world
 
 ```bash
 # Headless verification—exits 0 if outputs match, 1 if mismatch
-RRSIM_TEST=examples/hello_world_1.rrsim ./examples/hello_world
+SIM_TEST=examples/hello_world_1.rrsim ./examples/hello_world
 
 # With full mismatch log for debugging
-RRSIM_TEST=examples/hello_world_1.rrsim RRSIM_LOG=mismatches.log ./examples/hello_world
+SIM_TEST=examples/hello_world_1.rrsim SIM_LOG=mismatches.log ./examples/hello_world
 ```
 
 In CI, simulation tests run automatically for any `.rrsim` files found in `examples/`. The naming convention `<app>_<n>.rrsim` maps to `<app>.roc`.

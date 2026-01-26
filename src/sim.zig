@@ -2,10 +2,10 @@
 //!
 //! This module provides recording, replay, and headless testing capabilities.
 //! Environment variables control the mode:
-//!   - RRSIM_RECORD=path.rrsim  -> Record session to file
-//!   - RRSIM_REPLAY=path.rrsim  -> Replay session (visual, no Roc)
-//!   - RRSIM_TEST=path.rrsim -> Headless test (verify Roc outputs)
-//!   - RRSIM_LOG=path.log   -> Write all mismatches to file (no limit)
+//!   - SIM_RECORD=path.rrsim  -> Record session to file
+//!   - SIM_REPLAY=path.rrsim  -> Replay session (visual, no Roc)
+//!   - SIM_TEST=path.rrsim -> Headless test (verify Roc outputs)
+//!   - SIM_LOG=path.log   -> Write all mismatches to file (no limit)
 
 const std = @import("std");
 const types = @import("types.zig");
@@ -814,7 +814,7 @@ pub const SimState = struct {
                         stderr.writeAll(truncated_msg) catch {};
                         // Hint about log file if available
                         if (self.log_file != null) {
-                            stderr.writeAll(" (see RRSIM_LOG for full output)\n") catch {};
+                            stderr.writeAll(" (see SIM_LOG for full output)\n") catch {};
                         } else {
                             stderr.writeAll("\n") catch {};
                         }
@@ -847,25 +847,25 @@ pub fn initFromEnv(allocator: std.mem.Allocator) !SimState {
 
     // Check environment variables (in priority order)
     // Note: getEnvVarOwned allocates, but these paths live for program lifetime
-    if (getEnvVar(allocator, "RRSIM_TEST")) |path| {
+    if (getEnvVar(allocator, "SIM_TEST")) |path| {
         state.mode = .Test;
         state.file_path = path;
         const loaded = try SimState.readFromFile(allocator, path);
         state.frames = loaded.frames;
         state.string_buffer = loaded.string_buffer;
-    } else if (getEnvVar(allocator, "RRSIM_REPLAY")) |path| {
+    } else if (getEnvVar(allocator, "SIM_REPLAY")) |path| {
         state.mode = .Replay;
         state.file_path = path;
         const loaded = try SimState.readFromFile(allocator, path);
         state.frames = loaded.frames;
         state.string_buffer = loaded.string_buffer;
-    } else if (getEnvVar(allocator, "RRSIM_RECORD")) |path| {
+    } else if (getEnvVar(allocator, "SIM_RECORD")) |path| {
         state.mode = .Record;
         state.file_path = path;
     }
 
     // Check for log file (independent of mode, but only useful with Test mode)
-    if (getEnvVar(allocator, "RRSIM_LOG")) |log_path| {
+    if (getEnvVar(allocator, "SIM_LOG")) |log_path| {
         defer allocator.free(log_path);
         state.log_file = std.fs.cwd().createFile(log_path, .{}) catch null;
     }

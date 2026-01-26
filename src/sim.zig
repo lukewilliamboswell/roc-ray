@@ -255,6 +255,42 @@ pub const SimState = struct {
         return self.string_buffer.items[start..end];
     }
 
+    /// Step forward one frame (for manual replay control)
+    pub fn stepForward(self: *SimState) void {
+        if (self.frame_idx + 1 < self.frames.items.len) {
+            self.frame_idx += 1;
+        }
+    }
+
+    /// Step backward one frame (for manual replay control)
+    pub fn stepBack(self: *SimState) void {
+        if (self.frame_idx > 0) {
+            self.frame_idx -= 1;
+        }
+    }
+
+    /// Jump to start
+    pub fn jumpToStart(self: *SimState) void {
+        self.frame_idx = 0;
+    }
+
+    /// Jump to end (last frame)
+    pub fn jumpToEnd(self: *SimState) void {
+        if (self.frames.items.len > 0) {
+            self.frame_idx = self.frames.items.len - 1;
+        }
+    }
+
+    /// Get current frame index
+    pub fn getFrameIndex(self: *const SimState) usize {
+        return self.frame_idx;
+    }
+
+    /// Get total frame count
+    pub fn getTotalFrames(self: *const SimState) usize {
+        return self.frames.items.len;
+    }
+
     /// Start a new frame (recording mode)
     pub fn beginFrame(self: *SimState, inputs: InputState) !void {
         if (self.mode != .Record) return;

@@ -620,7 +620,40 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
 
+    // Replay control state
+    var replay_paused: bool = true; // Start paused
+    const speed_presets = [_]f32{ 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 };
+    var speed_index: usize = 4; // Start at 1.0x (index 4)
+    var frame_accumulator: f32 = 0.0; // For sub-frame timing at different speeds
+    var blink_timer: f32 = 0.0; // For blinking "PAUSED" text
+
     while (true) {
+        // Handle replay controls (only in visual replay mode)
+        if (replay_only) {
+            // Q to quit
+            if (rl.IsKeyPressed(rl.KEY_Q)) break;
+
+            // Space to toggle pause
+            if (rl.IsKeyPressed(rl.KEY_SPACE)) {
+                replay_paused = !replay_paused;
+                frame_accumulator = 0.0;
+            }
+
+            // Arrow keys for stepping (only when paused)
+            if (replay_paused) {
+                if (rl.IsKeyPressed(rl.KEY_LEFT)) sim_state.stepBack();
+                if (rl.IsKeyPressed(rl.KEY_RIGHT)) sim_state.stepForward();
+            }
+
+            // Home/End to jump
+            if (rl.IsKeyPressed(rl.KEY_HOME)) sim_state.jumpToStart();
+            if (rl.IsKeyPressed(rl.KEY_END)) sim_state.jumpToEnd();
+
+            // Up/Down for speed control
+            if (rl.IsKeyPressed(rl.KEY_UP) and speed_index + 1 < speed_presets.len) speed_index += 1;
+            if (rl.IsKeyPressed(rl.KEY_DOWN) and speed_index > 0) speed_index -= 1;
+        }
+
         // Check exit conditions
         if (!headless and rl.WindowShouldClose()) break;
         if (sim_state.mode == .Replay or sim_state.mode == .Test) {
@@ -704,7 +737,87 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                                 rl.DrawText(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, rocColorToRaylib(t.color));
                             }
                         },
-                        .EndFrame => rl.EndDrawing(),
+                        .EndFrame => {
+                            // Draw replay UI overlay before ending the frame
+                            if (replay_paused) {
+                                blink_timer += rl.GetFrameTime();
+                                // Alternate between white and dark gray every 0.5s
+                                const color = if (@mod(blink_timer, 1.0) < 0.5)
+                                    rl.WHITE
+                                else
+                                    rl.Color{ .r = 40, .g = 40, .b = 40, .a = 255 };
+
+                                const info_font: c_int = 30;
+
+                                if (rl.IsKeyDown(rl.KEY_F)) {
+                                    // Show input state while F is held
+                                    const inputs = frame.inputs;
+                                    const base_y = @divTrunc(screen_height, 2) - 80;
+
+                                    // Title
+                                    const title = "INPUTS";
+                                    const title_font: c_int = 60;
+                                    const title_width = rl.MeasureText(title, title_font);
+                                    rl.DrawText(title, @divTrunc(screen_width - title_width, 2), base_y, title_font, color);
+
+                                    // Mouse position
+                                    var line1_buf: [64:0]u8 = undefined;
+                                    const line1 = std.fmt.bufPrint(&line1_buf, "Mouse: ({d:.1}, {d:.1})", .{ inputs.mouse_x, inputs.mouse_y }) catch "Mouse: ?";
+                                    line1_buf[line1.len] = 0;
+                                    const line1_width = rl.MeasureText(line1_buf[0..line1.len :0], info_font);
+                                    rl.DrawText(line1_buf[0..line1.len :0], @divTrunc(screen_width - line1_width, 2), base_y + title_font + 15, info_font, color);
+
+                                    // Mouse buttons
+                                    var line2_buf: [64:0]u8 = undefined;
+                                    const left_str: []const u8 = if (inputs.mouse_left != 0) "LEFT" else "left";
+                                    const mid_str: []const u8 = if (inputs.mouse_middle != 0) "MID" else "mid";
+                                    const right_str: []const u8 = if (inputs.mouse_right != 0) "RIGHT" else "right";
+                                    const line2 = std.fmt.bufPrint(&line2_buf, "Buttons: [{s}] [{s}] [{s}]", .{ left_str, mid_str, right_str }) catch "Buttons: ?";
+                                    line2_buf[line2.len] = 0;
+                                    const line2_width = rl.MeasureText(line2_buf[0..line2.len :0], info_font);
+                                    rl.DrawText(line2_buf[0..line2.len :0], @divTrunc(screen_width - line2_width, 2), base_y + title_font + 50, info_font, color);
+
+                                    // Mouse wheel
+                                    var line3_buf: [64:0]u8 = undefined;
+                                    const line3 = std.fmt.bufPrint(&line3_buf, "Wheel: {d:.2}", .{inputs.mouse_wheel}) catch "Wheel: ?";
+                                    line3_buf[line3.len] = 0;
+                                    const line3_width = rl.MeasureText(line3_buf[0..line3.len :0], info_font);
+                                    rl.DrawText(line3_buf[0..line3.len :0], @divTrunc(screen_width - line3_width, 2), base_y + title_font + 85, info_font, color);
+                                } else {
+                                    // Normal paused display
+                                    // "PAUSED" text centered
+                                    const paused_text = "PAUSED";
+                                    const paused_font: c_int = 80;
+                                    const paused_width = rl.MeasureText(paused_text, paused_font);
+                                    const paused_x = @divTrunc(screen_width - paused_width, 2);
+                                    const paused_y = @divTrunc(screen_height, 2) - 60;
+                                    rl.DrawText(paused_text, paused_x, paused_y, paused_font, color);
+
+                                    // Frame/Speed status centered below PAUSED
+                                    var status_buf: [128:0]u8 = undefined;
+                                    const status_slice = std.fmt.bufPrint(&status_buf, "Frame: {d}/{d}  Speed: {d:.2}x", .{
+                                        sim_state.getFrameIndex() + 1,
+                                        sim_state.getTotalFrames(),
+                                        speed_presets[speed_index],
+                                    }) catch "Frame: ?/?";
+                                    status_buf[status_slice.len] = 0;
+                                    const status_width = rl.MeasureText(status_buf[0..status_slice.len :0], info_font);
+                                    const status_x = @divTrunc(screen_width - status_width, 2);
+                                    const status_y = paused_y + paused_font + 10;
+                                    rl.DrawText(status_buf[0..status_slice.len :0], status_x, status_y, info_font, color);
+
+                                    // Hint to press F
+                                    const hint_text = "PRESS F FOR INPUTS";
+                                    const hint_font: c_int = 20;
+                                    const hint_width = rl.MeasureText(hint_text, hint_font);
+                                    const hint_x = @divTrunc(screen_width - hint_width, 2);
+                                    const hint_y = status_y + info_font + 20;
+                                    rl.DrawText(hint_text, hint_x, hint_y, hint_font, color);
+                                }
+                            }
+
+                            rl.EndDrawing();
+                        },
                     }
                 }
             }
@@ -735,8 +848,20 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         }
 
         // End frame in simulation
-        sim_state.endFrame();
-        frame_count += 1;
+        if (replay_only) {
+            // In replay mode, advance frame only when playing (not paused)
+            if (!replay_paused) {
+                frame_accumulator += rl.GetFrameTime() * speed_presets[speed_index] * 60.0;
+                if (frame_accumulator >= 1.0) {
+                    sim_state.endFrame();
+                    frame_accumulator -= 1.0;
+                }
+            }
+            // Note: frame_count not used in replay mode
+        } else {
+            sim_state.endFrame();
+            frame_count += 1;
+        }
     }
 
     // Print timing stats for headless test mode

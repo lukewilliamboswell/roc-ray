@@ -128,3 +128,7 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 
 - We vendor the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5)
 - ARM Linux is not available (raylib doesn't provide pre-built libraries)
+
+## Future Ideas
+
+- Extend simulation recording/replay/testing to WASM target for browser-based deterministic testing

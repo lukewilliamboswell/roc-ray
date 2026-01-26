@@ -32,14 +32,13 @@ const roc__render_for_host = types.roc__render_for_host;
 // Access raw raylib binding through backend (for cases not yet abstracted)
 const rl = raylib.rl;
 
-const TRACE_ALLOCATIONS = false;
 const TRACE_HOST = false;
 
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
 var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
-/// Host environment for native builds
+/// Host environment for native builds.
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     stdin_reader: std.fs.File.Reader,
@@ -50,118 +49,14 @@ const HostEnv = struct {
     }
 };
 
-/// Roc allocation function with size-tracking metadata
-fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(.c) void {
+/// Extract allocator from HostEnv for RocMemory callbacks.
+fn getAllocatorFromEnv(env: *anyopaque) std.mem.Allocator {
     const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.allocator();
-
-    const min_alignment: usize = @max(roc_alloc.alignment, @alignOf(usize));
-    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
-
-    // Calculate additional bytes needed to store the size
-    const size_storage_bytes = @max(roc_alloc.alignment, @alignOf(usize));
-    const total_size = roc_alloc.length + size_storage_bytes;
-
-    // Allocate memory including space for size metadata
-    const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
-
-    const base_ptr = result orelse {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
-        std.process.exit(1);
-    };
-
-    // Store the total size (including metadata) right before the user data
-    const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
-    size_ptr.* = total_size;
-
-    // Return pointer to the user data (after the size metadata)
-    roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
-
-    if (TRACE_ALLOCATIONS) {
-        std.log.debug("[ALLOC] ptr=0x{x} size={d} align={d}", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
-    }
+    return host.allocator();
 }
 
-/// Roc deallocation function with size-tracking metadata
-fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
-    if (TRACE_ALLOCATIONS) {
-        std.log.debug("[DEALLOC] ptr=0x{x} align={d}", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
-    }
-
-    const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.allocator();
-
-    // Calculate where the size metadata is stored
-    const size_storage_bytes = @max(roc_dealloc.alignment, @alignOf(usize));
-    const size_ptr: *const usize = @ptrFromInt(@intFromPtr(roc_dealloc.ptr) - @sizeOf(usize));
-
-    // Read the total size from metadata
-    const total_size = size_ptr.*;
-
-    // Calculate the base pointer (start of actual allocation)
-    const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(roc_dealloc.ptr) - size_storage_bytes);
-
-    // Calculate alignment
-    const min_alignment: usize = @max(roc_dealloc.alignment, @alignOf(usize));
-    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
-
-    // Free the memory (including the size metadata)
-    const slice = @as([*]u8, @ptrCast(base_ptr))[0..total_size];
-    allocator.rawFree(slice, align_enum, @returnAddress());
-}
-
-/// Roc reallocation function with size-tracking metadata
-fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) callconv(.c) void {
-    const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.allocator();
-
-    // Calculate alignment
-    const min_alignment: usize = @max(roc_realloc.alignment, @alignOf(usize));
-    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
-
-    // Calculate where the size metadata is stored for the old allocation
-    const size_storage_bytes = min_alignment;
-    const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(roc_realloc.answer) - @sizeOf(usize));
-
-    // Read the old total size from metadata
-    const old_total_size = old_size_ptr.*;
-
-    // Calculate the old base pointer (start of actual allocation)
-    const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(roc_realloc.answer) - size_storage_bytes);
-
-    // Calculate new total size needed
-    const new_total_size = roc_realloc.new_length + size_storage_bytes;
-
-    // Allocate new memory with proper alignment
-    const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
-        std.process.exit(1);
-    };
-
-    // Copy old data to new allocation (excluding metadata, just user data)
-    const old_user_data_size = old_total_size - size_storage_bytes;
-    const copy_size = @min(old_user_data_size, roc_realloc.new_length);
-    const new_user_ptr: [*]u8 = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
-    const old_user_ptr: [*]const u8 = @ptrCast(roc_realloc.answer);
-    @memcpy(new_user_ptr, old_user_ptr[0..copy_size]);
-
-    // Free old allocation
-    const old_slice = old_base_ptr[0..old_total_size];
-    allocator.rawFree(old_slice, align_enum, @returnAddress());
-
-    // Store the new total size in the metadata
-    const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
-    new_size_ptr.* = new_total_size;
-
-    // Return pointer to the user data (after the size metadata)
-    roc_realloc.answer = new_user_ptr;
-
-    if (TRACE_ALLOCATIONS) {
-        std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(roc_realloc.answer), @intFromPtr(new_user_ptr), roc_realloc.new_length });
-    }
-}
+/// Memory management callbacks using shared RocMemory implementation.
+const NativeMemory = ffi.RocMemory(getAllocatorFromEnv);
 
 /// Roc debug function
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
@@ -488,9 +383,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Create the RocOps struct
     var roc_ops = RocOps{
         .env = @as(*anyopaque, @ptrCast(&host_env)),
-        .roc_alloc = rocAllocFn,
-        .roc_dealloc = rocDeallocFn,
-        .roc_realloc = rocReallocFn,
+        .roc_alloc = NativeMemory.alloc,
+        .roc_dealloc = NativeMemory.dealloc,
+        .roc_realloc = NativeMemory.realloc,
         .roc_dbg = rocDbgFn,
         .roc_expect_failed = rocExpectFailedFn,
         .roc_crashed = rocCrashedFn,

@@ -48,11 +48,23 @@ Helper scripts are available to build and serve WASM:
 
 ## Testing
 
+Run Zig unit tests and WASM integration tests:
+
 ```bash
 zig build test
 ```
 
-This runs both Zig unit tests and WASM integration tests.
+Run all Roc example tests (check, format, test, build, simulation):
+
+```bash
+python3 ci/all_tests.py
+```
+
+Install the pre-commit hook to run checks before each commit:
+
+```bash
+ln -sf ../../ci/pre-commit .git/hooks/pre-commit
+```
 
 ## Simulation Testing
 
@@ -69,8 +81,8 @@ RocRay includes a simulation recording and replay system for deterministic testi
 | Variable | Description |
 |----------|-------------|
 | `ROC_RAY_RECORD=path.rrsim` | Record session to file |
-| `ROC_RAY_REPLAY=path.rrsim` | Replay visually (no Roc execution) |
-| `ROC_RAY_SIM_TEST=path.rrsim` | Headless test mode (verify outputs match) |
+| `ROC_RAY_REPLAY=path.rrsim` | Replay visually |
+| `ROC_RAY_SIM_TEST=path.rrsim` | Headless test mode (verify Roc app behaviour) |
 
 ### Recording a Session
 

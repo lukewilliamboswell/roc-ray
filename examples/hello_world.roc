@@ -5,30 +5,35 @@ import rr.Color
 import rr.PlatformState
 
 Model : {
-    message: Str,
+	message : Str,
 }
 
 program = { init!, render! }
 
 init! : () => Try(Model, [Exit(I64), ..])
-init! = || Ok({
-    message: "Roc :heart: Raylib!",
-})
+init! = || Ok(
+	{
+		message: "Roc :heart: Raylib!",
+	},
+)
 
 render! : Model, PlatformState => Try(Model, [Exit(I64), ..])
 render! = |model, state| {
 
-    # Circle follows the mouse, changes color when clicked
-    circle_color = if state.mouse.left Red else Green
+	# Circle follows the mouse, changes color when clicked
+	circle_color = if state.mouse.left Red else Green
 
-    Draw.draw!(RayWhite, || {
-        Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, color: DarkGray })
-        Draw.rectangle!({ x: 100, y: 200, width: 100, height: 80, color: Red })
-        Draw.line!({ start: { x: 100, y: 500 }, end: { x: 600, y: 550 }, color: Blue })
+	Draw.draw!(
+		RayWhite,
+		|| {
+			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, color: DarkGray })
+			Draw.rectangle!({ x: 100, y: 200, width: 100, height: 80, color: Red })
+			Draw.line!({ start: { x: 100, y: 500 }, end: { x: 600, y: 550 }, color: Blue })
 
-        # Draw circle last so it is drawn over the top of other shapes
-        Draw.circle!({ center: { x: state.mouse.x, y: state.mouse.y }, radius: 50, color: circle_color })
-    })
+			# Draw circle last so it is drawn over the top of other shapes
+			Draw.circle!({ center: { x: state.mouse.x, y: state.mouse.y }, radius: 50, color: circle_color })
+		},
+	)
 
-    Ok(model)
+	Ok(model)
 }

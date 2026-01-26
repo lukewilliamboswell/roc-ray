@@ -86,8 +86,9 @@ jobs:
           done
 
       - name: Run all Roc tests
-        # Simulation tests are platform-specific (.rrsim files recorded on macOS)
-        # Skip on Windows (MSVC requirements) and Linux (different platform)
+        # Skip on Windows - roc executable PATH issues and MSVC requirements
+        # Simulation tests only run on macOS (where .rrsim files were recorded)
+        if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
             python3 ci/all_tests.py

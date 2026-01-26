@@ -44,7 +44,7 @@ async function runTests() {
     console.log('WASM Command Buffer Integration Tests\n');
 
     // Load WASM from zig-out/web-test/
-    const wasmPath = path.join(__dirname, '..', 'zig-out', 'web-test', 'host_web.wasm');
+    const wasmPath = path.join(__dirname, '..', 'zig-out', 'web-test', 'host_wasm.wasm');
     let wasmBytes;
     try {
         wasmBytes = await readFile(wasmPath);

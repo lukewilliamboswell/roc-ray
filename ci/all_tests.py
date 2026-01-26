@@ -188,7 +188,7 @@ def main() -> int:
                     failed.append(f"sim {rrsim.name} (no executable)")
                     continue
 
-                env = {"ROC_RAY_SIM_TEST": rrsim.name}
+                env = {"RRSIM_TEST": rrsim.name}
                 if run_cmd(
                     [f"./{executable.name}"], f"sim {rrsim.name}", args.verbose, env=env, cwd=examples_dir
                 ):

@@ -86,3 +86,6 @@ www/
 /app.wasm
 /host.js
 /index.html
+
+# log files
+*.log

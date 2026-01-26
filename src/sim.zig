@@ -2,14 +2,13 @@
 //!
 //! This module provides recording, replay, and headless testing capabilities.
 //! Environment variables control the mode:
-//!   - ROC_RAY_RECORD=path.rrsim  -> Record session to file
-//!   - ROC_RAY_REPLAY=path.rrsim  -> Replay session (visual, no Roc)
-//!   - ROC_RAY_SIM_TEST=path.rrsim -> Headless test (verify Roc outputs)
+//!   - RRSIM_RECORD=path.rrsim  -> Record session to file
+//!   - RRSIM_REPLAY=path.rrsim  -> Replay session (visual, no Roc)
+//!   - RRSIM_TEST=path.rrsim -> Headless test (verify Roc outputs)
+//!   - RRSIM_LOG=path.log   -> Write all mismatches to file (no limit)
 
 const std = @import("std");
-const roc_types = @import("roc_types.zig");
-
-pub const RocPlatformState = roc_types.RocPlatformState;
+const types = @import("types.zig");
 
 /// Magic bytes for .rrsim file format
 pub const MAGIC = [4]u8{ 'R', 'R', 'S', 'M' };
@@ -53,51 +52,55 @@ pub const DrawCommandTag = enum(u8) {
     Text = 6,
 };
 
-/// Circle draw command data
-pub const CircleData = struct {
-    center_x: f32,
-    center_y: f32,
-    radius: f32,
-    color: u8,
-};
-
-/// Line draw command data
-pub const LineData = struct {
-    start_x: f32,
-    start_y: f32,
-    end_x: f32,
-    end_y: f32,
-    color: u8,
-};
-
-/// Rectangle draw command data
-pub const RectangleData = struct {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    color: u8,
-};
-
-/// Text draw command data (text content stored in string_buffer)
-pub const TextData = struct {
-    pos_x: f32,
-    pos_y: f32,
-    size: i32,
-    color: u8,
-    text_offset: u32,
-    text_len: u32,
-};
-
-/// A recorded draw command
+/// A recorded draw command using types from types.zig
 pub const DrawCommand = union(DrawCommandTag) {
     BeginFrame: void,
-    Circle: CircleData,
+    Circle: types.Circle.FFI,
     Clear: u8, // color discriminant
     EndFrame: void,
-    Line: LineData,
-    Rectangle: RectangleData,
-    Text: TextData,
+    Line: types.Line.FFI,
+    Rectangle: types.Rectangle.FFI,
+    Text: types.Text.Serialized,
+
+    /// Create a Circle command from a safe Circle type
+    pub fn circle(c: types.Circle) DrawCommand {
+        return .{ .Circle = c.toFfi() };
+    }
+
+    /// Create a Rectangle command from a safe Rectangle type
+    pub fn rectangle(r: types.Rectangle) DrawCommand {
+        return .{ .Rectangle = r.toFfi() };
+    }
+
+    /// Create a Line command from a safe Line type
+    pub fn line(l: types.Line) DrawCommand {
+        return .{ .Line = l.toFfi() };
+    }
+
+    /// Create a Clear command from a safe Color type
+    pub fn clear(c: types.Color) DrawCommand {
+        return .{ .Clear = c.toU8() };
+    }
+
+    /// Convert Circle FFI to safe Circle type
+    pub fn toCircle(self: DrawCommand) types.Circle {
+        return self.Circle.toCircle();
+    }
+
+    /// Convert Rectangle FFI to safe Rectangle type
+    pub fn toRectangle(self: DrawCommand) types.Rectangle {
+        return self.Rectangle.toRectangle();
+    }
+
+    /// Convert Line FFI to safe Line type
+    pub fn toLine(self: DrawCommand) types.Line {
+        return self.Line.toLine();
+    }
+
+    /// Convert Clear to safe Color type
+    pub fn toClearColor(self: DrawCommand) types.Color {
+        return types.Color.fromU8(self.Clear) orelse .white;
+    }
 
     pub fn eql(self: DrawCommand, other: DrawCommand) bool {
         const self_tag = std.meta.activeTag(self);
@@ -107,14 +110,14 @@ pub const DrawCommand = union(DrawCommandTag) {
         return switch (self) {
             .BeginFrame, .EndFrame => true,
             .Clear => |c| c == other.Clear,
-            .Circle => |c| floatEq(c.center_x, other.Circle.center_x) and
-                floatEq(c.center_y, other.Circle.center_y) and
+            .Circle => |c| floatEq(c.center.x, other.Circle.center.x) and
+                floatEq(c.center.y, other.Circle.center.y) and
                 floatEq(c.radius, other.Circle.radius) and
                 c.color == other.Circle.color,
-            .Line => |l| floatEq(l.start_x, other.Line.start_x) and
-                floatEq(l.start_y, other.Line.start_y) and
-                floatEq(l.end_x, other.Line.end_x) and
-                floatEq(l.end_y, other.Line.end_y) and
+            .Line => |l| floatEq(l.start.x, other.Line.start.x) and
+                floatEq(l.start.y, other.Line.start.y) and
+                floatEq(l.end.x, other.Line.end.x) and
+                floatEq(l.end.y, other.Line.end.y) and
                 l.color == other.Line.color,
             .Rectangle => |r| floatEq(r.x, other.Rectangle.x) and
                 floatEq(r.y, other.Rectangle.y) and
@@ -131,50 +134,14 @@ pub const DrawCommand = union(DrawCommandTag) {
     }
 };
 
-/// Serialized input state (matches RocPlatformState layout for direct I/O)
-pub const InputState = extern struct {
-    frame_count: u64,
-    mouse_wheel: f32,
-    mouse_x: f32,
-    mouse_y: f32,
-    mouse_left: u8,
-    mouse_middle: u8,
-    mouse_right: u8,
-    _padding: u8 = 0,
-
-    pub fn fromRocState(state: RocPlatformState) InputState {
-        return .{
-            .frame_count = state.frame_count,
-            .mouse_wheel = state.mouse_wheel,
-            .mouse_x = state.mouse_x,
-            .mouse_y = state.mouse_y,
-            .mouse_left = if (state.mouse_left) 1 else 0,
-            .mouse_middle = if (state.mouse_middle) 1 else 0,
-            .mouse_right = if (state.mouse_right) 1 else 0,
-        };
-    }
-
-    pub fn toRocState(self: InputState) RocPlatformState {
-        return .{
-            .frame_count = self.frame_count,
-            .mouse_wheel = self.mouse_wheel,
-            .mouse_x = self.mouse_x,
-            .mouse_y = self.mouse_y,
-            .mouse_left = self.mouse_left != 0,
-            .mouse_middle = self.mouse_middle != 0,
-            .mouse_right = self.mouse_right != 0,
-        };
-    }
-};
-
 /// One frame of recorded data
 pub const FrameRecord = struct {
-    inputs: InputState,
+    inputs: types.InputState.Serialized,
     outputs: std.ArrayListUnmanaged(DrawCommand),
 
     pub fn init() FrameRecord {
         return .{
-            .inputs = std.mem.zeroes(InputState),
+            .inputs = std.mem.zeroes(types.InputState.Serialized),
             .outputs = .{},
         };
     }
@@ -204,6 +171,12 @@ pub const SimState = struct {
     /// Number of mismatches detected (test mode)
     mismatches: u32,
 
+    /// Stored mismatch details (printed on failure, limited to MAX_MISMATCH_DETAILS)
+    mismatch_details: std.ArrayListUnmanaged(u8),
+
+    /// Optional log file for complete mismatch output (no limit)
+    log_file: ?std.fs.File,
+
     /// File path for saving/loading
     file_path: ?[]const u8,
 
@@ -216,6 +189,8 @@ pub const SimState = struct {
             .frame_idx = 0,
             .output_idx = 0,
             .mismatches = 0,
+            .mismatch_details = .{},
+            .log_file = null,
             .file_path = null,
         };
     }
@@ -226,6 +201,12 @@ pub const SimState = struct {
         }
         self.frames.deinit(self.allocator);
         self.string_buffer.deinit(self.allocator);
+        self.mismatch_details.deinit(self.allocator);
+
+        // Close log file if open
+        if (self.log_file) |file| {
+            file.close();
+        }
 
         // Free the file_path if it was allocated (non-Normal modes)
         if (self.file_path) |path| {
@@ -244,6 +225,14 @@ pub const SimState = struct {
     pub fn currentFrame(self: *const SimState) ?*const FrameRecord {
         if (self.frame_idx < self.frames.items.len) {
             return &self.frames.items[self.frame_idx];
+        }
+        return null;
+    }
+
+    /// Get current frame's input state as safe type
+    pub fn currentInputState(self: *const SimState) ?types.InputState {
+        if (self.currentFrame()) |frame| {
+            return frame.inputs.toInputState();
         }
         return null;
     }
@@ -291,26 +280,33 @@ pub const SimState = struct {
         return self.frames.items.len;
     }
 
-    /// Start a new frame (recording mode)
-    pub fn beginFrame(self: *SimState, inputs: InputState) !void {
+    /// Start a new frame (recording mode) with safe InputState
+    pub fn beginFrame(self: *SimState, inputs: types.InputState) !void {
         if (self.mode != .Record) return;
 
         var frame = FrameRecord.init();
-        frame.inputs = inputs;
+        frame.inputs = inputs.toSerialized();
         try self.frames.append(self.allocator, frame);
     }
 
-    /// Record an output command
-    /// Maximum number of detailed mismatch reports to print
+    /// Maximum number of detailed mismatch reports to buffer for stderr
     const MAX_MISMATCH_DETAILS = 20;
 
-    /// Report a mismatch with details (limited to MAX_MISMATCH_DETAILS)
+    /// Store a mismatch detail for later output.
+    /// - stderr buffer: limited to MAX_MISMATCH_DETAILS (printed in finish() on failure)
+    /// - log file: unlimited (written immediately if log_file is set)
     fn reportMismatch(self: *SimState, comptime fmt: []const u8, args: anytype) void {
+        var buf: [512]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
+
+        // Always write to log file if set (no limit)
+        if (self.log_file) |file| {
+            file.writeAll(msg) catch {};
+        }
+
+        // Buffer for stderr (limited)
         if (self.mismatches <= MAX_MISMATCH_DETAILS) {
-            const stderr: std.fs.File = .stderr();
-            var buf: [512]u8 = undefined;
-            const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
-            stderr.writeAll(msg) catch {};
+            self.mismatch_details.appendSlice(self.allocator, msg) catch {};
         }
     }
 
@@ -327,6 +323,11 @@ pub const SimState = struct {
             }
         }
         return null;
+    }
+
+    /// Record a text output using safe Text type
+    pub fn recordText(self: *SimState, text: types.Text) !void {
+        try self.recordTextOutput(text.content, text.pos.x, text.pos.y, text.size, text.color.toU8());
     }
 
     /// Record a text output - handles text specially to avoid string_buffer issues in Test mode
@@ -444,13 +445,13 @@ pub const SimState = struct {
             .Clear => |a| a == expected.Clear,
             .Circle => |a| {
                 const e = expected.Circle;
-                return floatEq(a.center_x, e.center_x) and floatEq(a.center_y, e.center_y) and
+                return floatEq(a.center.x, e.center.x) and floatEq(a.center.y, e.center.y) and
                     floatEq(a.radius, e.radius) and a.color == e.color;
             },
             .Line => |a| {
                 const e = expected.Line;
-                return floatEq(a.start_x, e.start_x) and floatEq(a.start_y, e.start_y) and
-                    floatEq(a.end_x, e.end_x) and floatEq(a.end_y, e.end_y) and a.color == e.color;
+                return floatEq(a.start.x, e.start.x) and floatEq(a.start.y, e.start.y) and
+                    floatEq(a.end.x, e.end.x) and floatEq(a.end.y, e.end.y) and a.color == e.color;
             },
             .Rectangle => |a| {
                 const e = expected.Rectangle;
@@ -477,27 +478,13 @@ pub const SimState = struct {
             .BeginFrame => std.fmt.bufPrint(buf, "BeginFrame", .{}) catch "BeginFrame",
             .EndFrame => std.fmt.bufPrint(buf, "EndFrame", .{}) catch "EndFrame",
             .Clear => |c| std.fmt.bufPrint(buf, "Clear(color={d})", .{c}) catch "Clear(?)",
-            .Circle => |c| std.fmt.bufPrint(buf, "Circle(x={d:.0},y={d:.0},r={d:.0})", .{ c.center_x, c.center_y, c.radius }) catch "Circle(?)",
+            .Circle => |c| std.fmt.bufPrint(buf, "Circle(x={d:.0},y={d:.0},r={d:.0})", .{ c.center.x, c.center.y, c.radius }) catch "Circle(?)",
             .Rectangle => |r| std.fmt.bufPrint(buf, "Rect(x={d:.0},y={d:.0},w={d:.0},h={d:.0})", .{ r.x, r.y, r.width, r.height }) catch "Rect(?)",
-            .Line => |l| std.fmt.bufPrint(buf, "Line({d:.0},{d:.0})-({d:.0},{d:.0})", .{ l.start_x, l.start_y, l.end_x, l.end_y }) catch "Line(?)",
+            .Line => |l| std.fmt.bufPrint(buf, "Line({d:.0},{d:.0})-({d:.0},{d:.0})", .{ l.start.x, l.start.y, l.end.x, l.end.y }) catch "Line(?)",
             .Text => |t| {
                 const text_content = self.getText(t.text_offset, t.text_len);
                 return std.fmt.bufPrint(buf, "Text(\"{s}\",x={d:.0},y={d:.0},sz={d})", .{ text_content, t.pos_x, t.pos_y, t.size }) catch "Text(?)";
             },
-        };
-    }
-
-    /// Record text and return offset/length for TextData
-    pub fn recordText(self: *SimState, text: []const u8) !TextData {
-        const offset: u32 = @intCast(self.string_buffer.items.len);
-        try self.string_buffer.appendSlice(self.allocator, text);
-        return .{
-            .pos_x = 0,
-            .pos_y = 0,
-            .size = 0,
-            .color = 0,
-            .text_offset = offset,
-            .text_len = @intCast(text.len),
         };
     }
 
@@ -550,16 +537,16 @@ pub const SimState = struct {
                     .BeginFrame, .EndFrame => {},
                     .Clear => |c| try writer.writeByte(c),
                     .Circle => |c| {
-                        try writer.writeAll(std.mem.asBytes(&c.center_x));
-                        try writer.writeAll(std.mem.asBytes(&c.center_y));
+                        try writer.writeAll(std.mem.asBytes(&c.center.x));
+                        try writer.writeAll(std.mem.asBytes(&c.center.y));
                         try writer.writeAll(std.mem.asBytes(&c.radius));
                         try writer.writeByte(c.color);
                     },
                     .Line => |l| {
-                        try writer.writeAll(std.mem.asBytes(&l.start_x));
-                        try writer.writeAll(std.mem.asBytes(&l.start_y));
-                        try writer.writeAll(std.mem.asBytes(&l.end_x));
-                        try writer.writeAll(std.mem.asBytes(&l.end_y));
+                        try writer.writeAll(std.mem.asBytes(&l.start.x));
+                        try writer.writeAll(std.mem.asBytes(&l.start.y));
+                        try writer.writeAll(std.mem.asBytes(&l.end.x));
+                        try writer.writeAll(std.mem.asBytes(&l.end.y));
                         try writer.writeByte(l.color);
                     },
                     .Rectangle => |r| {
@@ -729,24 +716,24 @@ pub const SimState = struct {
                     .EndFrame => .{ .EndFrame = {} },
                     .Clear => .{ .Clear = try readByte(data, &pos) },
                     .Circle => blk: {
-                        var d: CircleData = undefined;
-                        d.center_x = try readF32(data, &pos);
-                        d.center_y = try readF32(data, &pos);
+                        var d: types.Circle.FFI = undefined;
+                        d.center.x = try readF32(data, &pos);
+                        d.center.y = try readF32(data, &pos);
                         d.radius = try readF32(data, &pos);
                         d.color = try readByte(data, &pos);
                         break :blk .{ .Circle = d };
                     },
                     .Line => blk: {
-                        var d: LineData = undefined;
-                        d.start_x = try readF32(data, &pos);
-                        d.start_y = try readF32(data, &pos);
-                        d.end_x = try readF32(data, &pos);
-                        d.end_y = try readF32(data, &pos);
+                        var d: types.Line.FFI = undefined;
+                        d.start.x = try readF32(data, &pos);
+                        d.start.y = try readF32(data, &pos);
+                        d.end.x = try readF32(data, &pos);
+                        d.end.y = try readF32(data, &pos);
                         d.color = try readByte(data, &pos);
                         break :blk .{ .Line = d };
                     },
                     .Rectangle => blk: {
-                        var d: RectangleData = undefined;
+                        var d: types.Rectangle.FFI = undefined;
                         d.x = try readF32(data, &pos);
                         d.y = try readF32(data, &pos);
                         d.width = try readF32(data, &pos);
@@ -755,7 +742,7 @@ pub const SimState = struct {
                         break :blk .{ .Rectangle = d };
                     },
                     .Text => blk: {
-                        var d: TextData = undefined;
+                        var d: types.Text.Serialized = undefined;
                         d.pos_x = try readF32(data, &pos);
                         d.pos_y = try readF32(data, &pos);
                         d.size = try readI32(data, &pos);
@@ -817,13 +804,28 @@ pub const SimState = struct {
                     stderr.writeAll(msg) catch {};
                 }
             } else {
+                // Print stored mismatch details to stderr
+                if (self.mismatch_details.items.len > 0) {
+                    stderr.writeAll(self.mismatch_details.items) catch {};
+                }
                 if (self.file_path) |path| {
                     if (self.mismatches > MAX_MISMATCH_DETAILS) {
-                        const msg = std.fmt.bufPrint(&buf, "  ... and {d} more mismatches\n", .{self.mismatches - MAX_MISMATCH_DETAILS}) catch "";
-                        stderr.writeAll(msg) catch {};
+                        const truncated_msg = std.fmt.bufPrint(&buf, "  ... and {d} more mismatches", .{self.mismatches - MAX_MISMATCH_DETAILS}) catch "";
+                        stderr.writeAll(truncated_msg) catch {};
+                        // Hint about log file if available
+                        if (self.log_file != null) {
+                            stderr.writeAll(" (see RRSIM_LOG for full output)\n") catch {};
+                        } else {
+                            stderr.writeAll("\n") catch {};
+                        }
                     }
                     const msg = std.fmt.bufPrint(&buf, "[FAIL] {s} - {d} total mismatches\n", .{ path, self.mismatches }) catch "[FAIL]\n";
                     stderr.writeAll(msg) catch {};
+                }
+                // Write summary to log file
+                if (self.log_file) |file| {
+                    const log_summary = std.fmt.bufPrint(&buf, "\n[SUMMARY] {d} total mismatches\n", .{self.mismatches}) catch "";
+                    file.writeAll(log_summary) catch {};
                 }
                 return error.TestFailed;
             }
@@ -845,29 +847,33 @@ pub fn initFromEnv(allocator: std.mem.Allocator) !SimState {
 
     // Check environment variables (in priority order)
     // Note: getEnvVarOwned allocates, but these paths live for program lifetime
-    if (getEnvVar(allocator, "ROC_RAY_SIM_TEST")) |path| {
+    if (getEnvVar(allocator, "RRSIM_TEST")) |path| {
         state.mode = .Test;
         state.file_path = path;
         const loaded = try SimState.readFromFile(allocator, path);
         state.frames = loaded.frames;
         state.string_buffer = loaded.string_buffer;
-    } else if (getEnvVar(allocator, "ROC_RAY_REPLAY")) |path| {
+    } else if (getEnvVar(allocator, "RRSIM_REPLAY")) |path| {
         state.mode = .Replay;
         state.file_path = path;
         const loaded = try SimState.readFromFile(allocator, path);
         state.frames = loaded.frames;
         state.string_buffer = loaded.string_buffer;
-    } else if (getEnvVar(allocator, "ROC_RAY_RECORD")) |path| {
+    } else if (getEnvVar(allocator, "RRSIM_RECORD")) |path| {
         state.mode = .Record;
         state.file_path = path;
+    }
+
+    // Check for log file (independent of mode, but only useful with Test mode)
+    if (getEnvVar(allocator, "RRSIM_LOG")) |log_path| {
+        defer allocator.free(log_path);
+        state.log_file = std.fs.cwd().createFile(log_path, .{}) catch null;
     }
 
     return state;
 }
 
-// ============================================================================
 // Unit Tests
-// ============================================================================
 
 test "rrsim format round-trip" {
     const allocator = std.testing.allocator;
@@ -892,9 +898,9 @@ test "rrsim format round-trip" {
     };
     try frame.outputs.append(allocator, .{ .BeginFrame = {} });
     try frame.outputs.append(allocator, .{ .Clear = 5 });
-    try frame.outputs.append(allocator, .{ .Rectangle = .{ .x = 10, .y = 20, .width = 100, .height = 50, .color = 10 } });
-    try frame.outputs.append(allocator, .{ .Circle = .{ .center_x = 50, .center_y = 50, .radius = 25, .color = 4 } });
-    try frame.outputs.append(allocator, .{ .Line = .{ .start_x = 0, .start_y = 0, .end_x = 100, .end_y = 100, .color = 1 } });
+    try frame.outputs.append(allocator, .{ .Rectangle = .{ .height = 50, .width = 100, .x = 10, .y = 20, .color = 10 } });
+    try frame.outputs.append(allocator, .{ .Circle = .{ .center = .{ .x = 50, .y = 50 }, .radius = 25, .color = 4 } });
+    try frame.outputs.append(allocator, .{ .Line = .{ .end = .{ .x = 100, .y = 100 }, .start = .{ .x = 0, .y = 0 }, .color = 1 } });
     try frame.outputs.append(allocator, .{ .Text = .{ .pos_x = 10, .pos_y = 10, .size = 20, .color = 11, .text_offset = 0, .text_len = 11 } });
     try frame.outputs.append(allocator, .{ .EndFrame = {} });
     try state.frames.append(allocator, frame);
@@ -945,27 +951,24 @@ test "draw command equality" {
     try std.testing.expect(!cmd1.eql(cmd4));
 }
 
-test "input state conversion" {
-    const roc_state = RocPlatformState{
-        .frame_count = 100,
-        .mouse_x = 50.5,
-        .mouse_y = 75.25,
-        .mouse_wheel = 2.0,
-        .mouse_left = true,
-        .mouse_middle = false,
-        .mouse_right = true,
+test "draw command from safe types" {
+    const circle = types.Circle{
+        .center = types.Vector2.init(100, 200),
+        .radius = 50,
+        .color = .red,
     };
+    const cmd = DrawCommand.circle(circle);
+    try std.testing.expectEqual(@as(f32, 100), cmd.Circle.center.x);
+    try std.testing.expectEqual(@as(f32, 200), cmd.Circle.center.y);
+    try std.testing.expectEqual(@as(f32, 50), cmd.Circle.radius);
+    try std.testing.expectEqual(@as(u8, 10), cmd.Circle.color); // red = 10
 
-    const input_state = InputState.fromRocState(roc_state);
-    try std.testing.expectEqual(@as(u64, 100), input_state.frame_count);
-    try std.testing.expectEqual(@as(u8, 1), input_state.mouse_left);
-    try std.testing.expectEqual(@as(u8, 0), input_state.mouse_middle);
-    try std.testing.expectEqual(@as(u8, 1), input_state.mouse_right);
-
-    const back = input_state.toRocState();
-    try std.testing.expectEqual(roc_state.frame_count, back.frame_count);
-    try std.testing.expectEqual(roc_state.mouse_left, back.mouse_left);
-    try std.testing.expectEqual(roc_state.mouse_right, back.mouse_right);
+    // Convert back to safe type
+    const back = cmd.toCircle();
+    try std.testing.expectEqual(circle.center.x, back.center.x);
+    try std.testing.expectEqual(circle.center.y, back.center.y);
+    try std.testing.expectEqual(circle.radius, back.radius);
+    try std.testing.expectEqual(circle.color, back.color);
 }
 
 test "test mode mismatch detection" {
@@ -977,7 +980,7 @@ test "test mode mismatch detection" {
     // Create expected frame
     var frame = FrameRecord.init();
     try frame.outputs.append(allocator, .{ .Clear = 5 });
-    try frame.outputs.append(allocator, .{ .Rectangle = .{ .x = 10, .y = 20, .width = 100, .height = 50, .color = 10 } });
+    try frame.outputs.append(allocator, .{ .Rectangle = .{ .height = 50, .width = 100, .x = 10, .y = 20, .color = 10 } });
     try state.frames.append(allocator, frame);
 
     state.mode = .Test;
@@ -989,7 +992,7 @@ test "test mode mismatch detection" {
     try std.testing.expectEqual(@as(u32, 0), state.mismatches);
 
     // Record mismatching output (wrong color)
-    try state.recordOutput(.{ .Rectangle = .{ .x = 10, .y = 20, .width = 100, .height = 50, .color = 11 } });
+    try state.recordOutput(.{ .Rectangle = .{ .height = 50, .width = 100, .x = 10, .y = 20, .color = 11 } });
     try std.testing.expectEqual(@as(u32, 1), state.mismatches);
 }
 

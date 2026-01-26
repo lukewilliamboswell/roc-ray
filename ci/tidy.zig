@@ -251,6 +251,19 @@ fn tidyBanned(file: SourceFile, errors: *Errors) void {
         }
     }
 
+    // Low-level raylib calls should only be in the raylib backend
+    if (!std.mem.endsWith(u8, file.path, "backend/raylib.zig")) {
+        if (std.mem.indexOf(u8, file.text, "raylib.rl.")) |offset| {
+            errors.addBanned(file, offset, "raylib.rl.", "raylib backend functions (colorToRl, drawText, etc.)");
+        }
+        if (std.mem.indexOf(u8, file.text, "@cInclude(\"raylib.h\")")) |offset| {
+            errors.addBanned(file, offset, "@cInclude(\"raylib.h\")", "import from backend/raylib.zig");
+        }
+        if (std.mem.indexOf(u8, file.text, "@cInclude(\"rlgl.h\")")) |offset| {
+            errors.addBanned(file, offset, "@cInclude(\"rlgl.h\")", "import from backend/raylib.zig");
+        }
+    }
+
     // Reminders:
     // Do use FIXME comments proactively while iterating on the code when you want to make sure
     // something is revisited before getting into the main branch.
@@ -600,7 +613,7 @@ const DeadFilesDetector = struct {
         // Entry points in src/ that are invoked directly (not via @import)
         const entry_points: []const []const u8 = &.{
             "host_native.zig", // Native platform host (built as library)
-            "host_web.zig", // WASM platform host (built as library)
+            "host_wasm.zig", // WASM platform host (built as library)
         };
         for (entry_points) |entry_point| {
             if (std.mem.startsWith(u8, &file, entry_point)) return true;

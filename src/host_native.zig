@@ -1,36 +1,36 @@
-///! Platform host for roc-ray - a Roc platform for raylib graphics.
-///! This file is for NATIVE builds only. Web/WASM builds use host_web.zig.
+///! Platform host for roc-ray using the raylib graphics library.
 const std = @import("std");
 const builtin = @import("builtin");
 const builtins = @import("builtins");
 
-// Import shared Roc ABI types
-const roc_types = @import("roc_types.zig");
+// Import types (includes Roc ABI types and safe types)
+const types = @import("types.zig");
+
+// Import FFI conversion utilities
+const ffi = @import("roc_ffi.zig");
+
+// Import backend
+const raylib = @import("backend/raylib.zig");
 
 // Import simulation recording/replay module
 const sim = @import("sim.zig");
-const RocStr = roc_types.RocStr;
-const RocList = roc_types.RocList;
-const RocBox = roc_types.RocBox;
-const RocVector2 = roc_types.RocVector2;
-const RocPlatformState = roc_types.RocPlatformState;
-const RocRectangle = roc_types.RocRectangle;
-const RocCircle = roc_types.RocCircle;
-const RocLine = roc_types.RocLine;
-const RocText = roc_types.RocText;
-const Try_BoxModel_I64 = roc_types.Try_BoxModel_I64;
-const RenderArgs = roc_types.RenderArgs;
-const RocOps = roc_types.RocOps;
-const HostedFn = roc_types.HostedFn;
-const Color = roc_types.Color;
-const roc__init_for_host = roc_types.roc__init_for_host;
-const roc__render_for_host = roc_types.roc__render_for_host;
 
-// Direct C interop with raylib
-const rl = @cImport({
-    @cInclude("raylib.h");
-    @cInclude("rlgl.h");
-});
+// Import replay UI overlay
+const overlay = @import("overlay_native.zig");
+
+// Type aliases for Roc ABI
+const RocBox = types.RocBox;
+const RocPlatformState = types.InputState.FFI;
+const RocText = types.Text.FFI;
+const Try_BoxModel_I64 = types.Try_BoxModel_I64;
+const RenderArgs = types.RenderArgs;
+const RocOps = types.RocOps;
+const HostedFn = types.HostedFn;
+const roc__init_for_host = types.roc__init_for_host;
+const roc__render_for_host = types.roc__render_for_host;
+
+// Access raw raylib binding through backend (for cases not yet abstracted)
+const rl = raylib.rl;
 
 const TRACE_ALLOCATIONS = false;
 const TRACE_HOST = false;
@@ -229,28 +229,6 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 }
 
 /// Convert Roc Color tag union discriminant to raylib Color
-/// Tags sorted alphabetically: Black=0, Blue=1, DarkGray=2, Gray=3, Green=4,
-/// LightGray=5, Orange=6, Pink=7, Purple=8, RayWhite=9, Red=10, White=11, Yellow=12
-fn rocColorToRaylib(discriminant: u8) rl.Color {
-    return switch (discriminant) {
-        0 => rl.BLACK,
-        1 => rl.BLUE,
-        2 => rl.DARKGRAY,
-        3 => rl.GRAY,
-        4 => rl.GREEN,
-        5 => rl.LIGHTGRAY,
-        6 => rl.ORANGE,
-        7 => rl.PINK,
-        8 => rl.PURPLE,
-        9 => rl.RAYWHITE,
-        10 => rl.RED,
-        11 => rl.WHITE,
-        12 => rl.YELLOW,
-        else => rl.MAGENTA, // Error fallback
-    };
-}
-
-/// Hosted function: Draw.begin_frame! (index 0 alphabetically)
 fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     _ = args_ptr;
@@ -262,50 +240,38 @@ fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque)
         if (s.mode == .Test) return; // Skip actual draw in headless test mode
     }
 
-    rl.BeginDrawing();
+    raylib.beginDrawing();
 }
 
-/// Hosted function: Draw.circle! (index 1 alphabetically)
 fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
-    const circle: *const RocCircle = @ptrCast(@alignCast(args_ptr));
+    const circle = ffi.circleFromRoc(args_ptr);
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
 
     // Record output if simulation active
     if (host.sim_state) |s| {
-        s.recordOutput(.{ .Circle = .{
-            .center_x = circle.center.x,
-            .center_y = circle.center.y,
-            .radius = circle.radius,
-            .color = circle.color,
-        } }) catch {};
+        s.recordOutput(sim.DrawCommand.circle(circle)) catch {};
         if (s.mode == .Test) return;
     }
 
-    rl.DrawCircle(
-        @intFromFloat(circle.center.x),
-        @intFromFloat(circle.center.y),
-        circle.radius,
-        rocColorToRaylib(circle.color),
-    );
+    raylib.drawCircle(circle);
 }
 
-/// Hosted function: Draw.clear! (index 2 alphabetically)
 fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     const color_discriminant: *const u8 = @ptrCast(args_ptr);
+    const color = types.Color.fromU8Safe(color_discriminant.*);
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
 
     // Record output if simulation active
     if (host.sim_state) |s| {
-        s.recordOutput(.{ .Clear = color_discriminant.* }) catch {};
+        s.recordOutput(sim.DrawCommand.clear(color)) catch {};
         if (s.mode == .Test) return;
     }
 
-    rl.ClearBackground(rocColorToRaylib(color_discriminant.*));
+    raylib.clearBackground(color);
 }
 
-/// Hosted function: Draw.end_frame! (index 3 alphabetically)
 fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     _ = args_ptr;
@@ -317,64 +283,37 @@ fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) c
         if (s.mode == .Test) return;
     }
 
-    rl.EndDrawing();
+    raylib.endDrawing();
 }
 
-/// Hosted function: Draw.line! (index 4 alphabetically)
 fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
-    const line: *const RocLine = @ptrCast(@alignCast(args_ptr));
+    const line = ffi.lineFromRoc(args_ptr);
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
 
     // Record output if simulation active
     if (host.sim_state) |s| {
-        s.recordOutput(.{ .Line = .{
-            .start_x = line.start.x,
-            .start_y = line.start.y,
-            .end_x = line.end.x,
-            .end_y = line.end.y,
-            .color = line.color,
-        } }) catch {};
+        s.recordOutput(sim.DrawCommand.line(line)) catch {};
         if (s.mode == .Test) return;
     }
 
-    rl.DrawLine(
-        @intFromFloat(line.start.x),
-        @intFromFloat(line.start.y),
-        @intFromFloat(line.end.x),
-        @intFromFloat(line.end.y),
-        rocColorToRaylib(line.color),
-    );
+    raylib.drawLine(line);
 }
 
-/// Hosted function: Draw.rectangle! (index 5 alphabetically)
 fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
-    const rect: *const RocRectangle = @ptrCast(@alignCast(args_ptr));
+    const rect = ffi.rectangleFromRoc(args_ptr);
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
 
     // Record output if simulation active
     if (host.sim_state) |s| {
-        s.recordOutput(.{ .Rectangle = .{
-            .x = rect.x,
-            .y = rect.y,
-            .width = rect.width,
-            .height = rect.height,
-            .color = rect.color,
-        } }) catch {};
+        s.recordOutput(sim.DrawCommand.rectangle(rect)) catch {};
         if (s.mode == .Test) return;
     }
 
-    rl.DrawRectangle(
-        @intFromFloat(rect.x),
-        @intFromFloat(rect.y),
-        @intFromFloat(rect.width),
-        @intFromFloat(rect.height),
-        rocColorToRaylib(rect.color),
-    );
+    raylib.drawRectangle(rect);
 }
 
-/// Hosted function: Draw.text! (index 6 alphabetically)
 fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
@@ -393,12 +332,11 @@ fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
     if (text_slice.len < buf.len) {
         @memcpy(buf[0..text_slice.len], text_slice);
         buf[text_slice.len] = 0;
-        rl.DrawText(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, rocColorToRaylib(txt.color));
+        raylib.drawTextRaw(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, raylib.colorToRl(types.Color.fromU8Safe(txt.color)));
     }
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// Order: Draw.begin_frame!, Draw.circle!, Draw.clear!, Draw.end_frame!, Draw.line!, Draw.rectangle!, Draw.text!
 const hosted_function_ptrs = [_]HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
     hostedDrawCircle, // Draw.circle! (1)
@@ -570,10 +508,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     const screen_width = 800;
     const screen_height = 600;
     if (!headless) {
-        rl.InitWindow(screen_width, screen_height, "Roc + Raylib");
-        rl.SetTargetFPS(60);
+        raylib.initWindow(screen_width, screen_height, "Roc + Raylib");
+        raylib.setTargetFps(60);
     }
-    defer if (!headless) rl.CloseWindow();
+    defer if (!headless) raylib.closeWindow();
 
     // Timing for headless test mode
     var timer = std.time.Timer.start() catch null;
@@ -613,49 +551,29 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     }
 
     if (!headless) {
-        rl.SetTargetFPS(240);
+        raylib.setTargetFps(240);
     }
 
     // Main render loop
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
 
-    // Replay control state
-    var replay_paused: bool = true; // Start paused
-    const speed_presets = [_]f32{ 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 };
-    var speed_index: usize = 4; // Start at 1.0x (index 4)
-    var frame_accumulator: f32 = 0.0; // For sub-frame timing at different speeds
-    var blink_timer: f32 = 0.0; // For blinking "PAUSED" text
+    // Replay control state (using overlay module)
+    var overlay_state = overlay.OverlayState{};
 
     while (true) {
         // Handle replay controls (only in visual replay mode)
         if (replay_only) {
-            // Q to quit
-            if (rl.IsKeyPressed(rl.KEY_Q)) break;
-
-            // Space to toggle pause
-            if (rl.IsKeyPressed(rl.KEY_SPACE)) {
-                replay_paused = !replay_paused;
-                frame_accumulator = 0.0;
-            }
-
-            // Arrow keys for stepping (only when paused)
-            if (replay_paused) {
-                if (rl.IsKeyPressed(rl.KEY_LEFT)) sim_state.stepBack();
-                if (rl.IsKeyPressed(rl.KEY_RIGHT)) sim_state.stepForward();
-            }
-
-            // Home/End to jump
-            if (rl.IsKeyPressed(rl.KEY_HOME)) sim_state.jumpToStart();
-            if (rl.IsKeyPressed(rl.KEY_END)) sim_state.jumpToEnd();
-
-            // Up/Down for speed control
-            if (rl.IsKeyPressed(rl.KEY_UP) and speed_index + 1 < speed_presets.len) speed_index += 1;
-            if (rl.IsKeyPressed(rl.KEY_DOWN) and speed_index > 0) speed_index -= 1;
+            const action = overlay.handleInput(&overlay_state);
+            if (action.quit) break;
+            if (action.step_back) sim_state.stepBack();
+            if (action.step_forward) sim_state.stepForward();
+            if (action.jump_to_start) sim_state.jumpToStart();
+            if (action.jump_to_end) sim_state.jumpToEnd();
         }
 
         // Check exit conditions
-        if (!headless and rl.WindowShouldClose()) break;
+        if (!headless and raylib.windowShouldClose()) break;
         if (sim_state.mode == .Replay or sim_state.mode == .Test) {
             if (!sim_state.hasMoreFrames()) break;
         }
@@ -666,19 +584,19 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         if (sim_state.mode == .Replay or sim_state.mode == .Test) {
             // Use recorded inputs
             if (sim_state.currentFrame()) |frame| {
-                platform_state = frame.inputs.toRocState();
+                platform_state = frame.inputs.toInputState().toFfi();
             } else {
                 break;
             }
         } else {
             // Capture real inputs from raylib
-            const mouse_pos = rl.GetMousePosition();
+            const mouse_pos = raylib.getMousePosition();
             platform_state = RocPlatformState{
                 .frame_count = frame_count,
-                .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
-                .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
-                .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
-                .mouse_wheel = rl.GetMouseWheelMove(),
+                .mouse_left = raylib.isMouseButtonDown(.left),
+                .mouse_middle = raylib.isMouseButtonDown(.middle),
+                .mouse_right = raylib.isMouseButtonDown(.right),
+                .mouse_wheel = raylib.getMouseWheelMove(),
                 .mouse_x = mouse_pos.x,
                 .mouse_y = mouse_pos.y,
             };
@@ -686,7 +604,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
         // Start frame recording (if in record mode)
         if (sim_state.mode == .Record) {
-            sim_state.beginFrame(sim.InputState.fromRocState(platform_state)) catch {};
+            sim_state.beginFrame(platform_state.toInputState()) catch {};
         }
 
         if (TRACE_HOST and frame_count % 60 == 0) {
@@ -706,27 +624,27 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             if (sim_state.currentFrame()) |frame| {
                 for (frame.outputs.items) |cmd| {
                     switch (cmd) {
-                        .BeginFrame => rl.BeginDrawing(),
-                        .Clear => |c| rl.ClearBackground(rocColorToRaylib(c)),
-                        .Circle => |c| rl.DrawCircle(
-                            @intFromFloat(c.center_x),
-                            @intFromFloat(c.center_y),
+                        .BeginFrame => raylib.beginDrawing(),
+                        .Clear => |c| raylib.clearBackgroundRaw(raylib.colorToRl(types.Color.fromU8Safe(c))),
+                        .Circle => |c| raylib.drawCircleRaw(
+                            @intFromFloat(c.center.x),
+                            @intFromFloat(c.center.y),
                             c.radius,
-                            rocColorToRaylib(c.color),
+                            raylib.colorToRl(types.Color.fromU8Safe(c.color)),
                         ),
-                        .Rectangle => |r| rl.DrawRectangle(
+                        .Rectangle => |r| raylib.drawRectangleRaw(
                             @intFromFloat(r.x),
                             @intFromFloat(r.y),
                             @intFromFloat(r.width),
                             @intFromFloat(r.height),
-                            rocColorToRaylib(r.color),
+                            raylib.colorToRl(types.Color.fromU8Safe(r.color)),
                         ),
-                        .Line => |l| rl.DrawLine(
-                            @intFromFloat(l.start_x),
-                            @intFromFloat(l.start_y),
-                            @intFromFloat(l.end_x),
-                            @intFromFloat(l.end_y),
-                            rocColorToRaylib(l.color),
+                        .Line => |l| raylib.drawLineRaw(
+                            @intFromFloat(l.start.x),
+                            @intFromFloat(l.start.y),
+                            @intFromFloat(l.end.x),
+                            @intFromFloat(l.end.y),
+                            raylib.colorToRl(types.Color.fromU8Safe(l.color)),
                         ),
                         .Text => |t| {
                             const text_content = sim_state.getText(t.text_offset, t.text_len);
@@ -734,89 +652,33 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                             if (text_content.len < buf.len) {
                                 @memcpy(buf[0..text_content.len], text_content);
                                 buf[text_content.len] = 0;
-                                rl.DrawText(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, rocColorToRaylib(t.color));
+                                raylib.drawTextRaw(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, raylib.colorToRl(types.Color.fromU8Safe(t.color)));
                             }
                         },
                         .EndFrame => {
                             // Draw replay UI overlay before ending the frame
-                            if (replay_paused) {
-                                blink_timer += rl.GetFrameTime();
-                                // Alternate between white and dark gray every 0.5s
-                                const color = if (@mod(blink_timer, 1.0) < 0.5)
-                                    rl.WHITE
-                                else
-                                    rl.Color{ .r = 40, .g = 40, .b = 40, .a = 255 };
+                            if (overlay_state.paused) {
+                                overlay_state.update(raylib.getFrameTime());
 
-                                const info_font: c_int = 30;
-
-                                if (rl.IsKeyDown(rl.KEY_F)) {
-                                    // Show input state while F is held
-                                    const inputs = frame.inputs;
-                                    const base_y = @divTrunc(screen_height, 2) - 80;
-
-                                    // Title
-                                    const title = "INPUTS";
-                                    const title_font: c_int = 60;
-                                    const title_width = rl.MeasureText(title, title_font);
-                                    rl.DrawText(title, @divTrunc(screen_width - title_width, 2), base_y, title_font, color);
-
-                                    // Mouse position
-                                    var line1_buf: [64:0]u8 = undefined;
-                                    const line1 = std.fmt.bufPrint(&line1_buf, "Mouse: ({d:.1}, {d:.1})", .{ inputs.mouse_x, inputs.mouse_y }) catch "Mouse: ?";
-                                    line1_buf[line1.len] = 0;
-                                    const line1_width = rl.MeasureText(line1_buf[0..line1.len :0], info_font);
-                                    rl.DrawText(line1_buf[0..line1.len :0], @divTrunc(screen_width - line1_width, 2), base_y + title_font + 15, info_font, color);
-
-                                    // Mouse buttons
-                                    var line2_buf: [64:0]u8 = undefined;
-                                    const left_str: []const u8 = if (inputs.mouse_left != 0) "LEFT" else "left";
-                                    const mid_str: []const u8 = if (inputs.mouse_middle != 0) "MID" else "mid";
-                                    const right_str: []const u8 = if (inputs.mouse_right != 0) "RIGHT" else "right";
-                                    const line2 = std.fmt.bufPrint(&line2_buf, "Buttons: [{s}] [{s}] [{s}]", .{ left_str, mid_str, right_str }) catch "Buttons: ?";
-                                    line2_buf[line2.len] = 0;
-                                    const line2_width = rl.MeasureText(line2_buf[0..line2.len :0], info_font);
-                                    rl.DrawText(line2_buf[0..line2.len :0], @divTrunc(screen_width - line2_width, 2), base_y + title_font + 50, info_font, color);
-
-                                    // Mouse wheel
-                                    var line3_buf: [64:0]u8 = undefined;
-                                    const line3 = std.fmt.bufPrint(&line3_buf, "Wheel: {d:.2}", .{inputs.mouse_wheel}) catch "Wheel: ?";
-                                    line3_buf[line3.len] = 0;
-                                    const line3_width = rl.MeasureText(line3_buf[0..line3.len :0], info_font);
-                                    rl.DrawText(line3_buf[0..line3.len :0], @divTrunc(screen_width - line3_width, 2), base_y + title_font + 85, info_font, color);
+                                if (overlay.isShowingInputs()) {
+                                    overlay.drawInputsOverlay(
+                                        &overlay_state,
+                                        frame.inputs.toInputState(),
+                                        screen_width,
+                                        screen_height,
+                                    );
                                 } else {
-                                    // Normal paused display
-                                    // "PAUSED" text centered
-                                    const paused_text = "PAUSED";
-                                    const paused_font: c_int = 80;
-                                    const paused_width = rl.MeasureText(paused_text, paused_font);
-                                    const paused_x = @divTrunc(screen_width - paused_width, 2);
-                                    const paused_y = @divTrunc(screen_height, 2) - 60;
-                                    rl.DrawText(paused_text, paused_x, paused_y, paused_font, color);
-
-                                    // Frame/Speed status centered below PAUSED
-                                    var status_buf: [128:0]u8 = undefined;
-                                    const status_slice = std.fmt.bufPrint(&status_buf, "Frame: {d}/{d}  Speed: {d:.2}x", .{
-                                        sim_state.getFrameIndex() + 1,
+                                    overlay.drawPausedOverlay(
+                                        &overlay_state,
+                                        sim_state.getFrameIndex(),
                                         sim_state.getTotalFrames(),
-                                        speed_presets[speed_index],
-                                    }) catch "Frame: ?/?";
-                                    status_buf[status_slice.len] = 0;
-                                    const status_width = rl.MeasureText(status_buf[0..status_slice.len :0], info_font);
-                                    const status_x = @divTrunc(screen_width - status_width, 2);
-                                    const status_y = paused_y + paused_font + 10;
-                                    rl.DrawText(status_buf[0..status_slice.len :0], status_x, status_y, info_font, color);
-
-                                    // Hint to press F
-                                    const hint_text = "PRESS F FOR INPUTS";
-                                    const hint_font: c_int = 20;
-                                    const hint_width = rl.MeasureText(hint_text, hint_font);
-                                    const hint_x = @divTrunc(screen_width - hint_width, 2);
-                                    const hint_y = status_y + info_font + 20;
-                                    rl.DrawText(hint_text, hint_x, hint_y, hint_font, color);
+                                        screen_width,
+                                        screen_height,
+                                    );
                                 }
                             }
 
-                            rl.EndDrawing();
+                            raylib.endDrawing();
                         },
                     }
                 }
@@ -850,11 +712,11 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // End frame in simulation
         if (replay_only) {
             // In replay mode, advance frame only when playing (not paused)
-            if (!replay_paused) {
-                frame_accumulator += rl.GetFrameTime() * speed_presets[speed_index] * 60.0;
-                if (frame_accumulator >= 1.0) {
+            if (!overlay_state.paused) {
+                overlay_state.frame_accumulator += raylib.getFrameTime() * overlay_state.currentSpeed() * 60.0;
+                if (overlay_state.frame_accumulator >= 1.0) {
                     sim_state.endFrame();
-                    frame_accumulator -= 1.0;
+                    overlay_state.frame_accumulator -= 1.0;
                 }
             }
             // Note: frame_count not used in replay mode
@@ -869,21 +731,20 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         const total_time_ns = if (timer) |*t| t.read() else 0;
         const stderr: std.fs.File = .stderr();
         var buf: [256]u8 = undefined;
-        const msg = std.fmt.bufPrint(&buf, "[timing] init={d}ms render={d}ms total={d}ms ({d} frames, {d}us/frame)\n", .{
+        const msg = std.fmt.bufPrint(&buf, "[TIMING] init={d}ms render={d}ms total={d}ms ({d} frames, {d}us/frame)\n", .{
             init_time_ns / 1_000_000,
             render_time_ns / 1_000_000,
             total_time_ns / 1_000_000,
             frame_count,
             if (frame_count > 0) render_time_ns / frame_count / 1000 else 0,
-        }) catch "[timing] error\n";
+        }) catch "[TIMING] error\n";
         stderr.writeAll(msg) catch {};
     }
 
     // Finish simulation (write file or report test results)
-    sim_state.finish() catch |err| {
-        if (err == error.TestFailed) {
-            exit_code = 1;
-        }
+    sim_state.finish() catch |err| switch (err) {
+        error.TestFailed => exit_code = 1,
+        else => {},
     };
 
     // Clean up simulation state before leak check
@@ -911,33 +772,4 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     }
 
     return exit_code;
-}
-
-/// Build a RocList of RocStr from argc/argv
-fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *RocOps) RocList {
-    if (argc == 0) {
-        return RocList.empty();
-    }
-
-    // Allocate list with proper refcount header using RocList.allocateExact
-    const args_list = RocList.allocateExact(
-        @alignOf(RocStr),
-        argc,
-        @sizeOf(RocStr),
-        true, // elements are refcounted (RocStr)
-        roc_ops,
-    );
-
-    const args_ptr: [*]RocStr = @ptrCast(@alignCast(args_list.bytes));
-
-    // Build each argument string
-    for (0..argc) |i| {
-        const arg_cstr = argv[i];
-        const arg_len = std.mem.len(arg_cstr);
-
-        // RocStr.init takes a const pointer to read FROM and allocates internally
-        args_ptr[i] = RocStr.init(arg_cstr, arg_len, roc_ops);
-    }
-
-    return args_list;
 }

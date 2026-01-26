@@ -142,9 +142,6 @@ pub fn build(b: *std.Build) void {
         }
     }
 
-    // ========================================================================
-    // WASM32 target: command-buffer based rendering (no raylib/emscripten)
-    // ========================================================================
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
@@ -154,7 +151,7 @@ pub fn build(b: *std.Build) void {
         .name = "host",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_web.zig"),
+            .root_source_file = b.path("src/host_wasm.zig"),
             .target = wasm_target,
             .optimize = optimize,
             .strip = false, // Preserve debug info for better error messages
@@ -174,9 +171,6 @@ pub fn build(b: *std.Build) void {
     copy_all.addCopyFileToSource(b.path("platform/web/host.js"), "platform/web/host.js");
     copy_all.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
 
-    // ========================================================================
-    // Test step: Zig unit tests + WASM integration tests + Lints
-    // ========================================================================
     const test_step = b.step("test", "Run all tests");
     const lint_step = b.step("lint", "Run code quality lints");
 
@@ -196,6 +190,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_tidy = b.addRunArtifact(tidy);
+    run_tidy.setCwd(b.path(".")); // Run from project root
     lint_step.dependOn(&run_tidy.step);
 
     // Build and run zig_lints.zig (style checks: doc comments, separator comments)
@@ -208,6 +203,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_lints = b.addRunArtifact(zig_lints);
+    run_lints.setCwd(b.path(".")); // Run from project root
     lint_step.dependOn(&run_lints.step);
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
@@ -232,10 +228,10 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_native_tests.step);
     }
 
-    // Zig unit tests for host_web.zig (runs natively, tests pure command buffer logic)
-    const web_tests = b.addTest(.{
+    // Zig unit tests for host_wasm.zig (runs natively, tests WASM host layer)
+    const wasm_host_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_web.zig"),
+            .root_source_file = b.path("src/host_wasm.zig"),
             .target = native_target,
             .optimize = optimize,
             .imports = &.{
@@ -243,10 +239,11 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    const run_web_tests = b.addRunArtifact(web_tests);
-    test_step.dependOn(&run_web_tests.step);
+    const run_wasm_host_tests = b.addRunArtifact(wasm_host_tests);
+    test_step.dependOn(&run_wasm_host_tests.step);
 
     // Zig unit tests for sim.zig (simulation recording/replay)
+    // Note: backend/wasm.zig tests are run through host_wasm.zig (it uses the backend)
     const sim_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/sim.zig"),
@@ -257,11 +254,33 @@ pub fn build(b: *std.Build) void {
     const run_sim_tests = b.addRunArtifact(sim_tests);
     test_step.dependOn(&run_sim_tests.step);
 
+    // Zig unit tests for types.zig (safe Zig types)
+    const types_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/types.zig"),
+            .target = native_target,
+            .optimize = optimize,
+        }),
+    });
+    const run_types_tests = b.addRunArtifact(types_tests);
+    test_step.dependOn(&run_types_tests.step);
+
+    // Zig unit tests for overlay_native.zig (replay UI)
+    const overlay_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/overlay_native.zig"),
+            .target = native_target,
+            .optimize = optimize,
+        }),
+    });
+    const run_overlay_tests = b.addRunArtifact(overlay_tests);
+    test_step.dependOn(&run_overlay_tests.step);
+
     // Build standalone test WASM module (exports test functions, no Roc app)
     const wasm_test_exe = b.addExecutable(.{
-        .name = "host_web",
+        .name = "host_wasm",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_web.zig"),
+            .root_source_file = b.path("src/host_wasm.zig"),
             .target = wasm_target,
             .optimize = optimize,
             .strip = false,
@@ -273,10 +292,11 @@ pub fn build(b: *std.Build) void {
     wasm_test_exe.entry = .disabled;
     wasm_test_exe.rdynamic = true;
 
-    const install_test_wasm = b.addInstallFile(wasm_test_exe.getEmittedBin(), "web-test/host_web.wasm");
+    const install_test_wasm = b.addInstallFile(wasm_test_exe.getEmittedBin(), "web-test/host_wasm.wasm");
 
     // Run Node.js integration tests
     const node_test = b.addSystemCommand(&.{ "node", "ci/wasm-test.mjs" });
+    node_test.setCwd(b.path(".")); // Run from project root
     node_test.step.dependOn(&install_test_wasm.step);
     test_step.dependOn(&node_test.step);
 }

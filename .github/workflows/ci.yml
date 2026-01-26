@@ -106,3 +106,25 @@ jobs:
             echo "Building: $example"
             roc build "$example"
           done
+
+      - name: Run simulation tests
+        # Simulation tests require native execution (no display needed - headless mode)
+        # Skip on Windows due to MSVC library requirements
+        if: runner.os != 'Windows'
+        run: |
+          # Find all .rrsim files and run corresponding app in test mode
+          for rrsim in examples/*.rrsim; do
+            [ -f "$rrsim" ] || continue
+
+            # Extract app name: hello_world_1.rrsim -> hello_world
+            basename=$(basename "$rrsim" .rrsim)
+            app_name="${basename%_[0-9]*}"
+            app_path="examples/${app_name}"
+
+            if [ -f "$app_path" ]; then
+              echo "Running simulation test: $rrsim -> $app_path"
+              ROC_RAY_SIM_TEST="$rrsim" "$app_path"
+            else
+              echo "Warning: No executable found for $rrsim (expected $app_path)"
+            fi
+          done

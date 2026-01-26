@@ -12,11 +12,13 @@ all_roc_syntax
 build
 app
 
-# Ignore markdown files, unless explicitly included
+# Ignore markdown files, except main README
 *.md
+!README.md
 
-# Ignore Roc Ray Simulation Files
+# Ignore Roc Ray Simulation Files, except test fixtures in examples/
 *.rrsim
+!examples/*.rrsim
 
 # Build artifacts (but NOT vendored libraries)
 *.a

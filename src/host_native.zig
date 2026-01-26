@@ -6,6 +6,9 @@ const builtins = @import("builtins");
 
 // Import shared Roc ABI types
 const roc_types = @import("roc_types.zig");
+
+// Import simulation recording/replay module
+const sim = @import("sim.zig");
 const RocStr = roc_types.RocStr;
 const RocList = roc_types.RocList;
 const RocBox = roc_types.RocBox;
@@ -40,6 +43,7 @@ var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     stdin_reader: std.fs.File.Reader,
+    sim_state: ?*sim.SimState = null,
 
     pub fn allocator(self: *@This()) std.mem.Allocator {
         return self.gpa.allocator();
@@ -248,17 +252,36 @@ fn rocColorToRaylib(discriminant: u8) rl.Color {
 
 /// Hosted function: Draw.begin_frame! (index 0 alphabetically)
 fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .BeginFrame = {} }) catch {};
+        if (s.mode == .Test) return; // Skip actual draw in headless test mode
+    }
+
     rl.BeginDrawing();
 }
 
 /// Hosted function: Draw.circle! (index 1 alphabetically)
 fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     const circle: *const RocCircle = @ptrCast(@alignCast(args_ptr));
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .Circle = .{
+            .center_x = circle.center.x,
+            .center_y = circle.center.y,
+            .radius = circle.radius,
+            .color = circle.color,
+        } }) catch {};
+        if (s.mode == .Test) return;
+    }
+
     rl.DrawCircle(
         @intFromFloat(circle.center.x),
         @intFromFloat(circle.center.y),
@@ -269,25 +292,52 @@ fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) cal
 
 /// Hosted function: Draw.clear! (index 2 alphabetically)
 fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     const color_discriminant: *const u8 = @ptrCast(args_ptr);
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .Clear = color_discriminant.* }) catch {};
+        if (s.mode == .Test) return;
+    }
+
     rl.ClearBackground(rocColorToRaylib(color_discriminant.*));
 }
 
 /// Hosted function: Draw.end_frame! (index 3 alphabetically)
 fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .EndFrame = {} }) catch {};
+        if (s.mode == .Test) return;
+    }
+
     rl.EndDrawing();
 }
 
 /// Hosted function: Draw.line! (index 4 alphabetically)
 fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     const line: *const RocLine = @ptrCast(@alignCast(args_ptr));
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .Line = .{
+            .start_x = line.start.x,
+            .start_y = line.start.y,
+            .end_x = line.end.x,
+            .end_y = line.end.y,
+            .color = line.color,
+        } }) catch {};
+        if (s.mode == .Test) return;
+    }
+
     rl.DrawLine(
         @intFromFloat(line.start.x),
         @intFromFloat(line.start.y),
@@ -299,9 +349,22 @@ fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
 
 /// Hosted function: Draw.rectangle! (index 5 alphabetically)
 fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     const rect: *const RocRectangle = @ptrCast(@alignCast(args_ptr));
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(.{ .Rectangle = .{
+            .x = rect.x,
+            .y = rect.y,
+            .width = rect.width,
+            .height = rect.height,
+            .color = rect.color,
+        } }) catch {};
+        if (s.mode == .Test) return;
+    }
+
     rl.DrawRectangle(
         @intFromFloat(rect.x),
         @intFromFloat(rect.y),
@@ -313,10 +376,18 @@ fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) 
 
 /// Hosted function: Draw.text! (index 6 alphabetically)
 fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
     _ = ret_ptr;
     const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
     const text_slice = txt.text.asSlice();
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        // Use dedicated text recording that handles Test mode properly
+        s.recordTextOutput(text_slice, txt.pos.x, txt.pos.y, txt.size, txt.color) catch {};
+        if (s.mode == .Test) return;
+    }
+
     // raylib expects null-terminated string, use stack buffer for small strings
     var buf: [256:0]u8 = undefined;
     if (text_slice.len < buf.len) {
@@ -462,6 +533,20 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
     };
 
+    // Initialize simulation state from environment variables
+    var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
+        const stderr: std.fs.File = .stderr();
+        var buf: [256]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "Failed to initialize simulation: {}\n", .{err}) catch "Failed to initialize simulation\n";
+        stderr.writeAll(msg) catch {};
+        return 1;
+    };
+    host_env.sim_state = &sim_state;
+
+    // Determine if we're in headless mode (Test) or replay-only mode (Replay)
+    const headless = sim_state.mode == .Test;
+    const replay_only = sim_state.mode == .Replay;
+
     // Create the RocOps struct
     var roc_ops = RocOps{
         .env = @as(*anyopaque, @ptrCast(&host_env)),
@@ -481,59 +566,95 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     _ = argc;
     _ = argv;
 
-    // Initialize raylib window
+    // Initialize raylib window (skip in headless test mode)
     const screen_width = 800;
     const screen_height = 600;
-    rl.InitWindow(screen_width, screen_height, "Roc + Raylib");
-    defer rl.CloseWindow();
-
-    rl.SetTargetFPS(60);
-
-    if (TRACE_HOST) {
-        // Call the app's init! entrypoint
-        std.log.debug("[HOST] Calling roc__init_for_host...", .{});
+    if (!headless) {
+        rl.InitWindow(screen_width, screen_height, "Roc + Raylib");
+        rl.SetTargetFPS(60);
     }
+    defer if (!headless) rl.CloseWindow();
 
-    var init_result: Try_BoxModel_I64 = undefined;
-    var unit: struct {} = .{};
-    roc__init_for_host(&roc_ops, &init_result, @ptrCast(&unit));
+    // Timing for headless test mode
+    var timer = std.time.Timer.start() catch null;
+    var init_time_ns: u64 = 0;
+    var render_time_ns: u64 = 0;
 
-    if (TRACE_HOST) {
-        std.log.debug("[HOST] init returned, discriminant={d}", .{init_result.discriminant});
-    }
-
-    // Check if init failed
-    if (init_result.isErr()) {
-        const err_code = init_result.getErrCode();
+    // In replay-only mode, skip Roc initialization - we just play back recorded outputs
+    var boxed_model: ?RocBox = null;
+    if (!replay_only) {
         if (TRACE_HOST) {
-            std.log.debug("[HOST] init returned Err({d})", .{err_code});
+            std.log.debug("[HOST] Calling roc__init_for_host...", .{});
         }
-        return @intCast(err_code);
+
+        var init_result: Try_BoxModel_I64 = undefined;
+        var unit: struct {} = .{};
+        roc__init_for_host(&roc_ops, &init_result, @ptrCast(&unit));
+
+        if (timer) |*t| init_time_ns = t.lap();
+
+        if (TRACE_HOST) {
+            std.log.debug("[HOST] init returned, discriminant={d}", .{init_result.discriminant});
+        }
+
+        // Check if init failed
+        if (init_result.isErr()) {
+            const err_code = init_result.getErrCode();
+            if (TRACE_HOST) {
+                std.log.debug("[HOST] init returned Err({d})", .{err_code});
+            }
+            return @intCast(err_code);
+        }
+
+        boxed_model = init_result.getModel();
+        if (TRACE_HOST) {
+            std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model.?)});
+        }
     }
 
-    // Get the boxed model from init
-    var boxed_model = init_result.getModel();
-    if (TRACE_HOST) {
-        std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
+    if (!headless) {
+        rl.SetTargetFPS(240);
     }
-
-    rl.SetTargetFPS(240);
 
     // Main render loop
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
-    while (!rl.WindowShouldClose()) {
+
+    while (true) {
+        // Check exit conditions
+        if (!headless and rl.WindowShouldClose()) break;
+        if (sim_state.mode == .Replay or sim_state.mode == .Test) {
+            if (!sim_state.hasMoreFrames()) break;
+        }
+
         // Build platform state for this frame
-        const mouse_pos = rl.GetMousePosition();
-        const platform_state = RocPlatformState{
-            .frame_count = frame_count,
-            .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
-            .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
-            .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
-            .mouse_wheel = rl.GetMouseWheelMove(),
-            .mouse_x = mouse_pos.x,
-            .mouse_y = mouse_pos.y,
-        };
+        var platform_state: RocPlatformState = undefined;
+
+        if (sim_state.mode == .Replay or sim_state.mode == .Test) {
+            // Use recorded inputs
+            if (sim_state.currentFrame()) |frame| {
+                platform_state = frame.inputs.toRocState();
+            } else {
+                break;
+            }
+        } else {
+            // Capture real inputs from raylib
+            const mouse_pos = rl.GetMousePosition();
+            platform_state = RocPlatformState{
+                .frame_count = frame_count,
+                .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
+                .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
+                .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
+                .mouse_wheel = rl.GetMouseWheelMove(),
+                .mouse_x = mouse_pos.x,
+                .mouse_y = mouse_pos.y,
+            };
+        }
+
+        // Start frame recording (if in record mode)
+        if (sim_state.mode == .Record) {
+            sim_state.beginFrame(sim.InputState.fromRocState(platform_state)) catch {};
+        }
 
         if (TRACE_HOST and frame_count % 60 == 0) {
             var buf: [256]u8 = undefined;
@@ -547,37 +668,108 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             dbg_stderr.writeAll(msg) catch {};
         }
 
-        // Call render with the boxed model and platform state
-        // Per RocCall ABI, args are passed as a single pointer to a tuple struct
-        var render_args = RenderArgs{
-            .model = boxed_model,
-            .state = platform_state,
-        };
-        var render_result: Try_BoxModel_I64 = undefined;
-        roc__render_for_host(&roc_ops, &render_result, &render_args);
-
-        // Check render result
-        if (render_result.isErr()) {
-            exit_code = @intCast(render_result.getErrCode());
-            if (TRACE_HOST) {
-                std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+        if (replay_only) {
+            // In replay mode, play back recorded draw commands directly
+            if (sim_state.currentFrame()) |frame| {
+                for (frame.outputs.items) |cmd| {
+                    switch (cmd) {
+                        .BeginFrame => rl.BeginDrawing(),
+                        .Clear => |c| rl.ClearBackground(rocColorToRaylib(c)),
+                        .Circle => |c| rl.DrawCircle(
+                            @intFromFloat(c.center_x),
+                            @intFromFloat(c.center_y),
+                            c.radius,
+                            rocColorToRaylib(c.color),
+                        ),
+                        .Rectangle => |r| rl.DrawRectangle(
+                            @intFromFloat(r.x),
+                            @intFromFloat(r.y),
+                            @intFromFloat(r.width),
+                            @intFromFloat(r.height),
+                            rocColorToRaylib(r.color),
+                        ),
+                        .Line => |l| rl.DrawLine(
+                            @intFromFloat(l.start_x),
+                            @intFromFloat(l.start_y),
+                            @intFromFloat(l.end_x),
+                            @intFromFloat(l.end_y),
+                            rocColorToRaylib(l.color),
+                        ),
+                        .Text => |t| {
+                            const text_content = sim_state.getText(t.text_offset, t.text_len);
+                            var buf: [256:0]u8 = undefined;
+                            if (text_content.len < buf.len) {
+                                @memcpy(buf[0..text_content.len], text_content);
+                                buf[text_content.len] = 0;
+                                rl.DrawText(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, rocColorToRaylib(t.color));
+                            }
+                        },
+                        .EndFrame => rl.EndDrawing(),
+                    }
+                }
             }
-            break;
+        } else {
+            // Call Roc render with the platform state
+            var render_args = RenderArgs{
+                .model = boxed_model.?,
+                .state = platform_state,
+            };
+            var render_result: Try_BoxModel_I64 = undefined;
+
+            const render_start = if (timer) |*t| t.lap() else 0;
+            _ = render_start;
+            roc__render_for_host(&roc_ops, &render_result, &render_args);
+            if (timer) |*t| render_time_ns += t.lap();
+
+            // Check render result
+            if (render_result.isErr()) {
+                exit_code = @intCast(render_result.getErrCode());
+                if (TRACE_HOST) {
+                    std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+                }
+                break;
+            }
+
+            // Update boxed_model for next iteration
+            boxed_model = render_result.getModel();
         }
 
-        // Update boxed_model for next iteration
-        boxed_model = render_result.getModel();
+        // End frame in simulation
+        sim_state.endFrame();
         frame_count += 1;
-
-        // Drawing is now handled by the Roc app via Draw effects
     }
 
-    // Clean up final model
-    if (exit_code == 0) {
-        if (TRACE_HOST) {
-            std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(boxed_model)});
+    // Print timing stats for headless test mode
+    if (headless) {
+        const total_time_ns = if (timer) |*t| t.read() else 0;
+        const stderr: std.fs.File = .stderr();
+        var buf: [256]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "[timing] init={d}ms render={d}ms total={d}ms ({d} frames, {d}us/frame)\n", .{
+            init_time_ns / 1_000_000,
+            render_time_ns / 1_000_000,
+            total_time_ns / 1_000_000,
+            frame_count,
+            if (frame_count > 0) render_time_ns / frame_count / 1000 else 0,
+        }) catch "[timing] error\n";
+        stderr.writeAll(msg) catch {};
+    }
+
+    // Finish simulation (write file or report test results)
+    sim_state.finish() catch |err| {
+        if (err == error.TestFailed) {
+            exit_code = 1;
         }
-        decrefRocBox(boxed_model, &roc_ops);
+    };
+
+    // Clean up simulation state before leak check
+    sim_state.deinit();
+
+    // Clean up final model (always clean up if we have one, regardless of exit code)
+    if (boxed_model) |model| {
+        if (TRACE_HOST) {
+            std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(model)});
+        }
+        decrefRocBox(model, &roc_ops);
     }
 
     // Check for memory leaks before returning

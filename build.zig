@@ -218,6 +218,17 @@ pub fn build(b: *std.Build) void {
     const run_web_tests = b.addRunArtifact(web_tests);
     test_step.dependOn(&run_web_tests.step);
 
+    // Zig unit tests for sim.zig (simulation recording/replay)
+    const sim_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/sim.zig"),
+            .target = native_target,
+            .optimize = optimize,
+        }),
+    });
+    const run_sim_tests = b.addRunArtifact(sim_tests);
+    test_step.dependOn(&run_sim_tests.step);
+
     // Build standalone test WASM module (exports test functions, no Roc app)
     const wasm_test_exe = b.addExecutable(.{
         .name = "host_web",

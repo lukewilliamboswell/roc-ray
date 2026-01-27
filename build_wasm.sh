@@ -60,8 +60,6 @@ if [ ! -f "$WASM_FILE" ]; then
 fi
 
 cp "$WASM_FILE" www/app.wasm
-cp platform/web/host.js www/
-cp platform/web/index.html www/
 
 echo "=== Files ready in www/ ==="
 ls -la www/

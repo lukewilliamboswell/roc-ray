@@ -170,6 +170,133 @@ pub const Rectangle = struct {
     }
 };
 
+// RectangleGradientV
+
+/// Rectangle with vertical gradient (top to bottom).
+pub const RectangleGradientV = struct {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    color_top: Color,
+    color_bottom: Color,
+
+    /// FFI-compatible layout matching Roc's RectangleGradientV.
+    /// Field order: f32s alphabetically (height, width, x, y), then u8s alphabetically (color_bottom, color_top)
+    pub const FFI = extern struct {
+        height: f32,
+        width: f32,
+        x: f32,
+        y: f32,
+        color_bottom: u8,
+        color_top: u8,
+
+        pub fn toRectangleGradientV(self: FFI) RectangleGradientV {
+            return .{
+                .x = self.x,
+                .y = self.y,
+                .width = self.width,
+                .height = self.height,
+                .color_top = Color.fromU8(self.color_top) orelse .white,
+                .color_bottom = Color.fromU8(self.color_bottom) orelse .white,
+            };
+        }
+    };
+
+    pub fn toFfi(self: RectangleGradientV) FFI {
+        return .{
+            .height = self.height,
+            .width = self.width,
+            .x = self.x,
+            .y = self.y,
+            .color_bottom = self.color_bottom.toU8(),
+            .color_top = self.color_top.toU8(),
+        };
+    }
+};
+
+// RectangleGradientH
+
+/// Rectangle with horizontal gradient (left to right).
+pub const RectangleGradientH = struct {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    color_left: Color,
+    color_right: Color,
+
+    /// FFI-compatible layout matching Roc's RectangleGradientH.
+    /// Field order: f32s alphabetically (height, width, x, y), then u8s alphabetically (color_left, color_right)
+    pub const FFI = extern struct {
+        height: f32,
+        width: f32,
+        x: f32,
+        y: f32,
+        color_left: u8,
+        color_right: u8,
+
+        pub fn toRectangleGradientH(self: FFI) RectangleGradientH {
+            return .{
+                .x = self.x,
+                .y = self.y,
+                .width = self.width,
+                .height = self.height,
+                .color_left = Color.fromU8(self.color_left) orelse .white,
+                .color_right = Color.fromU8(self.color_right) orelse .white,
+            };
+        }
+    };
+
+    pub fn toFfi(self: RectangleGradientH) FFI {
+        return .{
+            .height = self.height,
+            .width = self.width,
+            .x = self.x,
+            .y = self.y,
+            .color_left = self.color_left.toU8(),
+            .color_right = self.color_right.toU8(),
+        };
+    }
+};
+
+// CircleGradient
+
+/// Circle with radial gradient (inner to outer).
+pub const CircleGradient = struct {
+    center: Vector2,
+    radius: f32,
+    color_inner: Color,
+    color_outer: Color,
+
+    /// FFI-compatible layout matching Roc's CircleGradient.
+    /// Field order: center (align 4), radius (align 4), then u8s alphabetically (color_inner, color_outer)
+    pub const FFI = extern struct {
+        center: Vector2.FFI,
+        radius: f32,
+        color_inner: u8,
+        color_outer: u8,
+
+        pub fn toCircleGradient(self: FFI) CircleGradient {
+            return .{
+                .center = self.center.toVector2(),
+                .radius = self.radius,
+                .color_inner = Color.fromU8(self.color_inner) orelse .white,
+                .color_outer = Color.fromU8(self.color_outer) orelse .white,
+            };
+        }
+    };
+
+    pub fn toFfi(self: CircleGradient) FFI {
+        return .{
+            .center = self.center.toFfi(),
+            .radius = self.radius,
+            .color_inner = self.color_inner.toU8(),
+            .color_outer = self.color_outer.toU8(),
+        };
+    }
+};
+
 // Line
 
 /// Line shape with start and end points, and color.
@@ -531,4 +658,58 @@ test "InputState Serialized round trip" {
     try std.testing.expectEqual(state.mouse_left, back.mouse_left);
     try std.testing.expectEqual(state.mouse_middle, back.mouse_middle);
     try std.testing.expectEqual(state.mouse_right, back.mouse_right);
+}
+
+test "RectangleGradientV FFI round trip" {
+    const r = RectangleGradientV{
+        .x = 10,
+        .y = 20,
+        .width = 100,
+        .height = 50,
+        .color_top = .blue,
+        .color_bottom = .red,
+    };
+    const ffi = r.toFfi();
+    const back = ffi.toRectangleGradientV();
+    try std.testing.expectEqual(r.x, back.x);
+    try std.testing.expectEqual(r.y, back.y);
+    try std.testing.expectEqual(r.width, back.width);
+    try std.testing.expectEqual(r.height, back.height);
+    try std.testing.expectEqual(r.color_top, back.color_top);
+    try std.testing.expectEqual(r.color_bottom, back.color_bottom);
+}
+
+test "RectangleGradientH FFI round trip" {
+    const r = RectangleGradientH{
+        .x = 15,
+        .y = 25,
+        .width = 200,
+        .height = 75,
+        .color_left = .green,
+        .color_right = .yellow,
+    };
+    const ffi = r.toFfi();
+    const back = ffi.toRectangleGradientH();
+    try std.testing.expectEqual(r.x, back.x);
+    try std.testing.expectEqual(r.y, back.y);
+    try std.testing.expectEqual(r.width, back.width);
+    try std.testing.expectEqual(r.height, back.height);
+    try std.testing.expectEqual(r.color_left, back.color_left);
+    try std.testing.expectEqual(r.color_right, back.color_right);
+}
+
+test "CircleGradient FFI round trip" {
+    const c = CircleGradient{
+        .center = Vector2.init(100, 150),
+        .radius = 75.0,
+        .color_inner = .white,
+        .color_outer = .blue,
+    };
+    const ffi = c.toFfi();
+    const back = ffi.toCircleGradient();
+    try std.testing.expectEqual(c.center.x, back.center.x);
+    try std.testing.expectEqual(c.center.y, back.center.y);
+    try std.testing.expectEqual(c.radius, back.radius);
+    try std.testing.expectEqual(c.color_inner, back.color_inner);
+    try std.testing.expectEqual(c.color_outer, back.color_outer);
 }

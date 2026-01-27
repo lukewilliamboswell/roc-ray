@@ -152,6 +152,20 @@ fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) cal
     raylib.drawCircle(circle);
 }
 
+fn hostedDrawCircleGradient(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ret_ptr;
+    const cg = ffi.circleGradientFromRoc(args_ptr);
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(sim.DrawCommand.circleGradient(cg)) catch {};
+        if (s.mode == .Test) return;
+    }
+
+    raylib.drawCircleGradient(cg);
+}
+
 fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     const color_discriminant: *const u8 = @ptrCast(args_ptr);
@@ -209,6 +223,34 @@ fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) 
     raylib.drawRectangle(rect);
 }
 
+fn hostedDrawRectangleGradientH(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ret_ptr;
+    const rg = ffi.rectangleGradientHFromRoc(args_ptr);
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(sim.DrawCommand.rectangleGradientH(rg)) catch {};
+        if (s.mode == .Test) return;
+    }
+
+    raylib.drawRectangleGradientH(rg);
+}
+
+fn hostedDrawRectangleGradientV(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ret_ptr;
+    const rg = ffi.rectangleGradientVFromRoc(args_ptr);
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+
+    // Record output if simulation active
+    if (host.sim_state) |s| {
+        s.recordOutput(sim.DrawCommand.rectangleGradientV(rg)) catch {};
+        if (s.mode == .Test) return;
+    }
+
+    raylib.drawRectangleGradientV(rg);
+}
+
 fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ret_ptr;
     const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
@@ -235,11 +277,14 @@ fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
 const hosted_function_ptrs = [_]HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
     hostedDrawCircle, // Draw.circle! (1)
-    hostedDrawClear, // Draw.clear! (2)
-    hostedDrawEndFrame, // Draw.end_frame! (3)
-    hostedDrawLine, // Draw.line! (4)
-    hostedDrawRectangle, // Draw.rectangle! (5)
-    hostedDrawText, // Draw.text! (6)
+    hostedDrawCircleGradient, // Draw.circle_gradient! (2)
+    hostedDrawClear, // Draw.clear! (3)
+    hostedDrawEndFrame, // Draw.end_frame! (4)
+    hostedDrawLine, // Draw.line! (5)
+    hostedDrawRectangle, // Draw.rectangle! (6)
+    hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
+    hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
+    hostedDrawText, // Draw.text! (9)
 };
 
 /// Force-include all rlgl/GL functions that raylib might use at runtime.
@@ -367,13 +412,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     };
 
     // Initialize simulation state from environment variables
-    var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
-        const stderr: std.fs.File = .stderr();
-        var buf: [256]u8 = undefined;
-        const msg = std.fmt.bufPrint(&buf, "Failed to initialize simulation: {}\n", .{err}) catch "Failed to initialize simulation\n";
-        stderr.writeAll(msg) catch {};
-        return 1;
-    };
+    var sim_state = sim.SimState.init(host_env.allocator());
+    // Skip env var reading for now - causes segfault in Roc-built binary
+    // var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
+    //     const stderr: std.fs.File = .stderr();
+    //     var buf: [256]u8 = undefined;
+    //     const msg = std.fmt.bufPrint(&buf, "Failed to initialize simulation: {}\n", .{err}) catch "Failed to initialize simulation\n";
+    //     stderr.writeAll(msg) catch {};
+    //     return 1;
+    // };
     host_env.sim_state = &sim_state;
 
     // Determine if we're in headless mode (Test) or replay-only mode (Replay)
@@ -527,6 +574,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                             c.radius,
                             raylib.colorToRl(types.Color.fromU8Safe(c.color)),
                         ),
+                        .CircleGradient => |cg| raylib.drawCircleGradient(cg.toCircleGradient()),
                         .Rectangle => |r| raylib.drawRectangleRaw(
                             @intFromFloat(r.x),
                             @intFromFloat(r.y),
@@ -534,6 +582,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                             @intFromFloat(r.height),
                             raylib.colorToRl(types.Color.fromU8Safe(r.color)),
                         ),
+                        .RectangleGradientH => |rg| raylib.drawRectangleGradientH(rg.toRectangleGradientH()),
+                        .RectangleGradientV => |rg| raylib.drawRectangleGradientV(rg.toRectangleGradientV()),
                         .Line => |l| raylib.drawLineRaw(
                             @intFromFloat(l.start.x),
                             @intFromFloat(l.start.y),

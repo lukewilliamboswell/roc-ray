@@ -92,6 +92,41 @@ pub fn drawTextRaw(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: 
     rl.DrawText(text, x, y, size, color);
 }
 
+/// Draw a rectangle with vertical gradient using safe types.
+pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+    rl.DrawRectangleGradientV(
+        @intFromFloat(rg.x),
+        @intFromFloat(rg.y),
+        @intFromFloat(rg.width),
+        @intFromFloat(rg.height),
+        colorToRl(rg.color_top),
+        colorToRl(rg.color_bottom),
+    );
+}
+
+/// Draw a rectangle with horizontal gradient using safe types.
+pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+    rl.DrawRectangleGradientH(
+        @intFromFloat(rg.x),
+        @intFromFloat(rg.y),
+        @intFromFloat(rg.width),
+        @intFromFloat(rg.height),
+        colorToRl(rg.color_left),
+        colorToRl(rg.color_right),
+    );
+}
+
+/// Draw a circle with radial gradient using safe types.
+pub fn drawCircleGradient(cg: types.CircleGradient) void {
+    rl.DrawCircleGradient(
+        @intFromFloat(cg.center.x),
+        @intFromFloat(cg.center.y),
+        cg.radius,
+        colorToRl(cg.color_inner),
+        colorToRl(cg.color_outer),
+    );
+}
+
 /// Draw a rectangle with position and size as integers.
 pub fn drawRectangleRaw(x: c_int, y: c_int, w: c_int, h: c_int, color: rl.Color) void {
     rl.DrawRectangle(x, y, w, h, color);

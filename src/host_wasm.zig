@@ -303,6 +303,11 @@ fn hostedDrawCircle(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c
     wasm.drawCircle(circle);
 }
 
+fn hostedDrawCircleGradient(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    const cg = ffi.circleGradientFromRoc(args_ptr);
+    wasm.drawCircleGradient(cg);
+}
+
 fn hostedDrawEndFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
     wasm.endDrawing();
 }
@@ -317,6 +322,16 @@ fn hostedDrawRectangle(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv
     wasm.drawRectangle(rect);
 }
 
+fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    const rg = ffi.rectangleGradientHFromRoc(args_ptr);
+    wasm.drawRectangleGradientH(rg);
+}
+
+fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    const rg = ffi.rectangleGradientVFromRoc(args_ptr);
+    wasm.drawRectangleGradientV(rg);
+}
+
 fn hostedDrawText(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     const text = ffi.textFromRoc(args_ptr);
     var buf: [256:0]u8 = undefined;
@@ -325,13 +340,16 @@ fn hostedDrawText(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) 
 
 /// Hosted function pointers (alphabetical order by fully-qualified name)
 const hosted_function_ptrs = [_]HostedFn{
-    hostedDrawBeginFrame,
-    hostedDrawCircle,
-    hostedDrawClear,
-    hostedDrawEndFrame,
-    hostedDrawLine,
-    hostedDrawRectangle,
-    hostedDrawText,
+    hostedDrawBeginFrame, // Draw.begin_frame! (0)
+    hostedDrawCircle, // Draw.circle! (1)
+    hostedDrawCircleGradient, // Draw.circle_gradient! (2)
+    hostedDrawClear, // Draw.clear! (3)
+    hostedDrawEndFrame, // Draw.end_frame! (4)
+    hostedDrawLine, // Draw.line! (5)
+    hostedDrawRectangle, // Draw.rectangle! (6)
+    hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
+    hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
+    hostedDrawText, // Draw.text! (9)
 };
 
 fn makeRocOps() RocOps {
@@ -508,6 +526,72 @@ export fn _get_offset_string_buffer() usize {
 }
 export fn _get_offset_string_buffer_len() usize {
     return @offsetOf(CommandBuffer, "string_buffer_len");
+}
+
+// Circle gradient offsets
+export fn _get_offset_circle_gradient_count() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_count");
+}
+export fn _get_offset_circle_gradient_x() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_x");
+}
+export fn _get_offset_circle_gradient_y() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_y");
+}
+export fn _get_offset_circle_gradient_radius() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_radius");
+}
+export fn _get_offset_circle_gradient_inner() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_inner");
+}
+export fn _get_offset_circle_gradient_outer() usize {
+    return @offsetOf(CommandBuffer, "circle_gradient_outer");
+}
+
+// Rectangle gradient V offsets
+export fn _get_offset_rect_gradient_v_count() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_count");
+}
+export fn _get_offset_rect_gradient_v_x() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_x");
+}
+export fn _get_offset_rect_gradient_v_y() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_y");
+}
+export fn _get_offset_rect_gradient_v_w() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_w");
+}
+export fn _get_offset_rect_gradient_v_h() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_h");
+}
+export fn _get_offset_rect_gradient_v_top() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_top");
+}
+export fn _get_offset_rect_gradient_v_bottom() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_v_bottom");
+}
+
+// Rectangle gradient H offsets
+export fn _get_offset_rect_gradient_h_count() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_count");
+}
+export fn _get_offset_rect_gradient_h_x() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_x");
+}
+export fn _get_offset_rect_gradient_h_y() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_y");
+}
+export fn _get_offset_rect_gradient_h_w() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_w");
+}
+export fn _get_offset_rect_gradient_h_h() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_h");
+}
+export fn _get_offset_rect_gradient_h_left() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_left");
+}
+export fn _get_offset_rect_gradient_h_right() usize {
+    return @offsetOf(CommandBuffer, "rect_gradient_h_right");
 }
 
 // Memory Telemetry Exports

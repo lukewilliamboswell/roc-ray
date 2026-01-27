@@ -17,9 +17,11 @@ import path from 'path';
 // Import shared constants from host.js (single source of truth)
 import {
     CMD_RECT, CMD_CIRCLE, CMD_LINE, CMD_TEXT,
+    CMD_CIRCLE_GRADIENT, CMD_RECT_GRADIENT_V, CMD_RECT_GRADIENT_H,
     MAX_COMMANDS, MAX_RECTS, MAX_CIRCLES, MAX_LINES, MAX_TEXTS, MAX_STRING_BYTES,
+    MAX_CIRCLE_GRADIENTS, MAX_RECT_GRADIENTS,
     getOffsets, createBufferViews
-} from '../platform/web/host.js';
+} from '../www/host.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

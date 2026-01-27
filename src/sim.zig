@@ -45,21 +45,27 @@ pub const SimMode = enum {
 pub const DrawCommandTag = enum(u8) {
     BeginFrame = 0,
     Circle = 1,
-    Clear = 2,
-    EndFrame = 3,
-    Line = 4,
-    Rectangle = 5,
-    Text = 6,
+    CircleGradient = 2,
+    Clear = 3,
+    EndFrame = 4,
+    Line = 5,
+    Rectangle = 6,
+    RectangleGradientH = 7,
+    RectangleGradientV = 8,
+    Text = 9,
 };
 
 /// A recorded draw command using types from types.zig
 pub const DrawCommand = union(DrawCommandTag) {
     BeginFrame: void,
     Circle: types.Circle.FFI,
+    CircleGradient: types.CircleGradient.FFI,
     Clear: u8, // color discriminant
     EndFrame: void,
     Line: types.Line.FFI,
     Rectangle: types.Rectangle.FFI,
+    RectangleGradientH: types.RectangleGradientH.FFI,
+    RectangleGradientV: types.RectangleGradientV.FFI,
     Text: types.Text.Serialized,
 
     /// Create a Circle command from a safe Circle type
@@ -67,9 +73,24 @@ pub const DrawCommand = union(DrawCommandTag) {
         return .{ .Circle = c.toFfi() };
     }
 
+    /// Create a CircleGradient command from a safe CircleGradient type
+    pub fn circleGradient(cg: types.CircleGradient) DrawCommand {
+        return .{ .CircleGradient = cg.toFfi() };
+    }
+
     /// Create a Rectangle command from a safe Rectangle type
     pub fn rectangle(r: types.Rectangle) DrawCommand {
         return .{ .Rectangle = r.toFfi() };
+    }
+
+    /// Create a RectangleGradientV command from a safe RectangleGradientV type
+    pub fn rectangleGradientV(rg: types.RectangleGradientV) DrawCommand {
+        return .{ .RectangleGradientV = rg.toFfi() };
+    }
+
+    /// Create a RectangleGradientH command from a safe RectangleGradientH type
+    pub fn rectangleGradientH(rg: types.RectangleGradientH) DrawCommand {
+        return .{ .RectangleGradientH = rg.toFfi() };
     }
 
     /// Create a Line command from a safe Line type
@@ -114,6 +135,11 @@ pub const DrawCommand = union(DrawCommandTag) {
                 floatEq(c.center.y, other.Circle.center.y) and
                 floatEq(c.radius, other.Circle.radius) and
                 c.color == other.Circle.color,
+            .CircleGradient => |c| floatEq(c.center.x, other.CircleGradient.center.x) and
+                floatEq(c.center.y, other.CircleGradient.center.y) and
+                floatEq(c.radius, other.CircleGradient.radius) and
+                c.color_inner == other.CircleGradient.color_inner and
+                c.color_outer == other.CircleGradient.color_outer,
             .Line => |l| floatEq(l.start.x, other.Line.start.x) and
                 floatEq(l.start.y, other.Line.start.y) and
                 floatEq(l.end.x, other.Line.end.x) and
@@ -124,6 +150,18 @@ pub const DrawCommand = union(DrawCommandTag) {
                 floatEq(r.width, other.Rectangle.width) and
                 floatEq(r.height, other.Rectangle.height) and
                 r.color == other.Rectangle.color,
+            .RectangleGradientV => |r| floatEq(r.x, other.RectangleGradientV.x) and
+                floatEq(r.y, other.RectangleGradientV.y) and
+                floatEq(r.width, other.RectangleGradientV.width) and
+                floatEq(r.height, other.RectangleGradientV.height) and
+                r.color_top == other.RectangleGradientV.color_top and
+                r.color_bottom == other.RectangleGradientV.color_bottom,
+            .RectangleGradientH => |r| floatEq(r.x, other.RectangleGradientH.x) and
+                floatEq(r.y, other.RectangleGradientH.y) and
+                floatEq(r.width, other.RectangleGradientH.width) and
+                floatEq(r.height, other.RectangleGradientH.height) and
+                r.color_left == other.RectangleGradientH.color_left and
+                r.color_right == other.RectangleGradientH.color_right,
             .Text => |t| floatEq(t.pos_x, other.Text.pos_x) and
                 floatEq(t.pos_y, other.Text.pos_y) and
                 t.size == other.Text.size and
@@ -448,6 +486,11 @@ pub const SimState = struct {
                 return floatEq(a.center.x, e.center.x) and floatEq(a.center.y, e.center.y) and
                     floatEq(a.radius, e.radius) and a.color == e.color;
             },
+            .CircleGradient => |a| {
+                const e = expected.CircleGradient;
+                return floatEq(a.center.x, e.center.x) and floatEq(a.center.y, e.center.y) and
+                    floatEq(a.radius, e.radius) and a.color_inner == e.color_inner and a.color_outer == e.color_outer;
+            },
             .Line => |a| {
                 const e = expected.Line;
                 return floatEq(a.start.x, e.start.x) and floatEq(a.start.y, e.start.y) and
@@ -457,6 +500,16 @@ pub const SimState = struct {
                 const e = expected.Rectangle;
                 return floatEq(a.x, e.x) and floatEq(a.y, e.y) and floatEq(a.width, e.width) and
                     floatEq(a.height, e.height) and a.color == e.color;
+            },
+            .RectangleGradientV => |a| {
+                const e = expected.RectangleGradientV;
+                return floatEq(a.x, e.x) and floatEq(a.y, e.y) and floatEq(a.width, e.width) and
+                    floatEq(a.height, e.height) and a.color_top == e.color_top and a.color_bottom == e.color_bottom;
+            },
+            .RectangleGradientH => |a| {
+                const e = expected.RectangleGradientH;
+                return floatEq(a.x, e.x) and floatEq(a.y, e.y) and floatEq(a.width, e.width) and
+                    floatEq(a.height, e.height) and a.color_left == e.color_left and a.color_right == e.color_right;
             },
             .Text => |a| {
                 const e = expected.Text;
@@ -479,7 +532,10 @@ pub const SimState = struct {
             .EndFrame => std.fmt.bufPrint(buf, "EndFrame", .{}) catch "EndFrame",
             .Clear => |c| std.fmt.bufPrint(buf, "Clear(color={d})", .{c}) catch "Clear(?)",
             .Circle => |c| std.fmt.bufPrint(buf, "Circle(x={d:.0},y={d:.0},r={d:.0})", .{ c.center.x, c.center.y, c.radius }) catch "Circle(?)",
+            .CircleGradient => |c| std.fmt.bufPrint(buf, "CircleGrad(x={d:.0},y={d:.0},r={d:.0})", .{ c.center.x, c.center.y, c.radius }) catch "CircleGrad(?)",
             .Rectangle => |r| std.fmt.bufPrint(buf, "Rect(x={d:.0},y={d:.0},w={d:.0},h={d:.0})", .{ r.x, r.y, r.width, r.height }) catch "Rect(?)",
+            .RectangleGradientV => |r| std.fmt.bufPrint(buf, "RectGradV(x={d:.0},y={d:.0},w={d:.0},h={d:.0})", .{ r.x, r.y, r.width, r.height }) catch "RectGradV(?)",
+            .RectangleGradientH => |r| std.fmt.bufPrint(buf, "RectGradH(x={d:.0},y={d:.0},w={d:.0},h={d:.0})", .{ r.x, r.y, r.width, r.height }) catch "RectGradH(?)",
             .Line => |l| std.fmt.bufPrint(buf, "Line({d:.0},{d:.0})-({d:.0},{d:.0})", .{ l.start.x, l.start.y, l.end.x, l.end.y }) catch "Line(?)",
             .Text => |t| {
                 const text_content = self.getText(t.text_offset, t.text_len);
@@ -542,6 +598,13 @@ pub const SimState = struct {
                         try writer.writeAll(std.mem.asBytes(&c.radius));
                         try writer.writeByte(c.color);
                     },
+                    .CircleGradient => |c| {
+                        try writer.writeAll(std.mem.asBytes(&c.center.x));
+                        try writer.writeAll(std.mem.asBytes(&c.center.y));
+                        try writer.writeAll(std.mem.asBytes(&c.radius));
+                        try writer.writeByte(c.color_inner);
+                        try writer.writeByte(c.color_outer);
+                    },
                     .Line => |l| {
                         try writer.writeAll(std.mem.asBytes(&l.start.x));
                         try writer.writeAll(std.mem.asBytes(&l.start.y));
@@ -555,6 +618,22 @@ pub const SimState = struct {
                         try writer.writeAll(std.mem.asBytes(&r.width));
                         try writer.writeAll(std.mem.asBytes(&r.height));
                         try writer.writeByte(r.color);
+                    },
+                    .RectangleGradientV => |r| {
+                        try writer.writeAll(std.mem.asBytes(&r.x));
+                        try writer.writeAll(std.mem.asBytes(&r.y));
+                        try writer.writeAll(std.mem.asBytes(&r.width));
+                        try writer.writeAll(std.mem.asBytes(&r.height));
+                        try writer.writeByte(r.color_top);
+                        try writer.writeByte(r.color_bottom);
+                    },
+                    .RectangleGradientH => |r| {
+                        try writer.writeAll(std.mem.asBytes(&r.x));
+                        try writer.writeAll(std.mem.asBytes(&r.y));
+                        try writer.writeAll(std.mem.asBytes(&r.width));
+                        try writer.writeAll(std.mem.asBytes(&r.height));
+                        try writer.writeByte(r.color_left);
+                        try writer.writeByte(r.color_right);
                     },
                     .Text => |t| {
                         try writer.writeAll(std.mem.asBytes(&t.pos_x));
@@ -582,8 +661,11 @@ pub const SimState = struct {
                     .BeginFrame, .EndFrame => @as(usize, 0),
                     .Clear => 1,
                     .Circle => 13, // 3*f32 + u8
+                    .CircleGradient => 14, // 3*f32 + 2*u8
                     .Line => 17, // 4*f32 + u8
                     .Rectangle => 17, // 4*f32 + u8
+                    .RectangleGradientV => 18, // 4*f32 + 2*u8
+                    .RectangleGradientH => 18, // 4*f32 + 2*u8
                     .Text => 21, // 2*f32 + i32 + u8 + 2*u32
                 };
             }
@@ -723,6 +805,15 @@ pub const SimState = struct {
                         d.color = try readByte(data, &pos);
                         break :blk .{ .Circle = d };
                     },
+                    .CircleGradient => blk: {
+                        var d: types.CircleGradient.FFI = undefined;
+                        d.center.x = try readF32(data, &pos);
+                        d.center.y = try readF32(data, &pos);
+                        d.radius = try readF32(data, &pos);
+                        d.color_inner = try readByte(data, &pos);
+                        d.color_outer = try readByte(data, &pos);
+                        break :blk .{ .CircleGradient = d };
+                    },
                     .Line => blk: {
                         var d: types.Line.FFI = undefined;
                         d.start.x = try readF32(data, &pos);
@@ -740,6 +831,26 @@ pub const SimState = struct {
                         d.height = try readF32(data, &pos);
                         d.color = try readByte(data, &pos);
                         break :blk .{ .Rectangle = d };
+                    },
+                    .RectangleGradientV => blk: {
+                        var d: types.RectangleGradientV.FFI = undefined;
+                        d.x = try readF32(data, &pos);
+                        d.y = try readF32(data, &pos);
+                        d.width = try readF32(data, &pos);
+                        d.height = try readF32(data, &pos);
+                        d.color_top = try readByte(data, &pos);
+                        d.color_bottom = try readByte(data, &pos);
+                        break :blk .{ .RectangleGradientV = d };
+                    },
+                    .RectangleGradientH => blk: {
+                        var d: types.RectangleGradientH.FFI = undefined;
+                        d.x = try readF32(data, &pos);
+                        d.y = try readF32(data, &pos);
+                        d.width = try readF32(data, &pos);
+                        d.height = try readF32(data, &pos);
+                        d.color_left = try readByte(data, &pos);
+                        d.color_right = try readByte(data, &pos);
+                        break :blk .{ .RectangleGradientH = d };
                     },
                     .Text => blk: {
                         var d: types.Text.Serialized = undefined;

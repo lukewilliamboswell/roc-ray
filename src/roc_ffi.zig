@@ -33,6 +33,27 @@ pub fn lineFromRoc(ptr: *anyopaque) types.Line {
     return ffi.toLine();
 }
 
+/// Convert RocRectangleGradientV pointer to safe RectangleGradientV type.
+/// The Roc ABI layout matches types.RectangleGradientV.FFI exactly.
+pub fn rectangleGradientVFromRoc(ptr: *anyopaque) types.RectangleGradientV {
+    const ffi: *const types.RectangleGradientV.FFI = @ptrCast(@alignCast(ptr));
+    return ffi.toRectangleGradientV();
+}
+
+/// Convert RocRectangleGradientH pointer to safe RectangleGradientH type.
+/// The Roc ABI layout matches types.RectangleGradientH.FFI exactly.
+pub fn rectangleGradientHFromRoc(ptr: *anyopaque) types.RectangleGradientH {
+    const ffi: *const types.RectangleGradientH.FFI = @ptrCast(@alignCast(ptr));
+    return ffi.toRectangleGradientH();
+}
+
+/// Convert RocCircleGradient pointer to safe CircleGradient type.
+/// The Roc ABI layout matches types.CircleGradient.FFI exactly.
+pub fn circleGradientFromRoc(ptr: *anyopaque) types.CircleGradient {
+    const ffi: *const types.CircleGradient.FFI = @ptrCast(@alignCast(ptr));
+    return ffi.toCircleGradient();
+}
+
 /// Convert RocText pointer to safe Text type.
 /// Note: The returned Text.content is a slice into the RocStr's data,
 /// which is only valid while the RocStr is live.

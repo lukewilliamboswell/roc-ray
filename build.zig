@@ -167,10 +167,6 @@ pub fn build(b: *std.Build) void {
         "platform/targets/wasm32/libhost.a",
     );
 
-    // Copy JS runtime and HTML to platform/web/
-    copy_all.addCopyFileToSource(b.path("platform/web/host.js"), "platform/web/host.js");
-    copy_all.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
-
     const test_step = b.step("test", "Run all tests");
     const lint_step = b.step("lint", "Run code quality lints");
 

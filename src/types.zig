@@ -29,6 +29,20 @@ pub const RocCrashed = builtins.host_abi.RocCrashed;
 /// Boxed value - opaque pointer to heap-allocated Roc data
 pub const RocBox = *anyopaque;
 
+// ScreenSize
+
+/// Screen dimensions (width and height in pixels).
+pub const ScreenSize = struct {
+    width: i32,
+    height: i32,
+
+    /// FFI-compatible layout (alphabetical: height before width)
+    pub const FFI = extern struct {
+        height: i32,
+        width: i32,
+    };
+};
+
 // Color
 
 /// Color enum with compile-time safety.

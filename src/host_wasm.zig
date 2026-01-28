@@ -68,6 +68,13 @@ var app_model: RocBox = undefined;
 var app_initialized: bool = false; // Track if init has been called (model can be ptr 0 for empty records)
 var frame_count: u64 = 0;
 
+// Exit request state (set by Host.exit!, read by JS via _get_exit_requested)
+var exit_requested: ?i64 = null;
+
+// Screen size (set by JS via _set_screen_size, read by Host.get_screen_size!)
+var screen_width: i32 = 800;
+var screen_height: i32 = 600;
+
 // Dummy env for RocOps (not used by web host, but must be valid pointer)
 var dummy_env: u8 = 0;
 
@@ -285,9 +292,29 @@ const ReadEnvArgs = extern struct {
     key_str: types.RocStr,
 };
 
+const ExitArgs = extern struct {
+    exit_code: i64,
+};
+
+const SetTargetFpsArgs = extern struct {
+    fps: i32,
+};
+
+fn hostedExit(_: *RocOps, _: *ffi.NoReturn, args: *const ExitArgs) void {
+    exit_requested = args.exit_code;
+}
+
+fn hostedGetScreenSize(_: *RocOps, result: *types.ScreenSize.FFI, _: *ffi.NoArgs) void {
+    result.* = .{ .height = screen_height, .width = screen_width };
+}
+
 fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
     // WASM doesn't have environment variables - always return NotFound
     result.* = types.Try_Str_NotFound.notFound();
+}
+
+fn hostedSetTargetFps(_: *RocOps, _: *ffi.NoReturn, _: *const SetTargetFpsArgs) void {
+    // No-op on WASM - browser controls frame timing via requestAnimationFrame
 }
 
 /// Hosted function pointers (alphabetical order by fully-qualified name).
@@ -303,7 +330,10 @@ const hosted_function_ptrs = [_]HostedFn{
     wrapHostedFn(hostedDrawRectangleGradientH), // Draw.rectangle_gradient_h! (7)
     wrapHostedFn(hostedDrawRectangleGradientV), // Draw.rectangle_gradient_v! (8)
     wrapHostedFn(hostedDrawText), // Draw.text! (9)
-    wrapHostedFn(hostedReadEnv), // Host.read_env! (10)
+    wrapHostedFn(hostedExit), // Host.exit! (10)
+    wrapHostedFn(hostedGetScreenSize), // Host.get_screen_size! (11)
+    wrapHostedFn(hostedReadEnv), // Host.read_env! (12)
+    wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (13)
 };
 
 fn makeRocOps() RocOps {
@@ -555,6 +585,26 @@ export fn _get_offset_rect_gradient_h_left() usize {
 }
 export fn _get_offset_rect_gradient_h_right() usize {
     return @offsetOf(CommandBuffer, "rect_gradient_h_right");
+}
+
+// Host Effect JS Interop Exports
+// These functions allow JavaScript to interact with Host effects
+
+/// Get the exit code requested by Host.exit!, or -1 if no exit was requested.
+/// JS should check this after each _frame() call.
+export fn _get_exit_requested() i64 {
+    return exit_requested orelse -1;
+}
+
+/// Clear the exit request (useful if JS wants to ignore the exit)
+export fn _clear_exit_requested() void {
+    exit_requested = null;
+}
+
+/// Set the screen size (JS should call this before _frame() to update dimensions)
+export fn _set_screen_size(w: i32, h: i32) void {
+    screen_width = w;
+    screen_height = h;
 }
 
 // Memory Telemetry Exports

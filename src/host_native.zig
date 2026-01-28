@@ -232,6 +232,17 @@ const ReadEnvArgs = extern struct {
     key_str: types.RocStr,
 };
 
+const ExitArgs = extern struct {
+    exit_code: i64,
+};
+
+const SetTargetFpsArgs = extern struct {
+    fps: i32,
+};
+
+/// Global flag for deferred exit request (exit after current frame completes)
+var exit_requested: ?i64 = null;
+
 fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
     // Windows doesn't link libc, so env var reading is not yet supported
     // TODO: Use native Windows API (GetEnvironmentVariableW) in the future
@@ -252,6 +263,18 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *cons
     }
 }
 
+fn hostedExit(_: *HostEnv, _: *ffi.NoReturn, args: *const ExitArgs) void {
+    exit_requested = args.exit_code;
+}
+
+fn hostedGetScreenSize(_: *HostEnv, result: *types.ScreenSize.FFI, _: *ffi.NoArgs) void {
+    result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
+}
+
+fn hostedSetTargetFps(_: *HostEnv, _: *ffi.NoReturn, args: *const SetTargetFpsArgs) void {
+    raylib.setTargetFps(args.fps);
+}
+
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name.
 /// All functions use wrapHostedFn for type-safe pointer casting.
 const hosted_function_ptrs = [_]HostedFn{
@@ -265,7 +288,10 @@ const hosted_function_ptrs = [_]HostedFn{
     ffi.wrapHostedFn(hostedDrawRectangleGradientH), // Draw.rectangle_gradient_h! (7)
     ffi.wrapHostedFn(hostedDrawRectangleGradientV), // Draw.rectangle_gradient_v! (8)
     ffi.wrapHostedFn(hostedDrawText), // Draw.text! (9)
-    if (builtin.os.tag == .windows) ffi.wrapHostedFn(hostedReadEnvWindows) else ffi.wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (10)
+    ffi.wrapHostedFn(hostedExit), // Host.exit! (10)
+    ffi.wrapHostedFn(hostedGetScreenSize), // Host.get_screen_size! (11)
+    if (builtin.os.tag == .windows) ffi.wrapHostedFn(hostedReadEnvWindows) else ffi.wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (12)
+    ffi.wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (13)
 };
 
 /// Force-include all rlgl/GL functions that raylib might use at runtime.
@@ -638,6 +664,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
             // Update boxed_model for next iteration
             boxed_model = render_result.getModel();
+
+            // Check for exit request (deferred exit after frame completes)
+            if (exit_requested) |code| {
+                exit_code = @intCast(code);
+                break;
+            }
         }
 
         // End frame in simulation

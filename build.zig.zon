@@ -5,7 +5,7 @@
     .dependencies = .{
         .roc = .{
             .url = "git+https://github.com/roc-lang/roc#4c206185a278f3adf7a23e8336cc94cd849b358f",
-            .hash = "roc-0.0.0-NAC9w28LugCgzFdm0Jws0ZMzLVIEFbU9yROs-KnmFXnq",
+            .hash = "roc-0.0.0-NAC9w_WnuwAoH65i8wsLEql2fbZWJckpCzkHLzOBRXDa",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,

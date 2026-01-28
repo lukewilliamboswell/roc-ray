@@ -154,6 +154,11 @@ pub fn setTargetFps(fps: c_int) void {
     rl.SetTargetFPS(fps);
 }
 
+/// Set window size.
+pub fn setWindowSize(width: c_int, height: c_int) void {
+    rl.SetWindowSize(width, height);
+}
+
 /// Get frame time (delta time).
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();

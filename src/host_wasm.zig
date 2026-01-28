@@ -300,6 +300,11 @@ const SetTargetFpsArgs = extern struct {
     fps: i32,
 };
 
+const SetScreenSizeArgs = extern struct {
+    height: f32, // Alphabetical: height before width
+    width: f32,
+};
+
 fn hostedExit(_: *RocOps, _: *ffi.NoReturn, args: *const ExitArgs) void {
     exit_requested = args.exit_code;
 }
@@ -311,6 +316,11 @@ fn hostedGetScreenSize(_: *RocOps, result: *types.ScreenSize.FFI, _: *ffi.NoArgs
 fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
     // WASM doesn't have environment variables - always return NotFound
     result.* = types.Try_Str_NotFound.notFound();
+}
+
+fn hostedSetScreenSize(_: *RocOps, result: *types.Try_Unit_NotSupported, _: *const SetScreenSizeArgs) void {
+    // WASM can't resize the browser window - return NotSupported
+    result.* = types.Try_Unit_NotSupported.notSupported();
 }
 
 fn hostedSetTargetFps(_: *RocOps, _: *ffi.NoReturn, _: *const SetTargetFpsArgs) void {
@@ -333,7 +343,8 @@ const hosted_function_ptrs = [_]HostedFn{
     wrapHostedFn(hostedExit), // Host.exit! (10)
     wrapHostedFn(hostedGetScreenSize), // Host.get_screen_size! (11)
     wrapHostedFn(hostedReadEnv), // Host.read_env! (12)
-    wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (13)
+    wrapHostedFn(hostedSetScreenSize), // Host.set_screen_size! (13)
+    wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (14)
 };
 
 fn makeRocOps() RocOps {

@@ -240,6 +240,11 @@ const SetTargetFpsArgs = extern struct {
     fps: i32,
 };
 
+const SetScreenSizeArgs = extern struct {
+    height: f32, // Alphabetical: height before width
+    width: f32,
+};
+
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
@@ -271,6 +276,11 @@ fn hostedGetScreenSize(_: *HostEnv, result: *types.ScreenSize.FFI, _: *ffi.NoArg
     result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
+fn hostedSetScreenSize(_: *HostEnv, result: *types.Try_Unit_NotSupported, args: *const SetScreenSizeArgs) void {
+    raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
+    result.* = types.Try_Unit_NotSupported.ok();
+}
+
 fn hostedSetTargetFps(_: *HostEnv, _: *ffi.NoReturn, args: *const SetTargetFpsArgs) void {
     raylib.setTargetFps(args.fps);
 }
@@ -291,7 +301,8 @@ const hosted_function_ptrs = [_]HostedFn{
     ffi.wrapHostedFn(hostedExit), // Host.exit! (10)
     ffi.wrapHostedFn(hostedGetScreenSize), // Host.get_screen_size! (11)
     if (builtin.os.tag == .windows) ffi.wrapHostedFn(hostedReadEnvWindows) else ffi.wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (12)
-    ffi.wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (13)
+    ffi.wrapHostedFn(hostedSetScreenSize), // Host.set_screen_size! (13)
+    ffi.wrapHostedFn(hostedSetTargetFps), // Host.set_target_fps! (14)
 };
 
 /// Force-include all rlgl/GL functions that raylib might use at runtime.

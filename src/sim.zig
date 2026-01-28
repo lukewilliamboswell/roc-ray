@@ -14,7 +14,7 @@ const types = @import("types.zig");
 pub const MAGIC = [4]u8{ 'R', 'R', 'S', 'M' };
 
 /// Current format version (v2: u64 frame_count, epsilon-based float comparison)
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 
 /// Epsilon for floating-point comparisons.
 /// Set to 0.001 (1/1000th of a pixel) which is:

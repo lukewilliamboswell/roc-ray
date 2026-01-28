@@ -189,6 +189,10 @@ def main() -> int:
                     continue
 
                 env = {"SIM_TEST": rrsim.name}
+                # Add required env vars for specific tests
+                if executable.name == "read_env":
+                    env["USER"] = "TestUser"
+                    env["GREETING"] = "Hello"
                 if run_cmd(
                     [f"./{executable.name}"], f"sim {rrsim.name}", args.verbose, env=env, cwd=examples_dir
                 ):

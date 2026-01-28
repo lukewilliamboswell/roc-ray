@@ -295,6 +295,11 @@ pub fn build(b: *std.Build) void {
     node_test.setCwd(b.path(".")); // Run from project root
     node_test.step.dependOn(&install_test_wasm.step);
     test_step.dependOn(&node_test.step);
+
+    // Run Roc tests (check, fmt, test, build, and simulation tests)
+    const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
+    roc_tests.setCwd(b.path(".")); // Run from project root
+    test_step.dependOn(&roc_tests.step);
 }
 
 /// Detect which RocTarget matches the native platform

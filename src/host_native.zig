@@ -20,7 +20,7 @@ const overlay = @import("overlay_native.zig");
 
 // Type aliases for Roc ABI
 const RocBox = types.RocBox;
-const RocPlatformState = types.InputState.FFI;
+const RocHostState = types.InputState.FFI;
 const RocText = types.Text.FFI;
 const Try_BoxModel_I64 = types.Try_BoxModel_I64;
 const RenderArgs = types.RenderArgs;
@@ -28,6 +28,22 @@ const RocOps = types.RocOps;
 const HostedFn = types.HostedFn;
 const roc__init_for_host = types.roc__init_for_host;
 const roc__render_for_host = types.roc__render_for_host;
+
+/// Wraps a typed hosted function into the HostedFn signature (which uses *anyopaque).
+/// This allows writing hosted functions with explicit typed parameters for clarity.
+fn wrapHostedFn(comptime func: anytype) HostedFn {
+    const FnInfo = @typeInfo(@TypeOf(func)).@"fn";
+    const RetType = FnInfo.params[1].type.?; // Second param is return pointer
+    const ArgsType = FnInfo.params[2].type.?; // Third param is args pointer
+
+    return struct {
+        fn wrapper(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+            const result: RetType = @ptrCast(@alignCast(ret_ptr));
+            const args: ArgsType = @ptrCast(@alignCast(args_ptr));
+            @call(.auto, func, .{ ops, result, args });
+        }
+    }.wrapper;
+}
 
 // Access raw raylib binding through backend (for cases not yet abstracted)
 const rl = raylib.rl;
@@ -273,6 +289,31 @@ fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
     }
 }
 
+const ReadEnvArgs = extern struct {
+    host_arg: types.InputState.FFI,
+    key_str: types.RocStr,
+};
+
+fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *ReadEnvArgs) void {
+    // Windows doesn't link libc, so env var reading is not yet supported
+    // TODO: Use native Windows API (GetEnvironmentVariableW) in the future
+    result.* = types.Try_Str_NotFound.notFound();
+}
+
+fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *ReadEnvArgs) void {
+    const key = args.key_str.asSlice();
+
+    // On POSIX systems, use std.posix.getenv (works after environ initialization)
+    const value = std.posix.getenv(key);
+
+    if (value) |v| {
+        // Create RocStr from the value
+        result.* = types.Try_Str_NotFound.ok(types.RocStr.fromSlice(v, ops));
+    } else {
+        result.* = types.Try_Str_NotFound.notFound();
+    }
+}
+
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
 const hosted_function_ptrs = [_]HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
@@ -285,6 +326,7 @@ const hosted_function_ptrs = [_]HostedFn{
     hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
     hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
     hostedDrawText, // Draw.text! (9)
+    if (builtin.os.tag == .windows) wrapHostedFn(hostedReadEnvWindows) else wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (10)
 };
 
 /// Force-include all rlgl/GL functions that raylib might use at runtime.
@@ -405,6 +447,17 @@ export fn __force_gl_exports() void {
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
+    // Initialize std.os.environ on Linux.
+    // Roc links with -nostdlib, so glibc's __libc_start_main (which normally
+    // initializes environ) doesn't run. We manually extract envp from the stack
+    // where the kernel placed it: [argc, argv..., NULL, envp..., NULL, auxv...]
+    if (comptime builtin.os.tag == .linux) {
+        const envp_ptr: [*][*:0]u8 = @ptrCast(argv + argc + 1);
+        var envp_len: usize = 0;
+        while (@intFromPtr(envp_ptr[envp_len]) != 0) : (envp_len += 1) {}
+        std.os.environ = envp_ptr[0..envp_len];
+    }
+
     var stdin_buffer: [4096]u8 = undefined;
     var host_env: HostEnv = .{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
@@ -412,15 +465,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     };
 
     // Initialize simulation state from environment variables
-    var sim_state = sim.SimState.init(host_env.allocator());
-    // Skip env var reading for now - causes segfault in Roc-built binary
-    // var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
-    //     const stderr: std.fs.File = .stderr();
-    //     var buf: [256]u8 = undefined;
-    //     const msg = std.fmt.bufPrint(&buf, "Failed to initialize simulation: {}\n", .{err}) catch "Failed to initialize simulation\n";
-    //     stderr.writeAll(msg) catch {};
-    //     return 1;
-    // };
+    var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
+        std.debug.print("Failed to initialize simulation: {}\n", .{err});
+        return 1;
+    };
     host_env.sim_state = &sim_state;
 
     // Determine if we're in headless mode (Test) or replay-only mode (Replay)
@@ -442,9 +490,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         },
     };
 
-    // TODO: Build List(Str) from argc/argv when platform supports passing args to init
-    _ = argc;
-    _ = argv;
+    // argc/argv used above for environ initialization on Linux
 
     // Initialize raylib window (skip in headless test mode)
     const screen_width = 800;
@@ -468,8 +514,17 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         }
 
         var init_result: Try_BoxModel_I64 = undefined;
-        var unit: struct {} = .{};
-        roc__init_for_host(&roc_ops, &init_result, @ptrCast(&unit));
+        // Create initial host state for init (frame 0, no input)
+        var init_state = types.InputState.FFI{
+            .frame_count = 0,
+            .mouse_wheel = 0,
+            .mouse_x = 0,
+            .mouse_y = 0,
+            .mouse_left = false,
+            .mouse_right = false,
+            .mouse_middle = false,
+        };
+        roc__init_for_host(&roc_ops, &init_result, @ptrCast(&init_state));
 
         if (timer) |*t| init_time_ns = t.lap();
 
@@ -483,7 +538,16 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             if (TRACE_HOST) {
                 std.log.debug("[HOST] init returned Err({d})", .{err_code});
             }
-            return @intCast(err_code);
+            // In test mode, report init failure properly
+            if (headless) {
+                std.fs.File.stderr().writeAll("[FAIL] init! returned error\n") catch {};
+            }
+            // Clean up sim state before exiting
+            sim_state.deinit();
+            _ = host_env.gpa.deinit();
+            // Ensure non-zero exit code (use 1 if err_code is 0 due to Roc wildcard match bug)
+            const exit_code: c_int = if (err_code == 0) 1 else @intCast(err_code);
+            return exit_code;
         }
 
         boxed_model = init_result.getModel();
@@ -521,7 +585,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         }
 
         // Build platform state for this frame
-        var platform_state: RocPlatformState = undefined;
+        var platform_state: RocHostState = undefined;
 
         if (sim_state.mode == .Replay or sim_state.mode == .Test) {
             // Use recorded inputs
@@ -533,7 +597,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         } else {
             // Capture real inputs from raylib
             const mouse_pos = raylib.getMousePosition();
-            platform_state = RocPlatformState{
+            platform_state = RocHostState{
                 .frame_count = frame_count,
                 .mouse_left = raylib.isMouseButtonDown(.left),
                 .mouse_middle = raylib.isMouseButtonDown(.middle),

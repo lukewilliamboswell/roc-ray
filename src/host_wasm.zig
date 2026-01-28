@@ -26,7 +26,7 @@ pub const CMD_TEXT = wasm.CMD_TEXT;
 
 const types = @import("types.zig");
 const RocBox = types.RocBox;
-const RocPlatformState = types.InputState.FFI;
+const RocHostState = types.InputState.FFI;
 const RocRectangle = types.Rectangle.FFI; // Used in tests
 const Try_BoxModel_I64 = types.Try_BoxModel_I64;
 const RenderArgs = types.RenderArgs;
@@ -338,6 +338,12 @@ fn hostedDrawText(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) 
     wasm.drawText(text, &buf);
 }
 
+fn hostedReadEnv(_: *RocOps, ret_ptr: *anyopaque, _: *anyopaque) callconv(.c) void {
+    // WASM doesn't have environment variables - always return NotFound
+    const result: *types.Try_Str_NotFound = @ptrCast(@alignCast(ret_ptr));
+    result.* = types.Try_Str_NotFound.notFound();
+}
+
 /// Hosted function pointers (alphabetical order by fully-qualified name)
 const hosted_function_ptrs = [_]HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
@@ -350,6 +356,7 @@ const hosted_function_ptrs = [_]HostedFn{
     hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
     hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
     hostedDrawText, // Draw.text! (9)
+    hostedReadEnv, // Host.read_env! (10)
 };
 
 fn makeRocOps() RocOps {
@@ -372,8 +379,17 @@ fn makeRocOps() RocOps {
 export fn _init() void {
     var roc_ops = makeRocOps();
     var result: Try_BoxModel_I64 = undefined;
-    var unit: struct {} = .{};
-    roc__init_for_host(&roc_ops, &result, @ptrCast(&unit));
+    // Create initial host state for init (frame 0, no input)
+    var init_state = types.InputState.FFI{
+        .frame_count = 0,
+        .mouse_wheel = 0,
+        .mouse_x = 0,
+        .mouse_y = 0,
+        .mouse_left = false,
+        .mouse_right = false,
+        .mouse_middle = false,
+    };
+    roc__init_for_host(&roc_ops, &result, @ptrCast(&init_state));
 
     if (result.isOk()) {
         app_model = result.getModel();
@@ -386,7 +402,7 @@ export fn _frame(mouse_x: f32, mouse_y: f32, buttons: u32, wheel: f32) void {
     if (!app_initialized) return;
 
     var roc_ops = makeRocOps();
-    const platform_state = RocPlatformState{
+    const platform_state = RocHostState{
         .frame_count = frame_count,
         .mouse_x = mouse_x,
         .mouse_y = mouse_y,

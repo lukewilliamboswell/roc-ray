@@ -369,7 +369,7 @@ pub const Text = struct {
     };
 };
 
-// InputState / PlatformState
+// InputState / Host state
 
 /// Platform input state (safe version).
 /// Represents the state of input devices at a given frame.
@@ -394,7 +394,7 @@ pub const InputState = struct {
         };
     }
 
-    /// FFI-compatible layout matching Roc's PlatformStateFromHost.
+    /// FFI-compatible layout matching Roc's HostStateFromHost.
     /// Field order: frame_count (align 8), mouse_wheel/x/y (align 4, alphabetical),
     /// then mouse_left/middle/right (align 1, alphabetical)
     pub const FFI = extern struct {
@@ -470,6 +470,25 @@ pub const InputState = struct {
 };
 
 // Roc Result Types
+
+/// Runtime layout for `Try(Str, [NotFound])`
+/// Used as return type for Host.read_env!
+pub const Try_Str_NotFound = extern struct {
+    /// RocStr payload for Ok variant (24 bytes on 64-bit, 12 bytes on 32-bit)
+    payload: RocStr,
+    /// 0 = Err (NotFound), 1 = Ok
+    discriminant: u8,
+    // Padding to align struct properly
+    _padding: if (@sizeOf(*anyopaque) == 4) [3]u8 else [7]u8,
+
+    pub fn ok(str: RocStr) Try_Str_NotFound {
+        return .{ .payload = str, .discriminant = 1, ._padding = undefined };
+    }
+
+    pub fn notFound() Try_Str_NotFound {
+        return .{ .payload = RocStr.empty(), .discriminant = 0, ._padding = undefined };
+    }
+};
 
 /// Runtime layout for the Roc type `Try(Box(Model), I64)`
 /// Used as return type for init_for_host and render_for_host

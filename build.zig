@@ -167,10 +167,6 @@ pub fn build(b: *std.Build) void {
         "platform/targets/wasm32/libhost.a",
     );
 
-    // Copy JS runtime and HTML to platform/web/
-    copy_all.addCopyFileToSource(b.path("platform/web/host.js"), "platform/web/host.js");
-    copy_all.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
-
     const test_step = b.step("test", "Run all tests");
     const lint_step = b.step("lint", "Run code quality lints");
 
@@ -243,7 +239,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_wasm_host_tests.step);
 
     // Zig unit tests for sim.zig (simulation recording/replay)
-    // Note: backend/wasm.zig tests are run through host_wasm.zig (it uses the backend)
+    // Note: backend_wasm.zig tests are run through host_wasm.zig (it uses the backend)
     const sim_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/sim.zig"),
@@ -299,6 +295,11 @@ pub fn build(b: *std.Build) void {
     node_test.setCwd(b.path(".")); // Run from project root
     node_test.step.dependOn(&install_test_wasm.step);
     test_step.dependOn(&node_test.step);
+
+    // Run Roc tests (check, fmt, test, build, and simulation tests)
+    const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
+    roc_tests.setCwd(b.path(".")); // Run from project root
+    test_step.dependOn(&roc_tests.step);
 }
 
 /// Detect which RocTarget matches the native platform

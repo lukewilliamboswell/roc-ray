@@ -4,16 +4,13 @@
 //! from types.zig and converting them to raylib's C types. All C interop
 //! is isolated here.
 
-const types = @import("../types.zig");
+const types = @import("types.zig");
 
 /// Raw raylib C bindings.
 pub const rl = @cImport({
     @cInclude("raylib.h");
     @cInclude("rlgl.h");
 });
-
-/// Raylib's native color type (exposed for overlay/UI code that needs it).
-pub const Color = rl.Color;
 
 /// Convert safe Color enum to raylib Color.
 pub fn colorToRl(color: types.Color) rl.Color {
@@ -32,11 +29,6 @@ pub fn colorToRl(color: types.Color) rl.Color {
         .white => rl.WHITE,
         .yellow => rl.YELLOW,
     };
-}
-
-/// Create a raylib Color from RGBA values.
-pub fn rgba(r: u8, g: u8, b: u8, a: u8) rl.Color {
-    return rl.Color{ .r = r, .g = g, .b = b, .a = a };
 }
 
 /// Draw a circle using safe types.
@@ -87,24 +79,44 @@ pub fn drawText(text: types.Text, buf: *[256:0]u8) void {
     }
 }
 
-/// Draw text with a raw null-terminated string.
-pub fn drawTextRaw(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: rl.Color) void {
-    rl.DrawText(text, x, y, size, color);
+/// Draw text with a null-terminated string (for overlay/UI code).
+pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: types.Color) void {
+    rl.DrawText(text, x, y, size, colorToRl(color));
 }
 
-/// Draw a rectangle with position and size as integers.
-pub fn drawRectangleRaw(x: c_int, y: c_int, w: c_int, h: c_int, color: rl.Color) void {
-    rl.DrawRectangle(x, y, w, h, color);
+/// Draw a rectangle with vertical gradient using safe types.
+pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+    rl.DrawRectangleGradientV(
+        @intFromFloat(rg.x),
+        @intFromFloat(rg.y),
+        @intFromFloat(rg.width),
+        @intFromFloat(rg.height),
+        colorToRl(rg.color_top),
+        colorToRl(rg.color_bottom),
+    );
 }
 
-/// Draw a circle with raw integer/float coordinates.
-pub fn drawCircleRaw(x: c_int, y: c_int, radius: f32, color: rl.Color) void {
-    rl.DrawCircle(x, y, radius, color);
+/// Draw a rectangle with horizontal gradient using safe types.
+pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+    rl.DrawRectangleGradientH(
+        @intFromFloat(rg.x),
+        @intFromFloat(rg.y),
+        @intFromFloat(rg.width),
+        @intFromFloat(rg.height),
+        colorToRl(rg.color_left),
+        colorToRl(rg.color_right),
+    );
 }
 
-/// Draw a line with raw integer coordinates.
-pub fn drawLineRaw(x1: c_int, y1: c_int, x2: c_int, y2: c_int, color: rl.Color) void {
-    rl.DrawLine(x1, y1, x2, y2, color);
+/// Draw a circle with radial gradient using safe types.
+pub fn drawCircleGradient(cg: types.CircleGradient) void {
+    rl.DrawCircleGradient(
+        @intFromFloat(cg.center.x),
+        @intFromFloat(cg.center.y),
+        cg.radius,
+        colorToRl(cg.color_inner),
+        colorToRl(cg.color_outer),
+    );
 }
 
 /// Begin drawing frame.
@@ -120,11 +132,6 @@ pub fn endDrawing() void {
 /// Clear the background with a safe color.
 pub fn clearBackground(color: types.Color) void {
     rl.ClearBackground(colorToRl(color));
-}
-
-/// Clear the background with a raylib color.
-pub fn clearBackgroundRaw(color: rl.Color) void {
-    rl.ClearBackground(color);
 }
 
 /// Initialize a window.

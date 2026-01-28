@@ -1,8 +1,8 @@
 generated-docs/
 
-examples/hello
-examples/exit_code_msg
-examples/exit_tag
+# Built example executables (use `git add -f` to add manually if needed)
+examples/hello_world
+examples/read_env
 
 # Built executables at root
 hello_world
@@ -78,10 +78,8 @@ libapp
 roc-src/
 build-output/
 
-# WASM development server output
-www/
-
-# WASM build outputs (root level only, not platform/web/)
+# WASM build outputs
+www/*.wasm
 /*.wasm
 /app.wasm
 /host.js

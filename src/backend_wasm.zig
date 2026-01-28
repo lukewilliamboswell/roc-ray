@@ -6,7 +6,7 @@
 //! The command buffer uses Structure-of-Arrays (SoA) layout for cache efficiency
 //! and zero runtime allocations.
 
-const types = @import("../types.zig");
+const types = @import("types.zig");
 
 /// Maximum total commands per frame (all types combined).
 pub const MAX_COMMANDS = 2048;
@@ -28,6 +28,17 @@ pub const CMD_CIRCLE: u4 = 2;
 pub const CMD_LINE: u4 = 3;
 /// Command type code for text.
 pub const CMD_TEXT: u4 = 4;
+/// Command type code for circle gradient.
+pub const CMD_CIRCLE_GRADIENT: u4 = 5;
+/// Command type code for rectangle gradient vertical.
+pub const CMD_RECT_GRADIENT_V: u4 = 6;
+/// Command type code for rectangle gradient horizontal.
+pub const CMD_RECT_GRADIENT_H: u4 = 7;
+
+/// Maximum circle gradients per frame.
+pub const MAX_CIRCLE_GRADIENTS = 256;
+/// Maximum rectangle gradients per frame.
+pub const MAX_RECT_GRADIENTS = 256;
 
 /// Command buffer using Structure-of-Arrays layout for cache efficiency.
 /// This struct is read directly by JavaScript via memory access.
@@ -77,6 +88,32 @@ pub const CommandBuffer = struct {
     string_buffer: [MAX_STRING_BYTES]u8 = undefined,
     string_buffer_len: u32 = 0,
 
+    // Circle gradients (SoA)
+    circle_gradient_count: u32 = 0,
+    circle_gradient_x: [MAX_CIRCLE_GRADIENTS]f32 = undefined,
+    circle_gradient_y: [MAX_CIRCLE_GRADIENTS]f32 = undefined,
+    circle_gradient_radius: [MAX_CIRCLE_GRADIENTS]f32 = undefined,
+    circle_gradient_inner: [MAX_CIRCLE_GRADIENTS]u8 = undefined,
+    circle_gradient_outer: [MAX_CIRCLE_GRADIENTS]u8 = undefined,
+
+    // Rectangle gradients V (SoA)
+    rect_gradient_v_count: u32 = 0,
+    rect_gradient_v_x: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_v_y: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_v_w: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_v_h: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_v_top: [MAX_RECT_GRADIENTS]u8 = undefined,
+    rect_gradient_v_bottom: [MAX_RECT_GRADIENTS]u8 = undefined,
+
+    // Rectangle gradients H (SoA)
+    rect_gradient_h_count: u32 = 0,
+    rect_gradient_h_x: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_h_y: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_h_w: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_h_h: [MAX_RECT_GRADIENTS]f32 = undefined,
+    rect_gradient_h_left: [MAX_RECT_GRADIENTS]u8 = undefined,
+    rect_gradient_h_right: [MAX_RECT_GRADIENTS]u8 = undefined,
+
     pub fn reset(self: *CommandBuffer) void {
         self.has_clear = false;
         self.cmd_count = 0;
@@ -85,6 +122,9 @@ pub const CommandBuffer = struct {
         self.line_count = 0;
         self.text_count = 0;
         self.string_buffer_len = 0;
+        self.circle_gradient_count = 0;
+        self.rect_gradient_v_count = 0;
+        self.rect_gradient_h_count = 0;
     }
 };
 
@@ -182,6 +222,53 @@ pub fn endDrawing() void {
 pub fn clearBackground(color: types.Color) void {
     cmd_buffer.has_clear = true;
     cmd_buffer.clear_color = color.toU8();
+}
+
+/// Draw a circle gradient using safe types.
+pub fn drawCircleGradient(cg: types.CircleGradient) void {
+    const i = cmd_buffer.circle_gradient_count;
+    if (i >= MAX_CIRCLE_GRADIENTS) return;
+
+    cmd_buffer.circle_gradient_x[i] = cg.center.x;
+    cmd_buffer.circle_gradient_y[i] = cg.center.y;
+    cmd_buffer.circle_gradient_radius[i] = cg.radius;
+    cmd_buffer.circle_gradient_inner[i] = cg.color_inner.toU8();
+    cmd_buffer.circle_gradient_outer[i] = cg.color_outer.toU8();
+    cmd_buffer.circle_gradient_count += 1;
+
+    pushCmd(CMD_CIRCLE_GRADIENT, @intCast(i));
+}
+
+/// Draw a rectangle with vertical gradient using safe types.
+pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+    const i = cmd_buffer.rect_gradient_v_count;
+    if (i >= MAX_RECT_GRADIENTS) return;
+
+    cmd_buffer.rect_gradient_v_x[i] = rg.x;
+    cmd_buffer.rect_gradient_v_y[i] = rg.y;
+    cmd_buffer.rect_gradient_v_w[i] = rg.width;
+    cmd_buffer.rect_gradient_v_h[i] = rg.height;
+    cmd_buffer.rect_gradient_v_top[i] = rg.color_top.toU8();
+    cmd_buffer.rect_gradient_v_bottom[i] = rg.color_bottom.toU8();
+    cmd_buffer.rect_gradient_v_count += 1;
+
+    pushCmd(CMD_RECT_GRADIENT_V, @intCast(i));
+}
+
+/// Draw a rectangle with horizontal gradient using safe types.
+pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+    const i = cmd_buffer.rect_gradient_h_count;
+    if (i >= MAX_RECT_GRADIENTS) return;
+
+    cmd_buffer.rect_gradient_h_x[i] = rg.x;
+    cmd_buffer.rect_gradient_h_y[i] = rg.y;
+    cmd_buffer.rect_gradient_h_w[i] = rg.width;
+    cmd_buffer.rect_gradient_h_h[i] = rg.height;
+    cmd_buffer.rect_gradient_h_left[i] = rg.color_left.toU8();
+    cmd_buffer.rect_gradient_h_right[i] = rg.color_right.toU8();
+    cmd_buffer.rect_gradient_h_count += 1;
+
+    pushCmd(CMD_RECT_GRADIENT_H, @intCast(i));
 }
 
 /// Get pointer to the command buffer for JS to read.

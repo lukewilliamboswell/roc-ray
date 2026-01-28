@@ -252,15 +252,15 @@ fn tidyBanned(file: SourceFile, errors: *Errors) void {
     }
 
     // Low-level raylib calls should only be in the raylib backend
-    if (!std.mem.endsWith(u8, file.path, "backend/raylib.zig")) {
+    if (!std.mem.endsWith(u8, file.path, "backend_raylib.zig")) {
         if (std.mem.indexOf(u8, file.text, "raylib.rl.")) |offset| {
             errors.addBanned(file, offset, "raylib.rl.", "raylib backend functions (colorToRl, drawText, etc.)");
         }
         if (std.mem.indexOf(u8, file.text, "@cInclude(\"raylib.h\")")) |offset| {
-            errors.addBanned(file, offset, "@cInclude(\"raylib.h\")", "import from backend/raylib.zig");
+            errors.addBanned(file, offset, "@cInclude(\"raylib.h\")", "import from backend_raylib.zig");
         }
         if (std.mem.indexOf(u8, file.text, "@cInclude(\"rlgl.h\")")) |offset| {
-            errors.addBanned(file, offset, "@cInclude(\"rlgl.h\")", "import from backend/raylib.zig");
+            errors.addBanned(file, offset, "@cInclude(\"rlgl.h\")", "import from backend_raylib.zig");
         }
     }
 

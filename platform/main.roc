@@ -1,11 +1,11 @@
 platform ""
 	requires {
 		[Model : model] for program : {
-			init! : () => Try(model, [Exit(I64), ..]),
-			render! : model, PlatformState => Try(model, [Exit(I64), ..]),
+			init! : Host => Try(model, [Exit(I64), ..]),
+			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, PlatformState]
+	exposes [Draw, Color, Host]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -28,10 +28,10 @@ platform ""
 
 import Draw
 import Color
-import PlatformState
+import Host
 
 ## Internal type for host boundary - kept simple/flat for C compatibility
-PlatformStateFromHost : {
+HostStateFromHost : {
 	frame_count : U64,
 	mouse_wheel : F32,
 	mouse_x : F32,
@@ -41,17 +41,10 @@ PlatformStateFromHost : {
 	mouse_middle : Bool,
 }
 
-init_for_host! : {} => Try(Box(Model), I64)
-init_for_host! = |{}| match (program.init!)() {
-	Ok(unboxed_model) => Ok(Box.box(unboxed_model))
-	Err(Exit(code)) => Err(code)
-	Err(_) => Err(-1)
-}
-
-render_for_host! : Box(Model), PlatformStateFromHost => Try(Box(Model), I64)
-render_for_host! = |boxed_model, host_state| {
-	platform_state : PlatformState
-	platform_state = {
+init_for_host! : HostStateFromHost => Try(Box(Model), I64)
+init_for_host! = |host_state| {
+	host : Host
+	host = {
 		frame_count: host_state.frame_count,
 		mouse: {
 			x: host_state.mouse_x,
@@ -62,7 +55,29 @@ render_for_host! = |boxed_model, host_state| {
 			wheel: host_state.mouse_wheel,
 		},
 	}
-	match (program.render!)(Box.unbox(boxed_model), platform_state) {
+	match (program.init!)(host) {
+		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+		Err(Exit(code)) => Err(code)
+		## Testing wildcard-only: should return 42 for NotFound
+		Err(_) => Err(42)
+	}
+}
+
+render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
+render_for_host! = |boxed_model, host_state| {
+	host : Host
+	host = {
+		frame_count: host_state.frame_count,
+		mouse: {
+			x: host_state.mouse_x,
+			y: host_state.mouse_y,
+			left: host_state.mouse_left,
+			right: host_state.mouse_right,
+			middle: host_state.mouse_middle,
+			wheel: host_state.mouse_wheel,
+		},
+	}
+	match (program.render!)(Box.unbox(boxed_model), host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

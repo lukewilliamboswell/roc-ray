@@ -14,6 +14,9 @@ export const CMD_RECT = 1;
 export const CMD_CIRCLE = 2;
 export const CMD_LINE = 3;
 export const CMD_TEXT = 4;
+export const CMD_CIRCLE_GRADIENT = 5;
+export const CMD_RECT_GRADIENT_V = 6;
+export const CMD_RECT_GRADIENT_H = 7;
 
 // Buffer capacities
 export const MAX_COMMANDS = 2048;
@@ -22,6 +25,8 @@ export const MAX_CIRCLES = 512;
 export const MAX_LINES = 512;
 export const MAX_TEXTS = 256;
 export const MAX_STRING_BYTES = 8192;
+export const MAX_CIRCLE_GRADIENTS = 256;
+export const MAX_RECT_GRADIENTS = 256;
 
 // Color palette (matches Roc's Color type - alphabetically sorted)
 export const COLORS = [
@@ -81,6 +86,29 @@ export function getOffsets(wasm) {
         text_str_len: wasm._get_offset_text_str_len(),
         string_buffer: wasm._get_offset_string_buffer(),
         string_buffer_len: wasm._get_offset_string_buffer_len(),
+        // Circle gradients
+        circle_gradient_count: wasm._get_offset_circle_gradient_count(),
+        circle_gradient_x: wasm._get_offset_circle_gradient_x(),
+        circle_gradient_y: wasm._get_offset_circle_gradient_y(),
+        circle_gradient_radius: wasm._get_offset_circle_gradient_radius(),
+        circle_gradient_inner: wasm._get_offset_circle_gradient_inner(),
+        circle_gradient_outer: wasm._get_offset_circle_gradient_outer(),
+        // Rectangle gradients V
+        rect_gradient_v_count: wasm._get_offset_rect_gradient_v_count(),
+        rect_gradient_v_x: wasm._get_offset_rect_gradient_v_x(),
+        rect_gradient_v_y: wasm._get_offset_rect_gradient_v_y(),
+        rect_gradient_v_w: wasm._get_offset_rect_gradient_v_w(),
+        rect_gradient_v_h: wasm._get_offset_rect_gradient_v_h(),
+        rect_gradient_v_top: wasm._get_offset_rect_gradient_v_top(),
+        rect_gradient_v_bottom: wasm._get_offset_rect_gradient_v_bottom(),
+        // Rectangle gradients H
+        rect_gradient_h_count: wasm._get_offset_rect_gradient_h_count(),
+        rect_gradient_h_x: wasm._get_offset_rect_gradient_h_x(),
+        rect_gradient_h_y: wasm._get_offset_rect_gradient_h_y(),
+        rect_gradient_h_w: wasm._get_offset_rect_gradient_h_w(),
+        rect_gradient_h_h: wasm._get_offset_rect_gradient_h_h(),
+        rect_gradient_h_left: wasm._get_offset_rect_gradient_h_left(),
+        rect_gradient_h_right: wasm._get_offset_rect_gradient_h_right(),
     };
 }
 
@@ -119,6 +147,26 @@ export function createBufferViews(buffer, basePtr, offsets) {
         textStrOffset: new Uint16Array(buffer, basePtr + offsets.text_str_offset, MAX_TEXTS),
         textStrLen: new Uint16Array(buffer, basePtr + offsets.text_str_len, MAX_TEXTS),
         stringBuffer: new Uint8Array(buffer, basePtr + offsets.string_buffer, MAX_STRING_BYTES),
+        // Circle gradients
+        circleGradientX: new Float32Array(buffer, basePtr + offsets.circle_gradient_x, MAX_CIRCLE_GRADIENTS),
+        circleGradientY: new Float32Array(buffer, basePtr + offsets.circle_gradient_y, MAX_CIRCLE_GRADIENTS),
+        circleGradientRadius: new Float32Array(buffer, basePtr + offsets.circle_gradient_radius, MAX_CIRCLE_GRADIENTS),
+        circleGradientInner: new Uint8Array(buffer, basePtr + offsets.circle_gradient_inner, MAX_CIRCLE_GRADIENTS),
+        circleGradientOuter: new Uint8Array(buffer, basePtr + offsets.circle_gradient_outer, MAX_CIRCLE_GRADIENTS),
+        // Rectangle gradients V
+        rectGradientVX: new Float32Array(buffer, basePtr + offsets.rect_gradient_v_x, MAX_RECT_GRADIENTS),
+        rectGradientVY: new Float32Array(buffer, basePtr + offsets.rect_gradient_v_y, MAX_RECT_GRADIENTS),
+        rectGradientVW: new Float32Array(buffer, basePtr + offsets.rect_gradient_v_w, MAX_RECT_GRADIENTS),
+        rectGradientVH: new Float32Array(buffer, basePtr + offsets.rect_gradient_v_h, MAX_RECT_GRADIENTS),
+        rectGradientVTop: new Uint8Array(buffer, basePtr + offsets.rect_gradient_v_top, MAX_RECT_GRADIENTS),
+        rectGradientVBottom: new Uint8Array(buffer, basePtr + offsets.rect_gradient_v_bottom, MAX_RECT_GRADIENTS),
+        // Rectangle gradients H
+        rectGradientHX: new Float32Array(buffer, basePtr + offsets.rect_gradient_h_x, MAX_RECT_GRADIENTS),
+        rectGradientHY: new Float32Array(buffer, basePtr + offsets.rect_gradient_h_y, MAX_RECT_GRADIENTS),
+        rectGradientHW: new Float32Array(buffer, basePtr + offsets.rect_gradient_h_w, MAX_RECT_GRADIENTS),
+        rectGradientHH: new Float32Array(buffer, basePtr + offsets.rect_gradient_h_h, MAX_RECT_GRADIENTS),
+        rectGradientHLeft: new Uint8Array(buffer, basePtr + offsets.rect_gradient_h_left, MAX_RECT_GRADIENTS),
+        rectGradientHRight: new Uint8Array(buffer, basePtr + offsets.rect_gradient_h_right, MAX_RECT_GRADIENTS),
     };
 }
 
@@ -381,6 +429,52 @@ function render() {
                 const str = decoder.decode(views.stringBuffer.subarray(strOff, strOff + strLen));
                 ctx.fillText(str, views.textX[idx], views.textY[idx]);
                 break;
+
+            case CMD_CIRCLE_GRADIENT: {
+                const cx = views.circleGradientX[idx];
+                const cy = views.circleGradientY[idx];
+                const r = views.circleGradientRadius[idx];
+                const innerColor = COLORS[views.circleGradientInner[idx]] || '#ffffff';
+                const outerColor = COLORS[views.circleGradientOuter[idx]] || '#000000';
+                const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+                gradient.addColorStop(0, innerColor);
+                gradient.addColorStop(1, outerColor);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            }
+
+            case CMD_RECT_GRADIENT_V: {
+                const rx = views.rectGradientVX[idx];
+                const ry = views.rectGradientVY[idx];
+                const rw = views.rectGradientVW[idx];
+                const rh = views.rectGradientVH[idx];
+                const topColor = COLORS[views.rectGradientVTop[idx]] || '#ffffff';
+                const bottomColor = COLORS[views.rectGradientVBottom[idx]] || '#000000';
+                const gradient = ctx.createLinearGradient(rx, ry, rx, ry + rh);
+                gradient.addColorStop(0, topColor);
+                gradient.addColorStop(1, bottomColor);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(rx, ry, rw, rh);
+                break;
+            }
+
+            case CMD_RECT_GRADIENT_H: {
+                const rx = views.rectGradientHX[idx];
+                const ry = views.rectGradientHY[idx];
+                const rw = views.rectGradientHW[idx];
+                const rh = views.rectGradientHH[idx];
+                const leftColor = COLORS[views.rectGradientHLeft[idx]] || '#ffffff';
+                const rightColor = COLORS[views.rectGradientHRight[idx]] || '#000000';
+                const gradient = ctx.createLinearGradient(rx, ry, rx + rw, ry);
+                gradient.addColorStop(0, leftColor);
+                gradient.addColorStop(1, rightColor);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(rx, ry, rw, rh);
+                break;
+            }
         }
     }
 }

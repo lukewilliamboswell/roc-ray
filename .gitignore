@@ -1,8 +1,8 @@
 generated-docs/
 
-examples/hello
-examples/exit_code_msg
-examples/exit_tag
+# Built example executables (use `git add -f` to add manually if needed)
+examples/hello_world
+examples/read_env
 
 # Built executables at root
 hello_world

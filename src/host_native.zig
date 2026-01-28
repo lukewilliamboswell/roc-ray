@@ -631,30 +631,13 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                 for (frame.outputs.items) |cmd| {
                     switch (cmd) {
                         .BeginFrame => raylib.beginDrawing(),
-                        .Clear => |c| raylib.clearBackgroundRaw(raylib.colorToRl(types.Color.fromU8Safe(c))),
-                        .Circle => |c| raylib.drawCircleRaw(
-                            @intFromFloat(c.center.x),
-                            @intFromFloat(c.center.y),
-                            c.radius,
-                            raylib.colorToRl(types.Color.fromU8Safe(c.color)),
-                        ),
+                        .Clear => |c| raylib.clearBackground(types.Color.fromU8Safe(c)),
+                        .Circle => |c| raylib.drawCircle(c.toCircle()),
                         .CircleGradient => |cg| raylib.drawCircleGradient(cg.toCircleGradient()),
-                        .Rectangle => |r| raylib.drawRectangleRaw(
-                            @intFromFloat(r.x),
-                            @intFromFloat(r.y),
-                            @intFromFloat(r.width),
-                            @intFromFloat(r.height),
-                            raylib.colorToRl(types.Color.fromU8Safe(r.color)),
-                        ),
+                        .Rectangle => |r| raylib.drawRectangle(r.toRectangle()),
                         .RectangleGradientH => |rg| raylib.drawRectangleGradientH(rg.toRectangleGradientH()),
                         .RectangleGradientV => |rg| raylib.drawRectangleGradientV(rg.toRectangleGradientV()),
-                        .Line => |l| raylib.drawLineRaw(
-                            @intFromFloat(l.start.x),
-                            @intFromFloat(l.start.y),
-                            @intFromFloat(l.end.x),
-                            @intFromFloat(l.end.y),
-                            raylib.colorToRl(types.Color.fromU8Safe(l.color)),
-                        ),
+                        .Line => |l| raylib.drawLine(l.toLine()),
                         .Text => |t| {
                             const text_content = sim_state.getText(t.text_offset, t.text_len);
                             var buf: [256:0]u8 = undefined;

@@ -127,21 +127,6 @@ pub fn drawCircleGradient(cg: types.CircleGradient) void {
     );
 }
 
-/// Draw a rectangle with position and size as integers.
-pub fn drawRectangleRaw(x: c_int, y: c_int, w: c_int, h: c_int, color: rl.Color) void {
-    rl.DrawRectangle(x, y, w, h, color);
-}
-
-/// Draw a circle with raw integer/float coordinates.
-pub fn drawCircleRaw(x: c_int, y: c_int, radius: f32, color: rl.Color) void {
-    rl.DrawCircle(x, y, radius, color);
-}
-
-/// Draw a line with raw integer coordinates.
-pub fn drawLineRaw(x1: c_int, y1: c_int, x2: c_int, y2: c_int, color: rl.Color) void {
-    rl.DrawLine(x1, y1, x2, y2, color);
-}
-
 /// Begin drawing frame.
 pub fn beginDrawing() void {
     rl.BeginDrawing();
@@ -155,11 +140,6 @@ pub fn endDrawing() void {
 /// Clear the background with a safe color.
 pub fn clearBackground(color: types.Color) void {
     rl.ClearBackground(colorToRl(color));
-}
-
-/// Clear the background with a raylib color.
-pub fn clearBackgroundRaw(color: rl.Color) void {
-    rl.ClearBackground(color);
 }
 
 /// Initialize a window.

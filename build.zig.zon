@@ -4,7 +4,7 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .roc = .{
-            .url = "git+https://github.com/roc-lang/roc#6d99d4964bfe3ba8f47dc079b5197821b9a609fd",
+            .url = "git+https://github.com/roc-lang/roc#4c206185a278f3adf7a23e8336cc94cd849b358f",
             .hash = "roc-0.0.0-NAC9w28LugCgzFdm0Jws0ZMzLVIEFbU9yROs-KnmFXnq",
         },
     },

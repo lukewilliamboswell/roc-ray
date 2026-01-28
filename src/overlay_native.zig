@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const types = @import("types.zig");
-const raylib = @import("backend/raylib.zig");
+const raylib = @import("backend_raylib.zig");
 
 /// Speed presets for playback control.
 pub const speed_presets = [_]f32{ 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 };
@@ -52,11 +52,11 @@ pub const OverlayState = struct {
     }
 
     /// Get the current blink color (alternates between light and dark).
-    pub fn getBlinkColor(self: *const OverlayState) raylib.Color {
+    pub fn getBlinkColor(self: *const OverlayState) types.Color {
         if (@mod(self.blink_timer, 1.0) < 0.5) {
-            return raylib.colorToRl(.white);
+            return .white;
         } else {
-            return raylib.colorToRl(.dark_gray);
+            return .dark_gray;
         }
     }
 };
@@ -78,7 +78,7 @@ pub fn drawPausedOverlay(
     const paused_width = raylib.measureText(paused_text, paused_font);
     const paused_x = @divTrunc(screen_width - paused_width, 2);
     const paused_y = @divTrunc(screen_height, 2) - 60;
-    raylib.drawTextRaw(paused_text, paused_x, paused_y, paused_font, color);
+    raylib.drawTextZ(paused_text, paused_x, paused_y, paused_font, color);
 
     // Frame/Speed status centered below PAUSED
     var status_buf: [128:0]u8 = undefined;
@@ -91,7 +91,7 @@ pub fn drawPausedOverlay(
     const status_width = raylib.measureText(status_buf[0..status_slice.len :0], info_font);
     const status_x = @divTrunc(screen_width - status_width, 2);
     const status_y = paused_y + paused_font + 10;
-    raylib.drawTextRaw(status_buf[0..status_slice.len :0], status_x, status_y, info_font, color);
+    raylib.drawTextZ(status_buf[0..status_slice.len :0], status_x, status_y, info_font, color);
 
     // Hint to press F
     const hint_text = "PRESS F FOR INPUTS";
@@ -99,7 +99,7 @@ pub fn drawPausedOverlay(
     const hint_width = raylib.measureText(hint_text, hint_font);
     const hint_x = @divTrunc(screen_width - hint_width, 2);
     const hint_y = status_y + info_font + 20;
-    raylib.drawTextRaw(hint_text, hint_x, hint_y, hint_font, color);
+    raylib.drawTextZ(hint_text, hint_x, hint_y, hint_font, color);
 }
 
 /// Draw the input state overlay (when F is held).
@@ -117,14 +117,14 @@ pub fn drawInputsOverlay(
     const title = "INPUTS";
     const title_font: c_int = 60;
     const title_width = raylib.measureText(title, title_font);
-    raylib.drawTextRaw(title, @divTrunc(screen_width - title_width, 2), base_y, title_font, color);
+    raylib.drawTextZ(title, @divTrunc(screen_width - title_width, 2), base_y, title_font, color);
 
     // Mouse position
     var line1_buf: [64:0]u8 = undefined;
     const line1 = std.fmt.bufPrint(&line1_buf, "Mouse: ({d:.1}, {d:.1})", .{ inputs.mouse_x, inputs.mouse_y }) catch "Mouse: ?";
     line1_buf[line1.len] = 0;
     const line1_width = raylib.measureText(line1_buf[0..line1.len :0], info_font);
-    raylib.drawTextRaw(line1_buf[0..line1.len :0], @divTrunc(screen_width - line1_width, 2), base_y + title_font + 15, info_font, color);
+    raylib.drawTextZ(line1_buf[0..line1.len :0], @divTrunc(screen_width - line1_width, 2), base_y + title_font + 15, info_font, color);
 
     // Mouse buttons
     var line2_buf: [64:0]u8 = undefined;
@@ -134,14 +134,14 @@ pub fn drawInputsOverlay(
     const line2 = std.fmt.bufPrint(&line2_buf, "Buttons: [{s}] [{s}] [{s}]", .{ left_str, mid_str, right_str }) catch "Buttons: ?";
     line2_buf[line2.len] = 0;
     const line2_width = raylib.measureText(line2_buf[0..line2.len :0], info_font);
-    raylib.drawTextRaw(line2_buf[0..line2.len :0], @divTrunc(screen_width - line2_width, 2), base_y + title_font + 50, info_font, color);
+    raylib.drawTextZ(line2_buf[0..line2.len :0], @divTrunc(screen_width - line2_width, 2), base_y + title_font + 50, info_font, color);
 
     // Mouse wheel
     var line3_buf: [64:0]u8 = undefined;
     const line3 = std.fmt.bufPrint(&line3_buf, "Wheel: {d:.2}", .{inputs.mouse_wheel}) catch "Wheel: ?";
     line3_buf[line3.len] = 0;
     const line3_width = raylib.measureText(line3_buf[0..line3.len :0], info_font);
-    raylib.drawTextRaw(line3_buf[0..line3.len :0], @divTrunc(screen_width - line3_width, 2), base_y + title_font + 85, info_font, color);
+    raylib.drawTextZ(line3_buf[0..line3.len :0], @divTrunc(screen_width - line3_width, 2), base_y + title_font + 85, info_font, color);
 }
 
 /// Actions requested by input handling.

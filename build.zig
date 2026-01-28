@@ -239,7 +239,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_wasm_host_tests.step);
 
     // Zig unit tests for sim.zig (simulation recording/replay)
-    // Note: backend/wasm.zig tests are run through host_wasm.zig (it uses the backend)
+    // Note: backend_wasm.zig tests are run through host_wasm.zig (it uses the backend)
     const sim_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/sim.zig"),

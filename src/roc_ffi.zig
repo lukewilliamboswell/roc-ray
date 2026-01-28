@@ -1,83 +1,141 @@
-//! Roc FFI boundary module.
+//! Roc FFI utilities module.
 //!
-//! This module isolates all unsafe Roc interop code in one place. It handles:
-//! - Converting Roc ABI types to safe Zig types
-//! - Memory management callbacks for Roc runtime
-//! - Reference counting utilities
+//! This module provides reusable components for Roc host implementations:
+//! - wrapHostedFn: Type-safe wrapper for hosted function callbacks
+//! - RocMemory: Memory management callbacks (alloc, dealloc, realloc)
+//! - RocCallbacks: Debug/expect/crash callbacks with stderr output
 //!
-//! This module is verified once and rarely modified. All @ptrCast/@alignCast
-//! operations happen here, keeping the rest of the codebase type-safe.
+//! All are designed to reduce boilerplate and improve type safety in host code.
 
 const std = @import("std");
 const builtins = @import("builtins");
-const types = @import("types.zig");
 
-/// Convert RocCircle pointer to safe Circle type.
-/// The Roc ABI layout matches types.Circle.FFI exactly.
-pub fn circleFromRoc(ptr: *anyopaque) types.Circle {
-    const ffi: *const types.Circle.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toCircle();
+// Re-export host ABI types for convenience
+pub const RocOps = builtins.host_abi.RocOps;
+pub const HostedFn = builtins.host_abi.HostedFn;
+pub const RocDbg = builtins.host_abi.RocDbg;
+pub const RocExpectFailed = builtins.host_abi.RocExpectFailed;
+pub const RocCrashed = builtins.host_abi.RocCrashed;
+
+/// Unit type for hosted functions with no arguments.
+pub const NoArgs = extern struct {};
+
+/// Unit type for hosted functions with no return value.
+pub const NoReturn = extern struct {};
+
+/// Wraps a typed hosted function into the HostedFn signature (which uses *anyopaque).
+/// This allows writing hosted functions with explicit typed parameters for clarity.
+///
+/// The function can receive either:
+/// - `*RocOps` as first param: ops is passed directly (for functions needing allocation)
+/// - Any other pointer type: ops.env is cast to that type (for functions needing host env)
+///
+/// Example with typed env:
+/// ```
+/// fn hostedDrawCircle(host: *HostEnv, _: *ffi.NoReturn, args: *const Circle.FFI) void { ... }
+/// ```
+///
+/// Example with RocOps (for string allocation):
+/// ```
+/// fn hostedReadEnv(ops: *RocOps, result: *Try_Str_NotFound, args: *const ReadEnvArgs) void { ... }
+/// ```
+pub fn wrapHostedFn(comptime func: anytype) HostedFn {
+    const FnInfo = @typeInfo(@TypeOf(func)).@"fn";
+    const FirstParamType = FnInfo.params[0].type.?;
+    const RetType = FnInfo.params[1].type.?;
+    const ArgsType = FnInfo.params[2].type.?;
+
+    // Check if first param is *RocOps (pass ops directly) or something else (cast ops.env)
+    const pass_ops_directly = (FirstParamType == *RocOps);
+
+    return struct {
+        fn wrapper(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+            const first_arg = if (pass_ops_directly)
+                ops
+            else
+                @as(FirstParamType, @ptrCast(@alignCast(ops.env)));
+            const result: RetType = @ptrCast(@alignCast(ret_ptr));
+            const args: ArgsType = @ptrCast(@alignCast(args_ptr));
+            @call(.auto, func, .{ first_arg, result, args });
+        }
+    }.wrapper;
 }
 
-/// Convert RocRectangle pointer to safe Rectangle type.
-/// The Roc ABI layout matches types.Rectangle.FFI exactly.
-pub fn rectangleFromRoc(ptr: *anyopaque) types.Rectangle {
-    const ffi: *const types.Rectangle.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toRectangle();
-}
+/// Create debug/expect/crash callbacks that write to stderr with ANSI colors.
+/// Optionally tracks when dbg or expect_failed is called via a flag getter function.
+///
+/// Usage:
+/// ```
+/// var debug_flag: std.atomic.Value(bool) = .init(false);
+/// fn getDebugFlag() *std.atomic.Value(bool) { return &debug_flag; }
+/// const Callbacks = ffi.RocCallbacks(getDebugFlag);
+/// // Use Callbacks.dbg, Callbacks.expectFailed, Callbacks.crashed
+/// ```
+///
+/// Pass `null` for getDebugFlag if you don't need to track debug/expect calls.
+pub fn RocCallbacks(comptime getDebugFlag: ?fn () *std.atomic.Value(bool)) type {
+    return struct {
+        /// Roc debug callback - prints message to stderr with yellow "dbg:" prefix.
+        pub fn dbg(roc_dbg: *const RocDbg, env: *anyopaque) callconv(.c) void {
+            _ = env;
+            if (getDebugFlag) |getter| getter().store(true, .release);
+            const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
+            const stderr: std.fs.File = .stderr();
+            stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
+            stderr.writeAll(message) catch {};
+            stderr.writeAll("\n") catch {};
+        }
 
-/// Convert RocLine pointer to safe Line type.
-/// The Roc ABI layout matches types.Line.FFI exactly.
-pub fn lineFromRoc(ptr: *anyopaque) types.Line {
-    const ffi: *const types.Line.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toLine();
-}
+        /// Roc expect failed callback - prints message to stderr with yellow "expect failed:" prefix.
+        pub fn expectFailed(roc_expect: *const RocExpectFailed, env: *anyopaque) callconv(.c) void {
+            _ = env;
+            if (getDebugFlag) |getter| getter().store(true, .release);
+            const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
+            const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
+            const stderr: std.fs.File = .stderr();
+            stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
+            stderr.writeAll(trimmed) catch {};
+            stderr.writeAll("\n") catch {};
+        }
 
-/// Convert RocRectangleGradientV pointer to safe RectangleGradientV type.
-/// The Roc ABI layout matches types.RectangleGradientV.FFI exactly.
-pub fn rectangleGradientVFromRoc(ptr: *anyopaque) types.RectangleGradientV {
-    const ffi: *const types.RectangleGradientV.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toRectangleGradientV();
-}
-
-/// Convert RocRectangleGradientH pointer to safe RectangleGradientH type.
-/// The Roc ABI layout matches types.RectangleGradientH.FFI exactly.
-pub fn rectangleGradientHFromRoc(ptr: *anyopaque) types.RectangleGradientH {
-    const ffi: *const types.RectangleGradientH.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toRectangleGradientH();
-}
-
-/// Convert RocCircleGradient pointer to safe CircleGradient type.
-/// The Roc ABI layout matches types.CircleGradient.FFI exactly.
-pub fn circleGradientFromRoc(ptr: *anyopaque) types.CircleGradient {
-    const ffi: *const types.CircleGradient.FFI = @ptrCast(@alignCast(ptr));
-    return ffi.toCircleGradient();
-}
-
-/// Convert RocText pointer to safe Text type.
-/// Note: The returned Text.content is a slice into the RocStr's data,
-/// which is only valid while the RocStr is live.
-/// Text FFI layout is platform-dependent.
-pub fn textFromRoc(ptr: *anyopaque) types.Text {
-    const ffi: *const types.Text.FFI = @ptrCast(@alignCast(ptr));
-    return .{
-        .pos = .{ .x = ffi.pos.x, .y = ffi.pos.y },
-        .content = ffi.text.asSlice(),
-        .size = ffi.size,
-        .color = types.Color.fromU8(ffi.color) orelse .white,
+        /// Roc crashed callback - prints message to stderr with red "Roc crashed:" prefix and exits.
+        pub fn crashed(roc_crashed: *const RocCrashed, env: *anyopaque) callconv(.c) noreturn {
+            _ = env;
+            const message = roc_crashed.utf8_bytes[0..roc_crashed.len];
+            const stderr: std.fs.File = .stderr();
+            var buf: [256]u8 = undefined;
+            var w = stderr.writer(&buf);
+            w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
+            w.interface.flush() catch {};
+            std.process.exit(1);
+        }
     };
 }
 
-// Memory Management
+/// Configuration for RocMemory callbacks.
+pub const RocMemoryConfig = struct {
+    /// Function to get allocator from env pointer.
+    getAllocator: *const fn (env: *anyopaque) std.mem.Allocator,
 
-/// Create memory management callbacks parameterized by an allocator getter.
-/// The getAllocator function is called to get the allocator for each operation,
-/// allowing different hosts to provide different allocator sources.
-pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) type {
+    /// OOM handler - called when allocation fails. Must not return.
+    onOOM: *const fn () noreturn,
+
+    /// Optional telemetry: called after successful allocation with user bytes.
+    onAlloc: ?*const fn (bytes: usize) void = null,
+
+    /// Optional telemetry: called after deallocation with user bytes freed.
+    onDealloc: ?*const fn (bytes: usize) void = null,
+
+    /// Optional telemetry: called after reallocation with old and new user bytes.
+    onRealloc: ?*const fn (old_bytes: usize, new_bytes: usize) void = null,
+};
+
+/// Create memory management callbacks with configurable allocator, OOM handling, and telemetry.
+pub fn RocMemory(comptime config: RocMemoryConfig) type {
     return struct {
         /// Roc allocation function with size-tracking metadata.
         pub fn alloc(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(.c) void {
-            const allocator = getAllocator(env);
+            const allocator = config.getAllocator(env);
 
             const min_alignment: usize = @max(roc_alloc.alignment, @alignOf(usize));
             const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
@@ -87,17 +145,16 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
             const total_size = roc_alloc.length + size_storage_bytes;
 
             // Allocate memory including space for size metadata
-            const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
-
-            const base_ptr = result orelse {
-                const stderr: std.fs.File = .stderr();
-                stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
-                std.process.exit(1);
+            const base_ptr = allocator.rawAlloc(total_size, align_enum, @returnAddress()) orelse {
+                config.onOOM();
             };
 
             // Store the total size (including metadata) right before the user data
             const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
             size_ptr.* = total_size;
+
+            // Track telemetry if configured
+            if (config.onAlloc) |onAlloc| onAlloc(roc_alloc.length);
 
             // Return pointer to the user data (after the size metadata)
             roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
@@ -105,7 +162,7 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
 
         /// Roc deallocation function with size-tracking metadata.
         pub fn dealloc(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
-            const allocator = getAllocator(env);
+            const allocator = config.getAllocator(env);
 
             // Calculate where the size metadata is stored
             const size_storage_bytes = @max(roc_dealloc.alignment, @alignOf(usize));
@@ -121,6 +178,9 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
             const min_alignment: usize = @max(roc_dealloc.alignment, @alignOf(usize));
             const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
 
+            // Track telemetry if configured (user bytes = total - metadata)
+            if (config.onDealloc) |onDealloc| onDealloc(total_size - size_storage_bytes);
+
             // Free the memory (including the size metadata)
             const slice = @as([*]u8, @ptrCast(base_ptr))[0..total_size];
             allocator.rawFree(slice, align_enum, @returnAddress());
@@ -128,7 +188,7 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
 
         /// Roc reallocation function with size-tracking metadata.
         pub fn realloc(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) callconv(.c) void {
-            const allocator = getAllocator(env);
+            const allocator = config.getAllocator(env);
 
             // Calculate alignment
             const min_alignment: usize = @max(roc_realloc.alignment, @alignOf(usize));
@@ -149,9 +209,7 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
 
             // Allocate new memory with proper alignment
             const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
-                const stderr: std.fs.File = .stderr();
-                stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
-                std.process.exit(1);
+                config.onOOM();
             };
 
             // Copy old data to new allocation (excluding metadata, just user data)
@@ -169,19 +227,11 @@ pub fn RocMemory(comptime getAllocator: fn (env: *anyopaque) std.mem.Allocator) 
             const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
             new_size_ptr.* = new_total_size;
 
+            // Track telemetry if configured
+            if (config.onRealloc) |onRealloc| onRealloc(old_user_data_size, roc_realloc.new_length);
+
             // Return pointer to the user data (after the size metadata)
             roc_realloc.answer = new_user_ptr;
         }
     };
 }
-
-/// Decrement the reference count of a RocBox.
-/// If the refcount reaches zero, the memory is freed.
-pub fn decrefRocBox(box: types.RocBox, roc_ops: *types.RocOps) void {
-    const ptr: ?[*]u8 = @ptrCast(box);
-    // Box alignment is pointer-width, elements are not refcounted at this level
-    builtins.utils.decrefDataPtrC(ptr, @alignOf(usize), false, roc_ops);
-}
-
-// Tests for FFI conversion functions are in types.zig
-// This module's tests focus on the pointer conversion functions

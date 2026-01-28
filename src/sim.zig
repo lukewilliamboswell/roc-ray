@@ -120,7 +120,7 @@ pub const DrawCommand = union(DrawCommandTag) {
 
     /// Convert Clear to safe Color type
     pub fn toClearColor(self: DrawCommand) types.Color {
-        return types.Color.fromU8(self.Clear) orelse .white;
+        return types.Color.fromU8(self.Clear);
     }
 
     pub fn eql(self: DrawCommand, other: DrawCommand) bool {

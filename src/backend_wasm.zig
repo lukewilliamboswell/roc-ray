@@ -6,7 +6,7 @@
 //! The command buffer uses Structure-of-Arrays (SoA) layout for cache efficiency
 //! and zero runtime allocations.
 
-const types = @import("../types.zig");
+const types = @import("types.zig");
 
 /// Maximum total commands per frame (all types combined).
 pub const MAX_COMMANDS = 2048;

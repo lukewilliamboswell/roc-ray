@@ -4,16 +4,13 @@
 //! from types.zig and converting them to raylib's C types. All C interop
 //! is isolated here.
 
-const types = @import("../types.zig");
+const types = @import("types.zig");
 
 /// Raw raylib C bindings.
 pub const rl = @cImport({
     @cInclude("raylib.h");
     @cInclude("rlgl.h");
 });
-
-/// Raylib's native color type (exposed for overlay/UI code that needs it).
-pub const Color = rl.Color;
 
 /// Convert safe Color enum to raylib Color.
 pub fn colorToRl(color: types.Color) rl.Color {
@@ -32,11 +29,6 @@ pub fn colorToRl(color: types.Color) rl.Color {
         .white => rl.WHITE,
         .yellow => rl.YELLOW,
     };
-}
-
-/// Create a raylib Color from RGBA values.
-pub fn rgba(r: u8, g: u8, b: u8, a: u8) rl.Color {
-    return rl.Color{ .r = r, .g = g, .b = b, .a = a };
 }
 
 /// Draw a circle using safe types.
@@ -87,9 +79,9 @@ pub fn drawText(text: types.Text, buf: *[256:0]u8) void {
     }
 }
 
-/// Draw text with a raw null-terminated string.
-pub fn drawTextRaw(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: rl.Color) void {
-    rl.DrawText(text, x, y, size, color);
+/// Draw text with a null-terminated string (for overlay/UI code).
+pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: types.Color) void {
+    rl.DrawText(text, x, y, size, colorToRl(color));
 }
 
 /// Draw a rectangle with vertical gradient using safe types.

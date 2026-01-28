@@ -10,7 +10,7 @@ const types = @import("types.zig");
 const ffi = @import("roc_ffi.zig");
 
 // Import backend
-const raylib = @import("backend/raylib.zig");
+const raylib = @import("backend_raylib.zig");
 
 // Import simulation recording/replay module
 const sim = @import("sim.zig");
@@ -21,29 +21,12 @@ const overlay = @import("overlay_native.zig");
 // Type aliases for Roc ABI
 const RocBox = types.RocBox;
 const RocHostState = types.InputState.FFI;
-const RocText = types.Text.FFI;
 const Try_BoxModel_I64 = types.Try_BoxModel_I64;
 const RenderArgs = types.RenderArgs;
 const RocOps = types.RocOps;
 const HostedFn = types.HostedFn;
 const roc__init_for_host = types.roc__init_for_host;
 const roc__render_for_host = types.roc__render_for_host;
-
-/// Wraps a typed hosted function into the HostedFn signature (which uses *anyopaque).
-/// This allows writing hosted functions with explicit typed parameters for clarity.
-fn wrapHostedFn(comptime func: anytype) HostedFn {
-    const FnInfo = @typeInfo(@TypeOf(func)).@"fn";
-    const RetType = FnInfo.params[1].type.?; // Second param is return pointer
-    const ArgsType = FnInfo.params[2].type.?; // Third param is args pointer
-
-    return struct {
-        fn wrapper(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-            const result: RetType = @ptrCast(@alignCast(ret_ptr));
-            const args: ArgsType = @ptrCast(@alignCast(args_ptr));
-            @call(.auto, func, .{ ops, result, args });
-        }
-    }.wrapper;
-}
 
 // Access raw raylib binding through backend (for cases not yet abstracted)
 const rl = raylib.rl;
@@ -71,43 +54,25 @@ fn getAllocatorFromEnv(env: *anyopaque) std.mem.Allocator {
     return host.allocator();
 }
 
-/// Memory management callbacks using shared RocMemory implementation.
-const NativeMemory = ffi.RocMemory(getAllocatorFromEnv);
-
-/// Roc debug function
-fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
-    _ = env;
-    debug_or_expect_called.store(true, .release);
-    const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
+/// OOM handler for native host - prints error and exits.
+fn nativeOOM() noreturn {
     const stderr: std.fs.File = .stderr();
-    stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
-    stderr.writeAll(message) catch {};
-    stderr.writeAll("\n") catch {};
-}
-
-/// Roc expect failed function
-fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: *anyopaque) callconv(.c) void {
-    _ = env;
-    debug_or_expect_called.store(true, .release);
-    const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
-    const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    const stderr: std.fs.File = .stderr();
-    stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
-    stderr.writeAll(trimmed) catch {};
-    stderr.writeAll("\n") catch {};
-}
-
-/// Roc crashed function
-fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaque) callconv(.c) noreturn {
-    _ = env;
-    const message = roc_crashed.utf8_bytes[0..roc_crashed.len];
-    const stderr: std.fs.File = .stderr();
-    var buf: [256]u8 = undefined;
-    var w = stderr.writer(&buf);
-    w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
-    w.interface.flush() catch {};
+    stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
     std.process.exit(1);
 }
+
+/// Memory management callbacks using shared RocMemory implementation.
+const NativeMemory = ffi.RocMemory(.{
+    .getAllocator = &getAllocatorFromEnv,
+    .onOOM = &nativeOOM,
+});
+
+/// Debug/expect/crash callbacks with flag tracking.
+fn getDebugFlag() *std.atomic.Value(bool) {
+    return &debug_or_expect_called;
+}
+
+const NativeCallbacks = ffi.RocCallbacks(getDebugFlag);
 
 /// Decrement the reference count of a RocBox
 /// If the refcount reaches zero, the memory is freed
@@ -139,12 +104,7 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
 }
 
-/// Convert Roc Color tag union discriminant to raylib Color
-fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    _ = args_ptr;
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-
+fn hostedDrawBeginFrame(host: *HostEnv, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     // Record output if simulation active
     if (host.sim_state) |s| {
         s.recordOutput(.{ .BeginFrame = {} }) catch {};
@@ -154,10 +114,8 @@ fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque)
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const circle = ffi.circleFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawCircle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Circle.FFI) void {
+    const circle = args.toCircle();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -168,10 +126,8 @@ fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) cal
     raylib.drawCircle(circle);
 }
 
-fn hostedDrawCircleGradient(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const cg = ffi.circleGradientFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawCircleGradient(host: *HostEnv, _: *ffi.NoReturn, args: *const types.CircleGradient.FFI) void {
+    const cg = args.toCircleGradient();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -182,11 +138,8 @@ fn hostedDrawCircleGradient(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopa
     raylib.drawCircleGradient(cg);
 }
 
-fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const color_discriminant: *const u8 = @ptrCast(args_ptr);
-    const color = types.Color.fromU8Safe(color_discriminant.*);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawClear(host: *HostEnv, _: *ffi.NoReturn, args: *const u8) void {
+    const color = types.Color.fromU8(args.*);
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -197,11 +150,7 @@ fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) call
     raylib.clearBackground(color);
 }
 
-fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    _ = args_ptr;
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-
+fn hostedDrawEndFrame(host: *HostEnv, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     // Record output if simulation active
     if (host.sim_state) |s| {
         s.recordOutput(.{ .EndFrame = {} }) catch {};
@@ -211,10 +160,8 @@ fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) c
     raylib.endDrawing();
 }
 
-fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const line = ffi.lineFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawLine(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Line.FFI) void {
+    const line = args.toLine();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -225,10 +172,8 @@ fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
     raylib.drawLine(line);
 }
 
-fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const rect = ffi.rectangleFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawRectangle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Rectangle.FFI) void {
+    const rect = args.toRectangle();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -239,10 +184,8 @@ fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) 
     raylib.drawRectangle(rect);
 }
 
-fn hostedDrawRectangleGradientH(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const rg = ffi.rectangleGradientHFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawRectangleGradientH(host: *HostEnv, _: *ffi.NoReturn, args: *const types.RectangleGradientH.FFI) void {
+    const rg = args.toRectangleGradientH();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -253,10 +196,8 @@ fn hostedDrawRectangleGradientH(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *an
     raylib.drawRectangleGradientH(rg);
 }
 
-fn hostedDrawRectangleGradientV(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const rg = ffi.rectangleGradientVFromRoc(args_ptr);
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawRectangleGradientV(host: *HostEnv, _: *ffi.NoReturn, args: *const types.RectangleGradientV.FFI) void {
+    const rg = args.toRectangleGradientV();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -267,16 +208,13 @@ fn hostedDrawRectangleGradientV(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *an
     raylib.drawRectangleGradientV(rg);
 }
 
-fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ret_ptr;
-    const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
-    const text_slice = txt.text.asSlice();
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+fn hostedDrawText(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Text.FFI) void {
+    const text_slice = args.text.asSlice();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
         // Use dedicated text recording that handles Test mode properly
-        s.recordTextOutput(text_slice, txt.pos.x, txt.pos.y, txt.size, txt.color) catch {};
+        s.recordTextOutput(text_slice, args.pos.x, args.pos.y, args.size, args.color) catch {};
         if (s.mode == .Test) return;
     }
 
@@ -285,7 +223,7 @@ fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callc
     if (text_slice.len < buf.len) {
         @memcpy(buf[0..text_slice.len], text_slice);
         buf[text_slice.len] = 0;
-        raylib.drawTextRaw(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, raylib.colorToRl(types.Color.fromU8Safe(txt.color)));
+        raylib.drawTextZ(buf[0..text_slice.len :0], @intFromFloat(args.pos.x), @intFromFloat(args.pos.y), args.size, types.Color.fromU8(args.color));
     }
 }
 
@@ -294,13 +232,13 @@ const ReadEnvArgs = extern struct {
     key_str: types.RocStr,
 };
 
-fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *ReadEnvArgs) void {
+fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
     // Windows doesn't link libc, so env var reading is not yet supported
     // TODO: Use native Windows API (GetEnvironmentVariableW) in the future
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *ReadEnvArgs) void {
+fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *const ReadEnvArgs) void {
     const key = args.key_str.asSlice();
 
     // On POSIX systems, use std.posix.getenv (works after environ initialization)
@@ -314,19 +252,20 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *Read
     }
 }
 
-/// Array of hosted function pointers, sorted alphabetically by fully-qualified name
+/// Array of hosted function pointers, sorted alphabetically by fully-qualified name.
+/// All functions use wrapHostedFn for type-safe pointer casting.
 const hosted_function_ptrs = [_]HostedFn{
-    hostedDrawBeginFrame, // Draw.begin_frame! (0)
-    hostedDrawCircle, // Draw.circle! (1)
-    hostedDrawCircleGradient, // Draw.circle_gradient! (2)
-    hostedDrawClear, // Draw.clear! (3)
-    hostedDrawEndFrame, // Draw.end_frame! (4)
-    hostedDrawLine, // Draw.line! (5)
-    hostedDrawRectangle, // Draw.rectangle! (6)
-    hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
-    hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
-    hostedDrawText, // Draw.text! (9)
-    if (builtin.os.tag == .windows) wrapHostedFn(hostedReadEnvWindows) else wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (10)
+    ffi.wrapHostedFn(hostedDrawBeginFrame), // Draw.begin_frame! (0)
+    ffi.wrapHostedFn(hostedDrawCircle), // Draw.circle! (1)
+    ffi.wrapHostedFn(hostedDrawCircleGradient), // Draw.circle_gradient! (2)
+    ffi.wrapHostedFn(hostedDrawClear), // Draw.clear! (3)
+    ffi.wrapHostedFn(hostedDrawEndFrame), // Draw.end_frame! (4)
+    ffi.wrapHostedFn(hostedDrawLine), // Draw.line! (5)
+    ffi.wrapHostedFn(hostedDrawRectangle), // Draw.rectangle! (6)
+    ffi.wrapHostedFn(hostedDrawRectangleGradientH), // Draw.rectangle_gradient_h! (7)
+    ffi.wrapHostedFn(hostedDrawRectangleGradientV), // Draw.rectangle_gradient_v! (8)
+    ffi.wrapHostedFn(hostedDrawText), // Draw.text! (9)
+    if (builtin.os.tag == .windows) ffi.wrapHostedFn(hostedReadEnvWindows) else ffi.wrapHostedFn(hostedReadEnvPosix), // Host.read_env! (10)
 };
 
 /// Force-include all rlgl/GL functions that raylib might use at runtime.
@@ -481,9 +420,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .roc_alloc = NativeMemory.alloc,
         .roc_dealloc = NativeMemory.dealloc,
         .roc_realloc = NativeMemory.realloc,
-        .roc_dbg = rocDbgFn,
-        .roc_expect_failed = rocExpectFailedFn,
-        .roc_crashed = rocCrashedFn,
+        .roc_dbg = NativeCallbacks.dbg,
+        .roc_expect_failed = NativeCallbacks.expectFailed,
+        .roc_crashed = NativeCallbacks.crashed,
         .hosted_fns = .{
             .count = hosted_function_ptrs.len,
             .fns = @constCast(&hosted_function_ptrs),
@@ -631,7 +570,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                 for (frame.outputs.items) |cmd| {
                     switch (cmd) {
                         .BeginFrame => raylib.beginDrawing(),
-                        .Clear => |c| raylib.clearBackground(types.Color.fromU8Safe(c)),
+                        .Clear => |c| raylib.clearBackground(types.Color.fromU8(c)),
                         .Circle => |c| raylib.drawCircle(c.toCircle()),
                         .CircleGradient => |cg| raylib.drawCircleGradient(cg.toCircleGradient()),
                         .Rectangle => |r| raylib.drawRectangle(r.toRectangle()),
@@ -644,7 +583,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                             if (text_content.len < buf.len) {
                                 @memcpy(buf[0..text_content.len], text_content);
                                 buf[text_content.len] = 0;
-                                raylib.drawTextRaw(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, raylib.colorToRl(types.Color.fromU8Safe(t.color)));
+                                raylib.drawTextZ(buf[0..text_content.len :0], @intFromFloat(t.pos_x), @intFromFloat(t.pos_y), t.size, types.Color.fromU8(t.color));
                             }
                         },
                         .EndFrame => {

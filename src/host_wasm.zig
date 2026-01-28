@@ -4,13 +4,12 @@
 //!
 //! Architecture:
 //! - This host handles Roc FFI, memory callbacks, and WASM exports
-//! - The command buffer backend (backend/wasm.zig) handles draw buffering
+//! - The command buffer backend (backend_wasm.zig) handles draw buffering
 //! - JavaScript reads the command buffer after each frame
 
 const std = @import("std");
 const builtin = @import("builtin");
-const wasm = @import("backend/wasm.zig");
-const ffi = @import("roc_ffi.zig");
+const wasm = @import("backend_wasm.zig");
 
 pub const CommandBuffer = wasm.CommandBuffer;
 pub const MAX_COMMANDS = wasm.MAX_COMMANDS;
@@ -32,9 +31,6 @@ const Try_BoxModel_I64 = types.Try_BoxModel_I64;
 const RenderArgs = types.RenderArgs;
 const RocOps = types.RocOps;
 const HostedFn = types.HostedFn;
-const RocAlloc = types.RocAlloc;
-const RocDealloc = types.RocDealloc;
-const RocRealloc = types.RocRealloc;
 const RocDbg = types.RocDbg;
 const RocExpectFailed = types.RocExpectFailed;
 const RocCrashed = types.RocCrashed;
@@ -54,6 +50,11 @@ else
 fn stubRocInit(_: *RocOps, _: *Try_BoxModel_I64, _: ?*anyopaque) callconv(.c) void {}
 fn stubRocRender(_: *RocOps, _: *Try_BoxModel_I64, _: *RenderArgs) callconv(.c) void {}
 
+const ffi = @import("roc_ffi.zig");
+
+/// Use shared wrapHostedFn from roc_ffi for type-safe hosted function wrapping.
+const wrapHostedFn = ffi.wrapHostedFn;
+
 // Allocation telemetry - track allocations for leak detection
 // JS can read these via exported getters and log them to detect memory leaks over time
 var alloc_count: u64 = 0;
@@ -71,105 +72,48 @@ var frame_count: u64 = 0;
 var dummy_env: u8 = 0;
 
 // Conditional allocator: WASM uses wasm_allocator, native uses page_allocator (for testing)
-const allocator_vtable = if (builtin.cpu.arch == .wasm32)
-    std.heap.wasm_allocator.vtable
+const wasm_allocator: std.mem.Allocator = if (builtin.cpu.arch == .wasm32)
+    std.heap.wasm_allocator
 else
-    std.heap.page_allocator.vtable;
+    std.heap.page_allocator;
 
-// RocOps callback implementations
-fn rocAllocFn(args: *RocAlloc, env: *anyopaque) callconv(.c) void {
-    _ = env;
+/// Allocator getter for ffi.RocMemory (ignores env, uses global allocator).
+fn getWasmAllocator(_: *anyopaque) std.mem.Allocator {
+    return wasm_allocator;
+}
 
-    const align_enum = std.mem.Alignment.fromByteUnits(args.alignment);
+/// OOM handler for WASM - throws JS error.
+fn wasmOOM() noreturn {
+    js_throw_error("Out of memory", 13);
+}
 
-    // Calculate additional bytes needed to store the size
-    const size_storage_bytes = @max(args.alignment, @alignOf(usize));
-    const total_size = args.length + size_storage_bytes;
-
-    // Allocate memory including space for size metadata
-    const base_ptr = allocator_vtable.alloc(undefined, total_size, align_enum, @returnAddress()) orelse {
-        js_throw_error("Out of memory during rocAlloc", 29);
-    };
-
-    // Store the total size (including metadata) right before the user data
-    const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
-    size_ptr.* = total_size;
-
-    // Track allocation telemetry
+/// Telemetry: track allocation.
+fn onAlloc(bytes: usize) void {
     alloc_count += 1;
-    bytes_allocated += args.length;
-
-    // Return pointer to the user data (after the size metadata)
-    args.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
+    bytes_allocated += bytes;
 }
 
-fn rocDeallocFn(args: *RocDealloc, env: *anyopaque) callconv(.c) void {
-    _ = env;
-
-    // Calculate where the size metadata is stored
-    const size_storage_bytes = @max(args.alignment, @alignOf(usize));
-    const size_ptr: *const usize = @ptrFromInt(@intFromPtr(args.ptr) - @sizeOf(usize));
-
-    // Read the total size from metadata
-    const total_size = size_ptr.*;
-
-    // Calculate the base pointer (start of actual allocation)
-    const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(args.ptr) - size_storage_bytes);
-
-    // Calculate alignment
-    const log2_align = std.math.log2_int(u29, @intCast(args.alignment));
-    const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
-
-    // Track deallocation telemetry (user bytes = total - metadata)
-    const user_bytes = total_size - size_storage_bytes;
+/// Telemetry: track deallocation.
+fn onDealloc(bytes: usize) void {
     dealloc_count += 1;
-    bytes_freed += user_bytes;
-
-    // Free the memory (including the size metadata)
-    const slice = base_ptr[0..total_size];
-    allocator_vtable.free(undefined, slice, align_enum, @returnAddress());
+    bytes_freed += bytes;
 }
 
-fn rocReallocFn(args: *RocRealloc, env: *anyopaque) callconv(.c) void {
-    _ = env;
-
-    // Calculate where the size metadata is stored for the old allocation
-    const size_storage_bytes = @max(args.alignment, @alignOf(usize));
-    const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(args.answer) - @sizeOf(usize));
-
-    // Read the old total size from metadata
-    const old_total_size = old_size_ptr.*;
-    const old_user_bytes = old_total_size - size_storage_bytes;
-
-    // Calculate the old base pointer (start of actual allocation)
-    const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(args.answer) - size_storage_bytes);
-
-    // Calculate new total size needed
-    const new_total_size = args.new_length + size_storage_bytes;
-
-    // Perform reallocation
-    const old_slice = old_base_ptr[0..old_total_size];
-    const log2_align = std.math.log2_int(u29, @intCast(args.alignment));
-    const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
-
-    const new_base_ptr = allocator_vtable.remap(undefined, old_slice, align_enum, new_total_size, @returnAddress()) orelse {
-        // remap failed, keep old pointer
-        return;
-    };
-
-    // Track reallocation telemetry
+/// Telemetry: track reallocation.
+fn onRealloc(old_bytes: usize, new_bytes: usize) void {
     realloc_count += 1;
-    // Adjust bytes: freed old user bytes, allocated new user bytes
-    bytes_freed += old_user_bytes;
-    bytes_allocated += args.new_length;
-
-    // Store the new total size in the metadata
-    const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
-    new_size_ptr.* = new_total_size;
-
-    // Return pointer to the user data (after the size metadata)
-    args.answer = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
+    bytes_freed += old_bytes;
+    bytes_allocated += new_bytes;
 }
+
+/// Memory management callbacks using shared RocMemory implementation with WASM telemetry.
+const WasmMemory = ffi.RocMemory(.{
+    .getAllocator = &getWasmAllocator,
+    .onOOM = &wasmOOM,
+    .onAlloc = &onAlloc,
+    .onDealloc = &onDealloc,
+    .onRealloc = &onRealloc,
+});
 
 // Exported allocation functions (Roc imports these at link time)
 
@@ -178,7 +122,7 @@ export fn roc_alloc(size: usize, alignment: u32) callconv(.c) ?[*]u8 {
     const size_storage_bytes = @max(alignment, @alignOf(usize));
     const total_size = size + size_storage_bytes;
 
-    const base_ptr = allocator_vtable.alloc(undefined, total_size, align_enum, @returnAddress()) orelse {
+    const base_ptr = wasm_allocator.vtable.alloc(undefined, total_size, align_enum, @returnAddress()) orelse {
         return null;
     };
 
@@ -208,7 +152,7 @@ export fn roc_dealloc(ptr: [*]u8, alignment: u32) callconv(.c) void {
     bytes_freed += user_bytes;
 
     const slice = base_ptr[0..total_size];
-    allocator_vtable.free(undefined, slice, align_enum, @returnAddress());
+    wasm_allocator.vtable.free(undefined, slice, align_enum, @returnAddress());
 }
 
 export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) callconv(.c) ?[*]u8 {
@@ -223,7 +167,7 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) cal
     const log2_align = std.math.log2_int(u29, @intCast(alignment));
     const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
 
-    const new_base_ptr = allocator_vtable.remap(undefined, old_slice, align_enum, new_total_size, @returnAddress()) orelse {
+    const new_base_ptr = wasm_allocator.vtable.remap(undefined, old_slice, align_enum, new_total_size, @returnAddress()) orelse {
         return null;
     };
 
@@ -288,83 +232,86 @@ export fn roc_panic(msg_ptr: [*]const u8, msg_len: usize) callconv(.c) noreturn 
     js_throw_error(msg_ptr, msg_len);
 }
 
-fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
+fn hostedDrawBeginFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     wasm.beginDrawing();
 }
 
-fn hostedDrawClear(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const color_discriminant: *const u8 = @ptrCast(args_ptr);
-    const color = types.Color.fromU8Safe(color_discriminant.*);
+fn hostedDrawClear(_: *RocOps, _: *ffi.NoReturn, args: *const u8) void {
+    const color = types.Color.fromU8(args.*);
     wasm.clearBackground(color);
 }
 
-fn hostedDrawCircle(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const circle = ffi.circleFromRoc(args_ptr);
-    wasm.drawCircle(circle);
+fn hostedDrawCircle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Circle.FFI) void {
+    wasm.drawCircle(args.toCircle());
 }
 
-fn hostedDrawCircleGradient(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const cg = ffi.circleGradientFromRoc(args_ptr);
-    wasm.drawCircleGradient(cg);
+fn hostedDrawCircleGradient(_: *RocOps, _: *ffi.NoReturn, args: *const types.CircleGradient.FFI) void {
+    wasm.drawCircleGradient(args.toCircleGradient());
 }
 
-fn hostedDrawEndFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
+fn hostedDrawEndFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     wasm.endDrawing();
 }
 
-fn hostedDrawLine(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const line = ffi.lineFromRoc(args_ptr);
-    wasm.drawLine(line);
+fn hostedDrawLine(_: *RocOps, _: *ffi.NoReturn, args: *const types.Line.FFI) void {
+    wasm.drawLine(args.toLine());
 }
 
-fn hostedDrawRectangle(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const rect = ffi.rectangleFromRoc(args_ptr);
-    wasm.drawRectangle(rect);
+fn hostedDrawRectangle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Rectangle.FFI) void {
+    wasm.drawRectangle(args.toRectangle());
 }
 
-fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const rg = ffi.rectangleGradientHFromRoc(args_ptr);
-    wasm.drawRectangleGradientH(rg);
+fn hostedDrawRectangleGradientH(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientH.FFI) void {
+    wasm.drawRectangleGradientH(args.toRectangleGradientH());
 }
 
-fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const rg = ffi.rectangleGradientVFromRoc(args_ptr);
-    wasm.drawRectangleGradientV(rg);
+fn hostedDrawRectangleGradientV(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientV.FFI) void {
+    wasm.drawRectangleGradientV(args.toRectangleGradientV());
 }
 
-fn hostedDrawText(_: *RocOps, _: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    const text = ffi.textFromRoc(args_ptr);
+fn hostedDrawText(_: *RocOps, _: *ffi.NoReturn, args: *const types.Text.FFI) void {
+    const text = types.Text{
+        .pos = args.pos.toVector2(),
+        .content = args.text.asSlice(),
+        .size = args.size,
+        .color = types.Color.fromU8(args.color),
+    };
     var buf: [256:0]u8 = undefined;
     wasm.drawText(text, &buf);
 }
 
-fn hostedReadEnv(_: *RocOps, ret_ptr: *anyopaque, _: *anyopaque) callconv(.c) void {
+const ReadEnvArgs = extern struct {
+    host_arg: types.InputState.FFI,
+    key_str: types.RocStr,
+};
+
+fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
     // WASM doesn't have environment variables - always return NotFound
-    const result: *types.Try_Str_NotFound = @ptrCast(@alignCast(ret_ptr));
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-/// Hosted function pointers (alphabetical order by fully-qualified name)
+/// Hosted function pointers (alphabetical order by fully-qualified name).
+/// All functions use wrapHostedFn for type-safe pointer casting.
 const hosted_function_ptrs = [_]HostedFn{
-    hostedDrawBeginFrame, // Draw.begin_frame! (0)
-    hostedDrawCircle, // Draw.circle! (1)
-    hostedDrawCircleGradient, // Draw.circle_gradient! (2)
-    hostedDrawClear, // Draw.clear! (3)
-    hostedDrawEndFrame, // Draw.end_frame! (4)
-    hostedDrawLine, // Draw.line! (5)
-    hostedDrawRectangle, // Draw.rectangle! (6)
-    hostedDrawRectangleGradientH, // Draw.rectangle_gradient_h! (7)
-    hostedDrawRectangleGradientV, // Draw.rectangle_gradient_v! (8)
-    hostedDrawText, // Draw.text! (9)
-    hostedReadEnv, // Host.read_env! (10)
+    wrapHostedFn(hostedDrawBeginFrame), // Draw.begin_frame! (0)
+    wrapHostedFn(hostedDrawCircle), // Draw.circle! (1)
+    wrapHostedFn(hostedDrawCircleGradient), // Draw.circle_gradient! (2)
+    wrapHostedFn(hostedDrawClear), // Draw.clear! (3)
+    wrapHostedFn(hostedDrawEndFrame), // Draw.end_frame! (4)
+    wrapHostedFn(hostedDrawLine), // Draw.line! (5)
+    wrapHostedFn(hostedDrawRectangle), // Draw.rectangle! (6)
+    wrapHostedFn(hostedDrawRectangleGradientH), // Draw.rectangle_gradient_h! (7)
+    wrapHostedFn(hostedDrawRectangleGradientV), // Draw.rectangle_gradient_v! (8)
+    wrapHostedFn(hostedDrawText), // Draw.text! (9)
+    wrapHostedFn(hostedReadEnv), // Host.read_env! (10)
 };
 
 fn makeRocOps() RocOps {
     return RocOps{
         .env = @ptrCast(&dummy_env),
-        .roc_alloc = rocAllocFn,
-        .roc_dealloc = rocDeallocFn,
-        .roc_realloc = rocReallocFn,
+        .roc_alloc = WasmMemory.alloc,
+        .roc_dealloc = WasmMemory.dealloc,
+        .roc_realloc = WasmMemory.realloc,
         .roc_dbg = rocDbgFn,
         .roc_expect_failed = rocExpectFailedFn,
         .roc_crashed = rocCrashedFn,
@@ -657,7 +604,7 @@ export fn _reset_memory_telemetry() void {
 }
 
 // Unit Tests
-// Note: Core command buffer tests are in backend/wasm.zig
+// Note: Core command buffer tests are in backend_wasm.zig
 // These tests verify the hosted function bridge layer
 
 const testing = std.testing;

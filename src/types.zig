@@ -48,16 +48,16 @@ pub const Color = enum(u8) {
     white = 11,
     yellow = 12,
 
-    /// Convert from raw u8 discriminant (for FFI boundary).
-    /// Returns null if the value is not a valid color.
-    pub fn fromU8(value: u8) ?Color {
-        return std.meta.intToEnum(Color, value) catch null;
+    /// Convert from raw u8 discriminant, returning white for invalid values.
+    /// This is the default safe API for FFI boundaries.
+    pub fn fromU8(value: u8) Color {
+        return fromU8Checked(value) orelse .white;
     }
 
-    /// Convert from raw u8 discriminant, returning white for invalid values.
-    /// Use this at FFI boundaries where a valid color is always needed.
-    pub fn fromU8Safe(value: u8) Color {
-        return fromU8(value) orelse .white;
+    /// Convert from raw u8 discriminant with validation.
+    /// Returns null if the value is not a valid color discriminant.
+    pub fn fromU8Checked(value: u8) ?Color {
+        return std.meta.intToEnum(Color, value) catch null;
     }
 
     /// Convert to raw u8 discriminant (for serialization).
@@ -115,7 +115,7 @@ pub const Circle = struct {
             return .{
                 .center = self.center.toVector2(),
                 .radius = self.radius,
-                .color = Color.fromU8(self.color) orelse .white,
+                .color = Color.fromU8(self.color),
             };
         }
     };
@@ -154,7 +154,7 @@ pub const Rectangle = struct {
                 .y = self.y,
                 .width = self.width,
                 .height = self.height,
-                .color = Color.fromU8(self.color) orelse .white,
+                .color = Color.fromU8(self.color),
             };
         }
     };
@@ -197,8 +197,8 @@ pub const RectangleGradientV = struct {
                 .y = self.y,
                 .width = self.width,
                 .height = self.height,
-                .color_top = Color.fromU8(self.color_top) orelse .white,
-                .color_bottom = Color.fromU8(self.color_bottom) orelse .white,
+                .color_top = Color.fromU8(self.color_top),
+                .color_bottom = Color.fromU8(self.color_bottom),
             };
         }
     };
@@ -242,8 +242,8 @@ pub const RectangleGradientH = struct {
                 .y = self.y,
                 .width = self.width,
                 .height = self.height,
-                .color_left = Color.fromU8(self.color_left) orelse .white,
-                .color_right = Color.fromU8(self.color_right) orelse .white,
+                .color_left = Color.fromU8(self.color_left),
+                .color_right = Color.fromU8(self.color_right),
             };
         }
     };
@@ -281,8 +281,8 @@ pub const CircleGradient = struct {
             return .{
                 .center = self.center.toVector2(),
                 .radius = self.radius,
-                .color_inner = Color.fromU8(self.color_inner) orelse .white,
-                .color_outer = Color.fromU8(self.color_outer) orelse .white,
+                .color_inner = Color.fromU8(self.color_inner),
+                .color_outer = Color.fromU8(self.color_outer),
             };
         }
     };
@@ -316,7 +316,7 @@ pub const Line = struct {
             return .{
                 .start = self.start.toVector2(),
                 .end = self.end.toVector2(),
-                .color = Color.fromU8(self.color) orelse .white,
+                .color = Color.fromU8(self.color),
             };
         }
     };
@@ -545,21 +545,33 @@ pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try_BoxModel_I64, arg
 // Tests
 
 test "Color.fromU8 valid values" {
-    try std.testing.expectEqual(Color.black, Color.fromU8(0).?);
-    try std.testing.expectEqual(Color.blue, Color.fromU8(1).?);
-    try std.testing.expectEqual(Color.white, Color.fromU8(11).?);
-    try std.testing.expectEqual(Color.yellow, Color.fromU8(12).?);
+    try std.testing.expectEqual(Color.black, Color.fromU8(0));
+    try std.testing.expectEqual(Color.blue, Color.fromU8(1));
+    try std.testing.expectEqual(Color.white, Color.fromU8(11));
+    try std.testing.expectEqual(Color.yellow, Color.fromU8(12));
 }
 
-test "Color.fromU8 invalid value returns null" {
-    try std.testing.expect(Color.fromU8(13) == null);
-    try std.testing.expect(Color.fromU8(255) == null);
+test "Color.fromU8 invalid value returns white" {
+    try std.testing.expectEqual(Color.white, Color.fromU8(13));
+    try std.testing.expectEqual(Color.white, Color.fromU8(255));
+}
+
+test "Color.fromU8Checked valid values" {
+    try std.testing.expectEqual(Color.black, Color.fromU8Checked(0).?);
+    try std.testing.expectEqual(Color.blue, Color.fromU8Checked(1).?);
+    try std.testing.expectEqual(Color.white, Color.fromU8Checked(11).?);
+    try std.testing.expectEqual(Color.yellow, Color.fromU8Checked(12).?);
+}
+
+test "Color.fromU8Checked invalid value returns null" {
+    try std.testing.expect(Color.fromU8Checked(13) == null);
+    try std.testing.expect(Color.fromU8Checked(255) == null);
 }
 
 test "Color.toU8 round trip" {
     inline for (std.meta.fields(Color)) |field| {
         const color: Color = @enumFromInt(field.value);
-        try std.testing.expectEqual(color, Color.fromU8(color.toU8()).?);
+        try std.testing.expectEqual(color, Color.fromU8(color.toU8()));
     }
 }
 

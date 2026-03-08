@@ -13,8 +13,8 @@ const types = @import("types.zig");
 /// Magic bytes for .rrsim file format
 pub const MAGIC = [4]u8{ 'R', 'R', 'S', 'M' };
 
-/// Current format version (v2: u64 frame_count, epsilon-based float comparison)
-pub const VERSION: u32 = 3;
+/// Current format version (v4: adds keyboard state - 349 bytes per frame)
+pub const VERSION: u32 = 4;
 
 /// Epsilon for floating-point comparisons.
 /// Set to 0.001 (1/1000th of a pixel) which is:
@@ -582,6 +582,8 @@ pub const SimState = struct {
             try writer.writeByte(frame.inputs.mouse_left);
             try writer.writeByte(frame.inputs.mouse_middle);
             try writer.writeByte(frame.inputs.mouse_right);
+            // Write keyboard state (349 bytes)
+            try writer.writeAll(&frame.inputs.keys);
 
             // Write output count
             try writer.writeInt(u32, @intCast(frame.outputs.items.len), .little);
@@ -653,7 +655,7 @@ pub const SimState = struct {
         var size: usize = 16; // Header
         size += self.string_buffer.items.len; // String table
         for (self.frames.items) |frame| {
-            size += 23; // InputState fields: u64 + 3*f32 + 3*u8
+            size += 23 + types.KEY_COUNT; // InputState fields: u64 + 3*f32 + 3*u8 + 349 keys
             size += 4; // output_count
             for (frame.outputs.items) |cmd| {
                 size += 1; // command tag
@@ -786,6 +788,10 @@ pub const SimState = struct {
             frame.inputs.mouse_left = try readByte(data, &pos);
             frame.inputs.mouse_middle = try readByte(data, &pos);
             frame.inputs.mouse_right = try readByte(data, &pos);
+            // Read keyboard state (349 bytes)
+            if (pos + types.KEY_COUNT > data.len) return error.UnexpectedEof;
+            @memcpy(&frame.inputs.keys, data[pos..][0..types.KEY_COUNT]);
+            pos += types.KEY_COUNT;
 
             // Read outputs
             const output_count = try readU32(data, &pos);
@@ -1006,6 +1012,7 @@ test "rrsim format round-trip" {
         .mouse_left = 1,
         .mouse_middle = 0,
         .mouse_right = 1,
+        .keys = [_]u8{0} ** types.KEY_COUNT,
     };
     try frame.outputs.append(allocator, .{ .BeginFrame = {} });
     try frame.outputs.append(allocator, .{ .Clear = 5 });

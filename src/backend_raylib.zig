@@ -12,6 +12,22 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
+/// Persistent keyboard state - updated each frame
+var key_state: [types.KEY_COUNT]u8 = [_]u8{0} ** types.KEY_COUNT;
+
+/// Update keyboard state from raylib (call once per frame)
+pub fn updateKeyboardState() void {
+    for (0..types.KEY_COUNT) |i| {
+        const key: c_int = @intCast(i);
+        key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
+    }
+}
+
+/// Get the current keyboard state array
+pub fn getKeyState() *const [types.KEY_COUNT]u8 {
+    return &key_state;
+}
+
 /// Convert safe Color enum to raylib Color.
 pub fn colorToRl(color: types.Color) rl.Color {
     return switch (color) {
@@ -117,6 +133,11 @@ pub fn drawCircleGradient(cg: types.CircleGradient) void {
         colorToRl(cg.color_inner),
         colorToRl(cg.color_outer),
     );
+}
+
+/// Draw FPS counter at specified position.
+pub fn drawFps(x: c_int, y: c_int) void {
+    rl.DrawFPS(x, y);
 }
 
 /// Begin drawing frame.

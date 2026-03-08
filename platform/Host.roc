@@ -1,6 +1,9 @@
 ## Host module - provides platform state and system effects
+import Keys
+
 Host := {
 	frame_count : U64,
+	keys : Keys,
 	mouse : {
 		left : Bool,
 		middle : Bool,
@@ -14,7 +17,7 @@ Host := {
 
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
-	exit! : I64 => {}
+	exit! : I32 => {}
 
 	## Get the current screen/window dimensions.
 	get_screen_size! : () => ScreenSize
@@ -25,7 +28,6 @@ Host := {
 
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	## Uses F32 for width/height since most apps use floats for pixel math.
 	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported, ..])
 
 	## Set the target frames per second for the render loop.

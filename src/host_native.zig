@@ -6,6 +6,9 @@ const builtins = @import("builtins");
 // Import types (includes Roc ABI types and safe types)
 const types = @import("types.zig");
 
+// Import generated platform ABI (use for hosted function arg/ret types)
+const abi = @import("roc_platform_abi.zig");
+
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
 
@@ -21,7 +24,7 @@ const overlay = @import("overlay_native.zig");
 // Type aliases for Roc ABI
 const RocBox = types.RocBox;
 const RocHostState = types.InputState.FFI;
-const Try_BoxModel_I64 = types.Try_BoxModel_I64;
+const Try_BoxModel_I32 = types.Try_BoxModel_I32;
 const RenderArgs = types.RenderArgs;
 const RocOps = types.RocOps;
 const HostedFn = types.HostedFn;
@@ -104,7 +107,8 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
 }
 
-fn hostedDrawBeginFrame(host: *HostEnv, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
+fn hostedDrawBeginFrame(ops: *types.RocOps, _: *anyopaque, _: *anyopaque) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     // Record output if simulation active
     if (host.sim_state) |s| {
         s.recordOutput(.{ .BeginFrame = {} }) catch {};
@@ -114,7 +118,8 @@ fn hostedDrawBeginFrame(host: *HostEnv, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Circle.FFI) void {
+fn hostedDrawCircle(ops: *types.RocOps, _: *anyopaque, args: *const types.Circle.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const circle = args.toCircle();
 
     // Record output if simulation active
@@ -126,7 +131,8 @@ fn hostedDrawCircle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Circle.
     raylib.drawCircle(circle);
 }
 
-fn hostedDrawCircleGradient(host: *HostEnv, _: *ffi.NoReturn, args: *const types.CircleGradient.FFI) void {
+fn hostedDrawCircleGradient(ops: *types.RocOps, _: *anyopaque, args: *const types.CircleGradient.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const cg = args.toCircleGradient();
 
     // Record output if simulation active
@@ -138,8 +144,9 @@ fn hostedDrawCircleGradient(host: *HostEnv, _: *ffi.NoReturn, args: *const types
     raylib.drawCircleGradient(cg);
 }
 
-fn hostedDrawClear(host: *HostEnv, _: *ffi.NoReturn, args: *const u8) void {
-    const color = types.Color.fromU8(args.*);
+fn hostedDrawClear(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawClearArgs) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+    const color = types.Color.fromU8(@intFromEnum(args.arg0));
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -150,17 +157,24 @@ fn hostedDrawClear(host: *HostEnv, _: *ffi.NoReturn, args: *const u8) void {
     raylib.clearBackground(color);
 }
 
-fn hostedDrawEndFrame(host: *HostEnv, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
+fn hostedDrawEndFrame(ops: *types.RocOps, _: *anyopaque, _: *anyopaque) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     // Record output if simulation active
     if (host.sim_state) |s| {
         s.recordOutput(.{ .EndFrame = {} }) catch {};
         if (s.mode == .Test) return;
     }
 
+    // Show FPS counter in debug builds
+    if (builtin.mode == .Debug) {
+        raylib.drawFps(10, 10);
+    }
+
     raylib.endDrawing();
 }
 
-fn hostedDrawLine(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Line.FFI) void {
+fn hostedDrawLine(ops: *types.RocOps, _: *anyopaque, args: *const types.Line.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const line = args.toLine();
 
     // Record output if simulation active
@@ -172,7 +186,8 @@ fn hostedDrawLine(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Line.FFI)
     raylib.drawLine(line);
 }
 
-fn hostedDrawRectangle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Rectangle.FFI) void {
+fn hostedDrawRectangle(ops: *types.RocOps, _: *anyopaque, args: *const types.Rectangle.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const rect = args.toRectangle();
 
     // Record output if simulation active
@@ -184,7 +199,8 @@ fn hostedDrawRectangle(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Rect
     raylib.drawRectangle(rect);
 }
 
-fn hostedDrawRectangleGradientH(host: *HostEnv, _: *ffi.NoReturn, args: *const types.RectangleGradientH.FFI) void {
+fn hostedDrawRectangleGradientH(ops: *types.RocOps, _: *anyopaque, args: *const types.RectangleGradientH.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const rg = args.toRectangleGradientH();
 
     // Record output if simulation active
@@ -196,7 +212,8 @@ fn hostedDrawRectangleGradientH(host: *HostEnv, _: *ffi.NoReturn, args: *const t
     raylib.drawRectangleGradientH(rg);
 }
 
-fn hostedDrawRectangleGradientV(host: *HostEnv, _: *ffi.NoReturn, args: *const types.RectangleGradientV.FFI) void {
+fn hostedDrawRectangleGradientV(ops: *types.RocOps, _: *anyopaque, args: *const types.RectangleGradientV.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const rg = args.toRectangleGradientV();
 
     // Record output if simulation active
@@ -208,7 +225,8 @@ fn hostedDrawRectangleGradientV(host: *HostEnv, _: *ffi.NoReturn, args: *const t
     raylib.drawRectangleGradientV(rg);
 }
 
-fn hostedDrawText(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Text.FFI) void {
+fn hostedDrawText(ops: *types.RocOps, _: *anyopaque, args: *const types.Text.FFI) void {
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const text_slice = args.text.asSlice();
 
     // Record output if simulation active
@@ -227,35 +245,17 @@ fn hostedDrawText(host: *HostEnv, _: *ffi.NoReturn, args: *const types.Text.FFI)
     }
 }
 
-const ReadEnvArgs = extern struct {
-    host_arg: types.InputState.FFI,
-    key_str: types.RocStr,
-};
-
-const ExitArgs = extern struct {
-    exit_code: i64,
-};
-
-const SetTargetFpsArgs = extern struct {
-    fps: i32,
-};
-
-const SetScreenSizeArgs = extern struct {
-    height: f32, // Alphabetical: height before width
-    width: f32,
-};
-
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
-fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
+fn hostedReadEnvWindows(_: *RocOps, result: *types.Try_Str_NotFound, _: *const abi.HostRead_envArgs) void {
     // Windows doesn't link libc, so env var reading is not yet supported
     // TODO: Use native Windows API (GetEnvironmentVariableW) in the future
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *const ReadEnvArgs) void {
-    const key = args.key_str.asSlice();
+fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *const abi.HostRead_envArgs) void {
+    const key = args.arg1.asSlice();
 
     // On POSIX systems, use std.posix.getenv (works after environ initialization)
     const value = std.posix.getenv(key);
@@ -268,21 +268,21 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *types.Try_Str_NotFound, args: *cons
     }
 }
 
-fn hostedExit(_: *HostEnv, _: *ffi.NoReturn, args: *const ExitArgs) void {
-    exit_requested = args.exit_code;
+fn hostedExit(_: *types.RocOps, _: *anyopaque, args: *const abi.HostExitArgs) void {
+    exit_requested = @as(i64, args.arg0);
 }
 
-fn hostedGetScreenSize(_: *HostEnv, result: *types.ScreenSize.FFI, _: *ffi.NoArgs) void {
+fn hostedGetScreenSize(_: *types.RocOps, result: *abi.HostGet_screen_sizeRetRecord, _: *anyopaque) void {
     result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(_: *HostEnv, result: *types.Try_Unit_NotSupported, args: *const SetScreenSizeArgs) void {
+fn hostedSetScreenSize(_: *types.RocOps, result: *types.Try_Unit_NotSupported, args: *const abi.HostSet_screen_sizeArgs) void {
     raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
     result.* = types.Try_Unit_NotSupported.ok();
 }
 
-fn hostedSetTargetFps(_: *HostEnv, _: *ffi.NoReturn, args: *const SetTargetFpsArgs) void {
-    raylib.setTargetFps(args.fps);
+fn hostedSetTargetFps(_: *types.RocOps, _: *anyopaque, args: *const abi.HostSet_target_fpsArgs) void {
+    raylib.setTargetFps(args.arg0);
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name.
@@ -439,6 +439,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
         .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
     };
+    defer {
+        const leak_status = host_env.gpa.deinit();
+        if (leak_status == .leak) {
+            std.log.warn("Memory leak detected", .{});
+        }
+    }
 
     // Initialize simulation state from environment variables
     var sim_state = sim.initFromEnv(host_env.allocator()) catch |err| {
@@ -466,6 +472,11 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         },
     };
 
+    // Keyboard state manager (handles RocList allocation and refcounting)
+    // We incref before each pass to Roc, and Roc decrefs when it drops the old Host.
+    var keys = types.Keys.init(&roc_ops);
+    defer keys.decref();
+
     // argc/argv used above for environ initialization on Linux
 
     // Initialize raylib window (skip in headless test mode)
@@ -489,10 +500,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             std.log.debug("[HOST] Calling roc__init_for_host...", .{});
         }
 
-        var init_result: Try_BoxModel_I64 = undefined;
+        var init_result: Try_BoxModel_I32 = undefined;
         // Create initial host state for init (frame 0, no input)
+        keys.incref(); // Prevent Roc from freeing our list
         var init_state = types.InputState.FFI{
             .frame_count = 0,
+            .keys = keys.list,
             .mouse_wheel = 0,
             .mouse_x = 0,
             .mouse_y = 0,
@@ -518,9 +531,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             if (headless) {
                 std.fs.File.stderr().writeAll("[FAIL] init! returned error\n") catch {};
             }
-            // Clean up sim state before exiting
+            // Clean up sim state before exiting (other cleanup via defer)
             sim_state.deinit();
-            _ = host_env.gpa.deinit();
             // Ensure non-zero exit code (use 1 if err_code is 0 due to Roc wildcard match bug)
             const exit_code: c_int = if (err_code == 0) 1 else @intCast(err_code);
             return exit_code;
@@ -564,17 +576,33 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         var platform_state: RocHostState = undefined;
 
         if (sim_state.mode == .Replay or sim_state.mode == .Test) {
-            // Use recorded inputs
+            // Use recorded inputs - copy keys from recorded state to the persistent list
             if (sim_state.currentFrame()) |frame| {
-                platform_state = frame.inputs.toInputState().toFfi();
+                const input_state = frame.inputs.toInputState();
+                keys.update(&input_state.keys);
+                keys.incref(); // Prevent Roc from freeing our list
+                platform_state = .{
+                    .frame_count = input_state.frame_count,
+                    .keys = keys.list,
+                    .mouse_wheel = input_state.mouse_wheel,
+                    .mouse_x = input_state.mouse_x,
+                    .mouse_y = input_state.mouse_y,
+                    .mouse_left = input_state.mouse_left,
+                    .mouse_middle = input_state.mouse_middle,
+                    .mouse_right = input_state.mouse_right,
+                };
             } else {
                 break;
             }
         } else {
             // Capture real inputs from raylib
+            raylib.updateKeyboardState();
+            keys.update(raylib.getKeyState());
+            keys.incref(); // Prevent Roc from freeing our list
             const mouse_pos = raylib.getMousePosition();
             platform_state = RocHostState{
                 .frame_count = frame_count,
+                .keys = keys.list,
                 .mouse_left = raylib.isMouseButtonDown(.left),
                 .mouse_middle = raylib.isMouseButtonDown(.middle),
                 .mouse_right = raylib.isMouseButtonDown(.right),
@@ -657,7 +685,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                 .model = boxed_model.?,
                 .state = platform_state,
             };
-            var render_result: Try_BoxModel_I64 = undefined;
+            var render_result: Try_BoxModel_I32 = undefined;
 
             const render_start = if (timer) |*t| t.lap() else 0;
             _ = render_start;
@@ -730,12 +758,6 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(model)});
         }
         decrefRocBox(model, &roc_ops);
-    }
-
-    // Check for memory leaks before returning
-    const leak_status = host_env.gpa.deinit();
-    if (leak_status == .leak) {
-        std.log.warn("Memory leak detected", .{});
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code

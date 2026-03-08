@@ -27,7 +27,7 @@ const types = @import("types.zig");
 const RocBox = types.RocBox;
 const RocHostState = types.InputState.FFI;
 const RocRectangle = types.Rectangle.FFI; // Used in tests
-const Try_BoxModel_I64 = types.Try_BoxModel_I64;
+const Try_BoxModel_I32 = types.Try_BoxModel_I32;
 const RenderArgs = types.RenderArgs;
 const RocOps = types.RocOps;
 const HostedFn = types.HostedFn;
@@ -47,10 +47,11 @@ else
     stubRocRender;
 
 // Native stubs (only used during unit testing, not in production)
-fn stubRocInit(_: *RocOps, _: *Try_BoxModel_I64, _: ?*anyopaque) callconv(.c) void {}
-fn stubRocRender(_: *RocOps, _: *Try_BoxModel_I64, _: *RenderArgs) callconv(.c) void {}
+fn stubRocInit(_: *RocOps, _: *Try_BoxModel_I32, _: ?*anyopaque) callconv(.c) void {}
+fn stubRocRender(_: *RocOps, _: *Try_BoxModel_I32, _: *RenderArgs) callconv(.c) void {}
 
 const ffi = @import("roc_ffi.zig");
+const abi = @import("roc_platform_abi.zig");
 
 /// Use shared wrapHostedFn from roc_ffi for type-safe hosted function wrapping.
 const wrapHostedFn = ffi.wrapHostedFn;
@@ -74,6 +75,13 @@ var exit_requested: ?i64 = null;
 // Screen size (set by JS via _set_screen_size, read by Host.get_screen_size!)
 var screen_width: i32 = 800;
 var screen_height: i32 = 600;
+
+// Keyboard state (set by JS via _set_key_down/_set_key_up, passed to Roc each frame)
+var key_state: [types.KEY_COUNT]u8 = [_]u8{0} ** types.KEY_COUNT;
+
+// Keyboard state manager (initialized in _init)
+var keys: types.Keys = undefined;
+var keys_initialized: bool = false;
 
 // Dummy env for RocOps (not used by web host, but must be valid pointer)
 var dummy_env: u8 = 0;
@@ -243,8 +251,8 @@ fn hostedDrawBeginFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     wasm.beginDrawing();
 }
 
-fn hostedDrawClear(_: *RocOps, _: *ffi.NoReturn, args: *const u8) void {
-    const color = types.Color.fromU8(args.*);
+fn hostedDrawClear(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawClearArgs) void {
+    const color = types.Color.fromU8(@intFromEnum(args.arg0));
     wasm.clearBackground(color);
 }
 
@@ -287,43 +295,25 @@ fn hostedDrawText(_: *RocOps, _: *ffi.NoReturn, args: *const types.Text.FFI) voi
     wasm.drawText(text, &buf);
 }
 
-const ReadEnvArgs = extern struct {
-    host_arg: types.InputState.FFI,
-    key_str: types.RocStr,
-};
-
-const ExitArgs = extern struct {
-    exit_code: i64,
-};
-
-const SetTargetFpsArgs = extern struct {
-    fps: i32,
-};
-
-const SetScreenSizeArgs = extern struct {
-    height: f32, // Alphabetical: height before width
-    width: f32,
-};
-
-fn hostedExit(_: *RocOps, _: *ffi.NoReturn, args: *const ExitArgs) void {
-    exit_requested = args.exit_code;
+fn hostedExit(_: *RocOps, _: *ffi.NoReturn, args: *const abi.HostExitArgs) void {
+    exit_requested = @as(i64, args.arg0);
 }
 
-fn hostedGetScreenSize(_: *RocOps, result: *types.ScreenSize.FFI, _: *ffi.NoArgs) void {
+fn hostedGetScreenSize(_: *RocOps, result: *abi.HostGet_screen_sizeRetRecord, _: *ffi.NoArgs) void {
     result.* = .{ .height = screen_height, .width = screen_width };
 }
 
-fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
+fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const abi.HostRead_envArgs) void {
     // WASM doesn't have environment variables - always return NotFound
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-fn hostedSetScreenSize(_: *RocOps, result: *types.Try_Unit_NotSupported, _: *const SetScreenSizeArgs) void {
+fn hostedSetScreenSize(_: *RocOps, result: *types.Try_Unit_NotSupported, _: *const abi.HostSet_screen_sizeArgs) void {
     // WASM can't resize the browser window - return NotSupported
     result.* = types.Try_Unit_NotSupported.notSupported();
 }
 
-fn hostedSetTargetFps(_: *RocOps, _: *ffi.NoReturn, _: *const SetTargetFpsArgs) void {
+fn hostedSetTargetFps(_: *RocOps, _: *ffi.NoReturn, _: *const abi.HostSet_target_fpsArgs) void {
     // No-op on WASM - browser controls frame timing via requestAnimationFrame
 }
 
@@ -366,10 +356,19 @@ fn makeRocOps() RocOps {
 /// Initialize the app - call once at startup
 export fn _init() void {
     var roc_ops = makeRocOps();
-    var result: Try_BoxModel_I64 = undefined;
+
+    // Initialize keyboard state manager
+    if (!keys_initialized) {
+        keys = types.Keys.init(&roc_ops);
+        keys_initialized = true;
+    }
+
+    var result: Try_BoxModel_I32 = undefined;
     // Create initial host state for init (frame 0, no input)
+    keys.incref(); // Prevent Roc from freeing our list
     var init_state = types.InputState.FFI{
         .frame_count = 0,
+        .keys = keys.list,
         .mouse_wheel = 0,
         .mouse_x = 0,
         .mouse_y = 0,
@@ -389,9 +388,13 @@ export fn _init() void {
 export fn _frame(mouse_x: f32, mouse_y: f32, buttons: u32, wheel: f32) void {
     if (!app_initialized) return;
 
-    var roc_ops = makeRocOps();
+    // Update keyboard state from JS-provided key_state array
+    keys.update(&key_state);
+    keys.incref(); // Prevent Roc from freeing our list
+
     const platform_state = RocHostState{
         .frame_count = frame_count,
+        .keys = keys.list,
         .mouse_x = mouse_x,
         .mouse_y = mouse_y,
         .mouse_left = (buttons & 1) != 0,
@@ -400,7 +403,8 @@ export fn _frame(mouse_x: f32, mouse_y: f32, buttons: u32, wheel: f32) void {
         .mouse_wheel = wheel,
     };
 
-    var result: Try_BoxModel_I64 = undefined;
+    var roc_ops = makeRocOps();
+    var result: Try_BoxModel_I32 = undefined;
     var args = RenderArgs{ .model = app_model, .state = platform_state };
     roc__render_for_host(&roc_ops, &result, &args);
 
@@ -616,6 +620,35 @@ export fn _clear_exit_requested() void {
 export fn _set_screen_size(w: i32, h: i32) void {
     screen_width = w;
     screen_height = h;
+}
+
+// Keyboard State Exports
+// These functions allow JavaScript to update keyboard state from keydown/keyup events.
+// JS should call _set_key_down/up on keyboard events, then the state is automatically
+// passed to Roc each frame via the keys list.
+
+/// Set a key to Down state (1). JS should call this on keydown events.
+/// key_code should be the raylib key code (0-348).
+export fn _set_key_down(key_code: u32) void {
+    if (key_code < types.KEY_COUNT) {
+        key_state[key_code] = 1;
+    }
+}
+
+/// Set a key to Up state (0). JS should call this on keyup events.
+/// key_code should be the raylib key code (0-348).
+export fn _set_key_up(key_code: u32) void {
+    if (key_code < types.KEY_COUNT) {
+        key_state[key_code] = 0;
+    }
+}
+
+/// Get the current state of a key (0=Up, 1=Down). Useful for debugging.
+export fn _get_key_state(key_code: u32) u8 {
+    if (key_code < types.KEY_COUNT) {
+        return key_state[key_code];
+    }
+    return 0;
 }
 
 // Memory Telemetry Exports

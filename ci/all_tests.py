@@ -3,16 +3,17 @@
 Run all tests for the roc-ray platform.
 
 This script runs:
-1. roc check - Type check all examples
-2. roc fmt --check - Verify formatting
-3. roc test - Run inline tests
-4. roc build - Build executables
-5. Simulation tests - Verify .rrsim recordings match
+- roc check - Type check all examples
+- roc fmt --check - Verify formatting
+- roc test - Run inline tests
+- roc build - Build executables
+- Simulation tests - Verify .rrsim recordings match
 
 Usage:
     ./ci/all_tests.py              # Run all tests
     ./ci/all_tests.py --skip-sim   # Skip simulation tests (useful if no display)
     ./ci/all_tests.py --verbose    # Show all output
+    ./ci/all_tests.py --record     # Record new .rrsim files for each example
 
 TODO replace me with a Roc script when basic-cli is implemented
 """
@@ -96,6 +97,11 @@ def main() -> int:
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show all command output"
     )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="Record new .rrsim files for each example (interactive)",
+    )
     args = parser.parse_args()
 
     # Find project root (parent of ci/)
@@ -111,16 +117,16 @@ def main() -> int:
 
     failed = []
 
-    # 0. Build platform (ensures fresh host, not cached)
-    print("\n[0/5] Building platform (zig build)...")
+    # Build platform (ensures fresh host, not cached)
+    print("\nBuilding platform (zig build)...")
     if not run_cmd(["zig", "build"], "zig build", args.verbose, cwd=root):
         print("  FAILED")
         failed.append("zig build")
     else:
         print("  ok")
 
-    # 1. roc check
-    print("\n[1/5] Running roc check...")
+    # roc check
+    print("\nRunning roc check...")
     for example in examples:
         print(f"  Checking {example.name}...", end=" ", flush=True)
         if run_cmd(
@@ -131,8 +137,8 @@ def main() -> int:
             print("FAILED")
             failed.append(f"roc check {example.name}")
 
-    # 2. roc fmt --check
-    print("\n[2/5] Running roc fmt --check...")
+    # roc fmt --check
+    print("\nRunning roc fmt --check...")
     for example in examples:
         print(f"  Formatting {example.name}...", end=" ", flush=True)
         if run_cmd(
@@ -143,8 +149,8 @@ def main() -> int:
             print("FAILED")
             failed.append(f"roc fmt {example.name}")
 
-    # 3. roc test
-    print("\n[3/5] Running roc test...")
+    # roc test
+    print("\nRunning roc test...")
     for example in examples:
         print(f"  Testing {example.name}...", end=" ", flush=True)
         if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
@@ -153,11 +159,11 @@ def main() -> int:
             print("FAILED")
             failed.append(f"roc test {example.name}")
 
-    # 4. roc build (run from examples dir so executables are created there)
+    # roc build (run from examples dir so executables are created there)
     if args.skip_build:
-        print("\n[4/5] Skipping roc build (--skip-build)")
+        print("\nSkipping roc build (--skip-build)")
     else:
-        print("\n[4/5] Running roc build...")
+        print("\nRunning roc build...")
         for example in examples:
             print(f"  Building {example.name}...", end=" ", flush=True)
             if run_cmd(
@@ -168,18 +174,65 @@ def main() -> int:
                 print("FAILED")
                 failed.append(f"roc build {example.name}")
 
-    # 5. Simulation tests
+    # Record mode (if --record flag is set)
+    if args.record:
+        if args.skip_build:
+            print("\nCannot record without building (--skip-build conflicts with --record)")
+            return 1
+        print(f"\nRecording .rrsim files for {len(examples)} example(s)...")
+        print("      (Interact with each app, then close the window to save)")
+        for example in examples:
+            rrsim_path = examples_dir / f"{example.stem}_1.rrsim"
+            executable = examples_dir / example.stem
+            print(f"  Recording {example.stem}...", end=" ", flush=True)
+
+            if not executable.exists():
+                print(f"FAILED (executable not found)")
+                failed.append(f"record {example.name} (no executable)")
+                continue
+
+            env = {"SIM_RECORD": str(rrsim_path)}
+            # Add required env vars for specific tests
+            if executable.name == "read_env":
+                env["USER"] = "TestUser"
+                env["GREETING"] = "Hello"
+
+            # Run interactively (not captured) so user can interact
+            print(f"(close window when done)")
+            result = subprocess.run(
+                [f"./{executable.name}"],
+                env={**os.environ, **env},
+                cwd=examples_dir,
+                shell=IS_WINDOWS,
+            )
+            if result.returncode == 0 and rrsim_path.exists():
+                print(f"    -> Saved {rrsim_path.name}")
+            else:
+                print(f"    -> FAILED to save {rrsim_path.name}")
+                failed.append(f"record {example.name}")
+
+        print("\n" + "=" * 50)
+        if failed:
+            print(f"FAILED: {len(failed)} recording(s)")
+            for f in failed:
+                print(f"  - {f}")
+            return 1
+        else:
+            print(f"Successfully recorded {len(examples)} .rrsim file(s)!")
+            return 0
+
+    # Simulation tests
     if args.skip_sim or args.skip_build:
         print(
-            "\n[5/5] Skipping simulation tests"
+            "\nSkipping simulation tests"
             + (" (--skip-sim)" if args.skip_sim else " (--skip-build)")
         )
     else:
         simulations = find_simulations(examples_dir)
         if not simulations:
-            print("\n[5/5] No simulation tests found (no .rrsim files)")
+            print("\nNo simulation tests found (no .rrsim files)")
         else:
-            print(f"\n[5/5] Running {len(simulations)} simulation test(s)...")
+            print(f"\nRunning {len(simulations)} simulation test(s)...")
             for rrsim, executable in simulations:
                 print(f"  {rrsim.name} -> {executable.name}...", end=" ", flush=True)
 

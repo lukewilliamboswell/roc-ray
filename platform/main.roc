@@ -46,7 +46,6 @@ HostStateFromHost : {
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {
-	host : Host
 	host = {
 		frame_count: host_state.frame_count,
 		keys: Keys.pack(host_state.keys),
@@ -69,7 +68,6 @@ init_for_host! = |host_state| {
 
 render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
 render_for_host! = |boxed_model, host_state| {
-	host : Host
 	host = {
 		frame_count: host_state.frame_count,
 		keys: Keys.pack(host_state.keys),

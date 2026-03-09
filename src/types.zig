@@ -378,24 +378,6 @@ pub const Text = struct {
     size: i32,
     color: Color,
 
-    /// FFI-compatible layout matching Roc's Text.
-    /// On 64-bit: RocStr is 8-byte aligned -> text, pos, size, color
-    /// On 32-bit: RocStr is 4-byte aligned -> pos, size, text, color
-    pub const FFI = if (@sizeOf(*anyopaque) == 4)
-        extern struct {
-            pos: Vector2.FFI,
-            size: i32,
-            text: RocStr,
-            color: u8,
-        }
-    else
-        extern struct {
-            text: RocStr,
-            pos: Vector2.FFI,
-            size: i32,
-            color: u8,
-        };
-
     /// Serialization-only layout for .rrsim format.
     /// Text content is stored separately in the string buffer.
     pub const Serialized = extern struct {
@@ -534,31 +516,6 @@ pub const Try_Str_NotFound = extern struct {
     }
 };
 
-/// Runtime layout for the Roc type `Try({}, [NotSupported, ..])`
-/// Used as return type for effects that may not be supported on all platforms.
-///
-/// Layout explanation:
-/// - Ok({}) has zero-sized payload
-/// - Err([NotSupported, ..]) has a 1-byte payload (the error tag union's discriminant)
-/// - Max payload size = 1 byte, so Try's discriminant is at offset 1
-/// - Roc layout: [payload: u8][discriminant: u8][padding: 6 bytes]
-pub const Try_Unit_NotSupported = extern struct {
-    /// Payload union: unused for Ok, holds error tag discriminant (0=NotSupported) for Err
-    payload: u8,
-    /// Try discriminant: 0 = Err, 1 = Ok
-    discriminant: u8,
-    /// Padding for alignment (Roc tag unions are typically pointer-aligned)
-    _padding: [6]u8,
-
-    pub fn ok() Try_Unit_NotSupported {
-        return .{ .payload = 0, .discriminant = 1, ._padding = undefined };
-    }
-
-    pub fn notSupported() Try_Unit_NotSupported {
-        // payload=0 means NotSupported (first tag in alphabetical order of error type)
-        return .{ .payload = 0, .discriminant = 0, ._padding = undefined };
-    }
-};
 
 /// Runtime layout for the Roc type `Try(Box(Model), I32)`
 /// Used as return type for init_for_host and render_for_host

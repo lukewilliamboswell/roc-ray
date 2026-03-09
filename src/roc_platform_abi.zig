@@ -65,6 +65,26 @@ pub fn hostedFn(func: anytype) HostedFn {
     return @ptrCast(func);
 }
 
+/// Comptime constructor for Roc's `Try(Ok, Err)` result type.
+///
+/// Roc's `Try(ok, err)` is the tag union `[Ok(ok), Err(err)]`.
+/// Layout: payload extern union at offset 0, u8 discriminant after.
+/// Discriminant values: Err = 0, Ok = 1 (alphabetical).
+///
+/// Example: `Try(*anyopaque, i32)` for `Try(Box(Model), I32)`.
+pub fn Try(comptime Ok: type, comptime Err: type) type {
+    const OkField = if (@sizeOf(Ok) == 0) [0]u8 else Ok;
+    const ErrField = if (@sizeOf(Err) == 0) [0]u8 else Err;
+    return extern struct {
+        payload: extern union {
+            err: ErrField,
+            ok: OkField,
+        },
+        tag: TryTag,
+        pub const TryTag = enum(u8) { Err = 0, Ok = 1 };
+    };
+}
+
 /// A Roc string value. Small strings (up to 23 bytes) are stored inline;
 /// larger strings are heap-allocated with a reference count.
 pub const RocStr = extern struct {
@@ -544,6 +564,7 @@ comptime {
 
 /// Element type for __AnonStruct88
 pub const __AnonStruct88 = extern struct {
+    @"init!": *anyopaque,
     @"render!": *anyopaque,
 };
 
@@ -564,27 +585,58 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct107
-pub const __AnonStruct107 = extern struct {
-    mouse_wheel: f32,
+/// Element type for __AnonStruct112
+pub const __AnonStruct112 = extern struct {
+    wheel: f32,
+    x: f32,
+    y: f32,
+    left: bool,
+    middle: bool,
+    right: bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct107) != 4) @compileError("__AnonStruct107 size mismatch");
-        if (@alignOf(__AnonStruct107) != 4) @compileError("__AnonStruct107 alignment mismatch");
+        if (@sizeOf(__AnonStruct112) != 16) @compileError("__AnonStruct112 size mismatch");
+        if (@alignOf(__AnonStruct112) != 4) @compileError("__AnonStruct112 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct114
-pub const __AnonStruct114 = extern struct {
+/// Element type for __AnonStruct123
+pub const __AnonStruct123 = extern struct {
+    frame_count: u64,
+    keys: RocListWith(u8, false),
     mouse_wheel: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_left: bool,
+    mouse_middle: bool,
+    mouse_right: bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct114) != 4) @compileError("__AnonStruct114 size mismatch");
-        if (@alignOf(__AnonStruct114) != 4) @compileError("__AnonStruct114 alignment mismatch");
+        if (@sizeOf(__AnonStruct123) != 48) @compileError("__AnonStruct123 size mismatch");
+        if (@alignOf(__AnonStruct123) != 8) @compileError("__AnonStruct123 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct137
+pub const __AnonStruct137 = extern struct {
+    frame_count: u64,
+    keys: RocListWith(u8, false),
+    mouse_wheel: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_left: bool,
+    mouse_middle: bool,
+    mouse_right: bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct137) != 48) @compileError("__AnonStruct137 size mismatch");
+        if (@alignOf(__AnonStruct137) != 8) @compileError("__AnonStruct137 alignment mismatch");
     }
 }
 
@@ -605,28 +657,6 @@ pub const Color = enum(u8) {
     yellow = 12,
 };
 
-/// Tag discriminant for Try.
-pub const TryTag = enum(u8) {
-    Err = 0,
-    Ok = 1,
-};
-
-/// Tag union: Try
-pub const Try = extern struct {
-    payload: extern union {
-        err: *anyopaque,
-        ok: RocStr,
-    },
-    tag: TryTag,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Try) != 32) @compileError("Try size mismatch");
-        if (@alignOf(Try) != 8) @compileError("Try alignment mismatch");
-    }
-}
-
 /// Return type record for Host.get_screen_size!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const HostGet_screen_sizeRetRecord = extern struct {
@@ -643,6 +673,7 @@ comptime {
 
 /// Arguments for Draw.circle!
 /// Roc signature: Draw.Circle => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawCircleArgs = extern struct {
     center: __AnonStruct3,
     radius: f32,
@@ -658,6 +689,7 @@ comptime {
 
 /// Arguments for Draw.circle_gradient!
 /// Roc signature: Draw.CircleGradient => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawCircle_gradientArgs = extern struct {
     center: __AnonStruct10,
     radius: f32,
@@ -680,6 +712,7 @@ pub const DrawClearArgs = extern struct {
 
 /// Arguments for Draw.line!
 /// Roc signature: Draw.Line => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawLineArgs = extern struct {
     end: __AnonStruct22,
     start: __AnonStruct25,
@@ -695,6 +728,7 @@ comptime {
 
 /// Arguments for Draw.rectangle!
 /// Roc signature: Draw.Rectangle => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawRectangleArgs = extern struct {
     height: f32,
     width: f32,
@@ -712,6 +746,7 @@ comptime {
 
 /// Arguments for Draw.rectangle_gradient_h!
 /// Roc signature: Draw.RectangleGradientH => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawRectangle_gradient_hArgs = extern struct {
     height: f32,
     width: f32,
@@ -730,6 +765,7 @@ comptime {
 
 /// Arguments for Draw.rectangle_gradient_v!
 /// Roc signature: Draw.RectangleGradientV => {}
+/// Fields ordered by alignment descending (Roc ABI)
 pub const DrawRectangle_gradient_vArgs = extern struct {
     height: f32,
     width: f32,
@@ -748,17 +784,27 @@ comptime {
 
 /// Arguments for Draw.text!
 /// Roc signature: Draw.Text => {}
-pub const DrawTextArgs = extern struct {
+/// Fields ordered by alignment descending (Roc ABI)
+pub const DrawTextArgs = if (@sizeOf(usize) == 8) extern struct {
     text: RocStr,
     pos: __AnonStruct54,
     size: i32,
+    color: Color,
+} else extern struct {
+    pos: __AnonStruct54,
+    size: i32,
+    text: RocStr,
     color: Color,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawTextArgs) != 40) @compileError("DrawTextArgs size mismatch");
-        if (@alignOf(DrawTextArgs) != 8) @compileError("DrawTextArgs alignment mismatch");
+    if (@sizeOf(DrawTextArgs) != 40) @compileError("DrawTextArgs size mismatch");
+    if (@alignOf(DrawTextArgs) != 8) @compileError("DrawTextArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+    if (@sizeOf(DrawTextArgs) != 28) @compileError("DrawTextArgs size mismatch");
+    if (@alignOf(DrawTextArgs) != 4) @compileError("DrawTextArgs alignment mismatch");
     }
 }
 
@@ -777,6 +823,7 @@ pub const HostRead_envArgs = extern struct {
 
 /// Arguments for Host.set_screen_size!
 /// Roc signature: { height: F32, width: F32 } => Try({}, [NotSupported, ..])
+/// Fields ordered by alignment descending (Roc ABI)
 pub const HostSet_screen_sizeArgs = extern struct {
     height: f32,
     width: f32,
@@ -810,8 +857,8 @@ pub const PlatformHostedFns = struct {
     draw_text: *const fn (*RocOps, *anyopaque, *const DrawTextArgs) callconv(.c) void, // Draw.text!
     host_exit: *const fn (*RocOps, *anyopaque, *const HostExitArgs) callconv(.c) void, // Host.exit!
     host_get_screen_size: *const fn (*RocOps, *HostGet_screen_sizeRetRecord, *anyopaque) callconv(.c) void, // Host.get_screen_size!
-    host_read_env: *const fn (*RocOps, *Try, *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
-    host_set_screen_size: *const fn (*RocOps, *Try, *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
+    host_read_env: *const fn (*RocOps, *Try(RocStr, void), *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
+    host_set_screen_size: *const fn (*RocOps, *Try(void, void), *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
     host_set_target_fps: *const fn (*RocOps, *anyopaque, *const HostSet_target_fpsArgs) callconv(.c) void, // Host.set_target_fps!
 };
 
@@ -1002,13 +1049,13 @@ pub fn makeRocOps(comptime EnvType: type, env: *EnvType, hosted_fns: HostedFunct
 
 /// Arguments for entrypoint: render_for_host!
 pub const Render_for_hostArgs = extern struct {
-    arg0: **anyopaque,
-    arg1: __AnonStruct114,
+    arg0: *anyopaque,
+    arg1: __AnonStruct137,
 };
 
 /// Entrypoint: init_for_host!
-pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct107) callconv(.c) void;
+pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try(*anyopaque, i64), arg_ptr: ?*const __AnonStruct123) callconv(.c) void;
 
 /// Entrypoint: render_for_host!
-pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
+pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try(*anyopaque, i64), arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
 

@@ -8,17 +8,16 @@
 Keys := { data : List(U8) }.{
 
     ## Keyboard key codes (simplified to WASD for now)
+    ## Create a Keys value from a raw key state list (used internally by the platform)
+    pack : List(U8) -> Keys
+    pack = |bytes| { data: bytes }
+
     KeyboardKey := [
         KeyA,
         KeyD,
         KeyS,
         KeyW,
     ].{
-
-        ## Create a Keys value from a raw key state list (used internally by the platform)
-        pack : List(U8) -> Keys
-        pack = |bytes| { data: bytes }
-
 
         ## Map a KeyboardKey to its raylib key code index
         key_to_index : KeyboardKey -> U64

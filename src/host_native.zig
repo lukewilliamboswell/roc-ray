@@ -118,9 +118,13 @@ fn hostedDrawBeginFrame(ops: *types.RocOps, _: *anyopaque, _: *anyopaque) void {
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircle(ops: *types.RocOps, _: *anyopaque, args: *const types.Circle.FFI) void {
+fn hostedDrawCircle(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawCircleArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const circle = args.toCircle();
+    const circle = types.Circle{
+        .center = .{ .x = args.center.x, .y = args.center.y },
+        .radius = args.radius,
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -131,9 +135,14 @@ fn hostedDrawCircle(ops: *types.RocOps, _: *anyopaque, args: *const types.Circle
     raylib.drawCircle(circle);
 }
 
-fn hostedDrawCircleGradient(ops: *types.RocOps, _: *anyopaque, args: *const types.CircleGradient.FFI) void {
+fn hostedDrawCircleGradient(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawCircle_gradientArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const cg = args.toCircleGradient();
+    const cg = types.CircleGradient{
+        .center = .{ .x = args.center.x, .y = args.center.y },
+        .radius = args.radius,
+        .color_inner = types.Color.fromU8(@intFromEnum(args.color_inner)),
+        .color_outer = types.Color.fromU8(@intFromEnum(args.color_outer)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -173,9 +182,13 @@ fn hostedDrawEndFrame(ops: *types.RocOps, _: *anyopaque, _: *anyopaque) void {
     raylib.endDrawing();
 }
 
-fn hostedDrawLine(ops: *types.RocOps, _: *anyopaque, args: *const types.Line.FFI) void {
+fn hostedDrawLine(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawLineArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const line = args.toLine();
+    const line = types.Line{
+        .start = .{ .x = args.start.x, .y = args.start.y },
+        .end = .{ .x = args.end.x, .y = args.end.y },
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -186,9 +199,15 @@ fn hostedDrawLine(ops: *types.RocOps, _: *anyopaque, args: *const types.Line.FFI
     raylib.drawLine(line);
 }
 
-fn hostedDrawRectangle(ops: *types.RocOps, _: *anyopaque, args: *const types.Rectangle.FFI) void {
+fn hostedDrawRectangle(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawRectangleArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const rect = args.toRectangle();
+    const rect = types.Rectangle{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -199,9 +218,16 @@ fn hostedDrawRectangle(ops: *types.RocOps, _: *anyopaque, args: *const types.Rec
     raylib.drawRectangle(rect);
 }
 
-fn hostedDrawRectangleGradientH(ops: *types.RocOps, _: *anyopaque, args: *const types.RectangleGradientH.FFI) void {
+fn hostedDrawRectangleGradientH(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_hArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const rg = args.toRectangleGradientH();
+    const rg = types.RectangleGradientH{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color_left = types.Color.fromU8(@intFromEnum(args.color_left)),
+        .color_right = types.Color.fromU8(@intFromEnum(args.color_right)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -212,9 +238,16 @@ fn hostedDrawRectangleGradientH(ops: *types.RocOps, _: *anyopaque, args: *const 
     raylib.drawRectangleGradientH(rg);
 }
 
-fn hostedDrawRectangleGradientV(ops: *types.RocOps, _: *anyopaque, args: *const types.RectangleGradientV.FFI) void {
+fn hostedDrawRectangleGradientV(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_vArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const rg = args.toRectangleGradientV();
+    const rg = types.RectangleGradientV{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color_top = types.Color.fromU8(@intFromEnum(args.color_top)),
+        .color_bottom = types.Color.fromU8(@intFromEnum(args.color_bottom)),
+    };
 
     // Record output if simulation active
     if (host.sim_state) |s| {
@@ -225,14 +258,14 @@ fn hostedDrawRectangleGradientV(ops: *types.RocOps, _: *anyopaque, args: *const 
     raylib.drawRectangleGradientV(rg);
 }
 
-fn hostedDrawText(ops: *types.RocOps, _: *anyopaque, args: *const types.Text.FFI) void {
+fn hostedDrawText(ops: *types.RocOps, _: *anyopaque, args: *const abi.DrawTextArgs) void {
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     const text_slice = args.text.asSlice();
 
     // Record output if simulation active
     if (host.sim_state) |s| {
         // Use dedicated text recording that handles Test mode properly
-        s.recordTextOutput(text_slice, args.pos.x, args.pos.y, args.size, args.color) catch {};
+        s.recordTextOutput(text_slice, args.pos.x, args.pos.y, args.size, @intFromEnum(args.color)) catch {};
         if (s.mode == .Test) return;
     }
 
@@ -241,7 +274,7 @@ fn hostedDrawText(ops: *types.RocOps, _: *anyopaque, args: *const types.Text.FFI
     if (text_slice.len < buf.len) {
         @memcpy(buf[0..text_slice.len], text_slice);
         buf[text_slice.len] = 0;
-        raylib.drawTextZ(buf[0..text_slice.len :0], @intFromFloat(args.pos.x), @intFromFloat(args.pos.y), args.size, types.Color.fromU8(args.color));
+        raylib.drawTextZ(buf[0..text_slice.len :0], @intFromFloat(args.pos.x), @intFromFloat(args.pos.y), args.size, types.Color.fromU8(@intFromEnum(args.color)));
     }
 }
 
@@ -276,9 +309,9 @@ fn hostedGetScreenSize(_: *types.RocOps, result: *abi.HostGet_screen_sizeRetReco
     result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(_: *types.RocOps, result: *types.Try_Unit_NotSupported, args: *const abi.HostSet_screen_sizeArgs) void {
+fn hostedSetScreenSize(_: *types.RocOps, result: *abi.Try(void, void), args: *const abi.HostSet_screen_sizeArgs) void {
     raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
-    result.* = types.Try_Unit_NotSupported.ok();
+    result.tag = .Ok;
 }
 
 fn hostedSetTargetFps(_: *types.RocOps, _: *anyopaque, args: *const abi.HostSet_target_fpsArgs) void {

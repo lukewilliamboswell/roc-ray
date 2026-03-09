@@ -256,40 +256,73 @@ fn hostedDrawClear(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawClearArgs)
     wasm.clearBackground(color);
 }
 
-fn hostedDrawCircle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Circle.FFI) void {
-    wasm.drawCircle(args.toCircle());
+fn hostedDrawCircle(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawCircleArgs) void {
+    wasm.drawCircle(.{
+        .center = .{ .x = args.center.x, .y = args.center.y },
+        .radius = args.radius,
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    });
 }
 
-fn hostedDrawCircleGradient(_: *RocOps, _: *ffi.NoReturn, args: *const types.CircleGradient.FFI) void {
-    wasm.drawCircleGradient(args.toCircleGradient());
+fn hostedDrawCircleGradient(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawCircle_gradientArgs) void {
+    wasm.drawCircleGradient(.{
+        .center = .{ .x = args.center.x, .y = args.center.y },
+        .radius = args.radius,
+        .color_inner = types.Color.fromU8(@intFromEnum(args.color_inner)),
+        .color_outer = types.Color.fromU8(@intFromEnum(args.color_outer)),
+    });
 }
 
 fn hostedDrawEndFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
     wasm.endDrawing();
 }
 
-fn hostedDrawLine(_: *RocOps, _: *ffi.NoReturn, args: *const types.Line.FFI) void {
-    wasm.drawLine(args.toLine());
+fn hostedDrawLine(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawLineArgs) void {
+    wasm.drawLine(.{
+        .start = .{ .x = args.start.x, .y = args.start.y },
+        .end = .{ .x = args.end.x, .y = args.end.y },
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    });
 }
 
-fn hostedDrawRectangle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Rectangle.FFI) void {
-    wasm.drawRectangle(args.toRectangle());
+fn hostedDrawRectangle(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawRectangleArgs) void {
+    wasm.drawRectangle(.{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
+    });
 }
 
-fn hostedDrawRectangleGradientH(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientH.FFI) void {
-    wasm.drawRectangleGradientH(args.toRectangleGradientH());
+fn hostedDrawRectangleGradientH(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawRectangle_gradient_hArgs) void {
+    wasm.drawRectangleGradientH(.{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color_left = types.Color.fromU8(@intFromEnum(args.color_left)),
+        .color_right = types.Color.fromU8(@intFromEnum(args.color_right)),
+    });
 }
 
-fn hostedDrawRectangleGradientV(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientV.FFI) void {
-    wasm.drawRectangleGradientV(args.toRectangleGradientV());
+fn hostedDrawRectangleGradientV(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawRectangle_gradient_vArgs) void {
+    wasm.drawRectangleGradientV(.{
+        .x = args.x,
+        .y = args.y,
+        .width = args.width,
+        .height = args.height,
+        .color_top = types.Color.fromU8(@intFromEnum(args.color_top)),
+        .color_bottom = types.Color.fromU8(@intFromEnum(args.color_bottom)),
+    });
 }
 
-fn hostedDrawText(_: *RocOps, _: *ffi.NoReturn, args: *const types.Text.FFI) void {
+fn hostedDrawText(_: *RocOps, _: *ffi.NoReturn, args: *const abi.DrawTextArgs) void {
     const text = types.Text{
-        .pos = args.pos.toVector2(),
+        .pos = .{ .x = args.pos.x, .y = args.pos.y },
         .content = args.text.asSlice(),
         .size = args.size,
-        .color = types.Color.fromU8(args.color),
+        .color = types.Color.fromU8(@intFromEnum(args.color)),
     };
     var buf: [256:0]u8 = undefined;
     wasm.drawText(text, &buf);
@@ -308,9 +341,9 @@ fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const abi.Host
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-fn hostedSetScreenSize(_: *RocOps, result: *types.Try_Unit_NotSupported, _: *const abi.HostSet_screen_sizeArgs) void {
+fn hostedSetScreenSize(_: *RocOps, result: *abi.Try(void, void), _: *const abi.HostSet_screen_sizeArgs) void {
     // WASM can't resize the browser window - return NotSupported
-    result.* = types.Try_Unit_NotSupported.notSupported();
+    result.tag = .Err;
 }
 
 fn hostedSetTargetFps(_: *RocOps, _: *ffi.NoReturn, _: *const abi.HostSet_target_fpsArgs) void {

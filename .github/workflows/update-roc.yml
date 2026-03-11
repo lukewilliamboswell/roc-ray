@@ -1,0 +1,81 @@
+name: Update Roc Dependency
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  update-roc:
+    name: Update Roc to latest main
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get current Roc commit
+        id: current
+        run: |
+          CURRENT_COMMIT=$(python3 ci/get_roc_commit.py)
+          echo "commit=$CURRENT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Current Roc commit: $CURRENT_COMMIT"
+
+      - name: Get latest Roc main commit
+        id: latest
+        run: |
+          LATEST_COMMIT=$(git ls-remote https://github.com/roc-lang/roc refs/heads/main | cut -f1)
+          echo "commit=$LATEST_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Latest Roc main commit: $LATEST_COMMIT"
+
+      - name: Check if update needed
+        id: check
+        run: |
+          if [ "${{ steps.current.outputs.commit }}" = "${{ steps.latest.outputs.commit }}" ]; then
+            echo "Already on latest Roc commit, no update needed"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Update available: ${{ steps.current.outputs.commit }} -> ${{ steps.latest.outputs.commit }}"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Zig
+        if: steps.check.outputs.needed == 'true'
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.15.2
+
+      - name: Update Roc dependency
+        if: steps.check.outputs.needed == 'true'
+        run: python3 ci/update_roc_commit.py "${{ steps.latest.outputs.commit }}"
+
+      - name: Create Pull Request
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="auto-update-roc/${{ steps.latest.outputs.commit }}"
+          SHORT_COMMIT=$(echo "${{ steps.latest.outputs.commit }}" | cut -c1-7)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH_NAME"
+          git add build.zig.zon
+          git commit -m "Update Roc to ${SHORT_COMMIT}"
+          git push -u origin "$BRANCH_NAME"
+
+          gh pr create \
+            --title "Update Roc to ${SHORT_COMMIT}" \
+            --body "Automated update of Roc dependency to [${SHORT_COMMIT}](https://github.com/roc-lang/roc/commit/${{ steps.latest.outputs.commit }}).
+
+          **Previous commit:** \`${{ steps.current.outputs.commit }}\`
+          **New commit:** \`${{ steps.latest.outputs.commit }}\`
+
+          CI will run automatically. Merge if tests pass." \
+            --head "$BRANCH_NAME"

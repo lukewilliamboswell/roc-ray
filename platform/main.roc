@@ -1,86 +1,85 @@
-platform "roc-ray"
-    requires { Model } {
-        init! : {} => Result Model []_,
-        render! : Model, RocRay.PlatformState => Result Model []_,
-    }
-    exposes [
-        RocRay,
-        Camera,
-        Draw,
-        Font,
-        Keys,
-        Mouse,
-        Music,
-        Network,
-        RenderTexture,
-        Sound,
-        Texture,
-        Time,
-    ]
-    packages {}
-    imports []
-    provides [init_for_host!, render_for_host!]
+platform ""
+	requires {
+		[Model : model] for program : {
+			init! : Host => Try(model, [Exit(I64), ..]),
+			render! : model, Host => Try(model, [Exit(I64), ..]),
+		}
+	}
+	exposes [Draw, Color, Host]
+	packages {}
+	provides {
+		init_for_host!: "init_for_host",
+		render_for_host!: "render_for_host",
+	}
+	targets: {
+		files: "targets/",
+		exe: {
+			x64mac: ["libhost.a", "libraylib.a", app],
+			arm64mac: ["libhost.a", "libraylib.a", app],
+			## libm.so must come after libraylib.a (which uses it) or --as-needed drops it
+			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
+			## arm64glibc not supported - raylib doesn't provide pre-built libraries for Linux ARM
+			x64win: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app],
+		}
+		static_lib: {
+			wasm32: ["libhost.a", app],
+		}
+	}
 
-import RocRay
-import Mouse
-import InternalKeyboard
-import InternalMouse
-import Effect
-import Network
+import Draw
+import Color
+import Host
 
-init_for_host! : I32 => Result (Box Model) Str
-init_for_host! = |_x|
-    init!({})
-    |> Result.map_ok(Box.box)
-    |> Result.map_err(Inspect.to_str)
+## Internal type for host boundary - kept simple/flat for C compatibility
+HostStateFromHost : {
+	frame_count : U64,
+	mouse_wheel : F32,
+	mouse_x : F32,
+	mouse_y : F32,
+	mouse_left : Bool,
+	mouse_right : Bool,
+	mouse_middle : Bool,
+}
 
-render_for_host! : Box Model, Effect.PlatformStateFromHost => Result (Box Model) Str
-render_for_host! = |boxed_model, { frame_count, keys, mouse_buttons, timestamp, mouse_pos_x, mouse_pos_y, mouse_wheel, peers, messages }|
-    model = Box.unbox(boxed_model)
+init_for_host! : HostStateFromHost => Try(Box(Model), I64)
+init_for_host! = |host_state| {
+	host : Host
+	host = {
+		frame_count: host_state.frame_count,
+		mouse: {
+			x: host_state.mouse_x,
+			y: host_state.mouse_y,
+			left: host_state.mouse_left,
+			right: host_state.mouse_right,
+			middle: host_state.mouse_middle,
+			wheel: host_state.mouse_wheel,
+		},
+	}
+	match (program.init!)(host) {
+		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+		Err(Exit(code)) => Err(code)
+		## Testing wildcard-only: should return 42 for NotFound
+		Err(_) => Err(42)
+	}
+}
 
-    state : RocRay.PlatformState
-    state = {
-        frame_count,
-        keys: InternalKeyboard.pack(keys),
-        timestamp,
-        mouse: {
-            position: { x: mouse_pos_x, y: mouse_pos_y },
-            buttons: mouse_buttons_for_app({ mouse_buttons }),
-            wheel: mouse_wheel,
-        },
-        network: {
-            peers: {
-                connected: peers.connected |> List.map(Network.from_u64_pair),
-                disconnected: peers.disconnected |> List.map(Network.from_u64_pair),
-            },
-            messages: messages |> List.map(|{ id, bytes }| { id: Network.from_u64_pair(id), bytes }),
-        },
-    }
-
-    render!(model, state)
-    |> Result.map_ok(Box.box)
-    |> Result.map_err(Inspect.to_str)
-
-mouse_buttons_for_app : { mouse_buttons : List U8 } -> Mouse.Buttons
-mouse_buttons_for_app = |{ mouse_buttons }|
-    buttons_to_states : Dict InternalMouse.MouseButton Mouse.ButtonState
-    buttons_to_states =
-        mouse_buttons
-        |> List.map(InternalMouse.mouse_button_state_from_u8)
-        |> List.map_with_index(|s, i| (InternalMouse.mouse_button_from_u64(i), s))
-        |> Dict.from_list
-
-    state_of : InternalMouse.MouseButton -> Mouse.ButtonState
-    state_of = |button|
-        Dict.get(buttons_to_states, button)
-        |> Result.with_default(Up)
-
-    {
-        left: state_of(MouseButtonLeft),
-        right: state_of(MouseButtonRight),
-        middle: state_of(MouseButtonMiddle),
-        side: state_of(MouseButtonSide),
-        extra: state_of(MouseButtonExtra),
-        forward: state_of(MouseButtonForward),
-        back: state_of(MouseButtonBack),
-    }
+render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
+render_for_host! = |boxed_model, host_state| {
+	host : Host
+	host = {
+		frame_count: host_state.frame_count,
+		mouse: {
+			x: host_state.mouse_x,
+			y: host_state.mouse_y,
+			left: host_state.mouse_left,
+			right: host_state.mouse_right,
+			middle: host_state.mouse_middle,
+			wheel: host_state.mouse_wheel,
+		},
+	}
+	match (program.render!)(Box.unbox(boxed_model), host) {
+		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
+	}
+}

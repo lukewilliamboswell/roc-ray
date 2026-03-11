@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (e.g., v0.1.0)"
+        required: true
+        type: string
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-bundle:
+    name: Build and Bundle Platform
+    runs-on: ubuntu-22.04
+    outputs:
+      bundle_filename: ${{ steps.bundle.outputs.bundle_filename }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.15.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Roc from pinned commit
+        run: |
+          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+          echo "Building Roc from commit: $ROC_COMMIT"
+
+          git init roc-src
+          cd roc-src
+          git remote add origin https://github.com/roc-lang/roc
+          git fetch --depth 1 origin "$ROC_COMMIT"
+          git checkout FETCH_HEAD
+
+          zig build roc
+
+          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+
+      - name: Build platform
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Run tests
+        run: zig build test
+
+      - name: Bundle platform
+        id: bundle
+        run: |
+          ./bundle.sh
+
+          BUNDLE_FILE=$(ls *.tar.zst 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_FILE" ]; then
+            echo "Error: No bundle file found"
+            exit 1
+          fi
+
+          echo "Bundle created: $BUNDLE_FILE"
+          echo "bundle_filename=$BUNDLE_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-bundle
+          path: ${{ steps.bundle.outputs.bundle_filename }}
+          retention-days: 30
+
+  test-bundle:
+    name: Test Bundle (${{ matrix.os }})
+    needs: build-and-bundle
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15         # arm64mac
+          - ubuntu-24.04     # x64glibc
+          - windows-2022     # x64win
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.15.2
+
+      - name: Build Roc from pinned commit
+        run: |
+          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+          echo "Building Roc from commit: $ROC_COMMIT"
+
+          git init roc-src
+          cd roc-src
+          git remote add origin https://github.com/roc-lang/roc
+          git fetch --depth 1 origin "$ROC_COMMIT"
+          git checkout FETCH_HEAD
+
+          zig build roc
+
+          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: platform-bundle
+
+      - name: Start HTTP server for bundle
+        run: |
+          python3 -m http.server 8000 &
+          sleep 3
+
+          BUNDLE_FILE="${{ needs.build-and-bundle.outputs.bundle_filename }}"
+          if ! curl -sf "http://localhost:8000/$BUNDLE_FILE" -o /dev/null; then
+            echo "Error: Bundle not accessible at http://localhost:8000/$BUNDLE_FILE"
+            exit 1
+          fi
+          echo "Bundle accessible at http://localhost:8000/$BUNDLE_FILE"
+
+      - name: Modify examples to use bundled platform
+        run: |
+          BUNDLE_URL="http://localhost:8000/${{ needs.build-and-bundle.outputs.bundle_filename }}"
+          for example in examples/*.roc; do
+            echo "Updating: $example"
+            sed -i.bak "s|platform \"../platform/main.roc\"|platform \"$BUNDLE_URL\"|g" "$example"
+            rm -f "$example.bak"
+          done
+
+      - name: Test bundled platform with examples
+        run: |
+          for example in examples/*.roc; do
+            echo "Building: $example"
+            roc build "$example"
+          done
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-and-bundle, test-bundle]
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: platform-bundle
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUNDLE_FILE="${{ needs.build-and-bundle.outputs.bundle_filename }}"
+          ROC_COMMIT=$(python3 ci/get_roc_commit.py | cut -c1-8)
+
+          gh release create "${{ github.event.inputs.release_tag }}" \
+            "$BUNDLE_FILE" \
+            --title "${{ github.event.inputs.release_tag }}" \
+            --generate-notes \
+            --notes "Platform bundle built with Zig 0.15.2 and Roc ${ROC_COMMIT}
+
+Download the bundle and use it as a Roc platform:
+\`\`\`roc
+platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
+\`\`\`"

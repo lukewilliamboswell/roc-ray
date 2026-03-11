@@ -1,10 +1,11 @@
 //! Raylib backend wrapper.
 //!
-//! This module provides a clean interface to raylib, accepting safe Zig types
-//! from types.zig and converting them to raylib's C types. All C interop
-//! is isolated here.
+//! This module provides a clean interface to raylib, accepting ABI types
+//! from roc_platform_abi.zig and converting them to raylib's C types.
+//! All C interop is isolated here.
 
-const types = @import("types.zig");
+const abi = @import("roc_platform_abi.zig");
+const ffi = @import("roc_ffi.zig");
 
 /// Raw raylib C bindings.
 pub const rl = @cImport({
@@ -13,23 +14,23 @@ pub const rl = @cImport({
 });
 
 /// Persistent keyboard state - updated each frame
-var key_state: [types.KEY_COUNT]u8 = [_]u8{0} ** types.KEY_COUNT;
+var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
-    for (0..types.KEY_COUNT) |i| {
+    for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
         key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
     }
 }
 
 /// Get the current keyboard state array
-pub fn getKeyState() *const [types.KEY_COUNT]u8 {
+pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
 }
 
-/// Convert safe Color enum to raylib Color.
-pub fn colorToRl(color: types.Color) rl.Color {
+/// Convert abi Color enum to raylib Color.
+pub fn colorToRl(color: abi.Color) rl.Color {
     return switch (color) {
         .black => rl.BLACK,
         .blue => rl.BLUE,
@@ -47,91 +48,75 @@ pub fn colorToRl(color: types.Color) rl.Color {
     };
 }
 
-/// Draw a circle using safe types.
-pub fn drawCircle(circle: types.Circle) void {
+/// Draw a circle from abi args.
+pub fn drawCircle(args: abi.DrawCircleArgs) void {
     rl.DrawCircle(
-        @intFromFloat(circle.center.x),
-        @intFromFloat(circle.center.y),
-        circle.radius,
-        colorToRl(circle.color),
+        @intFromFloat(args.center.x),
+        @intFromFloat(args.center.y),
+        args.radius,
+        colorToRl(args.color),
     );
 }
 
-/// Draw a rectangle using safe types.
-pub fn drawRectangle(rect: types.Rectangle) void {
+/// Draw a rectangle from abi args.
+pub fn drawRectangle(args: abi.DrawRectangleArgs) void {
     rl.DrawRectangle(
-        @intFromFloat(rect.x),
-        @intFromFloat(rect.y),
-        @intFromFloat(rect.width),
-        @intFromFloat(rect.height),
-        colorToRl(rect.color),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color),
     );
 }
 
-/// Draw a line using safe types.
-pub fn drawLine(line: types.Line) void {
+/// Draw a line from abi args.
+pub fn drawLine(args: abi.DrawLineArgs) void {
     rl.DrawLine(
-        @intFromFloat(line.start.x),
-        @intFromFloat(line.start.y),
-        @intFromFloat(line.end.x),
-        @intFromFloat(line.end.y),
-        colorToRl(line.color),
+        @intFromFloat(args.start.x),
+        @intFromFloat(args.start.y),
+        @intFromFloat(args.end.x),
+        @intFromFloat(args.end.y),
+        colorToRl(args.color),
     );
 }
 
-/// Draw text using safe types.
-/// Note: The text content must be null-terminated or fit in internal buffer.
-pub fn drawText(text: types.Text, buf: *[256:0]u8) void {
-    if (text.content.len < buf.len) {
-        @memcpy(buf[0..text.content.len], text.content);
-        buf[text.content.len] = 0;
-        rl.DrawText(
-            buf[0..text.content.len :0],
-            @intFromFloat(text.pos.x),
-            @intFromFloat(text.pos.y),
-            text.size,
-            colorToRl(text.color),
-        );
-    }
-}
-
-/// Draw text with a null-terminated string (for overlay/UI code).
-pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: types.Color) void {
+/// Draw text with a null-terminated string.
+pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: abi.Color) void {
     rl.DrawText(text, x, y, size, colorToRl(color));
 }
 
-/// Draw a rectangle with vertical gradient using safe types.
-pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+/// Draw a rectangle with vertical gradient from abi args.
+pub fn drawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) void {
     rl.DrawRectangleGradientV(
-        @intFromFloat(rg.x),
-        @intFromFloat(rg.y),
-        @intFromFloat(rg.width),
-        @intFromFloat(rg.height),
-        colorToRl(rg.color_top),
-        colorToRl(rg.color_bottom),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color_top),
+        colorToRl(args.color_bottom),
     );
 }
 
-/// Draw a rectangle with horizontal gradient using safe types.
-pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+/// Draw a rectangle with horizontal gradient from abi args.
+pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
     rl.DrawRectangleGradientH(
-        @intFromFloat(rg.x),
-        @intFromFloat(rg.y),
-        @intFromFloat(rg.width),
-        @intFromFloat(rg.height),
-        colorToRl(rg.color_left),
-        colorToRl(rg.color_right),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color_left),
+        colorToRl(args.color_right),
     );
 }
 
-/// Draw a circle with radial gradient using safe types.
-pub fn drawCircleGradient(cg: types.CircleGradient) void {
+/// Draw a circle with radial gradient from abi args.
+pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
     rl.DrawCircleGradient(
-        @intFromFloat(cg.center.x),
-        @intFromFloat(cg.center.y),
-        cg.radius,
-        colorToRl(cg.color_inner),
-        colorToRl(cg.color_outer),
+        @intFromFloat(args.center.x),
+        @intFromFloat(args.center.y),
+        args.radius,
+        colorToRl(args.color_inner),
+        colorToRl(args.color_outer),
     );
 }
 
@@ -150,8 +135,8 @@ pub fn endDrawing() void {
     rl.EndDrawing();
 }
 
-/// Clear the background with a safe color.
-pub fn clearBackground(color: types.Color) void {
+/// Clear the background with a color.
+pub fn clearBackground(color: abi.Color) void {
     rl.ClearBackground(colorToRl(color));
 }
 
@@ -215,8 +200,11 @@ pub const MouseButton = enum(c_int) {
     right = rl.MOUSE_BUTTON_RIGHT,
 };
 
-/// Get mouse position as safe Vector2.
-pub fn getMousePosition() types.Vector2 {
+/// Simple 2D vector for mouse position.
+pub const Vec2 = struct { x: f32, y: f32 };
+
+/// Get mouse position.
+pub fn getMousePosition() Vec2 {
     const pos = rl.GetMousePosition();
     return .{ .x = pos.x, .y = pos.y };
 }
@@ -229,20 +217,6 @@ pub fn isMouseButtonDown(button: MouseButton) bool {
 /// Get mouse wheel movement.
 pub fn getMouseWheelMove() f32 {
     return rl.GetMouseWheelMove();
-}
-
-/// Get current input state.
-pub fn getInputState(frame_count: u64) types.InputState {
-    const pos = rl.GetMousePosition();
-    return .{
-        .frame_count = frame_count,
-        .mouse_x = pos.x,
-        .mouse_y = pos.y,
-        .mouse_wheel = rl.GetMouseWheelMove(),
-        .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
-        .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
-        .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
-    };
 }
 
 /// Measure text width.

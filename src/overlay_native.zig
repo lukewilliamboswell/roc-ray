@@ -5,7 +5,8 @@
 //! input state visualization.
 
 const std = @import("std");
-const types = @import("types.zig");
+const abi = @import("roc_platform_abi.zig");
+const sim = @import("sim.zig");
 const raylib = @import("backend_raylib.zig");
 
 /// Speed presets for playback control.
@@ -52,7 +53,7 @@ pub const OverlayState = struct {
     }
 
     /// Get the current blink color (alternates between light and dark).
-    pub fn getBlinkColor(self: *const OverlayState) types.Color {
+    pub fn getBlinkColor(self: *const OverlayState) abi.Color {
         if (@mod(self.blink_timer, 1.0) < 0.5) {
             return .white;
         } else {
@@ -105,7 +106,7 @@ pub fn drawPausedOverlay(
 /// Draw the input state overlay (when F is held).
 pub fn drawInputsOverlay(
     state: *const OverlayState,
-    inputs: types.InputState,
+    inputs: sim.InputState,
     screen_width: c_int,
     screen_height: c_int,
 ) void {

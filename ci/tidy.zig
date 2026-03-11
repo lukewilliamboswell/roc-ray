@@ -60,7 +60,10 @@ pub fn main() !void {
 
     for (paths) |file_path| {
         const bytes_read = (std.fs.cwd().readFile(file_path, file_buffer) catch |err| {
-            std.debug.print("Error reading {s}: {}\n", .{ file_path, err });
+            // FileNotFound is expected for deleted-but-unstaged files from git ls-files
+            if (err != error.FileNotFound) {
+                std.debug.print("Error reading {s}: {}\n", .{ file_path, err });
+            }
             continue;
         }).len;
         if (bytes_read >= file_buffer.len - 1) {

@@ -26,8 +26,9 @@ pub const RocDbg = builtins.host_abi.RocDbg;
 pub const RocExpectFailed = builtins.host_abi.RocExpectFailed;
 pub const RocCrashed = builtins.host_abi.RocCrashed;
 
-/// Boxed value - opaque pointer to heap-allocated Roc data
-pub const RocBox = *anyopaque;
+/// Boxed value - opaque pointer to heap-allocated Roc data.
+/// Nullable because ZST models (e.g. `Model : {}`) use null (box_of_zst).
+pub const RocBox = ?*anyopaque;
 
 /// Number of keyboard keys to track (raylib key codes 0-348)
 pub const KEY_COUNT: usize = 349;
@@ -517,11 +518,11 @@ pub const Try_Str_NotFound = extern struct {
 };
 
 
-/// Runtime layout for the Roc type `Try(Box(Model), I32)`
+/// Runtime layout for the Roc type `Try(Box(Model), I64)`
 /// Used as return type for init_for_host and render_for_host
 pub const Try_BoxModel_I32 = extern struct {
-    /// Box(Model) or I32 (4 bytes)
-    payload: extern union { ok: RocBox, err: i32 },
+    /// Box(Model) or I64 (8 bytes) — payload union is pointer-sized
+    payload: extern union { ok: RocBox, err: i64 },
     /// 0 = Err, 1 = Ok (1 byte)
     discriminant: u8,
     /// Padding to maintain 8-byte alignment

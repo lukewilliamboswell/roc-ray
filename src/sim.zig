@@ -961,6 +961,7 @@ fn getEnvVar(allocator: std.mem.Allocator, key: []const u8) ?[]const u8 {
 /// Initialize simulation state from environment variables
 pub fn initFromEnv(allocator: std.mem.Allocator) !SimState {
     var state = SimState.init(allocator);
+    errdefer state.deinit();
 
     // Check environment variables (in priority order)
     // Note: getEnvVarOwned allocates, but these paths live for program lifetime

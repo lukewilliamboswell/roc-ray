@@ -1,9 +1,8 @@
 ## Host module - provides platform state and system effects
-import Keys
 
 Host := {
 	frame_count : U64,
-	keys : Keys,
+	keys : List(U8),
 	mouse : {
 		left : Bool,
 		middle : Bool,

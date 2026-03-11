@@ -332,6 +332,10 @@ comptime {
         if (@sizeOf(__AnonStruct2) != 16) @compileError("__AnonStruct2 size mismatch");
         if (@alignOf(__AnonStruct2) != 4) @compileError("__AnonStruct2 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct2) != 16) @compileError("__AnonStruct2 size mismatch");
+        if (@alignOf(__AnonStruct2) != 4) @compileError("__AnonStruct2 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct3
@@ -342,6 +346,10 @@ pub const __AnonStruct3 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct3) != 8) @compileError("__AnonStruct3 size mismatch");
+        if (@alignOf(__AnonStruct3) != 4) @compileError("__AnonStruct3 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct3) != 8) @compileError("__AnonStruct3 size mismatch");
         if (@alignOf(__AnonStruct3) != 4) @compileError("__AnonStruct3 alignment mismatch");
     }
@@ -360,6 +368,10 @@ comptime {
         if (@sizeOf(__AnonStruct9) != 16) @compileError("__AnonStruct9 size mismatch");
         if (@alignOf(__AnonStruct9) != 4) @compileError("__AnonStruct9 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct9) != 16) @compileError("__AnonStruct9 size mismatch");
+        if (@alignOf(__AnonStruct9) != 4) @compileError("__AnonStruct9 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct10
@@ -370,6 +382,10 @@ pub const __AnonStruct10 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct10) != 8) @compileError("__AnonStruct10 size mismatch");
+        if (@alignOf(__AnonStruct10) != 4) @compileError("__AnonStruct10 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct10) != 8) @compileError("__AnonStruct10 size mismatch");
         if (@alignOf(__AnonStruct10) != 4) @compileError("__AnonStruct10 alignment mismatch");
     }
@@ -387,6 +403,10 @@ comptime {
         if (@sizeOf(__AnonStruct20) != 20) @compileError("__AnonStruct20 size mismatch");
         if (@alignOf(__AnonStruct20) != 4) @compileError("__AnonStruct20 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct20) != 20) @compileError("__AnonStruct20 size mismatch");
+        if (@alignOf(__AnonStruct20) != 4) @compileError("__AnonStruct20 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct22
@@ -397,6 +417,10 @@ pub const __AnonStruct22 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct22) != 8) @compileError("__AnonStruct22 size mismatch");
+        if (@alignOf(__AnonStruct22) != 4) @compileError("__AnonStruct22 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct22) != 8) @compileError("__AnonStruct22 size mismatch");
         if (@alignOf(__AnonStruct22) != 4) @compileError("__AnonStruct22 alignment mismatch");
     }
@@ -413,6 +437,10 @@ comptime {
         if (@sizeOf(__AnonStruct25) != 8) @compileError("__AnonStruct25 size mismatch");
         if (@alignOf(__AnonStruct25) != 4) @compileError("__AnonStruct25 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct25) != 8) @compileError("__AnonStruct25 size mismatch");
+        if (@alignOf(__AnonStruct25) != 4) @compileError("__AnonStruct25 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct29
@@ -426,6 +454,10 @@ pub const __AnonStruct29 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct29) != 20) @compileError("__AnonStruct29 size mismatch");
+        if (@alignOf(__AnonStruct29) != 4) @compileError("__AnonStruct29 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct29) != 20) @compileError("__AnonStruct29 size mismatch");
         if (@alignOf(__AnonStruct29) != 4) @compileError("__AnonStruct29 alignment mismatch");
     }
@@ -446,6 +478,10 @@ comptime {
         if (@sizeOf(__AnonStruct36) != 20) @compileError("__AnonStruct36 size mismatch");
         if (@alignOf(__AnonStruct36) != 4) @compileError("__AnonStruct36 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct36) != 20) @compileError("__AnonStruct36 size mismatch");
+        if (@alignOf(__AnonStruct36) != 4) @compileError("__AnonStruct36 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct44
@@ -463,20 +499,34 @@ comptime {
         if (@sizeOf(__AnonStruct44) != 20) @compileError("__AnonStruct44 size mismatch");
         if (@alignOf(__AnonStruct44) != 4) @compileError("__AnonStruct44 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct44) != 20) @compileError("__AnonStruct44 size mismatch");
+        if (@alignOf(__AnonStruct44) != 4) @compileError("__AnonStruct44 alignment mismatch");
+    }
 }
 
 /// Element type for __AnonStruct52
-pub const __AnonStruct52 = extern struct {
+/// Fields ordered by alignment descending (Roc ABI)
+pub const __AnonStruct52 = if (@sizeOf(usize) == 8) extern struct {
     text: RocStr,
     pos: __AnonStruct54,
     size: i32,
+    color: Color,
+} else extern struct {
+    pos: __AnonStruct54,
+    size: i32,
+    text: RocStr,
     color: Color,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct52) != 40) @compileError("__AnonStruct52 size mismatch");
-        if (@alignOf(__AnonStruct52) != 8) @compileError("__AnonStruct52 alignment mismatch");
+    if (@sizeOf(__AnonStruct52) != 40) @compileError("__AnonStruct52 size mismatch");
+    if (@alignOf(__AnonStruct52) != 8) @compileError("__AnonStruct52 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+    if (@sizeOf(__AnonStruct52) != 28) @compileError("__AnonStruct52 size mismatch");
+    if (@alignOf(__AnonStruct52) != 4) @compileError("__AnonStruct52 alignment mismatch");
     }
 }
 
@@ -488,6 +538,10 @@ pub const __AnonStruct54 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct54) != 8) @compileError("__AnonStruct54 size mismatch");
+        if (@alignOf(__AnonStruct54) != 4) @compileError("__AnonStruct54 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct54) != 8) @compileError("__AnonStruct54 size mismatch");
         if (@alignOf(__AnonStruct54) != 4) @compileError("__AnonStruct54 alignment mismatch");
     }
@@ -504,13 +558,17 @@ comptime {
         if (@sizeOf(__AnonStruct61) != 8) @compileError("__AnonStruct61 size mismatch");
         if (@alignOf(__AnonStruct61) != 4) @compileError("__AnonStruct61 alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct61) != 8) @compileError("__AnonStruct61 size mismatch");
+        if (@alignOf(__AnonStruct61) != 4) @compileError("__AnonStruct61 alignment mismatch");
+    }
 }
 
 /// Element type for Host
 pub const Host = extern struct {
     frame_count: u64,
-    keys: Keys,
-    mouse: __AnonStruct72,
+    keys: RocListWith(u8, false),
+    mouse: __AnonStruct71,
 };
 
 comptime {
@@ -518,22 +576,14 @@ comptime {
         if (@sizeOf(Host) != 48) @compileError("Host size mismatch");
         if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
-}
-
-/// Element type for Keys
-pub const Keys = extern struct {
-    data: RocListWith(u8, false),
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Keys) != 24) @compileError("Keys size mismatch");
-        if (@alignOf(Keys) != 8) @compileError("Keys alignment mismatch");
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(Host) != 40) @compileError("Host size mismatch");
+        if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct72
-pub const __AnonStruct72 = extern struct {
+/// Element type for __AnonStruct71
+pub const __AnonStruct71 = extern struct {
     wheel: f32,
     x: f32,
     y: f32,
@@ -544,32 +594,40 @@ pub const __AnonStruct72 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct72) != 16) @compileError("__AnonStruct72 size mismatch");
-        if (@alignOf(__AnonStruct72) != 4) @compileError("__AnonStruct72 alignment mismatch");
+        if (@sizeOf(__AnonStruct71) != 16) @compileError("__AnonStruct71 size mismatch");
+        if (@alignOf(__AnonStruct71) != 4) @compileError("__AnonStruct71 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct71) != 16) @compileError("__AnonStruct71 size mismatch");
+        if (@alignOf(__AnonStruct71) != 4) @compileError("__AnonStruct71 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct83
-pub const __AnonStruct83 = extern struct {
+/// Element type for __AnonStruct82
+pub const __AnonStruct82 = extern struct {
     height: f32,
     width: f32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct83) != 8) @compileError("__AnonStruct83 size mismatch");
-        if (@alignOf(__AnonStruct83) != 4) @compileError("__AnonStruct83 alignment mismatch");
+        if (@sizeOf(__AnonStruct82) != 8) @compileError("__AnonStruct82 size mismatch");
+        if (@alignOf(__AnonStruct82) != 4) @compileError("__AnonStruct82 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct82) != 8) @compileError("__AnonStruct82 size mismatch");
+        if (@alignOf(__AnonStruct82) != 4) @compileError("__AnonStruct82 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct88
-pub const __AnonStruct88 = extern struct {
+/// Element type for __AnonStruct87
+pub const __AnonStruct87 = extern struct {
     @"init!": *anyopaque,
     @"render!": *anyopaque,
 };
 
-/// Element type for __AnonStruct96
-pub const __AnonStruct96 = extern struct {
+/// Element type for __AnonStruct94
+pub const __AnonStruct94 = extern struct {
     wheel: f32,
     x: f32,
     y: f32,
@@ -580,13 +638,17 @@ pub const __AnonStruct96 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct96) != 16) @compileError("__AnonStruct96 size mismatch");
-        if (@alignOf(__AnonStruct96) != 4) @compileError("__AnonStruct96 alignment mismatch");
+        if (@sizeOf(__AnonStruct94) != 16) @compileError("__AnonStruct94 size mismatch");
+        if (@alignOf(__AnonStruct94) != 4) @compileError("__AnonStruct94 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct94) != 16) @compileError("__AnonStruct94 size mismatch");
+        if (@alignOf(__AnonStruct94) != 4) @compileError("__AnonStruct94 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct112
-pub const __AnonStruct112 = extern struct {
+/// Element type for __AnonStruct109
+pub const __AnonStruct109 = extern struct {
     wheel: f32,
     x: f32,
     y: f32,
@@ -597,13 +659,17 @@ pub const __AnonStruct112 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct112) != 16) @compileError("__AnonStruct112 size mismatch");
-        if (@alignOf(__AnonStruct112) != 4) @compileError("__AnonStruct112 alignment mismatch");
+        if (@sizeOf(__AnonStruct109) != 16) @compileError("__AnonStruct109 size mismatch");
+        if (@alignOf(__AnonStruct109) != 4) @compileError("__AnonStruct109 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct109) != 16) @compileError("__AnonStruct109 size mismatch");
+        if (@alignOf(__AnonStruct109) != 4) @compileError("__AnonStruct109 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct123
-pub const __AnonStruct123 = extern struct {
+/// Element type for __AnonStruct120
+pub const __AnonStruct120 = extern struct {
     frame_count: u64,
     keys: RocListWith(u8, false),
     mouse_wheel: f32,
@@ -616,13 +682,17 @@ pub const __AnonStruct123 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct123) != 48) @compileError("__AnonStruct123 size mismatch");
-        if (@alignOf(__AnonStruct123) != 8) @compileError("__AnonStruct123 alignment mismatch");
+        if (@sizeOf(__AnonStruct120) != 48) @compileError("__AnonStruct120 size mismatch");
+        if (@alignOf(__AnonStruct120) != 8) @compileError("__AnonStruct120 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct120) != 40) @compileError("__AnonStruct120 size mismatch");
+        if (@alignOf(__AnonStruct120) != 8) @compileError("__AnonStruct120 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct137
-pub const __AnonStruct137 = extern struct {
+/// Element type for __AnonStruct125
+pub const __AnonStruct125 = extern struct {
     frame_count: u64,
     keys: RocListWith(u8, false),
     mouse_wheel: f32,
@@ -635,8 +705,12 @@ pub const __AnonStruct137 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct137) != 48) @compileError("__AnonStruct137 size mismatch");
-        if (@alignOf(__AnonStruct137) != 8) @compileError("__AnonStruct137 alignment mismatch");
+        if (@sizeOf(__AnonStruct125) != 48) @compileError("__AnonStruct125 size mismatch");
+        if (@alignOf(__AnonStruct125) != 8) @compileError("__AnonStruct125 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct125) != 40) @compileError("__AnonStruct125 size mismatch");
+        if (@alignOf(__AnonStruct125) != 8) @compileError("__AnonStruct125 alignment mismatch");
     }
 }
 
@@ -669,6 +743,10 @@ comptime {
         if (@sizeOf(HostGet_screen_sizeRetRecord) != 8) @compileError("HostGet_screen_sizeRetRecord size mismatch");
         if (@alignOf(HostGet_screen_sizeRetRecord) != 4) @compileError("HostGet_screen_sizeRetRecord alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostGet_screen_sizeRetRecord) != 8) @compileError("HostGet_screen_sizeRetRecord size mismatch");
+        if (@alignOf(HostGet_screen_sizeRetRecord) != 4) @compileError("HostGet_screen_sizeRetRecord alignment mismatch");
+    }
 }
 
 /// Arguments for Draw.circle!
@@ -682,6 +760,10 @@ pub const DrawCircleArgs = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawCircleArgs) != 16) @compileError("DrawCircleArgs size mismatch");
+        if (@alignOf(DrawCircleArgs) != 4) @compileError("DrawCircleArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(DrawCircleArgs) != 16) @compileError("DrawCircleArgs size mismatch");
         if (@alignOf(DrawCircleArgs) != 4) @compileError("DrawCircleArgs alignment mismatch");
     }
@@ -699,6 +781,10 @@ pub const DrawCircle_gradientArgs = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawCircle_gradientArgs) != 16) @compileError("DrawCircle_gradientArgs size mismatch");
+        if (@alignOf(DrawCircle_gradientArgs) != 4) @compileError("DrawCircle_gradientArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(DrawCircle_gradientArgs) != 16) @compileError("DrawCircle_gradientArgs size mismatch");
         if (@alignOf(DrawCircle_gradientArgs) != 4) @compileError("DrawCircle_gradientArgs alignment mismatch");
     }
@@ -724,6 +810,10 @@ comptime {
         if (@sizeOf(DrawLineArgs) != 20) @compileError("DrawLineArgs size mismatch");
         if (@alignOf(DrawLineArgs) != 4) @compileError("DrawLineArgs alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawLineArgs) != 20) @compileError("DrawLineArgs size mismatch");
+        if (@alignOf(DrawLineArgs) != 4) @compileError("DrawLineArgs alignment mismatch");
+    }
 }
 
 /// Arguments for Draw.rectangle!
@@ -739,6 +829,10 @@ pub const DrawRectangleArgs = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawRectangleArgs) != 20) @compileError("DrawRectangleArgs size mismatch");
+        if (@alignOf(DrawRectangleArgs) != 4) @compileError("DrawRectangleArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(DrawRectangleArgs) != 20) @compileError("DrawRectangleArgs size mismatch");
         if (@alignOf(DrawRectangleArgs) != 4) @compileError("DrawRectangleArgs alignment mismatch");
     }
@@ -761,6 +855,10 @@ comptime {
         if (@sizeOf(DrawRectangle_gradient_hArgs) != 20) @compileError("DrawRectangle_gradient_hArgs size mismatch");
         if (@alignOf(DrawRectangle_gradient_hArgs) != 4) @compileError("DrawRectangle_gradient_hArgs alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawRectangle_gradient_hArgs) != 20) @compileError("DrawRectangle_gradient_hArgs size mismatch");
+        if (@alignOf(DrawRectangle_gradient_hArgs) != 4) @compileError("DrawRectangle_gradient_hArgs alignment mismatch");
+    }
 }
 
 /// Arguments for Draw.rectangle_gradient_v!
@@ -777,6 +875,10 @@ pub const DrawRectangle_gradient_vArgs = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawRectangle_gradient_vArgs) != 20) @compileError("DrawRectangle_gradient_vArgs size mismatch");
+        if (@alignOf(DrawRectangle_gradient_vArgs) != 4) @compileError("DrawRectangle_gradient_vArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
         if (@sizeOf(DrawRectangle_gradient_vArgs) != 20) @compileError("DrawRectangle_gradient_vArgs size mismatch");
         if (@alignOf(DrawRectangle_gradient_vArgs) != 4) @compileError("DrawRectangle_gradient_vArgs alignment mismatch");
     }
@@ -834,6 +936,10 @@ comptime {
         if (@sizeOf(HostSet_screen_sizeArgs) != 8) @compileError("HostSet_screen_sizeArgs size mismatch");
         if (@alignOf(HostSet_screen_sizeArgs) != 4) @compileError("HostSet_screen_sizeArgs alignment mismatch");
     }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostSet_screen_sizeArgs) != 8) @compileError("HostSet_screen_sizeArgs size mismatch");
+        if (@alignOf(HostSet_screen_sizeArgs) != 4) @compileError("HostSet_screen_sizeArgs alignment mismatch");
+    }
 }
 
 /// Arguments for Host.set_target_fps!
@@ -857,8 +963,8 @@ pub const PlatformHostedFns = struct {
     draw_text: *const fn (*RocOps, *anyopaque, *const DrawTextArgs) callconv(.c) void, // Draw.text!
     host_exit: *const fn (*RocOps, *anyopaque, *const HostExitArgs) callconv(.c) void, // Host.exit!
     host_get_screen_size: *const fn (*RocOps, *HostGet_screen_sizeRetRecord, *anyopaque) callconv(.c) void, // Host.get_screen_size!
-    host_read_env: *const fn (*RocOps, *Try(RocStr, void), *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
-    host_set_screen_size: *const fn (*RocOps, *Try(void, void), *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
+    host_read_env: *const fn (*RocOps, *Try(RocStr, *anyopaque), *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
+    host_set_screen_size: *const fn (*RocOps, *Try(void, *anyopaque), *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
     host_set_target_fps: *const fn (*RocOps, *anyopaque, *const HostSet_target_fpsArgs) callconv(.c) void, // Host.set_target_fps!
 };
 
@@ -1050,11 +1156,11 @@ pub fn makeRocOps(comptime EnvType: type, env: *EnvType, hosted_fns: HostedFunct
 /// Arguments for entrypoint: render_for_host!
 pub const Render_for_hostArgs = extern struct {
     arg0: *anyopaque,
-    arg1: __AnonStruct137,
+    arg1: __AnonStruct125,
 };
 
 /// Entrypoint: init_for_host!
-pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try(*anyopaque, i64), arg_ptr: ?*const __AnonStruct123) callconv(.c) void;
+pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try(*anyopaque, i64), arg_ptr: ?*const __AnonStruct120) callconv(.c) void;
 
 /// Entrypoint: render_for_host!
 pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try(*anyopaque, i64), arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;

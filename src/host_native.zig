@@ -77,13 +77,6 @@ fn getDebugFlag() *std.atomic.Value(bool) {
 
 const NativeCallbacks = ffi.RocCallbacks(getDebugFlag);
 
-/// Decrement the reference count of a RocBox
-/// If the refcount reaches zero, the memory is freed
-fn decrefRocBox(box: RocBox, roc_ops: *RocOps) void {
-    const ptr: ?[*]u8 = @ptrCast(box);
-    // Box alignment is pointer-width, elements are not refcounted at this level
-    builtins.utils.decrefDataPtrC(ptr, @alignOf(usize), false, roc_ops);
-}
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
@@ -309,7 +302,7 @@ fn hostedGetScreenSize(_: *types.RocOps, result: *abi.HostGet_screen_sizeRetReco
     result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(_: *types.RocOps, result: *abi.Try(void, void), args: *const abi.HostSet_screen_sizeArgs) void {
+fn hostedSetScreenSize(_: *types.RocOps, result: *abi.Try(void, *anyopaque), args: *const abi.HostSet_screen_sizeArgs) void {
     raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
     result.tag = .Ok;
 }
@@ -527,7 +520,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var render_time_ns: u64 = 0;
 
     // In replay-only mode, skip Roc initialization - we just play back recorded outputs
-    var boxed_model: ?RocBox = null;
+    var boxed_model: RocBox = null;
     if (!replay_only) {
         if (TRACE_HOST) {
             std.log.debug("[HOST] Calling roc__init_for_host...", .{});
@@ -572,9 +565,6 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         }
 
         boxed_model = init_result.getModel();
-        if (TRACE_HOST) {
-            std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model.?)});
-        }
     }
 
     if (!headless) {
@@ -715,7 +705,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         } else {
             // Call Roc render with the platform state
             var render_args = RenderArgs{
-                .model = boxed_model.?,
+                .model = boxed_model,
                 .state = platform_state,
             };
             var render_result: Try_BoxModel_I32 = undefined;
@@ -790,7 +780,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         if (TRACE_HOST) {
             std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(model)});
         }
-        decrefRocBox(model, &roc_ops);
+        builtins.utils.decrefDataPtrC(@ptrCast(model), @alignOf(usize), false, &roc_ops);
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code

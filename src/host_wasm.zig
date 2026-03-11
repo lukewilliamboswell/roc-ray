@@ -341,7 +341,7 @@ fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const abi.Host
     result.* = types.Try_Str_NotFound.notFound();
 }
 
-fn hostedSetScreenSize(_: *RocOps, result: *abi.Try(void, void), _: *const abi.HostSet_screen_sizeArgs) void {
+fn hostedSetScreenSize(_: *RocOps, result: *abi.Try(void, *anyopaque), _: *const abi.HostSet_screen_sizeArgs) void {
     // WASM can't resize the browser window - return NotSupported
     result.tag = .Err;
 }

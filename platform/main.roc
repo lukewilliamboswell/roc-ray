@@ -48,7 +48,7 @@ init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {
 	host = {
 		frame_count: host_state.frame_count,
-		keys: Keys.pack(host_state.keys),
+		keys: host_state.keys,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,
@@ -70,7 +70,7 @@ render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
 render_for_host! = |boxed_model, host_state| {
 	host = {
 		frame_count: host_state.frame_count,
-		keys: Keys.pack(host_state.keys),
+		keys: host_state.keys,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,

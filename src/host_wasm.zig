@@ -23,37 +23,30 @@ pub const CMD_CIRCLE = wasm.CMD_CIRCLE;
 pub const CMD_LINE = wasm.CMD_LINE;
 pub const CMD_TEXT = wasm.CMD_TEXT;
 
-const types = @import("types.zig");
-const RocBox = types.RocBox;
-const RocHostState = types.InputState.FFI;
-const RocRectangle = types.Rectangle.FFI; // Used in tests
-const Try_BoxModel_I64 = types.Try_BoxModel_I64;
-const RenderArgs = types.RenderArgs;
-const RocOps = types.RocOps;
-const HostedFn = types.HostedFn;
-const RocDbg = types.RocDbg;
-const RocExpectFailed = types.RocExpectFailed;
-const RocCrashed = types.RocCrashed;
+const ffi = @import("roc_ffi.zig");
+const abi = @import("roc_platform_abi.zig");
+
+// Type aliases
+const RocBox = ffi.RocBox;
+const RocResult = ffi.Try(ffi.RocBox, i64);
+const RenderArgs = ffi.RenderArgs;
+const RocOps = ffi.RocOps;
+const ReadEnvResult = abi.Try(abi.RocStr, *anyopaque);
 
 // Roc functions: extern on WASM (provided by Roc compiler), stubs on native (for testing)
 const roc__init_for_host = if (builtin.cpu.arch == .wasm32)
-    types.roc__init_for_host
+    abi.roc__init_for_host
 else
     stubRocInit;
 
 const roc__render_for_host = if (builtin.cpu.arch == .wasm32)
-    types.roc__render_for_host
+    abi.roc__render_for_host
 else
     stubRocRender;
 
 // Native stubs (only used during unit testing, not in production)
-fn stubRocInit(_: *RocOps, _: *Try_BoxModel_I64, _: ?*anyopaque) callconv(.c) void {}
-fn stubRocRender(_: *RocOps, _: *Try_BoxModel_I64, _: *RenderArgs) callconv(.c) void {}
-
-const ffi = @import("roc_ffi.zig");
-
-/// Use shared wrapHostedFn from roc_ffi for type-safe hosted function wrapping.
-const wrapHostedFn = ffi.wrapHostedFn;
+fn stubRocInit(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {}
+fn stubRocRender(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {}
 
 // Allocation telemetry - track allocations for leak detection
 // JS can read these via exported getters and log them to detect memory leaks over time
@@ -68,8 +61,19 @@ var app_model: RocBox = undefined;
 var app_initialized: bool = false; // Track if init has been called (model can be ptr 0 for empty records)
 var frame_count: u64 = 0;
 
-// Dummy env for RocOps (not used by web host, but must be valid pointer)
-var dummy_env: u8 = 0;
+// Exit request state (set by Host.exit!, read by JS via _get_exit_requested)
+var exit_requested: ?i64 = null;
+
+// Screen size (set by JS via _set_screen_size, read by Host.get_screen_size!)
+var screen_width: i32 = 800;
+var screen_height: i32 = 600;
+
+// Keyboard state (set by JS via _set_key_down/_set_key_up, passed to Roc each frame)
+var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+
+// Keyboard state manager (initialized in _init)
+var keys: ffi.Keys = undefined;
+var keys_initialized: bool = false;
 
 // Conditional allocator: WASM uses wasm_allocator, native uses page_allocator (for testing)
 const wasm_allocator: std.mem.Allocator = if (builtin.cpu.arch == .wasm32)
@@ -77,43 +81,75 @@ const wasm_allocator: std.mem.Allocator = if (builtin.cpu.arch == .wasm32)
 else
     std.heap.page_allocator;
 
-/// Allocator getter for ffi.RocMemory (ignores env, uses global allocator).
-fn getWasmAllocator(_: *anyopaque) std.mem.Allocator {
-    return wasm_allocator;
-}
+/// WASM environment type for DefaultAllocators.
+const WasmEnv = struct {
+    pub fn allocator(_: *@This()) std.mem.Allocator {
+        return wasm_allocator;
+    }
+};
 
-/// OOM handler for WASM - throws JS error.
-fn wasmOOM() noreturn {
-    js_throw_error("Out of memory", 13);
-}
+var wasm_env: WasmEnv = .{};
 
-/// Telemetry: track allocation.
-fn onAlloc(bytes: usize) void {
-    alloc_count += 1;
-    bytes_allocated += bytes;
-}
+/// WASM-compatible memory management callbacks for RocOps.
+/// Cannot use abi.DefaultAllocators because its OOM handler calls
+/// std.process.exit/stderr which are unavailable on wasm32-freestanding.
+const WasmAllocs = struct {
+    pub fn rocAlloc(alloc_args: *abi.RocAlloc, _: *anyopaque) callconv(.c) void {
+        const min_alignment: usize = @max(alloc_args.alignment, @alignOf(usize));
+        const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
+        const size_storage_bytes = min_alignment;
+        const total_size = alloc_args.length + size_storage_bytes;
 
-/// Telemetry: track deallocation.
-fn onDealloc(bytes: usize) void {
-    dealloc_count += 1;
-    bytes_freed += bytes;
-}
+        const base_ptr = wasm_allocator.rawAlloc(total_size, align_enum, @returnAddress()) orelse {
+            js_throw_error("roc_alloc: out of memory", 24);
+        };
 
-/// Telemetry: track reallocation.
-fn onRealloc(old_bytes: usize, new_bytes: usize) void {
-    realloc_count += 1;
-    bytes_freed += old_bytes;
-    bytes_allocated += new_bytes;
-}
+        const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
+        size_ptr.* = total_size;
+        alloc_args.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
+    }
 
-/// Memory management callbacks using shared RocMemory implementation with WASM telemetry.
-const WasmMemory = ffi.RocMemory(.{
-    .getAllocator = &getWasmAllocator,
-    .onOOM = &wasmOOM,
-    .onAlloc = &onAlloc,
-    .onDealloc = &onDealloc,
-    .onRealloc = &onRealloc,
-});
+    pub fn rocDealloc(dealloc_args: *abi.RocDealloc, _: *anyopaque) callconv(.c) void {
+        const min_alignment: usize = @max(dealloc_args.alignment, @alignOf(usize));
+        const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
+        const size_storage_bytes = min_alignment;
+
+        const size_ptr: *const usize = @ptrFromInt(@intFromPtr(dealloc_args.ptr) - @sizeOf(usize));
+        const total_size = size_ptr.*;
+
+        const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(dealloc_args.ptr) - size_storage_bytes);
+        const slice = base_ptr[0..total_size];
+        wasm_allocator.rawFree(slice, align_enum, @returnAddress());
+    }
+
+    pub fn rocRealloc(realloc_args: *abi.RocRealloc, _: *anyopaque) callconv(.c) void {
+        const min_alignment: usize = @max(realloc_args.alignment, @alignOf(usize));
+        const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
+        const size_storage_bytes = min_alignment;
+
+        const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(realloc_args.answer) - @sizeOf(usize));
+        const old_total_size = old_size_ptr.*;
+        const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(realloc_args.answer) - size_storage_bytes);
+
+        const new_total_size = realloc_args.new_length + size_storage_bytes;
+        const old_user_data_size = old_total_size - size_storage_bytes;
+        const copy_size = @min(old_user_data_size, realloc_args.new_length);
+
+        const new_base_ptr = wasm_allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
+            js_throw_error("roc_realloc: out of memory", 26);
+        };
+
+        const new_user_ptr: [*]u8 = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
+        const old_user_ptr: [*]const u8 = @ptrCast(realloc_args.answer);
+        @memcpy(new_user_ptr[0..copy_size], old_user_ptr[0..copy_size]);
+
+        wasm_allocator.rawFree(old_base_ptr[0..old_total_size], align_enum, @returnAddress());
+
+        const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
+        new_size_ptr.* = new_total_size;
+        realloc_args.answer = new_user_ptr;
+    }
+};
 
 // Exported allocation functions (Roc imports these at link time)
 
@@ -202,19 +238,16 @@ fn js_throw_error(ptr: [*]const u8, len: usize) noreturn {
 }
 
 // RocOps callback implementations
-fn rocDbgFn(dbg_info: *const RocDbg, env: *anyopaque) callconv(.c) void {
-    _ = env;
+fn rocDbgFn(dbg_info: *const abi.RocDbg, _: *anyopaque) callconv(.c) void {
     js_console_log(dbg_info.utf8_bytes, dbg_info.len);
 }
 
-fn rocExpectFailedFn(roc_expect: *const RocExpectFailed, env: *anyopaque) callconv(.c) void {
-    _ = env;
+fn rocExpectFailedFn(roc_expect: *const abi.RocExpectFailed, _: *anyopaque) callconv(.c) void {
     js_console_log(roc_expect.utf8_bytes, roc_expect.len);
 }
 
-fn rocCrashedFn(roc_crashed: *const RocCrashed, env: *anyopaque) callconv(.c) noreturn {
-    _ = env;
-    js_throw_error(roc_crashed.utf8_bytes, roc_crashed.len);
+fn rocCrashedFn(roc_crashed_args: *const abi.RocCrashed, _: *anyopaque) callconv(.c) void {
+    js_throw_error(roc_crashed_args.utf8_bytes, roc_crashed_args.len);
 }
 
 // Exported debug for roc to link
@@ -232,114 +265,130 @@ export fn roc_panic(msg_ptr: [*]const u8, msg_len: usize) callconv(.c) noreturn 
     js_throw_error(msg_ptr, msg_len);
 }
 
-fn hostedDrawBeginFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
+fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
     wasm.beginDrawing();
 }
 
-fn hostedDrawClear(_: *RocOps, _: *ffi.NoReturn, args: *const u8) void {
-    const color = types.Color.fromU8(args.*);
-    wasm.clearBackground(color);
+fn hostedDrawClear(_: *RocOps, _: *anyopaque, args: *const abi.DrawClearArgs) callconv(.c) void {
+    wasm.clearBackground(args.arg0);
 }
 
-fn hostedDrawCircle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Circle.FFI) void {
-    wasm.drawCircle(args.toCircle());
+fn hostedDrawCircle(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircleArgs) callconv(.c) void {
+    wasm.drawCircle(args.*);
 }
 
-fn hostedDrawCircleGradient(_: *RocOps, _: *ffi.NoReturn, args: *const types.CircleGradient.FFI) void {
-    wasm.drawCircleGradient(args.toCircleGradient());
+fn hostedDrawCircleGradient(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_gradientArgs) callconv(.c) void {
+    wasm.drawCircleGradient(args.*);
 }
 
-fn hostedDrawEndFrame(_: *RocOps, _: *ffi.NoReturn, _: *ffi.NoArgs) void {
+fn hostedDrawEndFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
     wasm.endDrawing();
 }
 
-fn hostedDrawLine(_: *RocOps, _: *ffi.NoReturn, args: *const types.Line.FFI) void {
-    wasm.drawLine(args.toLine());
+fn hostedDrawLine(_: *RocOps, _: *anyopaque, args: *const abi.DrawLineArgs) callconv(.c) void {
+    wasm.drawLine(args.*);
 }
 
-fn hostedDrawRectangle(_: *RocOps, _: *ffi.NoReturn, args: *const types.Rectangle.FFI) void {
-    wasm.drawRectangle(args.toRectangle());
+fn hostedDrawRectangle(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangleArgs) callconv(.c) void {
+    wasm.drawRectangle(args.*);
 }
 
-fn hostedDrawRectangleGradientH(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientH.FFI) void {
-    wasm.drawRectangleGradientH(args.toRectangleGradientH());
+fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_hArgs) callconv(.c) void {
+    wasm.drawRectangleGradientH(args.*);
 }
 
-fn hostedDrawRectangleGradientV(_: *RocOps, _: *ffi.NoReturn, args: *const types.RectangleGradientV.FFI) void {
-    wasm.drawRectangleGradientV(args.toRectangleGradientV());
+fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_vArgs) callconv(.c) void {
+    wasm.drawRectangleGradientV(args.*);
 }
 
-fn hostedDrawText(_: *RocOps, _: *ffi.NoReturn, args: *const types.Text.FFI) void {
-    const text = types.Text{
-        .pos = args.pos.toVector2(),
-        .content = args.text.asSlice(),
-        .size = args.size,
-        .color = types.Color.fromU8(args.color),
-    };
-    var buf: [256:0]u8 = undefined;
-    wasm.drawText(text, &buf);
+fn hostedDrawText(_: *RocOps, _: *anyopaque, args: *const abi.DrawTextArgs) callconv(.c) void {
+    const text_slice = args.text.asSlice();
+    wasm.drawText(args.pos.x, args.pos.y, text_slice, args.size, args.color);
 }
 
-const ReadEnvArgs = extern struct {
-    host_arg: types.InputState.FFI,
-    key_str: types.RocStr,
-};
+fn hostedExit(_: *RocOps, _: *anyopaque, args: *const abi.HostExitArgs) callconv(.c) void {
+    exit_requested = @as(i64, args.arg0);
+}
 
-fn hostedReadEnv(_: *RocOps, result: *types.Try_Str_NotFound, _: *const ReadEnvArgs) void {
+fn hostedGetScreenSize(_: *RocOps, result: *abi.HostGet_screen_sizeRetRecord, _: *anyopaque) callconv(.c) void {
+    result.* = .{ .height = screen_height, .width = screen_width };
+}
+
+fn hostedReadEnv(_: *RocOps, result: *ReadEnvResult, _: *const abi.HostRead_envArgs) callconv(.c) void {
     // WASM doesn't have environment variables - always return NotFound
-    result.* = types.Try_Str_NotFound.notFound();
+    result.tag = .Err;
 }
 
-/// Hosted function pointers (alphabetical order by fully-qualified name).
-/// All functions use wrapHostedFn for type-safe pointer casting.
-const hosted_function_ptrs = [_]HostedFn{
-    wrapHostedFn(hostedDrawBeginFrame), // Draw.begin_frame! (0)
-    wrapHostedFn(hostedDrawCircle), // Draw.circle! (1)
-    wrapHostedFn(hostedDrawCircleGradient), // Draw.circle_gradient! (2)
-    wrapHostedFn(hostedDrawClear), // Draw.clear! (3)
-    wrapHostedFn(hostedDrawEndFrame), // Draw.end_frame! (4)
-    wrapHostedFn(hostedDrawLine), // Draw.line! (5)
-    wrapHostedFn(hostedDrawRectangle), // Draw.rectangle! (6)
-    wrapHostedFn(hostedDrawRectangleGradientH), // Draw.rectangle_gradient_h! (7)
-    wrapHostedFn(hostedDrawRectangleGradientV), // Draw.rectangle_gradient_v! (8)
-    wrapHostedFn(hostedDrawText), // Draw.text! (9)
-    wrapHostedFn(hostedReadEnv), // Host.read_env! (10)
-};
+fn hostedSetScreenSize(_: *RocOps, result: *abi.Try(void, *anyopaque), _: *const abi.HostSet_screen_sizeArgs) callconv(.c) void {
+    // WASM can't resize the browser window - return NotSupported
+    result.tag = .Err;
+}
+
+fn hostedSetTargetFps(_: *RocOps, _: *anyopaque, _: *const abi.HostSet_target_fpsArgs) callconv(.c) void {
+    // No-op on WASM - browser controls frame timing via requestAnimationFrame
+}
+
+/// Hosted function dispatch table built from PlatformHostedFns.
+const hosted_fns_table = abi.hostedFunctions(.{
+    .draw_begin_frame = &hostedDrawBeginFrame,
+    .draw_circle = &hostedDrawCircle,
+    .draw_circle_gradient = &hostedDrawCircleGradient,
+    .draw_clear = &hostedDrawClear,
+    .draw_end_frame = &hostedDrawEndFrame,
+    .draw_line = &hostedDrawLine,
+    .draw_rectangle = &hostedDrawRectangle,
+    .draw_rectangle_gradient_h = &hostedDrawRectangleGradientH,
+    .draw_rectangle_gradient_v = &hostedDrawRectangleGradientV,
+    .draw_text = &hostedDrawText,
+    .host_exit = &hostedExit,
+    .host_get_screen_size = &hostedGetScreenSize,
+    .host_read_env = &hostedReadEnv,
+    .host_set_screen_size = &hostedSetScreenSize,
+    .host_set_target_fps = &hostedSetTargetFps,
+});
 
 fn makeRocOps() RocOps {
     return RocOps{
-        .env = @ptrCast(&dummy_env),
-        .roc_alloc = WasmMemory.alloc,
-        .roc_dealloc = WasmMemory.dealloc,
-        .roc_realloc = WasmMemory.realloc,
-        .roc_dbg = rocDbgFn,
-        .roc_expect_failed = rocExpectFailedFn,
-        .roc_crashed = rocCrashedFn,
-        .hosted_fns = .{
-            .count = hosted_function_ptrs.len,
-            .fns = @constCast(&hosted_function_ptrs),
-        },
+        .env = @ptrCast(&wasm_env),
+        .roc_alloc = &WasmAllocs.rocAlloc,
+        .roc_dealloc = &WasmAllocs.rocDealloc,
+        .roc_realloc = &WasmAllocs.rocRealloc,
+        .roc_dbg = &rocDbgFn,
+        .roc_expect_failed = &rocExpectFailedFn,
+        .roc_crashed = &rocCrashedFn,
+        .hosted_fns = hosted_fns_table,
     };
 }
 
 /// Initialize the app - call once at startup
 export fn _init() void {
     var roc_ops = makeRocOps();
-    var result: Try_BoxModel_I64 = undefined;
+
+    // Initialize keyboard state manager
+    if (!keys_initialized) {
+        keys = ffi.Keys.init(&roc_ops);
+        keys_initialized = true;
+    }
+
+    var result: RocResult = undefined;
     // Create initial host state for init (frame 0, no input)
-    var init_state = types.InputState.FFI{
+    keys.incref(); // Prevent Roc from freeing our list
+    var init_state = abi.Host{
         .frame_count = 0,
-        .mouse_wheel = 0,
-        .mouse_x = 0,
-        .mouse_y = 0,
-        .mouse_left = false,
-        .mouse_right = false,
-        .mouse_middle = false,
+        .keys = keys.list,
+        .mouse = .{
+            .wheel = 0,
+            .x = 0,
+            .y = 0,
+            .left = false,
+            .right = false,
+            .middle = false,
+        },
     };
-    roc__init_for_host(&roc_ops, &result, @ptrCast(&init_state));
+    roc__init_for_host(&roc_ops, @ptrCast(&result), @ptrCast(&init_state));
 
     if (result.isOk()) {
-        app_model = result.getModel();
+        app_model = result.getOk();
         app_initialized = true;
     }
 }
@@ -348,24 +397,31 @@ export fn _init() void {
 export fn _frame(mouse_x: f32, mouse_y: f32, buttons: u32, wheel: f32) void {
     if (!app_initialized) return;
 
-    var roc_ops = makeRocOps();
-    const platform_state = RocHostState{
+    // Update keyboard state from JS-provided key_state array
+    keys.update(&key_state);
+    keys.incref(); // Prevent Roc from freeing our list
+
+    const platform_state = abi.Host{
         .frame_count = frame_count,
-        .mouse_x = mouse_x,
-        .mouse_y = mouse_y,
-        .mouse_left = (buttons & 1) != 0,
-        .mouse_middle = (buttons & 4) != 0,
-        .mouse_right = (buttons & 2) != 0,
-        .mouse_wheel = wheel,
+        .keys = keys.list,
+        .mouse = .{
+            .x = mouse_x,
+            .y = mouse_y,
+            .left = (buttons & 1) != 0,
+            .middle = (buttons & 4) != 0,
+            .right = (buttons & 2) != 0,
+            .wheel = wheel,
+        },
     };
 
-    var result: Try_BoxModel_I64 = undefined;
+    var roc_ops = makeRocOps();
+    var result: RocResult = undefined;
     var args = RenderArgs{ .model = app_model, .state = platform_state };
-    roc__render_for_host(&roc_ops, &result, &args);
+    roc__render_for_host(&roc_ops, @ptrCast(&result), @ptrCast(&args));
 
     // Update model for next frame (same as native host - no decref between frames)
     if (result.isOk()) {
-        app_model = result.getModel();
+        app_model = result.getOk();
     }
     frame_count += 1;
 }
@@ -387,14 +443,13 @@ export fn _test_draw_commands() u32 {
     wasm.drawRectangle(.{ .x = 10, .y = 10, .width = 100, .height = 50, .color = .red });
 
     // Circle at (200, 100), radius 30, green
-    wasm.drawCircle(.{ .center = types.Vector2.init(200, 100), .radius = 30, .color = .green });
+    wasm.drawCircle(.{ .center = .{ .x = 200, .y = 100 }, .radius = 30, .color = .green });
 
     // Line from (300, 10) to (400, 100), yellow
-    wasm.drawLine(.{ .start = types.Vector2.init(300, 10), .end = types.Vector2.init(400, 100), .color = .yellow });
+    wasm.drawLine(.{ .start = .{ .x = 300, .y = 10 }, .end = .{ .x = 400, .y = 100 }, .color = .yellow });
 
     // Text "Test" at (10, 200), size 32, white
-    var text_buf: [256:0]u8 = undefined;
-    wasm.drawText(.{ .pos = types.Vector2.init(10, 200), .content = "Test", .size = 32, .color = .white }, &text_buf);
+    wasm.drawText(10, 200, "Test", 32, .white);
 
     return buf.cmd_count;
 }
@@ -557,6 +612,55 @@ export fn _get_offset_rect_gradient_h_right() usize {
     return @offsetOf(CommandBuffer, "rect_gradient_h_right");
 }
 
+// Host Effect JS Interop Exports
+// These functions allow JavaScript to interact with Host effects
+
+/// Get the exit code requested by Host.exit!, or -1 if no exit was requested.
+/// JS should check this after each _frame() call.
+export fn _get_exit_requested() i64 {
+    return exit_requested orelse -1;
+}
+
+/// Clear the exit request (useful if JS wants to ignore the exit)
+export fn _clear_exit_requested() void {
+    exit_requested = null;
+}
+
+/// Set the screen size (JS should call this before _frame() to update dimensions)
+export fn _set_screen_size(w: i32, h: i32) void {
+    screen_width = w;
+    screen_height = h;
+}
+
+// Keyboard State Exports
+// These functions allow JavaScript to update keyboard state from keydown/keyup events.
+// JS should call _set_key_down/up on keyboard events, then the state is automatically
+// passed to Roc each frame via the keys list.
+
+/// Set a key to Down state (1). JS should call this on keydown events.
+/// key_code should be the raylib key code (0-348).
+export fn _set_key_down(key_code: u32) void {
+    if (key_code < ffi.KEY_COUNT) {
+        key_state[key_code] = 1;
+    }
+}
+
+/// Set a key to Up state (0). JS should call this on keyup events.
+/// key_code should be the raylib key code (0-348).
+export fn _set_key_up(key_code: u32) void {
+    if (key_code < ffi.KEY_COUNT) {
+        key_state[key_code] = 0;
+    }
+}
+
+/// Get the current state of a key (0=Up, 1=Down). Useful for debugging.
+export fn _get_key_state(key_code: u32) u8 {
+    if (key_code < ffi.KEY_COUNT) {
+        return key_state[key_code];
+    }
+    return 0;
+}
+
 // Memory Telemetry Exports
 // These functions allow JavaScript to monitor memory allocation patterns.
 // Call after _frame() to get current statistics. If (alloc_count - dealloc_count)
@@ -613,14 +717,14 @@ test "hostedDrawRectangle stores data correctly via wasm backend" {
     const buf = wasm.getBuffer();
     buf.reset();
 
-    const rect = RocRectangle{
+    const rect = abi.DrawRectangleArgs{
         .x = 10.0,
         .y = 20.0,
         .width = 100.0,
         .height = 50.0,
-        .color = 10,
+        .color = .red,
     };
-    hostedDrawRectangle(undefined, undefined, @ptrCast(@constCast(&rect)));
+    hostedDrawRectangle(undefined, undefined, &rect);
 
     try testing.expectEqual(@as(u32, 1), buf.rect_count);
     try testing.expectEqual(@as(u32, 1), buf.cmd_count);

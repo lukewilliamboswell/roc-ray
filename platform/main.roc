@@ -5,7 +5,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host]
+	exposes [Draw, Color, Host, Keys]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -29,23 +29,26 @@ platform ""
 import Draw
 import Color
 import Host
+import Keys
 
 ## Internal type for host boundary - kept simple/flat for C compatibility
+## Field order must match FFI struct in types.zig (alignment then alphabetical)
 HostStateFromHost : {
 	frame_count : U64,
+	keys : List(U8),  ## 349 bytes, one per raylib key code 0-348
 	mouse_wheel : F32,
 	mouse_x : F32,
 	mouse_y : F32,
 	mouse_left : Bool,
-	mouse_right : Bool,
 	mouse_middle : Bool,
+	mouse_right : Bool,
 }
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {
-	host : Host
 	host = {
 		frame_count: host_state.frame_count,
+		keys: host_state.keys,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,
@@ -65,9 +68,9 @@ init_for_host! = |host_state| {
 
 render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
 render_for_host! = |boxed_model, host_state| {
-	host : Host
 	host = {
 		frame_count: host_state.frame_count,
+		keys: host_state.keys,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,

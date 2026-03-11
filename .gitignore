@@ -2,10 +2,14 @@ generated-docs/
 
 # Built example executables (use `git add -f` to add manually if needed)
 examples/hello_world
+examples/keyboard
+examples/keyboard_minimal
+examples/kitchen_sink
 examples/read_env
 
 # Built executables at root
 hello_world
+keyboard
 
 all_roc_syntax
 
@@ -87,3 +91,6 @@ www/*.wasm
 
 # log files
 *.log
+
+# Python cache
+__pycache__/

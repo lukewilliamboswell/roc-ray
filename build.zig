@@ -245,21 +245,13 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/sim.zig"),
             .target = native_target,
             .optimize = optimize,
+            .imports = &.{
+                .{ .name = "builtins", .module = builtins_module },
+            },
         }),
     });
     const run_sim_tests = b.addRunArtifact(sim_tests);
     test_step.dependOn(&run_sim_tests.step);
-
-    // Zig unit tests for types.zig (safe Zig types)
-    const types_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/types.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-    const run_types_tests = b.addRunArtifact(types_tests);
-    test_step.dependOn(&run_types_tests.step);
 
     // Zig unit tests for overlay_native.zig (replay UI)
     const overlay_tests = b.addTest(.{

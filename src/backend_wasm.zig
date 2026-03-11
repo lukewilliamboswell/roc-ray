@@ -6,7 +6,8 @@
 //! The command buffer uses Structure-of-Arrays (SoA) layout for cache efficiency
 //! and zero runtime allocations.
 
-const types = @import("types.zig");
+const abi = @import("roc_platform_abi.zig");
+const ffi = @import("roc_ffi.zig");
 
 /// Maximum total commands per frame (all types combined).
 pub const MAX_COMMANDS = 2048;
@@ -137,70 +138,67 @@ fn pushCmd(cmd_type: u4, index: u12) void {
     cmd_buffer.cmd_count += 1;
 }
 
-/// Draw a circle using safe types.
-pub fn drawCircle(circle: types.Circle) void {
+/// Draw a circle from abi args.
+pub fn drawCircle(args: abi.DrawCircleArgs) void {
     const i = cmd_buffer.circle_count;
     if (i >= MAX_CIRCLES) return;
 
-    cmd_buffer.circle_x[i] = circle.center.x;
-    cmd_buffer.circle_y[i] = circle.center.y;
-    cmd_buffer.circle_radius[i] = circle.radius;
-    cmd_buffer.circle_color[i] = circle.color.toU8();
+    cmd_buffer.circle_x[i] = args.center.x;
+    cmd_buffer.circle_y[i] = args.center.y;
+    cmd_buffer.circle_radius[i] = args.radius;
+    cmd_buffer.circle_color[i] = ffi.colorToU8(args.color);
     cmd_buffer.circle_count += 1;
 
     pushCmd(CMD_CIRCLE, @intCast(i));
 }
 
-/// Draw a rectangle using safe types.
-pub fn drawRectangle(rect: types.Rectangle) void {
+/// Draw a rectangle from abi args.
+pub fn drawRectangle(args: abi.DrawRectangleArgs) void {
     const i = cmd_buffer.rect_count;
     if (i >= MAX_RECTS) return;
 
-    cmd_buffer.rect_x[i] = rect.x;
-    cmd_buffer.rect_y[i] = rect.y;
-    cmd_buffer.rect_w[i] = rect.width;
-    cmd_buffer.rect_h[i] = rect.height;
-    cmd_buffer.rect_color[i] = rect.color.toU8();
+    cmd_buffer.rect_x[i] = args.x;
+    cmd_buffer.rect_y[i] = args.y;
+    cmd_buffer.rect_w[i] = args.width;
+    cmd_buffer.rect_h[i] = args.height;
+    cmd_buffer.rect_color[i] = ffi.colorToU8(args.color);
     cmd_buffer.rect_count += 1;
 
     pushCmd(CMD_RECT, @intCast(i));
 }
 
-/// Draw a line using safe types.
-pub fn drawLine(line: types.Line) void {
+/// Draw a line from abi args.
+pub fn drawLine(args: abi.DrawLineArgs) void {
     const i = cmd_buffer.line_count;
     if (i >= MAX_LINES) return;
 
-    cmd_buffer.line_x1[i] = line.start.x;
-    cmd_buffer.line_y1[i] = line.start.y;
-    cmd_buffer.line_x2[i] = line.end.x;
-    cmd_buffer.line_y2[i] = line.end.y;
-    cmd_buffer.line_color[i] = line.color.toU8();
+    cmd_buffer.line_x1[i] = args.start.x;
+    cmd_buffer.line_y1[i] = args.start.y;
+    cmd_buffer.line_x2[i] = args.end.x;
+    cmd_buffer.line_y2[i] = args.end.y;
+    cmd_buffer.line_color[i] = ffi.colorToU8(args.color);
     cmd_buffer.line_count += 1;
 
     pushCmd(CMD_LINE, @intCast(i));
 }
 
-/// Draw text using safe types.
-/// Note: The buf parameter is for API compatibility with raylib backend but unused here.
-pub fn drawText(text: types.Text, buf: *[256:0]u8) void {
-    _ = buf;
+/// Draw text from individual fields (text content as a slice, not RocStr).
+pub fn drawText(x: f32, y: f32, content: []const u8, size: i32, color: abi.Color) void {
     const i = cmd_buffer.text_count;
     if (i >= MAX_TEXTS) return;
 
-    const str = text.content;
     const available = MAX_STRING_BYTES - cmd_buffer.string_buffer_len;
-    const str_len: u32 = @intCast(@min(str.len, available));
+    const str_len: u32 = @intCast(@min(content.len, available));
     if (str_len == 0) return;
 
     const offset = cmd_buffer.string_buffer_len;
-    @memcpy(cmd_buffer.string_buffer[offset..][0..str_len], str[0..str_len]);
+    @memcpy(cmd_buffer.string_buffer[offset..][0..str_len], content[0..str_len]);
     cmd_buffer.string_buffer_len += str_len;
 
-    cmd_buffer.text_x[i] = text.pos.x;
-    cmd_buffer.text_y[i] = text.pos.y;
-    cmd_buffer.text_size[i] = text.size;
-    cmd_buffer.text_color[i] = text.color.toU8();
+    cmd_buffer.text_x[i] = x;
+    cmd_buffer.text_y[i] = y;
+    cmd_buffer.text_size[i] = size;
+    cmd_buffer.text_color[i] = ffi.colorToU8(color);
     cmd_buffer.text_str_offset[i] = @intCast(offset);
     cmd_buffer.text_str_len[i] = @intCast(str_len);
     cmd_buffer.text_count += 1;
@@ -218,54 +216,54 @@ pub fn endDrawing() void {
     // No-op - JS reads the buffer after the frame function returns
 }
 
-/// Clear the background with a safe color.
-pub fn clearBackground(color: types.Color) void {
+/// Clear the background with a color.
+pub fn clearBackground(color: abi.Color) void {
     cmd_buffer.has_clear = true;
-    cmd_buffer.clear_color = color.toU8();
+    cmd_buffer.clear_color = ffi.colorToU8(color);
 }
 
-/// Draw a circle gradient using safe types.
-pub fn drawCircleGradient(cg: types.CircleGradient) void {
+/// Draw a circle gradient from abi args.
+pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
     const i = cmd_buffer.circle_gradient_count;
     if (i >= MAX_CIRCLE_GRADIENTS) return;
 
-    cmd_buffer.circle_gradient_x[i] = cg.center.x;
-    cmd_buffer.circle_gradient_y[i] = cg.center.y;
-    cmd_buffer.circle_gradient_radius[i] = cg.radius;
-    cmd_buffer.circle_gradient_inner[i] = cg.color_inner.toU8();
-    cmd_buffer.circle_gradient_outer[i] = cg.color_outer.toU8();
+    cmd_buffer.circle_gradient_x[i] = args.center.x;
+    cmd_buffer.circle_gradient_y[i] = args.center.y;
+    cmd_buffer.circle_gradient_radius[i] = args.radius;
+    cmd_buffer.circle_gradient_inner[i] = ffi.colorToU8(args.color_inner);
+    cmd_buffer.circle_gradient_outer[i] = ffi.colorToU8(args.color_outer);
     cmd_buffer.circle_gradient_count += 1;
 
     pushCmd(CMD_CIRCLE_GRADIENT, @intCast(i));
 }
 
-/// Draw a rectangle with vertical gradient using safe types.
-pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+/// Draw a rectangle with vertical gradient from abi args.
+pub fn drawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) void {
     const i = cmd_buffer.rect_gradient_v_count;
     if (i >= MAX_RECT_GRADIENTS) return;
 
-    cmd_buffer.rect_gradient_v_x[i] = rg.x;
-    cmd_buffer.rect_gradient_v_y[i] = rg.y;
-    cmd_buffer.rect_gradient_v_w[i] = rg.width;
-    cmd_buffer.rect_gradient_v_h[i] = rg.height;
-    cmd_buffer.rect_gradient_v_top[i] = rg.color_top.toU8();
-    cmd_buffer.rect_gradient_v_bottom[i] = rg.color_bottom.toU8();
+    cmd_buffer.rect_gradient_v_x[i] = args.x;
+    cmd_buffer.rect_gradient_v_y[i] = args.y;
+    cmd_buffer.rect_gradient_v_w[i] = args.width;
+    cmd_buffer.rect_gradient_v_h[i] = args.height;
+    cmd_buffer.rect_gradient_v_top[i] = ffi.colorToU8(args.color_top);
+    cmd_buffer.rect_gradient_v_bottom[i] = ffi.colorToU8(args.color_bottom);
     cmd_buffer.rect_gradient_v_count += 1;
 
     pushCmd(CMD_RECT_GRADIENT_V, @intCast(i));
 }
 
-/// Draw a rectangle with horizontal gradient using safe types.
-pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+/// Draw a rectangle with horizontal gradient from abi args.
+pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
     const i = cmd_buffer.rect_gradient_h_count;
     if (i >= MAX_RECT_GRADIENTS) return;
 
-    cmd_buffer.rect_gradient_h_x[i] = rg.x;
-    cmd_buffer.rect_gradient_h_y[i] = rg.y;
-    cmd_buffer.rect_gradient_h_w[i] = rg.width;
-    cmd_buffer.rect_gradient_h_h[i] = rg.height;
-    cmd_buffer.rect_gradient_h_left[i] = rg.color_left.toU8();
-    cmd_buffer.rect_gradient_h_right[i] = rg.color_right.toU8();
+    cmd_buffer.rect_gradient_h_x[i] = args.x;
+    cmd_buffer.rect_gradient_h_y[i] = args.y;
+    cmd_buffer.rect_gradient_h_w[i] = args.width;
+    cmd_buffer.rect_gradient_h_h[i] = args.height;
+    cmd_buffer.rect_gradient_h_left[i] = ffi.colorToU8(args.color_left);
+    cmd_buffer.rect_gradient_h_right[i] = ffi.colorToU8(args.color_right);
     cmd_buffer.rect_gradient_h_count += 1;
 
     pushCmd(CMD_RECT_GRADIENT_H, @intCast(i));
@@ -318,14 +316,7 @@ test "pushCmd encodes type and index correctly" {
 test "drawRectangle stores data correctly" {
     cmd_buffer.reset();
 
-    const rect = types.Rectangle{
-        .x = 10.0,
-        .y = 20.0,
-        .width = 100.0,
-        .height = 50.0,
-        .color = .red,
-    };
-    drawRectangle(rect);
+    drawRectangle(.{ .x = 10.0, .y = 20.0, .width = 100.0, .height = 50.0, .color = .red });
 
     try testing.expectEqual(@as(u32, 1), cmd_buffer.rect_count);
     try testing.expectEqual(@as(u32, 1), cmd_buffer.cmd_count);
@@ -344,12 +335,7 @@ test "drawRectangle stores data correctly" {
 test "drawCircle stores data correctly" {
     cmd_buffer.reset();
 
-    const circle = types.Circle{
-        .center = types.Vector2.init(50, 50),
-        .radius = 25,
-        .color = .green,
-    };
-    drawCircle(circle);
+    drawCircle(.{ .center = .{ .x = 50, .y = 50 }, .radius = 25, .color = .green });
 
     try testing.expectEqual(@as(u32, 1), cmd_buffer.circle_count);
     try testing.expectEqual(@as(f32, 50.0), cmd_buffer.circle_x[0]);
@@ -361,12 +347,7 @@ test "drawCircle stores data correctly" {
 test "drawLine stores data correctly" {
     cmd_buffer.reset();
 
-    const line = types.Line{
-        .start = types.Vector2.init(0, 0),
-        .end = types.Vector2.init(100, 100),
-        .color = .blue,
-    };
-    drawLine(line);
+    drawLine(.{ .start = .{ .x = 0, .y = 0 }, .end = .{ .x = 100, .y = 100 }, .color = .blue });
 
     try testing.expectEqual(@as(u32, 1), cmd_buffer.line_count);
     try testing.expectEqual(@as(f32, 0.0), cmd_buffer.line_x1[0]);
@@ -379,14 +360,7 @@ test "drawLine stores data correctly" {
 test "drawText stores data correctly" {
     cmd_buffer.reset();
 
-    const text = types.Text{
-        .pos = types.Vector2.init(10, 200),
-        .content = "Hello",
-        .size = 20,
-        .color = .white,
-    };
-    var buf: [256:0]u8 = undefined;
-    drawText(text, &buf);
+    drawText(10, 200, "Hello", 20, .white);
 
     try testing.expectEqual(@as(u32, 1), cmd_buffer.text_count);
     try testing.expectEqual(@as(f32, 10.0), cmd_buffer.text_x[0]);
@@ -403,9 +377,9 @@ test "command stream preserves order" {
 
     // Push: rect, circle, rect, line
     drawRectangle(.{ .x = 0, .y = 0, .width = 10, .height = 10, .color = .black });
-    drawCircle(.{ .center = types.Vector2.init(50, 50), .radius = 25, .color = .blue });
+    drawCircle(.{ .center = .{ .x = 50, .y = 50 }, .radius = 25, .color = .blue });
     drawRectangle(.{ .x = 100, .y = 0, .width = 10, .height = 10, .color = .red });
-    drawLine(.{ .start = types.Vector2.zero(), .end = types.Vector2.init(100, 100), .color = .green });
+    drawLine(.{ .start = .{ .x = 0, .y = 0 }, .end = .{ .x = 100, .y = 100 }, .color = .green });
 
     try testing.expectEqual(@as(u32, 4), cmd_buffer.cmd_count);
     try testing.expectEqual(@as(u32, 2), cmd_buffer.rect_count);

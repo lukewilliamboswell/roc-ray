@@ -2,8 +2,6 @@
 
 A [Roc platform](https://www.roc-lang.org/platforms) for creating simple graphics applications.
 
-> **Work in Progress:** This branch (`new-compiler`) is actively porting features from the `main` branch while upgrading to new Roc semantics. Expect breaking changes and incomplete functionality.
-
 ## Features
 
 - 2D drawing primitives (rectangles, circles, lines, text)

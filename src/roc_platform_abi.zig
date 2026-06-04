@@ -164,12 +164,9 @@ pub fn decrefBoxWith(
     const rc = boxRefcountPtr(data);
     if (rc.* == 0) return; // REFCOUNT_STATIC_DATA
 
-    if (payload_decref) |callback| {
-        if (rc.* == 1) callback(data_ptr, roc_ops);
-    }
-
     const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
     if (prev == 1) {
+        if (payload_decref) |callback| callback(data_ptr, roc_ops);
         freeBoxAllocation(data, payload_alignment, payload_decref != null, roc_ops);
     }
 }
@@ -190,7 +187,6 @@ pub fn freeBoxWith(
 pub fn isUniqueBox(data_ptr: ?*anyopaque) bool {
     const data = boxDataPtr(data_ptr) orelse return true;
     const rc = boxRefcountPtr(data);
-    if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA
     return rc.* == 1;
 }
 
@@ -980,6 +976,14 @@ pub const HostExitArgs = extern struct {
     arg0: i32,
 };
 
+/// Arguments for Host.random_i32!
+/// Roc signature: I32, I32 => I32
+/// Refcounted fields are owned by the hosted function.
+pub const HostRandom_i32Args = extern struct {
+    arg0: i32,
+    arg1: i32,
+};
+
 /// Arguments for Host.read_env!
 /// Roc signature: Host, Str => Try(Str, [NotFound])
 /// Refcounted fields are owned by the hosted function.
@@ -1026,6 +1030,7 @@ pub const PlatformHostedFns = struct {
     draw_text: *const fn (*RocOps, *anyopaque, *const DrawTextArgs) callconv(.c) void, // Draw.text!
     host_exit: *const fn (*RocOps, *anyopaque, *const HostExitArgs) callconv(.c) void, // Host.exit!
     host_get_screen_size: *const fn (*RocOps, *HostGet_screen_sizeRetRecord, *anyopaque) callconv(.c) void, // Host.get_screen_size!
+    host_random_i32: *const fn (*RocOps, *i32, *const HostRandom_i32Args) callconv(.c) void, // Host.random_i32!
     host_read_env: *const fn (*RocOps, *Try, *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
     host_set_screen_size: *const fn (*RocOps, *Try, *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
     host_set_target_fps: *const fn (*RocOps, *anyopaque, *const HostSet_target_fpsArgs) callconv(.c) void, // Host.set_target_fps!
@@ -1049,9 +1054,10 @@ pub fn hostedFunctions(comptime fns: PlatformHostedFns) HostedFunctions {
             hostedFn(fns.draw_text), // Draw.text! (index 9)
             hostedFn(fns.host_exit), // Host.exit! (index 10)
             hostedFn(fns.host_get_screen_size), // Host.get_screen_size! (index 11)
-            hostedFn(fns.host_read_env), // Host.read_env! (index 12)
-            hostedFn(fns.host_set_screen_size), // Host.set_screen_size! (index 13)
-            hostedFn(fns.host_set_target_fps), // Host.set_target_fps! (index 14)
+            hostedFn(fns.host_random_i32), // Host.random_i32! (index 12)
+            hostedFn(fns.host_read_env), // Host.read_env! (index 13)
+            hostedFn(fns.host_set_screen_size), // Host.set_screen_size! (index 14)
+            hostedFn(fns.host_set_target_fps), // Host.set_target_fps! (index 15)
         };
     };
     return .{

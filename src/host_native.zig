@@ -191,6 +191,10 @@ fn hostedSetTargetFps(_: *RocOps, _: *anyopaque, args: *const abi.HostSet_target
     raylib.setTargetFps(args.arg0);
 }
 
+fn hostedRandomI32(_: *RocOps, result: *i32, args: *const abi.HostRandom_i32Args) callconv(.c) void {
+    result.* = raylib.getRandomValue(args.arg0, args.arg1);
+}
+
 /// Hosted function dispatch table built from PlatformHostedFns.
 const hosted_fns = abi.hostedFunctions(.{
     .draw_begin_frame = &hostedDrawBeginFrame,
@@ -205,6 +209,7 @@ const hosted_fns = abi.hostedFunctions(.{
     .draw_text = &hostedDrawText,
     .host_exit = &hostedExit,
     .host_get_screen_size = &hostedGetScreenSize,
+    .host_random_i32 = &hostedRandomI32,
     .host_read_env = if (builtin.os.tag == .windows) &hostedReadEnvWindows else &hostedReadEnvPosix,
     // set_screen_size! returns Try({}, [NotSupported, ..]), whose real layout is
     // smaller than the glue's shared `Try` type (the glue deduplicates both Try
@@ -269,6 +274,11 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Default frame-rate cap. Apps can override this from init!/render! via
     // Host.set_target_fps!; we don't force it again after init.
     raylib.setTargetFps(240);
+
+    // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
+    // (not uniformly available across our -nostdlib targets) and instead use
+    // ASLR: the address of a live object differs run-to-run on PIE builds.
+    raylib.setRandomSeed(@truncate(@intFromPtr(&roc_ops)));
 
     // Call Roc init! to build the initial model
     if (TRACE_HOST) std.log.debug("[HOST] Calling roc__init_for_host...", .{});

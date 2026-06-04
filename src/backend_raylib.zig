@@ -174,6 +174,16 @@ pub fn getTime() f64 {
     return rl.GetTime();
 }
 
+/// Seed raylib's random number generator.
+pub fn setRandomSeed(seed: u32) void {
+    rl.SetRandomSeed(seed);
+}
+
+/// Get a random value in the range [min, max] (both endpoints included).
+pub fn getRandomValue(min: c_int, max: c_int) c_int {
+    return rl.GetRandomValue(min, max);
+}
+
 /// Keyboard key enum for type-safe key handling.
 pub const Key = enum(c_int) {
     space = rl.KEY_SPACE,

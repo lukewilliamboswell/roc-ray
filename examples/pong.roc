@@ -52,15 +52,17 @@ ai_speed = 270
 init_vx : F32
 init_vx = 260
 
-init_vy : F32
-init_vy = 140
-
 # vy gained per pixel of offset between ball and paddle centre on a hit
 bounce_factor : F32
 bounce_factor = 6
 
 clamp : F32, F32, F32 -> F32
 clamp = |v, lo, hi| if v < lo lo else if v > hi hi else v
+
+# A random vertical serve speed in px/second, so each serve leaves at a
+# different angle instead of the same predictable line.
+random_serve_vy! : () => F32
+random_serve_vy! = || I32.to_f32(Host.random_i32!(-160, 160))
 
 program = { init!, render! }
 
@@ -74,12 +76,15 @@ init! = |_host| {
 	# because all motion is scaled by host.frame_time. Try 30, 60, 144, 240.
 	Host.set_target_fps!(240)
 
+	# Serve in a random direction at a random angle.
+	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
+
 	Ok(
 		{
 			ball_x: 400,
 			ball_y: 300,
-			ball_vx: 260,
-			ball_vy: 140,
+			ball_vx: serve_dir,
+			ball_vy: random_serve_vy!(),
 			left_y: 250,
 			right_y: 250,
 			left_score: 0,
@@ -93,6 +98,9 @@ render! = |model, host| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
+
+	# Angle to use if the ball is served (scored) this frame.
+	serve_vy = random_serve_vy!()
 
 	# --- Left paddle: player input (W up, S down) ---
 	w_down = Keys.key_down(host.keys, KeyW)
@@ -138,7 +146,7 @@ render! = |model, host| {
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny
 	final_vx = if out_left (init_vx * -1) else if out_right init_vx else vx
-	final_vy = if out_left init_vy else if out_right init_vy else vy
+	final_vy = if out_left serve_vy else if out_right serve_vy else vy
 
 	left_score = if out_right model.left_score + 1 else model.left_score
 	right_score = if out_left model.right_score + 1 else model.right_score

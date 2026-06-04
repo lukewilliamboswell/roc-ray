@@ -36,6 +36,12 @@ Host := {
 	## Returns Ok with the value if found, or Err NotFound if not set.
 	read_env! : Host, Str => Try(Str, [NotFound, ..])
 
+	## Get a random integer in the range [min, max] (both endpoints included).
+	## The generator is seeded once at startup, so sequences differ between runs.
+	## Derive other ranges/floats from this, e.g. a random direction with
+	## `if Host.random_i32!(0, 1) == 0 -1 else 1`.
+	random_i32! : I32, I32 => I32
+
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
 	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported, ..])

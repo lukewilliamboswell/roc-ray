@@ -6,10 +6,12 @@ examples/keyboard
 examples/keyboard_minimal
 examples/kitchen_sink
 examples/read_env
+examples/pong
 
 # Built executables at root
 hello_world
 keyboard
+pong
 
 all_roc_syntax
 

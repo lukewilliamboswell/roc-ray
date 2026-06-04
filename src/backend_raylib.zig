@@ -164,9 +164,14 @@ pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
 }
 
-/// Get frame time (delta time).
+/// Get frame time (delta time) in seconds since the previous frame.
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();
+}
+
+/// Get elapsed time in seconds since the window was initialized (monotonic).
+pub fn getTime() f64 {
+    return rl.GetTime();
 }
 
 /// Keyboard key enum for type-safe key handling.

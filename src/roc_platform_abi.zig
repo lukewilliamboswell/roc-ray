@@ -133,6 +133,94 @@ pub fn hostedFn(func: anytype) HostedFn {
     return @ptrCast(func);
 }
 
+/// Payload drop callback for a boxed value.
+///
+/// The callback receives the boxed payload data pointer and must recursively
+/// decref any Roc refcounted values inside the payload. It must not free the
+/// box allocation; `decrefBoxWith` and `freeBoxWith` free it after the callback.
+pub const RocBoxPayloadDecref = *const fn (?*anyopaque, *RocOps) callconv(.c) void;
+
+/// Increment the refcount of a boxed payload data pointer.
+pub fn increfBox(data_ptr: ?*anyopaque, amount: isize) void {
+    const data = boxDataPtr(data_ptr) orelse return;
+    const rc = boxRefcountPtr(data);
+    if (rc.* == 0) return; // REFCOUNT_STATIC_DATA
+    _ = @atomicRmw(isize, rc, .Add, amount, .monotonic);
+}
+
+/// Decrement a pointer-aligned boxed payload with no Roc refcounted values.
+pub fn decrefBox(data_ptr: ?*anyopaque, roc_ops: *RocOps) void {
+    decrefBoxWith(data_ptr, @alignOf(usize), null, roc_ops);
+}
+
+/// Decrement a boxed payload and run payload teardown when this is the final ref.
+pub fn decrefBoxWith(
+    data_ptr: ?*anyopaque,
+    payload_alignment: usize,
+    payload_decref: ?RocBoxPayloadDecref,
+    roc_ops: *RocOps,
+) void {
+    const data = boxDataPtr(data_ptr) orelse return;
+    const rc = boxRefcountPtr(data);
+    if (rc.* == 0) return; // REFCOUNT_STATIC_DATA
+
+    if (payload_decref) |callback| {
+        if (rc.* == 1) callback(data_ptr, roc_ops);
+    }
+
+    const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
+    if (prev == 1) {
+        freeBoxAllocation(data, payload_alignment, payload_decref != null, roc_ops);
+    }
+}
+
+/// Free a boxed payload allocation immediately after running payload teardown.
+pub fn freeBoxWith(
+    data_ptr: ?*anyopaque,
+    payload_alignment: usize,
+    payload_decref: ?RocBoxPayloadDecref,
+    roc_ops: *RocOps,
+) void {
+    const data = boxDataPtr(data_ptr) orelse return;
+    if (payload_decref) |callback| callback(data_ptr, roc_ops);
+    freeBoxAllocation(data, payload_alignment, payload_decref != null, roc_ops);
+}
+
+/// Return true when a boxed payload data pointer has exactly one live ref.
+pub fn isUniqueBox(data_ptr: ?*anyopaque) bool {
+    const data = boxDataPtr(data_ptr) orelse return true;
+    const rc = boxRefcountPtr(data);
+    if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA
+    return rc.* == 1;
+}
+
+fn boxDataPtr(data_ptr: ?*anyopaque) ?[*]u8 {
+    const ptr = data_ptr orelse return null;
+    return @ptrCast(ptr);
+}
+
+fn boxRefcountPtr(data: [*]u8) *isize {
+    return @ptrFromInt(@intFromPtr(data) - @sizeOf(isize));
+}
+
+fn freeBoxAllocation(
+    data: [*]u8,
+    payload_alignment: usize,
+    payload_contains_refcounted: bool,
+    roc_ops: *RocOps,
+) void {
+    const ptr_width = @sizeOf(usize);
+    const required_space: usize = if (payload_contains_refcounted) (2 * ptr_width) else ptr_width;
+    const header_bytes = @max(required_space, payload_alignment);
+    const alloc_alignment = @max(ptr_width, payload_alignment);
+    const base: *anyopaque = @ptrFromInt(@intFromPtr(data) - header_bytes);
+    var dealloc_args: RocDealloc = .{
+        .alignment = alloc_alignment,
+        .ptr = base,
+    };
+    roc_ops.roc_dealloc(&dealloc_args, roc_ops.env);
+}
+
 /// A Roc string value. Small strings (up to 23 bytes) are stored inline;
 /// larger strings are heap-allocated with a reference count.
 ///
@@ -481,9 +569,9 @@ pub const RocEnv = struct {
 
 /// Element type for __AnonStruct1
 pub const __AnonStruct1 = extern struct {
-    center: __AnonStruct2,
-    radius: f32,
-    color: Color,
+    @"center": __AnonStruct2,
+    @"radius": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -495,8 +583,8 @@ comptime {
 
 /// Element type for __AnonStruct2
 pub const __AnonStruct2 = extern struct {
-    x: f32,
-    y: f32,
+    @"x": f32,
+    @"y": f32,
 };
 
 comptime {
@@ -508,10 +596,10 @@ comptime {
 
 /// Element type for __AnonStruct5
 pub const __AnonStruct5 = extern struct {
-    center: __AnonStruct2,
-    radius: f32,
-    color_inner: Color,
-    color_outer: Color,
+    @"center": __AnonStruct2,
+    @"radius": f32,
+    @"color_inner": Color,
+    @"color_outer": Color,
 };
 
 comptime {
@@ -523,9 +611,9 @@ comptime {
 
 /// Element type for __AnonStruct6
 pub const __AnonStruct6 = extern struct {
-    end: __AnonStruct2,
-    start: __AnonStruct2,
-    color: Color,
+    @"end": __AnonStruct2,
+    @"start": __AnonStruct2,
+    @"color": Color,
 };
 
 comptime {
@@ -537,11 +625,11 @@ comptime {
 
 /// Element type for __AnonStruct7
 pub const __AnonStruct7 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -553,12 +641,12 @@ comptime {
 
 /// Element type for __AnonStruct8
 pub const __AnonStruct8 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_left: Color,
-    color_right: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_left": Color,
+    @"color_right": Color,
 };
 
 comptime {
@@ -570,12 +658,12 @@ comptime {
 
 /// Element type for __AnonStruct9
 pub const __AnonStruct9 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_bottom: Color,
-    color_top: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_bottom": Color,
+    @"color_top": Color,
 };
 
 comptime {
@@ -587,10 +675,10 @@ comptime {
 
 /// Element type for __AnonStruct10
 pub const __AnonStruct10 = extern struct {
-    text: RocStr,
-    pos: __AnonStruct2,
-    size: i32,
-    color: Color,
+    @"text": RocStr,
+    @"pos": __AnonStruct2,
+    @"size": i32,
+    @"color": Color,
 };
 
 comptime {
@@ -602,8 +690,8 @@ comptime {
 
 /// Element type for __AnonStruct15
 pub const __AnonStruct15 = extern struct {
-    height: i32,
-    width: i32,
+    @"height": i32,
+    @"width": i32,
 };
 
 comptime {
@@ -615,39 +703,41 @@ comptime {
 
 /// Element type for Host
 pub const Host = extern struct {
-    frame_count: u64,
-    keys: RocListWith(u8, false),
-    mouse: __AnonStruct23,
+    @"frame_count": u64,
+    @"keys": RocListWith(u8, false),
+    @"timestamp_nanos": u64,
+    @"frame_time": f32,
+    @"mouse": __AnonStruct24,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Host) != 48) @compileError("Host size mismatch");
+        if (@sizeOf(Host) != 64) @compileError("Host size mismatch");
         if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct23
-pub const __AnonStruct23 = extern struct {
-    wheel: f32,
-    x: f32,
-    y: f32,
-    left: bool,
-    middle: bool,
-    right: bool,
+/// Element type for __AnonStruct24
+pub const __AnonStruct24 = extern struct {
+    @"wheel": f32,
+    @"x": f32,
+    @"y": f32,
+    @"left": bool,
+    @"middle": bool,
+    @"right": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct23) != 16) @compileError("__AnonStruct23 size mismatch");
-        if (@alignOf(__AnonStruct23) != 4) @compileError("__AnonStruct23 alignment mismatch");
+        if (@sizeOf(__AnonStruct24) != 16) @compileError("__AnonStruct24 size mismatch");
+        if (@alignOf(__AnonStruct24) != 4) @compileError("__AnonStruct24 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct28
 pub const __AnonStruct28 = extern struct {
-    height: f32,
-    width: f32,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -659,46 +749,44 @@ comptime {
 
 /// Element type for __AnonStruct29
 pub const __AnonStruct29 = extern struct {
-    // NOTE: local patch — `roc glue` emits Roc identifiers verbatim and does not
-    // escape `!` into Zig's `@"..."` syntax, producing invalid Zig here. Re-apply
-    // this escaping after regenerating until the glue generator is fixed.
-    // Tracking: https://github.com/roc-lang/roc/issues/9497
     @"init!": *anyopaque,
     @"render!": *anyopaque,
 };
 
-/// Element type for __AnonStruct36
-pub const __AnonStruct36 = extern struct {
-    wheel: f32,
-    x: f32,
-    y: f32,
-    left: bool,
-    middle: bool,
-    right: bool,
+/// Element type for __AnonStruct37
+pub const __AnonStruct37 = extern struct {
+    @"wheel": f32,
+    @"x": f32,
+    @"y": f32,
+    @"left": bool,
+    @"middle": bool,
+    @"right": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct36) != 16) @compileError("__AnonStruct36 size mismatch");
-        if (@alignOf(__AnonStruct36) != 4) @compileError("__AnonStruct36 alignment mismatch");
+        if (@sizeOf(__AnonStruct37) != 16) @compileError("__AnonStruct37 size mismatch");
+        if (@alignOf(__AnonStruct37) != 4) @compileError("__AnonStruct37 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct46
 pub const __AnonStruct46 = extern struct {
-    frame_count: u64,
-    keys: RocListWith(u8, false),
-    mouse_wheel: f32,
-    mouse_x: f32,
-    mouse_y: f32,
-    mouse_left: bool,
-    mouse_middle: bool,
-    mouse_right: bool,
+    @"frame_count": u64,
+    @"keys": RocListWith(u8, false),
+    @"timestamp_nanos": u64,
+    @"frame_time": f32,
+    @"mouse_wheel": f32,
+    @"mouse_x": f32,
+    @"mouse_y": f32,
+    @"mouse_left": bool,
+    @"mouse_middle": bool,
+    @"mouse_right": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct46) != 48) @compileError("__AnonStruct46 size mismatch");
+        if (@sizeOf(__AnonStruct46) != 64) @compileError("__AnonStruct46 size mismatch");
         if (@alignOf(__AnonStruct46) != 8) @compileError("__AnonStruct46 alignment mismatch");
     }
 }
@@ -745,8 +833,8 @@ comptime {
 /// Return type record for Host.get_screen_size!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const HostGet_screen_sizeRetRecord = extern struct {
-    height: i32,
-    width: i32,
+    @"height": i32,
+    @"width": i32,
 };
 
 comptime {
@@ -760,9 +848,9 @@ comptime {
 /// Roc signature: { center : { x : F32, y : F32 }, color : Color, radius : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawCircleArgs = extern struct {
-    center: __AnonStruct2,
-    radius: f32,
-    color: Color,
+    @"center": __AnonStruct2,
+    @"radius": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -776,10 +864,10 @@ comptime {
 /// Roc signature: { center : { x : F32, y : F32 }, color_inner : Color, color_outer : Color, radius : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawCircle_gradientArgs = extern struct {
-    center: __AnonStruct2,
-    radius: f32,
-    color_inner: Color,
-    color_outer: Color,
+    @"center": __AnonStruct2,
+    @"radius": f32,
+    @"color_inner": Color,
+    @"color_outer": Color,
 };
 
 comptime {
@@ -800,9 +888,9 @@ pub const DrawClearArgs = extern struct {
 /// Roc signature: { color : Color, end : { x : F32, y : F32 }, start : { x : F32, y : F32 } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawLineArgs = extern struct {
-    end: __AnonStruct2,
-    start: __AnonStruct2,
-    color: Color,
+    @"end": __AnonStruct2,
+    @"start": __AnonStruct2,
+    @"color": Color,
 };
 
 comptime {
@@ -816,11 +904,11 @@ comptime {
 /// Roc signature: { color : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangleArgs = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -834,12 +922,12 @@ comptime {
 /// Roc signature: { color_left : Color, color_right : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangle_gradient_hArgs = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_left: Color,
-    color_right: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_left": Color,
+    @"color_right": Color,
 };
 
 comptime {
@@ -853,12 +941,12 @@ comptime {
 /// Roc signature: { color_bottom : Color, color_top : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangle_gradient_vArgs = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_bottom: Color,
-    color_top: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_bottom": Color,
+    @"color_top": Color,
 };
 
 comptime {
@@ -872,10 +960,10 @@ comptime {
 /// Roc signature: { color : Color, pos : { x : F32, y : F32 }, size : I32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawTextArgs = extern struct {
-    text: RocStr,
-    pos: __AnonStruct2,
-    size: i32,
-    color: Color,
+    @"text": RocStr,
+    @"pos": __AnonStruct2,
+    @"size": i32,
+    @"color": Color,
 };
 
 comptime {
@@ -904,8 +992,8 @@ pub const HostRead_envArgs = extern struct {
 /// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
 pub const HostSet_screen_sizeArgs = extern struct {
-    height: f32,
-    width: f32,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -1131,9 +1219,5 @@ pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const _
 pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
 
 /// Entrypoint: drop_model_for_host!
-/// Drops the host-owned model box. Roc knows the `Model` layout and emits the
-/// correct box refcount/free (including the wider header when the payload holds
-/// refcounted fields), so the host must not hand-roll this. Return is `{}` (ZST);
-/// the arg slot holds the box pointer (`Box(Model)` -> single pointer).
 pub extern fn roc__drop_model_for_host(ops: *RocOps, ret_ptr: *anyopaque, arg_ptr: ?*const **anyopaque) callconv(.c) void;
 

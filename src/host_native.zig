@@ -266,7 +266,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Initialize raylib window
     raylib.initWindow(800, 600, "Roc + Raylib");
     defer raylib.closeWindow();
-    raylib.setTargetFps(60);
+    // Default frame-rate cap. Apps can override this from init!/render! via
+    // Host.set_target_fps!; we don't force it again after init.
+    raylib.setTargetFps(240);
 
     // Call Roc init! to build the initial model
     if (TRACE_HOST) std.log.debug("[HOST] Calling roc__init_for_host...", .{});
@@ -278,6 +280,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         keys.incref(); // Prevent Roc from freeing our list
         var init_state = abi.Host{
             .frame_count = 0,
+            .timestamp_nanos = 0,
+            .frame_time = 0,
             .keys = keys.list,
             .mouse = .{ .wheel = 0, .x = 0, .y = 0, .left = false, .right = false, .middle = false },
         };
@@ -295,13 +299,17 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         boxed_model = init_result.getOk();
     }
 
-    raylib.setTargetFps(240);
-
     // Main render loop
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
 
     while (!raylib.windowShouldClose()) {
+        // Sample raylib's monotonic clock (seconds since window init) at the
+        // start of the frame and expose it as nanoseconds. frame_time is
+        // raylib's own delta, forced to 0 on the first frame.
+        const now_ns: u64 = @intFromFloat(raylib.getTime() * 1_000_000_000.0);
+        const frame_time: f32 = if (frame_count == 0) 0 else raylib.getFrameTime();
+
         // Capture real inputs from raylib
         raylib.updateKeyboardState();
         keys.update(raylib.getKeyState());
@@ -309,6 +317,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         const mouse_pos = raylib.getMousePosition();
         const platform_state = abi.Host{
             .frame_count = frame_count,
+            .timestamp_nanos = now_ns,
+            .frame_time = frame_time,
             .keys = keys.list,
             .mouse = .{
                 .left = raylib.isMouseButtonDown(.left),

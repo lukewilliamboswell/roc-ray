@@ -2,6 +2,17 @@
 
 Host := {
 	frame_count : U64,
+
+	## Monotonic clock in nanoseconds, sampled at the start of this frame.
+	## Counts up from window initialization and never goes backwards. Use it
+	## for absolute timing (animations, scheduling, fixed-timestep loops).
+	## See the `Time` module for converting nanosecond durations to seconds.
+	timestamp_nanos : U64,
+
+	## Seconds elapsed since the previous frame (0 on the first frame).
+	## Multiply movement by this for frame-rate-independent motion, e.g.
+	## `x + velocity * host.frame_time`.
+	frame_time : F32,
 	keys : List(U8),
 	mouse : {
 		left : Bool,

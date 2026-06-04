@@ -15,27 +15,11 @@ pub const RocOps = abi.RocOps;
 
 /// Boxed value - opaque pointer to heap-allocated Roc data.
 /// Nullable because ZST models (e.g. `Model : {}`) use null (box_of_zst).
-pub const RocBox = ?*anyopaque;
-
-/// Decrement the refcount of a boxed value given its data pointer; frees the
-/// allocation when it reaches zero. Mirrors the refcount layout used by
-/// `RocStr`/`RocList` in `roc_platform_abi.zig`: the refcount `isize` lives one
-/// pointer-width before the data, and the allocation base is at that same offset.
-/// Replaces the former `builtins.utils.decrefDataPtrC` for non-refcounted boxes.
 ///
-/// TODO: remove once `roc glue` generates box refcount helpers into the ABI.
-/// Tracking: https://github.com/roc-lang/roc/issues/9536
-pub fn decrefBox(data_ptr: *anyopaque, roc_ops: *RocOps) void {
-    const data_addr = @intFromPtr(data_ptr);
-    const rc: *isize = @ptrFromInt(data_addr - @sizeOf(isize));
-    if (rc.* == 0) return; // REFCOUNT_STATIC_DATA — in read-only memory
-    const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
-    if (prev == 1) {
-        const base: *anyopaque = @ptrFromInt(data_addr - @sizeOf(usize));
-        var dealloc_args: abi.RocDealloc = .{ .alignment = @alignOf(usize), .ptr = base };
-        roc_ops.roc_dealloc(&dealloc_args, roc_ops.env);
-    }
-}
+/// The host never frees a box itself: box allocation headers depend on the
+/// `Model` layout (a payload with refcounted fields uses a wider header), which
+/// only the compiler knows. Hand the box back to Roc via `roc__drop_model_for_host`.
+pub const RocBox = ?*anyopaque;
 
 /// Generic result type matching Roc's `Try` layout with helper methods.
 /// Ok/Err variants share a union payload, followed by a 1-byte tag.

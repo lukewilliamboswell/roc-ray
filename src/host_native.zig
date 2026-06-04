@@ -333,10 +333,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         }
     }
 
-    // Clean up final model (always clean up if we have one, regardless of exit code)
+    // Clean up final model (always clean up if we have one, regardless of exit code).
+    // We hand the box back to Roc to drop: only the compiler knows the Model layout,
+    // and a box whose payload holds refcounted fields uses a wider allocation header
+    // than the host could safely assume.
     if (boxed_model) |model| {
-        if (TRACE_HOST) std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(model)});
-        ffi.decrefBox(model, &roc_ops);
+        if (TRACE_HOST) std.log.debug("[HOST] Dropping final model box=0x{x}", .{@intFromPtr(model)});
+        var box_slot: *anyopaque = model;
+        var drop_ret: u8 = undefined;
+        abi.roc__drop_model_for_host(&roc_ops, @ptrCast(&drop_ret), @ptrCast(&box_slot));
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code

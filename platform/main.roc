@@ -10,6 +10,7 @@ platform ""
 	provides {
 		init_for_host!: "init_for_host",
 		render_for_host!: "render_for_host",
+		drop_model_for_host!: "drop_model_for_host",
 	}
 	targets: {
 		files: "targets/",
@@ -84,3 +85,14 @@ render_for_host! = |boxed_model, host_state| {
 		Err(_) => Err(-1)
 	}
 }
+
+## Drop the final boxed model at host shutdown.
+##
+## The host owns the model box returned by init!/render! and must release it.
+## Box refcounting depends on the Model layout (a box whose payload contains
+## refcounted fields uses a wider allocation header), which only the compiler
+## knows -- so we let Roc drop the box here rather than hand-rolling it in the
+## host. Roc takes ownership of the unused arg and decrefs it at scope end.
+## TODO: remove once roc glue emits box refcount helpers (roc#9536).
+drop_model_for_host! : Box(Model) => {}
+drop_model_for_host! = |_boxed_model| {}

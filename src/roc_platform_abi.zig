@@ -1130,3 +1130,10 @@ pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const _
 /// Entrypoint: render_for_host!
 pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
 
+/// Entrypoint: drop_model_for_host!
+/// Drops the host-owned model box. Roc knows the `Model` layout and emits the
+/// correct box refcount/free (including the wider header when the payload holds
+/// refcounted fields), so the host must not hand-roll this. Return is `{}` (ZST);
+/// the arg slot holds the box pointer (`Box(Model)` -> single pointer).
+pub extern fn roc__drop_model_for_host(ops: *RocOps, ret_ptr: *anyopaque, arg_ptr: ?*const **anyopaque) callconv(.c) void;
+

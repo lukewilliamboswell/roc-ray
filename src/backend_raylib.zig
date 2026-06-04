@@ -4,6 +4,7 @@
 //! from roc_platform_abi.zig and converting them to raylib's C types.
 //! All C interop is isolated here.
 
+const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
 
@@ -191,6 +192,68 @@ pub fn setRandomSeed(seed: u32) void {
 /// Get a random value in the range [min, max] (both endpoints included).
 pub fn getRandomValue(min: c_int, max: c_int) c_int {
     return rl.GetRandomValue(min, max);
+}
+
+// --- Audio ---------------------------------------------------------------
+
+const TONE_SAMPLE_RATE: u32 = 44100;
+const MAX_TONE_MS: i32 = 1000;
+const MAX_SOUNDS: usize = 32;
+
+/// Generated sounds, owned by the host and addressed by handle (index).
+var sounds: [MAX_SOUNDS]rl.Sound = undefined;
+var sound_count: usize = 0;
+/// Scratch buffer for tone generation (mono 16-bit, up to MAX_TONE_MS).
+var tone_buf: [TONE_SAMPLE_RATE]i16 = undefined;
+
+/// Initialize the audio device (call once, after the window exists).
+pub fn initAudioDevice() void {
+    rl.InitAudioDevice();
+}
+
+/// Unload generated sounds and close the audio device.
+pub fn closeAudioDevice() void {
+    var i: usize = 0;
+    while (i < sound_count) : (i += 1) rl.UnloadSound(sounds[i]);
+    rl.CloseAudioDevice();
+}
+
+/// Generate a short sine tone, store it, and return its handle.
+/// Duration is clamped to [1, MAX_TONE_MS] ms; if the table is full the
+/// existing handle 0 is returned rather than allocating.
+pub fn genTone(freq: f32, ms: i32) usize {
+    if (sound_count >= MAX_SOUNDS) return 0;
+
+    const dur_ms: i32 = if (ms < 1) 1 else if (ms > MAX_TONE_MS) MAX_TONE_MS else ms;
+    const frames: usize = @intCast(@divTrunc(@as(i64, TONE_SAMPLE_RATE) * dur_ms, 1000));
+    const fade: f32 = 0.005 * @as(f32, @floatFromInt(TONE_SAMPLE_RATE)); // 5ms anti-click ramp
+
+    var i: usize = 0;
+    while (i < frames) : (i += 1) {
+        const fi: f32 = @floatFromInt(i);
+        const t: f32 = fi / @as(f32, @floatFromInt(TONE_SAMPLE_RATE));
+        const wave_sample = std.math.sin(2.0 * std.math.pi * freq * t);
+        const tail: f32 = @as(f32, @floatFromInt(frames)) - fi;
+        const env: f32 = @min(1.0, @min(fi / fade, tail / fade));
+        tone_buf[i] = @intFromFloat(wave_sample * env * 8000.0);
+    }
+
+    const wave = rl.Wave{
+        .frameCount = @intCast(frames),
+        .sampleRate = TONE_SAMPLE_RATE,
+        .sampleSize = 16,
+        .channels = 1,
+        .data = @ptrCast(&tone_buf),
+    };
+    const handle = sound_count;
+    sounds[handle] = rl.LoadSoundFromWave(wave);
+    sound_count += 1;
+    return handle;
+}
+
+/// Play a previously generated sound by handle (no-op if out of range).
+pub fn playSoundHandle(handle: usize) void {
+    if (handle < sound_count) rl.PlaySound(sounds[handle]);
 }
 
 /// Keyboard key enum for type-safe key handling.

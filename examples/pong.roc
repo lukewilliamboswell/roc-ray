@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Host
 import rr.Keys
+import rr.Audio
 
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
@@ -21,6 +22,10 @@ Model : {
 	right_y : F32,
 	left_score : U64,
 	right_score : U64,
+	# Sound handles, generated once in init! and preserved across restarts.
+	hit_sound : Audio.Sound,
+	wall_sound : Audio.Sound,
+	score_sound : Audio.Sound,
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
@@ -68,8 +73,9 @@ random_serve_vy! : () => F32
 random_serve_vy! = || I32.to_f32(Host.random_i32!(-160, 160))
 
 # A fresh round: ball centred, scores zeroed, served in a random direction.
-new_round! : () => Model
-new_round! = || {
+# Sound handles are carried over from the previous model (generated once).
+new_round! : Model => Model
+new_round! = |model| {
 	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
 	{
 		ball_x: screen_w * 0.5,
@@ -80,8 +86,15 @@ new_round! = || {
 		right_y: 250,
 		left_score: 0,
 		right_score: 0,
+		hit_sound: model.hit_sound,
+		wall_sound: model.wall_sound,
+		score_sound: model.score_sound,
 	}
 }
+
+# Play a sound only when `cond` is true (a no-op otherwise).
+play_if! : Bool, Audio.Sound => {}
+play_if! = |cond, sound| if cond Audio.play!(sound) else {}
 
 program = { init!, render! }
 
@@ -95,7 +108,22 @@ init! = |_host| {
 	# because all motion is scaled by host.frame_time. Try 30, 60, 144, 240.
 	Host.set_target_fps!(240)
 
-	Ok(new_round!())
+	# Generate the sound effects once; new_round! carries the handles forward.
+	seed = {
+		ball_x: 0,
+		ball_y: 0,
+		ball_vx: 0,
+		ball_vy: 0,
+		left_y: 250,
+		right_y: 250,
+		left_score: 0,
+		right_score: 0,
+		hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 }),
+		wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 }),
+		score_sound: Audio.gen_tone!({ freq: 160, ms: 200 }),
+	}
+
+	Ok(new_round!(seed))
 }
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
@@ -119,7 +147,7 @@ render_game_over! = |model, host| {
 		},
 	)
 
-	Ok(if restart new_round!() else model)
+	Ok(if restart new_round!(model) else model)
 }
 
 # --- Active play ---
@@ -190,7 +218,15 @@ render_playing! = |model, host| {
 		right_y: right_y,
 		left_score: left_score,
 		right_score: right_score,
+		hit_sound: model.hit_sound,
+		wall_sound: model.wall_sound,
+		score_sound: model.score_sound,
 	}
+
+	# Sound effects for this frame's events.
+	play_if!(hit_left or hit_right, model.hit_sound)
+	play_if!(hit_top or hit_bottom, model.wall_sound)
+	play_if!(out_left or out_right, model.score_sound)
 
 	Draw.draw!(
 		Black,

@@ -5,7 +5,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Time]
+	exposes [Draw, Color, Host, Keys, Time, Audio]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -27,6 +27,7 @@ import Color
 import Host
 import Keys
 import Time
+import Audio
 
 ## Internal type for host boundary - kept simple/flat for C compatibility
 ## Field order must match FFI struct in types.zig (alignment then alphabetical)

@@ -195,8 +195,18 @@ fn hostedRandomI32(_: *RocOps, result: *i32, args: *const abi.HostRandom_i32Args
     result.* = raylib.getRandomValue(args.arg0, args.arg1);
 }
 
+fn hostedAudioGenTone(_: *RocOps, result: *u64, args: *const abi.AudioGen_tone_rawArgs) callconv(.c) void {
+    result.* = @intCast(raylib.genTone(args.freq, args.ms));
+}
+
+fn hostedAudioPlay(_: *RocOps, _: *anyopaque, args: *const abi.AudioPlay_rawArgs) callconv(.c) void {
+    raylib.playSoundHandle(@intCast(args.arg0));
+}
+
 /// Hosted function dispatch table built from PlatformHostedFns.
 const hosted_fns = abi.hostedFunctions(.{
+    .audio_gen_tone_raw = &hostedAudioGenTone,
+    .audio_play_raw = &hostedAudioPlay,
     .draw_begin_frame = &hostedDrawBeginFrame,
     .draw_circle = &hostedDrawCircle,
     .draw_circle_gradient = &hostedDrawCircleGradient,
@@ -282,6 +292,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // (not uniformly available across our -nostdlib targets) and instead use
     // ASLR: the address of a live object differs run-to-run on PIE builds.
     raylib.setRandomSeed(@truncate(@intFromPtr(&roc_ops)));
+
+    // Audio device must be ready before init! generates/plays any sounds.
+    raylib.initAudioDevice();
+    defer raylib.closeAudioDevice();
 
     // Call Roc init! to build the initial model
     if (TRACE_HOST) std.log.debug("[HOST] Calling roc__init_for_host...", .{});

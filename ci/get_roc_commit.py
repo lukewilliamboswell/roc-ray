@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""Extract the pinned Roc commit hash from build.zig.zon."""
+"""Extract the pinned Roc compiler commit hash from ci/ROC_COMMIT."""
 
 import re
 from pathlib import Path
 
 
 def main() -> None:
-    zon_path = Path(__file__).resolve().parent.parent / "build.zig.zon"
+    commit_path = Path(__file__).resolve().parent / "ROC_COMMIT"
     try:
-        contents = zon_path.read_text()
+        commit = commit_path.read_text().strip()
     except FileNotFoundError:
-        raise SystemExit(f"Missing build.zig.zon at {zon_path}")
+        raise SystemExit(f"Missing ROC_COMMIT at {commit_path}")
 
-    match = re.search(r"roc-lang/roc#([0-9a-fA-F]{40})", contents)
-    if not match:
-        raise SystemExit("Could not find roc commit in build.zig.zon")
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        raise SystemExit(f"Invalid commit hash in ROC_COMMIT: {commit!r}")
 
-    print(match.group(1))
+    print(commit)
 
 
 if __name__ == "__main__":

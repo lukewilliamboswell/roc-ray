@@ -16,8 +16,9 @@ init! = |_host| {
 	# Test set_target_fps!
 	Host.set_target_fps!(60)
 
-	# Test set_screen_size! - call without ? to avoid interpreter bug with Try propagation
-	Host.set_screen_size!({ width: 800, height: 600 })?
+	# Discard the result: set_screen_size!'s error is `[NotSupported, ..]`, which
+	# doesn't unify with this function's `[Exit(I64), ..]`, so `?` can't be used.
+	_ = Host.set_screen_size!({ width: 800, height: 600 })
 
 	Ok({ message: "Kitchen Sink - All Host Effects", frame_count: 0 })
 }

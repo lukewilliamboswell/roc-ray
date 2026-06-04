@@ -21,9 +21,6 @@ platform ""
 			## arm64glibc not supported - raylib doesn't provide pre-built libraries for Linux ARM
 			x64win: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app],
 		}
-		static_lib: {
-			wasm32: ["libhost.a", app],
-		}
 	}
 
 import Draw

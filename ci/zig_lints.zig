@@ -10,6 +10,7 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const PathList = std.ArrayList([]u8);
 
 const max_file_bytes: usize = 16 * 1024 * 1024;
@@ -20,13 +21,14 @@ const TermColor = struct {
     pub const reset = "\x1b[0m";
 };
 
-pub fn main() !void {
-    var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa_impl.deinit();
-    const gpa = gpa_impl.allocator();
+pub fn main(init: std.process.Init) !void {
+    // Zig 0.16 "juicy main": the runtime supplies a general-purpose allocator
+    // (with leak checking in debug) and an Io implementation, and cleans them up.
+    const gpa = init.gpa;
+    const io = init.io;
 
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_state = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_state = Io.File.stdout().writerStreaming(io, &stdout_buffer);
     const stdout = &stdout_state.interface;
 
     var found_errors = false;
@@ -35,17 +37,17 @@ pub fn main() !void {
     try stdout.print("Checking for separator comments (// ====)...\n", .{});
 
     {
-        var zig_files = PathList{};
+        var zig_files = PathList.empty;
         defer freePathList(&zig_files, gpa);
 
         // Scan src/ (not ci/ since zig_lints.zig mentions the pattern)
-        try walkTree(gpa, "src", &zig_files);
+        try walkTree(gpa, io, "src", &zig_files);
 
         // Add build.zig directly
         try zig_files.append(gpa, try gpa.dupe(u8, "build.zig"));
 
         for (zig_files.items) |file_path| {
-            const errors = try checkSeparatorComments(gpa, file_path);
+            const errors = try checkSeparatorComments(gpa, io, file_path);
             defer gpa.free(errors);
 
             if (errors.len > 0) {
@@ -66,13 +68,13 @@ pub fn main() !void {
     // Lint 2: Check for pub declarations without doc comments
     try stdout.print("Checking for pub declarations without doc comments...\n", .{});
 
-    var zig_files = PathList{};
+    var zig_files = PathList.empty;
     defer freePathList(&zig_files, gpa);
 
-    try walkTree(gpa, "src", &zig_files);
+    try walkTree(gpa, io, "src", &zig_files);
 
     for (zig_files.items) |file_path| {
-        const errors = try checkPubDocComments(gpa, file_path);
+        const errors = try checkPubDocComments(gpa, io, file_path);
         defer gpa.free(errors);
 
         if (errors.len > 0) {
@@ -92,7 +94,7 @@ pub fn main() !void {
     // Lint 3: Check for top level comments in new Zig files
     try stdout.print("Checking for top level comments in new Zig files...\n", .{});
 
-    var new_zig_files = try getNewZigFiles(gpa);
+    var new_zig_files = try getNewZigFiles(gpa, io);
     defer {
         for (new_zig_files.items) |path| {
             gpa.free(path);
@@ -106,11 +108,11 @@ pub fn main() !void {
         return;
     }
 
-    var failed_files = PathList{};
+    var failed_files = PathList.empty;
     defer freePathList(&failed_files, gpa);
 
     for (new_zig_files.items) |file_path| {
-        if (!try fileHasTopLevelComment(gpa, file_path)) {
+        if (!try fileHasTopLevelComment(gpa, io, file_path)) {
             try stdout.print("Error: {s} is missing top level comment (//!)\n", .{file_path});
             try failed_files.append(gpa, try gpa.dupe(u8, file_path));
         }
@@ -132,12 +134,12 @@ pub fn main() !void {
     try stdout.flush();
 }
 
-fn walkTree(allocator: Allocator, dir_path: []const u8, zig_files: *PathList) !void {
-    var dir = try std.fs.cwd().openDir(dir_path, .{ .iterate = true });
-    defer dir.close();
+fn walkTree(allocator: Allocator, io: Io, dir_path: []const u8, zig_files: *PathList) !void {
+    var dir = try Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
+    defer dir.close(io);
 
     var it = dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind == .sym_link) continue;
 
         const next_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
@@ -150,10 +152,13 @@ fn walkTree(allocator: Allocator, dir_path: []const u8, zig_files: *PathList) !v
                     continue;
                 }
                 defer allocator.free(next_path);
-                try walkTree(allocator, next_path, zig_files);
+                try walkTree(allocator, io, next_path, zig_files);
             },
             .file => {
-                if (std.mem.endsWith(u8, entry.name, ".zig")) {
+                // Skip the glue-generated ABI (not hand-maintained).
+                if (std.mem.endsWith(u8, entry.name, ".zig") and
+                    !std.mem.eql(u8, entry.name, "roc_platform_abi.zig"))
+                {
                     try zig_files.append(allocator, next_path);
                 } else {
                     allocator.free(next_path);
@@ -164,15 +169,15 @@ fn walkTree(allocator: Allocator, dir_path: []const u8, zig_files: *PathList) !v
     }
 }
 
-fn checkSeparatorComments(allocator: Allocator, file_path: []const u8) ![]u8 {
-    const source = readSourceFile(allocator, file_path) catch |err| switch (err) {
+fn checkSeparatorComments(allocator: Allocator, io: Io, file_path: []const u8) ![]u8 {
+    const source = readSourceFile(allocator, io, file_path) catch |err| switch (err) {
         // Skip files we can't read
         error.FileNotFound => return try allocator.dupe(u8, ""),
         else => return err,
     };
     defer allocator.free(source);
 
-    var errors = std.ArrayList(u8){};
+    var errors = std.ArrayList(u8).empty;
     errdefer errors.deinit(allocator);
 
     var line_num: usize = 1;
@@ -182,7 +187,7 @@ fn checkSeparatorComments(allocator: Allocator, file_path: []const u8) ![]u8 {
         defer line_num += 1;
 
         // Trim leading whitespace
-        const trimmed = std.mem.trimLeft(u8, line, " \t");
+        const trimmed = std.mem.trimStart(u8, line, " \t");
 
         // Check if line starts with // and is a separator comment
         // Separator comments are lines like "// ====" or "// ==== Section ===="
@@ -191,7 +196,7 @@ fn checkSeparatorComments(allocator: Allocator, file_path: []const u8) ![]u8 {
         if (std.mem.startsWith(u8, trimmed, "//")) {
             const after_slashes = trimmed[2..];
             if (isSeparatorComment(after_slashes)) {
-                try errors.writer(allocator).print("{s}:{d}: separator comment '// ====' not allowed\n", .{ file_path, line_num });
+                try errors.print(allocator, "{s}:{d}: separator comment '// ====' not allowed\n", .{ file_path, line_num });
             }
         }
     }
@@ -237,15 +242,15 @@ fn isSeparatorComment(after_slashes: []const u8) bool {
     return true;
 }
 
-fn checkPubDocComments(allocator: Allocator, file_path: []const u8) ![]u8 {
-    const source = readSourceFile(allocator, file_path) catch |err| switch (err) {
+fn checkPubDocComments(allocator: Allocator, io: Io, file_path: []const u8) ![]u8 {
+    const source = readSourceFile(allocator, io, file_path) catch |err| switch (err) {
         // Skip files we can't read
         error.FileNotFound => return try allocator.dupe(u8, ""),
         else => return err,
     };
     defer allocator.free(source);
 
-    var errors = std.ArrayList(u8){};
+    var errors = std.ArrayList(u8).empty;
     errdefer errors.deinit(allocator);
 
     var line_num: usize = 1;
@@ -262,7 +267,7 @@ fn checkPubDocComments(allocator: Allocator, file_path: []const u8) ![]u8 {
         if (!std.mem.startsWith(u8, line, "pub ")) continue;
 
         // Check if previous line is a doc comment (allow indented doc comments)
-        const prev_trimmed = std.mem.trimLeft(u8, prev_line, " \t");
+        const prev_trimmed = std.mem.trimStart(u8, prev_line, " \t");
         if (std.mem.startsWith(u8, prev_trimmed, "///")) continue;
 
         // Skip exceptions: init, deinit, @import, and pub const re-exports
@@ -274,7 +279,7 @@ fn checkPubDocComments(allocator: Allocator, file_path: []const u8) ![]u8 {
         // Check for pub const re-exports (e.g., "pub const Foo = bar.Baz;")
         if (isReExport(line)) continue;
 
-        try errors.writer(allocator).print("{s}:{d}: pub declaration without doc comment `///`\n", .{ file_path, line_num });
+        try errors.print(allocator, "{s}:{d}: pub declaration without doc comment `///`\n", .{ file_path, line_num });
     }
 
     return errors.toOwnedSlice(allocator);
@@ -287,7 +292,7 @@ fn isReExport(line: []const u8) bool {
 
     // Find the '=' sign
     const eq_pos = std.mem.indexOf(u8, line, "=") orelse return false;
-    const after_eq = std.mem.trimLeft(u8, line[eq_pos + 1 ..], " \t");
+    const after_eq = std.mem.trimStart(u8, line[eq_pos + 1 ..], " \t");
 
     // Check if it starts with a lowercase letter (module reference)
     if (after_eq.len == 0) return false;
@@ -297,13 +302,13 @@ fn isReExport(line: []const u8) bool {
     // Check if it contains a dot and ends with semicolon (but not a function call)
     if (std.mem.indexOf(u8, after_eq, ".") == null) return false;
     if (std.mem.indexOf(u8, after_eq, "(") != null) return false;
-    if (!std.mem.endsWith(u8, std.mem.trimRight(u8, after_eq, " \t"), ";")) return false;
+    if (!std.mem.endsWith(u8, std.mem.trimEnd(u8, after_eq, " \t"), ";")) return false;
 
     return true;
 }
 
-fn getNewZigFiles(allocator: Allocator) !PathList {
-    var result = PathList{};
+fn getNewZigFiles(allocator: Allocator, io: Io) !PathList {
+    var result = PathList.empty;
     errdefer {
         for (result.items) |path| {
             allocator.free(path);
@@ -311,25 +316,18 @@ fn getNewZigFiles(allocator: Allocator) !PathList {
         result.deinit(allocator);
     }
 
-    // Run git diff to get new files
-    var child = std.process.Child.init(&.{ "git", "diff", "--name-only", "--diff-filter=A", "origin/main", "HEAD", "--", "src/" }, allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
+    // Run git diff to get new files. If git is unavailable or this isn't a repo,
+    // return an empty list rather than failing the lint.
+    const run_result = std.process.run(allocator, io, .{
+        .argv = &.{ "git", "diff", "--name-only", "--diff-filter=A", "origin/main", "HEAD", "--", "src/" },
+    }) catch return result;
+    defer allocator.free(run_result.stdout);
+    defer allocator.free(run_result.stderr);
 
-    _ = child.spawn() catch {
-        // Git not available or not in a repo - return empty list
-        return result;
-    };
-
-    const stdout = child.stdout orelse return result;
-    const output = stdout.readToEndAlloc(allocator, max_file_bytes) catch return result;
-    defer allocator.free(output);
-
-    const term = child.wait() catch return result;
-    if (term.Exited != 0) return result;
+    if (run_result.term != .exited or run_result.term.exited != 0) return result;
 
     // Parse output line by line
-    var lines = std.mem.splitScalar(u8, output, '\n');
+    var lines = std.mem.splitScalar(u8, run_result.stdout, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         if (!std.mem.endsWith(u8, line, ".zig")) continue;
@@ -340,8 +338,8 @@ fn getNewZigFiles(allocator: Allocator) !PathList {
     return result;
 }
 
-fn fileHasTopLevelComment(allocator: Allocator, file_path: []const u8) !bool {
-    const source = readSourceFile(allocator, file_path) catch |err| switch (err) {
+fn fileHasTopLevelComment(allocator: Allocator, io: Io, file_path: []const u8) !bool {
+    const source = readSourceFile(allocator, io, file_path) catch |err| switch (err) {
         // File was deleted but still shows in git diff - skip it
         error.FileNotFound => return true,
         else => return err,
@@ -351,12 +349,12 @@ fn fileHasTopLevelComment(allocator: Allocator, file_path: []const u8) !bool {
     return std.mem.indexOf(u8, source, "//!") != null;
 }
 
-fn readSourceFile(allocator: Allocator, path: []const u8) ![:0]u8 {
-    return try std.fs.cwd().readFileAllocOptions(
-        allocator,
+fn readSourceFile(allocator: Allocator, io: Io, path: []const u8) ![:0]u8 {
+    return try Io.Dir.cwd().readFileAllocOptions(
+        io,
         path,
-        max_file_bytes,
-        null,
+        allocator,
+        .limited(max_file_bytes),
         std.mem.Alignment.of(u8),
         0,
     );

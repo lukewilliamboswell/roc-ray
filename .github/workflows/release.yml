@@ -30,12 +30,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.15.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          version: 0.16.0
 
       - name: Build Roc from pinned commit
         run: |
@@ -101,7 +96,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Build Roc from pinned commit
         run: |
@@ -179,7 +174,7 @@ jobs:
             "$BUNDLE_FILE" \
             --title "${{ github.event.inputs.release_tag }}" \
             --generate-notes \
-            --notes "Platform bundle built with Zig 0.15.2 and Roc ${ROC_COMMIT}
+            --notes "Platform bundle built with Zig 0.16.0 and Roc ${ROC_COMMIT}
 
 Download the bundle and use it as a Roc platform:
 \`\`\`roc

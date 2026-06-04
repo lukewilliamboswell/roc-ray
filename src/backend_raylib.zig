@@ -112,8 +112,7 @@ pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
 /// Draw a circle with radial gradient from abi args.
 pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
     rl.DrawCircleGradient(
-        @intFromFloat(args.center.x),
-        @intFromFloat(args.center.y),
+        rl.Vector2{ .x = args.center.x, .y = args.center.y },
         args.radius,
         colorToRl(args.color_inner),
         colorToRl(args.color_outer),

@@ -16,8 +16,9 @@ platform ""
 		exe: {
 			x64mac: ["libhost.a", "libraylib.a", app],
 			arm64mac: ["libhost.a", "libraylib.a", app],
-			## libm.so must come after libraylib.a (which uses it) or --as-needed drops it
-			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
+			## libm.so / libX11.so must come after libraylib.a (which uses them) or --as-needed drops them.
+			## libX11.so is a stub for the Xlib symbols raylib 6.0's GetClipboardImage references directly.
+			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"],
 			## arm64glibc not supported - raylib doesn't provide pre-built libraries for Linux ARM
 			x64win: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app],
 		}

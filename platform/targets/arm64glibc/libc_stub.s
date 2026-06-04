@@ -1900,3 +1900,194 @@ __isoc99_sscanf:
 strtoul:
     mov x0, #0
     ret
+
+# --- raylib 6.0 additions: extra libc symbols referenced by raylib 6.0 (rcore/raudio/rmodels) ---
+
+.balign 8
+.globl div
+.type div, %function
+div:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl eventfd
+.type eventfd, %function
+eventfd:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __fgets_chk
+.type __fgets_chk, %function
+__fgets_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __fread_chk
+.type __fread_chk, %function
+__fread_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __isoc23_strtoll
+.type __isoc23_strtoll, %function
+__isoc23_strtoll:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl memchr
+.type memchr, %function
+memchr:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __memcpy_chk
+.type __memcpy_chk, %function
+__memcpy_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __memmove_chk
+.type __memmove_chk, %function
+__memmove_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __memset_chk
+.type __memset_chk, %function
+__memset_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_destroy
+.type pthread_attr_destroy, %function
+pthread_attr_destroy:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_getschedparam
+.type pthread_attr_getschedparam, %function
+pthread_attr_getschedparam:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_init
+.type pthread_attr_init, %function
+pthread_attr_init:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_setinheritsched
+.type pthread_attr_setinheritsched, %function
+pthread_attr_setinheritsched:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_setschedparam
+.type pthread_attr_setschedparam, %function
+pthread_attr_setschedparam:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_setschedpolicy
+.type pthread_attr_setschedpolicy, %function
+pthread_attr_setschedpolicy:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_setstacksize
+.type pthread_attr_setstacksize, %function
+pthread_attr_setstacksize:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_cond_destroy
+.type pthread_cond_destroy, %function
+pthread_cond_destroy:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_cond_init
+.type pthread_cond_init, %function
+pthread_cond_init:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_cond_signal
+.type pthread_cond_signal, %function
+pthread_cond_signal:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_cond_wait
+.type pthread_cond_wait, %function
+pthread_cond_wait:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sched_get_priority_max
+.type sched_get_priority_max, %function
+sched_get_priority_max:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sched_get_priority_min
+.type sched_get_priority_min, %function
+sched_get_priority_min:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sched_getscheduler
+.type sched_getscheduler, %function
+sched_getscheduler:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __strcat_chk
+.type __strcat_chk, %function
+__strcat_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __strcpy_chk
+.type __strcpy_chk, %function
+__strcpy_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __strncpy_chk
+.type __strncpy_chk, %function
+__strncpy_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl wcsrtombs
+.type wcsrtombs, %function
+wcsrtombs:
+    xor %rax, %rax
+    ret

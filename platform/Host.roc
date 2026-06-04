@@ -13,7 +13,15 @@ Host := {
 	## Multiply movement by this for frame-rate-independent motion, e.g.
 	## `x + velocity * host.frame_time`.
 	frame_time : F32,
+
+	## Per-key held state: 1 while the key is down, 0 otherwise.
+	## Use with `Keys.key_down` / `Keys.key_up`.
 	keys : List(U8),
+
+	## Per-key edge state: 1 only on the frame the key was first pressed
+	## (respecting key-repeat), 0 otherwise. Use with `Keys.key_pressed` for
+	## one-shot actions like menu/restart where holding shouldn't re-trigger.
+	keys_pressed : List(U8),
 	mouse : {
 		left : Bool,
 		middle : Bool,

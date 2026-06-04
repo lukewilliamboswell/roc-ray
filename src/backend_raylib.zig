@@ -13,20 +13,29 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
-/// Persistent keyboard state - updated each frame
+/// Persistent keyboard state - updated each frame.
+/// `key_state` is the held (down) state; `key_pressed_state` is the edge
+/// (pressed-this-frame) state.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+var key_pressed_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
         key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
+        key_pressed_state[i] = if (rl.IsKeyPressed(key)) 1 else 0;
     }
 }
 
-/// Get the current keyboard state array
+/// Get the current keyboard down-state array
 pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
+}
+
+/// Get the keyboard pressed-this-frame (edge) state array
+pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
+    return &key_pressed_state;
 }
 
 /// Convert abi Color enum to raylib Color.

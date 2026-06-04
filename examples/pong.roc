@@ -4,14 +4,13 @@ import rr.Draw
 import rr.Host
 import rr.Keys
 
-# Pong v1 - frame-rate independent.
+# Pong v2 - first to 5 wins, then SPACE to restart.
 #
-# Player controls the LEFT paddle with W / S.
-# The RIGHT paddle is a simple AI that tracks the ball.
-#
-# All speeds are in pixels per SECOND and scaled by `host.frame_time` (seconds
-# since the previous frame), so motion is the same whether the host runs at 60
-# or 240 FPS. `host.frame_time` is 0 on the very first frame.
+# Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
+# Motion is in pixels/second scaled by host.frame_time (frame-rate independent).
+# Serves leave at a random angle. When someone reaches `win_score`, the game
+# freezes on a win screen until SPACE is pressed (edge-detected, so holding it
+# doesn't instantly restart again).
 
 Model : {
 	ball_x : F32,
@@ -56,6 +55,10 @@ init_vx = 260
 bounce_factor : F32
 bounce_factor = 6
 
+# First player to this many points wins.
+win_score : U64
+win_score = 5
+
 clamp : F32, F32, F32 -> F32
 clamp = |v, lo, hi| if v < lo lo else if v > hi hi else v
 
@@ -63,6 +66,22 @@ clamp = |v, lo, hi| if v < lo lo else if v > hi hi else v
 # different angle instead of the same predictable line.
 random_serve_vy! : () => F32
 random_serve_vy! = || I32.to_f32(Host.random_i32!(-160, 160))
+
+# A fresh round: ball centred, scores zeroed, served in a random direction.
+new_round! : () => Model
+new_round! = || {
+	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
+	{
+		ball_x: screen_w * 0.5,
+		ball_y: screen_h * 0.5,
+		ball_vx: serve_dir,
+		ball_vy: random_serve_vy!(),
+		left_y: 250,
+		right_y: 250,
+		left_score: 0,
+		right_score: 0,
+	}
+}
 
 program = { init!, render! }
 
@@ -76,25 +95,36 @@ init! = |_host| {
 	# because all motion is scaled by host.frame_time. Try 30, 60, 144, 240.
 	Host.set_target_fps!(240)
 
-	# Serve in a random direction at a random angle.
-	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
-
-	Ok(
-		{
-			ball_x: 400,
-			ball_y: 300,
-			ball_vx: serve_dir,
-			ball_vy: random_serve_vy!(),
-			left_y: 250,
-			right_y: 250,
-			left_score: 0,
-			right_score: 0,
-		},
-	)
+	Ok(new_round!())
 }
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
+	game_over = model.left_score >= win_score or model.right_score >= win_score
+	if game_over render_game_over!(model, host) else render_playing!(model, host)
+}
+
+# --- Win screen: freeze the field and wait for SPACE to start a new game ---
+render_game_over! : Model, Host => Try(Model, [Exit(I64), ..])
+render_game_over! = |model, host| {
+	restart = Keys.key_pressed(host.keys_pressed, KeySpace)
+	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
+
+	Draw.draw!(
+		Black,
+		|| {
+			draw_field!(model)
+			Draw.text!({ pos: { x: 170, y: 240 }, text: winner, size: 40, color: Yellow })
+			Draw.text!({ pos: { x: 235, y: 300 }, text: "Press SPACE to restart", size: 24, color: White })
+		},
+	)
+
+	Ok(if restart new_round!() else model)
+}
+
+# --- Active play ---
+render_playing! : Model, Host => Try(Model, [Exit(I64), ..])
+render_playing! = |model, host| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
@@ -151,35 +181,35 @@ render! = |model, host| {
 	left_score = if out_right model.left_score + 1 else model.left_score
 	right_score = if out_left model.right_score + 1 else model.right_score
 
+	next = {
+		ball_x: final_ball_x,
+		ball_y: final_ball_y,
+		ball_vx: final_vx,
+		ball_vy: final_vy,
+		left_y: left_y,
+		right_y: right_y,
+		left_score: left_score,
+		right_score: right_score,
+	}
+
 	Draw.draw!(
 		Black,
-		|| {
-			# Center line
-			Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, color: DarkGray })
-
-			# Paddles
-			Draw.rectangle!({ x: left_x, y: left_y, width: paddle_w, height: paddle_h, color: White })
-			Draw.rectangle!({ x: right_x, y: right_y, width: paddle_w, height: paddle_h, color: White })
-
-			# Ball
-			Draw.circle!({ center: { x: final_ball_x, y: final_ball_y }, radius: ball_r, color: RayWhite })
-
-			# Scores
-			Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(left_score), size: 40, color: White })
-			Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(right_score), size: 40, color: White })
-		},
+		|| draw_field!(next),
 	)
 
-	Ok(
-		{
-			ball_x: final_ball_x,
-			ball_y: final_ball_y,
-			ball_vx: final_vx,
-			ball_vy: final_vy,
-			left_y: left_y,
-			right_y: right_y,
-			left_score: left_score,
-			right_score: right_score,
-		},
-	)
+	Ok(next)
+}
+
+# Draw the static scene (center line, paddles, ball, scores) for a model.
+draw_field! : Model => {}
+draw_field! = |model| {
+	left_x = paddle_margin
+	right_x = screen_w - paddle_margin - paddle_w
+
+	Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, color: DarkGray })
+	Draw.rectangle!({ x: left_x, y: model.left_y, width: paddle_w, height: paddle_h, color: White })
+	Draw.rectangle!({ x: right_x, y: model.right_y, width: paddle_w, height: paddle_h, color: White })
+	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, color: RayWhite })
+	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, color: White })
+	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, color: White })
 }

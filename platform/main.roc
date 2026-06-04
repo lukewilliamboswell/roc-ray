@@ -32,7 +32,8 @@ import Time
 ## Field order must match FFI struct in types.zig (alignment then alphabetical)
 HostStateFromHost : {
 	frame_count : U64,
-	keys : List(U8), ## 349 bytes, one per raylib key code 0-348
+	keys : List(U8), ## 349 bytes, held state, one per raylib key code 0-348
+	keys_pressed : List(U8), ## 349 bytes, pressed-this-frame (edge) state
 	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
 	frame_time : F32, ## seconds since previous frame (0 on first frame)
 	mouse_wheel : F32,
@@ -50,6 +51,7 @@ init_for_host! = |host_state| {
 		timestamp_nanos: host_state.timestamp_nanos,
 		frame_time: host_state.frame_time,
 		keys: host_state.keys,
+		keys_pressed: host_state.keys_pressed,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,
@@ -75,6 +77,7 @@ render_for_host! = |boxed_model, host_state| {
 		timestamp_nanos: host_state.timestamp_nanos,
 		frame_time: host_state.frame_time,
 		keys: host_state.keys,
+		keys_pressed: host_state.keys_pressed,
 		mouse: {
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,

@@ -701,6 +701,7 @@ comptime {
 pub const Host = extern struct {
     @"frame_count": u64,
     @"keys": RocListWith(u8, false),
+    @"keys_pressed": RocListWith(u8, false),
     @"timestamp_nanos": u64,
     @"frame_time": f32,
     @"mouse": __AnonStruct24,
@@ -708,7 +709,7 @@ pub const Host = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Host) != 64) @compileError("Host size mismatch");
+        if (@sizeOf(Host) != 88) @compileError("Host size mismatch");
         if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
 }
@@ -770,6 +771,7 @@ comptime {
 pub const __AnonStruct46 = extern struct {
     @"frame_count": u64,
     @"keys": RocListWith(u8, false),
+    @"keys_pressed": RocListWith(u8, false),
     @"timestamp_nanos": u64,
     @"frame_time": f32,
     @"mouse_wheel": f32,
@@ -782,7 +784,7 @@ pub const __AnonStruct46 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct46) != 64) @compileError("__AnonStruct46 size mismatch");
+        if (@sizeOf(__AnonStruct46) != 88) @compileError("__AnonStruct46 size mismatch");
         if (@alignOf(__AnonStruct46) != 8) @compileError("__AnonStruct46 alignment mismatch");
     }
 }

@@ -267,6 +267,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // We incref before each pass to Roc, and Roc decrefs when it drops the old Host.
     var keys = ffi.Keys.init(&roc_ops);
     defer keys.decref();
+    // Edge (pressed-this-frame) state, kept in a separate RocList.
+    var keys_pressed = ffi.Keys.init(&roc_ops);
+    defer keys_pressed.decref();
 
     // Initialize raylib window
     raylib.initWindow(800, 600, "Roc + Raylib");
@@ -288,11 +291,13 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         var init_result: RocResult = undefined;
         // Create initial host state for init (frame 0, no input)
         keys.incref(); // Prevent Roc from freeing our list
+        keys_pressed.incref();
         var init_state = abi.Host{
             .frame_count = 0,
             .timestamp_nanos = 0,
             .frame_time = 0,
             .keys = keys.list,
+            .keys_pressed = keys_pressed.list,
             .mouse = .{ .wheel = 0, .x = 0, .y = 0, .left = false, .right = false, .middle = false },
         };
         abi.roc__init_for_host(&roc_ops, @ptrCast(&init_result), @ptrCast(&init_state));
@@ -324,12 +329,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         raylib.updateKeyboardState();
         keys.update(raylib.getKeyState());
         keys.incref(); // Prevent Roc from freeing our list
+        keys_pressed.update(raylib.getKeyPressedState());
+        keys_pressed.incref();
         const mouse_pos = raylib.getMousePosition();
         const platform_state = abi.Host{
             .frame_count = frame_count,
             .timestamp_nanos = now_ns,
             .frame_time = frame_time,
             .keys = keys.list,
+            .keys_pressed = keys_pressed.list,
             .mouse = .{
                 .left = raylib.isMouseButtonDown(.left),
                 .middle = raylib.isMouseButtonDown(.middle),

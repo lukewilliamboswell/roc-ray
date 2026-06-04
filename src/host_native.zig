@@ -148,9 +148,13 @@ fn hostedDrawText(_: *RocOps, _: *anyopaque, args: *const abi.DrawTextArgs) call
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
-fn hostedReadEnvWindows(_: *RocOps, result: *ReadEnvResult, _: *const abi.HostRead_envArgs) callconv(.c) void {
+fn hostedReadEnvWindows(ops: *RocOps, result: *ReadEnvResult, args: *const abi.HostRead_envArgs) callconv(.c) void {
     // Windows doesn't link libc, so env var reading is not yet supported
     result.tag = .Err;
+
+    // Roc transfers ownership of refcounted args to the hosted fn; release them.
+    args.arg0.keys.decref(ops);
+    args.arg1.decref(ops);
 }
 
 fn hostedReadEnvPosix(ops: *RocOps, result: *ReadEnvResult, args: *const abi.HostRead_envArgs) callconv(.c) void {
@@ -163,6 +167,11 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *ReadEnvResult, args: *const abi.Hos
     } else {
         result.tag = .Err;
     }
+
+    // Roc transfers ownership of refcounted args to the hosted fn; release them.
+    // `key` (a slice into arg1) is fully consumed above before arg1 is dropped.
+    args.arg0.keys.decref(ops);
+    args.arg1.decref(ops);
 }
 
 fn hostedExit(_: *RocOps, _: *anyopaque, args: *const abi.HostExitArgs) callconv(.c) void {

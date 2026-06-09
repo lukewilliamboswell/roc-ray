@@ -21,9 +21,9 @@ Audio := [].{
 	## (clamped by the host to a small maximum). Call this sparingly - e.g.
 	## once at startup - and reuse the handle, rather than per frame.
 	gen_tone! : { freq : F32, ms : I32 } => Sound
-	gen_tone! = |cfg| Box.box(gen_tone_raw!(cfg))
+	gen_tone! = |cfg| Box.box(Audio.gen_tone_raw!(cfg))
 
 	## Play a previously generated sound.
 	play! : Sound => {}
-	play! = |sound| play_raw!(Box.unbox(sound))
+	play! = |sound| Audio.play_raw!(Box.unbox(sound))
 }

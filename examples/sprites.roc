@@ -21,7 +21,7 @@ screen_h : F32
 screen_h = 600
 
 asset_path : Str
-asset_path = "examples/assets/checker.ppm"
+asset_path = "examples/assets/checker.bmp"
 
 init! : App.Init(Model)
 init! = App.init(

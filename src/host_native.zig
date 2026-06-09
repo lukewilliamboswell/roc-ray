@@ -19,7 +19,7 @@ const RocOps = ffi.RocOps;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
-const AppConfig = abi.__AnonStruct70;
+const AppConfig = abi.__AnonStruct77;
 
 const TRACE_HOST = false;
 
@@ -163,6 +163,24 @@ test "makeTempCString stops at embedded nul" {
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
+fn hostedAssetsLoadTextureRaw(ops: *RocOps, result: *abi.AssetsLoad_texture_rawRetRecord, args: *const abi.AssetsLoad_texture_rawArgs) callconv(.c) void {
+    defer args.arg0.decref(ops);
+    result.* = .{ .handle = 0, .height = 0, .width = 0 };
+
+    const path_slice = args.arg0.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return;
+    defer path.deinit();
+
+    if (raylib.loadTexture(path.ptr)) |texture| {
+        result.* = .{
+            .handle = texture.handle,
+            .height = texture.height,
+            .width = texture.width,
+        };
+    }
+}
+
 fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
     raylib.beginDrawing();
 }
@@ -280,6 +298,10 @@ fn hostedDrawTextRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawText_rawA
     );
 }
 
+fn hostedDrawTextureRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawDraw_texture_rawArgs) callconv(.c) void {
+    raylib.drawTexture(args.*);
+}
+
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
@@ -349,6 +371,7 @@ fn hostedAudioPlay(_: *RocOps, _: *anyopaque, args: *const abi.AudioPlay_rawArgs
 
 /// Hosted function dispatch table built from PlatformHostedFns.
 const hosted_fns = abi.hostedFunctions(.{
+    .assets_load_texture_raw = &hostedAssetsLoadTextureRaw,
     .audio_gen_tone_raw = &hostedAudioGenTone,
     .audio_play_raw = &hostedAudioPlay,
     .draw_begin_frame = &hostedDrawBeginFrame,
@@ -356,6 +379,7 @@ const hosted_fns = abi.hostedFunctions(.{
     .draw_circle_lines_raw = &hostedDrawCircleLinesRaw,
     .draw_circle_raw = &hostedDrawCircleRaw,
     .draw_clear = &hostedDrawClear,
+    .draw_draw_texture_raw = &hostedDrawTextureRaw,
     .draw_end_frame = &hostedDrawEndFrame,
     .draw_fps = &hostedDrawFps,
     .draw_line_raw = &hostedDrawLineRaw,

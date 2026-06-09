@@ -77,11 +77,24 @@ pub fn getMouseButtonReleasedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
 }
 
 const MAX_FONTS: usize = 32;
+const MAX_TEXTURES: usize = 128;
 
 /// Custom fonts loaded by the host. Handle 0 is always raylib's default font;
 /// loaded fonts use handles 1..MAX_FONTS.
 var fonts: [MAX_FONTS]rl.Font = undefined;
 var font_count: usize = 0;
+
+/// Textures loaded by the host. Handle 0 is invalid; loaded textures use
+/// handles 1..MAX_TEXTURES.
+var textures: [MAX_TEXTURES]rl.Texture2D = undefined;
+var texture_count: usize = 0;
+
+/// Host texture handle and dimensions returned to Roc after loading.
+pub const TextureInfo = struct {
+    handle: u64,
+    width: f32,
+    height: f32,
+};
 
 fn fontFromHandle(handle: u64) rl.Font {
     if (handle == 0) return rl.GetFontDefault();
@@ -111,6 +124,40 @@ pub fn unloadFonts() void {
         rl.UnloadFont(fonts[i]);
     }
     font_count = 0;
+}
+
+fn textureFromHandle(handle: u64) ?rl.Texture2D {
+    if (handle == 0) return null;
+    if (handle > @as(u64, @intCast(texture_count))) return null;
+
+    const index: usize = @intCast(handle - 1);
+    return textures[index];
+}
+
+/// Load a texture from disk and return its handle plus dimensions, or null on failure.
+pub fn loadTexture(path: [*:0]const u8) ?TextureInfo {
+    if (texture_count >= MAX_TEXTURES) return null;
+
+    const texture = rl.LoadTexture(path);
+    if (!rl.IsTextureValid(texture)) return null;
+
+    textures[texture_count] = texture;
+    texture_count += 1;
+
+    return .{
+        .handle = @intCast(texture_count),
+        .width = @floatFromInt(texture.width),
+        .height = @floatFromInt(texture.height),
+    };
+}
+
+/// Unload all custom textures.
+pub fn unloadTextures() void {
+    var i: usize = 0;
+    while (i < texture_count) : (i += 1) {
+        rl.UnloadTexture(textures[i]);
+    }
+    texture_count = 0;
 }
 
 /// Convert an ABI RGBA color record to raylib Color.
@@ -241,7 +288,7 @@ pub fn drawTriangleLines(args: abi.DrawTriangle_lines_rawArgs) void {
 }
 
 /// Draw a filled polygon by fanning triangles from the point centroid.
-pub fn drawPolygon(points: []const abi.__AnonStruct7, color: abi.Color) void {
+pub fn drawPolygon(points: anytype, color: abi.Color) void {
     if (points.len < 3) return;
 
     var center = rl.Vector2{ .x = 0, .y = 0 };
@@ -260,7 +307,7 @@ pub fn drawPolygon(points: []const abi.__AnonStruct7, color: abi.Color) void {
 }
 
 /// Draw a polygon outline from abi args.
-pub fn drawPolygonLines(points: []const abi.__AnonStruct7, thickness: f32, color: abi.Color) void {
+pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void {
     if (points.len < 2) return;
     const thick = positiveThickness(thickness) orelse return;
 
@@ -278,6 +325,19 @@ pub fn drawPolygonLines(points: []const abi.__AnonStruct7, thickness: f32, color
 /// Draw text with a null-terminated string.
 pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
     rl.DrawTextEx(fontFromHandle(font_handle), text, pos, size, spacing, colorToRl(color));
+}
+
+/// Draw a texture region into a destination rectangle.
+pub fn drawTexture(args: abi.DrawDraw_texture_rawArgs) void {
+    const texture = textureFromHandle(args.@"texture") orelse return;
+    rl.DrawTexturePro(
+        texture,
+        rectFromArgs(args.@"source"),
+        rectFromArgs(args.@"dest"),
+        toVector2(args.@"origin"),
+        args.@"rotation",
+        colorToRl(args.@"tint"),
+    );
 }
 
 /// Measure text with a null-terminated string.
@@ -362,6 +422,7 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint 
 
 /// Close the window.
 pub fn closeWindow() void {
+    unloadTextures();
     unloadFonts();
     rl.CloseWindow();
 }

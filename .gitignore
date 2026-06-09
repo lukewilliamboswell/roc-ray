@@ -7,12 +7,14 @@ examples/keyboard_minimal
 examples/kitchen_sink
 examples/read_env
 examples/pong
+examples/sprites
 examples/text_ui
 
 # Built executables at root
 hello_world
 keyboard
 pong
+sprites
 
 all_roc_syntax
 

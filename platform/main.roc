@@ -17,7 +17,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Math]
+	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math]
 	packages {}
 	provides {
 		app_config_for_host!: "app_config_for_host",
@@ -43,11 +43,12 @@ import Mouse
 import Time
 import Audio
 import App
+import Assets
 import Math
 
 ## TODO: roc glue currently undercounts direct function fields in generated
 ## records when they are mixed with non-function data. The generated
-## __AnonStruct49 and __AnonStruct62 size assertions are patched to include
+## __AnonStruct56 and __AnonStruct69 size assertions are patched to include
 ## the function pointers.
 ## Re-run glue without that patch once the upstream glue bug is fixed.
 

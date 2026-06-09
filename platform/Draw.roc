@@ -1,12 +1,255 @@
 ## Draw module - provides drawing primitives for the Roc raylib platform
+import Assets
 import Color
+import Math
+
+TextureDrawConfig : {
+	texture : Assets.Texture,
+	source : Math.Rect,
+	dest : Math.Rect,
+	origin : Math.Vec2,
+	rotation : F32,
+	tint : Color,
+}
+
+TextureDrawOptions : {
+	source : Math.Rect,
+	source_set : Bool,
+	dest : Math.Rect,
+	dest_set : Bool,
+	pos : Math.Vec2,
+	origin : Math.Vec2,
+	origin_set : Bool,
+	origin_center : Bool,
+	rotation : F32,
+	scale : Math.Vec2,
+	tint : Color,
+}
+
+TextureDrawBuilder(field) := {
+	value : field,
+	apply : TextureDrawOptions -> TextureDrawOptions,
+}.{
+
+	default_options : TextureDrawOptions
+	default_options = {
+		source: Math.rect(0, 0, 0, 0),
+		source_set: Bool.False,
+		dest: Math.rect(0, 0, 0, 0),
+		dest_set: Bool.False,
+		pos: Math.zero,
+		origin: Math.zero,
+		origin_set: Bool.False,
+		origin_center: Bool.False,
+		rotation: 0,
+		scale: { x: 1, y: 1 },
+		tint: Color.white,
+	}
+
+	map2 : TextureDrawBuilder(a), TextureDrawBuilder(b), (a, b -> c) -> TextureDrawBuilder(c)
+	map2 = |left, right, combine| {
+		value: combine(left.value, right.value),
+		apply: |options| (right.apply)((left.apply)(options)),
+	}
+
+	empty : TextureDrawBuilder({})
+	empty = { value: {}, apply: |options| options }
+
+	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
+	run = |builder, texture| {
+		options = (builder.apply)(TextureDrawBuilder.default_options)
+		source = if options.source_set options.source else Assets.rect(texture)
+
+		dest = if options.dest_set {
+			options.dest
+		} else {
+			{
+				x: options.pos.x,
+				y: options.pos.y,
+				width: source.width * options.scale.x,
+				height: source.height * options.scale.y,
+			}
+		}
+
+		origin = if options.origin_set {
+			options.origin
+		} else if options.origin_center {
+			{ x: dest.width * 0.5, y: dest.height * 0.5 }
+		} else {
+			Math.zero
+		}
+
+		{ texture, source, dest, origin, rotation: options.rotation, tint: options.tint }
+	}
+
+	pos : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
+	pos = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: value,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	source : Math.Rect -> TextureDrawBuilder(Math.Rect)
+	source = |value| {
+		value,
+		apply: |options| {
+			source: value,
+			source_set: Bool.True,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	dest : Math.Rect -> TextureDrawBuilder(Math.Rect)
+	dest = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: value,
+			dest_set: Bool.True,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	origin : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
+	origin = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: value,
+			origin_set: Bool.True,
+			origin_center: Bool.False,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	origin_center : TextureDrawBuilder({})
+	origin_center = {
+		value: {},
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: Bool.False,
+			origin_center: Bool.True,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	rotation : F32 -> TextureDrawBuilder(F32)
+	rotation = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: value,
+			scale: options.scale,
+			tint: options.tint,
+		},
+	}
+
+	scale : F32 -> TextureDrawBuilder(F32)
+	scale = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: { x: value, y: value },
+			tint: options.tint,
+		},
+	}
+
+	scale_xy : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
+	scale_xy = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: value,
+			tint: options.tint,
+		},
+	}
+
+	tint : Color -> TextureDrawBuilder(Color)
+	tint = |value| {
+		value,
+		apply: |options| {
+			source: options.source,
+			source_set: options.source_set,
+			dest: options.dest,
+			dest_set: options.dest_set,
+			pos: options.pos,
+			origin: options.origin,
+			origin_set: options.origin_set,
+			origin_center: options.origin_center,
+			rotation: options.rotation,
+			scale: options.scale,
+			tint: value,
+		},
+	}
+}
 
 Draw := [].{
 
-	Vector2 : {
-		x : F32,
-		y : F32,
-	}
+	Vector2 : Math.Vec2
+
+	Rect : Math.Rect
 
 	Fill : [NoFill, Fill(Color)]
 
@@ -235,6 +478,17 @@ Draw := [].{
 		size : I32,
 	}
 
+	TextureDraw : TextureDrawConfig
+
+	TextureDrawRaw : {
+		texture : U64,
+		source : Math.Rect,
+		dest : Math.Rect,
+		origin : Math.Vec2,
+		rotation : F32,
+		tint : Color,
+	}
+
 	## Hosted effects - implemented by the host
 	begin_frame! : () => {}
 	circle_raw! : CircleRaw => {}
@@ -255,6 +509,7 @@ Draw := [].{
 	rounded_rectangle_raw! : RoundedRectangleRaw => {}
 	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
 	text_raw! : TextRaw => {}
+	draw_texture_raw! : TextureDrawRaw => {}
 	triangle_raw! : TriangleRaw => {}
 	triangle_lines_raw! : TriangleLinesRaw => {}
 
@@ -428,6 +683,30 @@ Draw := [].{
 		}
 	}
 
+	texture_draw : Assets.Texture -> TextureDraw
+	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
+
+	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
+	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
+
+	texture! : TextureDraw => {}
+	texture! = |cfg| {
+		texture_info = Assets.info(cfg.texture)
+		Draw.draw_texture_raw!(
+			{
+				texture: texture_info.handle,
+				source: cfg.source,
+				dest: cfg.dest,
+				origin: cfg.origin,
+				rotation: cfg.rotation,
+				tint: cfg.tint,
+			},
+		)
+	}
+
+	draw_texture! : TextureDraw => {}
+	draw_texture! = |cfg| Draw.texture!(cfg)
+
 	text! : Text => {}
 	text! = |cfg| {
 		size = Draw.measure_text!(
@@ -475,3 +754,7 @@ Draw := [].{
 		Draw.end_frame!()
 	}
 }
+
+expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, Box.box({ handle: 1, width: 8, height: 4 }))).source == Math.rect(0, 0, 8, 4)
+expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), Box.box({ handle: 1, width: 8, height: 4 }))).dest == Math.rect(0, 0, 16, 8)
+expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, Box.box({ handle: 1, width: 8, height: 4 }))).origin == { x: 4, y: 2 }

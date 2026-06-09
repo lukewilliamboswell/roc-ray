@@ -7,6 +7,7 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
+- Asset loading for host-owned textures, with source/destination rectangles, rotation, origin, scale, and tint
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
@@ -31,6 +32,12 @@ Then run an example:
 
 ```bash
 roc examples/hello_world.roc
+```
+
+Sprite and texture drawing are demonstrated in:
+
+```bash
+roc examples/sprites.roc
 ```
 
 ## Testing

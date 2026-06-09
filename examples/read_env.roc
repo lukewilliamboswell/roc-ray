@@ -30,8 +30,8 @@ render! = |model, host| {
 	Draw.draw!(
 		RayWhite,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 10 }, text: message, size: 40, color: DarkGray })
-			Draw.text!({ pos: { x: 10, y: 60 }, text: "Set GREETING and USER env vars to customize!", size: 20, color: Gray })
+			Draw.text!({ pos: { x: 10, y: 10 }, text: message, size: 40, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 60 }, text: "Set GREETING and USER env vars to customize!", size: 20, spacing: Draw.default_spacing, color: Gray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 30, color: circle_color })
 		},
 	)

@@ -39,6 +39,43 @@ pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
     return &key_pressed_state;
 }
 
+const MAX_FONTS: usize = 32;
+
+/// Custom fonts loaded by the host. Handle 0 is always raylib's default font;
+/// loaded fonts use handles 1..MAX_FONTS.
+var fonts: [MAX_FONTS]rl.Font = undefined;
+var font_count: usize = 0;
+
+fn fontFromHandle(handle: u64) rl.Font {
+    if (handle == 0) return rl.GetFontDefault();
+    if (handle > @as(u64, @intCast(font_count))) return rl.GetFontDefault();
+
+    const index: usize = @intCast(handle - 1);
+    return fonts[index];
+}
+
+/// Load a custom font and return its handle, or null on failure.
+pub fn loadFont(path: [*:0]const u8, size: c_int) ?u64 {
+    if (font_count >= MAX_FONTS) return null;
+
+    const font_size = if (size < 1) 1 else size;
+    const font = rl.LoadFontEx(path, font_size, null, 0);
+    if (!rl.IsFontValid(font)) return null;
+
+    fonts[font_count] = font;
+    font_count += 1;
+    return @intCast(font_count);
+}
+
+/// Unload all custom fonts. The default font is owned by raylib.
+pub fn unloadFonts() void {
+    var i: usize = 0;
+    while (i < font_count) : (i += 1) {
+        rl.UnloadFont(fonts[i]);
+    }
+    font_count = 0;
+}
+
 /// Convert abi Color enum to raylib Color.
 pub fn colorToRl(color: abi.Color) rl.Color {
     return switch (color) {
@@ -91,8 +128,13 @@ pub fn drawLine(args: abi.DrawLineArgs) void {
 }
 
 /// Draw text with a null-terminated string.
-pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: abi.Color) void {
-    rl.DrawText(text, x, y, size, colorToRl(color));
+pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+    rl.DrawTextEx(fontFromHandle(font_handle), text, pos, size, spacing, colorToRl(color));
+}
+
+/// Measure text with a null-terminated string.
+pub fn measureTextZ(text: [*:0]const u8, font_handle: u64, size: f32, spacing: f32) rl.Vector2 {
+    return rl.MeasureTextEx(fontFromHandle(font_handle), text, size, spacing);
 }
 
 /// Draw a rectangle with vertical gradient from abi args.
@@ -156,6 +198,7 @@ pub fn initWindow(width: c_int, height: c_int, title: [*:0]const u8) void {
 
 /// Close the window.
 pub fn closeWindow() void {
+    unloadFonts();
     rl.CloseWindow();
 }
 
@@ -303,11 +346,6 @@ pub fn isMouseButtonDown(button: MouseButton) bool {
 /// Get mouse wheel movement.
 pub fn getMouseWheelMove() f32 {
     return rl.GetMouseWheelMove();
-}
-
-/// Measure text width.
-pub fn measureText(text: [*:0]const u8, font_size: c_int) c_int {
-    return rl.MeasureText(text, font_size);
 }
 
 /// Get screen width.

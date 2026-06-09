@@ -565,8 +565,8 @@ pub const RocEnv = struct {
 
 /// Element type for __AnonStruct1
 pub const __AnonStruct1 = extern struct {
-    @"freq": f32,
-    @"ms": i32,
+    freq: f32,
+    ms: i32,
 };
 
 comptime {
@@ -578,9 +578,9 @@ comptime {
 
 /// Element type for __AnonStruct6
 pub const __AnonStruct6 = extern struct {
-    @"center": __AnonStruct7,
-    @"radius": f32,
-    @"color": Color,
+    center: __AnonStruct7,
+    radius: f32,
+    color: Color,
 };
 
 comptime {
@@ -592,8 +592,8 @@ comptime {
 
 /// Element type for __AnonStruct7
 pub const __AnonStruct7 = extern struct {
-    @"x": f32,
-    @"y": f32,
+    x: f32,
+    y: f32,
 };
 
 comptime {
@@ -605,10 +605,10 @@ comptime {
 
 /// Element type for __AnonStruct10
 pub const __AnonStruct10 = extern struct {
-    @"center": __AnonStruct7,
-    @"radius": f32,
-    @"color_inner": Color,
-    @"color_outer": Color,
+    center: __AnonStruct7,
+    radius: f32,
+    color_inner: Color,
+    color_outer: Color,
 };
 
 comptime {
@@ -620,9 +620,9 @@ comptime {
 
 /// Element type for __AnonStruct11
 pub const __AnonStruct11 = extern struct {
-    @"end": __AnonStruct7,
-    @"start": __AnonStruct7,
-    @"color": Color,
+    end: __AnonStruct7,
+    start: __AnonStruct7,
+    color: Color,
 };
 
 comptime {
@@ -634,11 +634,11 @@ comptime {
 
 /// Element type for __AnonStruct12
 pub const __AnonStruct12 = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color: Color,
 };
 
 comptime {
@@ -650,12 +650,12 @@ comptime {
 
 /// Element type for __AnonStruct13
 pub const __AnonStruct13 = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color_left": Color,
-    @"color_right": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color_left: Color,
+    color_right: Color,
 };
 
 comptime {
@@ -667,12 +667,12 @@ comptime {
 
 /// Element type for __AnonStruct14
 pub const __AnonStruct14 = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color_bottom": Color,
-    @"color_top": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color_bottom: Color,
+    color_top: Color,
 };
 
 comptime {
@@ -684,40 +684,83 @@ comptime {
 
 /// Element type for __AnonStruct15
 pub const __AnonStruct15 = extern struct {
-    @"text": RocStr,
-    @"pos": __AnonStruct7,
-    @"size": i32,
-    @"color": Color,
+    font: u64,
+    text: RocStr,
+    pos: __AnonStruct7,
+    size: f32,
+    spacing: f32,
+    color: Color,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct15) != 40) @compileError("__AnonStruct15 size mismatch");
+        if (@sizeOf(__AnonStruct15) != 56) @compileError("__AnonStruct15 size mismatch");
         if (@alignOf(__AnonStruct15) != 8) @compileError("__AnonStruct15 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct18
+pub const __AnonStruct18 = extern struct {
+    height: f32,
+    width: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct18) != 8) @compileError("__AnonStruct18 size mismatch");
+        if (@alignOf(__AnonStruct18) != 4) @compileError("__AnonStruct18 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct19
+pub const __AnonStruct19 = extern struct {
+    font: u64,
+    text: RocStr,
+    size: f32,
+    spacing: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct19) != 40) @compileError("__AnonStruct19 size mismatch");
+        if (@alignOf(__AnonStruct19) != 8) @compileError("__AnonStruct19 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct20
 pub const __AnonStruct20 = extern struct {
-    @"height": i32,
-    @"width": i32,
+    path: RocStr,
+    size: i32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct20) != 8) @compileError("__AnonStruct20 size mismatch");
-        if (@alignOf(__AnonStruct20) != 4) @compileError("__AnonStruct20 alignment mismatch");
+        if (@sizeOf(__AnonStruct20) != 32) @compileError("__AnonStruct20 size mismatch");
+        if (@alignOf(__AnonStruct20) != 8) @compileError("__AnonStruct20 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct24
+pub const __AnonStruct24 = extern struct {
+    height: i32,
+    width: i32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct24) != 8) @compileError("__AnonStruct24 size mismatch");
+        if (@alignOf(__AnonStruct24) != 4) @compileError("__AnonStruct24 alignment mismatch");
     }
 }
 
 /// Element type for Host
 pub const Host = extern struct {
-    @"frame_count": u64,
-    @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"timestamp_nanos": u64,
-    @"frame_time": f32,
-    @"mouse": __AnonStruct29,
+    frame_count: u64,
+    keys: RocListWith(u8, false),
+    keys_pressed: RocListWith(u8, false),
+    timestamp_nanos: u64,
+    frame_time: f32,
+    mouse: __AnonStruct33,
 };
 
 comptime {
@@ -727,78 +770,78 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct29
-pub const __AnonStruct29 = extern struct {
-    @"wheel": f32,
-    @"x": f32,
-    @"y": f32,
-    @"left": bool,
-    @"middle": bool,
-    @"right": bool,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct29) != 16) @compileError("__AnonStruct29 size mismatch");
-        if (@alignOf(__AnonStruct29) != 4) @compileError("__AnonStruct29 alignment mismatch");
-    }
-}
-
 /// Element type for __AnonStruct33
 pub const __AnonStruct33 = extern struct {
-    @"height": f32,
-    @"width": f32,
+    wheel: f32,
+    x: f32,
+    y: f32,
+    left: bool,
+    middle: bool,
+    right: bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct33) != 8) @compileError("__AnonStruct33 size mismatch");
+        if (@sizeOf(__AnonStruct33) != 16) @compileError("__AnonStruct33 size mismatch");
         if (@alignOf(__AnonStruct33) != 4) @compileError("__AnonStruct33 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct34
-pub const __AnonStruct34 = extern struct {
+/// Element type for __AnonStruct37
+pub const __AnonStruct37 = extern struct {
+    height: f32,
+    width: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct37) != 8) @compileError("__AnonStruct37 size mismatch");
+        if (@alignOf(__AnonStruct37) != 4) @compileError("__AnonStruct37 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct38
+pub const __AnonStruct38 = extern struct {
     @"init!": *anyopaque,
     @"render!": *anyopaque,
 };
 
-/// Element type for __AnonStruct42
-pub const __AnonStruct42 = extern struct {
-    @"wheel": f32,
-    @"x": f32,
-    @"y": f32,
-    @"left": bool,
-    @"middle": bool,
-    @"right": bool,
+/// Element type for __AnonStruct46
+pub const __AnonStruct46 = extern struct {
+    wheel: f32,
+    x: f32,
+    y: f32,
+    left: bool,
+    middle: bool,
+    right: bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct42) != 16) @compileError("__AnonStruct42 size mismatch");
-        if (@alignOf(__AnonStruct42) != 4) @compileError("__AnonStruct42 alignment mismatch");
+        if (@sizeOf(__AnonStruct46) != 16) @compileError("__AnonStruct46 size mismatch");
+        if (@alignOf(__AnonStruct46) != 4) @compileError("__AnonStruct46 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct51
-pub const __AnonStruct51 = extern struct {
-    @"frame_count": u64,
-    @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"timestamp_nanos": u64,
-    @"frame_time": f32,
-    @"mouse_wheel": f32,
-    @"mouse_x": f32,
-    @"mouse_y": f32,
-    @"mouse_left": bool,
-    @"mouse_middle": bool,
-    @"mouse_right": bool,
+/// Element type for __AnonStruct55
+pub const __AnonStruct55 = extern struct {
+    frame_count: u64,
+    keys: RocListWith(u8, false),
+    keys_pressed: RocListWith(u8, false),
+    timestamp_nanos: u64,
+    frame_time: f32,
+    mouse_wheel: f32,
+    mouse_x: f32,
+    mouse_y: f32,
+    mouse_left: bool,
+    mouse_middle: bool,
+    mouse_right: bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct51) != 88) @compileError("__AnonStruct51 size mismatch");
-        if (@alignOf(__AnonStruct51) != 8) @compileError("__AnonStruct51 alignment mismatch");
+        if (@sizeOf(__AnonStruct55) != 88) @compileError("__AnonStruct55 size mismatch");
+        if (@alignOf(__AnonStruct55) != 8) @compileError("__AnonStruct55 alignment mismatch");
     }
 }
 
@@ -841,11 +884,25 @@ comptime {
     }
 }
 
+/// Return type record for Draw.measure_text_raw!
+/// Fields ordered by alignment descending (Roc ABI)
+pub const DrawMeasure_text_rawRetRecord = extern struct {
+    height: f32,
+    width: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawMeasure_text_rawRetRecord) != 8) @compileError("DrawMeasure_text_rawRetRecord size mismatch");
+        if (@alignOf(DrawMeasure_text_rawRetRecord) != 4) @compileError("DrawMeasure_text_rawRetRecord alignment mismatch");
+    }
+}
+
 /// Return type record for Host.get_screen_size!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const HostGet_screen_sizeRetRecord = extern struct {
-    @"height": i32,
-    @"width": i32,
+    height: i32,
+    width: i32,
 };
 
 comptime {
@@ -859,8 +916,8 @@ comptime {
 /// Roc signature: { freq : F32, ms : I32 } => U64
 /// Refcounted fields are owned by the hosted function.
 pub const AudioGen_tone_rawArgs = extern struct {
-    @"freq": f32,
-    @"ms": i32,
+    freq: f32,
+    ms: i32,
 };
 
 comptime {
@@ -881,9 +938,9 @@ pub const AudioPlay_rawArgs = extern struct {
 /// Roc signature: { center : { x : F32, y : F32 }, color : Color, radius : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawCircleArgs = extern struct {
-    @"center": __AnonStruct7,
-    @"radius": f32,
-    @"color": Color,
+    center: __AnonStruct7,
+    radius: f32,
+    color: Color,
 };
 
 comptime {
@@ -897,10 +954,10 @@ comptime {
 /// Roc signature: { center : { x : F32, y : F32 }, color_inner : Color, color_outer : Color, radius : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawCircle_gradientArgs = extern struct {
-    @"center": __AnonStruct7,
-    @"radius": f32,
-    @"color_inner": Color,
-    @"color_outer": Color,
+    center: __AnonStruct7,
+    radius: f32,
+    color_inner: Color,
+    color_outer: Color,
 };
 
 comptime {
@@ -921,9 +978,9 @@ pub const DrawClearArgs = extern struct {
 /// Roc signature: { color : Color, end : { x : F32, y : F32 }, start : { x : F32, y : F32 } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawLineArgs = extern struct {
-    @"end": __AnonStruct7,
-    @"start": __AnonStruct7,
-    @"color": Color,
+    end: __AnonStruct7,
+    start: __AnonStruct7,
+    color: Color,
 };
 
 comptime {
@@ -933,15 +990,47 @@ comptime {
     }
 }
 
+/// Arguments for Draw.load_font_raw!
+/// Roc signature: { path : Str, size : I32 } => U64
+/// Refcounted fields are owned by the hosted function.
+pub const DrawLoad_font_rawArgs = extern struct {
+    path: RocStr,
+    size: i32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawLoad_font_rawArgs) != 32) @compileError("DrawLoad_font_rawArgs size mismatch");
+        if (@alignOf(DrawLoad_font_rawArgs) != 8) @compileError("DrawLoad_font_rawArgs alignment mismatch");
+    }
+}
+
+/// Arguments for Draw.measure_text_raw!
+/// Roc signature: { font : U64, size : F32, spacing : F32, text : Str } => { height : F32, width : F32 }
+/// Refcounted fields are owned by the hosted function.
+pub const DrawMeasure_text_rawArgs = extern struct {
+    font: u64,
+    text: RocStr,
+    size: f32,
+    spacing: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawMeasure_text_rawArgs) != 40) @compileError("DrawMeasure_text_rawArgs size mismatch");
+        if (@alignOf(DrawMeasure_text_rawArgs) != 8) @compileError("DrawMeasure_text_rawArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Draw.rectangle!
 /// Roc signature: { color : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangleArgs = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color: Color,
 };
 
 comptime {
@@ -955,12 +1044,12 @@ comptime {
 /// Roc signature: { color_left : Color, color_right : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangle_gradient_hArgs = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color_left": Color,
-    @"color_right": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color_left: Color,
+    color_right: Color,
 };
 
 comptime {
@@ -974,12 +1063,12 @@ comptime {
 /// Roc signature: { color_bottom : Color, color_top : Color, height : F32, width : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawRectangle_gradient_vArgs = extern struct {
-    @"height": f32,
-    @"width": f32,
-    @"x": f32,
-    @"y": f32,
-    @"color_bottom": Color,
-    @"color_top": Color,
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color_bottom: Color,
+    color_top: Color,
 };
 
 comptime {
@@ -989,20 +1078,22 @@ comptime {
     }
 }
 
-/// Arguments for Draw.text!
-/// Roc signature: { color : Color, pos : { x : F32, y : F32 }, size : I32, text : Str } => {}
+/// Arguments for Draw.text_raw!
+/// Roc signature: { color : Color, font : U64, pos : { x : F32, y : F32 }, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
-pub const DrawTextArgs = extern struct {
-    @"text": RocStr,
-    @"pos": __AnonStruct7,
-    @"size": i32,
-    @"color": Color,
+pub const DrawText_rawArgs = extern struct {
+    font: u64,
+    text: RocStr,
+    pos: __AnonStruct7,
+    size: f32,
+    spacing: f32,
+    color: Color,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawTextArgs) != 40) @compileError("DrawTextArgs size mismatch");
-        if (@alignOf(DrawTextArgs) != 8) @compileError("DrawTextArgs alignment mismatch");
+        if (@sizeOf(DrawText_rawArgs) != 56) @compileError("DrawText_rawArgs size mismatch");
+        if (@alignOf(DrawText_rawArgs) != 8) @compileError("DrawText_rawArgs alignment mismatch");
     }
 }
 
@@ -1033,8 +1124,8 @@ pub const HostRead_envArgs = extern struct {
 /// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
 pub const HostSet_screen_sizeArgs = extern struct {
-    @"height": f32,
-    @"width": f32,
+    height: f32,
+    width: f32,
 };
 
 comptime {
@@ -1063,10 +1154,12 @@ pub const PlatformHostedFns = struct {
     draw_clear: *const fn (*RocOps, *anyopaque, *const DrawClearArgs) callconv(.c) void, // Draw.clear!
     draw_end_frame: *const fn (*RocOps, *anyopaque, *anyopaque) callconv(.c) void, // Draw.end_frame!
     draw_line: *const fn (*RocOps, *anyopaque, *const DrawLineArgs) callconv(.c) void, // Draw.line!
+    draw_load_font_raw: *const fn (*RocOps, *u64, *const DrawLoad_font_rawArgs) callconv(.c) void, // Draw.load_font_raw!
+    draw_measure_text_raw: *const fn (*RocOps, *DrawMeasure_text_rawRetRecord, *const DrawMeasure_text_rawArgs) callconv(.c) void, // Draw.measure_text_raw!
     draw_rectangle: *const fn (*RocOps, *anyopaque, *const DrawRectangleArgs) callconv(.c) void, // Draw.rectangle!
     draw_rectangle_gradient_h: *const fn (*RocOps, *anyopaque, *const DrawRectangle_gradient_hArgs) callconv(.c) void, // Draw.rectangle_gradient_h!
     draw_rectangle_gradient_v: *const fn (*RocOps, *anyopaque, *const DrawRectangle_gradient_vArgs) callconv(.c) void, // Draw.rectangle_gradient_v!
-    draw_text: *const fn (*RocOps, *anyopaque, *const DrawTextArgs) callconv(.c) void, // Draw.text!
+    draw_text_raw: *const fn (*RocOps, *anyopaque, *const DrawText_rawArgs) callconv(.c) void, // Draw.text_raw!
     host_exit: *const fn (*RocOps, *anyopaque, *const HostExitArgs) callconv(.c) void, // Host.exit!
     host_get_screen_size: *const fn (*RocOps, *HostGet_screen_sizeRetRecord, *anyopaque) callconv(.c) void, // Host.get_screen_size!
     host_random_i32: *const fn (*RocOps, *i32, *const HostRandom_i32Args) callconv(.c) void, // Host.random_i32!
@@ -1089,16 +1182,18 @@ pub fn hostedFunctions(comptime fns: PlatformHostedFns) HostedFunctions {
             hostedFn(fns.draw_clear), // Draw.clear! (index 5)
             hostedFn(fns.draw_end_frame), // Draw.end_frame! (index 6)
             hostedFn(fns.draw_line), // Draw.line! (index 7)
-            hostedFn(fns.draw_rectangle), // Draw.rectangle! (index 8)
-            hostedFn(fns.draw_rectangle_gradient_h), // Draw.rectangle_gradient_h! (index 9)
-            hostedFn(fns.draw_rectangle_gradient_v), // Draw.rectangle_gradient_v! (index 10)
-            hostedFn(fns.draw_text), // Draw.text! (index 11)
-            hostedFn(fns.host_exit), // Host.exit! (index 12)
-            hostedFn(fns.host_get_screen_size), // Host.get_screen_size! (index 13)
-            hostedFn(fns.host_random_i32), // Host.random_i32! (index 14)
-            hostedFn(fns.host_read_env), // Host.read_env! (index 15)
-            hostedFn(fns.host_set_screen_size), // Host.set_screen_size! (index 16)
-            hostedFn(fns.host_set_target_fps), // Host.set_target_fps! (index 17)
+            hostedFn(fns.draw_load_font_raw), // Draw.load_font_raw! (index 8)
+            hostedFn(fns.draw_measure_text_raw), // Draw.measure_text_raw! (index 9)
+            hostedFn(fns.draw_rectangle), // Draw.rectangle! (index 10)
+            hostedFn(fns.draw_rectangle_gradient_h), // Draw.rectangle_gradient_h! (index 11)
+            hostedFn(fns.draw_rectangle_gradient_v), // Draw.rectangle_gradient_v! (index 12)
+            hostedFn(fns.draw_text_raw), // Draw.text_raw! (index 13)
+            hostedFn(fns.host_exit), // Host.exit! (index 14)
+            hostedFn(fns.host_get_screen_size), // Host.get_screen_size! (index 15)
+            hostedFn(fns.host_random_i32), // Host.random_i32! (index 16)
+            hostedFn(fns.host_read_env), // Host.read_env! (index 17)
+            hostedFn(fns.host_set_screen_size), // Host.set_screen_size! (index 18)
+            hostedFn(fns.host_set_target_fps), // Host.set_target_fps! (index 19)
         };
     };
     return .{
@@ -1256,15 +1351,14 @@ pub fn makeRocOps(env: *RocEnv, hosted_fns: HostedFunctions) RocOps {
 /// Arguments for entrypoint: render_for_host!
 pub const Render_for_hostArgs = extern struct {
     arg0: **anyopaque,
-    arg1: __AnonStruct51,
+    arg1: __AnonStruct55,
 };
 
 /// Entrypoint: init_for_host!
-pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct51) callconv(.c) void;
+pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct55) callconv(.c) void;
 
 /// Entrypoint: render_for_host!
 pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
 
 /// Entrypoint: drop_model_for_host!
 pub extern fn roc__drop_model_for_host(ops: *RocOps, ret_ptr: *anyopaque, arg_ptr: ?*const **anyopaque) callconv(.c) void;
-

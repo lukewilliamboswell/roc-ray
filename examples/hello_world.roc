@@ -22,7 +22,7 @@ render! = |model, host| {
 	Draw.draw!(
 		RayWhite,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, color: DarkGray })
+			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.rectangle!({ x: 100, y: 200, width: 100, height: 80, color: Red })
 			Draw.line!({ start: { x: 100, y: 500 }, end: { x: 600, y: 550 }, color: Blue })
 

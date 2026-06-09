@@ -142,8 +142,8 @@ render_game_over! = |model, host| {
 		Black,
 		|| {
 			draw_field!(model)
-			Draw.text!({ pos: { x: 170, y: 240 }, text: winner, size: 40, color: Yellow })
-			Draw.text!({ pos: { x: 235, y: 300 }, text: "Press SPACE to restart", size: 24, color: White })
+			Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Yellow, font: Draw.default_font, align: Draw.align_center })
+			Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_center })
 		},
 	)
 
@@ -246,6 +246,6 @@ draw_field! = |model| {
 	Draw.rectangle!({ x: left_x, y: model.left_y, width: paddle_w, height: paddle_h, color: White })
 	Draw.rectangle!({ x: right_x, y: model.right_y, width: paddle_w, height: paddle_h, color: White })
 	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, color: RayWhite })
-	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, color: White })
-	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, color: White })
+	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_top_center })
+	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_top_center })
 }

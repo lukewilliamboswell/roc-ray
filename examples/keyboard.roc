@@ -22,7 +22,7 @@ render! = |model, host| {
 	Draw.draw!(
 		RayWhite,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "WASD to move", size: 20, color: DarkGray })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: "WASD to move", size: 20, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
 
 			# WASD display
 			w_color = if w_down Green else LightGray
@@ -31,13 +31,13 @@ render! = |model, host| {
 			d_color = if d_down Green else LightGray
 
 			Draw.rectangle!({ x: 70, y: 100, width: 30, height: 30, color: w_color })
-			Draw.text!({ pos: { x: 78, y: 105 }, text: "W", size: 20, color: Black })
+			Draw.text!({ pos: { x: 85, y: 115 }, text: "W", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 			Draw.rectangle!({ x: 30, y: 135, width: 30, height: 30, color: a_color })
-			Draw.text!({ pos: { x: 38, y: 140 }, text: "A", size: 20, color: Black })
+			Draw.text!({ pos: { x: 45, y: 150 }, text: "A", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 			Draw.rectangle!({ x: 70, y: 135, width: 30, height: 30, color: s_color })
-			Draw.text!({ pos: { x: 78, y: 140 }, text: "S", size: 20, color: Black })
+			Draw.text!({ pos: { x: 85, y: 150 }, text: "S", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 			Draw.rectangle!({ x: 110, y: 135, width: 30, height: 30, color: d_color })
-			Draw.text!({ pos: { x: 118, y: 140 }, text: "D", size: 20, color: Black })
+			Draw.text!({ pos: { x: 125, y: 150 }, text: "D", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 		},
 	)
 

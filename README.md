@@ -7,6 +7,7 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 ## Features
 
 - 2D drawing primitives (rectangles, circles, lines, text)
+- Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
 - Native rendering via raylib (macOS, Linux, Windows)
 

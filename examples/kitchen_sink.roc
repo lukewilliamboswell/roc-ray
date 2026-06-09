@@ -38,15 +38,15 @@ render! = |model, host| {
 	Draw.draw!(
 		RayWhite,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, color: DarkGray })
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "set_target_fps!(60) - called in init", size: 16, color: Blue })
-			Draw.text!({ pos: { x: 10, y: 80 }, text: "get_screen_size!() - called each frame", size: 16, color: Purple })
-			Draw.text!({ pos: { x: 10, y: 110 }, text: "set_screen_size!() - called in init", size: 16, color: Orange })
-			Draw.text!({ pos: { x: 10, y: 140 }, text: "exit!(0) - right-click to exit", size: 16, color: Red })
+			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: "set_target_fps!(60) - called in init", size: 16, spacing: Draw.default_spacing, color: Blue, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 80 }, text: "get_screen_size!() - called each frame", size: 16, spacing: Draw.default_spacing, color: Purple, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 110 }, text: "set_screen_size!() - called in init", size: 16, spacing: Draw.default_spacing, color: Orange, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 140 }, text: "exit!(0) - right-click to exit", size: 16, spacing: Draw.default_spacing, color: Red, font: Draw.default_font, align: Draw.align_top_left })
 
 			# Show current size
 			size_indicator = if is_wide "Wide screen" else "Small screen"
-			Draw.text!({ pos: { x: 10, y: 180 }, text: size_indicator, size: 16, color: Green })
+			Draw.text!({ pos: { x: 10, y: 180 }, text: size_indicator, size: 16, spacing: Draw.default_spacing, color: Green, font: Draw.default_font, align: Draw.align_top_left })
 
 			Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 20, color: circle_color })
 		},

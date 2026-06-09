@@ -69,7 +69,6 @@ fn nativeCrashed(crash_args: *const abi.RocCrashed, _: *anyopaque) callconv(.c) 
     std.process.exit(1);
 }
 
-
 // OS-specific entry point handling (not exported during tests)
 comptime {
     if (!builtin.is_test) {
@@ -90,6 +89,69 @@ fn __main() callconv(.c) void {}
 // C compatible main for runtime
 fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
+}
+
+const CSTRING_STACK_CAPACITY: usize = 1024;
+
+const TempCString = struct {
+    ptr: [*:0]const u8,
+    heap: ?[]u8,
+    allocator: std.mem.Allocator,
+
+    fn deinit(self: *TempCString) void {
+        if (self.heap) |buf| self.allocator.free(buf);
+    }
+};
+
+fn allocatorFromOps(ops: *RocOps) std.mem.Allocator {
+    const env: *abi.RocEnv = @ptrCast(@alignCast(ops.env));
+    return env.allocator;
+}
+
+fn makeTempCString(allocator: std.mem.Allocator, stack: *[CSTRING_STACK_CAPACITY:0]u8, bytes: []const u8) !TempCString {
+    const c_len = std.mem.indexOfScalar(u8, bytes, 0) orelse bytes.len;
+    const c_bytes = bytes[0..c_len];
+
+    if (c_len < stack.len) {
+        @memcpy(stack[0..c_len], c_bytes);
+        stack[c_len] = 0;
+        return .{ .ptr = stack[0..c_len :0].ptr, .heap = null, .allocator = allocator };
+    }
+
+    const heap = try allocator.alloc(u8, c_len + 1);
+    @memcpy(heap[0..c_len], c_bytes);
+    heap[c_len] = 0;
+
+    return .{ .ptr = heap[0..c_len :0].ptr, .heap = heap, .allocator = allocator };
+}
+
+test "makeTempCString uses stack storage for small strings" {
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var c_string = try makeTempCString(std.testing.allocator, &stack, "hello");
+    defer c_string.deinit();
+
+    try std.testing.expect(c_string.heap == null);
+    try std.testing.expectEqualStrings("hello", std.mem.span(c_string.ptr));
+}
+
+test "makeTempCString allocates long strings" {
+    var bytes: [CSTRING_STACK_CAPACITY + 10]u8 = undefined;
+    @memset(&bytes, 'x');
+
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var c_string = try makeTempCString(std.testing.allocator, &stack, bytes[0..]);
+    defer c_string.deinit();
+
+    try std.testing.expect(c_string.heap != null);
+    try std.testing.expectEqual(@as(usize, CSTRING_STACK_CAPACITY + 10), std.mem.span(c_string.ptr).len);
+}
+
+test "makeTempCString stops at embedded nul" {
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var c_string = try makeTempCString(std.testing.allocator, &stack, "before\x00after");
+    defer c_string.deinit();
+
+    try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
 fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
@@ -133,16 +195,47 @@ fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args: *const abi.Draw
     raylib.drawRectangleGradientV(args.*);
 }
 
-fn hostedDrawText(_: *RocOps, _: *anyopaque, args: *const abi.DrawTextArgs) callconv(.c) void {
-    const text_slice = args.text.asSlice();
+fn hostedDrawLoadFontRaw(ops: *RocOps, result: *u64, args: *const abi.DrawLoad_font_rawArgs) callconv(.c) void {
+    defer args.path.decref(ops);
+    result.* = 0;
 
-    // raylib expects null-terminated string, use stack buffer for small strings
-    var buf: [256:0]u8 = undefined;
-    if (text_slice.len < buf.len) {
-        @memcpy(buf[0..text_slice.len], text_slice);
-        buf[text_slice.len] = 0;
-        raylib.drawTextZ(buf[0..text_slice.len :0], @intFromFloat(args.pos.x), @intFromFloat(args.pos.y), args.size, args.color);
-    }
+    const path_slice = args.path.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return;
+    defer path.deinit();
+
+    result.* = raylib.loadFont(path.ptr, args.size) orelse 0;
+}
+
+fn hostedDrawMeasureTextRaw(ops: *RocOps, result: *abi.DrawMeasure_text_rawRetRecord, args: *const abi.DrawMeasure_text_rawArgs) callconv(.c) void {
+    defer args.text.decref(ops);
+    result.* = .{ .height = 0, .width = 0 };
+
+    const text_slice = args.text.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return;
+    defer text.deinit();
+
+    const measured = raylib.measureTextZ(text.ptr, args.font, args.size, args.spacing);
+    result.* = .{ .height = measured.y, .width = measured.x };
+}
+
+fn hostedDrawTextRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawText_rawArgs) callconv(.c) void {
+    defer args.text.decref(ops);
+
+    const text_slice = args.text.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return;
+    defer text.deinit();
+
+    raylib.drawTextZ(
+        text.ptr,
+        args.font,
+        .{ .x = args.pos.x, .y = args.pos.y },
+        args.size,
+        args.spacing,
+        args.color,
+    );
 }
 
 /// Global flag for deferred exit request (exit after current frame completes)
@@ -213,10 +306,12 @@ const hosted_fns = abi.hostedFunctions(.{
     .draw_clear = &hostedDrawClear,
     .draw_end_frame = &hostedDrawEndFrame,
     .draw_line = &hostedDrawLine,
+    .draw_load_font_raw = &hostedDrawLoadFontRaw,
+    .draw_measure_text_raw = &hostedDrawMeasureTextRaw,
     .draw_rectangle = &hostedDrawRectangle,
     .draw_rectangle_gradient_h = &hostedDrawRectangleGradientH,
     .draw_rectangle_gradient_v = &hostedDrawRectangleGradientV,
-    .draw_text = &hostedDrawText,
+    .draw_text_raw = &hostedDrawTextRaw,
     .host_exit = &hostedExit,
     .host_get_screen_size = &hostedGetScreenSize,
     .host_random_i32 = &hostedRandomI32,

@@ -7,6 +7,7 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
+- 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading

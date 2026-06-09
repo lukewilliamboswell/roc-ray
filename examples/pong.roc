@@ -6,6 +6,7 @@ import rr.Host
 import rr.Keys
 import rr.Audio
 import rr.App
+import rr.Math
 
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
@@ -66,13 +67,19 @@ bounce_factor = 6
 win_score : U64
 win_score = 5
 
-clamp : F32, F32, F32 -> F32
-clamp = |v, lo, hi| if v < lo lo else if v > hi hi else v
-
 # A random vertical serve speed in px/second, so each serve leaves at a
 # different angle instead of the same predictable line.
 random_serve_vy! : () => F32
 random_serve_vy! = || I32.to_f32(Host.random_i32!(-160, 160))
+
+left_paddle : F32 -> Math.Rect
+left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
+
+right_paddle : F32 -> Math.Rect
+right_paddle = |y| Math.rect(screen_w - paddle_margin - paddle_w, y, paddle_w, paddle_h)
+
+ball_circle : F32, F32 -> Math.Circle
+ball_circle = |x, y| Math.circle({ x, y }, ball_r)
 
 # A fresh round: ball centred, scores zeroed, served in a random direction.
 # Sound handles are carried over from the previous model (generated once).
@@ -170,12 +177,12 @@ render_playing! = |model, host| {
 	w_down = Keys.key_down(host.keys, KeyW)
 	s_down = Keys.key_down(host.keys, KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
-	left_y = clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
+	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 
 	# --- Right paddle: simple AI tracks the ball's vertical position ---
 	right_center = model.right_y + paddle_h * 0.5
 	right_dir = if model.ball_y < right_center - 4 (ai_speed * -1) else if model.ball_y > right_center + 4 ai_speed else 0
-	right_y = clamp(model.right_y + right_dir * dt, 0, screen_h - paddle_h)
+	right_y = Math.clamp(model.right_y + right_dir * dt, 0, screen_h - paddle_h)
 
 	# --- Move ball ---
 	nx0 = model.ball_x + model.ball_vx * dt
@@ -188,18 +195,18 @@ render_playing! = |model, host| {
 	vy_wall = if hit_top (model.ball_vy * -1) else if hit_bottom (model.ball_vy * -1) else model.ball_vy
 
 	# Paddle geometry
-	left_x = paddle_margin
-	left_right = left_x + paddle_w
-	right_x = screen_w - paddle_margin - paddle_w
+	left_rect = left_paddle(left_y)
+	right_rect = right_paddle(right_y)
+	ball_shape = ball_circle(nx0, ny)
 
 	# Paddle collisions (reflect horizontally; set vy from where the ball struck)
-	hit_left = model.ball_vx < 0 and nx0 - ball_r <= left_right and nx0 >= left_x and ny + ball_r >= left_y and ny - ball_r <= left_y + paddle_h
-	hit_right = model.ball_vx > 0 and nx0 + ball_r >= right_x and nx0 <= right_x + paddle_w and ny + ball_r >= right_y and ny - ball_r <= right_y + paddle_h
+	hit_left = model.ball_vx < 0 and nx0 >= Math.left(left_rect) and Math.circle_rect(ball_shape, left_rect)
+	hit_right = model.ball_vx > 0 and nx0 <= Math.right(right_rect) and Math.circle_rect(ball_shape, right_rect)
 
-	left_paddle_center = left_y + paddle_h * 0.5
-	right_paddle_center = right_y + paddle_h * 0.5
+	left_paddle_center = Math.center(left_rect).y
+	right_paddle_center = Math.center(right_rect).y
 
-	nx = if hit_left (left_right + ball_r) else if hit_right (right_x - ball_r) else nx0
+	nx = if hit_left (Math.right(left_rect) + ball_r) else if hit_right (Math.left(right_rect) - ball_r) else nx0
 	vx = if hit_left (model.ball_vx * -1) else if hit_right (model.ball_vx * -1) else model.ball_vx
 	vy = if hit_left ((ny - left_paddle_center) * bounce_factor) else if hit_right ((ny - right_paddle_center) * bounce_factor) else vy_wall
 
@@ -245,13 +252,14 @@ render_playing! = |model, host| {
 # Draw the static scene (center line, paddles, ball, scores) for a model.
 draw_field! : Model => {}
 draw_field! = |model| {
-	left_x = paddle_margin
-	right_x = screen_w - paddle_margin - paddle_w
+	left_rect = left_paddle(model.left_y)
+	right_rect = right_paddle(model.right_y)
+	ball_shape = ball_circle(model.ball_x, model.ball_y)
 
 	Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, stroke: Draw.stroke(Color.dark_gray, 2) })
-	Draw.rectangle!({ x: left_x, y: model.left_y, width: paddle_w, height: paddle_h, style: Draw.filled(Color.white) })
-	Draw.rectangle!({ x: right_x, y: model.right_y, width: paddle_w, height: paddle_h, style: Draw.filled(Color.white) })
-	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, style: Draw.filled(Color.ray_white) })
+	Draw.rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, style: Draw.filled(Color.white) })
+	Draw.rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, style: Draw.filled(Color.white) })
+	Draw.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
 	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
 	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
 }

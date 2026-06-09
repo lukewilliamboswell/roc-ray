@@ -113,55 +113,166 @@ pub fn unloadFonts() void {
     font_count = 0;
 }
 
-/// Convert abi Color enum to raylib Color.
-pub fn colorToRl(color: abi.Color) rl.Color {
-    return switch (color) {
-        .black => rl.BLACK,
-        .blue => rl.BLUE,
-        .dark_gray => rl.DARKGRAY,
-        .gray => rl.GRAY,
-        .green => rl.GREEN,
-        .light_gray => rl.LIGHTGRAY,
-        .orange => rl.ORANGE,
-        .pink => rl.PINK,
-        .purple => rl.PURPLE,
-        .ray_white => rl.RAYWHITE,
-        .red => rl.RED,
-        .white => rl.WHITE,
-        .yellow => rl.YELLOW,
+/// Convert an ABI RGBA color record to raylib Color.
+pub fn colorToRl(color: anytype) rl.Color {
+    return .{
+        .r = color.@"r",
+        .g = color.@"g",
+        .b = color.@"b",
+        .a = color.@"a",
     };
 }
 
+fn toVector2(point: anytype) rl.Vector2 {
+    return .{ .x = point.@"x", .y = point.@"y" };
+}
+
+fn rectFromArgs(args: anytype) rl.Rectangle {
+    return .{ .x = args.@"x", .y = args.@"y", .width = args.@"width", .height = args.@"height" };
+}
+
+fn positiveThickness(thickness: f32) ?f32 {
+    if (thickness <= 0) return null;
+    return thickness;
+}
+
+fn positiveSegments(segments: i32) c_int {
+    return if (segments < 4) 8 else @intCast(segments);
+}
+
+fn absF32(value: f32) f32 {
+    return if (value < 0) -value else value;
+}
+
+fn roundedness(width: f32, height: f32, radius: f32) f32 {
+    if (radius <= 0) return 0;
+    const min_dim = @min(absF32(width), absF32(height));
+    if (min_dim <= 0) return 0;
+    return @min(1, radius / min_dim);
+}
+
+fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) void {
+    const thick = positiveThickness(thickness) orelse return;
+    rl.DrawLineEx(toVector2(start), toVector2(end), thick, colorToRl(color));
+}
+
 /// Draw a circle from abi args.
-pub fn drawCircle(args: abi.DrawCircleArgs) void {
+pub fn drawCircle(args: abi.DrawCircle_rawArgs) void {
     rl.DrawCircle(
-        @intFromFloat(args.center.x),
-        @intFromFloat(args.center.y),
-        args.radius,
-        colorToRl(args.color),
+        @intFromFloat(args.@"center".@"x"),
+        @intFromFloat(args.@"center".@"y"),
+        args.@"radius",
+        colorToRl(args.@"color"),
+    );
+}
+
+/// Draw a thick circle outline from abi args.
+pub fn drawCircleLines(args: abi.DrawCircle_lines_rawArgs) void {
+    const thick = positiveThickness(args.@"thickness") orelse return;
+    const half = thick * 0.5;
+    const inner_radius = @max(0, args.@"radius" - half);
+    const outer_radius = args.@"radius" + half;
+
+    rl.DrawRing(
+        toVector2(args.@"center"),
+        inner_radius,
+        outer_radius,
+        0,
+        360,
+        64,
+        colorToRl(args.@"color"),
     );
 }
 
 /// Draw a rectangle from abi args.
-pub fn drawRectangle(args: abi.DrawRectangleArgs) void {
+pub fn drawRectangle(args: abi.DrawRectangle_rawArgs) void {
     rl.DrawRectangle(
-        @intFromFloat(args.x),
-        @intFromFloat(args.y),
-        @intFromFloat(args.width),
-        @intFromFloat(args.height),
-        colorToRl(args.color),
+        @intFromFloat(args.@"x"),
+        @intFromFloat(args.@"y"),
+        @intFromFloat(args.@"width"),
+        @intFromFloat(args.@"height"),
+        colorToRl(args.@"color"),
+    );
+}
+
+/// Draw a rectangle outline from abi args.
+pub fn drawRectangleLines(args: abi.DrawRectangle_lines_rawArgs) void {
+    const thick = positiveThickness(args.@"thickness") orelse return;
+    rl.DrawRectangleLinesEx(rectFromArgs(args), thick, colorToRl(args.@"color"));
+}
+
+/// Draw a rounded rectangle from abi args.
+pub fn drawRoundedRectangle(args: abi.DrawRounded_rectangle_rawArgs) void {
+    rl.DrawRectangleRounded(
+        rectFromArgs(args),
+        roundedness(args.@"width", args.@"height", args.@"radius"),
+        positiveSegments(args.@"segments"),
+        colorToRl(args.@"color"),
+    );
+}
+
+/// Draw a rounded rectangle outline from abi args.
+pub fn drawRoundedRectangleLines(args: abi.DrawRounded_rectangle_lines_rawArgs) void {
+    const thick = positiveThickness(args.@"thickness") orelse return;
+    rl.DrawRectangleRoundedLinesEx(
+        rectFromArgs(args),
+        roundedness(args.@"width", args.@"height", args.@"radius"),
+        positiveSegments(args.@"segments"),
+        thick,
+        colorToRl(args.@"color"),
     );
 }
 
 /// Draw a line from abi args.
-pub fn drawLine(args: abi.DrawLineArgs) void {
-    rl.DrawLine(
-        @intFromFloat(args.start.x),
-        @intFromFloat(args.start.y),
-        @intFromFloat(args.end.x),
-        @intFromFloat(args.end.y),
-        colorToRl(args.color),
-    );
+pub fn drawLine(args: abi.DrawLine_rawArgs) void {
+    drawSegment(args.@"start", args.@"end", args.@"thickness", args.@"color");
+}
+
+/// Draw a triangle from abi args.
+pub fn drawTriangle(args: abi.DrawTriangle_rawArgs) void {
+    rl.DrawTriangle(toVector2(args.@"a"), toVector2(args.@"b"), toVector2(args.@"c"), colorToRl(args.@"color"));
+}
+
+/// Draw a triangle outline from abi args.
+pub fn drawTriangleLines(args: abi.DrawTriangle_lines_rawArgs) void {
+    drawSegment(args.@"a", args.@"b", args.@"thickness", args.@"color");
+    drawSegment(args.@"b", args.@"c", args.@"thickness", args.@"color");
+    drawSegment(args.@"c", args.@"a", args.@"thickness", args.@"color");
+}
+
+/// Draw a filled polygon by fanning triangles from the point centroid.
+pub fn drawPolygon(points: []const abi.__AnonStruct7, color: abi.Color) void {
+    if (points.len < 3) return;
+
+    var center = rl.Vector2{ .x = 0, .y = 0 };
+    for (points) |point| {
+        center.x += point.@"x";
+        center.y += point.@"y";
+    }
+    const len_f: f32 = @floatFromInt(points.len);
+    center.x /= len_f;
+    center.y /= len_f;
+
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        rl.DrawTriangle(center, toVector2(point), toVector2(next), colorToRl(color));
+    }
+}
+
+/// Draw a polygon outline from abi args.
+pub fn drawPolygonLines(points: []const abi.__AnonStruct7, thickness: f32, color: abi.Color) void {
+    if (points.len < 2) return;
+    const thick = positiveThickness(thickness) orelse return;
+
+    if (points.len == 2) {
+        drawSegment(points[0], points[1], thick, color);
+        return;
+    }
+
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        drawSegment(point, next, thick, color);
+    }
 }
 
 /// Draw text with a null-terminated string.
@@ -181,8 +292,8 @@ pub fn drawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) void {
         @intFromFloat(args.y),
         @intFromFloat(args.width),
         @intFromFloat(args.height),
-        colorToRl(args.color_top),
-        colorToRl(args.color_bottom),
+        colorToRl(args.@"color_top"),
+        colorToRl(args.@"color_bottom"),
     );
 }
 
@@ -193,24 +304,26 @@ pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
         @intFromFloat(args.y),
         @intFromFloat(args.width),
         @intFromFloat(args.height),
-        colorToRl(args.color_left),
-        colorToRl(args.color_right),
+        colorToRl(args.@"color_left"),
+        colorToRl(args.@"color_right"),
     );
 }
 
 /// Draw a circle with radial gradient from abi args.
 pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
     rl.DrawCircleGradient(
-        rl.Vector2{ .x = args.center.x, .y = args.center.y },
-        args.radius,
-        colorToRl(args.color_inner),
-        colorToRl(args.color_outer),
+        toVector2(args.@"center"),
+        args.@"radius",
+        colorToRl(args.@"color_inner"),
+        colorToRl(args.@"color_outer"),
     );
 }
 
 /// Draw FPS counter at specified position.
-pub fn drawFps(x: c_int, y: c_int) void {
-    rl.DrawFPS(x, y);
+pub fn drawFps(args: abi.DrawFpsArgs) void {
+    var buf: [32:0]u8 = undefined;
+    const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
+    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.@"pos"), args.@"size", 1, colorToRl(args.@"color"));
 }
 
 /// Begin drawing frame.
@@ -224,7 +337,7 @@ pub fn endDrawing() void {
 }
 
 /// Clear the background with a color.
-pub fn clearBackground(color: abi.Color) void {
+pub fn clearBackground(color: anytype) void {
     rl.ClearBackground(colorToRl(color));
 }
 

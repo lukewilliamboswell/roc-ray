@@ -6,7 +6,9 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 
 ## Features
 
-- 2D drawing primitives (rectangles, circles, lines, text)
+- 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
+- RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
+- Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
 - Native rendering via raylib (macOS, Linux, Windows)

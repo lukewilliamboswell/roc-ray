@@ -3,11 +3,9 @@
 //! This module provides reusable components for Roc host implementations:
 //! - Try: Generic result type matching Roc's Try layout (with helper methods)
 //! - Keys/MouseButtons: input state managers for FFI with Roc
-//! - Color helpers: Safe conversion between u8 discriminants and abi.Color
 //!
 //! All are designed to reduce boilerplate and improve type safety in host code.
 
-const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 
 // Re-export host ABI types for convenience
@@ -124,13 +122,3 @@ else
         model: RocBox,
         state: abi.Host,
     };
-
-/// Convert from raw u8 discriminant to abi.Color, returning white for invalid values.
-pub fn colorFromU8(value: u8) abi.Color {
-    return std.meta.intToEnum(abi.Color, value) catch .white;
-}
-
-/// Convert abi.Color to raw u8 discriminant.
-pub fn colorToU8(color: abi.Color) u8 {
-    return @intFromEnum(color);
-}

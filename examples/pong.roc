@@ -1,6 +1,7 @@
 app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.Draw
+import rr.Color
 import rr.Host
 import rr.Keys
 import rr.Audio
@@ -139,11 +140,11 @@ render_game_over! = |model, host| {
 	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
 
 	Draw.draw!(
-		Black,
+		Color.black,
 		|| {
 			draw_field!(model)
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Yellow, font: Draw.default_font, align: Draw.align_center })
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_center })
+			Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
+			Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
 		},
 	)
 
@@ -229,7 +230,7 @@ render_playing! = |model, host| {
 	play_if!(out_left or out_right, model.score_sound)
 
 	Draw.draw!(
-		Black,
+		Color.black,
 		|| draw_field!(next),
 	)
 
@@ -242,10 +243,10 @@ draw_field! = |model| {
 	left_x = paddle_margin
 	right_x = screen_w - paddle_margin - paddle_w
 
-	Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, color: DarkGray })
-	Draw.rectangle!({ x: left_x, y: model.left_y, width: paddle_w, height: paddle_h, color: White })
-	Draw.rectangle!({ x: right_x, y: model.right_y, width: paddle_w, height: paddle_h, color: White })
-	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, color: RayWhite })
-	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_top_center })
-	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: White, font: Draw.default_font, align: Draw.align_top_center })
+	Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, stroke: Draw.stroke(Color.dark_gray, 2) })
+	Draw.rectangle!({ x: left_x, y: model.left_y, width: paddle_w, height: paddle_h, style: Draw.filled(Color.white) })
+	Draw.rectangle!({ x: right_x, y: model.right_y, width: paddle_w, height: paddle_h, style: Draw.filled(Color.white) })
+	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, style: Draw.filled(Color.ray_white) })
+	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
 }

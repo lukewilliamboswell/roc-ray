@@ -158,7 +158,7 @@ fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) v
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircle(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircleArgs) callconv(.c) void {
+fn hostedDrawCircleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_rawArgs) callconv(.c) void {
     raylib.drawCircle(args.*);
 }
 
@@ -166,25 +166,42 @@ fn hostedDrawCircleGradient(_: *RocOps, _: *anyopaque, args: *const abi.DrawCirc
     raylib.drawCircleGradient(args.*);
 }
 
+fn hostedDrawCircleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_lines_rawArgs) callconv(.c) void {
+    raylib.drawCircleLines(args.*);
+}
+
 fn hostedDrawClear(_: *RocOps, _: *anyopaque, args: *const abi.DrawClearArgs) callconv(.c) void {
-    raylib.clearBackground(args.arg0);
+    raylib.clearBackground(args.*);
 }
 
 fn hostedDrawEndFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
-    // Show FPS counter in debug builds
-    if (builtin.mode == .Debug) {
-        raylib.drawFps(10, 10);
-    }
-
     raylib.endDrawing();
 }
 
-fn hostedDrawLine(_: *RocOps, _: *anyopaque, args: *const abi.DrawLineArgs) callconv(.c) void {
+fn hostedDrawFps(_: *RocOps, _: *anyopaque, args: *const abi.DrawFpsArgs) callconv(.c) void {
+    raylib.drawFps(args.*);
+}
+
+fn hostedDrawLineRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawLine_rawArgs) callconv(.c) void {
     raylib.drawLine(args.*);
 }
 
-fn hostedDrawRectangle(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangleArgs) callconv(.c) void {
+fn hostedDrawPolygonRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawPolygon_rawArgs) callconv(.c) void {
+    defer args.points.decref(ops);
+    raylib.drawPolygon(args.points.items(), args.color);
+}
+
+fn hostedDrawPolygonLinesRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
+    defer args.points.decref(ops);
+    raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
+}
+
+fn hostedDrawRectangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_rawArgs) callconv(.c) void {
     raylib.drawRectangle(args.*);
+}
+
+fn hostedDrawRectangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_lines_rawArgs) callconv(.c) void {
+    raylib.drawRectangleLines(args.*);
 }
 
 fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_hArgs) callconv(.c) void {
@@ -193,6 +210,22 @@ fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args: *const abi.Draw
 
 fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_vArgs) callconv(.c) void {
     raylib.drawRectangleGradientV(args.*);
+}
+
+fn hostedDrawRoundedRectangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRounded_rectangle_rawArgs) callconv(.c) void {
+    raylib.drawRoundedRectangle(args.*);
+}
+
+fn hostedDrawRoundedRectangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRounded_rectangle_lines_rawArgs) callconv(.c) void {
+    raylib.drawRoundedRectangleLines(args.*);
+}
+
+fn hostedDrawTriangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawTriangle_rawArgs) callconv(.c) void {
+    raylib.drawTriangle(args.*);
+}
+
+fn hostedDrawTriangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawTriangle_lines_rawArgs) callconv(.c) void {
+    raylib.drawTriangleLines(args.*);
 }
 
 fn hostedDrawLoadFontRaw(ops: *RocOps, result: *u64, args: *const abi.DrawLoad_font_rawArgs) callconv(.c) void {
@@ -310,17 +343,26 @@ const hosted_fns = abi.hostedFunctions(.{
     .audio_gen_tone_raw = &hostedAudioGenTone,
     .audio_play_raw = &hostedAudioPlay,
     .draw_begin_frame = &hostedDrawBeginFrame,
-    .draw_circle = &hostedDrawCircle,
     .draw_circle_gradient = &hostedDrawCircleGradient,
+    .draw_circle_lines_raw = &hostedDrawCircleLinesRaw,
+    .draw_circle_raw = &hostedDrawCircleRaw,
     .draw_clear = &hostedDrawClear,
     .draw_end_frame = &hostedDrawEndFrame,
-    .draw_line = &hostedDrawLine,
+    .draw_fps = &hostedDrawFps,
+    .draw_line_raw = &hostedDrawLineRaw,
     .draw_load_font_raw = &hostedDrawLoadFontRaw,
     .draw_measure_text_raw = &hostedDrawMeasureTextRaw,
-    .draw_rectangle = &hostedDrawRectangle,
+    .draw_polygon_lines_raw = &hostedDrawPolygonLinesRaw,
+    .draw_polygon_raw = &hostedDrawPolygonRaw,
     .draw_rectangle_gradient_h = &hostedDrawRectangleGradientH,
     .draw_rectangle_gradient_v = &hostedDrawRectangleGradientV,
+    .draw_rectangle_lines_raw = &hostedDrawRectangleLinesRaw,
+    .draw_rectangle_raw = &hostedDrawRectangleRaw,
+    .draw_rounded_rectangle_lines_raw = &hostedDrawRoundedRectangleLinesRaw,
+    .draw_rounded_rectangle_raw = &hostedDrawRoundedRectangleRaw,
     .draw_text_raw = &hostedDrawTextRaw,
+    .draw_triangle_lines_raw = &hostedDrawTriangleLinesRaw,
+    .draw_triangle_raw = &hostedDrawTriangleRaw,
     .host_exit = &hostedExit,
     .host_get_screen_size = &hostedGetScreenSize,
     .host_random_i32 = &hostedRandomI32,

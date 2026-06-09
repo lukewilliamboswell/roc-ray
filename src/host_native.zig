@@ -241,12 +241,21 @@ fn hostedDrawTextRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawText_rawA
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
+fn decrefHostArg(ops: *RocOps, host: *const abi.Host) void {
+    host.keys.decref(ops);
+    host.keys_pressed.decref(ops);
+    host.keys_released.decref(ops);
+    host.mouse.buttons.decref(ops);
+    host.mouse.buttons_pressed.decref(ops);
+    host.mouse.buttons_released.decref(ops);
+}
+
 fn hostedReadEnvWindows(ops: *RocOps, result: *ReadEnvResult, args: *const abi.HostRead_envArgs) callconv(.c) void {
     // Windows doesn't link libc, so env var reading is not yet supported
     result.tag = .Err;
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    args.arg0.keys.decref(ops);
+    decrefHostArg(ops, &args.arg0);
     args.arg1.decref(ops);
 }
 
@@ -263,7 +272,7 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *ReadEnvResult, args: *const abi.Hos
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
     // `key` (a slice into arg1) is fully consumed above before arg1 is dropped.
-    args.arg0.keys.decref(ops);
+    decrefHostArg(ops, &args.arg0);
     args.arg1.decref(ops);
 }
 
@@ -375,6 +384,16 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Edge (pressed-this-frame) state, kept in a separate RocList.
     var keys_pressed = ffi.Keys.init(&roc_ops);
     defer keys_pressed.decref();
+    // Edge (released-this-frame) state, kept in a separate RocList.
+    var keys_released = ffi.Keys.init(&roc_ops);
+    defer keys_released.decref();
+
+    var mouse_buttons = ffi.MouseButtons.init(&roc_ops);
+    defer mouse_buttons.decref();
+    var mouse_buttons_pressed = ffi.MouseButtons.init(&roc_ops);
+    defer mouse_buttons_pressed.decref();
+    var mouse_buttons_released = ffi.MouseButtons.init(&roc_ops);
+    defer mouse_buttons_released.decref();
 
     // Initialize raylib window
     raylib.initWindow(800, 600, "Roc + Raylib");
@@ -401,13 +420,28 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // Create initial host state for init (frame 0, no input)
         keys.incref(); // Prevent Roc from freeing our list
         keys_pressed.incref();
+        keys_released.incref();
+        mouse_buttons.incref();
+        mouse_buttons_pressed.incref();
+        mouse_buttons_released.incref();
         var init_state = abi.Host{
             .frame_count = 0,
             .timestamp_nanos = 0,
             .frame_time = 0,
             .keys = keys.list,
             .keys_pressed = keys_pressed.list,
-            .mouse = .{ .wheel = 0, .x = 0, .y = 0, .left = false, .right = false, .middle = false },
+            .keys_released = keys_released.list,
+            .mouse = .{
+                .buttons = mouse_buttons.list,
+                .buttons_pressed = mouse_buttons_pressed.list,
+                .buttons_released = mouse_buttons_released.list,
+                .wheel = 0,
+                .x = 0,
+                .y = 0,
+                .left = false,
+                .right = false,
+                .middle = false,
+            },
         };
         abi.roc__init_for_host(&roc_ops, @ptrCast(&init_result), @ptrCast(&init_state));
 
@@ -440,6 +474,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         keys.incref(); // Prevent Roc from freeing our list
         keys_pressed.update(raylib.getKeyPressedState());
         keys_pressed.incref();
+        keys_released.update(raylib.getKeyReleasedState());
+        keys_released.incref();
+        raylib.updateMouseButtonState();
+        mouse_buttons.update(raylib.getMouseButtonState());
+        mouse_buttons.incref();
+        mouse_buttons_pressed.update(raylib.getMouseButtonPressedState());
+        mouse_buttons_pressed.incref();
+        mouse_buttons_released.update(raylib.getMouseButtonReleasedState());
+        mouse_buttons_released.incref();
         const mouse_pos = raylib.getMousePosition();
         const platform_state = abi.Host{
             .frame_count = frame_count,
@@ -447,7 +490,11 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             .frame_time = frame_time,
             .keys = keys.list,
             .keys_pressed = keys_pressed.list,
+            .keys_released = keys_released.list,
             .mouse = .{
+                .buttons = mouse_buttons.list,
+                .buttons_pressed = mouse_buttons_pressed.list,
+                .buttons_released = mouse_buttons_released.list,
                 .left = raylib.isMouseButtonDown(.left),
                 .middle = raylib.isMouseButtonDown(.middle),
                 .right = raylib.isMouseButtonDown(.right),

@@ -5,7 +5,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Time, Audio]
+	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -26,6 +26,7 @@ import Draw
 import Color
 import Host
 import Keys
+import Mouse
 import Time
 import Audio
 
@@ -35,8 +36,12 @@ HostStateFromHost : {
 	frame_count : U64,
 	keys : List(U8), ## 349 bytes, held state, one per raylib key code 0-348
 	keys_pressed : List(U8), ## 349 bytes, pressed-this-frame (edge) state
+	keys_released : List(U8), ## 349 bytes, released-this-frame (edge) state
 	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
 	frame_time : F32, ## seconds since previous frame (0 on first frame)
+	mouse_buttons : List(U8), ## 7 bytes, held state, one per raylib mouse button code 0-6
+	mouse_buttons_pressed : List(U8), ## 7 bytes, pressed-this-frame (edge) state
+	mouse_buttons_released : List(U8), ## 7 bytes, released-this-frame (edge) state
 	mouse_wheel : F32,
 	mouse_x : F32,
 	mouse_y : F32,
@@ -53,7 +58,11 @@ init_for_host! = |host_state| {
 		frame_time: host_state.frame_time,
 		keys: host_state.keys,
 		keys_pressed: host_state.keys_pressed,
+		keys_released: host_state.keys_released,
 		mouse: {
+			buttons: host_state.mouse_buttons,
+			buttons_pressed: host_state.mouse_buttons_pressed,
+			buttons_released: host_state.mouse_buttons_released,
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,
 			left: host_state.mouse_left,
@@ -79,7 +88,11 @@ render_for_host! = |boxed_model, host_state| {
 		frame_time: host_state.frame_time,
 		keys: host_state.keys,
 		keys_pressed: host_state.keys_pressed,
+		keys_released: host_state.keys_released,
 		mouse: {
+			buttons: host_state.mouse_buttons,
+			buttons_pressed: host_state.mouse_buttons_pressed,
+			buttons_released: host_state.mouse_buttons_released,
 			x: host_state.mouse_x,
 			y: host_state.mouse_y,
 			left: host_state.mouse_left,

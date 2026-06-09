@@ -16,9 +16,15 @@ pub const rl = @cImport({
 
 /// Persistent keyboard state - updated each frame.
 /// `key_state` is the held (down) state; `key_pressed_state` is the edge
-/// (pressed-this-frame) state.
+/// (pressed-this-frame) state; `key_released_state` is the release edge state.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 var key_pressed_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+var key_released_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+
+/// Persistent mouse button state - updated each frame.
+var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+var mouse_button_pressed_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+var mouse_button_released_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
@@ -26,6 +32,7 @@ pub fn updateKeyboardState() void {
         const key: c_int = @intCast(i);
         key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
         key_pressed_state[i] = if (rl.IsKeyPressed(key)) 1 else 0;
+        key_released_state[i] = if (rl.IsKeyReleased(key)) 1 else 0;
     }
 }
 
@@ -37,6 +44,36 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 /// Get the keyboard pressed-this-frame (edge) state array
 pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
     return &key_pressed_state;
+}
+
+/// Get the keyboard released-this-frame (edge) state array
+pub fn getKeyReleasedState() *const [ffi.KEY_COUNT]u8 {
+    return &key_released_state;
+}
+
+/// Update mouse button state from raylib (call once per frame)
+pub fn updateMouseButtonState() void {
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
+        const button: c_int = @intCast(i);
+        mouse_button_state[i] = if (rl.IsMouseButtonDown(button)) 1 else 0;
+        mouse_button_pressed_state[i] = if (rl.IsMouseButtonPressed(button)) 1 else 0;
+        mouse_button_released_state[i] = if (rl.IsMouseButtonReleased(button)) 1 else 0;
+    }
+}
+
+/// Get the current mouse button down-state array
+pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_state;
+}
+
+/// Get the mouse button pressed-this-frame (edge) state array
+pub fn getMouseButtonPressedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_pressed_state;
+}
+
+/// Get the mouse button released-this-frame (edge) state array
+pub fn getMouseButtonReleasedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_released_state;
 }
 
 const MAX_FONTS: usize = 32;
@@ -325,8 +362,12 @@ pub fn isKeyDown(key: Key) bool {
 /// Mouse button enum for type-safe button handling.
 pub const MouseButton = enum(c_int) {
     left = rl.MOUSE_BUTTON_LEFT,
-    middle = rl.MOUSE_BUTTON_MIDDLE,
     right = rl.MOUSE_BUTTON_RIGHT,
+    middle = rl.MOUSE_BUTTON_MIDDLE,
+    side = rl.MOUSE_BUTTON_SIDE,
+    extra = rl.MOUSE_BUTTON_EXTRA,
+    forward = rl.MOUSE_BUTTON_FORWARD,
+    back = rl.MOUSE_BUTTON_BACK,
 };
 
 /// Simple 2D vector for mouse position.
@@ -341,6 +382,16 @@ pub fn getMousePosition() Vec2 {
 /// Check if a mouse button is down.
 pub fn isMouseButtonDown(button: MouseButton) bool {
     return rl.IsMouseButtonDown(@intFromEnum(button));
+}
+
+/// Check if a mouse button was pressed.
+pub fn isMouseButtonPressed(button: MouseButton) bool {
+    return rl.IsMouseButtonPressed(@intFromEnum(button));
+}
+
+/// Check if a mouse button was released.
+pub fn isMouseButtonReleased(button: MouseButton) bool {
+    return rl.IsMouseButtonReleased(@intFromEnum(button));
 }
 
 /// Get mouse wheel movement.

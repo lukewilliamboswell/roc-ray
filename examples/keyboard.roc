@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Host
 import rr.Keys
+import rr.Mouse
 
 Model : {}
 
@@ -13,18 +14,27 @@ init! = |_host| Ok({})
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	# Check WASD keys
 	w_down = Keys.key_down(host.keys, KeyW)
 	a_down = Keys.key_down(host.keys, KeyA)
 	s_down = Keys.key_down(host.keys, KeyS)
 	d_down = Keys.key_down(host.keys, KeyD)
+	up_down = Keys.key_down(host.keys, KeyUp)
+	left_down = Keys.key_down(host.keys, KeyLeft)
+	down_down = Keys.key_down(host.keys, KeyDown)
+	right_down = Keys.key_down(host.keys, KeyRight)
+	one_down = Keys.key_down(host.keys, Key1)
+	shift_down = Keys.key_down(host.keys, KeyLeftShift) or Keys.key_down(host.keys, KeyRightShift)
+	ctrl_down = Keys.key_down(host.keys, KeyLeftControl) or Keys.key_down(host.keys, KeyRightControl)
+	escape_pressed = Keys.key_pressed(host.keys_pressed, KeyEscape)
+	space_released = Keys.key_released(host.keys_released, KeySpace)
+	mouse_left_pressed = Mouse.button_pressed(host.mouse, Left)
+	mouse_left_released = Mouse.button_released(host.mouse, Left)
 
 	Draw.draw!(
 		RayWhite,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "WASD to move", size: 20, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: "Keyboard and mouse input", size: 20, spacing: Draw.default_spacing, color: DarkGray, font: Draw.default_font, align: Draw.align_top_left })
 
-			# WASD display
 			w_color = if w_down Green else LightGray
 			a_color = if a_down Green else LightGray
 			s_color = if s_down Green else LightGray
@@ -38,6 +48,43 @@ render! = |model, host| {
 			Draw.text!({ pos: { x: 85, y: 150 }, text: "S", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 			Draw.rectangle!({ x: 110, y: 135, width: 30, height: 30, color: d_color })
 			Draw.text!({ pos: { x: 125, y: 150 }, text: "D", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+
+			up_color = if up_down Green else LightGray
+			left_color = if left_down Green else LightGray
+			down_color = if down_down Green else LightGray
+			right_color = if right_down Green else LightGray
+
+			Draw.rectangle!({ x: 250, y: 100, width: 30, height: 30, color: up_color })
+			Draw.text!({ pos: { x: 265, y: 115 }, text: "^", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 210, y: 135, width: 30, height: 30, color: left_color })
+			Draw.text!({ pos: { x: 225, y: 150 }, text: "<", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 250, y: 135, width: 30, height: 30, color: down_color })
+			Draw.text!({ pos: { x: 265, y: 150 }, text: "v", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 290, y: 135, width: 30, height: 30, color: right_color })
+			Draw.text!({ pos: { x: 305, y: 150 }, text: ">", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+
+			one_color = if one_down Green else LightGray
+			shift_color = if shift_down Green else LightGray
+			ctrl_color = if ctrl_down Green else LightGray
+			escape_color = if escape_pressed Green else LightGray
+			space_color = if space_released Green else LightGray
+			mouse_press_color = if mouse_left_pressed Green else LightGray
+			mouse_release_color = if mouse_left_released Green else LightGray
+
+			Draw.rectangle!({ x: 30, y: 220, width: 50, height: 30, color: one_color })
+			Draw.text!({ pos: { x: 55, y: 235 }, text: "1", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 90, y: 220, width: 80, height: 30, color: shift_color })
+			Draw.text!({ pos: { x: 130, y: 235 }, text: "Shift", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 180, y: 220, width: 70, height: 30, color: ctrl_color })
+			Draw.text!({ pos: { x: 215, y: 235 }, text: "Ctrl", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 260, y: 220, width: 80, height: 30, color: escape_color })
+			Draw.text!({ pos: { x: 300, y: 235 }, text: "Esc", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 350, y: 220, width: 90, height: 30, color: space_color })
+			Draw.text!({ pos: { x: 395, y: 235 }, text: "Space", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 30, y: 270, width: 130, height: 30, color: mouse_press_color })
+			Draw.text!({ pos: { x: 95, y: 285 }, text: "Mouse down", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
+			Draw.rectangle!({ x: 170, y: 270, width: 110, height: 30, color: mouse_release_color })
+			Draw.text!({ pos: { x: 225, y: 285 }, text: "Mouse up", size: 20, spacing: Draw.default_spacing, color: Black, font: Draw.default_font, align: Draw.align_center })
 		},
 	)
 

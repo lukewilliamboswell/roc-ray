@@ -2,7 +2,7 @@
 //!
 //! This module provides reusable components for Roc host implementations:
 //! - Try: Generic result type matching Roc's Try layout (with helper methods)
-//! - Keys: Keyboard state manager for FFI with Roc
+//! - Keys/MouseButtons: input state managers for FFI with Roc
 //! - Color helpers: Safe conversion between u8 discriminants and abi.Color
 //!
 //! All are designed to reduce boilerplate and improve type safety in host code.
@@ -62,39 +62,51 @@ pub fn Try(comptime Ok: type, comptime Err: type) type {
 /// Number of keyboard keys to track (raylib key codes 0-348)
 pub const KEY_COUNT: usize = 349;
 
-/// Keyboard state manager for FFI with Roc.
+/// Number of mouse buttons to track (raylib mouse button codes 0-6)
+pub const MOUSE_BUTTON_COUNT: usize = 7;
+
+/// Fixed-size byte state list manager for FFI with Roc.
 /// Handles RocList allocation, refcounting, and data copying internally.
-pub const Keys = struct {
-    list: abi.RocListWith(u8, false),
-    roc_ops: *RocOps,
+pub fn StateList(comptime COUNT: usize) type {
+    return struct {
+        list: abi.RocListWith(u8, false),
+        roc_ops: *RocOps,
 
-    /// Initialize keyboard state with heap-allocated RocList.
-    pub fn init(roc_ops: *RocOps) Keys {
-        const list = abi.RocListWith(u8, false).allocate(KEY_COUNT, roc_ops);
-        // Initialize to zeros (all keys up)
-        if (list.elements_ptr) |elements| {
-            @memset(elements[0..KEY_COUNT], 0);
+        const Self = @This();
+
+        /// Initialize state with a heap-allocated RocList.
+        pub fn init(roc_ops: *RocOps) Self {
+            const list = abi.RocListWith(u8, false).allocate(COUNT, roc_ops);
+            if (list.elements_ptr) |elements| {
+                @memset(elements[0..COUNT], 0);
+            }
+            return .{ .list = list, .roc_ops = roc_ops };
         }
-        return .{ .list = list, .roc_ops = roc_ops };
-    }
 
-    /// Update keyboard state from a source array (e.g., from raylib).
-    pub fn update(self: *Keys, source: *const [KEY_COUNT]u8) void {
-        if (self.list.elements_ptr) |elements| {
-            @memcpy(elements[0..KEY_COUNT], source);
+        /// Update state from a fixed-size source array.
+        pub fn update(self: *Self, source: *const [COUNT]u8) void {
+            if (self.list.elements_ptr) |elements| {
+                @memcpy(elements[0..COUNT], source);
+            }
         }
-    }
 
-    /// Increment refcount before passing to Roc (prevents Roc from freeing our list).
-    pub fn incref(self: *Keys) void {
-        self.list.incref(1);
-    }
+        /// Increment refcount before passing to Roc (prevents Roc from freeing our list).
+        pub fn incref(self: *Self) void {
+            self.list.incref(1);
+        }
 
-    /// Decrement refcount / free the list (call on cleanup).
-    pub fn decref(self: *Keys) void {
-        self.list.decref(self.roc_ops);
-    }
-};
+        /// Decrement refcount / free the list (call on cleanup).
+        pub fn decref(self: *Self) void {
+            self.list.decref(self.roc_ops);
+        }
+    };
+}
+
+/// Keyboard state manager.
+pub const Keys = StateList(KEY_COUNT);
+
+/// Mouse button state manager.
+pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 
 /// Args tuple for render_for_host!
 /// Per RocCall ABI, all args are passed as a single pointer to a tuple struct.

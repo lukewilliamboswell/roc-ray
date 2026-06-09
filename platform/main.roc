@@ -1,13 +1,26 @@
 platform ""
 	requires {
 		[Model : model] for program : {
-			init! : Host => Try(model, [Exit(I64), ..]),
+			init! : {
+				config : {
+					title : Str,
+					width : I32,
+					height : I32,
+					target_fps : I32,
+					resizable : Bool,
+					fullscreen : Bool,
+					vsync : Bool,
+					cursor_visible : Bool,
+				},
+				run! : Host => Try(model, [Exit(I64)]),
+			},
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio]
+	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App]
 	packages {}
 	provides {
+		app_config_for_host!: "app_config_for_host",
 		init_for_host!: "init_for_host",
 		render_for_host!: "render_for_host",
 		drop_model_for_host!: "drop_model_for_host",
@@ -29,6 +42,13 @@ import Keys
 import Mouse
 import Time
 import Audio
+import App
+
+## TODO: roc glue currently undercounts direct function fields in generated
+## records when they are mixed with non-function data. The generated
+## __AnonStruct49 and __AnonStruct62 size assertions are patched to include
+## the function pointers.
+## Re-run glue without that patch once the upstream glue bug is fixed.
 
 ## Internal type for host boundary - kept simple/flat for C compatibility
 ## Field order must match FFI struct in types.zig (alignment then alphabetical)
@@ -49,6 +69,9 @@ HostStateFromHost : {
 	mouse_middle : Bool,
 	mouse_right : Bool,
 }
+
+app_config_for_host! : () => App.Config
+app_config_for_host! = || program.init!.config
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {
@@ -71,12 +94,9 @@ init_for_host! = |host_state| {
 			wheel: host_state.mouse_wheel,
 		},
 	}
-	match (program.init!)(host) {
+	match (program.init!.run!)(host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
-
-		## Testing wildcard-only: should return 42 for NotFound
-		Err(_) => Err(42)
 	}
 }
 

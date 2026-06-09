@@ -19,6 +19,7 @@ const RocOps = ffi.RocOps;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
+const AppConfig = abi.__AnonStruct70;
 
 const TRACE_HOST = false;
 
@@ -123,6 +124,14 @@ fn makeTempCString(allocator: std.mem.Allocator, stack: *[CSTRING_STACK_CAPACITY
     heap[c_len] = 0;
 
     return .{ .ptr = heap[0..c_len :0].ptr, .heap = heap, .allocator = allocator };
+}
+
+fn positiveCInt(value: i32, fallback: c_int) c_int {
+    return if (value > 0) @as(c_int, @intCast(value)) else fallback;
+}
+
+fn targetFpsCInt(value: i32) c_int {
+    return if (value >= 0) @as(c_int, @intCast(value)) else 0;
 }
 
 test "makeTempCString uses stack storage for small strings" {
@@ -419,6 +428,17 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .hosted_fns = hosted_fns,
     };
 
+    var app_config: AppConfig = undefined;
+    abi.roc__app_config_for_host(&roc_ops, &app_config, null);
+    defer app_config.@"title".decref(&roc_ops);
+
+    var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var window_title = makeTempCString(gpa.allocator(), &title_stack, app_config.@"title".asSlice()) catch {
+        std.log.err("failed to allocate app window title", .{});
+        return 1;
+    };
+    defer window_title.deinit();
+
     // Keyboard state manager (handles RocList allocation and refcounting)
     // We incref before each pass to Roc, and Roc decrefs when it drops the old Host.
     var keys = ffi.Keys.init(&roc_ops);
@@ -438,11 +458,19 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     defer mouse_buttons_released.decref();
 
     // Initialize raylib window
-    raylib.initWindow(800, 600, "Roc + Raylib");
+    raylib.setConfigFlags(raylib.windowConfigFlags(
+        app_config.@"resizable",
+        app_config.@"fullscreen",
+        app_config.@"vsync",
+    ));
+    raylib.initWindow(
+        positiveCInt(app_config.@"width", 800),
+        positiveCInt(app_config.@"height", 600),
+        window_title.ptr,
+    );
     defer raylib.closeWindow();
-    // Default frame-rate cap. Apps can override this from init!/render! via
-    // Host.set_target_fps!; we don't force it again after init.
-    raylib.setTargetFps(240);
+    raylib.setTargetFps(targetFpsCInt(app_config.@"target_fps"));
+    if (app_config.@"cursor_visible") raylib.showCursor() else raylib.hideCursor();
 
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
     // (not uniformly available across our -nostdlib targets) and instead use

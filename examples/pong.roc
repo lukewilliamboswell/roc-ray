@@ -5,6 +5,7 @@ import rr.Color
 import rr.Host
 import rr.Keys
 import rr.Audio
+import rr.App
 
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
@@ -99,33 +100,37 @@ play_if! = |cond, sound| if cond Audio.play!(sound) else {}
 
 program = { init!, render! }
 
-init! : Host => Try(Model, [Exit(I64), ..])
-init! = |_host| {
-	# set_screen_size!'s error is `[NotSupported, ..]`, which doesn't unify with
-	# this function's `[Exit(I64), ..]`, so discard the result.
-	_ = Host.set_screen_size!({ width: 800, height: 600 })
+init! : App.Init(Model)
+init! = App.init(
+	{
+		title: "RocRay Pong",
+		width: 800,
+		height: 600,
+		target_fps: 240,
+		resizable: Bool.False,
+		fullscreen: Bool.False,
+		vsync: Bool.False,
+		cursor_visible: Bool.True,
+	},
+	|_host| {
+		# Generate the sound effects once; new_round! carries the handles forward.
+		seed = {
+			ball_x: 0,
+			ball_y: 0,
+			ball_vx: 0,
+			ball_vy: 0,
+			left_y: 250,
+			right_y: 250,
+			left_score: 0,
+			right_score: 0,
+			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 }),
+			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 }),
+			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 }),
+		}
 
-	# QA knob: change this and the ball/paddle speeds should look identical,
-	# because all motion is scaled by host.frame_time. Try 30, 60, 144, 240.
-	Host.set_target_fps!(240)
-
-	# Generate the sound effects once; new_round! carries the handles forward.
-	seed = {
-		ball_x: 0,
-		ball_y: 0,
-		ball_vx: 0,
-		ball_vy: 0,
-		left_y: 250,
-		right_y: 250,
-		left_score: 0,
-		right_score: 0,
-		hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 }),
-		wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 }),
-		score_sound: Audio.gen_tone!({ freq: 160, ms: 200 }),
-	}
-
-	Ok(new_round!(seed))
-}
+		Ok(new_round!(seed))
+	},
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

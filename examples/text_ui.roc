@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Color
 import rr.Host
+import rr.App
 
 Model : {
 	title_font : Draw.Font,
@@ -22,15 +23,18 @@ title_font_path = "examples/assets/RocRayDemo.ttf"
 long_message : Str
 long_message = "This is intentionally longer than the old fixed text buffer: text rendering and measurement now allocate a temporary C string when needed, so score screens, settings menus, HUD labels, and debug overlays can render longer copy without silently disappearing after 255 bytes."
 
-init! : Host => Try(Model, [Exit(I64), ..])
-init! = |_host| {
-	font = match Draw.load_font!({ path: title_font_path, size: 48 }) {
-		Ok(loaded) => loaded
-		Err(_) => Draw.default_font
-	}
+init! : App.Init(Model)
+init! = App.init(
+	App.default,
+	|_host| {
+		font = match Draw.load_font!({ path: title_font_path, size: 48 }) {
+			Ok(loaded) => loaded
+			Err(_) => Draw.default_font
+		}
 
-	Ok({ title_font: font })
-}
+		Ok({ title_font: font })
+	},
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, _host| {

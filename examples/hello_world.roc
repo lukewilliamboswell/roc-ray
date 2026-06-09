@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Color
 import rr.Host
+import rr.App
 
 Model : {
 	message : Str,
@@ -10,8 +11,11 @@ Model : {
 
 program = { init!, render! }
 
-init! : Host => Try(Model, [Exit(I64), ..])
-init! = |_host| Ok({ message: "Roc :heart: Raylib!" })
+init! : App.Init(Model)
+init! = App.init(
+	App.default,
+	|_host| Ok({ message: "Roc :heart: Raylib!" }),
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

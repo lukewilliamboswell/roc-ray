@@ -963,9 +963,16 @@ comptime {
 
 /// Element type for __AnonStruct49
 pub const __AnonStruct49 = extern struct {
-    @"init!": *anyopaque,
+    @"init!": __AnonStruct62,
     @"render!": *anyopaque,
 };
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct49) != 56) @compileError("__AnonStruct49 size mismatch");
+        if (@alignOf(__AnonStruct49) != 8) @compileError("__AnonStruct49 alignment mismatch");
+    }
+}
 
 /// Element type for __AnonStruct57
 pub const __AnonStruct57 = extern struct {
@@ -987,8 +994,59 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct62
+pub const __AnonStruct62 = extern struct {
+    @"config": __AnonStruct66,
+    @"run!": *anyopaque,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct62) != 48) @compileError("__AnonStruct62 size mismatch");
+        if (@alignOf(__AnonStruct62) != 8) @compileError("__AnonStruct62 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct66
 pub const __AnonStruct66 = extern struct {
+    @"title": RocStr,
+    @"height": i32,
+    @"target_fps": i32,
+    @"width": i32,
+    @"cursor_visible": bool,
+    @"fullscreen": bool,
+    @"resizable": bool,
+    @"vsync": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct66) != 40) @compileError("__AnonStruct66 size mismatch");
+        if (@alignOf(__AnonStruct66) != 8) @compileError("__AnonStruct66 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct70
+pub const __AnonStruct70 = extern struct {
+    @"title": RocStr,
+    @"height": i32,
+    @"target_fps": i32,
+    @"width": i32,
+    @"cursor_visible": bool,
+    @"fullscreen": bool,
+    @"resizable": bool,
+    @"vsync": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct70) != 40) @compileError("__AnonStruct70 size mismatch");
+        if (@alignOf(__AnonStruct70) != 8) @compileError("__AnonStruct70 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct72
+pub const __AnonStruct72 = extern struct {
     @"frame_count": u64,
     @"keys": RocListWith(u8, false),
     @"keys_pressed": RocListWith(u8, false),
@@ -1008,8 +1066,8 @@ pub const __AnonStruct66 = extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct66) != 184) @compileError("__AnonStruct66 size mismatch");
-        if (@alignOf(__AnonStruct66) != 8) @compileError("__AnonStruct66 alignment mismatch");
+        if (@sizeOf(__AnonStruct72) != 184) @compileError("__AnonStruct72 size mismatch");
+        if (@alignOf(__AnonStruct72) != 8) @compileError("__AnonStruct72 alignment mismatch");
     }
 }
 
@@ -1690,11 +1748,14 @@ pub fn makeRocOps(env: *RocEnv, hosted_fns: HostedFunctions) RocOps {
 /// Arguments for entrypoint: render_for_host!
 pub const Render_for_hostArgs = extern struct {
     arg0: **anyopaque,
-    arg1: __AnonStruct66,
+    arg1: __AnonStruct72,
 };
 
+/// Entrypoint: app_config_for_host!
+pub extern fn roc__app_config_for_host(ops: *RocOps, ret_ptr: *__AnonStruct70, arg_ptr: ?*anyopaque) callconv(.c) void;
+
 /// Entrypoint: init_for_host!
-pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct66) callconv(.c) void;
+pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct72) callconv(.c) void;
 
 /// Entrypoint: render_for_host!
 pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;

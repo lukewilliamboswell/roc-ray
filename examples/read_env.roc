@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Color
 import rr.Host
+import rr.App
 
 Model : {
 	greeting : Str,
@@ -11,14 +12,22 @@ Model : {
 
 program = { init!, render! }
 
-init! : Host => Try(Model, [Exit(I64), NotFound, ..])
-init! = |host| {
-	# Read USER and GREETING variables from the environment, early return if not set
-	username = host.read_env!("USER")?
-	greeting = host.read_env!("GREETING")?
+init! : App.Init(Model)
+init! = App.init(
+	App.default,
+	|host| {
+		username = match host.read_env!("USER") {
+			Ok(value) => value
+			Err(_) => "unknown user"
+		}
+		greeting = match host.read_env!("GREETING") {
+			Ok(value) => value
+			Err(_) => "Hello"
+		}
 
-	Ok({ greeting, username })
-}
+		Ok({ greeting, username })
+	},
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

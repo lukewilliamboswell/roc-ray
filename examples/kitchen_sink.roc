@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.Draw
 import rr.Color
 import rr.Host
+import rr.App
 
 Model : {
 	message : Str,
@@ -11,17 +12,20 @@ Model : {
 
 program = { init!, render! }
 
-init! : Host => Try(Model, [Exit(I64), ..])
-init! = |_host| {
-	# Test set_target_fps!
-	Host.set_target_fps!(60)
+init! : App.Init(Model)
+init! = App.init(
+	App.default,
+	|_host| {
+		# Test set_target_fps!
+		Host.set_target_fps!(60)
 
-	# Discard the result: set_screen_size!'s error is `[NotSupported, ..]`, which
-	# doesn't unify with this function's `[Exit(I64), ..]`, so `?` can't be used.
-	_ = Host.set_screen_size!({ width: 800, height: 600 })
+		# Discard the result: set_screen_size!'s error is `[NotSupported, ..]`, which
+		# doesn't unify with this function's `[Exit(I64), ..]`, so `?` can't be used.
+		_ = Host.set_screen_size!({ width: 800, height: 600 })
 
-	Ok({ message: "Kitchen Sink - All Host Effects", frame_count: 0 })
-}
+		Ok({ message: "Kitchen Sink - All Host Effects", frame_count: 0 })
+	},
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

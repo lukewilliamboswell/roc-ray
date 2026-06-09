@@ -5,13 +5,17 @@ import rr.Color
 import rr.Host
 import rr.Keys
 import rr.Mouse
+import rr.App
 
 Model : {}
 
 program = { init!, render! }
 
-init! : Host => Try(Model, [Exit(I64), ..])
-init! = |_host| Ok({})
+init! : App.Init(Model)
+init! = App.init(
+	App.default,
+	|_host| Ok({}),
+)
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

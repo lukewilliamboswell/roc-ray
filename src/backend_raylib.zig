@@ -346,6 +346,20 @@ pub fn initWindow(width: c_int, height: c_int, title: [*:0]const u8) void {
     rl.InitWindow(width, height, title);
 }
 
+/// Set flags that must be configured before InitWindow.
+pub fn setConfigFlags(flags: c_uint) void {
+    rl.SetConfigFlags(flags);
+}
+
+/// Build raylib window config flags from Roc app config booleans.
+pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint {
+    var flags: c_uint = 0;
+    if (resizable) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_RESIZABLE));
+    if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
+    if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
+    return flags;
+}
+
 /// Close the window.
 pub fn closeWindow() void {
     unloadFonts();
@@ -360,6 +374,16 @@ pub fn windowShouldClose() bool {
 /// Set target FPS.
 pub fn setTargetFps(fps: c_int) void {
     rl.SetTargetFPS(fps);
+}
+
+/// Show the OS cursor.
+pub fn showCursor() void {
+    rl.ShowCursor();
+}
+
+/// Hide the OS cursor.
+pub fn hideCursor() void {
+    rl.HideCursor();
 }
 
 /// Set window size.

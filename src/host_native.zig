@@ -15,6 +15,7 @@ const raylib = @import("backend_raylib.zig");
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
 const RenderArgs = ffi.RenderArgs;
+const HostState = ffi.HostState;
 const RocOps = ffi.RocOps;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
@@ -518,24 +519,22 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         mouse_buttons.incref();
         mouse_buttons_pressed.incref();
         mouse_buttons_released.incref();
-        var init_state = abi.Host{
+        var init_state = HostState{
             .frame_count = 0,
             .timestamp_nanos = 0,
             .frame_time = 0,
             .keys = keys.list,
             .keys_pressed = keys_pressed.list,
             .keys_released = keys_released.list,
-            .mouse = .{
-                .buttons = mouse_buttons.list,
-                .buttons_pressed = mouse_buttons_pressed.list,
-                .buttons_released = mouse_buttons_released.list,
-                .wheel = 0,
-                .x = 0,
-                .y = 0,
-                .left = false,
-                .right = false,
-                .middle = false,
-            },
+            .mouse_buttons = mouse_buttons.list,
+            .mouse_buttons_pressed = mouse_buttons_pressed.list,
+            .mouse_buttons_released = mouse_buttons_released.list,
+            .mouse_wheel = 0,
+            .mouse_x = 0,
+            .mouse_y = 0,
+            .mouse_left = false,
+            .mouse_middle = false,
+            .mouse_right = false,
         };
         abi.roc__init_for_host(&roc_ops, @ptrCast(&init_result), @ptrCast(&init_state));
 
@@ -578,24 +577,22 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         mouse_buttons_released.update(raylib.getMouseButtonReleasedState());
         mouse_buttons_released.incref();
         const mouse_pos = raylib.getMousePosition();
-        const platform_state = abi.Host{
+        const platform_state = HostState{
             .frame_count = frame_count,
             .timestamp_nanos = now_ns,
             .frame_time = frame_time,
             .keys = keys.list,
             .keys_pressed = keys_pressed.list,
             .keys_released = keys_released.list,
-            .mouse = .{
-                .buttons = mouse_buttons.list,
-                .buttons_pressed = mouse_buttons_pressed.list,
-                .buttons_released = mouse_buttons_released.list,
-                .left = raylib.isMouseButtonDown(.left),
-                .middle = raylib.isMouseButtonDown(.middle),
-                .right = raylib.isMouseButtonDown(.right),
-                .wheel = raylib.getMouseWheelMove(),
-                .x = mouse_pos.x,
-                .y = mouse_pos.y,
-            },
+            .mouse_buttons = mouse_buttons.list,
+            .mouse_buttons_pressed = mouse_buttons_pressed.list,
+            .mouse_buttons_released = mouse_buttons_released.list,
+            .mouse_wheel = raylib.getMouseWheelMove(),
+            .mouse_x = mouse_pos.x,
+            .mouse_y = mouse_pos.y,
+            .mouse_left = raylib.isMouseButtonDown(.left),
+            .mouse_middle = raylib.isMouseButtonDown(.middle),
+            .mouse_right = raylib.isMouseButtonDown(.right),
         };
 
         // Call Roc render with the platform state

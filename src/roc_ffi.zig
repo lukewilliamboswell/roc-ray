@@ -106,6 +106,10 @@ pub const Keys = StateList(KEY_COUNT);
 /// Mouse button state manager.
 pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 
+/// Flat state for init_for_host!/render_for_host!.
+/// This is not the public nested `Host` record exposed to Roc apps.
+pub const HostState = abi.__AnonStruct79;
+
 /// Args tuple for render_for_host!
 /// Per RocCall ABI, all args are passed as a single pointer to a tuple struct.
 /// Roc sorts tuple fields by alignment (descending), then alphabetically.
@@ -114,11 +118,11 @@ pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 /// On 32-bit WASM: pointer align (4) < u64 align (8), so sorted by align -> state, model
 pub const RenderArgs = if (@sizeOf(*anyopaque) == 4)
     extern struct {
-        state: abi.Host,
+        state: HostState,
         model: RocBox,
     }
 else
     extern struct {
         model: RocBox,
-        state: abi.Host,
+        state: HostState,
     };

@@ -8,6 +8,8 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
 - Asset loading for host-owned textures, with source/destination rectangles, rotation, origin, scale, and tint
+- Pure 2D camera values with scoped world-space drawing
+- Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
@@ -38,6 +40,12 @@ Sprite and texture drawing are demonstrated in:
 
 ```bash
 roc examples/sprites.roc
+```
+
+World-space camera drawing is demonstrated in:
+
+```bash
+roc examples/camera.roc
 ```
 
 Beginner game examples are available in:

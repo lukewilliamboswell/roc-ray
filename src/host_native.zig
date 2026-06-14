@@ -19,7 +19,7 @@ const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
-const AppConfig = abi.__AnonStruct77;
+const AppConfig = abi.__AnonStruct78;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
@@ -231,15 +231,19 @@ fn hostedDrawBeginFrame() callconv(.c) void {
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircleRaw(args: abi.__AnonStruct10) callconv(.c) void {
+fn hostedDrawBeginCamera(args: abi.DrawBegin_cameraArgs) callconv(.c) void {
+    raylib.beginMode2D(args);
+}
+
+fn hostedDrawCircleRaw(args: abi.DrawCircle_rawArgs) callconv(.c) void {
     raylib.drawCircle(args);
 }
 
-fn hostedDrawCircleGradient(args: abi.__AnonStruct15) callconv(.c) void {
+fn hostedDrawCircleGradient(args: abi.DrawCircle_gradientArgs) callconv(.c) void {
     raylib.drawCircleGradient(args);
 }
 
-fn hostedDrawCircleLinesRaw(args: abi.__AnonStruct16) callconv(.c) void {
+fn hostedDrawCircleLinesRaw(args: abi.DrawCircle_lines_rawArgs) callconv(.c) void {
     raylib.drawCircleLines(args);
 }
 
@@ -251,65 +255,69 @@ fn hostedDrawEndFrame() callconv(.c) void {
     raylib.endDrawing();
 }
 
-fn hostedDrawFps(args: abi.__AnonStruct17) callconv(.c) void {
+fn hostedDrawEndCamera() callconv(.c) void {
+    raylib.endMode2D();
+}
+
+fn hostedDrawFps(args: abi.DrawFpsArgs) callconv(.c) void {
     raylib.drawFps(args);
 }
 
-fn hostedDrawLineRaw(args: abi.__AnonStruct18) callconv(.c) void {
+fn hostedDrawLineRaw(args: abi.DrawLine_rawArgs) callconv(.c) void {
     raylib.drawLine(args);
 }
 
-fn hostedDrawPolygonRaw(host: *RocHost, args: abi.__AnonStruct25) callconv(.c) void {
+fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawPolygon_rawArgs) callconv(.c) void {
     defer args.points.decref(host);
     raylib.drawPolygon(args.points.items(), args.color);
 }
 
-fn exportedDrawPolygonRaw(args: abi.__AnonStruct25) callconv(.c) void {
+fn exportedDrawPolygonRaw(args: abi.DrawPolygon_rawArgs) callconv(.c) void {
     hostedDrawPolygonRaw(activeHost(), args);
 }
 
-fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.__AnonStruct27) callconv(.c) void {
+fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
     defer args.points.decref(host);
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
 }
 
-fn exportedDrawPolygonLinesRaw(args: abi.__AnonStruct27) callconv(.c) void {
+fn exportedDrawPolygonLinesRaw(args: abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
     hostedDrawPolygonLinesRaw(activeHost(), args);
 }
 
-fn hostedDrawRectangleRaw(args: abi.__AnonStruct28) callconv(.c) void {
+fn hostedDrawRectangleRaw(args: abi.DrawRectangle_rawArgs) callconv(.c) void {
     raylib.drawRectangle(args);
 }
 
-fn hostedDrawRectangleLinesRaw(args: abi.__AnonStruct31) callconv(.c) void {
+fn hostedDrawRectangleLinesRaw(args: abi.DrawRectangle_lines_rawArgs) callconv(.c) void {
     raylib.drawRectangleLines(args);
 }
 
-fn hostedDrawRectangleGradientH(args: abi.__AnonStruct29) callconv(.c) void {
+fn hostedDrawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) callconv(.c) void {
     raylib.drawRectangleGradientH(args);
 }
 
-fn hostedDrawRectangleGradientV(args: abi.__AnonStruct30) callconv(.c) void {
+fn hostedDrawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) callconv(.c) void {
     raylib.drawRectangleGradientV(args);
 }
 
-fn hostedDrawRoundedRectangleRaw(args: abi.__AnonStruct32) callconv(.c) void {
+fn hostedDrawRoundedRectangleRaw(args: abi.DrawRounded_rectangle_rawArgs) callconv(.c) void {
     raylib.drawRoundedRectangle(args);
 }
 
-fn hostedDrawRoundedRectangleLinesRaw(args: abi.__AnonStruct33) callconv(.c) void {
+fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawRounded_rectangle_lines_rawArgs) callconv(.c) void {
     raylib.drawRoundedRectangleLines(args);
 }
 
-fn hostedDrawTriangleRaw(args: abi.__AnonStruct38) callconv(.c) void {
+fn hostedDrawTriangleRaw(args: abi.DrawTriangle_rawArgs) callconv(.c) void {
     raylib.drawTriangle(args);
 }
 
-fn hostedDrawTriangleLinesRaw(args: abi.__AnonStruct39) callconv(.c) void {
+fn hostedDrawTriangleLinesRaw(args: abi.DrawTriangle_lines_rawArgs) callconv(.c) void {
     raylib.drawTriangleLines(args);
 }
 
-fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.__AnonStruct20) callconv(.c) u64 {
+fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawLoad_font_rawArgs) callconv(.c) u64 {
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
@@ -320,13 +328,13 @@ fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.__AnonStruct20) callconv(.c) 
     return raylib.loadFont(path.ptr, args.size) orelse 0;
 }
 
-fn exportedDrawLoadFontRaw(args: abi.__AnonStruct20) callconv(.c) u64 {
+fn exportedDrawLoadFontRaw(args: abi.DrawLoad_font_rawArgs) callconv(.c) u64 {
     return hostedDrawLoadFontRaw(activeHost(), args);
 }
 
-fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
+fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.__AnonStruct25 {
     defer args.text.decref(host);
-    var result: abi.__AnonStruct23 = .{ .height = 0, .width = 0 };
+    var result: abi.__AnonStruct25 = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -338,11 +346,11 @@ fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.__AnonStruct24) callconv(.
     return result;
 }
 
-fn exportedDrawMeasureTextRaw(args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
+fn exportedDrawMeasureTextRaw(args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.__AnonStruct25 {
     return hostedDrawMeasureTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextRaw(host: *RocHost, args: abi.__AnonStruct34) callconv(.c) void {
+fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawText_rawArgs) callconv(.c) void {
     defer args.text.decref(host);
 
     const text_slice = args.text.asSlice();
@@ -360,11 +368,11 @@ fn hostedDrawTextRaw(host: *RocHost, args: abi.__AnonStruct34) callconv(.c) void
     );
 }
 
-fn exportedDrawTextRaw(args: abi.__AnonStruct34) callconv(.c) void {
+fn exportedDrawTextRaw(args: abi.DrawText_rawArgs) callconv(.c) void {
     hostedDrawTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextureRaw(args: abi.__AnonStruct35) callconv(.c) void {
+fn hostedDrawTextureRaw(args: abi.DrawDraw_texture_rawArgs) callconv(.c) void {
     raylib.drawTexture(args);
 }
 
@@ -422,11 +430,11 @@ fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
 
-fn hostedGetScreenSize() callconv(.c) abi.__AnonStruct42 {
+fn hostedGetScreenSize() callconv(.c) abi.__AnonStruct43 {
     return .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(args: abi.__AnonStruct55) callconv(.c) abi.Try {
+fn hostedSetScreenSize(args: abi.HostSet_screen_sizeArgs) callconv(.c) abi.Try {
     raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
     var result: abi.Try = undefined;
     result.tag = .Ok;
@@ -441,7 +449,7 @@ fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     return raylib.getRandomValue(min, max);
 }
 
-fn hostedAudioGenTone(args: abi.__AnonStruct5) callconv(.c) u64 {
+fn hostedAudioGenTone(args: abi.AudioGen_tone_rawArgs) callconv(.c) u64 {
     return @intCast(raylib.genTone(args.freq, args.ms));
 }
 
@@ -461,12 +469,14 @@ comptime {
         @export(&exportedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
         @export(&hostedAudioPlay, .{ .name = "roc_audio_play_raw" });
+        @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
         @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
         @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
+        @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });

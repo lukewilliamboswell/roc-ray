@@ -5,11 +5,12 @@ import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Host
-import rr.Math
+import rr.Sprite
 
 Model : {
 	texture : Assets.Texture,
 	angle : F32,
+	animation : Sprite.Animation,
 }
 
 program = { init!, render! }
@@ -37,7 +38,7 @@ init! = App.init(
 	},
 	|_host| {
 		match Assets.load_texture!(asset_path) {
-			Ok(texture) => Ok({ texture, angle: 0 })
+			Ok(texture) => Ok({ texture, angle: 0, animation: Sprite.animation({ frame_count: 4, fps: 6 }) })
 			Err(_) => Err(Exit(1))
 		}
 	},
@@ -46,51 +47,59 @@ init! = App.init(
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
 	next_angle = model.angle + host.frame_time * 60
+	next_animation = Sprite.step(model.animation, host.frame_time)
+	frame_row = next_animation.frame // 2
+	frame_col = next_animation.frame % 2
+	frame_source = Sprite.sheet_frame({ frame_size: { x: 4, y: 4 }, row: frame_row, col: frame_col })
 
-	main_builder = Draw.TextureDrawBuilder.map2(
-		Draw.TextureDrawBuilder.pos({ x: screen_w * 0.5, y: 260 }),
-		Draw.TextureDrawBuilder.map2(
-			Draw.TextureDrawBuilder.scale(18),
-			Draw.TextureDrawBuilder.map2(
-				Draw.TextureDrawBuilder.origin_center,
-				Draw.TextureDrawBuilder.rotation(next_angle),
-				|_, _| {},
+	main_sprite = Sprite.with_rotation(
+		Sprite.with_origin_center(
+			Sprite.with_scale(
+				Sprite.with_pos(
+					Sprite.with_source(Sprite.from_texture(model.texture), frame_source),
+					{ x: screen_w * 0.5, y: 260 },
+				),
+				18,
 			),
-			|_, _| {},
 		),
-		|_, _| {},
+		next_angle,
 	)
-	main_sprite = Draw.TextureDrawBuilder.run(main_builder, model.texture)
 
-	top_left = {
-		texture: model.texture,
-		source: Math.rect(0, 0, 4, 4),
-		dest: Math.rect(90, 395, 96, 96),
-		origin: Math.zero,
-		rotation: 0,
-		tint: Color.white,
-	}
+	top_left = Sprite.with_scale(
+		Sprite.with_pos(
+			Sprite.with_source(Sprite.from_texture(model.texture), Sprite.sheet_frame({ frame_size: { x: 4, y: 4 }, row: 0, col: 0 })),
+			{ x: 90, y: 395 },
+		),
+		24,
+	)
 
-	bottom_right = {
-		texture: model.texture,
-		source: Math.rect(4, 4, 4, 4),
-		dest: Math.rect(screen_w - 186, 395, 96, 96),
-		origin: { x: 48, y: 48 },
-		rotation: next_angle * -1.5,
-		tint: Color.with_alpha(Color.purple, 210),
-	}
+	bottom_right = Sprite.with_tint(
+		Sprite.with_rotation(
+			Sprite.with_origin_center(
+				Sprite.with_scale(
+					Sprite.with_pos(
+						Sprite.with_source(Sprite.from_texture(model.texture), Sprite.sheet_frame({ frame_size: { x: 4, y: 4 }, row: 1, col: 1 })),
+						{ x: screen_w - 138, y: 443 },
+					),
+					24,
+				),
+			),
+			next_angle * -1.5,
+		),
+		Color.with_alpha(Color.purple, 210),
+	)
 
 	Draw.draw!(
 		Color.ray_white,
 		|| {
-			Draw.texture!(main_sprite)
-			Draw.draw_texture!(top_left)
-			Draw.draw_texture!(bottom_right)
+			Sprite.draw!(main_sprite)
+			Sprite.draw!(top_left)
+			Sprite.draw!(bottom_right)
 			Draw.text!({ pos: { x: screen_w * 0.5, y: 52 }, text: "Sprites", size: 42, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_center })
 			Draw.text!({ pos: { x: 90, y: 504 }, text: "source rect", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.text!({ pos: { x: screen_w - 90, y: 504 }, text: "rotation + tint", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_right })
 		},
 	)
 
-	Ok({ texture: model.texture, angle: next_angle })
+	Ok({ texture: model.texture, angle: next_angle, animation: next_animation })
 }

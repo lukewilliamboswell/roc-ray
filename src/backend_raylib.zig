@@ -178,6 +178,15 @@ fn rectFromArgs(args: anytype) rl.Rectangle {
     return .{ .x = args.@"x", .y = args.@"y", .width = args.@"width", .height = args.@"height" };
 }
 
+fn cameraFromArgs(args: anytype) rl.Camera2D {
+    return .{
+        .target = toVector2(args.@"target"),
+        .offset = toVector2(args.@"offset"),
+        .rotation = args.@"rotation",
+        .zoom = args.@"zoom",
+    };
+}
+
 fn positiveThickness(thickness: f32) ?f32 {
     if (thickness <= 0) return null;
     return thickness;
@@ -389,6 +398,16 @@ pub fn drawFps(args: anytype) void {
 /// Begin drawing frame.
 pub fn beginDrawing() void {
     rl.BeginDrawing();
+}
+
+/// Begin drawing in 2D camera mode.
+pub fn beginMode2D(camera: anytype) void {
+    rl.BeginMode2D(cameraFromArgs(camera));
+}
+
+/// End drawing in 2D camera mode.
+pub fn endMode2D() void {
+    rl.EndMode2D();
 }
 
 /// End drawing frame.

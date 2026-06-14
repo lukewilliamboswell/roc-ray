@@ -1,5 +1,6 @@
 ## Draw module - provides drawing primitives for the Roc raylib platform
 import Assets
+import Camera
 import Color
 import Math
 
@@ -251,6 +252,8 @@ Draw := [].{
 
 	Rect : Math.Rect
 
+	Camera2D : Camera.Camera2D
+
 	Fill : [NoFill, Fill(Color)]
 
 	Stroke : [NoStroke, Stroke({ color : Color, thickness : F32 })]
@@ -487,6 +490,8 @@ Draw := [].{
 
 	TextureDraw : TextureDrawConfig
 
+	CameraMode : Camera2D
+
 	TextureDrawRaw : {
 		texture : U64,
 		source : Math.Rect,
@@ -497,6 +502,7 @@ Draw := [].{
 	}
 
 	## Hosted effects - implemented by the host
+	begin_camera! : CameraMode => {}
 	begin_frame! : () => {}
 	circle_raw! : CircleRaw => {}
 	circle_gradient! : CircleGradient => {}
@@ -517,6 +523,7 @@ Draw := [].{
 	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
 	text_raw! : TextRaw => {}
 	draw_texture_raw! : TextureDrawRaw => {}
+	end_camera! : () => {}
 	triangle_raw! : TriangleRaw => {}
 	triangle_lines_raw! : TriangleLinesRaw => {}
 
@@ -713,6 +720,16 @@ Draw := [].{
 
 	draw_texture! : TextureDraw => {}
 	draw_texture! = |cfg| Draw.texture!(cfg)
+
+	with_camera! : CameraMode, (() => {}) => {}
+	with_camera! = |camera, callback| {
+		Draw.begin_camera!(camera)
+		callback()
+		Draw.end_camera!()
+	}
+
+	with_mode_2d! : CameraMode, (() => {}) => {}
+	with_mode_2d! = |camera, callback| Draw.with_camera!(camera, callback)
 
 	text! : Text => {}
 	text! = |cfg| {

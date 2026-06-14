@@ -11,6 +11,7 @@ examples/sprites
 examples/text_ui
 examples/snake
 examples/breakout
+examples/camera
 
 # Built executables at root
 hello_world
@@ -19,6 +20,7 @@ pong
 sprites
 snake
 breakout
+camera
 
 all_roc_syntax
 

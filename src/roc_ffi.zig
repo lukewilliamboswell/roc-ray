@@ -108,4 +108,4 @@ pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 
 /// Flat state for init_for_host!/render_for_host!.
 /// This is not the public nested `Host` record exposed to Roc apps.
-pub const HostState = abi.__AnonStruct79;
+pub const HostState = abi.__AnonStruct80;

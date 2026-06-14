@@ -40,6 +40,20 @@ Sprite and texture drawing are demonstrated in:
 roc examples/sprites.roc
 ```
 
+Beginner game examples are available in:
+
+```bash
+roc examples/snake.roc
+roc examples/breakout.roc
+```
+
+For smoother game-loop performance, build and run the executable:
+
+```bash
+roc build examples/breakout.roc
+./breakout
+```
+
 ## Testing
 
 Run code-quality lints (tidiness + style):
@@ -92,5 +106,5 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | x64glibc | Linux x64 |
 | x64win | Windows x64 |
 
-- We vendor the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5)
+- We vendor the pre-compiled libraries from [raylib v6.0](https://github.com/raysan5/raylib/releases/tag/6.0)
 - ARM Linux is not available (raylib doesn't provide pre-built libraries)

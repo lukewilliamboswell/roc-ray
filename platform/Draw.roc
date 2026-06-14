@@ -450,6 +450,13 @@ Draw := [].{
 		color : Color,
 	}
 
+	SimpleText : {
+		pos : Vector2,
+		text : Str,
+		size : F32,
+		color : Color,
+	}
+
 	TextRaw : {
 		pos : Vector2,
 		text : Str,
@@ -741,6 +748,34 @@ Draw := [].{
 				color: cfg.color,
 				font: Draw.default_font,
 				align: Draw.align_top_left,
+			},
+		)
+
+	text_at! : SimpleText => {}
+	text_at! = |cfg|
+		Draw.text!(
+			{
+				pos: cfg.pos,
+				text: cfg.text,
+				size: cfg.size,
+				spacing: Draw.default_spacing,
+				color: cfg.color,
+				font: Draw.default_font,
+				align: Draw.align_top_left,
+			},
+		)
+
+	text_centered! : SimpleText => {}
+	text_centered! = |cfg|
+		Draw.text!(
+			{
+				pos: cfg.pos,
+				text: cfg.text,
+				size: cfg.size,
+				spacing: Draw.default_spacing,
+				color: cfg.color,
+				font: Draw.default_font,
+				align: Draw.align_center,
 			},
 		)
 

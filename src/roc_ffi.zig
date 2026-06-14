@@ -8,8 +8,8 @@
 
 const abi = @import("roc_platform_abi.zig");
 
-// Re-export host ABI types for convenience
-pub const RocOps = abi.RocOps;
+// Re-export host helper context for convenience.
+pub const RocHost = abi.RocHost;
 
 /// Boxed value - opaque pointer to heap-allocated Roc data.
 /// Nullable because ZST models (e.g. `Model : {}`) use null (box_of_zst).
@@ -68,17 +68,17 @@ pub const MOUSE_BUTTON_COUNT: usize = 7;
 pub fn StateList(comptime COUNT: usize) type {
     return struct {
         list: abi.RocListWith(u8, false),
-        roc_ops: *RocOps,
+        roc_host: *RocHost,
 
         const Self = @This();
 
         /// Initialize state with a heap-allocated RocList.
-        pub fn init(roc_ops: *RocOps) Self {
-            const list = abi.RocListWith(u8, false).allocate(COUNT, roc_ops);
+        pub fn init(roc_host: *RocHost) Self {
+            const list = abi.RocListWith(u8, false).allocate(COUNT, roc_host);
             if (list.elements_ptr) |elements| {
                 @memset(elements[0..COUNT], 0);
             }
-            return .{ .list = list, .roc_ops = roc_ops };
+            return .{ .list = list, .roc_host = roc_host };
         }
 
         /// Update state from a fixed-size source array.
@@ -95,7 +95,7 @@ pub fn StateList(comptime COUNT: usize) type {
 
         /// Decrement refcount / free the list (call on cleanup).
         pub fn decref(self: *Self) void {
-            self.list.decref(self.roc_ops);
+            self.list.decref(self.roc_host);
         }
     };
 }
@@ -109,20 +109,3 @@ pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 /// Flat state for init_for_host!/render_for_host!.
 /// This is not the public nested `Host` record exposed to Roc apps.
 pub const HostState = abi.__AnonStruct79;
-
-/// Args tuple for render_for_host!
-/// Per RocCall ABI, all args are passed as a single pointer to a tuple struct.
-/// Roc sorts tuple fields by alignment (descending), then alphabetically.
-///
-/// On 64-bit: pointer align == u64 align (8), so sorted alphabetically -> model, state
-/// On 32-bit WASM: pointer align (4) < u64 align (8), so sorted by align -> state, model
-pub const RenderArgs = if (@sizeOf(*anyopaque) == 4)
-    extern struct {
-        state: HostState,
-        model: RocBox,
-    }
-else
-    extern struct {
-        model: RocBox,
-        state: HostState,
-    };

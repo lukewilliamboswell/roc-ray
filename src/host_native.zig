@@ -15,7 +15,7 @@ const raylib = @import("backend_raylib.zig");
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
 const HostState = ffi.HostState;
-const RocOps = ffi.RocOps;
+const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
@@ -32,9 +32,9 @@ const TRACE_HOST = false;
 /// If set, program exits with non-zero code to prevent accidental commits.
 var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
-/// Roc's current symbol ABI calls runtime and hosted symbols directly, without
-/// passing RocOps. Keep the active per-process ops here for those callbacks.
-var active_roc_ops: ?*RocOps = null;
+/// Roc's symbol ABI calls runtime and hosted symbols directly, without passing
+/// host context. Keep the active per-process helper context here for callbacks.
+var active_roc_host: ?*RocHost = null;
 
 /// Captured `envp` for the process. On Linux the host runs with `-nostdlib`, so
 /// glibc never populates an environ global; we capture it from the process stack
@@ -58,56 +58,56 @@ fn matchEnvEntry(entry: [:0]const u8, key: []const u8) ?[]const u8 {
     return null;
 }
 
-fn activeOps() *RocOps {
-    return active_roc_ops orelse {
-        std.debug.print("roc-ray host called before RocOps were initialized\n", .{});
+fn activeHost() *RocHost {
+    return active_roc_host orelse {
+        std.debug.print("roc-ray host called before RocHost was initialized\n", .{});
         std.process.exit(1);
     };
 }
 
 /// Custom dbg handler that sets flag and prints to stderr.
-fn nativeDbg(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+fn nativeDbg(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[36m[ROC DBG]\x1b[0m {s}\n", .{msg});
 }
 
 /// Custom expect handler that sets flag and prints to stderr.
-fn nativeExpectFailed(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+fn nativeExpectFailed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
     debug_or_expect_called.store(true, .release);
     const msg = bytes[0..len];
     std.debug.print("\x1b[33m[ROC EXPECT]\x1b[0m {s}\n", .{msg});
 }
 
 /// Crash handler - prints to stderr and exits.
-fn nativeCrashed(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+fn nativeCrashed(_: *RocHost, bytes: [*]const u8, len: usize) callconv(.c) void {
     const msg = bytes[0..len];
     std.debug.print("\x1b[31m[ROC CRASHED]\x1b[0m {s}\n", .{msg});
     std.process.exit(1);
 }
 
 fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
-    return abi.DefaultAllocators.rocAlloc(activeOps(), length, alignment);
+    return abi.DefaultAllocators.rocAlloc(activeHost(), length, alignment);
 }
 
 fn exportedRocDealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    abi.DefaultAllocators.rocDealloc(activeOps(), ptr, alignment);
+    abi.DefaultAllocators.rocDealloc(activeHost(), ptr, alignment);
 }
 
 fn exportedRocRealloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
-    return abi.DefaultAllocators.rocRealloc(activeOps(), ptr, new_length, alignment);
+    return abi.DefaultAllocators.rocRealloc(activeHost(), ptr, new_length, alignment);
 }
 
 fn exportedRocDbg(bytes: [*]const u8, len: usize) callconv(.c) void {
-    nativeDbg(activeOps(), bytes, len);
+    nativeDbg(activeHost(), bytes, len);
 }
 
 fn exportedRocExpectFailed(bytes: [*]const u8, len: usize) callconv(.c) void {
-    nativeExpectFailed(activeOps(), bytes, len);
+    nativeExpectFailed(activeHost(), bytes, len);
 }
 
 fn exportedRocCrashed(bytes: [*]const u8, len: usize) callconv(.c) void {
-    nativeCrashed(activeOps(), bytes, len);
+    nativeCrashed(activeHost(), bytes, len);
 }
 
 // OS-specific entry point handling (not exported during tests)
@@ -144,8 +144,8 @@ const TempCString = struct {
     }
 };
 
-fn allocatorFromOps(ops: *RocOps) std.mem.Allocator {
-    const env: *abi.RocEnv = @ptrCast(@alignCast(ops.env));
+fn allocatorFromHost(host: *RocHost) std.mem.Allocator {
+    const env: *abi.RocEnv = @ptrCast(@alignCast(host.env));
     return env.allocator;
 }
 
@@ -203,13 +203,13 @@ test "makeTempCString stops at embedded nul" {
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
-fn hostedAssetsLoadTextureRaw(ops: *RocOps, path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
-    defer path_arg.decref(ops);
+fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
+    defer path_arg.decref(host);
     var result: abi.__AnonStruct0 = .{ .handle = 0, .height = 0, .width = 0 };
 
     const path_slice = path_arg.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return result;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return result;
     defer path.deinit();
 
     if (raylib.loadTexture(path.ptr)) |texture| {
@@ -224,7 +224,7 @@ fn hostedAssetsLoadTextureRaw(ops: *RocOps, path_arg: abi.RocStr) callconv(.c) a
 }
 
 fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
-    return hostedAssetsLoadTextureRaw(activeOps(), path_arg);
+    return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
 }
 
 fn hostedDrawBeginFrame() callconv(.c) void {
@@ -259,22 +259,22 @@ fn hostedDrawLineRaw(args: abi.__AnonStruct18) callconv(.c) void {
     raylib.drawLine(args);
 }
 
-fn hostedDrawPolygonRaw(ops: *RocOps, args: abi.__AnonStruct25) callconv(.c) void {
-    defer args.points.decref(ops);
+fn hostedDrawPolygonRaw(host: *RocHost, args: abi.__AnonStruct25) callconv(.c) void {
+    defer args.points.decref(host);
     raylib.drawPolygon(args.points.items(), args.color);
 }
 
 fn exportedDrawPolygonRaw(args: abi.__AnonStruct25) callconv(.c) void {
-    hostedDrawPolygonRaw(activeOps(), args);
+    hostedDrawPolygonRaw(activeHost(), args);
 }
 
-fn hostedDrawPolygonLinesRaw(ops: *RocOps, args: abi.__AnonStruct27) callconv(.c) void {
-    defer args.points.decref(ops);
+fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.__AnonStruct27) callconv(.c) void {
+    defer args.points.decref(host);
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
 }
 
 fn exportedDrawPolygonLinesRaw(args: abi.__AnonStruct27) callconv(.c) void {
-    hostedDrawPolygonLinesRaw(activeOps(), args);
+    hostedDrawPolygonLinesRaw(activeHost(), args);
 }
 
 fn hostedDrawRectangleRaw(args: abi.__AnonStruct28) callconv(.c) void {
@@ -309,28 +309,28 @@ fn hostedDrawTriangleLinesRaw(args: abi.__AnonStruct39) callconv(.c) void {
     raylib.drawTriangleLines(args);
 }
 
-fn hostedDrawLoadFontRaw(ops: *RocOps, args: abi.__AnonStruct20) callconv(.c) u64 {
-    defer args.path.decref(ops);
+fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.__AnonStruct20) callconv(.c) u64 {
+    defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return 0;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
     defer path.deinit();
 
     return raylib.loadFont(path.ptr, args.size) orelse 0;
 }
 
 fn exportedDrawLoadFontRaw(args: abi.__AnonStruct20) callconv(.c) u64 {
-    return hostedDrawLoadFontRaw(activeOps(), args);
+    return hostedDrawLoadFontRaw(activeHost(), args);
 }
 
-fn hostedDrawMeasureTextRaw(ops: *RocOps, args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
-    defer args.text.decref(ops);
+fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
+    defer args.text.decref(host);
     var result: abi.__AnonStruct23 = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return result;
+    var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return result;
     defer text.deinit();
 
     const measured = raylib.measureTextZ(text.ptr, args.font, args.size, args.spacing);
@@ -339,15 +339,15 @@ fn hostedDrawMeasureTextRaw(ops: *RocOps, args: abi.__AnonStruct24) callconv(.c)
 }
 
 fn exportedDrawMeasureTextRaw(args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
-    return hostedDrawMeasureTextRaw(activeOps(), args);
+    return hostedDrawMeasureTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextRaw(ops: *RocOps, args: abi.__AnonStruct34) callconv(.c) void {
-    defer args.text.decref(ops);
+fn hostedDrawTextRaw(host: *RocHost, args: abi.__AnonStruct34) callconv(.c) void {
+    defer args.text.decref(host);
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return;
+    var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return;
     defer text.deinit();
 
     raylib.drawTextZ(
@@ -361,7 +361,7 @@ fn hostedDrawTextRaw(ops: *RocOps, args: abi.__AnonStruct34) callconv(.c) void {
 }
 
 fn exportedDrawTextRaw(args: abi.__AnonStruct34) callconv(.c) void {
-    hostedDrawTextRaw(activeOps(), args);
+    hostedDrawTextRaw(activeHost(), args);
 }
 
 fn hostedDrawTextureRaw(args: abi.__AnonStruct35) callconv(.c) void {
@@ -371,37 +371,37 @@ fn hostedDrawTextureRaw(args: abi.__AnonStruct35) callconv(.c) void {
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
-fn decrefHostArg(ops: *RocOps, host: *const abi.Host) void {
-    host.keys.decref(ops);
-    host.keys_pressed.decref(ops);
-    host.keys_released.decref(ops);
-    host.mouse.buttons.decref(ops);
-    host.mouse.buttons_pressed.decref(ops);
-    host.mouse.buttons_released.decref(ops);
+fn decrefHostArg(roc_host: *RocHost, host: *const abi.Host) void {
+    host.keys.decref(roc_host);
+    host.keys_pressed.decref(roc_host);
+    host.keys_released.decref(roc_host);
+    host.mouse.buttons.decref(roc_host);
+    host.mouse.buttons_pressed.decref(roc_host);
+    host.mouse.buttons_released.decref(roc_host);
 }
 
-fn hostedReadEnvWindows(ops: *RocOps, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+fn hostedReadEnvWindows(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     // Windows doesn't link libc, so env var reading is not yet supported
     var result: ReadEnvResult = undefined;
     result.tag = .Err;
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    decrefHostArg(ops, &host);
-    key_arg.decref(ops);
+    decrefHostArg(roc_host, &host);
+    key_arg.decref(roc_host);
     return result;
 }
 
 fn exportedReadEnvWindows(host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    return hostedReadEnvWindows(activeOps(), host, key_arg);
+    return hostedReadEnvWindows(activeHost(), host, key_arg);
 }
 
-fn hostedReadEnvPosix(ops: *RocOps, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+fn hostedReadEnvPosix(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     var result: ReadEnvResult = undefined;
     const key = key_arg.asSlice();
     const value = hostGetEnv(key);
 
     if (value) |v| {
-        result.payload = .{ .ok = abi.RocStr.fromSlice(v, ops) };
+        result.payload = .{ .ok = abi.RocStr.fromSlice(v, roc_host) };
         result.tag = .Ok;
     } else {
         result.tag = .Err;
@@ -409,13 +409,13 @@ fn hostedReadEnvPosix(ops: *RocOps, host: abi.Host, key_arg: abi.RocStr) callcon
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
     // `key` (a slice into key_arg) is fully consumed above before key_arg is dropped.
-    decrefHostArg(ops, &host);
-    key_arg.decref(ops);
+    decrefHostArg(roc_host, &host);
+    key_arg.decref(roc_host);
     return result;
 }
 
 fn exportedReadEnvPosix(host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    return hostedReadEnvPosix(activeOps(), host, key_arg);
+    return hostedReadEnvPosix(activeHost(), host, key_arg);
 }
 
 fn hostedExit(code: i32) callconv(.c) void {
@@ -492,41 +492,6 @@ comptime {
     }
 }
 
-/// Hosted function dispatch table built from PlatformHostedFns.
-const hosted_fns = abi.hostedFunctions(.{
-    .assets_load_texture_raw = &hostedAssetsLoadTextureRaw,
-    .audio_gen_tone_raw = &hostedAudioGenTone,
-    .audio_play_raw = &hostedAudioPlay,
-    .draw_begin_frame = &hostedDrawBeginFrame,
-    .draw_circle_gradient = &hostedDrawCircleGradient,
-    .draw_circle_lines_raw = &hostedDrawCircleLinesRaw,
-    .draw_circle_raw = &hostedDrawCircleRaw,
-    .draw_clear = &hostedDrawClear,
-    .draw_draw_texture_raw = &hostedDrawTextureRaw,
-    .draw_end_frame = &hostedDrawEndFrame,
-    .draw_fps = &hostedDrawFps,
-    .draw_line_raw = &hostedDrawLineRaw,
-    .draw_load_font_raw = &hostedDrawLoadFontRaw,
-    .draw_measure_text_raw = &hostedDrawMeasureTextRaw,
-    .draw_polygon_lines_raw = &hostedDrawPolygonLinesRaw,
-    .draw_polygon_raw = &hostedDrawPolygonRaw,
-    .draw_rectangle_gradient_h = &hostedDrawRectangleGradientH,
-    .draw_rectangle_gradient_v = &hostedDrawRectangleGradientV,
-    .draw_rectangle_lines_raw = &hostedDrawRectangleLinesRaw,
-    .draw_rectangle_raw = &hostedDrawRectangleRaw,
-    .draw_rounded_rectangle_lines_raw = &hostedDrawRoundedRectangleLinesRaw,
-    .draw_rounded_rectangle_raw = &hostedDrawRoundedRectangleRaw,
-    .draw_text_raw = &hostedDrawTextRaw,
-    .draw_triangle_lines_raw = &hostedDrawTriangleLinesRaw,
-    .draw_triangle_raw = &hostedDrawTriangleRaw,
-    .host_exit = &hostedExit,
-    .host_get_screen_size = &hostedGetScreenSize,
-    .host_random_i32 = &hostedRandomI32,
-    .host_read_env = if (builtin.os.tag == .windows) &hostedReadEnvWindows else &hostedReadEnvPosix,
-    .host_set_screen_size = &hostedSetScreenSize,
-    .host_set_target_fps = &hostedSetTargetFps,
-});
-
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Capture envp on Linux. Roc links with -nostdlib, so glibc's
@@ -558,8 +523,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .roc_io = abi.RocIo.freestanding(),
     };
 
-    // Create the RocOps struct
-    var roc_ops = RocOps{
+    // Create the host-internal helper context used by generated helpers.
+    var roc_host = RocHost{
         .env = @ptrCast(&roc_env),
         .roc_alloc = &abi.DefaultAllocators.rocAlloc,
         .roc_dealloc = &abi.DefaultAllocators.rocDealloc,
@@ -567,17 +532,16 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         .roc_dbg = &nativeDbg,
         .roc_expect_failed = &nativeExpectFailed,
         .roc_crashed = &nativeCrashed,
-        .hosted_fns = hosted_fns,
     };
 
-    active_roc_ops = &roc_ops;
-    defer active_roc_ops = null;
+    active_roc_host = &roc_host;
+    defer active_roc_host = null;
 
     var app_config = app_config_for_host();
-    defer app_config.@"title".decref(&roc_ops);
+    defer app_config.title.decref(&roc_host);
 
     var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var window_title = makeTempCString(gpa.allocator(), &title_stack, app_config.@"title".asSlice()) catch {
+    var window_title = makeTempCString(gpa.allocator(), &title_stack, app_config.title.asSlice()) catch {
         std.log.err("failed to allocate app window title", .{});
         return 1;
     };
@@ -585,41 +549,41 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
     // Keyboard state manager (handles RocList allocation and refcounting)
     // We incref before each pass to Roc, and Roc decrefs when it drops the old Host.
-    var keys = ffi.Keys.init(&roc_ops);
+    var keys = ffi.Keys.init(&roc_host);
     defer keys.decref();
     // Edge (pressed-this-frame) state, kept in a separate RocList.
-    var keys_pressed = ffi.Keys.init(&roc_ops);
+    var keys_pressed = ffi.Keys.init(&roc_host);
     defer keys_pressed.decref();
     // Edge (released-this-frame) state, kept in a separate RocList.
-    var keys_released = ffi.Keys.init(&roc_ops);
+    var keys_released = ffi.Keys.init(&roc_host);
     defer keys_released.decref();
 
-    var mouse_buttons = ffi.MouseButtons.init(&roc_ops);
+    var mouse_buttons = ffi.MouseButtons.init(&roc_host);
     defer mouse_buttons.decref();
-    var mouse_buttons_pressed = ffi.MouseButtons.init(&roc_ops);
+    var mouse_buttons_pressed = ffi.MouseButtons.init(&roc_host);
     defer mouse_buttons_pressed.decref();
-    var mouse_buttons_released = ffi.MouseButtons.init(&roc_ops);
+    var mouse_buttons_released = ffi.MouseButtons.init(&roc_host);
     defer mouse_buttons_released.decref();
 
     // Initialize raylib window
     raylib.setConfigFlags(raylib.windowConfigFlags(
-        app_config.@"resizable",
-        app_config.@"fullscreen",
-        app_config.@"vsync",
+        app_config.resizable,
+        app_config.fullscreen,
+        app_config.vsync,
     ));
     raylib.initWindow(
-        positiveCInt(app_config.@"width", 800),
-        positiveCInt(app_config.@"height", 600),
+        positiveCInt(app_config.width, 800),
+        positiveCInt(app_config.height, 600),
         window_title.ptr,
     );
     defer raylib.closeWindow();
-    raylib.setTargetFps(targetFpsCInt(app_config.@"target_fps"));
-    if (app_config.@"cursor_visible") raylib.showCursor() else raylib.hideCursor();
+    raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
+    if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
 
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
     // (not uniformly available across our -nostdlib targets) and instead use
     // ASLR: the address of a live object differs run-to-run on PIE builds.
-    raylib.setRandomSeed(@truncate(@intFromPtr(&roc_ops)));
+    raylib.setRandomSeed(@truncate(@intFromPtr(&roc_host)));
 
     // Audio device must be ready before init! generates/plays any sounds.
     raylib.initAudioDevice();

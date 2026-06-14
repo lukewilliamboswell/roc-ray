@@ -13,6 +13,7 @@ examples/snake
 examples/breakout
 examples/camera
 examples/top_down
+examples/cave_climb
 
 # Built executables at root
 hello_world
@@ -23,6 +24,7 @@ snake
 breakout
 camera
 top_down
+cave_climb
 
 all_roc_syntax
 

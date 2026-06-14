@@ -1,0 +1,6 @@
+Kenney New Platformer Pack 1.0
+Source: https://www.kenney.nl/assets/new-platformer-pack
+License: Creative Commons Zero, CC0
+
+Selected spritesheets, sounds, background images, and License.txt are copied
+from the pack for the cave_climb example.

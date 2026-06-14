@@ -27,6 +27,7 @@ Host := {
 	## 0 otherwise. Use with `Keys.key_released`.
 	keys_released : List(U8),
 	mouse : {
+
 		## Per-button held state for raylib mouse button codes 0-6.
 		## Prefer the `Mouse` module helpers for new code.
 		buttons : List(U8),
@@ -47,6 +48,12 @@ Host := {
 }.{
 	ScreenSize : { width : I32, height : I32 }
 
+	ReadFileRawResult : {
+		ok : Bool,
+		err : U8,
+		contents : Str,
+	}
+
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : I32 => {}
@@ -57,6 +64,22 @@ Host := {
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
 	read_env! : Host, Str => Try(Str, [NotFound, ..])
+
+	## Raw hosted file read. Prefer `read_file!`.
+	read_file_raw! : Str => ReadFileRawResult
+
+	## Read a UTF-8 text file from disk.
+	read_file! : Str => Try(Str, [NotFound, ReadFailed, ..])
+	read_file! = |path| {
+		result = Host.read_file_raw!(path)
+		if result.ok {
+			Ok(result.contents)
+		} else if result.err == 1 {
+			Err(NotFound)
+		} else {
+			Err(ReadFailed)
+		}
+	}
 
 	## Get a random integer in the range [min, max] (both endpoints included).
 	## The generator is seeded once at startup, so sequences differ between runs.

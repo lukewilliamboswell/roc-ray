@@ -10,6 +10,7 @@ import rr.Host
 import rr.Keys
 import rr.Math
 import rr.Sprite
+import rr.Tilemap
 
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest]
 
@@ -38,6 +39,19 @@ Decoration : {
 	tile : Tile,
 	scale : F32,
 	rotation : F32,
+}
+
+Level : {
+	tilemap : Tilemap,
+	spawn : Math.Vec2,
+	exit_center : Math.Vec2,
+	exit_radius : F32,
+	sparks : List(World.Spark),
+	spark_total : U64,
+	obstacles : List(World.Obstacle),
+	hazards : List(World.Hazard),
+	decorations : List(Decoration),
+	bounds : Math.Rect,
 }
 
 GameState := [Playing, Won, GameOver]
@@ -117,10 +131,10 @@ World := {
 			}
 		}
 
-		damage_respawn : Player -> Player
-		damage_respawn = |player| {
+		damage_respawn : Player, Math.Vec2 -> Player
+		damage_respawn = |player, respawn_pos| {
 			..player,
-			pos: spawn,
+			pos: respawn_pos,
 			invuln: 1.2,
 			dash_timer: 0,
 			facing: East,
@@ -227,16 +241,16 @@ World := {
 		damaged : Bool,
 	}
 
-	new : () -> World
-	new = || {
-		player: Player.new(spawn),
-		sparks: fresh_sparks,
+	new : Level -> World
+	new = |level| {
+		player: Player.new(level.spawn),
+		sparks: level.sparks,
 		score: 0,
 		lives: 3,
 		phase: 0,
 		shake: 0,
 		flash: 0,
-		burst_pos: spawn,
+		burst_pos: level.spawn,
 		burst_timer: 0,
 		gate: GateLocked,
 		gate_flash: 0,
@@ -258,6 +272,7 @@ Sounds : {
 Model : {
 	characters : Assets.Texture,
 	tiles : Assets.Texture,
+	level : Level,
 	sounds : Sounds,
 	world : World,
 }
@@ -277,10 +292,10 @@ world_top : F32
 world_top = -520
 
 world_right : F32
-world_right = 1360
+world_right = 1456
 
 world_bottom : F32
-world_bottom = 1120
+world_bottom = 1144
 
 player_radius : F32
 player_radius = 22
@@ -309,6 +324,9 @@ characters_path = "examples/assets/kenney-topdown/characters.png"
 tiles_path : Str
 tiles_path = "examples/assets/kenney-topdown/tiles.png"
 
+top_down_map_path : Str
+top_down_map_path = "examples/assets/top_down.tmx"
+
 collect_path : Str
 collect_path = "examples/assets/kenney-audio/sfx/collect.ogg"
 
@@ -330,14 +348,14 @@ dash_path = "examples/assets/kenney-audio/sfx/dash.ogg"
 music_path : Str
 music_path = "examples/assets/kenney-audio/music/spark_loop.wav"
 
-spawn : Math.Vec2
-spawn = { x: -560, y: -360 }
+fallback_spawn : Math.Vec2
+fallback_spawn = { x: -560, y: -360 }
 
-exit_center : Math.Vec2
-exit_center = { x: 1185, y: 920 }
+fallback_exit_center : Math.Vec2
+fallback_exit_center = { x: 1185, y: 920 }
 
-exit_radius : F32
-exit_radius = 58
+fallback_exit_radius : F32
+fallback_exit_radius = 58
 
 burst_duration : F32
 burst_duration = 0.36
@@ -353,11 +371,53 @@ init! = App.init(
 		match Assets.load_texture!(characters_path) {
 			Ok(characters) =>
 				match Assets.load_texture!(tiles_path) {
-					Ok(tiles) => {
-						sounds = make_sounds!()
-						Audio.play_music!(sounds.music)
-						Ok(new_game(characters, tiles, sounds))
-					}
+					Ok(tiles) =>
+						match Tilemap.load_tmx!(top_down_map_path) {
+							Ok(raw_map) => {
+								tilemap = Tilemap.from_raw(raw_map)
+									.with_origin(
+										{ x: world_left, y: world_top },
+									)
+									.with_tileset_texture(
+										1,
+										tiles,
+									)
+									.layer_role(
+										"Ground",
+										Drawn,
+									)
+									.layer_role(
+										"Decor",
+										Drawn,
+									)
+									.layer_role(
+										"Walls",
+										Solid,
+									)
+									.object_role(
+										"spawn",
+										Spawn,
+									)
+									.object_role(
+										"spark",
+										Collectible,
+									)
+									.object_role(
+										"hazard",
+										Hazard,
+									)
+									.object_role(
+										"exit",
+										Exit,
+									)
+									.build()
+								level = level_from_tilemap(tilemap)
+								sounds = make_sounds!()
+								Audio.play_music!(sounds.music)
+								Ok(new_game(characters, tiles, level, sounds))
+							}
+							Err(_) => Err(Exit(1))
+						}
 					Err(_) => Err(Exit(1))
 				}
 			Err(_) => Err(Exit(1))
@@ -419,16 +479,17 @@ make_sounds! = || {
 	{ collect, hurt, win, lose, gate, dash, sparkle, music }
 }
 
-new_game : Assets.Texture, Assets.Texture, Sounds -> Model
-new_game = |characters, tiles, sounds| {
+new_game : Assets.Texture, Assets.Texture, Level, Sounds -> Model
+new_game = |characters, tiles, level, sounds| {
 	characters,
 	tiles,
+	level,
 	sounds,
-	world: World.new(),
+	world: World.new(level),
 }
 
-fresh_sparks : List(World.Spark)
-fresh_sparks = [
+fallback_sparks : List(World.Spark)
+fallback_sparks = [
 	World.Spark.new(0, -430, -150),
 	World.Spark.new(1, -55, -350),
 	World.Spark.new(2, 315, -295),
@@ -441,8 +502,8 @@ fresh_sparks = [
 	World.Spark.new(9, -540, 410),
 ]
 
-obstacles : List(World.Obstacle)
-obstacles = [
+fallback_obstacles : List(World.Obstacle)
+fallback_obstacles = [
 	World.Obstacle.new(-305, -300, 150, 440, TileBlockA, 0),
 	World.Obstacle.new(85, -430, 150, 295, TileBlockB, 11),
 	World.Obstacle.new(210, -45, 510, 120, TileBlockA, 22),
@@ -452,16 +513,16 @@ obstacles = [
 	World.Obstacle.new(965, -300, 145, 450, TileBlockA, 66),
 ]
 
-hazards : List(World.Hazard)
-hazards = [
+fallback_hazards : List(World.Hazard)
+fallback_hazards = [
 	{ center: { x: -445, y: 165 }, span: 520, lane: Horizontal, offset: 0, radius: 30, color: Color.from_hex_rgb(0xf94144) },
 	{ center: { x: 25, y: 320 }, span: 650, lane: Vertical, offset: 0.22, radius: 34, color: Color.from_hex_rgb(0xf3722c) },
 	{ center: { x: 600, y: -255 }, span: 650, lane: Horizontal, offset: 0.48, radius: 32, color: Color.from_hex_rgb(0xf8961e) },
 	{ center: { x: 1035, y: 455 }, span: 700, lane: Vertical, offset: 0.72, radius: 36, color: Color.from_hex_rgb(0xf94144) },
 ]
 
-decorations : List(Decoration)
-decorations = [
+fallback_decorations : List(Decoration)
+fallback_decorations = [
 	{ pos: { x: -640, y: 80 }, tile: TileCrystalA, scale: 1.35, rotation: 0 },
 	{ pos: { x: -575, y: 585 }, tile: TileCrystalB, scale: 1.2, rotation: 0 },
 	{ pos: { x: -85, y: -455 }, tile: TilePlantA, scale: 1.35, rotation: 0 },
@@ -475,6 +536,155 @@ decorations = [
 	{ pos: { x: 1280, y: -395 }, tile: TileSparkB, scale: 0.72, rotation: -18 },
 	{ pos: { x: -615, y: -405 }, tile: TilePlantB, scale: 1.1, rotation: 0 },
 ]
+
+fallback_level : Level
+fallback_level = {
+	tilemap: Tilemap.from_raw(Tilemap.empty_raw_map).build(),
+	spawn: fallback_spawn,
+	exit_center: fallback_exit_center,
+	exit_radius: fallback_exit_radius,
+	sparks: fallback_sparks,
+	spark_total,
+	obstacles: fallback_obstacles,
+	hazards: fallback_hazards,
+	decorations: fallback_decorations,
+	bounds: Math.rect(world_left, world_top, world_right - world_left, world_bottom - world_top),
+}
+
+level_from_tilemap : Tilemap -> Level
+level_from_tilemap = |tilemap| {
+	raw = Tilemap.raw_map(tilemap)
+	spawn_object = first_typed_object(tilemap, "spawn")
+	exit_object = first_typed_object(tilemap, "exit")
+	sparks = sparks_from_tilemap(tilemap)
+
+	{
+		tilemap,
+		spawn: object_center_or(tilemap, spawn_object, fallback_spawn),
+		exit_center: object_center_or(tilemap, exit_object, fallback_exit_center),
+		exit_radius: object_radius_or(exit_object, fallback_exit_radius),
+		sparks,
+		spark_total: List.len(sparks),
+		obstacles: obstacles_from_tilemap(raw, tilemap),
+		hazards: hazards_from_tilemap(raw, tilemap),
+		decorations: decorations_from_tilemap(raw, tilemap),
+		bounds: Math.rect(world_left, world_top, world_right - world_left, world_bottom - world_top),
+	}
+}
+
+first_typed_object : Tilemap, Str -> Try(Tilemap.RawObject, [NotFound])
+first_typed_object = |tilemap, type_name|
+	match List.first(Tilemap.objects_typed(tilemap, type_name)) {
+		Ok(object) => Ok(object)
+		Err(_) => Err(NotFound)
+	}
+
+object_center_or : Tilemap, Try(Tilemap.RawObject, [NotFound]), Math.Vec2 -> Math.Vec2
+object_center_or = |tilemap, object_result, fallback|
+	match object_result {
+		Ok(object) => Tilemap.object_world_center(tilemap, object)
+		Err(_) => fallback
+	}
+
+object_radius_or : Try(Tilemap.RawObject, [NotFound]), F32 -> F32
+object_radius_or = |object_result, fallback|
+	match object_result {
+		Ok(object) => if object.width == 0 and object.height == 0 fallback else F32.max(object.width, object.height) * 0.5
+		Err(_) => fallback
+	}
+
+sparks_from_tilemap : Tilemap -> List(World.Spark)
+sparks_from_tilemap = |tilemap| {
+	var $sparks = []
+	for object in Tilemap.objects_typed(tilemap, "spark") {
+		pos = Tilemap.object_world_center(tilemap, object)
+		$sparks = List.append($sparks, World.Spark.new(object.id, pos.x, pos.y))
+	}
+	if List.len($sparks) == 0 fallback_sparks else $sparks
+}
+
+obstacles_from_tilemap : Tilemap.RawMap, Tilemap -> List(World.Obstacle)
+obstacles_from_tilemap = |raw, tilemap| {
+	var $items = []
+	for object in Tilemap.objects_typed(tilemap, "obstacle") {
+		rect = Tilemap.object_world_rect(tilemap, object)
+		tile = tile_from_name(Tilemap.property_str(raw, object, "tile", "TileBlockA"))
+		rotation = Tilemap.property_f32(raw, object, "rotation", object.rotation)
+		$items = List.append($items, World.Obstacle.new(rect.x, rect.y, rect.width, rect.height, tile, rotation))
+	}
+	if List.len($items) == 0 fallback_obstacles else $items
+}
+
+hazards_from_tilemap : Tilemap.RawMap, Tilemap -> List(World.Hazard)
+hazards_from_tilemap = |raw, tilemap| {
+	var $items = []
+	for object in Tilemap.objects_typed(tilemap, "hazard") {
+		center = Tilemap.object_world_center(tilemap, object)
+		lane = lane_from_name(Tilemap.property_str(raw, object, "lane", "Horizontal"))
+		span = Tilemap.property_f32(raw, object, "span", 520)
+		offset = Tilemap.property_f32(raw, object, "offset", 0)
+		radius = Tilemap.property_f32(raw, object, "radius", 30)
+		$items = List.append($items, { center, span, lane, offset, radius, color: hazard_color(object.id) })
+	}
+	if List.len($items) == 0 fallback_hazards else $items
+}
+
+decorations_from_tilemap : Tilemap.RawMap, Tilemap -> List(Decoration)
+decorations_from_tilemap = |raw, tilemap| {
+	var $items = []
+	for object in Tilemap.objects_typed(tilemap, "decoration") {
+		$items = List.append(
+			$items,
+			{
+				pos: Tilemap.object_world_center(tilemap, object),
+				tile: tile_from_name(Tilemap.property_str(raw, object, "tile", "TilePlantA")),
+				scale: Tilemap.property_f32(raw, object, "scale", 1),
+				rotation: Tilemap.property_f32(raw, object, "rotation", object.rotation),
+			},
+		)
+	}
+	if List.len($items) == 0 fallback_decorations else $items
+}
+
+tile_from_name : Str -> Tile
+tile_from_name = |name|
+	if name == "TileBlockB" {
+		TileBlockB
+	} else if name == "TileMarker" {
+		TileMarker
+	} else if name == "TileRockA" {
+		TileRockA
+	} else if name == "TilePlantA" {
+		TilePlantA
+	} else if name == "TilePlantB" {
+		TilePlantB
+	} else if name == "TileFlowerA" {
+		TileFlowerA
+	} else if name == "TileFlowerB" {
+		TileFlowerB
+	} else if name == "TileCrystalA" {
+		TileCrystalA
+	} else if name == "TileCrystalB" {
+		TileCrystalB
+	} else if name == "TileSparkA" {
+		TileSparkA
+	} else if name == "TileSparkB" {
+		TileSparkB
+	} else {
+		TileBlockA
+	}
+
+lane_from_name : Str -> Lane
+lane_from_name = |name| if name == "Vertical" Vertical else Horizontal
+
+hazard_color : U64 -> Color
+hazard_color = |id|
+	match id % 4 {
+		0 => Color.from_hex_rgb(0xf94144)
+		1 => Color.from_hex_rgb(0xf3722c)
+		2 => Color.from_hex_rgb(0xf8961e)
+		_ => Color.from_hex_rgb(0xf94144)
+	}
 
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
@@ -512,29 +722,32 @@ facing_from_input = |dir, fallback| {
 	}
 }
 
-clamp_to_world : Math.Vec2 -> Math.Vec2
-clamp_to_world = |pos| {
-	x: Math.clamp(pos.x, world_left + player_radius, world_right - player_radius),
-	y: Math.clamp(pos.y, world_top + player_radius, world_bottom - player_radius),
+clamp_to_world : Level, Math.Vec2 -> Math.Vec2
+clamp_to_world = |level, pos| {
+	x: Math.clamp(pos.x, Math.left(level.bounds) + player_radius, Math.right(level.bounds) - player_radius),
+	y: Math.clamp(pos.y, Math.top(level.bounds) + player_radius, Math.bottom(level.bounds) - player_radius),
 }
 
-any_obstacle_hit : Math.Circle -> Bool
-any_obstacle_hit = |circle| {
+any_obstacle_hit : Level, Math.Circle -> Bool
+any_obstacle_hit = |level, circle| {
 	var $hit = Bool.False
-	for obstacle in obstacles {
+	for obstacle in level.obstacles {
 		if obstacle.hit_by(circle) {
 			$hit = Bool.True
 		}
 	}
+	if Tilemap.circle_touches_solid(level.tilemap, circle) {
+		$hit = Bool.True
+	}
 	$hit
 }
 
-move_player_speed : Math.Vec2, Math.Vec2, F32, F32 -> Math.Vec2
-move_player_speed = |player, raw_dir, dt, speed| {
+move_player_speed : Level, Math.Vec2, Math.Vec2, F32, F32 -> Math.Vec2
+move_player_speed = |level, player, raw_dir, dt, speed| {
 	dir = Math.normalize(raw_dir)
-	candidate = clamp_to_world(Math.add(player, Math.scale(dir, speed * dt)))
+	candidate = clamp_to_world(level, Math.add(player, Math.scale(dir, speed * dt)))
 
-	if any_obstacle_hit(Math.circle(candidate, player_radius)) player else candidate
+	if any_obstacle_hit(level, Math.circle(candidate, player_radius)) player else candidate
 }
 
 wrap_unit : F32 -> F32
@@ -603,10 +816,10 @@ collect_spark = |world|
 		Err(_) => { world, collected: Err(NoSpark), gate_opened: Bool.False }
 	}
 
-any_hazard_hit : Math.Circle, F32 -> Bool
-any_hazard_hit = |circle, phase| {
+any_hazard_hit : Level, Math.Circle, F32 -> Bool
+any_hazard_hit = |level, circle, phase| {
 	var $hit = Bool.False
-	for hazard in hazards {
+	for hazard in level.hazards {
 		if hazard.hit_by(circle, phase) {
 			$hit = Bool.True
 		}
@@ -614,15 +827,15 @@ any_hazard_hit = |circle, phase| {
 	$hit
 }
 
-damage_if_needed : World -> World.DamageResult
-damage_if_needed = |world| {
-	if world.player.invuln <= 0 and any_hazard_hit(world.player.circle(), world.phase) {
+damage_if_needed : Level, World -> World.DamageResult
+damage_if_needed = |level, world| {
+	if world.player.invuln <= 0 and any_hazard_hit(level, world.player.circle(), world.phase) {
 		next_lives = if world.lives > 0 world.lives - 1 else 0
 		next_state = if world.lives <= 1 GameOver else Playing
 		{
 			world: {
 				..world,
-				player: world.player.damage_respawn(),
+				player: world.player.damage_respawn(level.spawn),
 				lives: next_lives,
 				shake: 10,
 				flash: 0.28,
@@ -637,15 +850,15 @@ damage_if_needed = |world| {
 	}
 }
 
-escape_if_needed : World -> World.EscapeResult
-escape_if_needed = |world| {
-	if gate_is_open(world.gate) and Math.circle_overlaps(world.player.circle(), Math.circle(exit_center, exit_radius)) {
+escape_if_needed : Level, World -> World.EscapeResult
+escape_if_needed = |level, world| {
+	if gate_is_open(world.gate) and Math.circle_overlaps(world.player.circle(), Math.circle(level.exit_center, level.exit_radius)) {
 		{
 			world: {
 				..world,
 				shake: 10,
 				flash: 0,
-				burst_pos: exit_center,
+				burst_pos: level.exit_center,
 				burst_timer: burst_duration,
 				gate_flash: 1,
 				state: Won,
@@ -720,14 +933,14 @@ step_events = |dash_started, collected, gate_opened, escaped, damaged, damage_st
 		),
 	)
 
-advance_playing : World, World.StepInput -> World.StepResult
-advance_playing = |world, input| {
+advance_playing : Level, World, World.StepInput -> World.StepResult
+advance_playing = |level, world, input| {
 	moving = is_moving(input.raw_dir)
 	dash_started = input.dash_pressed and world.player.dash_ready()
 	dash_active = dash_started or world.player.dash_active()
 	move_dir = if dash_active and !(moving) world.player.facing_dir() else input.raw_dir
 	speed = if dash_active dash_speed else player_speed
-	player_pos = move_player_speed(world.player.pos, move_dir, input.dt, speed)
+	player_pos = move_player_speed(level, world.player.pos, move_dir, input.dt, speed)
 	player = world.player.step({ pos: player_pos, raw_dir: input.raw_dir, move_dir, dash_started, dash_active, dt: input.dt })
 	hazard_speed = 0.15 + U64.to_f32(world.score) * 0.012
 	phase = wrap_unit(world.phase + input.dt * hazard_speed)
@@ -743,8 +956,8 @@ advance_playing = |world, input| {
 		state: Playing,
 	}
 	collect_result = collect_spark(moved)
-	escape_result = escape_if_needed(collect_result.world)
-	damage_result = if escape_result.world.state == Won { world: escape_result.world, damaged: Bool.False } else damage_if_needed(escape_result.world)
+	escape_result = escape_if_needed(level, collect_result.world)
+	damage_result = if escape_result.world.state == Won { world: escape_result.world, damaged: Bool.False } else damage_if_needed(level, escape_result.world)
 
 	{
 		world: damage_result.world,
@@ -790,6 +1003,7 @@ play_step_events! = |model, result| {
 advance_playing! : Model, Host => Model
 advance_playing! = |model, host| {
 	result = advance_playing(
+		model.level,
 		model.world,
 		{
 			raw_dir: input_axis(host),
@@ -812,14 +1026,14 @@ render! = |model, host| {
 		Won =>
 			if Keys.key_pressed(host.keys_pressed, KeySpace) {
 				Audio.set_music_volume!(model.sounds.music, 0.13)
-				new_game(model.characters, model.tiles, model.sounds)
+				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {
 				model
 			}
 		GameOver =>
 			if Keys.key_pressed(host.keys_pressed, KeySpace) {
 				Audio.set_music_volume!(model.sounds.music, 0.13)
-				new_game(model.characters, model.tiles, model.sounds)
+				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {
 				model
 			}
@@ -832,10 +1046,10 @@ render! = |model, host| {
 		|| {
 			Draw.with_camera!(
 				camera,
-				|| draw_world!(next.characters, next.tiles, next.world),
+				|| draw_world!(next.level, next.characters, next.tiles, next.world),
 			)
 
-			draw_hud!(next.world)
+			draw_hud!(next.level, next.world)
 		},
 	)
 
@@ -853,20 +1067,19 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Assets.Texture, Assets.Texture, World => {}
-draw_world! = |characters, tiles, world| {
-	Draw.rectangle_gradient_v!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
-	draw_floor_y!(tiles, world_top)
-	draw_path_network!()
-	draw_hazard_lanes!(world.phase)
-	draw_props!(tiles)
-	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
+draw_world! : Level, Assets.Texture, Assets.Texture, World => {}
+draw_world! = |level, characters, tiles, world| {
+	Draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
+	Tilemap.draw_all!(level.tilemap)
+	draw_hazard_lanes!(level, world.phase)
+	draw_props!(level, tiles)
+	Draw.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
-	draw_spawn!()
-	draw_exit!(world)
-	draw_obstacles!(tiles)
+	draw_spawn!(level)
+	draw_exit!(level, world)
+	draw_obstacles!(level, tiles)
 	draw_sparks!(tiles, world.sparks, world.phase)
-	draw_hazards!(characters, world.phase)
+	draw_hazards!(level, characters, world.phase)
 	draw_burst!(world)
 	draw_player!(characters, world.player)
 }
@@ -917,53 +1130,21 @@ draw_tile! = |tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scale).draw
 draw_tile_centered! : Assets.Texture, Tile, Math.Vec2, F32, F32 => {}
 draw_tile_centered! = |tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!()
 
-draw_floor_y! : Assets.Texture, F32 => {}
-draw_floor_y! = |tiles, y| {
-	if y > world_bottom {
-		{}
-	} else {
-		draw_floor_x!(tiles, world_left, y)
-		draw_floor_y!(tiles, y + 128)
-	}
+draw_spawn! : Level => {}
+draw_spawn! = |level| {
+	Draw.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
+	Draw.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
+	Draw.text!({ pos: { x: level.spawn.x, y: level.spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font: Draw.default_font, align: Draw.align_top_center })
 }
 
-draw_floor_x! : Assets.Texture, F32, F32 => {}
-draw_floor_x! = |tiles, x, y| {
-	if x > world_right {
-		{}
-	} else {
-		draw_tile!(tiles, TileFloor, { x, y }, 2)
-		draw_floor_x!(tiles, x + 128, y)
-	}
-}
-
-draw_path_network! : () => {}
-draw_path_network! = || {
-	path = Color.with_alpha(Color.from_hex_rgb(0x303d36), 210)
-	edge = Color.with_alpha(Color.from_hex_rgb(0x8fa87d), 90)
-	Draw.rounded_rectangle!({ x: -625, y: -420, width: 1750, height: 110, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-	Draw.rounded_rectangle!({ x: -625, y: 300, width: 1725, height: 112, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-	Draw.rounded_rectangle!({ x: -575, y: 820, width: 1790, height: 120, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-	Draw.rounded_rectangle!({ x: -565, y: -430, width: 112, height: 1325, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-	Draw.rounded_rectangle!({ x: 455, y: -410, width: 120, height: 1270, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-	Draw.rounded_rectangle!({ x: 1130, y: -80, width: 125, height: 1045, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
-}
-
-draw_spawn! : () => {}
-draw_spawn! = || {
-	Draw.circle_gradient!({ center: spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
-	Draw.circle!({ center: spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
-	Draw.text!({ pos: { x: spawn.x, y: spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font: Draw.default_font, align: Draw.align_top_center })
-}
-
-draw_exit! : World => {}
-draw_exit! = |world| {
+draw_exit! : Level, World => {}
+draw_exit! = |level, world| {
 	is_open = gate_is_open(world.gate)
 	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
 	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
-	Draw.circle_gradient!({ center: exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
-	Draw.circle!({ center: exit_center, radius: exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
-	Draw.text!({ pos: { x: exit_center.x, y: exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	Draw.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
+	Draw.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
+	Draw.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
 }
 
 draw_obstacle! : Assets.Texture, World.Obstacle => {}
@@ -973,16 +1154,16 @@ draw_obstacle! = |tiles, obstacle| {
 	draw_tile_centered!(tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
 }
 
-draw_obstacles! : Assets.Texture => {}
-draw_obstacles! = |tiles| {
-	for obstacle in obstacles {
+draw_obstacles! : Level, Assets.Texture => {}
+draw_obstacles! = |level, tiles| {
+	for obstacle in level.obstacles {
 		draw_obstacle!(tiles, obstacle)
 	}
 }
 
-draw_props! : Assets.Texture => {}
-draw_props! = |tiles| {
-	for decoration in decorations {
+draw_props! : Level, Assets.Texture => {}
+draw_props! = |level, tiles| {
+	for decoration in level.decorations {
 		draw_tile_centered!(tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
 	}
 }
@@ -1004,9 +1185,9 @@ draw_sparks! = |tiles, sparks, phase| {
 	}
 }
 
-draw_hazard_lanes! : F32 => {}
-draw_hazard_lanes! = |phase| {
-	for hazard in hazards {
+draw_hazard_lanes! : Level, F32 => {}
+draw_hazard_lanes! = |level, phase| {
+	for hazard in level.hazards {
 		pos = hazard.pos(phase)
 		Draw.line!({ start: hazard.lane_start(), end: hazard.lane_end(), stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
 		Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
@@ -1035,9 +1216,9 @@ draw_hazard! = |characters, hazard, phase| {
 	Draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
-draw_hazards! : Assets.Texture, F32 => {}
-draw_hazards! = |characters, phase| {
-	for hazard in hazards {
+draw_hazards! : Level, Assets.Texture, F32 => {}
+draw_hazards! = |level, characters, phase| {
+	for hazard in level.hazards {
 		draw_hazard!(characters, hazard, phase)
 	}
 }
@@ -1115,17 +1296,17 @@ draw_bar! = |x, y, width, height, amount, color| {
 	Draw.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
 }
 
-draw_hud! : World => {}
-draw_hud! = |world| {
+draw_hud! : Level, World => {}
+draw_hud! = |level, world| {
 	is_open = gate_is_open(world.gate)
 
 	Draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
 	Draw.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: Draw.default_font, align: Draw.align_top_left })
 	Draw.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 	Draw.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 	Draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
-	draw_bar!(196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(spark_total), Color.from_hex_rgb(0xf9c74f))
+	draw_bar!(196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
 	draw_bar!(510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
 	Draw.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 
@@ -1159,16 +1340,16 @@ approx_vec = |a, b| approx(a.x, b.x) and approx(a.y, b.y)
 test_hazard : World.Hazard
 test_hazard = { center: { x: 0, y: 0 }, span: 20, lane: Horizontal, offset: 0, radius: 5, color: Color.white }
 
-expect World.Player.new(spawn).circle().radius == player_radius
-expect World.Player.new(spawn).facing_dir() == { x: 1, y: 0 }
-expect World.Player.new(spawn).facing == East
+expect World.Player.new(fallback_spawn).circle().radius == player_radius
+expect World.Player.new(fallback_spawn).facing_dir() == { x: 1, y: 0 }
+expect World.Player.new(fallback_spawn).facing == East
 expect facing_to_rotation(East) == 0
 expect facing_to_vec(NorthWest) == { x: -0.7, y: -0.7 }
 expect gate_is_open(GateOpen)
 expect !(gate_is_open(GateLocked))
 expect tile_id(TileBlockA) == 156
 expect tile_id(TileSparkB) == 240
-expect World.Player.new({ x: 10, y: 20 }).damage_respawn().pos == spawn
+expect World.Player.new({ x: 10, y: 20 }).damage_respawn(fallback_spawn).pos == fallback_spawn
 expect World.Obstacle.new(0, 0, 10, 10, TileBlockA, 0).hit_by(Math.circle({ x: 5, y: 5 }, 1))
 expect !(World.Obstacle.new(0, 0, 10, 10, TileBlockA, 0).hit_by(Math.circle({ x: 30, y: 30 }, 1)))
 expect approx_vec(test_hazard.pos(0), { x: -10, y: 0 })
@@ -1183,7 +1364,7 @@ expect {
 }
 
 expect {
-	world = { ..World.new(), player: World.Player.new({ x: -430, y: -150 }) }
+	world = { ..World.new(fallback_level), player: World.Player.new({ x: -430, y: -150 }) }
 	result = collect_spark(world)
 	result.world.score == 1 and match result.collected {
 		Ok(spark) => spark.id == 0
@@ -1193,27 +1374,27 @@ expect {
 
 expect {
 	spark = World.Spark.new(99, 0, 0)
-	world = { ..World.new(), player: World.Player.new({ x: 0, y: 0 }), sparks: [spark], score: 9 }
+	world = { ..World.new(fallback_level), player: World.Player.new({ x: 0, y: 0 }), sparks: [spark], score: 9 }
 	result = collect_spark(world)
 	result.gate_opened and result.world.gate == GateOpen and result.world.score == 10
 }
 
 expect {
-	world = { ..World.new(), player: World.Player.new({ x: -705, y: 165 }) }
-	result = damage_if_needed(world)
-	result.damaged and result.world.lives == 2 and result.world.player.pos == spawn
+	world = { ..World.new(fallback_level), player: World.Player.new({ x: -705, y: 165 }) }
+	result = damage_if_needed(fallback_level, world)
+	result.damaged and result.world.lives == 2 and result.world.player.pos == fallback_spawn
 }
 
 expect {
-	world = { ..World.new(), gate: GateOpen, player: World.Player.new(exit_center) }
-	result = escape_if_needed(world)
+	world = { ..World.new(fallback_level), gate: GateOpen, player: World.Player.new(fallback_exit_center) }
+	result = escape_if_needed(fallback_level, world)
 	result.escaped and result.world.state == Won
 }
 
 expect {
-	result = advance_playing(World.new(), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
+	result = advance_playing(fallback_level, World.new(fallback_level), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
 	match List.first(result.events) {
-		Ok(DashStarted(pos)) => pos == spawn and result.world.player.dash_timer == dash_duration
+		Ok(DashStarted(pos)) => pos == fallback_spawn and result.world.player.dash_timer == dash_duration
 		Ok(_) => Bool.False
 		Err(_) => Bool.False
 	}

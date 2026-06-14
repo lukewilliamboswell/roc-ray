@@ -7,17 +7,19 @@
 const raw = @import("roc_platform_abi.zig");
 
 pub const __AnonStruct0 = raw.__AnonStruct0;
-pub const __AnonStruct82 = raw.__AnonStruct82;
-pub const __AnonStruct84 = raw.__AnonStruct84;
+pub const __AnonStruct100 = raw.__AnonStruct100;
+pub const __AnonStruct106 = raw.__AnonStruct106;
 pub const Color = raw.Color;
 pub const DefaultAllocators = raw.DefaultAllocators;
 pub const DrawMeasure_text_rawRetRecord = raw.DrawMeasure_text_rawRetRecord;
 pub const Host = raw.Host;
 pub const HostGet_screen_sizeRetRecord = raw.HostGet_screen_sizeRetRecord;
+pub const HostRead_file_rawRetRecord = raw.HostRead_file_rawRetRecord;
 pub const RocEnv = raw.RocEnv;
 pub const RocHost = raw.RocHost;
 pub const RocIo = raw.RocIo;
 pub const RocStr = raw.RocStr;
+pub const TilemapLoad_tmx_rawRetRecord = raw.TilemapLoad_tmx_rawRetRecord;
 pub const Try = raw.Try;
 pub const AudioGen_sound_rawArgs = raw.__AnonStruct8;
 pub const AudioGen_tone_rawArgs = raw.__AnonStruct5;
@@ -41,7 +43,14 @@ pub const DrawRounded_rectangle_rawArgs = raw.__AnonStruct38;
 pub const DrawText_rawArgs = raw.__AnonStruct40;
 pub const DrawTriangle_lines_rawArgs = raw.__AnonStruct44;
 pub const DrawTriangle_rawArgs = raw.__AnonStruct43;
-pub const HostSet_screen_sizeArgs = raw.__AnonStruct60;
+pub const HostSet_screen_sizeArgs = raw.__AnonStruct61;
+pub const TilemapRawMap = raw.__AnonStruct64;
+pub const TilemapRawLayer = raw.__AnonStruct68;
+pub const TilemapRawObject = raw.__AnonStruct73;
+pub const TilemapRawPoint = raw.__AnonStruct75;
+pub const TilemapRawProperty = raw.__AnonStruct77;
+pub const TilemapRawTileProperties = raw.__AnonStruct80;
+pub const TilemapRawTileset = raw.__AnonStruct82;
 
 /// List type using the generated Roc ABI layout.
 pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {

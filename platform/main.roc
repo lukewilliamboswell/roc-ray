@@ -17,7 +17,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math, Camera, Sprite]
+	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Pga2]
 	packages {}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -69,8 +69,10 @@ platform ""
 		"roc_host_get_screen_size": Host.get_screen_size!,
 		"roc_host_random_i32": Host.random_i32!,
 		"roc_host_read_env": Host.read_env!,
+		"roc_host_read_file_raw": Host.read_file_raw!,
 		"roc_host_set_screen_size": Host.set_screen_size!,
 		"roc_host_set_target_fps": Host.set_target_fps!,
+		"roc_tilemap_load_tmx_raw": Tilemap.load_tmx_raw!,
 		"roc_draw_begin_camera": Draw.begin_camera!,
 		"roc_draw_end_camera": Draw.end_camera!,
 	}
@@ -94,6 +96,8 @@ import Assets
 import Math
 import Camera
 import Sprite
+import Tilemap
+import Pga2
 
 ## TODO: roc glue currently undercounts direct function fields in generated
 ## records when they are mixed with non-function data. The generated

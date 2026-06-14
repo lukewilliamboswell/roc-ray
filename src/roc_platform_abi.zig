@@ -493,9 +493,9 @@ pub const RocEnv = struct {
 
 /// Element type for __AnonStruct0
 pub const __AnonStruct0 = extern struct {
-    handle: u64,
-    height: f32,
-    width: f32,
+    @"handle": u64,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -507,8 +507,8 @@ comptime {
 
 /// Element type for __AnonStruct5
 pub const __AnonStruct5 = extern struct {
-    freq: f32,
-    ms: i32,
+    @"freq": f32,
+    @"ms": i32,
 };
 
 comptime {
@@ -520,15 +520,15 @@ comptime {
 
 /// Element type for __AnonStruct8
 pub const __AnonStruct8 = extern struct {
-    attack_ms: i32,
-    decay_ms: i32,
-    freq_end: f32,
-    freq_start: f32,
-    ms: i32,
-    release_ms: i32,
-    sustain: f32,
-    volume: f32,
-    waveform: u8,
+    @"attack_ms": i32,
+    @"decay_ms": i32,
+    @"freq_end": f32,
+    @"freq_start": f32,
+    @"ms": i32,
+    @"release_ms": i32,
+    @"sustain": f32,
+    @"volume": f32,
+    @"waveform": u8,
 };
 
 comptime {
@@ -540,10 +540,10 @@ comptime {
 
 /// Element type for __AnonStruct14
 pub const __AnonStruct14 = extern struct {
-    offset: __AnonStruct15,
-    rotation: f32,
-    target: __AnonStruct15,
-    zoom: f32,
+    @"offset": __AnonStruct15,
+    @"rotation": f32,
+    @"target": __AnonStruct15,
+    @"zoom": f32,
 };
 
 comptime {
@@ -555,8 +555,8 @@ comptime {
 
 /// Element type for __AnonStruct15
 pub const __AnonStruct15 = extern struct {
-    x: f32,
-    y: f32,
+    @"x": f32,
+    @"y": f32,
 };
 
 comptime {
@@ -568,9 +568,9 @@ comptime {
 
 /// Element type for __AnonStruct17
 pub const __AnonStruct17 = extern struct {
-    center: __AnonStruct18,
-    radius: f32,
-    color: Color,
+    @"center": __AnonStruct18,
+    @"radius": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -582,8 +582,8 @@ comptime {
 
 /// Element type for __AnonStruct18
 pub const __AnonStruct18 = extern struct {
-    x: f32,
-    y: f32,
+    @"x": f32,
+    @"y": f32,
 };
 
 comptime {
@@ -595,10 +595,10 @@ comptime {
 
 /// Element type for Color
 pub const Color = extern struct {
-    a: u8,
-    b: u8,
-    g: u8,
-    r: u8,
+    @"a": u8,
+    @"b": u8,
+    @"g": u8,
+    @"r": u8,
 };
 
 comptime {
@@ -610,10 +610,10 @@ comptime {
 
 /// Element type for __AnonStruct21
 pub const __AnonStruct21 = extern struct {
-    center: __AnonStruct18,
-    radius: f32,
-    color_inner: Color,
-    color_outer: Color,
+    @"center": __AnonStruct18,
+    @"radius": f32,
+    @"color_inner": Color,
+    @"color_outer": Color,
 };
 
 comptime {
@@ -625,10 +625,10 @@ comptime {
 
 /// Element type for __AnonStruct22
 pub const __AnonStruct22 = extern struct {
-    center: __AnonStruct18,
-    radius: f32,
-    thickness: f32,
-    color: Color,
+    @"center": __AnonStruct18,
+    @"radius": f32,
+    @"thickness": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -640,9 +640,9 @@ comptime {
 
 /// Element type for __AnonStruct23
 pub const __AnonStruct23 = extern struct {
-    pos: __AnonStruct18,
-    size: f32,
-    color: Color,
+    @"pos": __AnonStruct18,
+    @"size": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -654,10 +654,10 @@ comptime {
 
 /// Element type for __AnonStruct24
 pub const __AnonStruct24 = extern struct {
-    end: __AnonStruct18,
-    start: __AnonStruct18,
-    thickness: f32,
-    color: Color,
+    @"end": __AnonStruct18,
+    @"start": __AnonStruct18,
+    @"thickness": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -669,8 +669,8 @@ comptime {
 
 /// Element type for __AnonStruct26
 pub const __AnonStruct26 = extern struct {
-    path: RocStr,
-    size: i32,
+    @"path": RocStr,
+    @"size": i32,
 };
 
 comptime {
@@ -682,8 +682,8 @@ comptime {
 
 /// Element type for __AnonStruct29
 pub const __AnonStruct29 = extern struct {
-    height: f32,
-    width: f32,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -695,10 +695,10 @@ comptime {
 
 /// Element type for __AnonStruct30
 pub const __AnonStruct30 = extern struct {
-    font: u64,
-    text: RocStr,
-    size: f32,
-    spacing: f32,
+    @"font": u64,
+    @"text": RocStr,
+    @"size": f32,
+    @"spacing": f32,
 };
 
 comptime {
@@ -710,8 +710,8 @@ comptime {
 
 /// Element type for __AnonStruct31
 pub const __AnonStruct31 = extern struct {
-    points: RocListWith(__AnonStruct18, false),
-    color: Color,
+    @"points": RocListWith(__AnonStruct18, false),
+    @"color": Color,
 };
 
 comptime {
@@ -723,9 +723,9 @@ comptime {
 
 /// Element type for __AnonStruct33
 pub const __AnonStruct33 = extern struct {
-    points: RocListWith(__AnonStruct18, false),
-    thickness: f32,
-    color: Color,
+    @"points": RocListWith(__AnonStruct18, false),
+    @"thickness": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -737,11 +737,11 @@ comptime {
 
 /// Element type for __AnonStruct34
 pub const __AnonStruct34 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -753,12 +753,12 @@ comptime {
 
 /// Element type for __AnonStruct35
 pub const __AnonStruct35 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_left: Color,
-    color_right: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_left": Color,
+    @"color_right": Color,
 };
 
 comptime {
@@ -770,12 +770,12 @@ comptime {
 
 /// Element type for __AnonStruct36
 pub const __AnonStruct36 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color_bottom: Color,
-    color_top: Color,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color_bottom": Color,
+    @"color_top": Color,
 };
 
 comptime {
@@ -787,12 +787,12 @@ comptime {
 
 /// Element type for __AnonStruct37
 pub const __AnonStruct37 = extern struct {
-    height: f32,
-    thickness: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"thickness": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -804,13 +804,13 @@ comptime {
 
 /// Element type for __AnonStruct38
 pub const __AnonStruct38 = extern struct {
-    height: f32,
-    radius: f32,
-    segments: i32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"radius": f32,
+    @"segments": i32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -822,14 +822,14 @@ comptime {
 
 /// Element type for __AnonStruct39
 pub const __AnonStruct39 = extern struct {
-    height: f32,
-    radius: f32,
-    segments: i32,
-    thickness: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: Color,
+    @"height": f32,
+    @"radius": f32,
+    @"segments": i32,
+    @"thickness": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -841,12 +841,12 @@ comptime {
 
 /// Element type for __AnonStruct40
 pub const __AnonStruct40 = extern struct {
-    font: u64,
-    text: RocStr,
-    pos: __AnonStruct18,
-    size: f32,
-    spacing: f32,
-    color: Color,
+    @"font": u64,
+    @"text": RocStr,
+    @"pos": __AnonStruct18,
+    @"size": f32,
+    @"spacing": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -858,12 +858,12 @@ comptime {
 
 /// Element type for __AnonStruct41
 pub const __AnonStruct41 = extern struct {
-    texture: u64,
-    dest: __AnonStruct42,
-    origin: __AnonStruct15,
-    rotation: f32,
-    source: __AnonStruct42,
-    tint: Color,
+    @"texture": u64,
+    @"dest": __AnonStruct42,
+    @"origin": __AnonStruct15,
+    @"rotation": f32,
+    @"source": __AnonStruct42,
+    @"tint": Color,
 };
 
 comptime {
@@ -875,10 +875,10 @@ comptime {
 
 /// Element type for __AnonStruct42
 pub const __AnonStruct42 = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
 };
 
 comptime {
@@ -890,10 +890,10 @@ comptime {
 
 /// Element type for __AnonStruct43
 pub const __AnonStruct43 = extern struct {
-    a: __AnonStruct18,
-    b: __AnonStruct18,
-    c: __AnonStruct18,
-    color: Color,
+    @"a": __AnonStruct18,
+    @"b": __AnonStruct18,
+    @"c": __AnonStruct18,
+    @"color": Color,
 };
 
 comptime {
@@ -905,11 +905,11 @@ comptime {
 
 /// Element type for __AnonStruct44
 pub const __AnonStruct44 = extern struct {
-    a: __AnonStruct18,
-    b: __AnonStruct18,
-    c: __AnonStruct18,
-    thickness: f32,
-    color: Color,
+    @"a": __AnonStruct18,
+    @"b": __AnonStruct18,
+    @"c": __AnonStruct18,
+    @"thickness": f32,
+    @"color": Color,
 };
 
 comptime {
@@ -921,8 +921,8 @@ comptime {
 
 /// Element type for __AnonStruct47
 pub const __AnonStruct47 = extern struct {
-    height: i32,
-    width: i32,
+    @"height": i32,
+    @"width": i32,
 };
 
 comptime {
@@ -934,13 +934,13 @@ comptime {
 
 /// Element type for Host
 pub const Host = extern struct {
-    frame_count: u64,
-    keys: RocListWith(u8, false),
-    keys_pressed: RocListWith(u8, false),
-    keys_released: RocListWith(u8, false),
-    mouse: __AnonStruct56,
-    timestamp_nanos: u64,
-    frame_time: f32,
+    @"frame_count": u64,
+    @"keys": RocListWith(u8, false),
+    @"keys_pressed": RocListWith(u8, false),
+    @"keys_released": RocListWith(u8, false),
+    @"mouse": __AnonStruct56,
+    @"timestamp_nanos": u64,
+    @"frame_time": f32,
 };
 
 comptime {
@@ -952,15 +952,15 @@ comptime {
 
 /// Element type for __AnonStruct56
 pub const __AnonStruct56 = extern struct {
-    buttons: RocListWith(u8, false),
-    buttons_pressed: RocListWith(u8, false),
-    buttons_released: RocListWith(u8, false),
-    wheel: f32,
-    x: f32,
-    y: f32,
-    left: bool,
-    middle: bool,
-    right: bool,
+    @"buttons": RocListWith(u8, false),
+    @"buttons_pressed": RocListWith(u8, false),
+    @"buttons_released": RocListWith(u8, false),
+    @"wheel": f32,
+    @"x": f32,
+    @"y": f32,
+    @"left": bool,
+    @"middle": bool,
+    @"right": bool,
 };
 
 comptime {
@@ -970,126 +970,288 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct60
-pub const __AnonStruct60 = extern struct {
-    height: f32,
-    width: f32,
+/// Element type for __AnonStruct58
+pub const __AnonStruct58 = extern struct {
+    @"contents": RocStr,
+    @"err": u8,
+    @"ok": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct60) != 8) @compileError("__AnonStruct60 size mismatch");
-        if (@alignOf(__AnonStruct60) != 4) @compileError("__AnonStruct60 alignment mismatch");
+        if (@sizeOf(__AnonStruct58) != 32) @compileError("__AnonStruct58 size mismatch");
+        if (@alignOf(__AnonStruct58) != 8) @compileError("__AnonStruct58 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct61
 pub const __AnonStruct61 = extern struct {
-    @"init!": __AnonStruct74,
-    @"render!": *anyopaque,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct61) != 56) @compileError("__AnonStruct61 size mismatch");
-        if (@alignOf(__AnonStruct61) != 8) @compileError("__AnonStruct61 alignment mismatch");
+        if (@sizeOf(__AnonStruct61) != 8) @compileError("__AnonStruct61 size mismatch");
+        if (@alignOf(__AnonStruct61) != 4) @compileError("__AnonStruct61 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct69
-pub const __AnonStruct69 = extern struct {
-    buttons: RocListWith(u8, false),
-    buttons_pressed: RocListWith(u8, false),
-    buttons_released: RocListWith(u8, false),
-    wheel: f32,
-    x: f32,
-    y: f32,
-    left: bool,
-    middle: bool,
-    right: bool,
+/// Element type for __AnonStruct62
+pub const __AnonStruct62 = extern struct {
+    @"map": __AnonStruct64,
+    @"err": u8,
+    @"ok": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct69) != 88) @compileError("__AnonStruct69 size mismatch");
-        if (@alignOf(__AnonStruct69) != 8) @compileError("__AnonStruct69 alignment mismatch");
+        if (@sizeOf(__AnonStruct62) != 216) @compileError("__AnonStruct62 size mismatch");
+        if (@alignOf(__AnonStruct62) != 8) @compileError("__AnonStruct62 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct74
-pub const __AnonStruct74 = extern struct {
-    config: __AnonStruct78,
-    @"run!": *anyopaque,
+/// Element type for __AnonStruct64
+pub const __AnonStruct64 = extern struct {
+    @"gids": RocListWith(u64, false),
+    @"height": u64,
+    @"layers": RocList(__AnonStruct68),
+    @"map_property_count": u64,
+    @"map_property_start": u64,
+    @"objects": RocList(__AnonStruct73),
+    @"points": RocListWith(__AnonStruct75, false),
+    @"properties": RocList(__AnonStruct77),
+    @"tile_properties": RocListWith(__AnonStruct80, false),
+    @"tilesets": RocList(__AnonStruct82),
+    @"width": u64,
+    @"tile_height": f32,
+    @"tile_width": f32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct74) != 48) @compileError("__AnonStruct74 size mismatch");
-        if (@alignOf(__AnonStruct74) != 8) @compileError("__AnonStruct74 alignment mismatch");
+        if (@sizeOf(__AnonStruct64) != 208) @compileError("__AnonStruct64 size mismatch");
+        if (@alignOf(__AnonStruct64) != 8) @compileError("__AnonStruct64 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct78
-pub const __AnonStruct78 = extern struct {
-    title: RocStr,
-    height: i32,
-    target_fps: i32,
-    width: i32,
-    cursor_visible: bool,
-    fullscreen: bool,
-    resizable: bool,
-    vsync: bool,
+/// Element type for __AnonStruct68
+pub const __AnonStruct68 = extern struct {
+    @"gid_count": u64,
+    @"gid_start": u64,
+    @"height": u64,
+    @"name": RocStr,
+    @"property_count": u64,
+    @"property_start": u64,
+    @"width": u64,
+    @"opacity": f32,
+    @"visible": bool,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct78) != 40) @compileError("__AnonStruct78 size mismatch");
-        if (@alignOf(__AnonStruct78) != 8) @compileError("__AnonStruct78 alignment mismatch");
+        if (@sizeOf(__AnonStruct68) != 80) @compileError("__AnonStruct68 size mismatch");
+        if (@alignOf(__AnonStruct68) != 8) @compileError("__AnonStruct68 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct73
+pub const __AnonStruct73 = extern struct {
+    @"id": u64,
+    @"name": RocStr,
+    @"point_count": u64,
+    @"point_start": u64,
+    @"property_count": u64,
+    @"property_start": u64,
+    @"type_name": RocStr,
+    @"height": f32,
+    @"rotation": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+    @"kind": u8,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct73) != 112) @compileError("__AnonStruct73 size mismatch");
+        if (@alignOf(__AnonStruct73) != 8) @compileError("__AnonStruct73 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct75
+pub const __AnonStruct75 = extern struct {
+    @"x": f32,
+    @"y": f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct75) != 8) @compileError("__AnonStruct75 size mismatch");
+        if (@alignOf(__AnonStruct75) != 4) @compileError("__AnonStruct75 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct77
+pub const __AnonStruct77 = extern struct {
+    @"integer": i64,
+    @"name": RocStr,
+    @"text": RocStr,
+    @"number": f32,
+    @"bool_value": bool,
+    @"kind": u8,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct77) != 64) @compileError("__AnonStruct77 size mismatch");
+        if (@alignOf(__AnonStruct77) != 8) @compileError("__AnonStruct77 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct80
+pub const __AnonStruct80 = extern struct {
+    @"gid": u64,
+    @"property_count": u64,
+    @"property_start": u64,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct80) != 24) @compileError("__AnonStruct80 size mismatch");
+        if (@alignOf(__AnonStruct80) != 8) @compileError("__AnonStruct80 alignment mismatch");
     }
 }
 
 /// Element type for __AnonStruct82
 pub const __AnonStruct82 = extern struct {
-    title: RocStr,
-    height: i32,
-    target_fps: i32,
-    width: i32,
-    cursor_visible: bool,
-    fullscreen: bool,
-    resizable: bool,
-    vsync: bool,
+    @"columns": u64,
+    @"first_gid": u64,
+    @"image_source": RocStr,
+    @"name": RocStr,
+    @"property_count": u64,
+    @"property_start": u64,
+    @"tile_count": u64,
+    @"image_height": f32,
+    @"image_width": f32,
+    @"tile_height": f32,
+    @"tile_width": f32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct82) != 40) @compileError("__AnonStruct82 size mismatch");
+        if (@sizeOf(__AnonStruct82) != 104) @compileError("__AnonStruct82 size mismatch");
         if (@alignOf(__AnonStruct82) != 8) @compileError("__AnonStruct82 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct84
-pub const __AnonStruct84 = extern struct {
-    frame_count: u64,
-    keys: RocListWith(u8, false),
-    keys_pressed: RocListWith(u8, false),
-    keys_released: RocListWith(u8, false),
-    mouse_buttons: RocListWith(u8, false),
-    mouse_buttons_pressed: RocListWith(u8, false),
-    mouse_buttons_released: RocListWith(u8, false),
-    timestamp_nanos: u64,
-    frame_time: f32,
-    mouse_wheel: f32,
-    mouse_x: f32,
-    mouse_y: f32,
-    mouse_left: bool,
-    mouse_middle: bool,
-    mouse_right: bool,
+/// Element type for __AnonStruct83
+pub const __AnonStruct83 = extern struct {
+    @"init!": __AnonStruct96,
+    @"render!": *anyopaque,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct84) != 184) @compileError("__AnonStruct84 size mismatch");
-        if (@alignOf(__AnonStruct84) != 8) @compileError("__AnonStruct84 alignment mismatch");
+        if (@sizeOf(__AnonStruct83) != 56) @compileError("__AnonStruct83 size mismatch");
+        if (@alignOf(__AnonStruct83) != 8) @compileError("__AnonStruct83 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct91
+pub const __AnonStruct91 = extern struct {
+    @"buttons": RocListWith(u8, false),
+    @"buttons_pressed": RocListWith(u8, false),
+    @"buttons_released": RocListWith(u8, false),
+    @"wheel": f32,
+    @"x": f32,
+    @"y": f32,
+    @"left": bool,
+    @"middle": bool,
+    @"right": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct91) != 88) @compileError("__AnonStruct91 size mismatch");
+        if (@alignOf(__AnonStruct91) != 8) @compileError("__AnonStruct91 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct96
+pub const __AnonStruct96 = extern struct {
+    @"config": __AnonStruct100,
+    @"run!": *anyopaque,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct96) != 48) @compileError("__AnonStruct96 size mismatch");
+        if (@alignOf(__AnonStruct96) != 8) @compileError("__AnonStruct96 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct100
+pub const __AnonStruct100 = extern struct {
+    @"title": RocStr,
+    @"height": i32,
+    @"target_fps": i32,
+    @"width": i32,
+    @"cursor_visible": bool,
+    @"fullscreen": bool,
+    @"resizable": bool,
+    @"vsync": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct100) != 40) @compileError("__AnonStruct100 size mismatch");
+        if (@alignOf(__AnonStruct100) != 8) @compileError("__AnonStruct100 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct104
+pub const __AnonStruct104 = extern struct {
+    @"title": RocStr,
+    @"height": i32,
+    @"target_fps": i32,
+    @"width": i32,
+    @"cursor_visible": bool,
+    @"fullscreen": bool,
+    @"resizable": bool,
+    @"vsync": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct104) != 40) @compileError("__AnonStruct104 size mismatch");
+        if (@alignOf(__AnonStruct104) != 8) @compileError("__AnonStruct104 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct106
+pub const __AnonStruct106 = extern struct {
+    @"frame_count": u64,
+    @"keys": RocListWith(u8, false),
+    @"keys_pressed": RocListWith(u8, false),
+    @"keys_released": RocListWith(u8, false),
+    @"mouse_buttons": RocListWith(u8, false),
+    @"mouse_buttons_pressed": RocListWith(u8, false),
+    @"mouse_buttons_released": RocListWith(u8, false),
+    @"timestamp_nanos": u64,
+    @"frame_time": f32,
+    @"mouse_wheel": f32,
+    @"mouse_x": f32,
+    @"mouse_y": f32,
+    @"mouse_left": bool,
+    @"mouse_middle": bool,
+    @"mouse_right": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct106) != 184) @compileError("__AnonStruct106 size mismatch");
+        if (@alignOf(__AnonStruct106) != 8) @compileError("__AnonStruct106 alignment mismatch");
     }
 }
 
@@ -1118,9 +1280,9 @@ comptime {
 /// Return type record for Assets.load_texture_raw!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const AssetsLoad_texture_rawRetRecord = extern struct {
-    handle: u64,
-    height: f32,
-    width: f32,
+    @"handle": u64,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -1133,8 +1295,8 @@ comptime {
 /// Return type record for Draw.measure_text_raw!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const DrawMeasure_text_rawRetRecord = extern struct {
-    height: f32,
-    width: f32,
+    @"height": f32,
+    @"width": f32,
 };
 
 comptime {
@@ -1147,8 +1309,8 @@ comptime {
 /// Return type record for Host.get_screen_size!
 /// Fields ordered by alignment descending (Roc ABI)
 pub const HostGet_screen_sizeRetRecord = extern struct {
-    height: i32,
-    width: i32,
+    @"height": i32,
+    @"width": i32,
 };
 
 comptime {
@@ -1157,6 +1319,37 @@ comptime {
         if (@alignOf(HostGet_screen_sizeRetRecord) != 4) @compileError("HostGet_screen_sizeRetRecord alignment mismatch");
     }
 }
+
+/// Return type record for Host.read_file_raw!
+/// Fields ordered by alignment descending (Roc ABI)
+pub const HostRead_file_rawRetRecord = extern struct {
+    @"contents": RocStr,
+    @"err": u8,
+    @"ok": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostRead_file_rawRetRecord) != 32) @compileError("HostRead_file_rawRetRecord size mismatch");
+        if (@alignOf(HostRead_file_rawRetRecord) != 8) @compileError("HostRead_file_rawRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for Tilemap.load_tmx_raw!
+/// Fields ordered by alignment descending (Roc ABI)
+pub const TilemapLoad_tmx_rawRetRecord = extern struct {
+    @"map": __AnonStruct64,
+    @"err": u8,
+    @"ok": bool,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(TilemapLoad_tmx_rawRetRecord) != 216) @compileError("TilemapLoad_tmx_rawRetRecord size mismatch");
+        if (@alignOf(TilemapLoad_tmx_rawRetRecord) != 8) @compileError("TilemapLoad_tmx_rawRetRecord alignment mismatch");
+    }
+}
+
 
 // =============================================================================
 // Runtime Symbols
@@ -1358,13 +1551,22 @@ pub extern fn roc_host_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
 /// Roc signature: Host, Str => Try(Str, [NotFound])
 pub extern fn roc_host_read_env(arg0: Host, arg1: RocStr) callconv(.c) Try;
 
+/// Hosted symbol for Host.read_file_raw!
+/// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
+pub extern fn roc_host_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct58;
+
 /// Hosted symbol for Host.set_screen_size!
 /// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
-pub extern fn roc_host_set_screen_size(arg0: __AnonStruct60) callconv(.c) Try;
+pub extern fn roc_host_set_screen_size(arg0: __AnonStruct61) callconv(.c) Try;
 
 /// Hosted symbol for Host.set_target_fps!
 /// Roc signature: I32 => {}
 pub extern fn roc_host_set_target_fps(arg0: i32) callconv(.c) void;
+
+/// Hosted symbol for Tilemap.load_tmx_raw!
+/// Roc signature: Str => { err : U8, map : { gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, ok : Bool }
+pub extern fn roc_tilemap_load_tmx_raw(arg0: RocStr) callconv(.c) __AnonStruct62;
+
 
 /// Default memory management functions for Roc platforms.
 ///
@@ -1508,13 +1710,13 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // =============================================================================
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct82;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct104;
 
 /// Entrypoint: init_for_host!
-pub extern fn init_for_host(arg0: __AnonStruct84) callconv(.c) Try;
+pub extern fn init_for_host(arg0: __AnonStruct106) callconv(.c) Try;
 
 /// Entrypoint: render_for_host!
-pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct84) callconv(.c) Try;
+pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct106) callconv(.c) Try;
 
 /// Entrypoint: drop_model_for_host!
 pub extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;

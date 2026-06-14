@@ -7,6 +7,7 @@ const abi = @import("roc_abi.zig");
 
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
+const tmx_loader = @import("tmx_loader.zig");
 
 // Import backend
 const raylib = @import("backend_raylib.zig");
@@ -19,7 +20,17 @@ const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
-const AppConfig = abi.__AnonStruct82;
+const HostReadFileRawResult = abi.HostRead_file_rawRetRecord;
+const TilemapLoadTmxRawResult = abi.TilemapLoad_tmx_rawRetRecord;
+const AppConfig = abi.__AnonStruct100;
+
+const HOST_ERR_NOT_FOUND: u8 = 1;
+const HOST_ERR_READ_FAILED: u8 = 2;
+const TILEMAP_ERR_NOT_FOUND: u8 = 1;
+const TILEMAP_ERR_READ_FAILED: u8 = 2;
+const TILEMAP_ERR_PARSE_FAILED: u8 = 3;
+const TILEMAP_ERR_UNSUPPORTED: u8 = 4;
+const MAX_HOST_TEXT_FILE_BYTES: usize = 16 * 1024 * 1024;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
@@ -147,6 +158,174 @@ const TempCString = struct {
 fn allocatorFromHost(host: *RocHost) std.mem.Allocator {
     const env: *abi.RocEnv = @ptrCast(@alignCast(host.env));
     return env.allocator;
+}
+
+fn defaultIo() std.Io {
+    if (comptime builtin.is_test) {
+        return std.testing.io;
+    } else {
+        return std.Io.Threaded.global_single_threaded.io();
+    }
+}
+
+fn emptyHostReadFileRawResult() HostReadFileRawResult {
+    return .{ .contents = abi.RocStr.empty(), .err = 0, .ok = false };
+}
+
+fn emptyTilemapRawMap() abi.TilemapRawMap {
+    return .{
+        .gids = abi.RocListWith(u64, false).empty(),
+        .height = 0,
+        .layers = abi.RocListWith(abi.TilemapRawLayer, true).empty(),
+        .map_property_count = 0,
+        .map_property_start = 0,
+        .objects = abi.RocListWith(abi.TilemapRawObject, true).empty(),
+        .points = abi.RocListWith(abi.TilemapRawPoint, false).empty(),
+        .properties = abi.RocListWith(abi.TilemapRawProperty, true).empty(),
+        .tile_properties = abi.RocListWith(abi.TilemapRawTileProperties, false).empty(),
+        .tilesets = abi.RocListWith(abi.TilemapRawTileset, true).empty(),
+        .width = 0,
+        .tile_height = 0,
+        .tile_width = 0,
+    };
+}
+
+fn emptyTilemapLoadResult(err: u8) TilemapLoadTmxRawResult {
+    return .{ .map = emptyTilemapRawMap(), .err = err, .ok = false };
+}
+
+fn tilemapLoadErrorCode(err: tmx_loader.LoadError) u8 {
+    return switch (err) {
+        error.NotFound => TILEMAP_ERR_NOT_FOUND,
+        error.ReadFailed => TILEMAP_ERR_READ_FAILED,
+        error.Unsupported => TILEMAP_ERR_UNSUPPORTED,
+        else => TILEMAP_ERR_PARSE_FAILED,
+    };
+}
+
+fn convertTilemapRawMap(host: *RocHost, raw: tmx_loader.RawMap) abi.TilemapRawMap {
+    return .{
+        .gids = abi.RocListWith(u64, false).fromSlice(raw.gids, host),
+        .height = raw.height,
+        .layers = convertTilemapLayers(host, raw.layers),
+        .map_property_count = raw.map_property_count,
+        .map_property_start = raw.map_property_start,
+        .objects = convertTilemapObjects(host, raw.objects),
+        .points = convertTilemapPoints(host, raw.points),
+        .properties = convertTilemapProperties(host, raw.properties),
+        .tile_properties = convertTilemapTileProperties(host, raw.tile_properties),
+        .tilesets = convertTilemapTilesets(host, raw.tilesets),
+        .width = raw.width,
+        .tile_height = raw.tile_height,
+        .tile_width = raw.tile_width,
+    };
+}
+
+fn convertTilemapLayers(host: *RocHost, layers: []const tmx_loader.Layer) abi.RocListWith(abi.TilemapRawLayer, true) {
+    const list = abi.RocListWith(abi.TilemapRawLayer, true).allocate(layers.len, host);
+    if (list.elements_ptr) |elements| {
+        for (layers, 0..) |layer, i| {
+            elements[i] = .{
+                .gid_count = layer.gid_count,
+                .gid_start = layer.gid_start,
+                .height = layer.height,
+                .name = abi.RocStr.fromSlice(layer.name, host),
+                .property_count = layer.property_count,
+                .property_start = layer.property_start,
+                .width = layer.width,
+                .opacity = layer.opacity,
+                .visible = layer.visible,
+            };
+        }
+    }
+    return list;
+}
+
+fn convertTilemapObjects(host: *RocHost, objects: []const tmx_loader.Object) abi.RocListWith(abi.TilemapRawObject, true) {
+    const list = abi.RocListWith(abi.TilemapRawObject, true).allocate(objects.len, host);
+    if (list.elements_ptr) |elements| {
+        for (objects, 0..) |object, i| {
+            elements[i] = .{
+                .id = object.id,
+                .name = abi.RocStr.fromSlice(object.name, host),
+                .point_count = object.point_count,
+                .point_start = object.point_start,
+                .property_count = object.property_count,
+                .property_start = object.property_start,
+                .type_name = abi.RocStr.fromSlice(object.type_name, host),
+                .height = object.height,
+                .rotation = object.rotation,
+                .width = object.width,
+                .x = object.x,
+                .y = object.y,
+                .kind = @intFromEnum(object.kind),
+            };
+        }
+    }
+    return list;
+}
+
+fn convertTilemapPoints(host: *RocHost, points: []const tmx_loader.Point) abi.RocListWith(abi.TilemapRawPoint, false) {
+    const list = abi.RocListWith(abi.TilemapRawPoint, false).allocate(points.len, host);
+    if (list.elements_ptr) |elements| {
+        for (points, 0..) |point, i| {
+            elements[i] = .{ .x = point.x, .y = point.y };
+        }
+    }
+    return list;
+}
+
+fn convertTilemapProperties(host: *RocHost, properties: []const tmx_loader.Property) abi.RocListWith(abi.TilemapRawProperty, true) {
+    const list = abi.RocListWith(abi.TilemapRawProperty, true).allocate(properties.len, host);
+    if (list.elements_ptr) |elements| {
+        for (properties, 0..) |property, i| {
+            elements[i] = .{
+                .integer = property.integer,
+                .name = abi.RocStr.fromSlice(property.name, host),
+                .text = abi.RocStr.fromSlice(property.text, host),
+                .number = property.number,
+                .bool_value = property.bool_value,
+                .kind = property.kind,
+            };
+        }
+    }
+    return list;
+}
+
+fn convertTilemapTileProperties(host: *RocHost, ranges: []const tmx_loader.TileProperties) abi.RocListWith(abi.TilemapRawTileProperties, false) {
+    const list = abi.RocListWith(abi.TilemapRawTileProperties, false).allocate(ranges.len, host);
+    if (list.elements_ptr) |elements| {
+        for (ranges, 0..) |range, i| {
+            elements[i] = .{
+                .gid = range.gid,
+                .property_count = range.property_count,
+                .property_start = range.property_start,
+            };
+        }
+    }
+    return list;
+}
+
+fn convertTilemapTilesets(host: *RocHost, tilesets: []const tmx_loader.Tileset) abi.RocListWith(abi.TilemapRawTileset, true) {
+    const list = abi.RocListWith(abi.TilemapRawTileset, true).allocate(tilesets.len, host);
+    if (list.elements_ptr) |elements| {
+        for (tilesets, 0..) |tileset, i| {
+            elements[i] = .{
+                .columns = tileset.columns,
+                .first_gid = tileset.first_gid,
+                .image_source = abi.RocStr.fromSlice(tileset.image_source, host),
+                .name = abi.RocStr.fromSlice(tileset.name, host),
+                .property_count = tileset.property_count,
+                .property_start = tileset.property_start,
+                .tile_count = tileset.tile_count,
+                .image_height = tileset.image_height,
+                .image_width = tileset.image_width,
+                .tile_height = tileset.tile_height,
+                .tile_width = tileset.tile_width,
+            };
+        }
+    }
+    return list;
 }
 
 fn makeTempCString(allocator: std.mem.Allocator, stack: *[CSTRING_STACK_CAPACITY:0]u8, bytes: []const u8) !TempCString {
@@ -426,6 +605,52 @@ fn exportedReadEnvPosix(host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEn
     return hostedReadEnvPosix(activeHost(), host, key_arg);
 }
 
+fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
+    defer path_arg.decref(roc_host);
+
+    const allocator = allocatorFromHost(roc_host);
+    const path = path_arg.asSlice();
+    const bytes = std.Io.Dir.cwd().readFileAlloc(defaultIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+        var result = emptyHostReadFileRawResult();
+        result.err = switch (err) {
+            error.FileNotFound => HOST_ERR_NOT_FOUND,
+            else => HOST_ERR_READ_FAILED,
+        };
+        return result;
+    };
+    defer allocator.free(bytes);
+
+    return .{
+        .contents = abi.RocStr.fromSlice(bytes, roc_host),
+        .err = 0,
+        .ok = true,
+    };
+}
+
+fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
+    return hostedReadFileRaw(activeHost(), path_arg);
+}
+
+fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
+    defer path_arg.decref(roc_host);
+
+    const path = path_arg.asSlice();
+    var map = tmx_loader.load(allocatorFromHost(roc_host), defaultIo(), path) catch |err| {
+        return emptyTilemapLoadResult(tilemapLoadErrorCode(err));
+    };
+    defer map.deinit();
+
+    return .{
+        .map = convertTilemapRawMap(roc_host, map.raw),
+        .err = 0,
+        .ok = true,
+    };
+}
+
+fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
+    return hostedTilemapLoadTmxRaw(activeHost(), path_arg);
+}
+
 fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
@@ -589,8 +814,10 @@ comptime {
         @export(&hostedGetScreenSize, .{ .name = "roc_host_get_screen_size" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
+        @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
+        @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
     }
 }
 

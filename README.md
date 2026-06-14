@@ -11,6 +11,8 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 - Pure 2D camera values with scoped world-space drawing
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
+- Tiled TMX tilemap loading, drawing, layer/object roles, solid queries, and object/property access
+- Pga2 geometry helpers for 2D points, vectors, lines, circles, transforms, distances, and intersections
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
@@ -50,7 +52,9 @@ World-space camera drawing is demonstrated in:
 roc examples/camera.roc
 ```
 
-The top-down demo uses selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
+The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
+
+The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Pga2 distance checks with selected CC0 assets from Kenney's New Platformer Pack.
 
 Beginner game examples are available in:
 
@@ -58,6 +62,7 @@ Beginner game examples are available in:
 roc examples/snake.roc
 roc examples/breakout.roc
 roc examples/top_down.roc
+roc examples/cave_climb.roc
 ```
 
 For smoother game-loop performance, build and run the executable:
@@ -80,6 +85,14 @@ Run the full test suite (lints, Zig unit tests, and `roc check`/`fmt`/`test`/`bu
 ```bash
 zig build test
 ```
+
+Profile Roc compiler build time on Linux with `perf`:
+
+```bash
+scripts/profile-roc-build.sh examples/cave_climb.roc 20
+```
+
+Set `ROC=/path/to/roc` to compare compiler builds. A Debug-built Roc compiler can spend substantial time in Zig's debug allocator; the cumulative call-stack report is usually more useful than self time for finding the compiler phase.
 
 Or run just the Roc example tests directly:
 

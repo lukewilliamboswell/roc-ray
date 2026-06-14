@@ -51,24 +51,36 @@ fn matchEnvEntry(entry: [:0]const u8, key: []const u8) ?[]const u8 {
 }
 
 /// Custom dbg handler that sets flag and prints to stderr.
-fn nativeDbg(dbg_args: *const abi.RocDbg, _: *anyopaque) callconv(.c) void {
+fn nativeDbg(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
     debug_or_expect_called.store(true, .release);
-    const msg = dbg_args.utf8_bytes[0..dbg_args.len];
+    const msg = bytes[0..len];
     std.debug.print("\x1b[36m[ROC DBG]\x1b[0m {s}\n", .{msg});
 }
 
 /// Custom expect handler that sets flag and prints to stderr.
-fn nativeExpectFailed(expect_args: *const abi.RocExpectFailed, _: *anyopaque) callconv(.c) void {
+fn nativeExpectFailed(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
     debug_or_expect_called.store(true, .release);
-    const msg = expect_args.utf8_bytes[0..expect_args.len];
+    const msg = bytes[0..len];
     std.debug.print("\x1b[33m[ROC EXPECT]\x1b[0m {s}\n", .{msg});
 }
 
 /// Crash handler - prints to stderr and exits.
-fn nativeCrashed(crash_args: *const abi.RocCrashed, _: *anyopaque) callconv(.c) void {
-    const msg = crash_args.utf8_bytes[0..crash_args.len];
+fn nativeCrashed(_: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+    const msg = bytes[0..len];
     std.debug.print("\x1b[31m[ROC CRASHED]\x1b[0m {s}\n", .{msg});
     std.process.exit(1);
+}
+
+fn exportedRocAlloc(ops: *RocOps, length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    return abi.DefaultAllocators.rocAlloc(ops, length, alignment);
+}
+
+fn exportedRocDealloc(ops: *RocOps, ptr: *anyopaque, alignment: usize) callconv(.c) void {
+    abi.DefaultAllocators.rocDealloc(ops, ptr, alignment);
+}
+
+fn exportedRocRealloc(ops: *RocOps, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    return abi.DefaultAllocators.rocRealloc(ops, ptr, new_length, alignment);
 }
 
 // OS-specific entry point handling (not exported during tests)
@@ -164,124 +176,126 @@ test "makeTempCString stops at embedded nul" {
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
-fn hostedAssetsLoadTextureRaw(ops: *RocOps, result: *abi.AssetsLoad_texture_rawRetRecord, args: *const abi.AssetsLoad_texture_rawArgs) callconv(.c) void {
-    defer args.arg0.decref(ops);
-    result.* = .{ .handle = 0, .height = 0, .width = 0 };
+fn hostedAssetsLoadTextureRaw(ops: *RocOps, path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
+    defer path_arg.decref(ops);
+    var result: abi.__AnonStruct0 = .{ .handle = 0, .height = 0, .width = 0 };
 
-    const path_slice = args.arg0.asSlice();
+    const path_slice = path_arg.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return;
+    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return result;
     defer path.deinit();
 
     if (raylib.loadTexture(path.ptr)) |texture| {
-        result.* = .{
+        result = .{
             .handle = texture.handle,
             .height = texture.height,
             .width = texture.width,
         };
     }
+
+    return result;
 }
 
-fn hostedDrawBeginFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
+fn hostedDrawBeginFrame() callconv(.c) void {
     raylib.beginDrawing();
 }
 
-fn hostedDrawCircleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_rawArgs) callconv(.c) void {
-    raylib.drawCircle(args.*);
+fn hostedDrawCircleRaw(args: abi.__AnonStruct10) callconv(.c) void {
+    raylib.drawCircle(args);
 }
 
-fn hostedDrawCircleGradient(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_gradientArgs) callconv(.c) void {
-    raylib.drawCircleGradient(args.*);
+fn hostedDrawCircleGradient(args: abi.__AnonStruct15) callconv(.c) void {
+    raylib.drawCircleGradient(args);
 }
 
-fn hostedDrawCircleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawCircle_lines_rawArgs) callconv(.c) void {
-    raylib.drawCircleLines(args.*);
+fn hostedDrawCircleLinesRaw(args: abi.__AnonStruct16) callconv(.c) void {
+    raylib.drawCircleLines(args);
 }
 
-fn hostedDrawClear(_: *RocOps, _: *anyopaque, args: *const abi.DrawClearArgs) callconv(.c) void {
-    raylib.clearBackground(args.*);
+fn hostedDrawClear(color: abi.Color) callconv(.c) void {
+    raylib.clearBackground(color);
 }
 
-fn hostedDrawEndFrame(_: *RocOps, _: *anyopaque, _: *anyopaque) callconv(.c) void {
+fn hostedDrawEndFrame() callconv(.c) void {
     raylib.endDrawing();
 }
 
-fn hostedDrawFps(_: *RocOps, _: *anyopaque, args: *const abi.DrawFpsArgs) callconv(.c) void {
-    raylib.drawFps(args.*);
+fn hostedDrawFps(args: abi.__AnonStruct17) callconv(.c) void {
+    raylib.drawFps(args);
 }
 
-fn hostedDrawLineRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawLine_rawArgs) callconv(.c) void {
-    raylib.drawLine(args.*);
+fn hostedDrawLineRaw(args: abi.__AnonStruct18) callconv(.c) void {
+    raylib.drawLine(args);
 }
 
-fn hostedDrawPolygonRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawPolygon_rawArgs) callconv(.c) void {
+fn hostedDrawPolygonRaw(ops: *RocOps, args: abi.__AnonStruct25) callconv(.c) void {
     defer args.points.decref(ops);
     raylib.drawPolygon(args.points.items(), args.color);
 }
 
-fn hostedDrawPolygonLinesRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
+fn hostedDrawPolygonLinesRaw(ops: *RocOps, args: abi.__AnonStruct27) callconv(.c) void {
     defer args.points.decref(ops);
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
 }
 
-fn hostedDrawRectangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_rawArgs) callconv(.c) void {
-    raylib.drawRectangle(args.*);
+fn hostedDrawRectangleRaw(args: abi.__AnonStruct28) callconv(.c) void {
+    raylib.drawRectangle(args);
 }
 
-fn hostedDrawRectangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_lines_rawArgs) callconv(.c) void {
-    raylib.drawRectangleLines(args.*);
+fn hostedDrawRectangleLinesRaw(args: abi.__AnonStruct31) callconv(.c) void {
+    raylib.drawRectangleLines(args);
 }
 
-fn hostedDrawRectangleGradientH(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_hArgs) callconv(.c) void {
-    raylib.drawRectangleGradientH(args.*);
+fn hostedDrawRectangleGradientH(args: abi.__AnonStruct29) callconv(.c) void {
+    raylib.drawRectangleGradientH(args);
 }
 
-fn hostedDrawRectangleGradientV(_: *RocOps, _: *anyopaque, args: *const abi.DrawRectangle_gradient_vArgs) callconv(.c) void {
-    raylib.drawRectangleGradientV(args.*);
+fn hostedDrawRectangleGradientV(args: abi.__AnonStruct30) callconv(.c) void {
+    raylib.drawRectangleGradientV(args);
 }
 
-fn hostedDrawRoundedRectangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRounded_rectangle_rawArgs) callconv(.c) void {
-    raylib.drawRoundedRectangle(args.*);
+fn hostedDrawRoundedRectangleRaw(args: abi.__AnonStruct32) callconv(.c) void {
+    raylib.drawRoundedRectangle(args);
 }
 
-fn hostedDrawRoundedRectangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawRounded_rectangle_lines_rawArgs) callconv(.c) void {
-    raylib.drawRoundedRectangleLines(args.*);
+fn hostedDrawRoundedRectangleLinesRaw(args: abi.__AnonStruct33) callconv(.c) void {
+    raylib.drawRoundedRectangleLines(args);
 }
 
-fn hostedDrawTriangleRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawTriangle_rawArgs) callconv(.c) void {
-    raylib.drawTriangle(args.*);
+fn hostedDrawTriangleRaw(args: abi.__AnonStruct38) callconv(.c) void {
+    raylib.drawTriangle(args);
 }
 
-fn hostedDrawTriangleLinesRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawTriangle_lines_rawArgs) callconv(.c) void {
-    raylib.drawTriangleLines(args.*);
+fn hostedDrawTriangleLinesRaw(args: abi.__AnonStruct39) callconv(.c) void {
+    raylib.drawTriangleLines(args);
 }
 
-fn hostedDrawLoadFontRaw(ops: *RocOps, result: *u64, args: *const abi.DrawLoad_font_rawArgs) callconv(.c) void {
+fn hostedDrawLoadFontRaw(ops: *RocOps, args: abi.__AnonStruct20) callconv(.c) u64 {
     defer args.path.decref(ops);
-    result.* = 0;
 
     const path_slice = args.path.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return;
+    var path = makeTempCString(allocatorFromOps(ops), &stack, path_slice) catch return 0;
     defer path.deinit();
 
-    result.* = raylib.loadFont(path.ptr, args.size) orelse 0;
+    return raylib.loadFont(path.ptr, args.size) orelse 0;
 }
 
-fn hostedDrawMeasureTextRaw(ops: *RocOps, result: *abi.DrawMeasure_text_rawRetRecord, args: *const abi.DrawMeasure_text_rawArgs) callconv(.c) void {
+fn hostedDrawMeasureTextRaw(ops: *RocOps, args: abi.__AnonStruct24) callconv(.c) abi.__AnonStruct23 {
     defer args.text.decref(ops);
-    result.* = .{ .height = 0, .width = 0 };
+    var result: abi.__AnonStruct23 = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return;
+    var text = makeTempCString(allocatorFromOps(ops), &stack, text_slice) catch return result;
     defer text.deinit();
 
     const measured = raylib.measureTextZ(text.ptr, args.font, args.size, args.spacing);
-    result.* = .{ .height = measured.y, .width = measured.x };
+    result = .{ .height = measured.y, .width = measured.x };
+    return result;
 }
 
-fn hostedDrawTextRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawText_rawArgs) callconv(.c) void {
+fn hostedDrawTextRaw(ops: *RocOps, args: abi.__AnonStruct34) callconv(.c) void {
     defer args.text.decref(ops);
 
     const text_slice = args.text.asSlice();
@@ -299,8 +313,8 @@ fn hostedDrawTextRaw(ops: *RocOps, _: *anyopaque, args: *const abi.DrawText_rawA
     );
 }
 
-fn hostedDrawTextureRaw(_: *RocOps, _: *anyopaque, args: *const abi.DrawDraw_texture_rawArgs) callconv(.c) void {
-    raylib.drawTexture(args.*);
+fn hostedDrawTextureRaw(args: abi.__AnonStruct35) callconv(.c) void {
+    raylib.drawTexture(args);
 }
 
 /// Global flag for deferred exit request (exit after current frame completes)
@@ -315,17 +329,20 @@ fn decrefHostArg(ops: *RocOps, host: *const abi.Host) void {
     host.mouse.buttons_released.decref(ops);
 }
 
-fn hostedReadEnvWindows(ops: *RocOps, result: *ReadEnvResult, args: *const abi.HostRead_envArgs) callconv(.c) void {
+fn hostedReadEnvWindows(ops: *RocOps, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     // Windows doesn't link libc, so env var reading is not yet supported
+    var result: ReadEnvResult = undefined;
     result.tag = .Err;
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    decrefHostArg(ops, &args.arg0);
-    args.arg1.decref(ops);
+    decrefHostArg(ops, &host);
+    key_arg.decref(ops);
+    return result;
 }
 
-fn hostedReadEnvPosix(ops: *RocOps, result: *ReadEnvResult, args: *const abi.HostRead_envArgs) callconv(.c) void {
-    const key = args.arg1.asSlice();
+fn hostedReadEnvPosix(ops: *RocOps, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+    var result: ReadEnvResult = undefined;
+    const key = key_arg.asSlice();
     const value = hostGetEnv(key);
 
     if (value) |v| {
@@ -336,38 +353,84 @@ fn hostedReadEnvPosix(ops: *RocOps, result: *ReadEnvResult, args: *const abi.Hos
     }
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    // `key` (a slice into arg1) is fully consumed above before arg1 is dropped.
-    decrefHostArg(ops, &args.arg0);
-    args.arg1.decref(ops);
+    // `key` (a slice into key_arg) is fully consumed above before key_arg is dropped.
+    decrefHostArg(ops, &host);
+    key_arg.decref(ops);
+    return result;
 }
 
-fn hostedExit(_: *RocOps, _: *anyopaque, args: *const abi.HostExitArgs) callconv(.c) void {
-    exit_requested = @as(i64, args.arg0);
+fn hostedExit(code: i32) callconv(.c) void {
+    exit_requested = @as(i64, code);
 }
 
-fn hostedGetScreenSize(_: *RocOps, result: *abi.HostGet_screen_sizeRetRecord, _: *anyopaque) callconv(.c) void {
-    result.* = .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
+fn hostedGetScreenSize() callconv(.c) abi.__AnonStruct42 {
+    return .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(_: *RocOps, result: *ffi.Try(void, void), args: *const abi.HostSet_screen_sizeArgs) callconv(.c) void {
+fn hostedSetScreenSize(args: abi.__AnonStruct55) callconv(.c) abi.Try {
     raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
+    var result: abi.Try = undefined;
     result.tag = .Ok;
+    return result;
 }
 
-fn hostedSetTargetFps(_: *RocOps, _: *anyopaque, args: *const abi.HostSet_target_fpsArgs) callconv(.c) void {
-    raylib.setTargetFps(args.arg0);
+fn hostedSetTargetFps(fps: i32) callconv(.c) void {
+    raylib.setTargetFps(fps);
 }
 
-fn hostedRandomI32(_: *RocOps, result: *i32, args: *const abi.HostRandom_i32Args) callconv(.c) void {
-    result.* = raylib.getRandomValue(args.arg0, args.arg1);
+fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
+    return raylib.getRandomValue(min, max);
 }
 
-fn hostedAudioGenTone(_: *RocOps, result: *u64, args: *const abi.AudioGen_tone_rawArgs) callconv(.c) void {
-    result.* = @intCast(raylib.genTone(args.freq, args.ms));
+fn hostedAudioGenTone(args: abi.__AnonStruct5) callconv(.c) u64 {
+    return @intCast(raylib.genTone(args.freq, args.ms));
 }
 
-fn hostedAudioPlay(_: *RocOps, _: *anyopaque, args: *const abi.AudioPlay_rawArgs) callconv(.c) void {
-    raylib.playSoundHandle(@intCast(args.arg0));
+fn hostedAudioPlay(handle: u64) callconv(.c) void {
+    raylib.playSoundHandle(@intCast(handle));
+}
+
+comptime {
+    if (!builtin.is_test) {
+        @export(&exportedRocAlloc, .{ .name = "roc_alloc" });
+        @export(&exportedRocDealloc, .{ .name = "roc_dealloc" });
+        @export(&exportedRocRealloc, .{ .name = "roc_realloc" });
+        @export(&nativeDbg, .{ .name = "roc_dbg" });
+        @export(&nativeExpectFailed, .{ .name = "roc_expect_failed" });
+        @export(&nativeCrashed, .{ .name = "roc_crashed" });
+
+        @export(&hostedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
+        @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
+        @export(&hostedAudioPlay, .{ .name = "roc_audio_play_raw" });
+        @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
+        @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
+        @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
+        @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
+        @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
+        @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
+        @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
+        @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
+        @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
+        @export(&hostedDrawLoadFontRaw, .{ .name = "roc_draw_load_font_raw" });
+        @export(&hostedDrawMeasureTextRaw, .{ .name = "roc_draw_measure_text_raw" });
+        @export(&hostedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
+        @export(&hostedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });
+        @export(&hostedDrawRectangleGradientH, .{ .name = "roc_draw_rectangle_gradient_h" });
+        @export(&hostedDrawRectangleGradientV, .{ .name = "roc_draw_rectangle_gradient_v" });
+        @export(&hostedDrawRectangleLinesRaw, .{ .name = "roc_draw_rectangle_lines_raw" });
+        @export(&hostedDrawRectangleRaw, .{ .name = "roc_draw_rectangle_raw" });
+        @export(&hostedDrawRoundedRectangleLinesRaw, .{ .name = "roc_draw_rounded_rectangle_lines_raw" });
+        @export(&hostedDrawRoundedRectangleRaw, .{ .name = "roc_draw_rounded_rectangle_raw" });
+        @export(&hostedDrawTextRaw, .{ .name = "roc_draw_text_raw" });
+        @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
+        @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
+        @export(&hostedExit, .{ .name = "roc_host_exit" });
+        @export(&hostedGetScreenSize, .{ .name = "roc_host_get_screen_size" });
+        @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
+        @export(if (builtin.os.tag == .windows) &hostedReadEnvWindows else &hostedReadEnvPosix, .{ .name = "roc_host_read_env" });
+        @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
+        @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
+    }
 }
 
 /// Hosted function dispatch table built from PlatformHostedFns.
@@ -401,12 +464,7 @@ const hosted_fns = abi.hostedFunctions(.{
     .host_get_screen_size = &hostedGetScreenSize,
     .host_random_i32 = &hostedRandomI32,
     .host_read_env = if (builtin.os.tag == .windows) &hostedReadEnvWindows else &hostedReadEnvPosix,
-    // set_screen_size! returns Try({}, [NotSupported, ..]), whose real layout is
-    // smaller than the glue's shared `Try` type (the glue deduplicates both Try
-    // result types by name). Use the correctly-sized `ffi.Try(void, void)` and
-    // cast past the dispatch field type. TODO: drop the cast once glue emits a
-    // distinct type per Try instantiation.
-    .host_set_screen_size = @ptrCast(&hostedSetScreenSize),
+    .host_set_screen_size = &hostedSetScreenSize,
     .host_set_target_fps = &hostedSetTargetFps,
 });
 
@@ -454,7 +512,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     };
 
     var app_config: AppConfig = undefined;
-    abi.roc__app_config_for_host(&roc_ops, &app_config, null);
+    abi.app_config_for_host(&roc_ops, &app_config, null);
     defer app_config.@"title".decref(&roc_ops);
 
     var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -507,7 +565,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     defer raylib.closeAudioDevice();
 
     // Call Roc init! to build the initial model
-    if (TRACE_HOST) std.log.debug("[HOST] Calling roc__init_for_host...", .{});
+    if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
 
     var boxed_model: RocBox = null;
     {
@@ -536,7 +594,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
             .mouse_middle = false,
             .mouse_right = false,
         };
-        abi.roc__init_for_host(&roc_ops, @ptrCast(&init_result), @ptrCast(&init_state));
+        abi.init_for_host(&roc_ops, @ptrCast(&init_result), @ptrCast(&init_state));
 
         if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
 
@@ -598,7 +656,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // Call Roc render with the platform state
         var render_args = RenderArgs{ .model = boxed_model, .state = platform_state };
         var render_result: RocResult = undefined;
-        abi.roc__render_for_host(&roc_ops, @ptrCast(&render_result), @ptrCast(&render_args));
+        abi.render_for_host(&roc_ops, @ptrCast(&render_result), @ptrCast(&render_args));
 
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
@@ -625,7 +683,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         if (TRACE_HOST) std.log.debug("[HOST] Dropping final model box=0x{x}", .{@intFromPtr(model)});
         var box_slot: *anyopaque = model;
         var drop_ret: u8 = undefined;
-        abi.roc__drop_model_for_host(&roc_ops, @ptrCast(&drop_ret), @ptrCast(&box_slot));
+        abi.drop_model_for_host(&roc_ops, @ptrCast(&drop_ret), @ptrCast(&box_slot));
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code

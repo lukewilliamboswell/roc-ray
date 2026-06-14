@@ -16,14 +16,17 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-/// Type-erased function pointer for hosted function dispatch.
+/// Type-erased pointer to a hosted function. Each hosted function has its own natural
+/// C signature (determined by its Roc argument and return types under the platform C
+/// ABI), so they are stored type-erased here and cast to their concrete signature at the
+/// Roc call site. A hosted function takes a leading `*RocOps` only when it allocates or
+/// frees Roc-managed memory (i.e. when an argument or its return is a heap type).
 ///
-/// Roc transfers ownership of refcounted arguments to hosted functions.
-/// Hosted functions must decref owned refcounted arguments when done,
-/// or transfer that ownership into the return value or longer-lived storage.
-/// If the host keeps both the call argument and a stored copy, it must
-/// incref the stored copy so each live reference has one ownership.
-pub const HostedFn = *const fn (*anyopaque, *anyopaque, *anyopaque) callconv(.c) void;
+/// Roc transfers ownership of refcounted arguments to hosted functions. Hosted functions
+/// must decref owned refcounted arguments when done, or transfer that ownership into the
+/// return value or longer-lived storage. If the host keeps both the call argument and a
+/// stored copy, it must incref the stored copy so each live reference has one ownership.
+pub const HostedFn = *const anyopaque;
 
 /// Table of hosted function pointers passed to the Roc runtime.
 pub const HostedFunctions = extern struct {
@@ -31,28 +34,18 @@ pub const HostedFunctions = extern struct {
     fns: [*]HostedFn,
 };
 
-/// Arguments for a Roc allocation request.
-pub const RocAlloc = extern struct { alignment: usize, length: usize, answer: *anyopaque };
-/// Arguments for a Roc deallocation request.
-pub const RocDealloc = extern struct { alignment: usize, ptr: *anyopaque };
-/// Arguments for a Roc reallocation request.
-pub const RocRealloc = extern struct { alignment: usize, new_length: usize, answer: *anyopaque };
-/// Arguments for a Roc `dbg` expression.
-pub const RocDbg = extern struct { utf8_bytes: [*]u8, len: usize };
-/// Arguments for a failed Roc `expect`.
-pub const RocExpectFailed = extern struct { utf8_bytes: [*]u8, len: usize };
-/// Arguments for a Roc `crash`.
-pub const RocCrashed = extern struct { utf8_bytes: [*]u8, len: usize };
-
-/// The operations table passed from the host to the Roc runtime.
+/// The operations table passed from the host to the Roc runtime. The memory and
+/// diagnostic callbacks take a leading `*RocOps` and pass their remaining arguments and
+/// return value in registers per the platform C ABI. `roc_alloc`/`roc_realloc` return the
+/// allocation (or null on OOM — a platform host aborts instead of returning null).
 pub const RocOps = extern struct {
     env: *anyopaque,
-    roc_alloc: *const fn (*RocAlloc, *anyopaque) callconv(.c) void,
-    roc_dealloc: *const fn (*RocDealloc, *anyopaque) callconv(.c) void,
-    roc_realloc: *const fn (*RocRealloc, *anyopaque) callconv(.c) void,
-    roc_dbg: *const fn (*const RocDbg, *anyopaque) callconv(.c) void,
-    roc_expect_failed: *const fn (*const RocExpectFailed, *anyopaque) callconv(.c) void,
-    roc_crashed: *const fn (*const RocCrashed, *anyopaque) callconv(.c) void,
+    roc_alloc: *const fn (*RocOps, usize, usize) callconv(.c) ?*anyopaque,
+    roc_dealloc: *const fn (*RocOps, *anyopaque, usize) callconv(.c) void,
+    roc_realloc: *const fn (*RocOps, *anyopaque, usize, usize) callconv(.c) ?*anyopaque,
+    roc_dbg: *const fn (*RocOps, [*]const u8, usize) callconv(.c) void,
+    roc_expect_failed: *const fn (*RocOps, [*]const u8, usize) callconv(.c) void,
+    roc_crashed: *const fn (*RocOps, [*]const u8, usize) callconv(.c) void,
     hosted_fns: HostedFunctions,
 };
 
@@ -97,13 +90,8 @@ pub fn rocErasedCallableAllocate(
     const ptr_width = @sizeOf(usize);
     const alignment = @max(ptr_width, roc_erased_callable_payload_alignment);
     const extra_bytes = @max(ptr_width, roc_erased_callable_payload_alignment);
-    var alloc_args: RocAlloc = .{
-        .alignment = alignment,
-        .length = extra_bytes + rocErasedCallablePayloadSize(capture_size),
-        .answer = undefined,
-    };
-    roc_ops.roc_alloc(&alloc_args, roc_ops.env);
-    const base: [*]u8 = @ptrCast(alloc_args.answer);
+    const length = extra_bytes + rocErasedCallablePayloadSize(capture_size);
+    const base: [*]u8 = @ptrCast(roc_ops.roc_alloc(roc_ops, length, alignment));
     const data = base + extra_bytes;
     const rc: *isize = @ptrFromInt(@intFromPtr(data) - @sizeOf(isize));
     rc.* = 1;
@@ -112,24 +100,11 @@ pub fn rocErasedCallableAllocate(
     return data;
 }
 
-/// Type-erase a hosted function pointer to `HostedFn`.
-///
-/// Hosted functions are typically written with concrete parameter types for clarity
-/// (e.g. `*RocOps`, `*RocStr`, `[*]u8`), but must be stored as `HostedFn` which
-/// uses `*anyopaque` for all parameters. This helper performs that cast.
+/// Type-erase a concrete hosted function pointer to `HostedFn` for storage in the vtable.
+/// Hosted functions are written with their natural C signatures (e.g.
+/// `fn(ops: *RocOps, x: i32) Plant` or `fn(s: RocStr) void`); this stores the pointer
+/// type-erased, and the Roc call site casts it back to the concrete signature.
 pub fn hostedFn(func: anytype) HostedFn {
-    const T = @TypeOf(func);
-    const info = @typeInfo(T);
-    if (info == .pointer) {
-        const child = @typeInfo(info.pointer.child);
-        if (child == .@"fn") {
-            const f = child.@"fn";
-            if (f.params.len != 3)
-                @compileError("hostedFn: function must take exactly 3 parameters (ops, ret_ptr, args_ptr)");
-            if (f.return_type != void)
-                @compileError("hostedFn: function must return void");
-        }
-    }
     return @ptrCast(func);
 }
 
@@ -210,11 +185,7 @@ fn freeBoxAllocation(
     const header_bytes = @max(required_space, payload_alignment);
     const alloc_alignment = @max(ptr_width, payload_alignment);
     const base: *anyopaque = @ptrFromInt(@intFromPtr(data) - header_bytes);
-    var dealloc_args: RocDealloc = .{
-        .alignment = alloc_alignment,
-        .ptr = base,
-    };
-    roc_ops.roc_dealloc(&dealloc_args, roc_ops.env);
+    roc_ops.roc_dealloc(roc_ops, base, alloc_alignment);
 }
 
 /// A Roc string value. Small strings (up to 23 bytes) are stored inline;
@@ -292,13 +263,7 @@ pub const RocStr = extern struct {
             const ptr_width = @sizeOf(usize);
             const extra_bytes = ptr_width;
             const total = extra_bytes + slice.len;
-            var alloc_args: RocAlloc = .{
-                .alignment = @alignOf(usize),
-                .length = total,
-                .answer = undefined,
-            };
-            roc_ops.roc_alloc(&alloc_args, roc_ops.env);
-            const base: [*]u8 = @ptrCast(alloc_args.answer);
+            const base: [*]u8 = @ptrCast(roc_ops.roc_alloc(roc_ops, total, @alignOf(usize)));
             const data_ptr = base + extra_bytes;
             const rc: *isize = @ptrFromInt(@intFromPtr(data_ptr) - @sizeOf(isize));
             rc.* = 1;
@@ -322,8 +287,7 @@ pub const RocStr = extern struct {
         if (prev == 1) {
             const ptr_width = @sizeOf(usize);
             const base: *anyopaque = @ptrFromInt(data_addr - ptr_width);
-            var dealloc_args: RocDealloc = .{ .alignment = @alignOf(usize), .ptr = base };
-            roc_ops.roc_dealloc(&dealloc_args, roc_ops.env);
+            roc_ops.roc_dealloc(roc_ops, base, @alignOf(usize));
         }
     }
 
@@ -421,13 +385,7 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
             if (length == 0) return empty();
             const data_bytes = length * @sizeOf(T);
             const total = data_bytes + header_bytes;
-            var alloc_args: RocAlloc = .{
-                .alignment = alloc_align,
-                .length = total,
-                .answer = undefined,
-            };
-            roc_ops.roc_alloc(&alloc_args, roc_ops.env);
-            const base: [*]u8 = @ptrCast(alloc_args.answer);
+            const base: [*]u8 = @ptrCast(roc_ops.roc_alloc(roc_ops, total, alloc_align));
             const data_ptr = base + header_bytes;
             const rc: *isize = @ptrFromInt(@intFromPtr(data_ptr) - @sizeOf(isize));
             rc.* = 1;
@@ -457,11 +415,7 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
             const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
             if (prev == 1) {
                 const base: *anyopaque = @ptrFromInt(data_addr - header_bytes);
-                var dealloc_args: RocDealloc = .{
-                    .alignment = alloc_align,
-                    .ptr = base,
-                };
-                roc_ops.roc_dealloc(&dealloc_args, roc_ops.env);
+                roc_ops.roc_dealloc(roc_ops, base, alloc_align);
             }
         }
 
@@ -1625,37 +1579,37 @@ pub const HostSet_target_fpsArgs = extern struct {
 /// Refcounted hosted arguments are owned by the hosted function.
 /// Pass it to hostedFunctions() to create the dispatch table.
 pub const PlatformHostedFns = struct {
-    assets_load_texture_raw: *const fn (*RocOps, *AssetsLoad_texture_rawRetRecord, *const AssetsLoad_texture_rawArgs) callconv(.c) void, // Assets.load_texture_raw!
-    audio_gen_tone_raw: *const fn (*RocOps, *u64, *const AudioGen_tone_rawArgs) callconv(.c) void, // Audio.gen_tone_raw!
-    audio_play_raw: *const fn (*RocOps, *anyopaque, *const AudioPlay_rawArgs) callconv(.c) void, // Audio.play_raw!
-    draw_begin_frame: *const fn (*RocOps, *anyopaque, *anyopaque) callconv(.c) void, // Draw.begin_frame!
-    draw_circle_gradient: *const fn (*RocOps, *anyopaque, *const DrawCircle_gradientArgs) callconv(.c) void, // Draw.circle_gradient!
-    draw_circle_lines_raw: *const fn (*RocOps, *anyopaque, *const DrawCircle_lines_rawArgs) callconv(.c) void, // Draw.circle_lines_raw!
-    draw_circle_raw: *const fn (*RocOps, *anyopaque, *const DrawCircle_rawArgs) callconv(.c) void, // Draw.circle_raw!
-    draw_clear: *const fn (*RocOps, *anyopaque, *const DrawClearArgs) callconv(.c) void, // Draw.clear!
-    draw_draw_texture_raw: *const fn (*RocOps, *anyopaque, *const DrawDraw_texture_rawArgs) callconv(.c) void, // Draw.draw_texture_raw!
-    draw_end_frame: *const fn (*RocOps, *anyopaque, *anyopaque) callconv(.c) void, // Draw.end_frame!
-    draw_fps: *const fn (*RocOps, *anyopaque, *const DrawFpsArgs) callconv(.c) void, // Draw.fps!
-    draw_line_raw: *const fn (*RocOps, *anyopaque, *const DrawLine_rawArgs) callconv(.c) void, // Draw.line_raw!
-    draw_load_font_raw: *const fn (*RocOps, *u64, *const DrawLoad_font_rawArgs) callconv(.c) void, // Draw.load_font_raw!
-    draw_measure_text_raw: *const fn (*RocOps, *DrawMeasure_text_rawRetRecord, *const DrawMeasure_text_rawArgs) callconv(.c) void, // Draw.measure_text_raw!
-    draw_polygon_lines_raw: *const fn (*RocOps, *anyopaque, *const DrawPolygon_lines_rawArgs) callconv(.c) void, // Draw.polygon_lines_raw!
-    draw_polygon_raw: *const fn (*RocOps, *anyopaque, *const DrawPolygon_rawArgs) callconv(.c) void, // Draw.polygon_raw!
-    draw_rectangle_gradient_h: *const fn (*RocOps, *anyopaque, *const DrawRectangle_gradient_hArgs) callconv(.c) void, // Draw.rectangle_gradient_h!
-    draw_rectangle_gradient_v: *const fn (*RocOps, *anyopaque, *const DrawRectangle_gradient_vArgs) callconv(.c) void, // Draw.rectangle_gradient_v!
-    draw_rectangle_lines_raw: *const fn (*RocOps, *anyopaque, *const DrawRectangle_lines_rawArgs) callconv(.c) void, // Draw.rectangle_lines_raw!
-    draw_rectangle_raw: *const fn (*RocOps, *anyopaque, *const DrawRectangle_rawArgs) callconv(.c) void, // Draw.rectangle_raw!
-    draw_rounded_rectangle_lines_raw: *const fn (*RocOps, *anyopaque, *const DrawRounded_rectangle_lines_rawArgs) callconv(.c) void, // Draw.rounded_rectangle_lines_raw!
-    draw_rounded_rectangle_raw: *const fn (*RocOps, *anyopaque, *const DrawRounded_rectangle_rawArgs) callconv(.c) void, // Draw.rounded_rectangle_raw!
-    draw_text_raw: *const fn (*RocOps, *anyopaque, *const DrawText_rawArgs) callconv(.c) void, // Draw.text_raw!
-    draw_triangle_lines_raw: *const fn (*RocOps, *anyopaque, *const DrawTriangle_lines_rawArgs) callconv(.c) void, // Draw.triangle_lines_raw!
-    draw_triangle_raw: *const fn (*RocOps, *anyopaque, *const DrawTriangle_rawArgs) callconv(.c) void, // Draw.triangle_raw!
-    host_exit: *const fn (*RocOps, *anyopaque, *const HostExitArgs) callconv(.c) void, // Host.exit!
-    host_get_screen_size: *const fn (*RocOps, *HostGet_screen_sizeRetRecord, *anyopaque) callconv(.c) void, // Host.get_screen_size!
-    host_random_i32: *const fn (*RocOps, *i32, *const HostRandom_i32Args) callconv(.c) void, // Host.random_i32!
-    host_read_env: *const fn (*RocOps, *Try, *const HostRead_envArgs) callconv(.c) void, // Host.read_env!
-    host_set_screen_size: *const fn (*RocOps, *Try, *const HostSet_screen_sizeArgs) callconv(.c) void, // Host.set_screen_size!
-    host_set_target_fps: *const fn (*RocOps, *anyopaque, *const HostSet_target_fpsArgs) callconv(.c) void, // Host.set_target_fps!
+    assets_load_texture_raw: *const fn (roc_ops: *RocOps, arg0: RocStr) callconv(.c) __AnonStruct0, // Assets.load_texture_raw!
+    audio_gen_tone_raw: *const fn (arg0: __AnonStruct5) callconv(.c) u64, // Audio.gen_tone_raw!
+    audio_play_raw: *const fn (arg0: u64) callconv(.c) void, // Audio.play_raw!
+    draw_begin_frame: *const fn () callconv(.c) void, // Draw.begin_frame!
+    draw_circle_gradient: *const fn (arg0: __AnonStruct15) callconv(.c) void, // Draw.circle_gradient!
+    draw_circle_lines_raw: *const fn (arg0: __AnonStruct16) callconv(.c) void, // Draw.circle_lines_raw!
+    draw_circle_raw: *const fn (arg0: __AnonStruct10) callconv(.c) void, // Draw.circle_raw!
+    draw_clear: *const fn (arg0: Color) callconv(.c) void, // Draw.clear!
+    draw_draw_texture_raw: *const fn (arg0: __AnonStruct35) callconv(.c) void, // Draw.draw_texture_raw!
+    draw_end_frame: *const fn () callconv(.c) void, // Draw.end_frame!
+    draw_fps: *const fn (arg0: __AnonStruct17) callconv(.c) void, // Draw.fps!
+    draw_line_raw: *const fn (arg0: __AnonStruct18) callconv(.c) void, // Draw.line_raw!
+    draw_load_font_raw: *const fn (roc_ops: *RocOps, arg0: __AnonStruct20) callconv(.c) u64, // Draw.load_font_raw!
+    draw_measure_text_raw: *const fn (roc_ops: *RocOps, arg0: __AnonStruct24) callconv(.c) __AnonStruct23, // Draw.measure_text_raw!
+    draw_polygon_lines_raw: *const fn (roc_ops: *RocOps, arg0: __AnonStruct27) callconv(.c) void, // Draw.polygon_lines_raw!
+    draw_polygon_raw: *const fn (roc_ops: *RocOps, arg0: __AnonStruct25) callconv(.c) void, // Draw.polygon_raw!
+    draw_rectangle_gradient_h: *const fn (arg0: __AnonStruct29) callconv(.c) void, // Draw.rectangle_gradient_h!
+    draw_rectangle_gradient_v: *const fn (arg0: __AnonStruct30) callconv(.c) void, // Draw.rectangle_gradient_v!
+    draw_rectangle_lines_raw: *const fn (arg0: __AnonStruct31) callconv(.c) void, // Draw.rectangle_lines_raw!
+    draw_rectangle_raw: *const fn (arg0: __AnonStruct28) callconv(.c) void, // Draw.rectangle_raw!
+    draw_rounded_rectangle_lines_raw: *const fn (arg0: __AnonStruct33) callconv(.c) void, // Draw.rounded_rectangle_lines_raw!
+    draw_rounded_rectangle_raw: *const fn (arg0: __AnonStruct32) callconv(.c) void, // Draw.rounded_rectangle_raw!
+    draw_text_raw: *const fn (roc_ops: *RocOps, arg0: __AnonStruct34) callconv(.c) void, // Draw.text_raw!
+    draw_triangle_lines_raw: *const fn (arg0: __AnonStruct39) callconv(.c) void, // Draw.triangle_lines_raw!
+    draw_triangle_raw: *const fn (arg0: __AnonStruct38) callconv(.c) void, // Draw.triangle_raw!
+    host_exit: *const fn (arg0: i32) callconv(.c) void, // Host.exit!
+    host_get_screen_size: *const fn () callconv(.c) __AnonStruct42, // Host.get_screen_size!
+    host_random_i32: *const fn (arg0: i32, arg1: i32) callconv(.c) i32, // Host.random_i32!
+    host_read_env: *const fn (roc_ops: *RocOps, arg0: Host, arg1: RocStr) callconv(.c) Try, // Host.read_env!
+    host_set_screen_size: *const fn (arg0: __AnonStruct55) callconv(.c) Try, // Host.set_screen_size!
+    host_set_target_fps: *const fn (arg0: i32) callconv(.c) void, // Host.set_target_fps!
 };
 
 /// Create a HostedFunctions dispatch table from your implementations.
@@ -1710,14 +1664,14 @@ pub fn hostedFunctions(comptime fns: PlatformHostedFns) HostedFunctions {
 /// allocation size (required because `roc_dealloc` receives no length).
 pub const DefaultAllocators = struct {
     /// Allocate memory for the Roc runtime.
-    pub fn rocAlloc(alloc_args: *RocAlloc, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
+    pub fn rocAlloc(roc_ops: *RocOps, length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         const allocator = env.allocator;
 
-        const min_alignment: usize = @max(alloc_args.alignment, @alignOf(usize));
+        const min_alignment: usize = @max(alignment, @alignOf(usize));
         const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
         const size_storage_bytes = min_alignment;
-        const total_size = alloc_args.length + size_storage_bytes;
+        const total_size = length + size_storage_bytes;
 
         const base_ptr = allocator.rawAlloc(total_size, align_enum, @returnAddress()) orelse {
             env.roc_io.writeStderr("roc_alloc: out of memory\n");
@@ -1728,42 +1682,42 @@ pub const DefaultAllocators = struct {
         const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
         size_ptr.* = total_size;
 
-        alloc_args.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
+        return @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
     }
 
     /// Free memory previously allocated by `rocAlloc`.
-    pub fn rocDealloc(dealloc_args: *RocDealloc, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
+    pub fn rocDealloc(roc_ops: *RocOps, ptr: *anyopaque, alignment: usize) callconv(.c) void {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         const allocator = env.allocator;
 
-        const min_alignment: usize = @max(dealloc_args.alignment, @alignOf(usize));
+        const min_alignment: usize = @max(alignment, @alignOf(usize));
         const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
         const size_storage_bytes = min_alignment;
 
-        const size_ptr: *const usize = @ptrFromInt(@intFromPtr(dealloc_args.ptr) - @sizeOf(usize));
+        const size_ptr: *const usize = @ptrFromInt(@intFromPtr(ptr) - @sizeOf(usize));
         const total_size = size_ptr.*;
 
-        const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(dealloc_args.ptr) - size_storage_bytes);
+        const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(ptr) - size_storage_bytes);
         const slice = base_ptr[0..total_size];
         allocator.rawFree(slice, align_enum, @returnAddress());
     }
 
     /// Reallocate memory, copying existing data to the new allocation.
-    pub fn rocRealloc(realloc_args: *RocRealloc, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
+    pub fn rocRealloc(roc_ops: *RocOps, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         const allocator = env.allocator;
 
-        const min_alignment: usize = @max(realloc_args.alignment, @alignOf(usize));
+        const min_alignment: usize = @max(alignment, @alignOf(usize));
         const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
         const size_storage_bytes = min_alignment;
 
         // Read old size from metadata
-        const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(realloc_args.answer) - @sizeOf(usize));
+        const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(ptr) - @sizeOf(usize));
         const old_total_size = old_size_ptr.*;
-        const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(realloc_args.answer) - size_storage_bytes);
+        const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(ptr) - size_storage_bytes);
 
         // Allocate new block
-        const new_total_size = realloc_args.new_length + size_storage_bytes;
+        const new_total_size = new_length + size_storage_bytes;
         const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
             env.roc_io.writeStderr("roc_realloc: out of memory\n");
             env.roc_io.onFatal();
@@ -1771,9 +1725,9 @@ pub const DefaultAllocators = struct {
 
         // Copy old user data to new location
         const old_user_data_size = old_total_size - size_storage_bytes;
-        const copy_size = @min(old_user_data_size, realloc_args.new_length);
+        const copy_size = @min(old_user_data_size, new_length);
         const new_user_ptr: [*]u8 = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
-        const old_user_ptr: [*]const u8 = @ptrCast(realloc_args.answer);
+        const old_user_ptr: [*]const u8 = @ptrCast(ptr);
         @memcpy(new_user_ptr[0..copy_size], old_user_ptr[0..copy_size]);
 
         // Free old allocation
@@ -1782,7 +1736,7 @@ pub const DefaultAllocators = struct {
         // Store new size and return user pointer
         const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
         new_size_ptr.* = new_total_size;
-        realloc_args.answer = new_user_ptr;
+        return new_user_ptr;
     }
 };
 
@@ -1791,29 +1745,26 @@ pub const DefaultAllocators = struct {
 /// Routes output through `RocEnv.roc_io` for platform portability.
 pub const DefaultHandlers = struct {
     /// Print a `dbg` expression to stderr.
-    pub fn rocDbg(dbg_args: *const RocDbg, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
-        const msg = dbg_args.utf8_bytes[0..dbg_args.len];
+    pub fn rocDbg(roc_ops: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         env.roc_io.writeStderr("[ROC DBG] ");
-        env.roc_io.writeStderr(msg);
+        env.roc_io.writeStderr(bytes[0..len]);
         env.roc_io.writeStderr("\n");
     }
 
     /// Print a failed `expect` to stderr.
-    pub fn rocExpectFailed(expect_args: *const RocExpectFailed, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
-        const msg = expect_args.utf8_bytes[0..expect_args.len];
+    pub fn rocExpectFailed(roc_ops: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         env.roc_io.writeStderr("[ROC EXPECT] ");
-        env.roc_io.writeStderr(msg);
+        env.roc_io.writeStderr(bytes[0..len]);
         env.roc_io.writeStderr("\n");
     }
 
     /// Print a `crash` message to stderr and terminate.
-    pub fn rocCrashed(crash_args: *const RocCrashed, env_ptr: *anyopaque) callconv(.c) void {
-        const env: *RocEnv = @ptrCast(@alignCast(env_ptr));
-        const msg = crash_args.utf8_bytes[0..crash_args.len];
+    pub fn rocCrashed(roc_ops: *RocOps, bytes: [*]const u8, len: usize) callconv(.c) void {
+        const env: *RocEnv = @ptrCast(@alignCast(roc_ops.env));
         env.roc_io.writeStderr("[ROC CRASHED] ");
-        env.roc_io.writeStderr(msg);
+        env.roc_io.writeStderr(bytes[0..len]);
         env.roc_io.writeStderr("\n");
         env.roc_io.onFatal();
     }
@@ -1856,13 +1807,13 @@ pub const Render_for_hostArgs = extern struct {
 };
 
 /// Entrypoint: app_config_for_host!
-pub extern fn roc__app_config_for_host(ops: *RocOps, ret_ptr: *__AnonStruct77, arg_ptr: ?*anyopaque) callconv(.c) void;
+pub extern fn app_config_for_host(ops: *RocOps, ret_ptr: *__AnonStruct77, arg_ptr: ?*anyopaque) callconv(.c) void;
 
 /// Entrypoint: init_for_host!
-pub extern fn roc__init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct79) callconv(.c) void;
+pub extern fn init_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const __AnonStruct79) callconv(.c) void;
 
 /// Entrypoint: render_for_host!
-pub extern fn roc__render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
+pub extern fn render_for_host(ops: *RocOps, ret_ptr: *Try, arg_ptr: ?*const Render_for_hostArgs) callconv(.c) void;
 
 /// Entrypoint: drop_model_for_host!
-pub extern fn roc__drop_model_for_host(ops: *RocOps, ret_ptr: *anyopaque, arg_ptr: ?*const **anyopaque) callconv(.c) void;
+pub extern fn drop_model_for_host(ops: *RocOps, ret_ptr: *anyopaque, arg_ptr: ?*const **anyopaque) callconv(.c) void;

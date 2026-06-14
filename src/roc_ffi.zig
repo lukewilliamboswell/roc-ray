@@ -16,7 +16,7 @@ pub const RocOps = abi.RocOps;
 ///
 /// The host never frees a box itself: box allocation headers depend on the
 /// `Model` layout (a payload with refcounted fields uses a wider header), which
-/// only the compiler knows. Hand the box back to Roc via `roc__drop_model_for_host`.
+/// only the compiler knows. Hand the box back to Roc via `drop_model_for_host`.
 pub const RocBox = ?*anyopaque;
 
 /// Generic result type matching Roc's `Try` layout with helper methods.

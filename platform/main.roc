@@ -20,19 +20,50 @@ platform ""
 	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math]
 	packages {}
 	provides {
-		app_config_for_host!: "app_config_for_host",
-		init_for_host!: "init_for_host",
-		render_for_host!: "render_for_host",
-		drop_model_for_host!: "drop_model_for_host",
+		"app_config_for_host": app_config_for_host!,
+		"init_for_host": init_for_host!,
+		"render_for_host": render_for_host!,
+		"drop_model_for_host": drop_model_for_host!,
+	}
+	hosted {
+		"roc_assets_load_texture_raw": Assets.load_texture_raw!,
+		"roc_audio_gen_tone_raw": Audio.gen_tone_raw!,
+		"roc_audio_play_raw": Audio.play_raw!,
+		"roc_draw_begin_frame": Draw.begin_frame!,
+		"roc_draw_circle_gradient": Draw.circle_gradient!,
+		"roc_draw_circle_lines_raw": Draw.circle_lines_raw!,
+		"roc_draw_circle_raw": Draw.circle_raw!,
+		"roc_draw_clear": Draw.clear!,
+		"roc_draw_draw_texture_raw": Draw.draw_texture_raw!,
+		"roc_draw_end_frame": Draw.end_frame!,
+		"roc_draw_fps": Draw.fps!,
+		"roc_draw_line_raw": Draw.line_raw!,
+		"roc_draw_load_font_raw": Draw.load_font_raw!,
+		"roc_draw_measure_text_raw": Draw.measure_text_raw!,
+		"roc_draw_polygon_lines_raw": Draw.polygon_lines_raw!,
+		"roc_draw_polygon_raw": Draw.polygon_raw!,
+		"roc_draw_rectangle_gradient_h": Draw.rectangle_gradient_h!,
+		"roc_draw_rectangle_gradient_v": Draw.rectangle_gradient_v!,
+		"roc_draw_rectangle_lines_raw": Draw.rectangle_lines_raw!,
+		"roc_draw_rectangle_raw": Draw.rectangle_raw!,
+		"roc_draw_rounded_rectangle_lines_raw": Draw.rounded_rectangle_lines_raw!,
+		"roc_draw_rounded_rectangle_raw": Draw.rounded_rectangle_raw!,
+		"roc_draw_text_raw": Draw.text_raw!,
+		"roc_draw_triangle_lines_raw": Draw.triangle_lines_raw!,
+		"roc_draw_triangle_raw": Draw.triangle_raw!,
+		"roc_host_exit": Host.exit!,
+		"roc_host_get_screen_size": Host.get_screen_size!,
+		"roc_host_random_i32": Host.random_i32!,
+		"roc_host_read_env": Host.read_env!,
+		"roc_host_set_screen_size": Host.set_screen_size!,
+		"roc_host_set_target_fps": Host.set_target_fps!,
 	}
 	targets: {
-		files: "targets/",
-		exe: {
-			x64mac: ["libhost.a", "libraylib.a", app],
-			arm64mac: ["libhost.a", "libraylib.a", app],
-			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"],
-			x64win: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app],
-		},
+		inputs: "targets/",
+		x64mac: { inputs: ["libhost.a", "libraylib.a", app] },
+		arm64mac: { inputs: ["libhost.a", "libraylib.a", app] },
+		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
+		x64win: { inputs: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app] },
 	}
 
 import Draw

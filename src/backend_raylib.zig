@@ -204,7 +204,7 @@ fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) v
 }
 
 /// Draw a circle from abi args.
-pub fn drawCircle(args: abi.DrawCircle_rawArgs) void {
+pub fn drawCircle(args: anytype) void {
     rl.DrawCircle(
         @intFromFloat(args.@"center".@"x"),
         @intFromFloat(args.@"center".@"y"),
@@ -214,7 +214,7 @@ pub fn drawCircle(args: abi.DrawCircle_rawArgs) void {
 }
 
 /// Draw a thick circle outline from abi args.
-pub fn drawCircleLines(args: abi.DrawCircle_lines_rawArgs) void {
+pub fn drawCircleLines(args: anytype) void {
     const thick = positiveThickness(args.@"thickness") orelse return;
     const half = thick * 0.5;
     const inner_radius = @max(0, args.@"radius" - half);
@@ -232,7 +232,7 @@ pub fn drawCircleLines(args: abi.DrawCircle_lines_rawArgs) void {
 }
 
 /// Draw a rectangle from abi args.
-pub fn drawRectangle(args: abi.DrawRectangle_rawArgs) void {
+pub fn drawRectangle(args: anytype) void {
     rl.DrawRectangle(
         @intFromFloat(args.@"x"),
         @intFromFloat(args.@"y"),
@@ -243,13 +243,13 @@ pub fn drawRectangle(args: abi.DrawRectangle_rawArgs) void {
 }
 
 /// Draw a rectangle outline from abi args.
-pub fn drawRectangleLines(args: abi.DrawRectangle_lines_rawArgs) void {
+pub fn drawRectangleLines(args: anytype) void {
     const thick = positiveThickness(args.@"thickness") orelse return;
     rl.DrawRectangleLinesEx(rectFromArgs(args), thick, colorToRl(args.@"color"));
 }
 
 /// Draw a rounded rectangle from abi args.
-pub fn drawRoundedRectangle(args: abi.DrawRounded_rectangle_rawArgs) void {
+pub fn drawRoundedRectangle(args: anytype) void {
     rl.DrawRectangleRounded(
         rectFromArgs(args),
         roundedness(args.@"width", args.@"height", args.@"radius"),
@@ -259,7 +259,7 @@ pub fn drawRoundedRectangle(args: abi.DrawRounded_rectangle_rawArgs) void {
 }
 
 /// Draw a rounded rectangle outline from abi args.
-pub fn drawRoundedRectangleLines(args: abi.DrawRounded_rectangle_lines_rawArgs) void {
+pub fn drawRoundedRectangleLines(args: anytype) void {
     const thick = positiveThickness(args.@"thickness") orelse return;
     rl.DrawRectangleRoundedLinesEx(
         rectFromArgs(args),
@@ -271,17 +271,17 @@ pub fn drawRoundedRectangleLines(args: abi.DrawRounded_rectangle_lines_rawArgs) 
 }
 
 /// Draw a line from abi args.
-pub fn drawLine(args: abi.DrawLine_rawArgs) void {
+pub fn drawLine(args: anytype) void {
     drawSegment(args.@"start", args.@"end", args.@"thickness", args.@"color");
 }
 
 /// Draw a triangle from abi args.
-pub fn drawTriangle(args: abi.DrawTriangle_rawArgs) void {
+pub fn drawTriangle(args: anytype) void {
     rl.DrawTriangle(toVector2(args.@"a"), toVector2(args.@"b"), toVector2(args.@"c"), colorToRl(args.@"color"));
 }
 
 /// Draw a triangle outline from abi args.
-pub fn drawTriangleLines(args: abi.DrawTriangle_lines_rawArgs) void {
+pub fn drawTriangleLines(args: anytype) void {
     drawSegment(args.@"a", args.@"b", args.@"thickness", args.@"color");
     drawSegment(args.@"b", args.@"c", args.@"thickness", args.@"color");
     drawSegment(args.@"c", args.@"a", args.@"thickness", args.@"color");
@@ -328,7 +328,7 @@ pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f
 }
 
 /// Draw a texture region into a destination rectangle.
-pub fn drawTexture(args: abi.DrawDraw_texture_rawArgs) void {
+pub fn drawTexture(args: anytype) void {
     const texture = textureFromHandle(args.@"texture") orelse return;
     rl.DrawTexturePro(
         texture,
@@ -346,7 +346,7 @@ pub fn measureTextZ(text: [*:0]const u8, font_handle: u64, size: f32, spacing: f
 }
 
 /// Draw a rectangle with vertical gradient from abi args.
-pub fn drawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) void {
+pub fn drawRectangleGradientV(args: anytype) void {
     rl.DrawRectangleGradientV(
         @intFromFloat(args.x),
         @intFromFloat(args.y),
@@ -358,7 +358,7 @@ pub fn drawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) void {
 }
 
 /// Draw a rectangle with horizontal gradient from abi args.
-pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
+pub fn drawRectangleGradientH(args: anytype) void {
     rl.DrawRectangleGradientH(
         @intFromFloat(args.x),
         @intFromFloat(args.y),
@@ -370,7 +370,7 @@ pub fn drawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) void {
 }
 
 /// Draw a circle with radial gradient from abi args.
-pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
+pub fn drawCircleGradient(args: anytype) void {
     rl.DrawCircleGradient(
         toVector2(args.@"center"),
         args.@"radius",
@@ -380,7 +380,7 @@ pub fn drawCircleGradient(args: abi.DrawCircle_gradientArgs) void {
 }
 
 /// Draw FPS counter at specified position.
-pub fn drawFps(args: abi.DrawFpsArgs) void {
+pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
     const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
     rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.@"pos"), args.@"size", 1, colorToRl(args.@"color"));

@@ -14,23 +14,50 @@ Brick : {
 	color : Color,
 }
 
+Ball : {
+	pos : Math.Vec2,
+	vel : Math.Vec2,
+}
+
+BrickRow := [RedRow, OrangeRow, YellowRow, GreenRow, BlueRow]
+
+PaddleMove := [PaddleLeft, PaddleRight, PaddleStill]
+
 GameState := [Ready, Playing, Won, GameOver]
 
-Model : {
+StepEvent := [GameStarted, WallHit, PaddleHit, BrickHit(Brick), LifeLost(GameState), WallCleared]
+
+Game : {
 	bricks : List(Brick),
 	paddle_x : F32,
-	ball_x : F32,
-	ball_y : F32,
-	ball_vx : F32,
-	ball_vy : F32,
+	ball : Ball,
 	score : U64,
 	lives : U64,
 	state : GameState,
-	paddle_sound : Audio.Sound,
-	brick_sound : Audio.Sound,
-	wall_sound : Audio.Sound,
-	lose_sound : Audio.Sound,
-	start_sound : Audio.Sound,
+}
+
+Sounds : {
+	paddle : Audio.Sound,
+	brick : Audio.Sound,
+	wall : Audio.Sound,
+	lose : Audio.Sound,
+	start : Audio.Sound,
+}
+
+Model : {
+	game : Game,
+	sounds : Sounds,
+}
+
+FrameInput : {
+	paddle_move : PaddleMove,
+	action_pressed : Bool,
+	dt : F32,
+}
+
+StepResult : {
+	game : Game,
+	events : List(StepEvent),
 }
 
 program = { init!, render! }
@@ -40,6 +67,9 @@ screen_w = 800
 
 screen_h : F32
 screen_h = 600
+
+top_wall_y : F32
+top_wall_y = 58
 
 paddle_w : F32
 paddle_w = 112
@@ -53,8 +83,17 @@ paddle_y = 548
 paddle_speed : F32
 paddle_speed = 460
 
+paddle_bounce_speed : F32
+paddle_bounce_speed = 360
+
 ball_radius : F32
 ball_radius = 8
+
+ball_ready_gap : F32
+ball_ready_gap = 2
+
+ball_bounce_gap : F32
+ball_bounce_gap = 1
 
 launch_vx : F32
 launch_vx = 170
@@ -65,6 +104,9 @@ launch_vy = -340
 brick_left : F32
 brick_left = 44
 
+brick_top : F32
+brick_top = 88
+
 brick_w : F32
 brick_w = 64
 
@@ -74,6 +116,21 @@ brick_h = 22
 brick_gap : F32
 brick_gap = 8
 
+bricks_per_row : U64
+bricks_per_row = 10
+
+brick_score : U64
+brick_score = 10
+
+brick_band_top : F32
+brick_band_top = 84
+
+brick_band_bottom : F32
+brick_band_bottom = 236
+
+initial_lives : U64
+initial_lives = 3
+
 init! : App.Init(Model)
 init! = App.init(
 	{
@@ -82,27 +139,68 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		paddle_x = (screen_w - paddle_w) * 0.5
-		seed = {
-			bricks: fresh_bricks,
-			paddle_x,
-			ball_x: paddle_x + paddle_w * 0.5,
-			ball_y: paddle_y - ball_radius - 2,
-			ball_vx: launch_vx,
-			ball_vy: launch_vy,
-			score: 0,
-			lives: 3,
-			state: Ready,
-			paddle_sound: Audio.gen_tone!({ freq: 440, ms: 50 }),
-			brick_sound: Audio.gen_tone!({ freq: 760, ms: 45 }),
-			wall_sound: Audio.gen_tone!({ freq: 260, ms: 40 }),
-			lose_sound: Audio.gen_tone!({ freq: 140, ms: 180 }),
-			start_sound: Audio.gen_tone!({ freq: 520, ms: 70 }),
-		}
-
-		Ok(new_game(seed))
+		Ok(
+			{
+				game: new_game_state(),
+				sounds: {
+					paddle: Audio.gen_tone!({ freq: 440, ms: 50 }),
+					brick: Audio.gen_tone!({ freq: 760, ms: 45 }),
+					wall: Audio.gen_tone!({ freq: 260, ms: 40 }),
+					lose: Audio.gen_tone!({ freq: 140, ms: 180 }),
+					start: Audio.gen_tone!({ freq: 520, ms: 70 }),
+				},
+			},
+		)
 	},
 )
+
+start_paddle_x : F32
+start_paddle_x = (screen_w - paddle_w) * 0.5
+
+launch_ball : F32 -> Ball
+launch_ball = |paddle_x| {
+	pos: {
+		x: paddle_x + paddle_w * 0.5,
+		y: paddle_y - ball_radius - ball_ready_gap,
+	},
+	vel: { x: launch_vx, y: launch_vy },
+}
+
+new_game_state : () -> Game
+new_game_state = || {
+	bricks: fresh_bricks,
+	paddle_x: start_paddle_x,
+	ball: launch_ball(start_paddle_x),
+	score: 0,
+	lives: initial_lives,
+	state: Ready,
+}
+
+brick_row_index : BrickRow -> U64
+brick_row_index = |row|
+	match row {
+		RedRow => 0
+		OrangeRow => 1
+		YellowRow => 2
+		GreenRow => 3
+		BlueRow => 4
+	}
+
+brick_row_color : BrickRow -> Color
+brick_row_color = |row|
+	match row {
+		RedRow => Color.from_hex_rgb(0xf94144)
+		OrangeRow => Color.from_hex_rgb(0xf3722c)
+		YellowRow => Color.from_hex_rgb(0xf9c74f)
+		GreenRow => Color.from_hex_rgb(0x43aa8b)
+		BlueRow => Color.from_hex_rgb(0x577590)
+	}
+
+brick_row_y : BrickRow -> F32
+brick_row_y = |row| brick_top + U64.to_f32(brick_row_index(row)) * (brick_h + brick_gap)
+
+brick_col_x : U64 -> F32
+brick_col_x = |col| brick_left + U64.to_f32(col) * (brick_w + brick_gap)
 
 brick_at : U64, F32, F32, Color -> Brick
 brick_at = |id, x, y, color| {
@@ -111,91 +209,109 @@ brick_at = |id, x, y, color| {
 	color,
 }
 
-brick_row : U64, F32, Color -> List(Brick)
-brick_row = |base_id, y, color| [
-	brick_at(base_id + 0, brick_left + 0 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 1, brick_left + 1 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 2, brick_left + 2 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 3, brick_left + 3 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 4, brick_left + 4 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 5, brick_left + 5 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 6, brick_left + 6 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 7, brick_left + 7 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 8, brick_left + 8 * (brick_w + brick_gap), y, color),
-	brick_at(base_id + 9, brick_left + 9 * (brick_w + brick_gap), y, color),
+brick_in_row : BrickRow, U64 -> Brick
+brick_in_row = |row, col| {
+	id = brick_row_index(row) * bricks_per_row + col
+	brick_at(id, brick_col_x(col), brick_row_y(row), brick_row_color(row))
+}
+
+brick_row : BrickRow -> List(Brick)
+brick_row = |row| [
+	brick_in_row(row, 0),
+	brick_in_row(row, 1),
+	brick_in_row(row, 2),
+	brick_in_row(row, 3),
+	brick_in_row(row, 4),
+	brick_in_row(row, 5),
+	brick_in_row(row, 6),
+	brick_in_row(row, 7),
+	brick_in_row(row, 8),
+	brick_in_row(row, 9),
 ]
 
 fresh_bricks : List(Brick)
 fresh_bricks = List.concat(
-	brick_row(0, 88, Color.from_hex_rgb(0xf94144)),
+	brick_row(RedRow),
 	List.concat(
-		brick_row(10, 118, Color.from_hex_rgb(0xf3722c)),
+		brick_row(OrangeRow),
 		List.concat(
-			brick_row(20, 148, Color.from_hex_rgb(0xf9c74f)),
+			brick_row(YellowRow),
 			List.concat(
-				brick_row(30, 178, Color.from_hex_rgb(0x43aa8b)),
-				brick_row(40, 208, Color.from_hex_rgb(0x577590)),
+				brick_row(GreenRow),
+				brick_row(BlueRow),
 			),
 		),
 	),
 )
 
-new_game : Model -> Model
-new_game = |model| {
-	paddle_x = (screen_w - paddle_w) * 0.5
-	{
-		..model,
-		bricks: fresh_bricks,
-		paddle_x,
-		ball_x: paddle_x + paddle_w * 0.5,
-		ball_y: paddle_y - ball_radius - 2,
-		ball_vx: launch_vx,
-		ball_vy: launch_vy,
-		score: 0,
-		lives: 3,
-		state: Ready,
+paddle_move_from_host : Host -> PaddleMove
+paddle_move_from_host = |host| {
+	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
+	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
+
+	if left PaddleLeft else if right PaddleRight else PaddleStill
+}
+
+paddle_move_dir : PaddleMove -> F32
+paddle_move_dir = |move|
+	match move {
+		PaddleLeft => -1
+		PaddleRight => 1
+		PaddleStill => 0
 	}
+
+frame_input : Host -> FrameInput
+frame_input = |host| {
+	paddle_move: paddle_move_from_host(host),
+	action_pressed: Keys.key_pressed(host.keys_pressed, KeySpace),
+	dt: host.frame_time,
 }
 
 paddle_rect : F32 -> Math.Rect
 paddle_rect = |paddle_x| Math.rect(paddle_x, paddle_y, paddle_w, paddle_h)
 
-move_paddle : F32, Host -> F32
-move_paddle = |paddle_x, host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
-	dir = if left -1 else if right 1 else 0
+move_paddle : F32, PaddleMove, F32 -> F32
+move_paddle = |paddle_x, move, dt|
+	Math.clamp(paddle_x + paddle_move_dir(move) * paddle_speed * dt, 0, screen_w - paddle_w)
 
-	Math.clamp(paddle_x + dir * paddle_speed * host.frame_time, 0, screen_w - paddle_w)
-}
+ball_circle : Ball -> Math.Circle
+ball_circle = |ball| Math.circle(ball.pos, ball_radius)
 
-ball_on_paddle : Model, F32, U64, GameState -> Model
-ball_on_paddle = |model, paddle_x, lives, state| {
-	..model,
+move_ball : Ball, F32 -> Ball
+move_ball = |ball, dt| { ..ball, pos: Math.add(ball.pos, Math.scale(ball.vel, dt)) }
+
+ball_on_paddle : Game, F32, U64, GameState -> Game
+ball_on_paddle = |game, paddle_x, lives, state| {
+	..game,
 	paddle_x,
-	ball_x: paddle_x + paddle_w * 0.5,
-	ball_y: paddle_y - ball_radius - 2,
-	ball_vx: launch_vx,
-	ball_vy: launch_vy,
+	ball: launch_ball(paddle_x),
 	lives,
 	state,
 }
 
-advance_ready! : Model, Host => Model
-advance_ready! = |model, host| {
-	paddle_x = move_paddle(model.paddle_x, host)
-	ready_model = ball_on_paddle(model, paddle_x, model.lives, Ready)
+event_when : Bool, StepEvent -> List(StepEvent)
+event_when = |condition, event| if condition [event] else []
 
-	if Keys.key_pressed(host.keys_pressed, KeySpace) {
-		Audio.play!(model.start_sound)
-		{ ..ready_model, state: Playing }
+advance_ready : Game, FrameInput -> StepResult
+advance_ready = |game, input| {
+	paddle_x = move_paddle(game.paddle_x, input.paddle_move, input.dt)
+	ready_game = ball_on_paddle(game, paddle_x, game.lives, Ready)
+
+	if input.action_pressed {
+		{ game: { ..ready_game, state: Playing }, events: [GameStarted] }
 	} else {
-		ready_model
+		{ game: ready_game, events: [] }
 	}
 }
 
-play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond Audio.play!(sound) else {}
+advance_finished : Game, FrameInput -> StepResult
+advance_finished = |game, input| {
+	if input.action_pressed {
+		{ game: new_game_state(), events: [GameStarted] }
+	} else {
+		{ game, events: [] }
+	}
+}
 
 find_hit_brick : List(Brick), Math.Circle, U64 -> Try(Brick, [NotFound])
 find_hit_brick = |bricks, ball_shape, index|
@@ -209,54 +325,98 @@ find_hit_brick = |bricks, ball_shape, index|
 		Err(_) => Err(NotFound)
 	}
 
-advance_playing! : Model, Host => Model
-advance_playing! = |model, host| {
-	paddle_x = move_paddle(model.paddle_x, host)
+advance_playing : Game, FrameInput -> StepResult
+advance_playing = |game, input| {
+	paddle_x = move_paddle(game.paddle_x, input.paddle_move, input.dt)
 	paddle = paddle_rect(paddle_x)
-
-	nx0 = model.ball_x + model.ball_vx * host.frame_time
-	ny0 = model.ball_y + model.ball_vy * host.frame_time
-	lost_life = ny0 - ball_radius > screen_h
+	next_ball = move_ball(game.ball, input.dt)
+	lost_life = next_ball.pos.y - ball_radius > screen_h
 
 	if lost_life {
-		Audio.play!(model.lose_sound)
-		next_lives = if model.lives > 0 model.lives - 1 else 0
-		next_state = if model.lives <= 1 GameOver else Ready
-		ball_on_paddle(model, paddle_x, next_lives, next_state)
+		next_lives = if game.lives > 0 game.lives - 1 else 0
+		next_state = if game.lives <= 1 GameOver else Ready
+		{
+			game: ball_on_paddle(game, paddle_x, next_lives, next_state),
+			events: [LifeLost(next_state)],
+		}
 	} else {
-		hit_left = nx0 - ball_radius < 0
-		hit_right = nx0 + ball_radius > screen_w
-		hit_top = ny0 - ball_radius < 58
+		hit_left = next_ball.pos.x - ball_radius < 0
+		hit_right = next_ball.pos.x + ball_radius > screen_w
+		hit_top = next_ball.pos.y - ball_radius < top_wall_y
+		hit_wall = hit_left or hit_right or hit_top
 
-		nx = if hit_left ball_radius else if hit_right screen_w - ball_radius else nx0
-		ny = if hit_top 58 + ball_radius else ny0
-		vx_wall = if hit_left or hit_right model.ball_vx * -1 else model.ball_vx
-		vy_wall = if hit_top model.ball_vy * -1 else model.ball_vy
+		wall_pos = {
+			x: if hit_left ball_radius else if hit_right screen_w - ball_radius else next_ball.pos.x,
+			y: if hit_top top_wall_y + ball_radius else next_ball.pos.y,
+		}
+		wall_vel = {
+			x: if hit_left or hit_right game.ball.vel.x * -1 else game.ball.vel.x,
+			y: if hit_top game.ball.vel.y * -1 else game.ball.vel.y,
+		}
+		wall_ball = { pos: wall_pos, vel: wall_vel }
 
-		wall_ball = Math.circle({ x: nx, y: ny }, ball_radius)
-		hit_paddle = vy_wall > 0 and Math.circle_rect(wall_ball, paddle)
+		hit_paddle = wall_ball.vel.y > 0 and Math.circle_rect(ball_circle(wall_ball), paddle)
 		paddle_center = Math.center(paddle).x
-		paddle_offset = Math.clamp((nx - paddle_center) / (paddle_w * 0.5), -1, 1)
-		vx_paddle = if hit_paddle paddle_offset * 360 else vx_wall
-		vy_paddle = if hit_paddle F32.abs(vy_wall) * -1 else vy_wall
-		ny_paddle = if hit_paddle paddle_y - ball_radius - 1 else ny
+		paddle_offset = Math.clamp((wall_ball.pos.x - paddle_center) / (paddle_w * 0.5), -1, 1)
+		paddle_ball = if hit_paddle {
+			pos: { x: wall_ball.pos.x, y: paddle_y - ball_radius - ball_bounce_gap },
+			vel: {
+				x: paddle_offset * paddle_bounce_speed,
+				y: F32.abs(wall_ball.vel.y) * -1,
+			},
+		} else {
+			wall_ball
+		}
 
-		play_if!(hit_left or hit_right or hit_top, model.wall_sound)
-		play_if!(hit_paddle, model.paddle_sound)
-
-		ball_shape = Math.circle({ x: nx, y: ny_paddle }, ball_radius)
-		near_bricks = ny_paddle + ball_radius >= 84 and ny_paddle - ball_radius <= 236
-		hit_result = if near_bricks find_hit_brick(model.bricks, ball_shape, 0) else Err(NotFound)
+		ball_shape = ball_circle(paddle_ball)
+		near_bricks = paddle_ball.pos.y + ball_radius >= brick_band_top and paddle_ball.pos.y - ball_radius <= brick_band_bottom
+		hit_result = if near_bricks find_hit_brick(game.bricks, ball_shape, 0) else Err(NotFound)
+		base_events = List.concat(event_when(hit_wall, WallHit), event_when(hit_paddle, PaddleHit))
 
 		match hit_result {
 			Ok(hit_brick) => {
-				Audio.play!(model.brick_sound)
-				remaining = List.keep_if(model.bricks, |brick| brick.id != hit_brick.id)
+				remaining = List.keep_if(game.bricks, |brick| brick.id != hit_brick.id)
 				state = if List.len(remaining) == 0 Won else Playing
-				play_if!(state == Won, model.start_sound)
-				{ ..model, bricks: remaining, paddle_x, ball_x: nx, ball_y: ny_paddle, ball_vx: vx_paddle, ball_vy: vy_paddle * -1, score: model.score + 10, state }
+				events = List.concat(base_events, List.concat([BrickHit(hit_brick)], event_when(state == Won, WallCleared)))
+				{
+					game: {
+						..game,
+						bricks: remaining,
+						paddle_x,
+						ball: { ..paddle_ball, vel: { x: paddle_ball.vel.x, y: paddle_ball.vel.y * -1 } },
+						score: game.score + brick_score,
+						state,
+					},
+					events,
+				}
 			}
-			Err(_) => { ..model, paddle_x, ball_x: nx, ball_y: ny_paddle, ball_vx: vx_paddle, ball_vy: vy_paddle, state: Playing }
+			Err(_) => {
+				game: { ..game, paddle_x, ball: paddle_ball, state: Playing },
+				events: base_events,
+			}
+		}
+	}
+}
+
+advance_game : Game, FrameInput -> StepResult
+advance_game = |game, input|
+	match game.state {
+		Ready => advance_ready(game, input)
+		Playing => advance_playing(game, input)
+		Won => advance_finished(game, input)
+		GameOver => advance_finished(game, input)
+	}
+
+play_step_events! : Sounds, List(StepEvent) => {}
+play_step_events! = |sounds, events| {
+	for event in events {
+		match event {
+			GameStarted => Audio.play!(sounds.start)
+			WallHit => Audio.play!(sounds.wall)
+			PaddleHit => Audio.play!(sounds.paddle)
+			BrickHit(_) => Audio.play!(sounds.brick)
+			LifeLost(_) => Audio.play!(sounds.lose)
+			WallCleared => Audio.play!(sounds.start)
 		}
 	}
 }
@@ -267,28 +427,13 @@ render! = |model, host| {
 		Host.exit!(0)
 	}
 
-	next = match model.state {
-		Ready => advance_ready!(model, host)
-		Playing => advance_playing!(model, host)
-		Won =>
-			if Keys.key_pressed(host.keys_pressed, KeySpace) {
-				Audio.play!(model.start_sound)
-				new_game(model)
-			} else {
-				model
-			}
-		GameOver =>
-			if Keys.key_pressed(host.keys_pressed, KeySpace) {
-				Audio.play!(model.start_sound)
-				new_game(model)
-			} else {
-				model
-			}
-		}
+	result = advance_game(model.game, frame_input(host))
+	play_step_events!(model.sounds, result.events)
+	next = { ..model, game: result.game }
 
 	Draw.draw!(
 		Color.ray_white,
-		|| draw_game!(next),
+		|| draw_game!(next.game),
 	)
 
 	Ok(next)
@@ -305,21 +450,21 @@ draw_bricks! = |bricks| {
 	}
 }
 
-draw_game! : Model => {}
-draw_game! = |model| {
+draw_game! : Game => {}
+draw_game! = |game| {
 	Draw.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
-	Draw.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(model.score)), size: 22, color: Color.gray })
-	Draw.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(model.lives)), size: 22, color: Color.gray })
+	Draw.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
+	Draw.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
 	Draw.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
-	Draw.line!({ start: { x: 44, y: 58 }, end: { x: screen_w - 44, y: 58 }, stroke: Draw.stroke(Color.light_gray, 2) })
+	Draw.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
 
-	draw_bricks!(model.bricks)
+	draw_bricks!(game.bricks)
 
-	paddle = paddle_rect(model.paddle_x)
+	paddle = paddle_rect(game.paddle_x)
 	Draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
-	Draw.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
+	Draw.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
 
-	match model.state {
+	match game.state {
 		Ready => {
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: "Move with A/D or arrow keys", size: 18, color: Color.gray })
@@ -335,5 +480,55 @@ draw_game! = |model| {
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: "Press SPACE to restart", size: 20, color: Color.light_gray })
 		}
+	}
+}
+
+still_input : FrameInput
+still_input = { paddle_move: PaddleStill, action_pressed: Bool.False, dt: 0 }
+
+expect List.len(fresh_bricks) == bricks_per_row * 5
+expect brick_row_index(BlueRow) == 4
+expect brick_row_y(YellowRow) == 148
+expect paddle_move_dir(PaddleLeft) == -1
+expect paddle_move_dir(PaddleRight) == 1
+expect paddle_move_dir(PaddleStill) == 0
+expect launch_ball(start_paddle_x).pos == { x: 400, y: 538 }
+expect ball_circle(launch_ball(start_paddle_x)).radius == ball_radius
+
+expect {
+	result = advance_ready(new_game_state(), { paddle_move: PaddleStill, action_pressed: Bool.True, dt: 0 })
+	result.game.state == Playing and match List.first(result.events) {
+		Ok(GameStarted) => Bool.True
+		Ok(_) => Bool.False
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 20, y: top_wall_y + ball_radius - 1 }, vel: { x: 0, y: -100 } } }
+	result = advance_playing(game, still_input)
+	result.game.ball.vel.y == 100 and match List.first(result.events) {
+		Ok(WallHit) => Bool.True
+		Ok(_) => Bool.False
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	game = { ..new_game_state(), state: Playing, lives: 1, ball: { pos: { x: 10, y: screen_h + ball_radius + 1 }, vel: { x: 0, y: 0 } } }
+	result = advance_playing(game, still_input)
+	result.game.state == GameOver and result.game.lives == 0 and match List.first(result.events) {
+		Ok(LifeLost(state)) => state == GameOver
+		Ok(_) => Bool.False
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	brick = brick_at(99, 100, 100, Color.red)
+	result = find_hit_brick([brick], Math.circle({ x: 105, y: 105 }, 1), 0)
+	match result {
+		Ok(hit) => hit.id == 99
+		Err(_) => Bool.False
 	}
 }

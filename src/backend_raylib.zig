@@ -1,11 +1,11 @@
 //! Raylib backend wrapper.
 //!
 //! This module provides a clean interface to raylib, accepting ABI types
-//! from roc_platform_abi.zig and converting them to raylib's C types.
+//! from roc_abi.zig and converting them to raylib's C types.
 //! All C interop is isolated here.
 
 const std = @import("std");
-const abi = @import("roc_platform_abi.zig");
+const abi = @import("roc_abi.zig");
 const ffi = @import("roc_ffi.zig");
 
 /// Raw raylib C bindings.
@@ -163,27 +163,27 @@ pub fn unloadTextures() void {
 /// Convert an ABI RGBA color record to raylib Color.
 pub fn colorToRl(color: anytype) rl.Color {
     return .{
-        .r = color.@"r",
-        .g = color.@"g",
-        .b = color.@"b",
-        .a = color.@"a",
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
     };
 }
 
 fn toVector2(point: anytype) rl.Vector2 {
-    return .{ .x = point.@"x", .y = point.@"y" };
+    return .{ .x = point.x, .y = point.y };
 }
 
 fn rectFromArgs(args: anytype) rl.Rectangle {
-    return .{ .x = args.@"x", .y = args.@"y", .width = args.@"width", .height = args.@"height" };
+    return .{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
 }
 
 fn cameraFromArgs(args: anytype) rl.Camera2D {
     return .{
-        .target = toVector2(args.@"target"),
-        .offset = toVector2(args.@"offset"),
-        .rotation = args.@"rotation",
-        .zoom = args.@"zoom",
+        .target = toVector2(args.target),
+        .offset = toVector2(args.offset),
+        .rotation = args.rotation,
+        .zoom = args.zoom,
     };
 }
 
@@ -215,85 +215,85 @@ fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) v
 /// Draw a circle from abi args.
 pub fn drawCircle(args: anytype) void {
     rl.DrawCircle(
-        @intFromFloat(args.@"center".@"x"),
-        @intFromFloat(args.@"center".@"y"),
-        args.@"radius",
-        colorToRl(args.@"color"),
+        @intFromFloat(args.center.x),
+        @intFromFloat(args.center.y),
+        args.radius,
+        colorToRl(args.color),
     );
 }
 
 /// Draw a thick circle outline from abi args.
 pub fn drawCircleLines(args: anytype) void {
-    const thick = positiveThickness(args.@"thickness") orelse return;
+    const thick = positiveThickness(args.thickness) orelse return;
     const half = thick * 0.5;
-    const inner_radius = @max(0, args.@"radius" - half);
-    const outer_radius = args.@"radius" + half;
+    const inner_radius = @max(0, args.radius - half);
+    const outer_radius = args.radius + half;
 
     rl.DrawRing(
-        toVector2(args.@"center"),
+        toVector2(args.center),
         inner_radius,
         outer_radius,
         0,
         360,
         64,
-        colorToRl(args.@"color"),
+        colorToRl(args.color),
     );
 }
 
 /// Draw a rectangle from abi args.
 pub fn drawRectangle(args: anytype) void {
     rl.DrawRectangle(
-        @intFromFloat(args.@"x"),
-        @intFromFloat(args.@"y"),
-        @intFromFloat(args.@"width"),
-        @intFromFloat(args.@"height"),
-        colorToRl(args.@"color"),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color),
     );
 }
 
 /// Draw a rectangle outline from abi args.
 pub fn drawRectangleLines(args: anytype) void {
-    const thick = positiveThickness(args.@"thickness") orelse return;
-    rl.DrawRectangleLinesEx(rectFromArgs(args), thick, colorToRl(args.@"color"));
+    const thick = positiveThickness(args.thickness) orelse return;
+    rl.DrawRectangleLinesEx(rectFromArgs(args), thick, colorToRl(args.color));
 }
 
 /// Draw a rounded rectangle from abi args.
 pub fn drawRoundedRectangle(args: anytype) void {
     rl.DrawRectangleRounded(
         rectFromArgs(args),
-        roundedness(args.@"width", args.@"height", args.@"radius"),
-        positiveSegments(args.@"segments"),
-        colorToRl(args.@"color"),
+        roundedness(args.width, args.height, args.radius),
+        positiveSegments(args.segments),
+        colorToRl(args.color),
     );
 }
 
 /// Draw a rounded rectangle outline from abi args.
 pub fn drawRoundedRectangleLines(args: anytype) void {
-    const thick = positiveThickness(args.@"thickness") orelse return;
+    const thick = positiveThickness(args.thickness) orelse return;
     rl.DrawRectangleRoundedLinesEx(
         rectFromArgs(args),
-        roundedness(args.@"width", args.@"height", args.@"radius"),
-        positiveSegments(args.@"segments"),
+        roundedness(args.width, args.height, args.radius),
+        positiveSegments(args.segments),
         thick,
-        colorToRl(args.@"color"),
+        colorToRl(args.color),
     );
 }
 
 /// Draw a line from abi args.
 pub fn drawLine(args: anytype) void {
-    drawSegment(args.@"start", args.@"end", args.@"thickness", args.@"color");
+    drawSegment(args.start, args.end, args.thickness, args.color);
 }
 
 /// Draw a triangle from abi args.
 pub fn drawTriangle(args: anytype) void {
-    rl.DrawTriangle(toVector2(args.@"a"), toVector2(args.@"b"), toVector2(args.@"c"), colorToRl(args.@"color"));
+    rl.DrawTriangle(toVector2(args.a), toVector2(args.b), toVector2(args.c), colorToRl(args.color));
 }
 
 /// Draw a triangle outline from abi args.
 pub fn drawTriangleLines(args: anytype) void {
-    drawSegment(args.@"a", args.@"b", args.@"thickness", args.@"color");
-    drawSegment(args.@"b", args.@"c", args.@"thickness", args.@"color");
-    drawSegment(args.@"c", args.@"a", args.@"thickness", args.@"color");
+    drawSegment(args.a, args.b, args.thickness, args.color);
+    drawSegment(args.b, args.c, args.thickness, args.color);
+    drawSegment(args.c, args.a, args.thickness, args.color);
 }
 
 /// Draw a filled polygon by fanning triangles from the point centroid.
@@ -302,8 +302,8 @@ pub fn drawPolygon(points: anytype, color: abi.Color) void {
 
     var center = rl.Vector2{ .x = 0, .y = 0 };
     for (points) |point| {
-        center.x += point.@"x";
-        center.y += point.@"y";
+        center.x += point.x;
+        center.y += point.y;
     }
     const len_f: f32 = @floatFromInt(points.len);
     center.x /= len_f;
@@ -338,14 +338,14 @@ pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f
 
 /// Draw a texture region into a destination rectangle.
 pub fn drawTexture(args: anytype) void {
-    const texture = textureFromHandle(args.@"texture") orelse return;
+    const texture = textureFromHandle(args.texture) orelse return;
     rl.DrawTexturePro(
         texture,
-        rectFromArgs(args.@"source"),
-        rectFromArgs(args.@"dest"),
-        toVector2(args.@"origin"),
-        args.@"rotation",
-        colorToRl(args.@"tint"),
+        rectFromArgs(args.source),
+        rectFromArgs(args.dest),
+        toVector2(args.origin),
+        args.rotation,
+        colorToRl(args.tint),
     );
 }
 
@@ -361,8 +361,8 @@ pub fn drawRectangleGradientV(args: anytype) void {
         @intFromFloat(args.y),
         @intFromFloat(args.width),
         @intFromFloat(args.height),
-        colorToRl(args.@"color_top"),
-        colorToRl(args.@"color_bottom"),
+        colorToRl(args.color_top),
+        colorToRl(args.color_bottom),
     );
 }
 
@@ -373,18 +373,18 @@ pub fn drawRectangleGradientH(args: anytype) void {
         @intFromFloat(args.y),
         @intFromFloat(args.width),
         @intFromFloat(args.height),
-        colorToRl(args.@"color_left"),
-        colorToRl(args.@"color_right"),
+        colorToRl(args.color_left),
+        colorToRl(args.color_right),
     );
 }
 
 /// Draw a circle with radial gradient from abi args.
 pub fn drawCircleGradient(args: anytype) void {
     rl.DrawCircleGradient(
-        toVector2(args.@"center"),
-        args.@"radius",
-        colorToRl(args.@"color_inner"),
-        colorToRl(args.@"color_outer"),
+        toVector2(args.center),
+        args.radius,
+        colorToRl(args.color_inner),
+        colorToRl(args.color_outer),
     );
 }
 
@@ -392,7 +392,7 @@ pub fn drawCircleGradient(args: anytype) void {
 pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
     const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
-    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.@"pos"), args.@"size", 1, colorToRl(args.@"color"));
+    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 
 /// Begin drawing frame.
@@ -493,72 +493,264 @@ pub fn getRandomValue(min: c_int, max: c_int) c_int {
 
 // --- Audio ---------------------------------------------------------------
 
-const TONE_SAMPLE_RATE: u32 = 44100;
-const MAX_TONE_MS: i32 = 1000;
-const MAX_SOUNDS: usize = 32;
+const AUDIO_SAMPLE_RATE: u32 = 44100;
+const MAX_GEN_SOUND_MS: i32 = 5000;
+const MAX_SOUNDS: usize = 128;
+const MAX_MUSIC: usize = 16;
 
-/// Generated sounds, owned by the host and addressed by handle (index).
+/// Sounds, owned by the host and addressed by one-based handle.
 var sounds: [MAX_SOUNDS]rl.Sound = undefined;
 var sound_count: usize = 0;
-/// Scratch buffer for tone generation (mono 16-bit, up to MAX_TONE_MS).
-var tone_buf: [TONE_SAMPLE_RATE]i16 = undefined;
+
+/// Music streams, owned by the host and addressed by one-based handle.
+var music_streams: [MAX_MUSIC]rl.Music = undefined;
+var music_count: usize = 0;
+
+/// Scratch buffer for procedural generation (mono 16-bit).
+var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
 
 /// Initialize the audio device (call once, after the window exists).
 pub fn initAudioDevice() void {
     rl.InitAudioDevice();
 }
 
-/// Unload generated sounds and close the audio device.
+/// Unload audio resources and close the audio device.
 pub fn closeAudioDevice() void {
-    var i: usize = 0;
-    while (i < sound_count) : (i += 1) rl.UnloadSound(sounds[i]);
+    var music_index: usize = 0;
+    while (music_index < music_count) : (music_index += 1) rl.UnloadMusicStream(music_streams[music_index]);
+    music_count = 0;
+
+    var sound_index: usize = 0;
+    while (sound_index < sound_count) : (sound_index += 1) rl.UnloadSound(sounds[sound_index]);
+    sound_count = 0;
+
     rl.CloseAudioDevice();
 }
 
-/// Generate a short sine tone, store it, and return its handle.
-/// Duration is clamped to [1, MAX_TONE_MS] ms; if the table is full the
-/// existing handle 0 is returned rather than allocating.
-pub fn genTone(freq: f32, ms: i32) usize {
+fn clampF32(value: f32, min: f32, max: f32) f32 {
+    return if (value < min) min else if (value > max) max else value;
+}
+
+fn clampI32(value: i32, min: i32, max: i32) i32 {
+    return if (value < min) min else if (value > max) max else value;
+}
+
+fn handleIndex(handle: u64, count: usize) ?usize {
+    if (handle == 0) return null;
+    if (handle > @as(u64, @intCast(count))) return null;
+    return @intCast(handle - 1);
+}
+
+fn storeSound(sound: rl.Sound) u64 {
+    if (sound_count >= MAX_SOUNDS) return 0;
+    sounds[sound_count] = sound;
+    sound_count += 1;
+    return @intCast(sound_count);
+}
+
+fn soundFromHandle(handle: u64) ?rl.Sound {
+    const index = handleIndex(handle, sound_count) orelse return null;
+    return sounds[index];
+}
+
+fn musicFromHandle(handle: u64) ?rl.Music {
+    const index = handleIndex(handle, music_count) orelse return null;
+    return music_streams[index];
+}
+
+fn musicPtrFromHandle(handle: u64) ?*rl.Music {
+    const index = handleIndex(handle, music_count) orelse return null;
+    return &music_streams[index];
+}
+
+fn msToFrames(ms: i32) usize {
+    const clamped = if (ms <= 0) 0 else ms;
+    return @intCast(@divTrunc(@as(i64, AUDIO_SAMPLE_RATE) * clamped, 1000));
+}
+
+fn envelopeAt(frame: usize, frames: usize, attack: usize, decay: usize, sustain_in: f32, release: usize) f32 {
+    if (frames == 0) return 0;
+
+    const sustain = clampF32(sustain_in, 0.0, 1.0);
+    const frame_f: f32 = @floatFromInt(frame);
+
+    if (attack > 0 and frame < attack) {
+        return frame_f / @as(f32, @floatFromInt(attack));
+    }
+
+    if (decay > 0 and frame < attack + decay) {
+        const amount = (frame_f - @as(f32, @floatFromInt(attack))) / @as(f32, @floatFromInt(decay));
+        return 1.0 + (sustain - 1.0) * clampF32(amount, 0.0, 1.0);
+    }
+
+    if (release > 0) {
+        const release_start = if (release >= frames) 0 else frames - release;
+        if (frame >= release_start) {
+            const tail = frames - frame;
+            return sustain * (@as(f32, @floatFromInt(tail)) / @as(f32, @floatFromInt(release)));
+        }
+    }
+
+    return sustain;
+}
+
+fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
+    return switch (waveform) {
+        1 => if (phase < 0.5) 1.0 else -1.0,
+        2 => 1.0 - 4.0 * absF32(phase - 0.5),
+        3 => phase * 2.0 - 1.0,
+        4 => blk: {
+            random_state.* = random_state.* *% 1664525 +% 1013904223;
+            const raw: f32 = @floatFromInt(random_state.* >> 8);
+            break :blk raw / 16777215.0 * 2.0 - 1.0;
+        },
+        else => std.math.sin(2.0 * std.math.pi * phase),
+    };
+}
+
+/// Load a sound effect from disk and return a one-based handle, or 0 on failure.
+pub fn loadSound(path: [*:0]const u8) u64 {
+    if (sound_count >= MAX_SOUNDS) return 0;
+    const sound = rl.LoadSound(path);
+    if (!rl.IsSoundValid(sound)) return 0;
+    return storeSound(sound);
+}
+
+/// Generate a short procedural sound, store it, and return a one-based handle.
+pub fn genSound(args: anytype) u64 {
     if (sound_count >= MAX_SOUNDS) return 0;
 
-    const dur_ms: i32 = if (ms < 1) 1 else if (ms > MAX_TONE_MS) MAX_TONE_MS else ms;
-    const frames: usize = @intCast(@divTrunc(@as(i64, TONE_SAMPLE_RATE) * dur_ms, 1000));
-    const fade: f32 = 0.005 * @as(f32, @floatFromInt(TONE_SAMPLE_RATE)); // 5ms anti-click ramp
+    const dur_ms = clampI32(args.ms, 1, MAX_GEN_SOUND_MS);
+    const frames = msToFrames(dur_ms);
+    if (frames == 0 or frames > gen_sound_buf.len) return 0;
+
+    const attack = msToFrames(args.attack_ms);
+    const decay = msToFrames(args.decay_ms);
+    const release = msToFrames(args.release_ms);
+    const volume = clampF32(args.volume, 0.0, 1.0);
+
+    var phase: f32 = 0.0;
+    var random_state: u32 = 0x9e3779b9 ^ @as(u32, @bitCast(args.freq_start));
+    const sample_rate: f32 = @floatFromInt(AUDIO_SAMPLE_RATE);
+    const frames_f: f32 = @floatFromInt(frames);
 
     var i: usize = 0;
     while (i < frames) : (i += 1) {
-        const fi: f32 = @floatFromInt(i);
-        const t: f32 = fi / @as(f32, @floatFromInt(TONE_SAMPLE_RATE));
-        const wave_sample = std.math.sin(2.0 * std.math.pi * freq * t);
-        const tail: f32 = @as(f32, @floatFromInt(frames)) - fi;
-        const env: f32 = @min(1.0, @min(fi / fade, tail / fade));
-        tone_buf[i] = @intFromFloat(wave_sample * env * 8000.0);
+        const amount = @as(f32, @floatFromInt(i)) / frames_f;
+        const freq = @max(1.0, args.freq_start + (args.freq_end - args.freq_start) * amount);
+        phase += freq / sample_rate;
+        phase -= @floor(phase);
+
+        const env = envelopeAt(i, frames, attack, decay, args.sustain, release);
+        const sample = waveformSample(args.waveform, phase, &random_state) * env * volume;
+        gen_sound_buf[i] = @intFromFloat(clampF32(sample, -1.0, 1.0) * 32767.0);
     }
 
     const wave = rl.Wave{
         .frameCount = @intCast(frames),
-        .sampleRate = TONE_SAMPLE_RATE,
+        .sampleRate = AUDIO_SAMPLE_RATE,
         .sampleSize = 16,
         .channels = 1,
-        .data = @ptrCast(&tone_buf),
+        .data = @ptrCast(&gen_sound_buf),
     };
-    const handle = sound_count;
-    sounds[handle] = rl.LoadSoundFromWave(wave);
-    sound_count += 1;
-    return handle;
+
+    const sound = rl.LoadSoundFromWave(wave);
+    if (!rl.IsSoundValid(sound)) return 0;
+    return storeSound(sound);
 }
 
-/// Play a previously generated sound by handle (no-op if out of range).
-pub fn playSoundHandle(handle: usize) void {
-    if (handle < sound_count) rl.PlaySound(sounds[handle]);
+/// Generate a short sine tone, store it, and return a one-based handle.
+pub fn genTone(freq: f32, ms: i32) u64 {
+    return genSound(.{
+        .waveform = @as(u8, 0),
+        .freq_start = freq,
+        .freq_end = freq,
+        .ms = ms,
+        .attack_ms = 5,
+        .decay_ms = 12,
+        .sustain = 0.8,
+        .release_ms = 8,
+        .volume = 0.55,
+    });
 }
 
-/// Set volume for a previously generated sound by handle (no-op if out of range).
-pub fn setSoundVolumeHandle(handle: usize, volume: f32) void {
-    if (handle < sound_count) {
-        const clamped = if (volume < 0.0) 0.0 else if (volume > 1.0) 1.0 else volume;
-        rl.SetSoundVolume(sounds[handle], clamped);
-    }
+/// Play a previously loaded/generated sound by handle (no-op if out of range).
+pub fn playSoundHandle(handle: u64) void {
+    if (soundFromHandle(handle)) |sound| rl.PlaySound(sound);
+}
+
+/// Set volume for a sound by handle (no-op if out of range).
+pub fn setSoundVolumeHandle(handle: u64, volume: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
+}
+
+/// Set pitch for a sound by handle (no-op if out of range).
+pub fn setSoundPitchHandle(handle: u64, pitch: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
+}
+
+/// Set pan for a sound by handle (no-op if out of range).
+pub fn setSoundPanHandle(handle: u64, pan: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
+}
+
+/// Load a music stream from disk and return a one-based handle, or 0 on failure.
+pub fn loadMusic(path: [*:0]const u8) u64 {
+    if (music_count >= MAX_MUSIC) return 0;
+
+    var stream = rl.LoadMusicStream(path);
+    if (!rl.IsMusicValid(stream)) return 0;
+    stream.looping = true;
+
+    music_streams[music_count] = stream;
+    music_count += 1;
+    return @intCast(music_count);
+}
+
+/// Update all loaded music streams. Call once per frame.
+pub fn updateMusicStreams() void {
+    var i: usize = 0;
+    while (i < music_count) : (i += 1) rl.UpdateMusicStream(music_streams[i]);
+}
+
+/// Play a music stream by handle (no-op if out of range).
+pub fn playMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.PlayMusicStream(stream);
+}
+
+/// Stop a music stream by handle (no-op if out of range).
+pub fn stopMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.StopMusicStream(stream);
+}
+
+/// Pause a music stream by handle (no-op if out of range).
+pub fn pauseMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.PauseMusicStream(stream);
+}
+
+/// Resume a music stream by handle (no-op if out of range).
+pub fn resumeMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.ResumeMusicStream(stream);
+}
+
+/// Set volume for a music stream by handle (no-op if out of range).
+pub fn setMusicVolumeHandle(handle: u64, volume: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
+}
+
+/// Set pitch for a music stream by handle (no-op if out of range).
+pub fn setMusicPitchHandle(handle: u64, pitch: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
+}
+
+/// Set pan for a music stream by handle (no-op if out of range).
+pub fn setMusicPanHandle(handle: u64, pan: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
+}
+
+/// Set looping for a music stream by handle (no-op if out of range).
+pub fn setMusicLoopingHandle(handle: u64, looping: bool) void {
+    if (musicPtrFromHandle(handle)) |stream| stream.looping = looping;
 }
 
 /// Keyboard key enum for type-safe key handling.

@@ -6,7 +6,7 @@
 //!
 //! All are designed to reduce boilerplate and improve type safety in host code.
 
-const abi = @import("roc_platform_abi.zig");
+const abi = @import("roc_abi.zig");
 
 // Re-export host helper context for convenience.
 pub const RocHost = abi.RocHost;
@@ -108,4 +108,4 @@ pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 
 /// Flat state for init_for_host!/render_for_host!.
 /// This is not the public nested `Host` record exposed to Roc apps.
-pub const HostState = abi.__AnonStruct80;
+pub const HostState = abi.__AnonStruct84;

@@ -3,7 +3,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 // Import generated platform ABI (use for hosted function arg/ret types)
-const abi = @import("roc_platform_abi.zig");
+const abi = @import("roc_abi.zig");
 
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
@@ -19,7 +19,7 @@ const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.Try;
-const AppConfig = abi.__AnonStruct78;
+const AppConfig = abi.__AnonStruct82;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
@@ -332,9 +332,9 @@ fn exportedDrawLoadFontRaw(args: abi.DrawLoad_font_rawArgs) callconv(.c) u64 {
     return hostedDrawLoadFontRaw(activeHost(), args);
 }
 
-fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.__AnonStruct25 {
+fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.DrawMeasure_text_rawRetRecord {
     defer args.text.decref(host);
-    var result: abi.__AnonStruct25 = .{ .height = 0, .width = 0 };
+    var result: abi.DrawMeasure_text_rawRetRecord = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -346,7 +346,7 @@ fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) 
     return result;
 }
 
-fn exportedDrawMeasureTextRaw(args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.__AnonStruct25 {
+fn exportedDrawMeasureTextRaw(args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.DrawMeasure_text_rawRetRecord {
     return hostedDrawMeasureTextRaw(activeHost(), args);
 }
 
@@ -430,7 +430,7 @@ fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
 
-fn hostedGetScreenSize() callconv(.c) abi.__AnonStruct43 {
+fn hostedGetScreenSize() callconv(.c) abi.HostGet_screen_sizeRetRecord {
     return .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
@@ -450,15 +450,89 @@ fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
 }
 
 fn hostedAudioGenTone(args: abi.AudioGen_tone_rawArgs) callconv(.c) u64 {
-    return @intCast(raylib.genTone(args.freq, args.ms));
+    return raylib.genTone(args.freq, args.ms);
+}
+
+fn hostedAudioGenSound(args: abi.AudioGen_sound_rawArgs) callconv(.c) u64 {
+    return raylib.genSound(args);
+}
+
+fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) u64 {
+    defer path_arg.decref(host);
+
+    const path_slice = path_arg.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
+    defer path.deinit();
+
+    return raylib.loadSound(path.ptr);
+}
+
+fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) u64 {
+    return hostedAudioLoadSound(activeHost(), path_arg);
+}
+
+fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) u64 {
+    defer path_arg.decref(host);
+
+    const path_slice = path_arg.asSlice();
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
+    defer path.deinit();
+
+    return raylib.loadMusic(path.ptr);
+}
+
+fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) u64 {
+    return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
 fn hostedAudioPlay(handle: u64) callconv(.c) void {
-    raylib.playSoundHandle(@intCast(handle));
+    raylib.playSoundHandle(handle);
 }
 
 fn hostedAudioSetVolume(handle: u64, volume: f32) callconv(.c) void {
-    raylib.setSoundVolumeHandle(@intCast(handle), volume);
+    raylib.setSoundVolumeHandle(handle, volume);
+}
+
+fn hostedAudioSetPitch(handle: u64, pitch: f32) callconv(.c) void {
+    raylib.setSoundPitchHandle(handle, pitch);
+}
+
+fn hostedAudioSetPan(handle: u64, pan: f32) callconv(.c) void {
+    raylib.setSoundPanHandle(handle, pan);
+}
+
+fn hostedAudioPlayMusic(handle: u64) callconv(.c) void {
+    raylib.playMusicHandle(handle);
+}
+
+fn hostedAudioStopMusic(handle: u64) callconv(.c) void {
+    raylib.stopMusicHandle(handle);
+}
+
+fn hostedAudioPauseMusic(handle: u64) callconv(.c) void {
+    raylib.pauseMusicHandle(handle);
+}
+
+fn hostedAudioResumeMusic(handle: u64) callconv(.c) void {
+    raylib.resumeMusicHandle(handle);
+}
+
+fn hostedAudioSetMusicVolume(handle: u64, volume: f32) callconv(.c) void {
+    raylib.setMusicVolumeHandle(handle, volume);
+}
+
+fn hostedAudioSetMusicPitch(handle: u64, pitch: f32) callconv(.c) void {
+    raylib.setMusicPitchHandle(handle, pitch);
+}
+
+fn hostedAudioSetMusicPan(handle: u64, pan: f32) callconv(.c) void {
+    raylib.setMusicPanHandle(handle, pan);
+}
+
+fn hostedAudioSetMusicLooping(handle: u64, looping: bool) callconv(.c) void {
+    raylib.setMusicLoopingHandle(handle, looping);
 }
 
 comptime {
@@ -471,9 +545,22 @@ comptime {
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
 
         @export(&exportedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
+        @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
+        @export(&exportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
+        @export(&exportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
+        @export(&hostedAudioPauseMusic, .{ .name = "roc_audio_pause_music_raw" });
+        @export(&hostedAudioPlayMusic, .{ .name = "roc_audio_play_music_raw" });
         @export(&hostedAudioPlay, .{ .name = "roc_audio_play_raw" });
+        @export(&hostedAudioResumeMusic, .{ .name = "roc_audio_resume_music_raw" });
+        @export(&hostedAudioSetMusicLooping, .{ .name = "roc_audio_set_music_looping_raw" });
+        @export(&hostedAudioSetMusicPan, .{ .name = "roc_audio_set_music_pan_raw" });
+        @export(&hostedAudioSetMusicPitch, .{ .name = "roc_audio_set_music_pitch_raw" });
+        @export(&hostedAudioSetMusicVolume, .{ .name = "roc_audio_set_music_volume_raw" });
+        @export(&hostedAudioSetPan, .{ .name = "roc_audio_set_pan_raw" });
+        @export(&hostedAudioSetPitch, .{ .name = "roc_audio_set_pitch_raw" });
         @export(&hostedAudioSetVolume, .{ .name = "roc_audio_set_volume_raw" });
+        @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
@@ -657,6 +744,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // raylib's own delta, forced to 0 on the first frame.
         const now_ns: u64 = @intFromFloat(raylib.getTime() * 1_000_000_000.0);
         const frame_time: f32 = if (frame_count == 0) 0 else raylib.getFrameTime();
+        raylib.updateMusicStreams();
 
         // Capture real inputs from raylib
         raylib.updateKeyboardState();

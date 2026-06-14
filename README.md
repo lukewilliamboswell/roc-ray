@@ -15,7 +15,8 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
-- Generated sound playback with per-sound volume control
+- Loaded sound effects and generated procedural sounds with volume, pitch, and pan
+- Streamed music playback with host-managed per-frame updates
 - Native rendering via raylib (macOS, Linux, Windows)
 
 ## Requirements
@@ -49,7 +50,7 @@ World-space camera drawing is demonstrated in:
 roc examples/camera.roc
 ```
 
-The top-down demo uses selected CC0 assets from Kenney's Topdown Shooter pack; a copy of the asset license is included in [`examples/assets/kenney-topdown/LICENSE.txt`](examples/assets/kenney-topdown/LICENSE.txt).
+The top-down demo uses selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
 
 Beginner game examples are available in:
 

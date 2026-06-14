@@ -25,6 +25,13 @@ Hazard : {
 	color : Color,
 }
 
+Decoration : {
+	pos : Math.Vec2,
+	tile : U64,
+	scale : F32,
+	rotation : F32,
+}
+
 GameState := [Playing, Won, GameOver]
 
 Sounds : {
@@ -32,16 +39,10 @@ Sounds : {
 	hurt : Audio.Sound,
 	win : Audio.Sound,
 	lose : Audio.Sound,
-	start : Audio.Sound,
-	bass_c : Audio.Sound,
-	bass_f : Audio.Sound,
-	bass_g : Audio.Sound,
-	bass_a : Audio.Sound,
-	lead_e : Audio.Sound,
-	lead_g : Audio.Sound,
-	lead_a : Audio.Sound,
-	lead_b : Audio.Sound,
-	lead_c : Audio.Sound,
+	gate : Audio.Sound,
+	dash : Audio.Sound,
+	sparkle : Audio.Sound,
+	music : Audio.Music,
 }
 
 Model : {
@@ -54,10 +55,16 @@ Model : {
 	lives : U64,
 	phase : F32,
 	invuln : F32,
-	beat_timer : F32,
-	beat_index : U64,
+	dash_cooldown : F32,
+	dash_timer : F32,
+	shake : F32,
+	flash : F32,
+	burst_pos : Math.Vec2,
+	burst_timer : F32,
 	animation : Sprite.Animation,
 	facing : F32,
+	gate_open : Bool,
+	gate_flash : F32,
 	state : GameState,
 }
 
@@ -87,6 +94,15 @@ player_radius = 22
 player_speed : F32
 player_speed = 330
 
+dash_speed : F32
+dash_speed = 760
+
+dash_duration : F32
+dash_duration = 0.18
+
+dash_cooldown_time : F32
+dash_cooldown_time = 0.62
+
 spark_radius : F32
 spark_radius = 24
 
@@ -99,11 +115,38 @@ characters_path = "examples/assets/kenney-topdown/characters.png"
 tiles_path : Str
 tiles_path = "examples/assets/kenney-topdown/tiles.png"
 
+collect_path : Str
+collect_path = "examples/assets/kenney-audio/sfx/collect.ogg"
+
+hurt_path : Str
+hurt_path = "examples/assets/kenney-audio/sfx/hurt.ogg"
+
+win_path : Str
+win_path = "examples/assets/kenney-audio/sfx/win.ogg"
+
+lose_path : Str
+lose_path = "examples/assets/kenney-audio/sfx/lose.ogg"
+
+gate_path : Str
+gate_path = "examples/assets/kenney-audio/sfx/gate.ogg"
+
+dash_path : Str
+dash_path = "examples/assets/kenney-audio/sfx/dash.ogg"
+
+music_path : Str
+music_path = "examples/assets/kenney-audio/music/spark_loop.wav"
+
 spawn : Math.Vec2
 spawn = { x: -560, y: -360 }
 
-music_volume : F32
-music_volume = 0.22
+exit_center : Math.Vec2
+exit_center = { x: 1185, y: 920 }
+
+exit_radius : F32
+exit_radius = 58
+
+burst_duration : F32
+burst_duration = 0.36
 
 init! : App.Init(Model)
 init! = App.init(
@@ -122,24 +165,8 @@ init! = App.init(
 			Ok(characters) =>
 				match Assets.load_texture!(tiles_path) {
 					Ok(tiles) => {
-						sounds = {
-							collect: Audio.gen_tone!({ freq: 880, ms: 55 }),
-							hurt: Audio.gen_tone!({ freq: 130, ms: 170 }),
-							win: Audio.gen_tone!({ freq: 1040, ms: 180 }),
-							lose: Audio.gen_tone!({ freq: 90, ms: 260 }),
-							start: Audio.gen_tone!({ freq: 520, ms: 90 }),
-							bass_c: Audio.gen_tone!({ freq: 131, ms: 70 }),
-							bass_f: Audio.gen_tone!({ freq: 175, ms: 70 }),
-							bass_g: Audio.gen_tone!({ freq: 196, ms: 70 }),
-							bass_a: Audio.gen_tone!({ freq: 220, ms: 70 }),
-							lead_e: Audio.gen_tone!({ freq: 659, ms: 34 }),
-							lead_g: Audio.gen_tone!({ freq: 784, ms: 34 }),
-							lead_a: Audio.gen_tone!({ freq: 880, ms: 34 }),
-							lead_b: Audio.gen_tone!({ freq: 988, ms: 34 }),
-							lead_c: Audio.gen_tone!({ freq: 1047, ms: 48 }),
-						}
-
-						quiet_music!(sounds)
+						sounds = make_sounds!()
+						Audio.play_music!(sounds.music)
 						Ok(new_game(characters, tiles, sounds))
 					}
 					Err(_) => Err(Exit(1))
@@ -149,17 +176,58 @@ init! = App.init(
 	},
 )
 
-quiet_music! : Sounds => {}
-quiet_music! = |sounds| {
-	Audio.set_volume!(sounds.bass_c, music_volume)
-	Audio.set_volume!(sounds.bass_f, music_volume)
-	Audio.set_volume!(sounds.bass_g, music_volume)
-	Audio.set_volume!(sounds.bass_a, music_volume)
-	Audio.set_volume!(sounds.lead_e, music_volume)
-	Audio.set_volume!(sounds.lead_g, music_volume)
-	Audio.set_volume!(sounds.lead_a, music_volume)
-	Audio.set_volume!(sounds.lead_b, music_volume)
-	Audio.set_volume!(sounds.lead_c, music_volume)
+make_sound : Audio.Waveform, F32, F32, I32, F32 => Audio.Sound
+make_sound = |waveform, from, to, ms, volume|
+	Audio.gen_sound!(
+		{
+			waveform,
+			freq_start: from,
+			freq_end: to,
+			ms,
+			attack_ms: 2,
+			decay_ms: 24,
+			sustain: 0.45,
+			release_ms: 45,
+			volume,
+		},
+	)
+
+load_sound_or! : Str, Audio.Sound => Audio.Sound
+load_sound_or! = |path, fallback|
+	match Audio.load_sound!(path) {
+		Ok(sound) => sound
+		Err(_) => fallback
+	}
+
+load_music_or_invalid! : Str => Audio.Music
+load_music_or_invalid! = |path|
+	match Audio.load_music!(path) {
+		Ok(music) => music
+		Err(_) => Box.box(0)
+	}
+
+make_sounds! : () => Sounds
+make_sounds! = || {
+	collect = load_sound_or!(collect_path, make_sound(Sine, 880, 1160, 110, 0.55))
+	hurt = load_sound_or!(hurt_path, make_sound(Noise, 180, 70, 220, 0.7))
+	win = load_sound_or!(win_path, make_sound(Square, 640, 1280, 520, 0.45))
+	lose = load_sound_or!(lose_path, make_sound(Saw, 120, 45, 520, 0.5))
+	gate = load_sound_or!(gate_path, make_sound(Square, 220, 390, 240, 0.45))
+	dash = load_sound_or!(dash_path, make_sound(Noise, 520, 120, 130, 0.38))
+	sparkle = make_sound(Sine, 980, 1620, 140, 0.36)
+	music = load_music_or_invalid!(music_path)
+
+	Audio.set_volume!(collect, 0.58)
+	Audio.set_volume!(hurt, 0.55)
+	Audio.set_volume!(win, 0.48)
+	Audio.set_volume!(lose, 0.58)
+	Audio.set_volume!(gate, 0.46)
+	Audio.set_volume!(dash, 0.3)
+	Audio.set_volume!(sparkle, 0.16)
+	Audio.set_music_volume!(music, 0.13)
+	Audio.set_music_looping!(music, Bool.True)
+
+	{ collect, hurt, win, lose, gate, dash, sparkle, music }
 }
 
 new_game : Assets.Texture, Assets.Texture, Sounds -> Model
@@ -173,15 +241,21 @@ new_game = |characters, tiles, sounds| {
 	lives: 3,
 	phase: 0,
 	invuln: 0,
-	beat_timer: 0,
-	beat_index: 0,
-	animation: Sprite.animation({ frame_count: 4, fps: 8 }),
+	dash_cooldown: 0,
+	dash_timer: 0,
+	shake: 0,
+	flash: 0,
+	burst_pos: spawn,
+	burst_timer: 0,
+	animation: Sprite.animation({ frame_count: 4, fps: 10 }),
 	facing: 90,
+	gate_open: Bool.False,
+	gate_flash: 0,
 	state: Playing,
 }
 
-replace_model : Model, Math.Vec2, List(Spark), U64, U64, F32, F32, F32, U64, Sprite.Animation, F32, GameState -> Model
-replace_model = |model, player, sparks, score, lives, phase, invuln, beat_timer, beat_index, animation, facing, state| {
+replace_model : Model, Math.Vec2, List(Spark), U64, U64, F32, F32, F32, F32, F32, F32, Math.Vec2, F32, Sprite.Animation, F32, Bool, F32, GameState -> Model
+replace_model = |model, player, sparks, score, lives, phase, invuln, dash_cooldown, dash_timer, shake, flash, burst_pos, burst_timer, animation, facing, gate_open, gate_flash, state| {
 	characters: model.characters,
 	tiles: model.tiles,
 	sounds: model.sounds,
@@ -191,10 +265,16 @@ replace_model = |model, player, sparks, score, lives, phase, invuln, beat_timer,
 	lives,
 	phase,
 	invuln,
-	beat_timer,
-	beat_index,
+	dash_cooldown,
+	dash_timer,
+	shake,
+	flash,
+	burst_pos,
+	burst_timer,
 	animation,
 	facing,
+	gate_open,
+	gate_flash,
 	state,
 }
 
@@ -204,32 +284,50 @@ spark_at = |id, x, y| { id, pos: { x, y } }
 fresh_sparks : List(Spark)
 fresh_sparks = [
 	spark_at(0, -430, -150),
-	spark_at(1, -40, -330),
-	spark_at(2, 335, -235),
-	spark_at(3, 790, -410),
-	spark_at(4, 1110, -30),
-	spark_at(5, 880, 360),
-	spark_at(6, 510, 830),
-	spark_at(7, 90, 615),
-	spark_at(8, -270, 890),
-	spark_at(9, -515, 390),
+	spark_at(1, -55, -350),
+	spark_at(2, 315, -295),
+	spark_at(3, 760, -405),
+	spark_at(4, 1110, -65),
+	spark_at(5, 910, 350),
+	spark_at(6, 560, 820),
+	spark_at(7, 105, 640),
+	spark_at(8, -280, 895),
+	spark_at(9, -540, 410),
 ]
 
 obstacles : List(Math.Rect)
 obstacles = [
-	Math.rect(-255, -280, 160, 520),
-	Math.rect(125, -50, 530, 120),
-	Math.rect(260, 365, 150, 420),
-	Math.rect(705, 165, 135, 405),
-	Math.rect(-510, 530, 405, 110),
+	Math.rect(-305, -300, 150, 440),
+	Math.rect(85, -430, 150, 295),
+	Math.rect(210, -45, 510, 120),
+	Math.rect(705, 150, 140, 425),
+	Math.rect(5, 505, 480, 115),
+	Math.rect(-535, 515, 340, 105),
+	Math.rect(965, -300, 145, 450),
 ]
 
 hazards : List(Hazard)
 hazards = [
-	{ center: { x: -420, y: 160 }, span: 520, vertical: Bool.False, offset: 0, radius: 30, color: Color.from_hex_rgb(0xf94144) },
-	{ center: { x: 40, y: 330 }, span: 620, vertical: Bool.True, offset: 0.28, radius: 34, color: Color.from_hex_rgb(0xf3722c) },
-	{ center: { x: 570, y: -255 }, span: 610, vertical: Bool.False, offset: 0.52, radius: 32, color: Color.from_hex_rgb(0xf8961e) },
-	{ center: { x: 1045, y: 430 }, span: 640, vertical: Bool.True, offset: 0.76, radius: 36, color: Color.from_hex_rgb(0xf94144) },
+	{ center: { x: -445, y: 165 }, span: 520, vertical: Bool.False, offset: 0, radius: 30, color: Color.from_hex_rgb(0xf94144) },
+	{ center: { x: 25, y: 320 }, span: 650, vertical: Bool.True, offset: 0.22, radius: 34, color: Color.from_hex_rgb(0xf3722c) },
+	{ center: { x: 600, y: -255 }, span: 650, vertical: Bool.False, offset: 0.48, radius: 32, color: Color.from_hex_rgb(0xf8961e) },
+	{ center: { x: 1035, y: 455 }, span: 700, vertical: Bool.True, offset: 0.72, radius: 36, color: Color.from_hex_rgb(0xf94144) },
+]
+
+decorations : List(Decoration)
+decorations = [
+	{ pos: { x: -640, y: 80 }, tile: 237, scale: 1.35, rotation: 0 },
+	{ pos: { x: -575, y: 585 }, tile: 238, scale: 1.2, rotation: 0 },
+	{ pos: { x: -85, y: -455 }, tile: 183, scale: 1.35, rotation: 0 },
+	{ pos: { x: 190, y: 185 }, tile: 158, scale: 1.15, rotation: 0 },
+	{ pos: { x: 780, y: -210 }, tile: 156, scale: 1.1, rotation: 12 },
+	{ pos: { x: 1110, y: 190 }, tile: 181, scale: 1.45, rotation: 0 },
+	{ pos: { x: 1035, y: 785 }, tile: 157, scale: 1.2, rotation: -14 },
+	{ pos: { x: 315, y: 975 }, tile: 213, scale: 1.05, rotation: 0 },
+	{ pos: { x: -395, y: 960 }, tile: 214, scale: 0.9, rotation: 0 },
+	{ pos: { x: 1185, y: 735 }, tile: 239, scale: 0.7, rotation: 20 },
+	{ pos: { x: 1280, y: -395 }, tile: 240, scale: 0.72, rotation: -18 },
+	{ pos: { x: -615, y: -405 }, tile: 184, scale: 1.1, rotation: 0 },
 ]
 
 axis : Bool, Bool -> F32
@@ -286,10 +384,10 @@ any_obstacle_hit = |pos, index|
 		Err(_) => Bool.False
 	}
 
-move_player : Math.Vec2, Math.Vec2, F32 -> Math.Vec2
-move_player = |player, raw_dir, dt| {
+move_player_speed : Math.Vec2, Math.Vec2, F32, F32 -> Math.Vec2
+move_player_speed = |player, raw_dir, dt, speed| {
 	dir = Math.normalize(raw_dir)
-	candidate = clamp_to_world(Math.add(player, Math.scale(dir, player_speed * dt)))
+	candidate = clamp_to_world(Math.add(player, Math.scale(dir, speed * dt)))
 
 	if any_obstacle_hit(candidate, 0) player else candidate
 }
@@ -325,16 +423,25 @@ find_hit_spark = |sparks, player, index|
 play_if! : Bool, Audio.Sound => {}
 play_if! = |cond, sound| if cond Audio.play!(sound) else {}
 
+pan_for_world_x : F32 -> F32
+pan_for_world_x = |x| Math.clamp((x - world_left) / (world_right - world_left) * 2 - 1, -1, 1)
+
 collect_spark! : Model => Model
 collect_spark! = |model|
 	match find_hit_spark(model.sparks, model.player, 0) {
 		Ok(spark) => {
-			Audio.play!(model.sounds.collect)
 			remaining = List.keep_if(model.sparks, |item| item.id != spark.id)
 			next_score = model.score + 1
-			next_state = if List.len(remaining) == 0 Won else Playing
-			play_if!(next_state == Won, model.sounds.win)
-			replace_model(model, model.player, remaining, next_score, model.lives, model.phase, model.invuln, model.beat_timer, model.beat_index, model.animation, model.facing, next_state)
+			gate_open = List.len(remaining) == 0
+			just_opened = gate_open and !(model.gate_open)
+
+			Audio.set_pan!(model.sounds.collect, pan_for_world_x(spark.pos.x))
+			Audio.set_pitch!(model.sounds.sparkle, 0.92 + U64.to_f32(next_score) * 0.045)
+			Audio.play!(model.sounds.collect)
+			play_if!(next_score % 3 == 0, model.sounds.sparkle)
+			play_if!(just_opened, model.sounds.gate)
+
+			replace_model(model, model.player, remaining, next_score, model.lives, model.phase, model.invuln, model.dash_cooldown, model.dash_timer, 0, 0, spark.pos, burst_duration, model.animation, model.facing, gate_open, if just_opened 1 else model.gate_flash, Playing)
 		}
 		Err(_) => model
 	}
@@ -357,7 +464,18 @@ damage_if_needed! = |model| {
 		next_lives = if model.lives > 0 model.lives - 1 else 0
 		next_state = if model.lives <= 1 GameOver else Playing
 		Audio.play!(if next_state == GameOver model.sounds.lose else model.sounds.hurt)
-		replace_model(model, spawn, model.sparks, model.score, next_lives, model.phase, 1.2, model.beat_timer, model.beat_index, model.animation, 90, next_state)
+		replace_model(model, spawn, model.sparks, model.score, next_lives, model.phase, 1.2, model.dash_cooldown, 0, 10, 0.28, model.player, burst_duration, model.animation, 90, model.gate_open, model.gate_flash, next_state)
+	} else {
+		model
+	}
+}
+
+escape_if_needed! : Model => Model
+escape_if_needed! = |model| {
+	if model.gate_open and Math.circle_overlaps(Math.circle(model.player, player_radius), Math.circle(exit_center, exit_radius)) {
+		Audio.set_music_volume!(model.sounds.music, 0.08)
+		Audio.play!(model.sounds.win)
+		replace_model(model, model.player, model.sparks, model.score, model.lives, model.phase, model.invuln, model.dash_cooldown, model.dash_timer, 10, 0, exit_center, burst_duration, model.animation, model.facing, model.gate_open, 1, Won)
 	} else {
 		model
 	}
@@ -365,6 +483,29 @@ damage_if_needed! = |model| {
 
 is_moving : Math.Vec2 -> Bool
 is_moving = |dir| dir.x != 0 or dir.y != 0
+
+direction_for_facing : F32 -> Math.Vec2
+direction_for_facing = |facing| {
+	if facing == 0 {
+		{ x: 0, y: -1 }
+	} else if facing == 45 {
+		{ x: 0.7, y: -0.7 }
+	} else if facing == 90 {
+		{ x: 1, y: 0 }
+	} else if facing == 135 {
+		{ x: 0.7, y: 0.7 }
+	} else if facing == 180 {
+		{ x: 0, y: 1 }
+	} else if facing == 225 {
+		{ x: -0.7, y: 0.7 }
+	} else if facing == 270 {
+		{ x: -1, y: 0 }
+	} else if facing == 315 {
+		{ x: -0.7, y: -0.7 }
+	} else {
+		{ x: 1, y: 0 }
+	}
+}
 
 idle_animation : Sprite.Animation -> Sprite.Animation
 idle_animation = |animation| {
@@ -374,69 +515,41 @@ idle_animation = |animation| {
 	elapsed: 0,
 }
 
-beat_interval : F32
-beat_interval = 0.18
-
-music_step : Model -> U64
-music_step = |model| model.beat_index % 16
-
-music_bass : Model -> Audio.Sound
-music_bass = |model| {
-	match music_step(model) {
-		0 => model.sounds.bass_c
-		4 => model.sounds.bass_g
-		8 => model.sounds.bass_a
-		12 => model.sounds.bass_f
-		_ => model.sounds.bass_c
-	}
-}
-
-music_lead : Model -> Audio.Sound
-music_lead = |model| {
-	match music_step(model) {
-		1 => model.sounds.lead_e
-		3 => model.sounds.lead_g
-		5 => model.sounds.lead_b
-		6 => model.sounds.lead_a
-		9 => model.sounds.lead_g
-		11 => model.sounds.lead_c
-		13 => model.sounds.lead_b
-		15 => model.sounds.lead_g
-		_ => model.sounds.lead_e
-	}
-}
-
-lead_step : U64 -> Bool
-lead_step = |step| step == 1 or step == 3 or step == 5 or step == 6 or step == 9 or step == 11 or step == 13 or step == 15
-
-play_music_step! : Model => {}
-play_music_step! = |model| {
-	step = music_step(model)
-	play_if!(step % 4 == 0, music_bass(model))
-	play_if!(lead_step(step), music_lead(model))
-}
-
 advance_playing! : Model, Host => Model
 advance_playing! = |model, host| {
 	raw_dir = input_axis(host)
-	player = move_player(model.player, raw_dir, host.frame_time)
-	phase = wrap_unit(model.phase + host.frame_time * 0.18)
+	moving = is_moving(raw_dir)
+	dash_pressed = Keys.key_pressed(host.keys_pressed, KeySpace)
+	dash_started = dash_pressed and model.dash_cooldown <= 0
+	dash_active = dash_started or model.dash_timer > 0
+	move_dir = if dash_active and !(moving) direction_for_facing(model.facing) else raw_dir
+	speed = if dash_active dash_speed else player_speed
+	player = move_player_speed(model.player, move_dir, host.frame_time, speed)
+	hazard_speed = 0.15 + U64.to_f32(model.score) * 0.012
+	phase = wrap_unit(model.phase + host.frame_time * hazard_speed)
 	invuln = Math.clamp(model.invuln - host.frame_time, 0, 10)
-	beat_timer0 = model.beat_timer + host.frame_time
-	beat_due = beat_timer0 >= beat_interval
-	if beat_due {
-		play_music_step!(model)
+	dash_cooldown = if dash_started dash_cooldown_time else Math.clamp(model.dash_cooldown - host.frame_time, 0, 10)
+	dash_timer = if dash_started dash_duration else Math.clamp(model.dash_timer - host.frame_time, 0, 10)
+	shake = Math.clamp(model.shake - host.frame_time * 36, 0, 99)
+	flash = Math.clamp(model.flash - host.frame_time * 1.8, 0, 1)
+	burst_timer = Math.clamp(model.burst_timer - host.frame_time, 0, 1)
+	gate_flash = Math.clamp(model.gate_flash - host.frame_time * 1.15, 0, 1)
+	animation = if is_moving(move_dir) Sprite.step(model.animation, host.frame_time) else idle_animation(model.animation)
+	facing = if dash_active and !(moving) model.facing else facing_for(raw_dir, model.facing)
+
+	if dash_started {
+		Audio.set_pan!(model.sounds.dash, pan_for_world_x(model.player.x))
+		Audio.set_pitch!(model.sounds.dash, 0.95 + U64.to_f32(model.score) * 0.015)
+		Audio.play!(model.sounds.dash)
 	} else {
 		{}
 	}
-	beat_timer = if beat_due beat_timer0 - beat_interval else beat_timer0
-	beat_index = if beat_due model.beat_index + 1 else model.beat_index
-	animation = if is_moving(raw_dir) Sprite.step(model.animation, host.frame_time) else idle_animation(model.animation)
-	facing = facing_for(raw_dir, model.facing)
-	moved = replace_model(model, player, model.sparks, model.score, model.lives, phase, invuln, beat_timer, beat_index, animation, facing, Playing)
-	collected = collect_spark!(moved)
 
-	if collected.state == Won collected else damage_if_needed!(collected)
+	moved = replace_model(model, player, model.sparks, model.score, model.lives, phase, invuln, dash_cooldown, dash_timer, shake, flash, model.burst_pos, burst_timer, animation, facing, model.gate_open, gate_flash, Playing)
+	collected = collect_spark!(moved)
+	escaped = escape_if_needed!(collected)
+
+	if escaped.state == Won escaped else damage_if_needed!(escaped)
 }
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
@@ -449,24 +562,24 @@ render! = |model, host| {
 		Playing => advance_playing!(model, host)
 		Won =>
 			if Keys.key_pressed(host.keys_pressed, KeySpace) {
-				Audio.play!(model.sounds.start)
+				Audio.set_music_volume!(model.sounds.music, 0.13)
 				new_game(model.characters, model.tiles, model.sounds)
 			} else {
 				model
 			}
 		GameOver =>
 			if Keys.key_pressed(host.keys_pressed, KeySpace) {
-				Audio.play!(model.sounds.start)
+				Audio.set_music_volume!(model.sounds.music, 0.13)
 				new_game(model.characters, model.tiles, model.sounds)
 			} else {
 				model
 			}
 		}
 
-	camera = Camera.follow(next.player, { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
+	camera = Camera.follow(shaken_target(next), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
 
 	Draw.draw!(
-		Color.from_hex_rgb(0x08151c),
+		Color.from_hex_rgb(0x071018),
 		|| {
 			Draw.with_camera!(
 				camera,
@@ -480,17 +593,32 @@ render! = |model, host| {
 	Ok(next)
 }
 
+shaken_target : Model -> Math.Vec2
+shaken_target = |model| {
+	amount = model.shake
+	x_phase = ping_pong(wrap_unit(model.phase * 9.7))
+	y_phase = ping_pong(wrap_unit(model.phase * 13.1 + 0.31))
+	{
+		x: model.player.x + (x_phase - 0.5) * amount,
+		y: model.player.y + (y_phase - 0.5) * amount,
+	}
+}
+
 draw_world! : Model => {}
 draw_world! = |model| {
-	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled(Color.from_hex_rgb(0x12313a)) })
+	Draw.rectangle_gradient_v!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	draw_floor_y!(model.tiles, world_top)
+	draw_path_network!()
+	draw_hazard_lanes!(model.phase, 0)
 	draw_props!(model.tiles, 0)
-	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.outlined(Color.with_alpha(Color.white, 100), 6) })
+	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
-	Draw.circle!({ center: spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
+	draw_spawn!()
+	draw_exit!(model)
 	draw_obstacles!(model.tiles, 0)
 	draw_sparks!(model.tiles, model.sparks, model.phase, 0)
 	draw_hazards!(model.characters, model.phase, 0)
+	draw_burst!(model)
 	draw_player!(model)
 }
 
@@ -554,12 +682,40 @@ draw_floor_x! = |tiles, x, y| {
 	}
 }
 
+draw_path_network! : () => {}
+draw_path_network! = || {
+	path = Color.with_alpha(Color.from_hex_rgb(0x303d36), 210)
+	edge = Color.with_alpha(Color.from_hex_rgb(0x8fa87d), 90)
+	Draw.rounded_rectangle!({ x: -625, y: -420, width: 1750, height: 110, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+	Draw.rounded_rectangle!({ x: -625, y: 300, width: 1725, height: 112, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+	Draw.rounded_rectangle!({ x: -575, y: 820, width: 1790, height: 120, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+	Draw.rounded_rectangle!({ x: -565, y: -430, width: 112, height: 1325, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+	Draw.rounded_rectangle!({ x: 455, y: -410, width: 120, height: 1270, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+	Draw.rounded_rectangle!({ x: 1130, y: -80, width: 125, height: 1045, radius: 18, segments: 8, style: Draw.filled_and_outlined(path, edge, 3) })
+}
+
+draw_spawn! : () => {}
+draw_spawn! = || {
+	Draw.circle_gradient!({ center: spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
+	Draw.circle!({ center: spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
+	Draw.text!({ pos: { x: spawn.x, y: spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font: Draw.default_font, align: Draw.align_top_center })
+}
+
+draw_exit! : Model => {}
+draw_exit! = |model| {
+	color = if model.gate_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
+	halo = if model.gate_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
+	Draw.circle_gradient!({ center: exit_center, radius: 82 + model.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
+	Draw.circle!({ center: exit_center, radius: exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
+	Draw.text!({ pos: { x: exit_center.x, y: exit_center.y + 74 }, text: if model.gate_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+}
+
 draw_obstacles! : Assets.Texture, U64 => {}
 draw_obstacles! = |tiles, index|
 	match List.get(obstacles, index) {
 		Ok(obstacle) => {
-			Draw.rounded_rectangle!({ x: obstacle.x, y: obstacle.y, width: obstacle.width, height: obstacle.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x283b34), 225), Color.from_hex_rgb(0xa3b18a), 4) })
-			draw_tile_centered!(tiles, 156, Math.center(obstacle), 1.35, 0)
+			Draw.rounded_rectangle!({ x: obstacle.x, y: obstacle.y, width: obstacle.width, height: obstacle.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
+			draw_tile_centered!(tiles, if index % 2 == 0 156 else 157, Math.center(obstacle), 1.25, U64.to_f32(index) * 11)
 			draw_obstacles!(tiles, index + 1)
 		}
 		Err(_) => {}
@@ -576,32 +732,14 @@ draw_props! = |tiles, index| {
 	}
 }
 
-Decoration : {
-	pos : Math.Vec2,
-	tile : U64,
-	scale : F32,
-	rotation : F32,
-}
-
-decorations : List(Decoration)
-decorations = [
-	{ pos: { x: -620, y: 75 }, tile: 237, scale: 1.35, rotation: 0 },
-	{ pos: { x: -560, y: 585 }, tile: 238, scale: 1.2, rotation: 0 },
-	{ pos: { x: -70, y: -455 }, tile: 183, scale: 1.35, rotation: 0 },
-	{ pos: { x: 190, y: 185 }, tile: 158, scale: 1.15, rotation: 0 },
-	{ pos: { x: 770, y: -200 }, tile: 156, scale: 1.1, rotation: 12 },
-	{ pos: { x: 1100, y: 190 }, tile: 181, scale: 1.45, rotation: 0 },
-	{ pos: { x: 1025, y: 770 }, tile: 157, scale: 1.2, rotation: -14 },
-	{ pos: { x: 320, y: 975 }, tile: 213, scale: 1.05, rotation: 0 },
-	{ pos: { x: -395, y: 960 }, tile: 214, scale: 0.9, rotation: 0 },
-]
-
 draw_spark! : Assets.Texture, Spark, F32 => {}
 draw_spark! = |tiles, spark, phase| {
 	tile = if spark.id % 2 == 0 239 else 240
-	rotation = phase * 360 + U64.to_f32(spark.id) * 23
-	Draw.circle!({ center: spark.pos, radius: spark_radius, style: Draw.outlined(Color.with_alpha(Color.white, 130), 3) })
-	draw_tile_centered!(tiles, tile, spark.pos, 0.72, rotation)
+	rotation = phase * 160 + U64.to_f32(spark.id) * 19
+	pulse = 1 + ping_pong(wrap_unit(phase * 2 + U64.to_f32(spark.id) * 0.09)) * 0.1
+	Draw.circle_gradient!({ center: spark.pos, radius: spark_radius * 2 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf9c74f), 0) })
+	Draw.circle!({ center: spark.pos, radius: spark_radius + 4 * pulse, style: Draw.outlined(Color.with_alpha(Color.white, 110), 3) })
+	draw_tile_centered!(tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
 draw_sparks! : Assets.Texture, List(Spark), F32, U64 => {}
@@ -614,14 +752,26 @@ draw_sparks! = |tiles, sparks, phase, index|
 		Err(_) => {}
 	}
 
+draw_hazard_lanes! : F32, U64 => {}
+draw_hazard_lanes! = |phase, index|
+	match List.get(hazards, index) {
+		Ok(hazard) => {
+			pos = hazard_pos(hazard, phase)
+			start = if hazard.vertical { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 } else { x: hazard.center.x - hazard.span * 0.5, y: hazard.center.y }
+			end = if hazard.vertical { x: hazard.center.x, y: hazard.center.y + hazard.span * 0.5 } else { x: hazard.center.x + hazard.span * 0.5, y: hazard.center.y }
+			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
+			Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
+			draw_hazard_lanes!(phase, index + 1)
+		}
+		Err(_) => {}
+	}
+
 robot_source : Math.Rect
 robot_source = Math.rect(458, 88, 33, 43)
 
 draw_hazard! : Assets.Texture, Hazard, F32 => {}
 draw_hazard! = |characters, hazard, phase| {
 	pos = hazard_pos(hazard, phase)
-	start = if hazard.vertical { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 } else { x: hazard.center.x - hazard.span * 0.5, y: hazard.center.y }
-	end = if hazard.vertical { x: hazard.center.x, y: hazard.center.y + hazard.span * 0.5 } else { x: hazard.center.x + hazard.span * 0.5, y: hazard.center.y }
 	sprite = Sprite.with_rotation(
 		Sprite.with_origin_center(
 			Sprite.with_scale(
@@ -629,16 +779,14 @@ draw_hazard! = |characters, hazard, phase| {
 					Sprite.with_source(Sprite.from_texture(characters), robot_source),
 					pos,
 				),
-				1.35,
+				1.38,
 			),
 		),
-		phase * 720 + hazard.offset * 360,
+		0,
 	)
 
-	Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.white, 64), 4) })
-	Draw.circle!({ center: pos, radius: hazard.radius + 9, style: Draw.filled(Color.with_alpha(hazard.color, 70)) })
 	Sprite.draw!(sprite)
-	Draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 160), 3) })
+	Draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
 draw_hazards! : Assets.Texture, F32, U64 => {}
@@ -651,32 +799,55 @@ draw_hazards! = |characters, phase, index|
 		Err(_) => {}
 	}
 
-player_source : U64 -> Math.Rect
-player_source = |frame| {
-	match frame % 4 {
-		0 => Math.rect(390, 176, 35, 43)
-		1 => Math.rect(352, 176, 37, 43)
-		2 => Math.rect(112, 88, 51, 43)
-		_ => Math.rect(110, 176, 51, 43)
+burst_dir : U64 -> Math.Vec2
+burst_dir = |index|
+	match index % 8 {
+		0 => { x: 1, y: 0 }
+		1 => { x: 0.7, y: 0.7 }
+		2 => { x: 0, y: 1 }
+		3 => { x: -0.7, y: 0.7 }
+		4 => { x: -1, y: 0 }
+		5 => { x: -0.7, y: -0.7 }
+		6 => { x: 0, y: -1 }
+		_ => { x: 0.7, y: -0.7 }
+	}
+
+draw_burst_particle! : Model, U64 => {}
+draw_burst_particle! = |model, index| {
+	if index >= 6 or model.burst_timer <= 0 {
+		{}
+	} else {
+		progress = 1 - model.burst_timer / burst_duration
+		dir = burst_dir(index)
+		pos = Math.add(model.burst_pos, Math.scale(dir, 18 + progress * 58))
+		size = 6 + ping_pong(wrap_unit(model.phase * 5 + U64.to_f32(index) * 0.11)) * 3
+		Draw.circle!({ center: pos, radius: size, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xf9c74f), if model.burst_timer > 0.18 135 else 70)) })
+		draw_burst_particle!(model, index + 1)
 	}
 }
+
+draw_burst! : Model => {}
+draw_burst! = |model| draw_burst_particle!(model, 0)
+
+player_source : Math.Rect
+player_source = Math.rect(0, 0, 52, 43)
 
 player_rotation : F32 -> F32
 player_rotation = |facing| facing - 90
 
 draw_player! : Model => {}
 draw_player! = |model| {
-	source = player_source(model.animation.frame)
 	tint = if model.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
+	scale = if model.dash_timer > 0 1.3 else 1.22
 	sprite = Sprite.with_tint(
 		Sprite.with_rotation(
 			Sprite.with_origin_center(
 				Sprite.with_scale(
 					Sprite.with_pos(
-						Sprite.with_source(Sprite.from_texture(model.characters), source),
+						Sprite.with_source(Sprite.from_texture(model.characters), player_source),
 						model.player,
 					),
-					1.25,
+					scale,
 				),
 			),
 			player_rotation(model.facing),
@@ -684,31 +855,53 @@ draw_player! = |model| {
 		tint,
 	)
 
-	Draw.circle!({ center: { x: model.player.x + 5, y: model.player.y + 7 }, radius: player_radius + 5, style: Draw.filled(Color.with_alpha(Color.black, 80)) })
+	Draw.circle!({ center: { x: model.player.x + 5, y: model.player.y + 7 }, radius: player_radius + 6, style: Draw.filled(Color.with_alpha(Color.black, 85)) })
+	if model.dash_timer > 0 {
+		trail_center = Math.add(model.player, Math.scale(direction_for_facing(model.facing), -38))
+		Draw.circle_gradient!({ center: trail_center, radius: 44, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
+		Draw.circle_gradient!({ center: model.player, radius: 54, color_inner: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 70), color_outer: Color.with_alpha(Color.from_hex_rgb(0x43aa8b), 0) })
+	} else {
+		{}
+	}
 	Sprite.draw!(sprite)
 	Draw.circle!({ center: model.player, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
 }
 
+draw_bar! : F32, F32, F32, F32, F32, Color => {}
+draw_bar! = |x, y, width, height, amount, color| {
+	Draw.rounded_rectangle!({ x, y, width, height, radius: 5, segments: 6, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
+	Draw.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
+}
+
 draw_hud! : Model => {}
 draw_hud! = |model| {
-	Draw.rectangle!({ x: 0, y: 0, width: screen_w, height: 64, style: Draw.filled(Color.with_alpha(Color.black, 175)) })
-	Draw.text_at!({ pos: { x: 22, y: 18 }, text: "Spark Run", size: 26, color: Color.white })
-	Draw.text_at!({ pos: { x: 220, y: 22 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(model.score), Str.concat("/", U64.to_str(spark_total)))), size: 20, color: Color.from_hex_rgb(0xf9c74f) })
-	Draw.text_at!({ pos: { x: 410, y: 22 }, text: Str.concat("Lives ", U64.to_str(model.lives)), size: 20, color: Color.light_gray })
-	Draw.text_at!({ pos: { x: 548, y: 22 }, text: "WASD/Arrows", size: 20, color: Color.light_gray })
-	Draw.fps!({ pos: { x: 735, y: 22 }, size: 18, color: Color.gray })
+	Draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
+	Draw.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(model.score), Str.concat("/", U64.to_str(spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(model.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 510, y: 18 }, text: if model.gate_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if model.gate_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
+	draw_bar!(196, 48, 170, 9, U64.to_f32(model.score) / U64.to_f32(spark_total), Color.from_hex_rgb(0xf9c74f))
+	draw_bar!(510, 48, 120, 9, if model.dash_cooldown <= 0 1 else 1 - model.dash_cooldown / dash_cooldown_time, Color.from_hex_rgb(0x43aa8b))
+	Draw.text!({ pos: { x: 640, y: 43 }, text: if model.dash_cooldown <= 0 "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+
+	if model.flash > 0 {
+		Draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if model.flash > 0.45 120 else 70)) })
+	} else {
+		{}
+	}
 
 	match model.state {
 		Playing => {}
-		Won => {
-			Draw.rectangle!({ x: 190, y: 238, width: 420, height: 132, style: Draw.filled(Color.with_alpha(Color.black, 220)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 282 }, text: "All sparks recovered", size: 30, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 328 }, text: "Press SPACE to run again", size: 21, color: Color.light_gray })
-		}
-		GameOver => {
-			Draw.rectangle!({ x: 190, y: 238, width: 420, height: 132, style: Draw.filled(Color.with_alpha(Color.black, 220)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 282 }, text: "Spark Run ended", size: 30, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 328 }, text: "Press SPACE to restart", size: 21, color: Color.light_gray })
-		}
+		Won => draw_modal!("All sparks recovered", "Press SPACE to run again", Color.from_hex_rgb(0x43aa8b))
+		GameOver => draw_modal!("Spark Run ended", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
 	}
+}
+
+draw_modal! : Str, Str, Color => {}
+draw_modal! = |title, subtitle, accent| {
+	Draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
+	Draw.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })
+	Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 276 }, text: title, size: 30, color: Color.white })
+	Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
 }

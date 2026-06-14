@@ -823,36 +823,24 @@ tile_source = |tile_id| {
 	Sprite.sheet_frame({ frame_size: { x: 64, y: 64 }, row: index // tile_cols, col: index % tile_cols })
 }
 
-draw_tile! : Assets.Texture, U64, Math.Vec2, F32 => {}
-draw_tile! = |tiles, tile_id, pos, scale| {
-	Sprite.draw!(
-		Sprite.with_scale(
-			Sprite.with_pos(
-				Sprite.with_source(Sprite.from_texture(tiles), tile_source(tile_id)),
-				pos,
-			),
+tile_sprite : Assets.Texture, U64, Math.Vec2, F32 -> Sprite.Sprite
+tile_sprite = |tiles, tile_id, pos, scale|
+	Sprite.from_texture(tiles)
+		.source(
+			tile_source(tile_id),
+		)
+		.pos(
+			pos,
+		)
+		.scale(
 			scale,
-		),
-	)
-}
+		)
+
+draw_tile! : Assets.Texture, U64, Math.Vec2, F32 => {}
+draw_tile! = |tiles, tile_id, pos, scale| tile_sprite(tiles, tile_id, pos, scale).draw!()
 
 draw_tile_centered! : Assets.Texture, U64, Math.Vec2, F32, F32 => {}
-draw_tile_centered! = |tiles, tile_id, pos, scale, rotation| {
-	Sprite.draw!(
-		Sprite.with_rotation(
-			Sprite.with_origin_center(
-				Sprite.with_scale(
-					Sprite.with_pos(
-						Sprite.with_source(Sprite.from_texture(tiles), tile_source(tile_id)),
-						pos,
-					),
-					scale,
-				),
-			),
-			rotation,
-		),
-	)
-}
+draw_tile_centered! = |tiles, tile_id, pos, scale, rotation| tile_sprite(tiles, tile_id, pos, scale).centered().rotation(rotation).draw!()
 
 draw_floor_y! : Assets.Texture, F32 => {}
 draw_floor_y! = |tiles, y| {
@@ -955,20 +943,19 @@ robot_source = Math.rect(458, 88, 33, 43)
 draw_hazard! : Assets.Texture, World.Hazard, F32 => {}
 draw_hazard! = |characters, hazard, phase| {
 	pos = hazard.pos(phase)
-	sprite = Sprite.with_rotation(
-		Sprite.with_origin_center(
-			Sprite.with_scale(
-				Sprite.with_pos(
-					Sprite.with_source(Sprite.from_texture(characters), robot_source),
-					pos,
-				),
-				1.38,
-			),
-		),
-		0,
-	)
+	sprite = Sprite.from_texture(characters)
+		.source(
+			robot_source,
+		)
+		.pos(
+			pos,
+		)
+		.scale(
+			1.38,
+		)
+		.centered()
 
-	Sprite.draw!(sprite)
+	sprite.draw!()
 	Draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
@@ -1016,21 +1003,23 @@ draw_player! : Assets.Texture, World.Player => {}
 draw_player! = |characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
 	scale = if player.dash_active() 1.3 else 1.22
-	sprite = Sprite.with_tint(
-		Sprite.with_rotation(
-			Sprite.with_origin_center(
-				Sprite.with_scale(
-					Sprite.with_pos(
-						Sprite.with_source(Sprite.from_texture(characters), player_source),
-						player.pos,
-					),
-					scale,
-				),
-			),
+	sprite = Sprite.from_texture(characters)
+		.source(
+			player_source,
+		)
+		.pos(
+			player.pos,
+		)
+		.scale(
+			scale,
+		)
+		.centered()
+		.rotation(
 			player.rotation(),
-		),
-		tint,
-	)
+		)
+		.tint(
+			tint,
+		)
 
 	Draw.circle!({ center: { x: player.pos.x + 5, y: player.pos.y + 7 }, radius: player_radius + 6, style: Draw.filled(Color.with_alpha(Color.black, 85)) })
 	if player.dash_active() {
@@ -1040,7 +1029,7 @@ draw_player! = |characters, player| {
 	} else {
 		{}
 	}
-	Sprite.draw!(sprite)
+	sprite.draw!()
 	Draw.circle!({ center: player.pos, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
 }
 

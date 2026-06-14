@@ -1153,6 +1153,10 @@ pub const AudioGen_tone_rawArgs = __AnonStruct5;
 pub const AudioPlay_rawArgs = extern struct {
     arg0: u64,
 };
+pub const AudioSet_volume_rawArgs = extern struct {
+    arg0: u64,
+    arg1: f32,
+};
 pub const DrawBegin_cameraArgs = __AnonStruct10;
 pub const DrawCircle_rawArgs = __AnonStruct13;
 pub const DrawCircle_gradientArgs = __AnonStruct17;
@@ -1221,6 +1225,10 @@ pub extern fn roc_audio_gen_tone_raw(arg0: AudioGen_tone_rawArgs) callconv(.c) u
 /// Hosted symbol for Audio.play_raw!
 /// Roc signature: U64 => {}
 pub extern fn roc_audio_play_raw(arg0: u64) callconv(.c) void;
+
+/// Hosted symbol for Audio.set_volume_raw!
+/// Roc signature: U64, F32 => {}
+pub extern fn roc_audio_set_volume_raw(arg0: u64, arg1: f32) callconv(.c) void;
 
 /// Hosted symbol for Draw.begin_camera!
 /// Roc signature: { offset : { x : F32, y : F32 }, rotation : F32, target : { x : F32, y : F32 }, zoom : F32 } => {}

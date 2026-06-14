@@ -29,6 +29,7 @@ platform ""
 		"roc_assets_load_texture_raw": Assets.load_texture_raw!,
 		"roc_audio_gen_tone_raw": Audio.gen_tone_raw!,
 		"roc_audio_play_raw": Audio.play_raw!,
+		"roc_audio_set_volume_raw": Audio.set_volume_raw!,
 		"roc_draw_begin_frame": Draw.begin_frame!,
 		"roc_draw_circle_gradient": Draw.circle_gradient!,
 		"roc_draw_circle_lines_raw": Draw.circle_lines_raw!,

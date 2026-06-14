@@ -457,6 +457,10 @@ fn hostedAudioPlay(handle: u64) callconv(.c) void {
     raylib.playSoundHandle(@intCast(handle));
 }
 
+fn hostedAudioSetVolume(handle: u64, volume: f32) callconv(.c) void {
+    raylib.setSoundVolumeHandle(@intCast(handle), volume);
+}
+
 comptime {
     if (!builtin.is_test) {
         @export(&exportedRocAlloc, .{ .name = "roc_alloc" });
@@ -469,6 +473,7 @@ comptime {
         @export(&exportedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
         @export(&hostedAudioPlay, .{ .name = "roc_audio_play_raw" });
+        @export(&hostedAudioSetVolume, .{ .name = "roc_audio_set_volume_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });

@@ -553,6 +553,14 @@ pub fn playSoundHandle(handle: usize) void {
     if (handle < sound_count) rl.PlaySound(sounds[handle]);
 }
 
+/// Set volume for a previously generated sound by handle (no-op if out of range).
+pub fn setSoundVolumeHandle(handle: usize, volume: f32) void {
+    if (handle < sound_count) {
+        const clamped = if (volume < 0.0) 0.0 else if (volume > 1.0) 1.0 else volume;
+        rl.SetSoundVolume(sounds[handle], clamped);
+    }
+}
+
 /// Keyboard key enum for type-safe key handling.
 pub const Key = enum(c_int) {
     space = rl.KEY_SPACE,

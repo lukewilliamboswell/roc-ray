@@ -12,6 +12,7 @@ examples/text_ui
 examples/snake
 examples/breakout
 examples/camera
+examples/top_down
 
 # Built executables at root
 hello_world
@@ -21,6 +22,7 @@ sprites
 snake
 breakout
 camera
+top_down
 
 all_roc_syntax
 

@@ -15,6 +15,7 @@ Audio := [].{
 	## index). The public gen_tone!/play! wrap that scalar in a Box.
 	gen_tone_raw! : { freq : F32, ms : I32 } => U64
 	play_raw! : U64 => {}
+	set_volume_raw! : U64, F32 => {}
 
 	## Generate a short sine tone and return a handle to it.
 	## `freq` is the pitch in Hz; `ms` is the duration in milliseconds
@@ -26,4 +27,8 @@ Audio := [].{
 	## Play a previously generated sound.
 	play! : Sound => {}
 	play! = |sound| Audio.play_raw!(Box.unbox(sound))
+
+	## Set playback volume for a sound. The host clamps volume to [0, 1].
+	set_volume! : Sound, F32 => {}
+	set_volume! = |sound, volume| Audio.set_volume_raw!(Box.unbox(sound), volume)
 }

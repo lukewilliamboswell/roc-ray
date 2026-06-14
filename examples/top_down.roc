@@ -151,14 +151,9 @@ burst_duration = 0.36
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Spark Run",
-		width: 800,
-		height: 600,
 		target_fps: 120,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| {
 		match Assets.load_texture!(characters_path) {
@@ -252,30 +247,6 @@ new_game = |characters, tiles, sounds| {
 	gate_open: Bool.False,
 	gate_flash: 0,
 	state: Playing,
-}
-
-replace_model : Model, Math.Vec2, List(Spark), U64, U64, F32, F32, F32, F32, F32, F32, Math.Vec2, F32, Sprite.Animation, F32, Bool, F32, GameState -> Model
-replace_model = |model, player, sparks, score, lives, phase, invuln, dash_cooldown, dash_timer, shake, flash, burst_pos, burst_timer, animation, facing, gate_open, gate_flash, state| {
-	characters: model.characters,
-	tiles: model.tiles,
-	sounds: model.sounds,
-	player,
-	sparks,
-	score,
-	lives,
-	phase,
-	invuln,
-	dash_cooldown,
-	dash_timer,
-	shake,
-	flash,
-	burst_pos,
-	burst_timer,
-	animation,
-	facing,
-	gate_open,
-	gate_flash,
-	state,
 }
 
 spark_at : U64, F32, F32 -> Spark
@@ -441,7 +412,18 @@ collect_spark! = |model|
 			play_if!(next_score % 3 == 0, model.sounds.sparkle)
 			play_if!(just_opened, model.sounds.gate)
 
-			replace_model(model, model.player, remaining, next_score, model.lives, model.phase, model.invuln, model.dash_cooldown, model.dash_timer, 0, 0, spark.pos, burst_duration, model.animation, model.facing, gate_open, if just_opened 1 else model.gate_flash, Playing)
+			{
+				..model,
+				sparks: remaining,
+				score: next_score,
+				shake: 0,
+				flash: 0,
+				burst_pos: spark.pos,
+				burst_timer: burst_duration,
+				gate_open,
+				gate_flash: if just_opened 1 else model.gate_flash,
+				state: Playing,
+			}
 		}
 		Err(_) => model
 	}
@@ -464,7 +446,19 @@ damage_if_needed! = |model| {
 		next_lives = if model.lives > 0 model.lives - 1 else 0
 		next_state = if model.lives <= 1 GameOver else Playing
 		Audio.play!(if next_state == GameOver model.sounds.lose else model.sounds.hurt)
-		replace_model(model, spawn, model.sparks, model.score, next_lives, model.phase, 1.2, model.dash_cooldown, 0, 10, 0.28, model.player, burst_duration, model.animation, 90, model.gate_open, model.gate_flash, next_state)
+		{
+			..model,
+			player: spawn,
+			lives: next_lives,
+			invuln: 1.2,
+			dash_timer: 0,
+			shake: 10,
+			flash: 0.28,
+			burst_pos: model.player,
+			burst_timer: burst_duration,
+			facing: 90,
+			state: next_state,
+		}
 	} else {
 		model
 	}
@@ -475,7 +469,15 @@ escape_if_needed! = |model| {
 	if model.gate_open and Math.circle_overlaps(Math.circle(model.player, player_radius), Math.circle(exit_center, exit_radius)) {
 		Audio.set_music_volume!(model.sounds.music, 0.08)
 		Audio.play!(model.sounds.win)
-		replace_model(model, model.player, model.sparks, model.score, model.lives, model.phase, model.invuln, model.dash_cooldown, model.dash_timer, 10, 0, exit_center, burst_duration, model.animation, model.facing, model.gate_open, 1, Won)
+		{
+			..model,
+			shake: 10,
+			flash: 0,
+			burst_pos: exit_center,
+			burst_timer: burst_duration,
+			gate_flash: 1,
+			state: Won,
+		}
 	} else {
 		model
 	}
@@ -545,7 +547,21 @@ advance_playing! = |model, host| {
 		{}
 	}
 
-	moved = replace_model(model, player, model.sparks, model.score, model.lives, phase, invuln, dash_cooldown, dash_timer, shake, flash, model.burst_pos, burst_timer, animation, facing, model.gate_open, gate_flash, Playing)
+	moved = {
+		..model,
+		player,
+		phase,
+		invuln,
+		dash_cooldown,
+		dash_timer,
+		shake,
+		flash,
+		burst_timer,
+		animation,
+		facing,
+		gate_flash,
+		state: Playing,
+	}
 	collected = collect_spark!(moved)
 	escaped = escape_if_needed!(collected)
 
@@ -609,15 +625,15 @@ draw_world! = |model| {
 	Draw.rectangle_gradient_v!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	draw_floor_y!(model.tiles, world_top)
 	draw_path_network!()
-	draw_hazard_lanes!(model.phase, 0)
-	draw_props!(model.tiles, 0)
+	draw_hazard_lanes!(model.phase)
+	draw_props!(model.tiles)
 	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
 	draw_spawn!()
 	draw_exit!(model)
 	draw_obstacles!(model.tiles, 0)
-	draw_sparks!(model.tiles, model.sparks, model.phase, 0)
-	draw_hazards!(model.characters, model.phase, 0)
+	draw_sparks!(model.tiles, model.sparks, model.phase)
+	draw_hazards!(model.characters, model.phase)
 	draw_burst!(model)
 	draw_player!(model)
 }
@@ -721,14 +737,10 @@ draw_obstacles! = |tiles, index|
 		Err(_) => {}
 	}
 
-draw_props! : Assets.Texture, U64 => {}
-draw_props! = |tiles, index| {
-	match List.get(decorations, index) {
-		Ok(decoration) => {
-			draw_tile_centered!(tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
-			draw_props!(tiles, index + 1)
-		}
-		Err(_) => {}
+draw_props! : Assets.Texture => {}
+draw_props! = |tiles| {
+	for decoration in decorations {
+		draw_tile_centered!(tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
 	}
 }
 
@@ -742,29 +754,23 @@ draw_spark! = |tiles, spark, phase| {
 	draw_tile_centered!(tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
-draw_sparks! : Assets.Texture, List(Spark), F32, U64 => {}
-draw_sparks! = |tiles, sparks, phase, index|
-	match List.get(sparks, index) {
-		Ok(spark) => {
-			draw_spark!(tiles, spark, phase)
-			draw_sparks!(tiles, sparks, phase, index + 1)
-		}
-		Err(_) => {}
+draw_sparks! : Assets.Texture, List(Spark), F32 => {}
+draw_sparks! = |tiles, sparks, phase| {
+	for spark in sparks {
+		draw_spark!(tiles, spark, phase)
 	}
+}
 
-draw_hazard_lanes! : F32, U64 => {}
-draw_hazard_lanes! = |phase, index|
-	match List.get(hazards, index) {
-		Ok(hazard) => {
-			pos = hazard_pos(hazard, phase)
-			start = if hazard.vertical { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 } else { x: hazard.center.x - hazard.span * 0.5, y: hazard.center.y }
-			end = if hazard.vertical { x: hazard.center.x, y: hazard.center.y + hazard.span * 0.5 } else { x: hazard.center.x + hazard.span * 0.5, y: hazard.center.y }
-			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
-			Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
-			draw_hazard_lanes!(phase, index + 1)
-		}
-		Err(_) => {}
+draw_hazard_lanes! : F32 => {}
+draw_hazard_lanes! = |phase| {
+	for hazard in hazards {
+		pos = hazard_pos(hazard, phase)
+		start = if hazard.vertical { x: hazard.center.x, y: hazard.center.y - hazard.span * 0.5 } else { x: hazard.center.x - hazard.span * 0.5, y: hazard.center.y }
+		end = if hazard.vertical { x: hazard.center.x, y: hazard.center.y + hazard.span * 0.5 } else { x: hazard.center.x + hazard.span * 0.5, y: hazard.center.y }
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(hazard.color, 48), 10) })
+		Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.9, color_inner: Color.with_alpha(hazard.color, 54), color_outer: Color.with_alpha(hazard.color, 0) })
 	}
+}
 
 robot_source : Math.Rect
 robot_source = Math.rect(458, 88, 33, 43)
@@ -789,15 +795,12 @@ draw_hazard! = |characters, hazard, phase| {
 	Draw.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
-draw_hazards! : Assets.Texture, F32, U64 => {}
-draw_hazards! = |characters, phase, index|
-	match List.get(hazards, index) {
-		Ok(hazard) => {
-			draw_hazard!(characters, hazard, phase)
-			draw_hazards!(characters, phase, index + 1)
-		}
-		Err(_) => {}
+draw_hazards! : Assets.Texture, F32 => {}
+draw_hazards! = |characters, phase| {
+	for hazard in hazards {
+		draw_hazard!(characters, hazard, phase)
 	}
+}
 
 burst_dir : U64 -> Math.Vec2
 burst_dir = |index|

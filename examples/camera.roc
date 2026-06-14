@@ -37,14 +37,9 @@ world_bottom = 1200
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Camera",
-		width: 800,
-		height: 600,
 		target_fps: 120,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| Ok({ player: { x: 400, y: 300 }, zoom: 1, rotation: 0 }),
 )

@@ -39,37 +39,13 @@ Sprite := [].{
 	}
 
 	with_source : Sprite, Math.Rect -> Sprite
-	with_source = |sprite, source| {
-		texture: sprite.texture,
-		source,
-		pos: sprite.pos,
-		origin: sprite.origin,
-		rotation: sprite.rotation,
-		scale: sprite.scale,
-		tint: sprite.tint,
-	}
+	with_source = |sprite, source| { ..sprite, source }
 
 	with_pos : Sprite, Math.Vec2 -> Sprite
-	with_pos = |sprite, pos| {
-		texture: sprite.texture,
-		source: sprite.source,
-		pos,
-		origin: sprite.origin,
-		rotation: sprite.rotation,
-		scale: sprite.scale,
-		tint: sprite.tint,
-	}
+	with_pos = |sprite, pos| { ..sprite, pos }
 
 	with_origin : Sprite, Math.Vec2 -> Sprite
-	with_origin = |sprite, origin| {
-		texture: sprite.texture,
-		source: sprite.source,
-		pos: sprite.pos,
-		origin,
-		rotation: sprite.rotation,
-		scale: sprite.scale,
-		tint: sprite.tint,
-	}
+	with_origin = |sprite, origin| { ..sprite, origin }
 
 	with_origin_center : Sprite -> Sprite
 	with_origin_center = |sprite| {
@@ -83,40 +59,16 @@ Sprite := [].{
 	}
 
 	with_rotation : Sprite, F32 -> Sprite
-	with_rotation = |sprite, rotation| {
-		texture: sprite.texture,
-		source: sprite.source,
-		pos: sprite.pos,
-		origin: sprite.origin,
-		rotation,
-		scale: sprite.scale,
-		tint: sprite.tint,
-	}
+	with_rotation = |sprite, rotation| { ..sprite, rotation }
 
 	with_scale_xy : Sprite, Math.Vec2 -> Sprite
-	with_scale_xy = |sprite, scale| {
-		texture: sprite.texture,
-		source: sprite.source,
-		pos: sprite.pos,
-		origin: sprite.origin,
-		rotation: sprite.rotation,
-		scale,
-		tint: sprite.tint,
-	}
+	with_scale_xy = |sprite, scale| { ..sprite, scale }
 
 	with_scale : Sprite, F32 -> Sprite
 	with_scale = |sprite, amount| Sprite.with_scale_xy(sprite, { x: amount, y: amount })
 
 	with_tint : Sprite, Color -> Sprite
-	with_tint = |sprite, tint| {
-		texture: sprite.texture,
-		source: sprite.source,
-		pos: sprite.pos,
-		origin: sprite.origin,
-		rotation: sprite.rotation,
-		scale: sprite.scale,
-		tint,
-	}
+	with_tint = |sprite, tint| { ..sprite, tint }
 
 	to_texture_draw : Sprite -> Draw.TextureDraw
 	to_texture_draw = |sprite| {
@@ -162,18 +114,12 @@ Sprite := [].{
 			elapsed = animation_state.elapsed + dt
 			if elapsed >= period {
 				{
+					..animation_state,
 					frame: (animation_state.frame + 1) % animation_state.frame_count,
-					frame_count: animation_state.frame_count,
-					fps: animation_state.fps,
 					elapsed: elapsed - period,
 				}
 			} else {
-				{
-					frame: animation_state.frame,
-					frame_count: animation_state.frame_count,
-					fps: animation_state.fps,
-					elapsed,
-				}
+				{ ..animation_state, elapsed }
 			}
 		}
 	}

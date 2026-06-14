@@ -50,47 +50,47 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 
 	title : Str -> App(Str)
 	title = |value| {
-		apply: |cfg| { title: value, width: cfg.width, height: cfg.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, title: value },
 	}
 
 	width : I32 -> App(I32)
 	width = |value| {
-		apply: |cfg| { title: cfg.title, width: value, height: cfg.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, width: value },
 	}
 
 	height : I32 -> App(I32)
 	height = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: value, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, height: value },
 	}
 
 	size : { width : I32, height : I32 } -> App({ width : I32, height : I32 })
 	size = |dims| {
-		apply: |cfg| { title: cfg.title, width: dims.width, height: dims.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, width: dims.width, height: dims.height },
 	}
 
 	target_fps : I32 -> App(I32)
 	target_fps = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: cfg.height, target_fps: value, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, target_fps: value },
 	}
 
 	resizable : Bool -> App(Bool)
 	resizable = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: cfg.height, target_fps: cfg.target_fps, resizable: value, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, resizable: value },
 	}
 
 	fullscreen : Bool -> App(Bool)
 	fullscreen = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: cfg.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: value, vsync: cfg.vsync, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, fullscreen: value },
 	}
 
 	vsync : Bool -> App(Bool)
 	vsync = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: cfg.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: value, cursor_visible: cfg.cursor_visible },
+		apply: |cfg| { ..cfg, vsync: value },
 	}
 
 	cursor_visible : Bool -> App(Bool)
 	cursor_visible = |value| {
-		apply: |cfg| { title: cfg.title, width: cfg.width, height: cfg.height, target_fps: cfg.target_fps, resizable: cfg.resizable, fullscreen: cfg.fullscreen, vsync: cfg.vsync, cursor_visible: value },
+		apply: |cfg| { ..cfg, cursor_visible: value },
 	}
 }
 

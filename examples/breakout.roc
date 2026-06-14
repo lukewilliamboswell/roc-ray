@@ -77,14 +77,9 @@ brick_gap = 8
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Breakout",
-		width: 800,
-		height: 600,
 		target_fps: 120,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| {
 		paddle_x = (screen_w - paddle_w) * 0.5
@@ -145,28 +140,21 @@ fresh_bricks = List.concat(
 	),
 )
 
-replace_model : Model, List(Brick), F32, F32, F32, F32, F32, U64, U64, GameState -> Model
-replace_model = |model, bricks, paddle_x, ball_x, ball_y, ball_vx, ball_vy, score, lives, state| {
-	bricks,
-	paddle_x,
-	ball_x,
-	ball_y,
-	ball_vx,
-	ball_vy,
-	score,
-	lives,
-	state,
-	paddle_sound: model.paddle_sound,
-	brick_sound: model.brick_sound,
-	wall_sound: model.wall_sound,
-	lose_sound: model.lose_sound,
-	start_sound: model.start_sound,
-}
-
 new_game : Model -> Model
 new_game = |model| {
 	paddle_x = (screen_w - paddle_w) * 0.5
-	replace_model(model, fresh_bricks, paddle_x, paddle_x + paddle_w * 0.5, paddle_y - ball_radius - 2, launch_vx, launch_vy, 0, 3, Ready)
+	{
+		..model,
+		bricks: fresh_bricks,
+		paddle_x,
+		ball_x: paddle_x + paddle_w * 0.5,
+		ball_y: paddle_y - ball_radius - 2,
+		ball_vx: launch_vx,
+		ball_vy: launch_vy,
+		score: 0,
+		lives: 3,
+		state: Ready,
+	}
 }
 
 paddle_rect : F32 -> Math.Rect
@@ -182,7 +170,16 @@ move_paddle = |paddle_x, host| {
 }
 
 ball_on_paddle : Model, F32, U64, GameState -> Model
-ball_on_paddle = |model, paddle_x, lives, state| replace_model(model, model.bricks, paddle_x, paddle_x + paddle_w * 0.5, paddle_y - ball_radius - 2, launch_vx, launch_vy, model.score, lives, state)
+ball_on_paddle = |model, paddle_x, lives, state| {
+	..model,
+	paddle_x,
+	ball_x: paddle_x + paddle_w * 0.5,
+	ball_y: paddle_y - ball_radius - 2,
+	ball_vx: launch_vx,
+	ball_vy: launch_vy,
+	lives,
+	state,
+}
 
 advance_ready! : Model, Host => Model
 advance_ready! = |model, host| {
@@ -191,7 +188,7 @@ advance_ready! = |model, host| {
 
 	if Keys.key_pressed(host.keys_pressed, KeySpace) {
 		Audio.play!(model.start_sound)
-		replace_model(ready_model, ready_model.bricks, ready_model.paddle_x, ready_model.ball_x, ready_model.ball_y, launch_vx, launch_vy, ready_model.score, ready_model.lives, Playing)
+		{ ..ready_model, state: Playing }
 	} else {
 		ready_model
 	}
@@ -225,7 +222,7 @@ advance_playing! = |model, host| {
 		Audio.play!(model.lose_sound)
 		next_lives = if model.lives > 0 model.lives - 1 else 0
 		next_state = if model.lives <= 1 GameOver else Ready
-		ball_on_paddle(replace_model(model, model.bricks, paddle_x, model.ball_x, model.ball_y, model.ball_vx, model.ball_vy, model.score, next_lives, next_state), paddle_x, next_lives, next_state)
+		ball_on_paddle(model, paddle_x, next_lives, next_state)
 	} else {
 		hit_left = nx0 - ball_radius < 0
 		hit_right = nx0 + ball_radius > screen_w
@@ -257,9 +254,9 @@ advance_playing! = |model, host| {
 				remaining = List.keep_if(model.bricks, |brick| brick.id != hit_brick.id)
 				state = if List.len(remaining) == 0 Won else Playing
 				play_if!(state == Won, model.start_sound)
-				replace_model(model, remaining, paddle_x, nx, ny_paddle, vx_paddle, vy_paddle * -1, model.score + 10, model.lives, state)
+				{ ..model, bricks: remaining, paddle_x, ball_x: nx, ball_y: ny_paddle, ball_vx: vx_paddle, ball_vy: vy_paddle * -1, score: model.score + 10, state }
 			}
-			Err(_) => replace_model(model, model.bricks, paddle_x, nx, ny_paddle, vx_paddle, vy_paddle, model.score, model.lives, Playing)
+			Err(_) => { ..model, paddle_x, ball_x: nx, ball_y: ny_paddle, ball_vx: vx_paddle, ball_vy: vy_paddle, state: Playing }
 		}
 	}
 }
@@ -301,15 +298,12 @@ draw_brick! : Brick => {}
 draw_brick! = |brick|
 	Draw.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
 
-draw_bricks! : List(Brick), U64 => {}
-draw_bricks! = |bricks, index|
-	match List.get(bricks, index) {
-		Ok(brick) => {
-			draw_brick!(brick)
-			draw_bricks!(bricks, index + 1)
-		}
-		Err(_) => {}
+draw_bricks! : List(Brick) => {}
+draw_bricks! = |bricks| {
+	for brick in bricks {
+		draw_brick!(brick)
 	}
+}
 
 draw_game! : Model => {}
 draw_game! = |model| {
@@ -319,7 +313,7 @@ draw_game! = |model| {
 	Draw.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
 	Draw.line!({ start: { x: 44, y: 58 }, end: { x: screen_w - 44, y: 58 }, stroke: Draw.stroke(Color.light_gray, 2) })
 
-	draw_bricks!(model.bricks, 0)
+	draw_bricks!(model.bricks)
 
 	paddle = paddle_rect(model.paddle_x)
 	Draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })

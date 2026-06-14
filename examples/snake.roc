@@ -62,14 +62,9 @@ start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Snake",
-		width: 800,
-		height: 600,
 		target_fps: 120,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| {
 		seed = {
@@ -93,6 +88,7 @@ new_game! : Model => Model
 new_game! = |model| {
 	food = spawn_food!(start_snake)
 	{
+		..model,
 		snake: start_snake,
 		direction: DirRight,
 		pending_direction: DirRight,
@@ -100,24 +96,7 @@ new_game! = |model| {
 		score: 0,
 		accumulator: 0,
 		state: Playing,
-		eat_sound: model.eat_sound,
-		crash_sound: model.crash_sound,
-		start_sound: model.start_sound,
 	}
-}
-
-replace_model : Model, List(Cell), Direction, Direction, Cell, U64, F32, GameState -> Model
-replace_model = |model, snake, direction, pending_direction, food, score, accumulator, state| {
-	snake,
-	direction,
-	pending_direction,
-	food,
-	score,
-	accumulator,
-	state,
-	eat_sound: model.eat_sound,
-	crash_sound: model.crash_sound,
-	start_sound: model.start_sound,
 }
 
 head_of : List(Cell) -> Cell
@@ -204,7 +183,7 @@ apply_input : Model, Host -> Model
 apply_input = |model, host| {
 	requested = requested_direction(model, host)
 	pending = if can_turn(model.direction, requested) requested else model.pending_direction
-	replace_model(model, model.snake, model.direction, pending, model.food, model.score, model.accumulator, model.state)
+	{ ..model, pending_direction: pending }
 }
 
 step_snake! : Model => Model
@@ -219,16 +198,32 @@ step_snake! = |model| {
 
 	if hit_wall or hit_self {
 		Audio.play!(model.crash_sound)
-		replace_model(model, model.snake, model.direction, model.pending_direction, model.food, model.score, 0, GameOver)
+		{ ..model, accumulator: 0, state: GameOver }
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
 		next_snake = List.prepend(next_body, next_head)
 
 		if ate {
 			Audio.play!(model.eat_sound)
-			replace_model(model, next_snake, model.pending_direction, model.pending_direction, spawn_food!(next_snake), model.score + 1, 0, Playing)
+			{
+				..model,
+				snake: next_snake,
+				direction: model.pending_direction,
+				pending_direction: model.pending_direction,
+				food: spawn_food!(next_snake),
+				score: model.score + 1,
+				accumulator: 0,
+				state: Playing,
+			}
 		} else {
-			replace_model(model, next_snake, model.pending_direction, model.pending_direction, model.food, model.score, 0, Playing)
+			{
+				..model,
+				snake: next_snake,
+				direction: model.pending_direction,
+				pending_direction: model.pending_direction,
+				accumulator: 0,
+				state: Playing,
+			}
 		}
 	}
 }
@@ -237,10 +232,10 @@ advance_playing! : Model, Host => Model
 advance_playing! = |model, host| {
 	input_model = apply_input(model, host)
 	accumulator = input_model.accumulator + host.frame_time
-	with_accumulator = replace_model(input_model, input_model.snake, input_model.direction, input_model.pending_direction, input_model.food, input_model.score, accumulator, input_model.state)
+	with_accumulator = { ..input_model, accumulator }
 
 	if accumulator >= step_time {
-		step_snake!(replace_model(with_accumulator, with_accumulator.snake, with_accumulator.direction, with_accumulator.pending_direction, with_accumulator.food, with_accumulator.score, accumulator - step_time, with_accumulator.state))
+		step_snake!({ ..with_accumulator, accumulator: accumulator - step_time })
 	} else {
 		with_accumulator
 	}
@@ -291,15 +286,12 @@ draw_food! = |food| {
 	Draw.circle!({ center: { x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.5 }, radius: cell_size * 0.36, style: Draw.filled_and_outlined(Color.red, Color.dark_gray, 2) })
 }
 
-draw_snake_cells! : List(Cell), U64 => {}
-draw_snake_cells! = |snake, index|
-	match List.get(snake, index) {
-		Ok(cell) => {
-			draw_cell!(cell, Color.from_hex_rgb(0x23c552), Color.from_hex_rgb(0x0d5f2a))
-			draw_snake_cells!(snake, index + 1)
-		}
-		Err(_) => {}
+draw_snake_cells! : List(Cell) => {}
+draw_snake_cells! = |snake| {
+	for cell in snake {
+		draw_cell!(cell, Color.from_hex_rgb(0x23c552), Color.from_hex_rgb(0x0d5f2a))
 	}
+}
 
 draw_board! : {} => {}
 draw_board! = |_| {
@@ -314,7 +306,7 @@ draw_game! = |model| {
 	Draw.text_at!({ pos: { x: screen_w - 190, y: 32 }, text: Str.concat("Score ", U64.to_str(model.score)), size: 22, color: Color.gray })
 	draw_board!({})
 	draw_food!(model.food)
-	draw_snake_cells!(model.snake, 0)
+	draw_snake_cells!(model.snake)
 	draw_cell!(head_of(model.snake), Color.yellow, Color.from_hex_rgb(0x0d5f2a))
 
 	match model.state {

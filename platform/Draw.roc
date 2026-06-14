@@ -86,163 +86,55 @@ TextureDrawBuilder(field) := {
 	pos : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
 	pos = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: value,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, pos: value },
 	}
 
 	source : Math.Rect -> TextureDrawBuilder(Math.Rect)
 	source = |value| {
 		value,
-		apply: |options| {
-			source: value,
-			source_set: Bool.True,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, source: value, source_set: Bool.True },
 	}
 
 	dest : Math.Rect -> TextureDrawBuilder(Math.Rect)
 	dest = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: value,
-			dest_set: Bool.True,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, dest: value, dest_set: Bool.True },
 	}
 
 	origin : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
 	origin = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: value,
-			origin_set: Bool.True,
-			origin_center: Bool.False,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, origin: value, origin_set: Bool.True, origin_center: Bool.False },
 	}
 
 	origin_center : TextureDrawBuilder({})
 	origin_center = {
 		value: {},
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: Bool.False,
-			origin_center: Bool.True,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, origin_set: Bool.False, origin_center: Bool.True },
 	}
 
 	rotation : F32 -> TextureDrawBuilder(F32)
 	rotation = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: value,
-			scale: options.scale,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, rotation: value },
 	}
 
 	scale : F32 -> TextureDrawBuilder(F32)
 	scale = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: { x: value, y: value },
-			tint: options.tint,
-		},
+		apply: |options| { ..options, scale: { x: value, y: value } },
 	}
 
 	scale_xy : Math.Vec2 -> TextureDrawBuilder(Math.Vec2)
 	scale_xy = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: value,
-			tint: options.tint,
-		},
+		apply: |options| { ..options, scale: value },
 	}
 
 	tint : Color -> TextureDrawBuilder(Color)
 	tint = |value| {
 		value,
-		apply: |options| {
-			source: options.source,
-			source_set: options.source_set,
-			dest: options.dest,
-			dest_set: options.dest_set,
-			pos: options.pos,
-			origin: options.origin,
-			origin_set: options.origin_set,
-			origin_center: options.origin_center,
-			rotation: options.rotation,
-			scale: options.scale,
-			tint: value,
-		},
+		apply: |options| { ..options, tint: value },
 	}
 }
 

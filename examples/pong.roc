@@ -87,6 +87,7 @@ new_round! : Model => Model
 new_round! = |model| {
 	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
 	{
+		..model,
 		ball_x: screen_w * 0.5,
 		ball_y: screen_h * 0.5,
 		ball_vx: serve_dir,
@@ -95,9 +96,6 @@ new_round! = |model| {
 		right_y: 250,
 		left_score: 0,
 		right_score: 0,
-		hit_sound: model.hit_sound,
-		wall_sound: model.wall_sound,
-		score_sound: model.score_sound,
 	}
 }
 
@@ -110,14 +108,8 @@ program = { init!, render! }
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Pong",
-		width: 800,
-		height: 600,
-		target_fps: 240,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| {
 		# Generate the sound effects once; new_round! carries the handles forward.
@@ -223,6 +215,7 @@ render_playing! = |model, host| {
 	right_score = if out_left model.right_score + 1 else model.right_score
 
 	next = {
+		..model,
 		ball_x: final_ball_x,
 		ball_y: final_ball_y,
 		ball_vx: final_vx,
@@ -231,9 +224,6 @@ render_playing! = |model, host| {
 		right_y: right_y,
 		left_score: left_score,
 		right_score: right_score,
-		hit_sound: model.hit_sound,
-		wall_sound: model.wall_sound,
-		score_sound: model.score_sound,
 	}
 
 	# Sound effects for this frame's events.

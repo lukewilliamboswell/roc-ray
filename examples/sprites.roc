@@ -27,14 +27,9 @@ asset_path = "examples/assets/checker.bmp"
 init! : App.Init(Model)
 init! = App.init(
 	{
+		..App.default,
 		title: "RocRay Sprites",
-		width: 800,
-		height: 600,
 		target_fps: 120,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
 	},
 	|_host| {
 		match Assets.load_texture!(asset_path) {
@@ -101,5 +96,5 @@ render! = |model, host| {
 		},
 	)
 
-	Ok({ texture: model.texture, angle: next_angle, animation: next_animation })
+	Ok({ ..model, angle: next_angle, animation: next_animation })
 }

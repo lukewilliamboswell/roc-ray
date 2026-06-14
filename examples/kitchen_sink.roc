@@ -62,5 +62,5 @@ render! = |model, host| {
 		Host.exit!(0)
 	}
 
-	Ok({ message: model.message, frame_count: model.frame_count + 1 })
+	Ok({ ..model, frame_count: model.frame_count + 1 })
 }

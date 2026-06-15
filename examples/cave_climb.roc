@@ -124,6 +124,8 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
+		# TODO(roc#9655): replace these nested matches with `?` once App.Init
+		# can expose open init error rows through platform module aliases.
 		match Assets.load_texture!(tiles_path) {
 			Ok(tiles) =>
 				match Assets.load_texture!(characters_path) {

@@ -14,8 +14,9 @@ AppConfig : {
 App(_field) := { apply : AppConfig -> AppConfig }.{
 	Config : AppConfig
 
-	## TODO: allow init callbacks to expose extra errors once Roc can carry
-	## open error rows through this init record shape without breaking fmt/glue.
+	## TODO(roc#9655): make this `Try(model, [Exit(I64), ..])` once open
+	## error rows through exposed platform aliases like `App.Init(Model)` no
+	## longer panic the compiler.
 	InitCallback(model) : Host => Try(model, [Exit(I64)])
 
 	Init(model) : {

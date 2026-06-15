@@ -8,11 +8,37 @@ import rr.Draw
 import rr.Host
 import rr.Keys
 import rr.Math
+import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
 
 GameState := [Playing, Won, GameOver]
+
+LaserState : {
+	active : Bool,
+	end : Physics.Point,
+}
+
+HookProjectile : {
+	pos : Physics.Point,
+	velocity : Physics.Vector,
+	age : F32,
+}
+
+HookLatch : {
+	anchor : Physics.Point,
+	rest_length : F32,
+}
+
+HookState := [HookIdle, HookFlying(HookProjectile), HookLatched(HookLatch)]
+
+ToolInput : {
+	aim : Physics.Point,
+	laser_down : Bool,
+	hook_down : Bool,
+	hook_pressed : Bool,
+}
 
 Gem : {
 	id : U64,
@@ -53,6 +79,8 @@ World : {
 	state : GameState,
 	phase : F32,
 	flash : F32,
+	laser : LaserState,
+	hook : HookState,
 }
 
 Model : {
@@ -115,6 +143,45 @@ checkpoint_radius = 38
 
 goal_radius : F32
 goal_radius = 54
+
+laser_range : F32
+laser_range = 780
+
+laser_step : F32
+laser_step = 10
+
+hook_launch_speed : F32
+hook_launch_speed = 1040
+
+hook_max_range : F32
+hook_max_range = 980
+
+hook_max_age : F32
+hook_max_age = 1.35
+
+hook_collision_step : F32
+hook_collision_step = 9
+
+hook_spring_strength : F32
+hook_spring_strength = 18
+
+hook_damping : F32
+hook_damping = 3.2
+
+hook_max_acceleration : F32
+hook_max_acceleration = 3200
+
+ground_control : F32
+ground_control = 90
+
+air_control : F32
+air_control = 20
+
+ground_friction : F32
+ground_friction = 70
+
+air_drag : F32
+air_drag = 0.35
 
 init! : App.Init(Model)
 init! = App.init(
@@ -201,6 +268,9 @@ new_player = |pos| {
 	invuln: 0,
 }
 
+inactive_laser : LaserState
+inactive_laser = { active: Bool.False, end: Physics.origin }
+
 new_world : Level -> World
 new_world = |level| {
 	player: new_player(level.spawn),
@@ -211,6 +281,8 @@ new_world = |level| {
 	state: Playing,
 	phase: 0,
 	flash: 0,
+	laser: inactive_laser,
+	hook: HookIdle,
 }
 
 level_from_tilemap : Tilemap -> Level
@@ -292,6 +364,23 @@ wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else val
 ping_pong : F32 -> F32
 ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
 
+screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
+screen_to_map = |camera, screen| {
+	x: camera.target.x + (screen.x - camera.offset.x) / camera.zoom,
+	y: camera.target.y + (screen.y - camera.offset.y) / camera.zoom,
+}
+
+tool_input : Host, Camera.Camera2D -> ToolInput
+tool_input = |host, camera| {
+	aim = map_to_world(screen_to_map(camera, { x: host.mouse.x, y: host.mouse.y }))
+	{
+		aim,
+		laser_down: Mouse.button_down(host.mouse, Left),
+		hook_down: Mouse.button_down(host.mouse, Right),
+		hook_pressed: Mouse.button_pressed(host.mouse, Right),
+	}
+}
+
 player_rect_at : Physics.Point -> Math.Rect
 player_rect_at = |pos| {
 	map_pos = world_to_map(pos)
@@ -334,6 +423,142 @@ move_y = |level, pos, dy, velocity_y| {
 		{ pos, velocity_y: 0, grounded: velocity_y < 0 }
 	} else {
 		{ pos: candidate, velocity_y, grounded: Bool.False }
+	}
+}
+
+direction_to : Physics.Point, Physics.Point, F32 -> Physics.Vector
+direction_to = |origin, target, fallback_facing| {
+	offset = Physics.sub(target, origin)
+	if Physics.length(offset) == 0 {
+		Physics.normalize(Physics.vector(fallback_facing, 0.18, 0))
+	} else {
+		Physics.normalize(offset)
+	}
+}
+
+point_along : Physics.Point, Physics.Vector, F32 -> Physics.Point
+point_along = |origin, direction, distance| Physics.add(origin, Physics.scale(direction, distance))
+
+solid_hit_along : Level, Physics.Point, Physics.Vector, F32, F32 -> Try(Physics.Point, [NoHit])
+solid_hit_along = |level, origin, direction, max_distance, step| solid_hit_at(level, origin, direction, max_distance, step, step)
+
+solid_hit_at : Level, Physics.Point, Physics.Vector, F32, F32, F32 -> Try(Physics.Point, [NoHit])
+solid_hit_at = |level, origin, direction, max_distance, step, distance| {
+	if distance >= max_distance {
+		end = point_along(origin, direction, max_distance)
+		if solid_probe(level, end) Ok(end) else Err(NoHit)
+	} else {
+		probe = point_along(origin, direction, distance)
+		if solid_probe(level, probe) {
+			Ok(probe)
+		} else {
+			solid_hit_at(level, origin, direction, max_distance, step, distance + step)
+		}
+	}
+}
+
+laser_end : Level, Player, Physics.Point -> Physics.Point
+laser_end = |level, player, aim| {
+	direction = direction_to(player.pos, aim, player.facing)
+	match solid_hit_along(level, player.pos, direction, laser_range, laser_step) {
+		Ok(hit) => hit
+		Err(_) => point_along(player.pos, direction, laser_range)
+	}
+}
+
+advance_laser : Level, Player, ToolInput -> LaserState
+advance_laser = |level, player, input| {
+	if input.laser_down {
+		{ active: Bool.True, end: laser_end(level, player, input.aim) }
+	} else {
+		inactive_laser
+	}
+}
+
+launch_hook : Player, Physics.Point -> HookState
+launch_hook = |player, aim| {
+	direction = direction_to(player.pos, aim, player.facing)
+	HookFlying(
+		{
+			pos: player.pos,
+			velocity: Physics.add_vec(player.velocity, Physics.scale(direction, hook_launch_speed)),
+			age: 0,
+		},
+	)
+}
+
+solid_hit_between : Level, Physics.Point, Physics.Point -> Try(Physics.Point, [NoHit])
+solid_hit_between = |level, from, to| {
+	offset = Physics.sub(to, from)
+	distance = Physics.length(offset)
+	if distance == 0 {
+		if solid_probe(level, to) Ok(to) else Err(NoHit)
+	} else {
+		solid_hit_along(level, from, Physics.scale(offset, 1 / distance), distance, hook_collision_step)
+	}
+}
+
+advance_hook_projectile : Level, Player, HookProjectile, F32 -> HookState
+advance_hook_projectile = |level, player, hook, dt| {
+	accelerated = Physics.apply_acceleration(Physics.body(hook.pos, hook.velocity), Physics.vector(0, gravity, 0), dt)
+	next_pos = Physics.add(hook.pos, Physics.scale(accelerated.velocity, dt))
+	next_age = hook.age + dt
+	too_far = physics_distance(player.pos, next_pos) > hook_max_range
+	expired = next_age > hook_max_age
+
+	if too_far or expired {
+		HookIdle
+	} else {
+		match solid_hit_between(level, hook.pos, next_pos) {
+			Ok(anchor) => HookLatched({ anchor, rest_length: physics_distance(player.pos, anchor) })
+			Err(_) => HookFlying({ pos: next_pos, velocity: accelerated.velocity, age: next_age })
+		}
+	}
+}
+
+advance_hook : Level, Player, HookState, ToolInput, F32 -> HookState
+advance_hook = |level, player, hook, input, dt| {
+	if !(input.hook_down) {
+		HookIdle
+	} else {
+		match hook {
+			HookIdle => if input.hook_pressed launch_hook(player, input.aim) else HookIdle
+			HookFlying(projectile) => advance_hook_projectile(level, player, projectile, dt)
+			HookLatched(latch) => HookLatched(latch)
+		}
+	}
+}
+
+hook_acceleration : HookState, Player -> Physics.Vector
+hook_acceleration = |hook, player| {
+	match hook {
+		HookLatched(latch) => {
+			offset = Physics.sub(latch.anchor, player.pos)
+			distance = Physics.length(offset)
+			stretch = distance - latch.rest_length
+			if distance == 0 or stretch <= 0 {
+				Physics.zero
+			} else {
+				direction = Physics.scale(offset, 1 / distance)
+				velocity_along = Physics.dot(player.velocity, direction)
+				pull = Math.clamp(stretch * hook_spring_strength - velocity_along * hook_damping, 0, hook_max_acceleration)
+				Physics.scale(direction, pull)
+			}
+		}
+		_ => Physics.zero
+	}
+}
+
+steered_x_velocity : F32, F32, Bool, F32 -> F32
+steered_x_velocity = |velocity_x, move_axis, grounded, dt| {
+	if move_axis != 0 {
+		target = move_axis * move_speed
+		rate = if grounded ground_control else air_control
+		Math.lerp(velocity_x, target, Math.clamp01(rate * dt))
+	} else if grounded {
+		Math.lerp(velocity_x, 0, Math.clamp01(ground_friction * dt))
+	} else {
+		Math.lerp(velocity_x, 0, Math.clamp01(air_drag * dt))
 	}
 }
 
@@ -392,16 +617,20 @@ damage_player = |world, respawn| {
 		lives: next_lives,
 		flash: 0.32,
 		state: if next_lives == 0 GameOver else Playing,
+		laser: inactive_laser,
+		hook: HookIdle,
 	}
 }
 
-advance_player : Level, Player, F32, Bool, F32 -> Player
-advance_player = |level, player, move_axis, jump_pressed, dt| {
+advance_player : Level, Player, F32, Bool, Physics.Vector, F32 -> Player
+advance_player = |level, player, move_axis, jump_pressed, extra_acceleration, dt| {
 	jumping = jump_pressed and player.grounded
 	current_velocity = Physics.components(player.velocity)
-	accelerated = Physics.apply_acceleration(Physics.body(player.pos, player.velocity), Physics.vector(0, gravity, 0), dt)
-	velocity_y = if jumping jump_velocity else (Physics.components(Physics.clamp_y(accelerated.velocity, max_fall_speed, jump_velocity))).y
-	velocity_x = move_axis * move_speed
+	extra = Physics.components(extra_acceleration)
+	accelerated = Physics.apply_acceleration(Physics.body(player.pos, player.velocity), Physics.vector(extra.x, gravity + extra.y, extra.z), dt)
+	accelerated_velocity = Physics.components(accelerated.velocity)
+	velocity_y = if jumping jump_velocity else Math.clamp(accelerated_velocity.y, max_fall_speed, jump_velocity)
+	velocity_x = steered_x_velocity(accelerated_velocity.x, move_axis, player.grounded, dt)
 	after_x = move_x(level, player.pos, velocity_x * dt)
 	after_y = move_y(level, after_x, velocity_y * dt, velocity_y)
 	moving = move_axis != 0
@@ -417,9 +646,12 @@ advance_player = |level, player, move_axis, jump_pressed, dt| {
 	}
 }
 
-advance_world : Level, World, F32, Bool, F32 -> World
-advance_world = |level, world, move_axis, jump_pressed, dt| {
-	player = advance_player(level, world.player, move_axis, jump_pressed, dt)
+advance_world : Level, World, F32, Bool, ToolInput, F32 -> World
+advance_world = |level, world, move_axis, jump_pressed, input, dt| {
+	held_hook = if input.hook_down world.hook else HookIdle
+	player = advance_player(level, world.player, move_axis, jump_pressed, hook_acceleration(held_hook, world.player), dt)
+	hook = advance_hook(level, player, held_hook, input, dt)
+	laser = advance_laser(level, player, input)
 	collect = collect_gems(world.gems, player.pos)
 	collected = world.collected + collect.taken
 	checkpoint = match checkpoint_hit(level.checkpoints, player.pos) {
@@ -435,10 +667,12 @@ advance_world = |level, world, move_axis, jump_pressed, dt| {
 		checkpoint,
 		phase,
 		flash: tick_timer(world.flash, dt),
+		laser,
+		hook,
 	}
 
 	if goal_reached(level, base) {
-		{ ..base, state: Won }
+		{ ..base, state: Won, laser: inactive_laser, hook: HookIdle }
 	} else if player.invuln <= 0 and (touches_hazard(level.hazards, player.pos) or (world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
 		damage_player(base, checkpoint)
 	} else {
@@ -453,12 +687,15 @@ render! = |model, host| {
 	}
 
 	restart = Keys.key_pressed(host.keys_pressed, KeySpace)
+	input_camera = camera_for(model.level, model.world.player.pos)
+	input = tool_input(host, input_camera)
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
 			model.world,
 			input_axis(host),
 			Keys.key_pressed(host.keys_pressed, KeySpace) or Keys.key_pressed(host.keys_pressed, KeyUp) or Keys.key_pressed(host.keys_pressed, KeyW),
+			input,
 			host.frame_time,
 		)
 		Won => if restart new_world(model.level) else model.world
@@ -504,6 +741,7 @@ draw_world! = |level, background, tiles, characters, world| {
 	draw_goal!(tiles, level, world)
 	draw_gems!(tiles, world.gems, world.phase)
 	draw_hazard_marks!(tiles, level.hazards, world.phase)
+	draw_tools!(world)
 	draw_player!(characters, world.player)
 }
 
@@ -603,12 +841,55 @@ draw_goal! = |tiles, level, world| {
 	draw_tile_sprite!(tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
+draw_tools! : World => {}
+draw_tools! = |world| {
+	draw_laser!(world.player, world.laser)
+	draw_hook!(world.player, world.hook)
+}
+
+draw_laser! : Player, LaserState => {}
+draw_laser! = |player, laser| {
+	if laser.active {
+		start = world_to_map(player.pos)
+		end = world_to_map(laser.end)
+		laser_color = Color.from_hex_rgb(0x72f7ff)
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+		Draw.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
+	}
+}
+
+draw_hook! : Player, HookState => {}
+draw_hook! = |player, hook| {
+	start = world_to_map(player.pos)
+	match hook {
+		HookIdle => {}
+		HookFlying(projectile) => {
+			end = world_to_map(projectile.pos)
+			cord = Color.from_hex_rgb(0xd7dee8)
+			hook_color = Color.from_hex_rgb(0xffc857)
+			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
+			Draw.circle!({ center: end, radius: 7, style: Draw.filled(hook_color) })
+			Draw.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
+		}
+		HookLatched(latch) => {
+			end = world_to_map(latch.anchor)
+			cord = Color.from_hex_rgb(0xd7dee8)
+			anchor_color = Color.from_hex_rgb(0xf9c74f)
+			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
+			Draw.line!({ start, end, stroke: Draw.stroke(cord, 3) })
+			Draw.circle_gradient!({ center: end, radius: 20, color_inner: Color.with_alpha(anchor_color, 150), color_outer: Color.with_alpha(anchor_color, 0) })
+			Draw.circle!({ center: end, radius: 6, style: Draw.filled(anchor_color) })
+		}
+	}
+}
+
 player_source : Player -> Math.Rect
 player_source = |player| {
 	velocity = Physics.components(player.velocity)
 	if !(player.grounded) {
 		player_jump_source
-	} else if velocity.x != 0 {
+	} else if F32.abs(velocity.x) > 8 {
 		if player.animation.frame % 2 == 0 player_walk_a_source else player_walk_b_source
 	} else {
 		player_idle_source
@@ -670,3 +951,7 @@ expect world_to_map(map_to_world({ x: 10, y: 20 })) == { x: 10, y: 20 }
 expect player_rect_at(map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, player_width, player_height)
 expect tick_timer(0.1, 0.2) == 0
 expect F32.abs(wrap_unit(1.2) - 0.2) < 0.0001
+expect screen_to_map(Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, y: screen_h }, zoom: 2 }), { x: screen_w * 0.5, y: screen_h * 0.5 }) == { x: 100, y: 200 }
+expect Physics.components(direction_to(Physics.point_xy(0, 0), Physics.point_xy(3, 4), 1)) == { x: 0.6, y: 0.8, z: 0 }
+expect steered_x_velocity(0, 1, Bool.True, 1) == move_speed
+expect steered_x_velocity(20, 0, Bool.True, 1) == 0

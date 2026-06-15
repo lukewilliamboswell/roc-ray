@@ -15,9 +15,20 @@ import rr.Tilemap
 
 GameState := [Playing, Won, GameOver]
 
+LaserSegment : {
+	start : Physics.Point,
+	end : Physics.Point,
+}
+
 LaserState : {
 	active : Bool,
-	end : Physics.Point,
+	segments : List(LaserSegment),
+}
+
+LaserTrace : {
+	segments : List(LaserSegment),
+	killed : List(U64),
+	hit_player : Bool,
 }
 
 HookProjectile : {
@@ -32,6 +43,21 @@ HookLatch : {
 }
 
 HookState := [HookIdle, HookFlying(HookProjectile), HookLatched(HookLatch)]
+
+Mirror : {
+	id : U64,
+	pos : Physics.Point,
+	length : F32,
+	base_turn : F32,
+	spin : F32,
+}
+
+MirrorHit : {
+	point : Physics.Point,
+	normal : Physics.Vector,
+}
+
+LaserHit := [HitSolid(Physics.Point), HitMirror(MirrorHit), HitEnemy({ point : Physics.Point, id : U64 }), HitPlayer(Physics.Point), HitNone(Physics.Point)]
 
 ToolInput : {
 	aim : Physics.Point,
@@ -51,12 +77,21 @@ Danger : {
 	radius : F32,
 }
 
+Enemy : {
+	id : U64,
+	pos : Physics.Point,
+	radius : F32,
+	alive : Bool,
+}
+
 Level : {
 	tilemap : Tilemap,
 	spawn : Physics.Point,
 	goal : Physics.Point,
 	gems : List(Gem),
 	hazards : List(Danger),
+	mirrors : List(Mirror),
+	enemy_spawns : List(Enemy),
 	checkpoints : List(Physics.Point),
 	bounds : Math.Rect,
 }
@@ -74,6 +109,7 @@ World : {
 	player : Player,
 	gems : List(Gem),
 	collected : U64,
+	enemies : List(Enemy),
 	checkpoint : Physics.Point,
 	lives : U64,
 	state : GameState,
@@ -86,6 +122,7 @@ World : {
 Model : {
 	tiles : Assets.Texture,
 	characters : Assets.Texture,
+	enemies_texture : Assets.Texture,
 	background : Assets.Texture,
 	level : Level,
 	world : World,
@@ -107,6 +144,9 @@ tiles_path = "examples/assets/kenney-platformer/spritesheet-tiles-default.png"
 
 characters_path : Str
 characters_path = "examples/assets/kenney-platformer/spritesheet-characters-default.png"
+
+enemies_path : Str
+enemies_path = "examples/assets/kenney-platformer/spritesheet-enemies-default.png"
 
 background_path : Str
 background_path = "examples/assets/kenney-platformer/background_color_hills.png"
@@ -149,6 +189,18 @@ laser_range = 780
 
 laser_step : F32
 laser_step = 10
+
+laser_bounce_limit : U64
+laser_bounce_limit = 5
+
+laser_player_radius : F32
+laser_player_radius = 17
+
+laser_reflect_nudge : F32
+laser_reflect_nudge = 12
+
+mirror_thickness : F32
+mirror_thickness = 9
 
 hook_launch_speed : F32
 hook_launch_speed = 1040
@@ -197,47 +249,51 @@ init! = App.init(
 			Ok(tiles) =>
 				match Assets.load_texture!(characters_path) {
 					Ok(characters) =>
-						match Assets.load_texture!(background_path) {
-							Ok(background) =>
-								match Tilemap.load_tmx!(map_path) {
-									Ok(raw_map) => {
-										tilemap = Tilemap.from_raw(raw_map)
-											.with_tileset_texture(
-												1,
-												tiles,
-											)
-											.layer_role(
-												"Platforms",
-												Solid,
-											)
-											.layer_role(
-												"Hazards",
-												Drawn,
-											)
-											.object_role(
-												"spawn",
-												Spawn,
-											)
-											.object_role(
-												"gem",
-												Collectible,
-											)
-											.object_role(
-												"hazard",
-												Hazard,
-											)
-											.object_role(
-												"checkpoint",
-												Checkpoint,
-											)
-											.object_role(
-												"goal",
-												Goal,
-											)
-											.build()
-										level = level_from_tilemap(tilemap)
-										Ok({ tiles, characters, background, level, world: new_world(level) })
-									}
+						match Assets.load_texture!(enemies_path) {
+							Ok(enemies_texture) =>
+								match Assets.load_texture!(background_path) {
+									Ok(background) =>
+										match Tilemap.load_tmx!(map_path) {
+											Ok(raw_map) => {
+												tilemap = Tilemap.from_raw(raw_map)
+													.with_tileset_texture(
+														1,
+														tiles,
+													)
+													.layer_role(
+														"Platforms",
+														Solid,
+													)
+													.layer_role(
+														"Hazards",
+														Drawn,
+													)
+													.object_role(
+														"spawn",
+														Spawn,
+													)
+													.object_role(
+														"gem",
+														Collectible,
+													)
+													.object_role(
+														"hazard",
+														Hazard,
+													)
+													.object_role(
+														"checkpoint",
+														Checkpoint,
+													)
+													.object_role(
+														"goal",
+														Goal,
+													)
+													.build()
+												level = level_from_tilemap(tilemap)
+												Ok({ tiles, characters, enemies_texture, background, level, world: new_world(level) })
+											}
+											Err(_) => Err(Exit(1))
+										}
 									Err(_) => Err(Exit(1))
 								}
 							Err(_) => Err(Exit(1))
@@ -269,13 +325,14 @@ new_player = |pos| {
 }
 
 inactive_laser : LaserState
-inactive_laser = { active: Bool.False, end: Physics.origin }
+inactive_laser = { active: Bool.False, segments: [] }
 
 new_world : Level -> World
 new_world = |level| {
 	player: new_player(level.spawn),
 	gems: level.gems,
 	collected: 0,
+	enemies: level.enemy_spawns,
 	checkpoint: level.spawn,
 	lives: 3,
 	state: Playing,
@@ -297,6 +354,8 @@ level_from_tilemap = |tilemap| {
 		goal,
 		gems: gems_from_tilemap(tilemap),
 		hazards: hazards_from_tilemap(raw, tilemap),
+		mirrors: mirrors_from_tilemap(raw, tilemap),
+		enemy_spawns: enemies_from_tilemap(raw, tilemap),
 		checkpoints: checkpoints_from_tilemap(tilemap),
 		bounds: Math.rect(0, 0, U64.to_f32(raw.width) * raw.tile_width, U64.to_f32(raw.height) * raw.tile_height),
 	}
@@ -333,6 +392,57 @@ hazards_from_tilemap = |raw, tilemap| {
 	$hazards
 }
 
+mirrors_from_tilemap : Tilemap.RawMap, Tilemap -> List(Mirror)
+mirrors_from_tilemap = |raw, tilemap| {
+	var $mirrors = []
+	for object in Tilemap.objects_typed(tilemap, "mirror") {
+		center = Tilemap.object_world_center(tilemap, object)
+		length = Tilemap.property_f32(raw, object, "length", F32.max(F32.max(object.width, object.height), 88))
+		$mirrors = List.append(
+			$mirrors,
+			{
+				id: object.id,
+				pos: map_to_world(center),
+				length,
+				base_turn: Tilemap.property_f32(raw, object, "turn", object.rotation / 360),
+				spin: Tilemap.property_f32(raw, object, "spin", 0.22),
+			},
+		)
+	}
+	if List.len($mirrors) == 0 default_mirrors else $mirrors
+}
+
+enemies_from_tilemap : Tilemap.RawMap, Tilemap -> List(Enemy)
+enemies_from_tilemap = |raw, tilemap| {
+	var $enemies = []
+	for object in Tilemap.objects_typed(tilemap, "enemy") {
+		$enemies = List.append(
+			$enemies,
+			{
+				id: object.id,
+				pos: map_to_world(Tilemap.object_world_center(tilemap, object)),
+				radius: Tilemap.property_f32(raw, object, "radius", 28),
+				alive: Bool.True,
+			},
+		)
+	}
+	if List.len($enemies) == 0 default_enemies else $enemies
+}
+
+default_mirrors : List(Mirror)
+default_mirrors = [
+	{ id: 900, pos: map_to_world({ x: 365, y: 2295 }), length: 118, base_turn: 0.08, spin: 0.18 },
+	{ id: 901, pos: map_to_world({ x: 600, y: 1880 }), length: 104, base_turn: 0.32, spin: -0.16 },
+	{ id: 902, pos: map_to_world({ x: 700, y: 1240 }), length: 108, base_turn: 0.16, spin: 0.22 },
+]
+
+default_enemies : List(Enemy)
+default_enemies = [
+	{ id: 920, pos: map_to_world({ x: 705, y: 2260 }), radius: 24, alive: Bool.True },
+	{ id: 921, pos: map_to_world({ x: 760, y: 1370 }), radius: 24, alive: Bool.True },
+	{ id: 922, pos: map_to_world({ x: 570, y: 820 }), radius: 24, alive: Bool.True },
+]
+
 checkpoints_from_tilemap : Tilemap -> List(Physics.Point)
 checkpoints_from_tilemap = |tilemap| {
 	var $checkpoints = []
@@ -361,8 +471,37 @@ tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
 wrap_unit : F32 -> F32
 wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
 
+wrap_turn : F32 -> F32
+wrap_turn = |value| if value >= 1 wrap_turn(value - 1) else if value < 0 wrap_turn(value + 1) else value
+
 ping_pong : F32 -> F32
 ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
+
+quarter_wave : F32 -> F32
+quarter_wave = |amount| {
+	t = Math.clamp01(amount)
+	t * (2 - t)
+}
+
+sin_turn : F32 -> F32
+sin_turn = |turn| {
+	t = wrap_turn(turn)
+	if t < 0.25 {
+		quarter_wave(t * 4)
+	} else if t < 0.5 {
+		quarter_wave((0.5 - t) * 4)
+	} else if t < 0.75 {
+		0 - quarter_wave((t - 0.5) * 4)
+	} else {
+		0 - quarter_wave((1 - t) * 4)
+	}
+}
+
+cos_turn : F32 -> F32
+cos_turn = |turn| sin_turn(turn + 0.25)
+
+unit_from_turn : F32 -> Physics.Vector
+unit_from_turn = |turn| Physics.normalize(Physics.vector(cos_turn(turn), sin_turn(turn), 0))
 
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 screen_to_map = |camera, screen| {
@@ -457,22 +596,148 @@ solid_hit_at = |level, origin, direction, max_distance, step, distance| {
 	}
 }
 
-laser_end : Level, Player, Physics.Point -> Physics.Point
-laser_end = |level, player, aim| {
-	direction = direction_to(player.pos, aim, player.facing)
-	match solid_hit_along(level, player.pos, direction, laser_range, laser_step) {
-		Ok(hit) => hit
-		Err(_) => point_along(player.pos, direction, laser_range)
+mirror_axis : Mirror, F32 -> Physics.Vector
+mirror_axis = |mirror, phase| unit_from_turn(mirror.base_turn + phase * mirror.spin)
+
+mirror_normal : Mirror, F32 -> Physics.Vector
+mirror_normal = |mirror, phase| {
+	axis_vector = Physics.components(mirror_axis(mirror, phase))
+	Physics.normalize(Physics.vector(0 - axis_vector.y, axis_vector.x, 0))
+}
+
+mirror_segment : Mirror, F32 -> LaserSegment
+mirror_segment = |mirror, phase| {
+	axis_vector = mirror_axis(mirror, phase)
+	offset = Physics.scale(axis_vector, mirror.length * 0.5)
+	{
+		start: Physics.add(mirror.pos, Physics.scale(offset, -1)),
+		end: Physics.add(mirror.pos, offset),
 	}
 }
 
-advance_laser : Level, Player, ToolInput -> LaserState
-advance_laser = |level, player, input| {
-	if input.laser_down {
-		{ active: Bool.True, end: laser_end(level, player, input.aim) }
+point_segment_distance : Physics.Point, LaserSegment -> F32
+point_segment_distance = |point, segment| {
+	ab = Physics.sub(segment.end, segment.start)
+	len_sq = Physics.length_squared(ab)
+	if len_sq == 0 {
+		physics_distance(point, segment.start)
 	} else {
-		inactive_laser
+		t = Math.clamp(Physics.dot(Physics.sub(point, segment.start), ab) / len_sq, 0, 1)
+		physics_distance(point, Physics.add(segment.start, Physics.scale(ab, t)))
 	}
+}
+
+mirror_hit_at : List(Mirror), F32, Physics.Point -> Try(MirrorHit, [NoHit])
+mirror_hit_at = |mirrors, phase, point| {
+	var $hit = Err(NoHit)
+	for mirror in mirrors {
+		match $hit {
+			Ok(_) => {}
+			Err(_) => {
+				segment = mirror_segment(mirror, phase)
+				if point_segment_distance(point, segment) <= mirror_thickness {
+					$hit = Ok({ point, normal: mirror_normal(mirror, phase) })
+				}
+			}
+		}
+	}
+	$hit
+}
+
+enemy_hit_at : List(Enemy), Physics.Point -> Try({ point : Physics.Point, id : U64 }, [NoHit])
+enemy_hit_at = |enemies, point| {
+	var $hit = Err(NoHit)
+	for enemy in enemies {
+		match $hit {
+			Ok(_) => {}
+			Err(_) => if enemy.alive and physics_distance(enemy.pos, point) <= enemy.radius {
+				$hit = Ok({ point, id: enemy.id })
+			}
+		}
+	}
+	$hit
+}
+
+laser_probe_hit : Level, List(Enemy), Player, Physics.Point, F32, Bool -> LaserHit
+laser_probe_hit = |level, enemies, player, probe, phase, can_hit_player| {
+	if can_hit_player and physics_distance(player.pos, probe) <= laser_player_radius {
+		HitPlayer(probe)
+	} else {
+		match enemy_hit_at(enemies, probe) {
+			Ok(hit) => HitEnemy(hit)
+			Err(_) =>
+				match mirror_hit_at(level.mirrors, phase, probe) {
+					Ok(hit) => HitMirror(hit)
+					Err(_) => if solid_probe(level, probe) HitSolid(probe) else HitNone(probe)
+				}
+			}
+	}
+}
+
+cast_laser : Level, List(Enemy), Player, Physics.Point, Physics.Vector, F32, F32, Bool, F32 -> LaserHit
+cast_laser = |level, enemies, player, origin, direction, phase, remaining, can_hit_player, distance| {
+	if distance >= remaining {
+		HitNone(point_along(origin, direction, remaining))
+	} else {
+		probe = point_along(origin, direction, distance)
+		hit = laser_probe_hit(level, enemies, player, probe, phase, can_hit_player)
+		match hit {
+			HitNone(_) => cast_laser(level, enemies, player, origin, direction, phase, remaining, can_hit_player, distance + laser_step)
+			_ => hit
+		}
+	}
+}
+
+laser_trace_from : Level, List(Enemy), Player, Physics.Point, Physics.Vector, F32, F32, U64, Bool, List(LaserSegment), List(U64), Bool -> LaserTrace
+laser_trace_from = |level, enemies, player, origin, direction, phase, remaining, bounces, can_hit_player, segments, killed, hit_player| {
+	if remaining <= 0 {
+		{ segments, killed, hit_player }
+	} else {
+		match cast_laser(level, enemies, player, origin, direction, phase, remaining, can_hit_player, laser_step) {
+			HitNone(end) => { segments: List.append(segments, { start: origin, end }), killed, hit_player }
+			HitSolid(end) => { segments: List.append(segments, { start: origin, end }), killed, hit_player }
+			HitEnemy(hit) => { segments: List.append(segments, { start: origin, end: hit.point }), killed: List.append(killed, hit.id), hit_player }
+			HitPlayer(end) => { segments: List.append(segments, { start: origin, end }), killed, hit_player: Bool.True }
+			HitMirror(hit) => {
+				next_segments = List.append(segments, { start: origin, end: hit.point })
+				remaining_after_hit = remaining - physics_distance(origin, hit.point)
+				reflected = Physics.normalize(Physics.reflect(direction, hit.normal))
+
+				if bounces >= laser_bounce_limit or remaining_after_hit <= laser_reflect_nudge or Physics.length(reflected) == 0 {
+					{ segments: next_segments, killed, hit_player }
+				} else {
+					next_origin = point_along(hit.point, reflected, laser_reflect_nudge)
+					laser_trace_from(level, enemies, player, next_origin, reflected, phase, remaining_after_hit - laser_reflect_nudge, bounces + 1, Bool.True, next_segments, killed, hit_player)
+				}
+			}
+		}
+	}
+}
+
+advance_laser : Level, Player, List(Enemy), ToolInput, F32 -> LaserTrace
+advance_laser = |level, player, enemies, input, phase| {
+	if input.laser_down {
+		direction = direction_to(player.pos, input.aim, player.facing)
+		laser_trace_from(level, enemies, player, player.pos, direction, phase, laser_range, 0, Bool.False, [], [], Bool.False)
+	} else {
+		{ segments: [], killed: [], hit_player: Bool.False }
+	}
+}
+
+laser_state_from_trace : ToolInput, LaserTrace -> LaserState
+laser_state_from_trace = |input, trace| {
+	active: input.laser_down,
+	segments: trace.segments,
+}
+
+kill_laser_enemies : List(Enemy), List(U64) -> List(Enemy)
+kill_laser_enemies = |enemies, killed| {
+	var $next = []
+	for enemy in enemies {
+		dead = enemy.alive and List.contains(killed, enemy.id)
+		$next = List.append($next, { ..enemy, alive: enemy.alive and !(dead) })
+	}
+	$next
 }
 
 launch_hook : Player, Physics.Point -> HookState
@@ -651,18 +916,21 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	held_hook = if input.hook_down world.hook else HookIdle
 	player = advance_player(level, world.player, move_axis, jump_pressed, hook_acceleration(held_hook, world.player), dt)
 	hook = advance_hook(level, player, held_hook, input, dt)
-	laser = advance_laser(level, player, input)
+	phase = wrap_unit(world.phase + dt * 0.55)
+	laser_trace = advance_laser(level, player, world.enemies, input, phase)
+	laser = laser_state_from_trace(input, laser_trace)
+	enemies = kill_laser_enemies(world.enemies, laser_trace.killed)
 	collect = collect_gems(world.gems, player.pos)
 	collected = world.collected + collect.taken
 	checkpoint = match checkpoint_hit(level.checkpoints, player.pos) {
 		Ok(point) => point
 		Err(_) => world.checkpoint
 	}
-	phase = wrap_unit(world.phase + dt * 0.55)
 	base = {
 		..world,
 		player,
 		gems: collect.gems,
+		enemies,
 		collected,
 		checkpoint,
 		phase,
@@ -673,7 +941,7 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 	if goal_reached(level, base) {
 		{ ..base, state: Won, laser: inactive_laser, hook: HookIdle }
-	} else if player.invuln <= 0 and (touches_hazard(level.hazards, player.pos) or (world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
+	} else if player.invuln <= 0 and (laser_trace.hit_player or touches_hazard(level.hazards, player.pos) or (world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
 		damage_player(base, checkpoint)
 	} else {
 		base
@@ -710,7 +978,7 @@ render! = |model, host| {
 		|| {
 			Draw.with_camera!(
 				camera,
-				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.world),
+				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world),
 			)
 			draw_hud!(next.level, next.world)
 		},
@@ -732,8 +1000,8 @@ camera_for = |level, target| {
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
 
-draw_world! : Level, Assets.Texture, Assets.Texture, Assets.Texture, World => {}
-draw_world! = |level, background, tiles, characters, world| {
+draw_world! : Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World => {}
+draw_world! = |level, background, tiles, characters, enemies_texture, world| {
 	Draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
 	Draw.texture!({ texture: background, source: Assets.rect(background), dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
 	Tilemap.draw_all!(level.tilemap)
@@ -741,6 +1009,8 @@ draw_world! = |level, background, tiles, characters, world| {
 	draw_goal!(tiles, level, world)
 	draw_gems!(tiles, world.gems, world.phase)
 	draw_hazard_marks!(tiles, level.hazards, world.phase)
+	draw_mirrors!(level.mirrors, world.phase)
+	draw_enemies!(enemies_texture, world.enemies, world.phase)
 	draw_tools!(world)
 	draw_player!(characters, world.player)
 }
@@ -756,6 +1026,12 @@ goal_source = Math.rect(896, 768, 64, 64)
 
 checkpoint_source : Math.Rect
 checkpoint_source = Math.rect(896, 448, 64, 64)
+
+enemy_fly_a_source : Math.Rect
+enemy_fly_a_source = Math.rect(320, 256, 64, 64)
+
+enemy_fly_b_source : Math.Rect
+enemy_fly_b_source = Math.rect(320, 192, 64, 64)
 
 player_idle_source : Math.Rect
 player_idle_source = Math.rect(384, 768, 128, 128)
@@ -841,21 +1117,59 @@ draw_goal! = |tiles, level, world| {
 	draw_tile_sprite!(tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
+draw_mirrors! : List(Mirror), F32 => {}
+draw_mirrors! = |mirrors, phase| {
+	for mirror in mirrors {
+		segment = mirror_segment(mirror, phase)
+		start = world_to_map(segment.start)
+		end = world_to_map(segment.end)
+		center = world_to_map(mirror.pos)
+		glass = Color.from_hex_rgb(0xbaf2ff)
+		edge = Color.from_hex_rgb(0x3a506b)
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
+		Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+		Draw.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
+		Draw.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
+		Draw.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
+	}
+}
+
+enemy_source : Enemy, F32 -> Math.Rect
+enemy_source = |enemy, phase| {
+	flutter = wrap_unit(phase * 2 + U64.to_f32(enemy.id) * 0.11)
+	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
+}
+
+draw_enemies! : Assets.Texture, List(Enemy), F32 => {}
+draw_enemies! = |texture, enemies, phase| {
+	for enemy in enemies {
+		if enemy.alive {
+			pos = world_to_map(enemy.pos)
+			pulse = 0.9 + ping_pong(wrap_unit(phase + U64.to_f32(enemy.id) * 0.09)) * 0.08
+			Draw.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
+			draw_tile_sprite!(texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
+		}
+	}
+}
+
 draw_tools! : World => {}
 draw_tools! = |world| {
-	draw_laser!(world.player, world.laser)
+	draw_laser!(world.laser)
 	draw_hook!(world.player, world.hook)
 }
 
-draw_laser! : Player, LaserState => {}
-draw_laser! = |player, laser| {
+draw_laser! : LaserState => {}
+draw_laser! = |laser| {
 	if laser.active {
-		start = world_to_map(player.pos)
-		end = world_to_map(laser.end)
 		laser_color = Color.from_hex_rgb(0x72f7ff)
-		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
-		Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-		Draw.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
+		for segment in laser.segments {
+			start = world_to_map(segment.start)
+			end = world_to_map(segment.end)
+			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
+			Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+			Draw.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
+		}
 	}
 }
 
@@ -955,3 +1269,10 @@ expect screen_to_map(Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, 
 expect Physics.components(direction_to(Physics.point_xy(0, 0), Physics.point_xy(3, 4), 1)) == { x: 0.6, y: 0.8, z: 0 }
 expect steered_x_velocity(0, 1, Bool.True, 1) == move_speed
 expect steered_x_velocity(20, 0, Bool.True, 1) == 0
+expect wrap_turn(1.25) == 0.25
+expect Physics.components(unit_from_turn(0)) == { x: 1, y: 0, z: 0 }
+expect point_segment_distance(Physics.point_xy(5, 3), { start: Physics.point_xy(0, 0), end: Physics.point_xy(10, 0) }) == 3
+expect match List.first(kill_laser_enemies([{ id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }], [1])) {
+	Ok(enemy) => !(enemy.alive)
+	Err(_) => Bool.False
+}

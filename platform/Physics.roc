@@ -232,6 +232,13 @@ Physics := [].{
 		if len == 0 Physics.zero else Physics.scale(v, 1 / len)
 	}
 
+	## Reflect a vector around a surface normal.
+	reflect : Vector, Vector -> Vector
+	reflect = |direction, normal| {
+		n = Physics.normalize(normal)
+		Physics.sub_vec(direction, Physics.scale(n, 2 * Physics.dot(direction, n)))
+	}
+
 	## Compute the Euclidean distance between two finite points.
 	distance : Point, Point -> F32
 	distance = |a, b| Physics.length(Physics.sub(a, b))
@@ -341,6 +348,7 @@ expect Physics.components(Physics.vector(3, 4, 5)) == { x: 3, y: 4, z: 5 }
 expect Physics.length(Physics.vector(3, 4, 0)) == 5
 expect Physics.distance(Physics.origin, Physics.point(2, 3, 6)) == 7
 expect Physics.components(Physics.normalize(Physics.vector(0, 3, 4))) == { x: 0, y: 0.6, z: 0.8 }
+expect Physics.components(Physics.reflect(Physics.vector(1, -1, 0), Physics.vector(0, 1, 0))) == { x: 1, y: 1, z: 0 }
 expect Physics.point_coeffs(Physics.point(3, 4, 5)) == { e032: 3, e013: 4, e021: 5, e123: 1 }
 expect Physics.vector_coeffs(Physics.vector(3, 4, 5)) == { e032: 3, e013: 4, e021: 5 }
 expect {

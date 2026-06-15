@@ -12,7 +12,7 @@ A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native 
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
 - Tiled TMX tilemap loading, drawing, layer/object roles, solid queries, and object/property access
-- Pga2 geometry helpers for 2D points, vectors, lines, circles, transforms, distances, and intersections
+- Physics helpers backed by compact 3D PGA points, vectors, planes, lines, and translation motors
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
@@ -54,7 +54,7 @@ roc examples/camera.roc
 
 The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
 
-The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Pga2 distance checks with selected CC0 assets from Kenney's New Platformer Pack.
+The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Physics distance checks with selected CC0 assets from Kenney's New Platformer Pack.
 
 Beginner game examples are available in:
 

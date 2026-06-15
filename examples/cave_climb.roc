@@ -8,7 +8,7 @@ import rr.Draw
 import rr.Host
 import rr.Keys
 import rr.Math
-import rr.Pga2
+import rr.Physics
 import rr.Sprite
 import rr.Tilemap
 
@@ -16,28 +16,28 @@ GameState := [Playing, Won, GameOver]
 
 Gem : {
 	id : U64,
-	pos : Math.Vec2,
+	pos : Physics.Point,
 	taken : Bool,
 }
 
 Danger : {
-	pos : Math.Vec2,
+	pos : Physics.Point,
 	radius : F32,
 }
 
 Level : {
 	tilemap : Tilemap,
-	spawn : Math.Vec2,
-	goal : Math.Vec2,
+	spawn : Physics.Point,
+	goal : Physics.Point,
 	gems : List(Gem),
 	hazards : List(Danger),
-	checkpoints : List(Math.Vec2),
+	checkpoints : List(Physics.Point),
 	bounds : Math.Rect,
 }
 
 Player : {
-	pos : Math.Vec2,
-	velocity : Math.Vec2,
+	pos : Physics.Point,
+	velocity : Physics.Vector,
 	grounded : Bool,
 	facing : F32,
 	animation : Sprite.Animation,
@@ -48,7 +48,7 @@ World : {
 	player : Player,
 	gems : List(Gem),
 	collected : U64,
-	checkpoint : Math.Vec2,
+	checkpoint : Physics.Point,
 	lives : U64,
 	state : GameState,
 	phase : F32,
@@ -99,13 +99,13 @@ move_speed : F32
 move_speed = 315
 
 gravity : F32
-gravity = 2100
+gravity = -2100
 
 jump_velocity : F32
-jump_velocity = -920
+jump_velocity = 920
 
 max_fall_speed : F32
-max_fall_speed = 980
+max_fall_speed = -980
 
 gem_radius : F32
 gem_radius = 34
@@ -180,10 +180,19 @@ init! = App.init(
 	},
 )
 
-new_player : Math.Vec2 -> Player
+map_to_world : Math.Vec2 -> Physics.Point
+map_to_world = |point| Physics.point(point.x, 0 - point.y, 0)
+
+world_to_map : Physics.Point -> Math.Vec2
+world_to_map = |point| {
+	coords = Physics.coords(point)
+	{ x: coords.x, y: 0 - coords.y }
+}
+
+new_player : Physics.Point -> Player
 new_player = |pos| {
 	pos,
-	velocity: Math.zero,
+	velocity: Physics.zero,
 	grounded: Bool.False,
 	facing: 1,
 	animation: Sprite.animation({ frame_count: 2, fps: 8 }),
@@ -205,8 +214,8 @@ new_world = |level| {
 level_from_tilemap : Tilemap -> Level
 level_from_tilemap = |tilemap| {
 	raw = Tilemap.raw_map(tilemap)
-	spawn = object_role_center_or(tilemap, Spawn, { x: 160, y: 2520 })
-	goal = object_role_center_or(tilemap, Goal, { x: 832, y: 260 })
+	spawn = map_to_world(object_role_center_or(tilemap, Spawn, { x: 160, y: 2520 }))
+	goal = map_to_world(object_role_center_or(tilemap, Goal, { x: 832, y: 260 }))
 
 	{
 		tilemap,
@@ -230,7 +239,7 @@ gems_from_tilemap : Tilemap -> List(Gem)
 gems_from_tilemap = |tilemap| {
 	var $gems = []
 	for object in Tilemap.objects_with_role(tilemap, Collectible) {
-		$gems = List.append($gems, { id: object.id, pos: Tilemap.object_world_center(tilemap, object), taken: Bool.False })
+		$gems = List.append($gems, { id: object.id, pos: map_to_world(Tilemap.object_world_center(tilemap, object)), taken: Bool.False })
 	}
 	$gems
 }
@@ -242,7 +251,7 @@ hazards_from_tilemap = |raw, tilemap| {
 		$hazards = List.append(
 			$hazards,
 			{
-				pos: Tilemap.object_world_center(tilemap, object),
+				pos: map_to_world(Tilemap.object_world_center(tilemap, object)),
 				radius: Tilemap.property_f32(raw, object, "radius", 30),
 			},
 		)
@@ -250,11 +259,11 @@ hazards_from_tilemap = |raw, tilemap| {
 	$hazards
 }
 
-checkpoints_from_tilemap : Tilemap -> List(Math.Vec2)
+checkpoints_from_tilemap : Tilemap -> List(Physics.Point)
 checkpoints_from_tilemap = |tilemap| {
 	var $checkpoints = []
 	for object in Tilemap.objects_with_role(tilemap, Checkpoint) {
-		$checkpoints = List.append($checkpoints, Tilemap.object_world_center(tilemap, object))
+		$checkpoints = List.append($checkpoints, map_to_world(Tilemap.object_world_center(tilemap, object)))
 	}
 	$checkpoints
 }
@@ -269,8 +278,8 @@ input_axis = |host| {
 	axis(left, right)
 }
 
-pga_distance : Math.Vec2, Math.Vec2 -> F32
-pga_distance = |a, b| Pga2.distance(Pga2.from_vec2(a), Pga2.from_vec2(b))
+physics_distance : Physics.Point, Physics.Point -> F32
+physics_distance = |a, b| Physics.distance(a, b)
 
 tick_timer : F32, F32 -> F32
 tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
@@ -281,42 +290,46 @@ wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else val
 ping_pong : F32 -> F32
 ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
 
-player_rect_at : Math.Vec2 -> Math.Rect
-player_rect_at = |pos| Math.rect(pos.x - half_player_w, pos.y - half_player_h, player_width, player_height)
+player_rect_at : Physics.Point -> Math.Rect
+player_rect_at = |pos| {
+	map_pos = world_to_map(pos)
+	Math.rect(map_pos.x - half_player_w, map_pos.y - half_player_h, player_width, player_height)
+}
 
-solid_probe : Level, Math.Vec2 -> Bool
-solid_probe = |level, point| Tilemap.solid_at_world(level.tilemap, point)
+solid_probe : Level, Physics.Point -> Bool
+solid_probe = |level, point| Tilemap.solid_at_world(level.tilemap, world_to_map(point))
 
-player_hits_solid : Level, Math.Vec2, F32 -> Bool
+player_hits_solid : Level, Physics.Point, F32 -> Bool
 player_hits_solid = |level, pos, bottom_inset| {
-	left = pos.x - half_player_w + 4
-	right = pos.x + half_player_w - 4
-	top = pos.y - half_player_h + 4
-	bottom = pos.y + half_player_h - bottom_inset
+	coords = Physics.coords(pos)
+	left = coords.x - half_player_w + 4
+	right = coords.x + half_player_w - 4
+	top = coords.y + half_player_h - 4
+	bottom = coords.y - half_player_h + bottom_inset
 
-	solid_probe(level, { x: left, y: top })
-		or solid_probe(level, { x: right, y: top })
-			or solid_probe(level, { x: left, y: bottom })
-				or solid_probe(level, { x: right, y: bottom })
+	solid_probe(level, Physics.point(left, top, 0))
+		or solid_probe(level, Physics.point(right, top, 0))
+			or solid_probe(level, Physics.point(left, bottom, 0))
+				or solid_probe(level, Physics.point(right, bottom, 0))
 }
 
 MoveYResult : {
-	pos : Math.Vec2,
+	pos : Physics.Point,
 	velocity_y : F32,
 	grounded : Bool,
 }
 
-move_x : Level, Math.Vec2, F32 -> Math.Vec2
+move_x : Level, Physics.Point, F32 -> Physics.Point
 move_x = |level, pos, dx| {
-	candidate = { x: pos.x + dx, y: pos.y }
+	candidate = Physics.add(pos, Physics.vector(dx, 0, 0))
 	if player_hits_solid(level, candidate, 2) pos else candidate
 }
 
-move_y : Level, Math.Vec2, F32, F32 -> MoveYResult
+move_y : Level, Physics.Point, F32, F32 -> MoveYResult
 move_y = |level, pos, dy, velocity_y| {
-	candidate = { x: pos.x, y: pos.y + dy }
+	candidate = Physics.add(pos, Physics.vector(0, dy, 0))
 	if player_hits_solid(level, candidate, 0) {
-		{ pos, velocity_y: 0, grounded: velocity_y > 0 }
+		{ pos, velocity_y: 0, grounded: velocity_y < 0 }
 	} else {
 		{ pos: candidate, velocity_y, grounded: Bool.False }
 	}
@@ -327,12 +340,12 @@ CollectResult : {
 	taken : U64,
 }
 
-collect_gems : List(Gem), Math.Vec2 -> CollectResult
+collect_gems : List(Gem), Physics.Point -> CollectResult
 collect_gems = |gems, player_pos| {
 	var $next = []
 	var $taken = 0
 	for gem in gems {
-		hit = !(gem.taken) and pga_distance(gem.pos, player_pos) <= gem_radius
+		hit = !(gem.taken) and physics_distance(gem.pos, player_pos) <= gem_radius
 		$next = List.append($next, { ..gem, taken: gem.taken or hit })
 		if hit {
 			$taken = $taken + 1
@@ -341,22 +354,22 @@ collect_gems = |gems, player_pos| {
 	{ gems: $next, taken: $taken }
 }
 
-checkpoint_hit : List(Math.Vec2), Math.Vec2 -> Try(Math.Vec2, [NoCheckpoint])
+checkpoint_hit : List(Physics.Point), Physics.Point -> Try(Physics.Point, [NoCheckpoint])
 checkpoint_hit = |checkpoints, player_pos| {
 	var $hit = Err(NoCheckpoint)
 	for checkpoint in checkpoints {
-		if pga_distance(checkpoint, player_pos) <= checkpoint_radius {
+		if physics_distance(checkpoint, player_pos) <= checkpoint_radius {
 			$hit = Ok(checkpoint)
 		}
 	}
 	$hit
 }
 
-touches_hazard : List(Danger), Math.Vec2 -> Bool
+touches_hazard : List(Danger), Physics.Point -> Bool
 touches_hazard = |hazards, player_pos| {
 	var $hit = Bool.False
 	for hazard in hazards {
-		if pga_distance(hazard.pos, player_pos) <= hazard.radius + half_player_w {
+		if physics_distance(hazard.pos, player_pos) <= hazard.radius + half_player_w {
 			$hit = Bool.True
 		}
 	}
@@ -365,10 +378,10 @@ touches_hazard = |hazards, player_pos| {
 
 goal_reached : Level, World -> Bool
 goal_reached = |level, world| {
-	world.collected == List.len(level.gems) and pga_distance(world.player.pos, level.goal) <= goal_radius
+	world.collected == List.len(level.gems) and physics_distance(world.player.pos, level.goal) <= goal_radius
 }
 
-damage_player : World, Math.Vec2 -> World
+damage_player : World, Physics.Point -> World
 damage_player = |world, respawn| {
 	next_lives = if world.lives > 0 world.lives - 1 else 0
 	{
@@ -383,7 +396,9 @@ damage_player = |world, respawn| {
 advance_player : Level, Player, F32, Bool, F32 -> Player
 advance_player = |level, player, move_axis, jump_pressed, dt| {
 	jumping = jump_pressed and player.grounded
-	velocity_y = if jumping jump_velocity else Math.clamp(player.velocity.y + gravity * dt, jump_velocity, max_fall_speed)
+	current_velocity = Physics.components(player.velocity)
+	accelerated = Physics.apply_acceleration(Physics.body(player.pos, player.velocity), Physics.vector(0, gravity, 0), dt)
+	velocity_y = if jumping jump_velocity else (Physics.components(Physics.clamp_y(accelerated.velocity, max_fall_speed, jump_velocity))).y
 	velocity_x = move_axis * move_speed
 	after_x = move_x(level, player.pos, velocity_x * dt)
 	after_y = move_y(level, after_x, velocity_y * dt, velocity_y)
@@ -392,7 +407,7 @@ advance_player = |level, player, move_axis, jump_pressed, dt| {
 	{
 		..player,
 		pos: after_y.pos,
-		velocity: { x: velocity_x, y: after_y.velocity_y },
+		velocity: Physics.vector(velocity_x, after_y.velocity_y, current_velocity.z),
 		grounded: after_y.grounded,
 		facing: if moving move_axis else player.facing,
 		animation: if moving Sprite.step(player.animation, dt) else player.animation,
@@ -422,7 +437,7 @@ advance_world = |level, world, move_axis, jump_pressed, dt| {
 
 	if goal_reached(level, base) {
 		{ ..base, state: Won }
-	} else if player.invuln <= 0 and (touches_hazard(level.hazards, player.pos) or player.pos.y > Math.bottom(level.bounds) + 96) {
+	} else if player.invuln <= 0 and (touches_hazard(level.hazards, player.pos) or (world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
 		damage_player(base, checkpoint)
 	} else {
 		base
@@ -465,14 +480,15 @@ render! = |model, host| {
 	Ok(next)
 }
 
-camera_for : Level, Math.Vec2 -> Camera.Camera2D
+camera_for : Level, Physics.Point -> Camera.Camera2D
 camera_for = |level, target| {
+	map_target = world_to_map(target)
 	zoom = 0.96
 	half_w = screen_w * 0.5 / zoom
 	half_h = screen_h * 0.5 / zoom
 	clamped = {
-		x: Math.clamp(target.x, half_w, Math.right(level.bounds) - half_w),
-		y: Math.clamp(target.y, half_h, Math.bottom(level.bounds) - half_h),
+		x: Math.clamp(map_target.x, half_w, Math.right(level.bounds) - half_w),
+		y: Math.clamp(map_target.y, half_h, Math.bottom(level.bounds) - half_h),
 	}
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
@@ -535,9 +551,10 @@ draw_gems! : Assets.Texture, List(Gem), F32 => {}
 draw_gems! = |tiles, gems, phase| {
 	for gem in gems {
 		if !(gem.taken) {
+			pos = world_to_map(gem.pos)
 			pulse = 0.86 + ping_pong(wrap_unit(phase + U64.to_f32(gem.id) * 0.07)) * 0.12
-			Draw.circle_gradient!({ center: gem.pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
-			draw_tile_sprite!(tiles, gem_source, gem.pos, 0.72 * pulse, phase * 60)
+			Draw.circle_gradient!({ center: pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
+			draw_tile_sprite!(tiles, gem_source, pos, 0.72 * pulse, phase * 60)
 		}
 	}
 }
@@ -545,22 +562,24 @@ draw_gems! = |tiles, gems, phase| {
 draw_hazard_marks! : Assets.Texture, List(Danger), F32 => {}
 draw_hazard_marks! = |tiles, hazards, phase| {
 	for hazard in hazards {
-		Draw.circle_gradient!({ center: hazard.pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
-		draw_tile_sprite!(tiles, saw_source, hazard.pos, 0.78, phase * 260)
+		pos = world_to_map(hazard.pos)
+		Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
+		draw_tile_sprite!(tiles, saw_source, pos, 0.78, phase * 260)
 	}
 }
 
 draw_checkpoints! : Assets.Texture, Level, World => {}
 draw_checkpoints! = |tiles, level, world| {
 	for checkpoint in level.checkpoints {
-		reached = checkpoint.y >= world.checkpoint.y
+		checkpoint_pos = world_to_map(checkpoint)
+		reached = checkpoint_pos.y >= (world_to_map(world.checkpoint)).y
 		tint = if reached Color.white else Color.with_alpha(Color.white, 120)
 		sprite = Sprite.from_texture(tiles)
 			.source(
 				checkpoint_source,
 			)
 			.pos(
-				checkpoint,
+				checkpoint_pos,
 			)
 			.scale(
 				0.74,
@@ -576,16 +595,18 @@ draw_checkpoints! = |tiles, level, world| {
 draw_goal! : Assets.Texture, Level, World => {}
 draw_goal! = |tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
+	pos = world_to_map(level.goal)
 	color = if ready Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
-	Draw.circle_gradient!({ center: level.goal, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
-	draw_tile_sprite!(tiles, goal_source, level.goal, if ready 1.0 else 0.82, 0)
+	Draw.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
+	draw_tile_sprite!(tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
 player_source : Player -> Math.Rect
 player_source = |player| {
+	velocity = Physics.components(player.velocity)
 	if !(player.grounded) {
 		player_jump_source
-	} else if player.velocity.x != 0 {
+	} else if velocity.x != 0 {
 		if player.animation.frame % 2 == 0 player_walk_a_source else player_walk_b_source
 	} else {
 		player_idle_source
@@ -595,12 +616,13 @@ player_source = |player| {
 draw_player! : Assets.Texture, Player => {}
 draw_player! = |characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
+	pos = world_to_map(player.pos)
 	Sprite.from_texture(characters)
 		.source(
 			player_source(player),
 		)
 		.pos(
-			player.pos,
+			pos,
 		)
 		.scale(
 			0.58,
@@ -610,7 +632,7 @@ draw_player! = |characters, player| {
 			tint,
 		)
 		.draw!()
-	Draw.rectangle!({ x: player.pos.x - half_player_w, y: player.pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
+	Draw.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
 }
 
 draw_hud! : Level, World => {}
@@ -641,7 +663,8 @@ draw_modal! = |title, subtitle, accent| {
 	Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
 }
 
-expect pga_distance({ x: 0, y: 0 }, { x: 3, y: 4 }) == 5
-expect player_rect_at({ x: 10, y: 20 }) == Math.rect(-11, -9, player_width, player_height)
+expect physics_distance(Physics.point_xy(0, 0), Physics.point_xy(3, 4)) == 5
+expect world_to_map(map_to_world({ x: 10, y: 20 })) == { x: 10, y: 20 }
+expect player_rect_at(map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, player_width, player_height)
 expect tick_timer(0.1, 0.2) == 0
 expect F32.abs(wrap_unit(1.2) - 0.2) < 0.0001

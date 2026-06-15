@@ -17,7 +17,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Pga2]
+	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
 	packages {}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -97,7 +97,7 @@ import Math
 import Camera
 import Sprite
 import Tilemap
-import Pga2
+import Physics
 
 ## TODO: roc glue currently undercounts direct function fields in generated
 ## records when they are mixed with non-function data. The generated

@@ -98,3 +98,6 @@ build-output/
 
 # Python cache
 __pycache__/
+
+# winows exectuables
+*.exe

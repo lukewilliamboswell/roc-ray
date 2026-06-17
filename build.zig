@@ -66,10 +66,11 @@ const all_native_targets = [_]RocTarget{
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
-
-    // Get the roc dependency and its builtins module
-    const roc_dep = b.dependency("roc", .{});
-    const builtins_module = roc_dep.module("builtins");
+    const run_roc_tests = b.option(
+        bool,
+        "roc-tests",
+        "Run Roc example tests as part of `zig build test`",
+    ) orelse true;
 
     // Cleanup step: remove all generated build artifacts
     const cleanup_step = b.step("clean", "Remove all built library files");
@@ -78,15 +79,11 @@ pub fn build(b: *std.Build) void {
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         )).step);
     }
-    // Clean wasm32 target (including old raylib/libc artifacts)
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/targets/wasm32/libhost.a")).step);
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/targets/wasm32/libraylib.a")).step);
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/targets/wasm32/libwasm_libc.a")).step);
     // Clean legacy locations
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 
-    // Default step: build for all targets (native + wasm32)
+    // Default step: build the host library for all native targets
     const all_step = b.getInstallStep();
     all_step.dependOn(cleanup_step);
 
@@ -106,7 +103,7 @@ pub fn build(b: *std.Build) void {
     // Build for each native Roc target
     for (all_native_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const build_result = buildHostLib(b, target, optimize, builtins_module, roc_target);
+        const build_result = buildHostLib(b, target, optimize, roc_target);
 
         // For Linux targets, ensure X11 stubs are generated first
         if (target.result.os.tag == .linux) {
@@ -140,32 +137,15 @@ pub fn build(b: *std.Build) void {
                 b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libm.so" }),
             );
         }
+
+        // Copy libX11.so stub for Linux targets
+        if (build_result.x11_stub) |x11_stub| {
+            copy_all.addCopyFileToSource(
+                x11_stub,
+                b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libX11.so" }),
+            );
+        }
     }
-
-    const wasm_target = b.resolveTargetQuery(.{
-        .cpu_arch = .wasm32,
-        .os_tag = .freestanding,
-    });
-
-    const wasm_host = b.addLibrary(.{
-        .name = "host",
-        .linkage = .static,
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_wasm.zig"),
-            .target = wasm_target,
-            .optimize = optimize,
-            .strip = false, // Preserve debug info for better error messages
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
-        }),
-    });
-
-    // Copy libhost.a to platform/targets/wasm32/
-    copy_all.addCopyFileToSource(
-        wasm_host.getEmittedBin(),
-        "platform/targets/wasm32/libhost.a",
-    );
 
     const test_step = b.step("test", "Run all tests");
     const lint_step = b.step("lint", "Run code quality lints");
@@ -211,95 +191,22 @@ pub fn build(b: *std.Build) void {
                 .root_source_file = b.path("src/host_native.zig"),
                 .target = native_target,
                 .optimize = optimize,
-                .imports = &.{
-                    .{ .name = "builtins", .module = builtins_module },
-                },
             }),
         });
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
         native_tests.root_module.addLibraryPath(b.path(raylib_lib_dir));
-        native_tests.linkSystemLibrary("raylib");
-        native_tests.linkLibC();
+        native_tests.root_module.linkSystemLibrary("raylib", .{});
+        native_tests.root_module.link_libc = true;
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
     }
 
-    // Zig unit tests for host_wasm.zig (runs natively, tests WASM host layer)
-    const wasm_host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_wasm.zig"),
-            .target = native_target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
-        }),
-    });
-    const run_wasm_host_tests = b.addRunArtifact(wasm_host_tests);
-    test_step.dependOn(&run_wasm_host_tests.step);
-
-    // Zig unit tests for sim.zig (simulation recording/replay)
-    // Note: backend_wasm.zig tests are run through host_wasm.zig (it uses the backend)
-    const sim_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/sim.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-    const run_sim_tests = b.addRunArtifact(sim_tests);
-    test_step.dependOn(&run_sim_tests.step);
-
-    // Zig unit tests for types.zig (safe Zig types)
-    const types_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/types.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-    const run_types_tests = b.addRunArtifact(types_tests);
-    test_step.dependOn(&run_types_tests.step);
-
-    // Zig unit tests for overlay_native.zig (replay UI)
-    const overlay_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/overlay_native.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-    const run_overlay_tests = b.addRunArtifact(overlay_tests);
-    test_step.dependOn(&run_overlay_tests.step);
-
-    // Build standalone test WASM module (exports test functions, no Roc app)
-    const wasm_test_exe = b.addExecutable(.{
-        .name = "host_wasm",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_wasm.zig"),
-            .target = wasm_target,
-            .optimize = optimize,
-            .strip = false,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
-        }),
-    });
-    wasm_test_exe.entry = .disabled;
-    wasm_test_exe.rdynamic = true;
-
-    const install_test_wasm = b.addInstallFile(wasm_test_exe.getEmittedBin(), "web-test/host_wasm.wasm");
-
-    // Run Node.js integration tests
-    const node_test = b.addSystemCommand(&.{ "node", "ci/wasm-test.mjs" });
-    node_test.setCwd(b.path(".")); // Run from project root
-    node_test.step.dependOn(&install_test_wasm.step);
-    test_step.dependOn(&node_test.step);
-
-    // Run Roc tests (check, fmt, test, build, and simulation tests)
-    const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
-    roc_tests.setCwd(b.path(".")); // Run from project root
-    test_step.dependOn(&roc_tests.step);
+    if (run_roc_tests) {
+        // Run Roc tests (check, fmt, test, build)
+        const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
+        roc_tests.setCwd(b.path(".")); // Run from project root
+        test_step.dependOn(&roc_tests.step);
+    }
 }
 
 /// Detect which RocTarget matches the native platform
@@ -344,8 +251,9 @@ const CleanupStep = struct {
     fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
         _ = options;
         const self: *CleanupStep = @fieldParentPtr("step", step);
+        const io = step.owner.graph.io;
         const path = self.path.getPath2(step.owner, null);
-        std.fs.cwd().deleteFile(path) catch |err| switch (err) {
+        std.Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
             error.FileNotFound => {},
             else => return err,
         };
@@ -357,11 +265,24 @@ const BuildResult = struct {
     raylib_archive: std.Build.LazyPath,
     libc_stub: ?std.Build.LazyPath,
     libm_stub: ?std.Build.LazyPath,
+    x11_stub: ?std.Build.LazyPath,
 };
 
 /// X11 libraries that raylib depends on (need stubs for cross-compilation)
 const x11_libs = [_][]const u8{
     "GLX", "X11", "Xcursor", "Xext", "Xfixes", "Xi", "Xinerama", "Xrandr", "Xrender",
+};
+
+/// Xlib functions that raylib 6.0's `GetClipboardImage()` (rcore.c) calls
+/// directly, instead of going through GLFW's dlopen-loaded X11 like every other
+/// X11 use. roc-ray never calls `GetClipboardImage`, but `rcore.o` is pulled
+/// into the final executable link, so these symbols must resolve. We ship a
+/// `libX11.so` stub (SONAME `libX11.so.6`) that declares them; at runtime the
+/// real libX11 (already loaded by GLFW) provides the implementations. See
+/// `generateX11SoStub` and the `x64glibc` link list in `platform/main.roc`.
+const x11_clipboard_syms = [_][]const u8{
+    "XConvertSelection", "XNextEvent",      "XGetWindowProperty", "XFree",
+    "XDestroyWindow",    "XCreateSimpleWindow", "XInternAtom",
 };
 
 /// Windows system libraries that raylib depends on (need import libs for cross-compilation)
@@ -392,7 +313,7 @@ fn generateX11Stubs(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.
                 .optimize = .ReleaseSmall,
             }),
         });
-        stub_lib.addCSourceFile(.{ .file = stub_file });
+        stub_lib.root_module.addCSourceFile(.{ .file = stub_file });
 
         copy_stubs.addCopyFileToSource(
             stub_lib.getEmittedBin(),
@@ -450,7 +371,7 @@ fn generateLibcStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.
         .aarch64 => "platform/targets/arm64glibc/libc_stub.s",
         else => @panic("Unsupported architecture for libc stub"),
     };
-    stub_lib.addAssemblyFile(b.path(stub_path));
+    stub_lib.root_module.addAssemblyFile(b.path(stub_path));
     return stub_lib;
 }
 
@@ -471,7 +392,36 @@ fn generateLibmStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.
         .aarch64 => "platform/targets/arm64glibc/libm_stub.s",
         else => @panic("Unsupported architecture for libm stub"),
     };
-    stub_lib.addAssemblyFile(b.path(stub_path));
+    stub_lib.root_module.addAssemblyFile(b.path(stub_path));
+    return stub_lib;
+}
+
+/// Generate libX11 stub shared library with SONAME libX11.so.6.
+/// Declares the Xlib symbols raylib 6.0's `GetClipboardImage()` references
+/// directly (see `x11_clipboard_syms`); the real libX11 loaded at runtime by
+/// GLFW provides the implementations. Needed in the `x64glibc` link list so the
+/// `rcore.o` references resolve even though roc-ray never calls clipboard image.
+fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step.Compile {
+    const stub_lib = b.addLibrary(.{
+        .name = "X11",
+        .linkage = .dynamic,
+        .version = .{ .major = 6, .minor = 0, .patch = 0 },
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = .ReleaseSmall,
+        }),
+    });
+
+    var src: []const u8 = "";
+    for (x11_clipboard_syms) |sym| {
+        src = std.fmt.allocPrint(b.allocator,
+            \\{s}int {s}(void) {{ return 0; }}
+            \\
+        , .{ src, sym }) catch @panic("OOM");
+    }
+    const write_files = b.addWriteFiles();
+    const stub_file = write_files.add("x11_stub.c", src);
+    stub_lib.root_module.addCSourceFile(.{ .file = stub_file });
     return stub_lib;
 }
 
@@ -479,7 +429,6 @@ fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    builtins_module: *std.Build.Module,
     roc_target: RocTarget,
 ) BuildResult {
     const raylib_include_path = b.path("vendor/raylib/include");
@@ -495,9 +444,6 @@ fn buildHostLib(
             .optimize = optimize,
             .strip = optimize != .Debug,
             .pic = true,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
         }),
     });
 
@@ -532,10 +478,16 @@ fn buildHostLib(
         break :blk stub.getEmittedBin();
     } else null;
 
+    const x11_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
+        const stub = generateX11SoStub(b, target);
+        break :blk stub.getEmittedBin();
+    } else null;
+
     return .{
         .host_lib = host_lib,
         .raylib_archive = raylib_archive,
         .libc_stub = libc_stub,
         .libm_stub = libm_stub,
+        .x11_stub = x11_stub,
     };
 }

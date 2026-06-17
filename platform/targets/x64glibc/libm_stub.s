@@ -396,3 +396,19 @@ tanhf:
 tanh:
     xor %rax, %rax
     ret
+
+# --- raylib 6.0 additions: extra libm symbols referenced by raylib 6.0 ---
+
+.balign 8
+.globl sincos
+.type sincos, %function
+sincos:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sincosf
+.type sincosf, %function
+sincosf:
+    xor %rax, %rax
+    ret

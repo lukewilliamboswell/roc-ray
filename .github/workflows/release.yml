@@ -7,7 +7,6 @@ on:
         description: "Release tag (e.g., v0.1.0)"
         required: true
         type: string
-  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,12 +29,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.15.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          version: 0.16.0
 
       - name: Build Roc from pinned commit
         run: |
@@ -56,7 +50,7 @@ jobs:
         run: zig build -Doptimize=ReleaseSafe
 
       - name: Run tests
-        run: zig build test
+        run: zig build test -Droc-tests=false
 
       - name: Bundle platform
         id: bundle
@@ -101,7 +95,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       - name: Build Roc from pinned commit
         run: |
@@ -179,9 +173,9 @@ jobs:
             "$BUNDLE_FILE" \
             --title "${{ github.event.inputs.release_tag }}" \
             --generate-notes \
-            --notes "Platform bundle built with Zig 0.15.2 and Roc ${ROC_COMMIT}
+            --notes "Platform bundle built with Zig 0.16.0 and Roc ${ROC_COMMIT}
 
-Download the bundle and use it as a Roc platform:
-\`\`\`roc
-platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
-\`\`\`"
+            Download the bundle and use it as a Roc platform:
+            \`\`\`roc
+            platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
+            \`\`\`"

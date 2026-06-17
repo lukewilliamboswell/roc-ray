@@ -2,10 +2,29 @@ generated-docs/
 
 # Built example executables (use `git add -f` to add manually if needed)
 examples/hello_world
+examples/keyboard
+examples/keyboard_minimal
+examples/kitchen_sink
 examples/read_env
+examples/pong
+examples/sprites
+examples/text_ui
+examples/snake
+examples/breakout
+examples/camera
+examples/top_down
+examples/cave_climb
 
 # Built executables at root
 hello_world
+keyboard
+pong
+sprites
+snake
+breakout
+camera
+top_down
+cave_climb
 
 all_roc_syntax
 
@@ -15,10 +34,6 @@ app
 # Ignore markdown files, except main README
 *.md
 !README.md
-
-# Ignore Roc Ray Simulation Files, except test fixtures in examples/
-*.rrsim
-!examples/*.rrsim
 
 # Build artifacts (but NOT vendored libraries)
 *.a
@@ -78,12 +93,8 @@ libapp
 roc-src/
 build-output/
 
-# WASM build outputs
-www/*.wasm
-/*.wasm
-/app.wasm
-/host.js
-/index.html
-
 # log files
 *.log
+
+# Python cache
+__pycache__/

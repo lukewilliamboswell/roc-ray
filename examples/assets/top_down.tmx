@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="17" height="13" tilewidth="128" tileheight="128" infinite="0" nextlayerid="5" nextobjectid="82">
+ <tileset firstgid="1" source="top_down.tsx"/>
+ <layer id="1" name="Ground" width="17" height="13">
+  <data encoding="csv">
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+  </data>
+ </layer>
+ <layer id="2" name="Decor" width="17" height="13">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  </data>
+ </layer>
+ <layer id="3" name="Walls" width="17" height="13">
+  <data encoding="csv">
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  </data>
+ </layer>
+ <objectgroup id="4" name="Objects">
+  <object id="1" name="spawn" type="spawn" x="160" y="160"><point/></object>
+  <object id="2" name="exit" type="exit" x="1847" y="1382" width="116" height="116"><ellipse/></object>
+  <object id="10" name="spark-1" type="spark" x="290" y="370"><point/></object>
+  <object id="11" name="spark-2" type="spark" x="665" y="170"><point/></object>
+  <object id="12" name="spark-3" type="spark" x="1035" y="225"><point/></object>
+  <object id="13" name="spark-4" type="spark" x="1480" y="115"><point/></object>
+  <object id="14" name="spark-5" type="spark" x="1830" y="455"><point/></object>
+  <object id="15" name="spark-6" type="spark" x="1630" y="870"><point/></object>
+  <object id="16" name="spark-7" type="spark" x="1280" y="1340"><point/></object>
+  <object id="17" name="spark-8" type="spark" x="825" y="1160"><point/></object>
+  <object id="18" name="spark-9" type="spark" x="440" y="1415"><point/></object>
+  <object id="19" name="spark-10" type="spark" x="180" y="930"><point/></object>
+  <object id="30" name="obstacle-1" type="obstacle" x="415" y="220" width="150" height="440">
+   <properties>
+    <property name="tile" value="TileBlockA"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="31" name="obstacle-2" type="obstacle" x="805" y="90" width="150" height="295">
+   <properties>
+    <property name="tile" value="TileBlockB"/>
+    <property name="rotation" type="float" value="11"/>
+   </properties>
+  </object>
+  <object id="32" name="obstacle-3" type="obstacle" x="930" y="475" width="510" height="120">
+   <properties>
+    <property name="tile" value="TileBlockA"/>
+    <property name="rotation" type="float" value="22"/>
+   </properties>
+  </object>
+  <object id="33" name="obstacle-4" type="obstacle" x="1425" y="670" width="140" height="425">
+   <properties>
+    <property name="tile" value="TileBlockB"/>
+    <property name="rotation" type="float" value="33"/>
+   </properties>
+  </object>
+  <object id="34" name="obstacle-5" type="obstacle" x="725" y="1025" width="480" height="115">
+   <properties>
+    <property name="tile" value="TileBlockA"/>
+    <property name="rotation" type="float" value="44"/>
+   </properties>
+  </object>
+  <object id="35" name="obstacle-6" type="obstacle" x="185" y="1035" width="340" height="105">
+   <properties>
+    <property name="tile" value="TileBlockB"/>
+    <property name="rotation" type="float" value="55"/>
+   </properties>
+  </object>
+  <object id="36" name="obstacle-7" type="obstacle" x="1685" y="220" width="145" height="450">
+   <properties>
+    <property name="tile" value="TileBlockA"/>
+    <property name="rotation" type="float" value="66"/>
+   </properties>
+  </object>
+  <object id="50" name="hazard-1" type="hazard" x="275" y="685"><point/>
+   <properties>
+    <property name="lane" value="Horizontal"/>
+    <property name="span" type="float" value="520"/>
+    <property name="offset" type="float" value="0"/>
+    <property name="radius" type="float" value="30"/>
+   </properties>
+  </object>
+  <object id="51" name="hazard-2" type="hazard" x="745" y="840"><point/>
+   <properties>
+    <property name="lane" value="Vertical"/>
+    <property name="span" type="float" value="650"/>
+    <property name="offset" type="float" value="0.22"/>
+    <property name="radius" type="float" value="34"/>
+   </properties>
+  </object>
+  <object id="52" name="hazard-3" type="hazard" x="1320" y="265"><point/>
+   <properties>
+    <property name="lane" value="Horizontal"/>
+    <property name="span" type="float" value="650"/>
+    <property name="offset" type="float" value="0.48"/>
+    <property name="radius" type="float" value="32"/>
+   </properties>
+  </object>
+  <object id="53" name="hazard-4" type="hazard" x="1755" y="975"><point/>
+   <properties>
+    <property name="lane" value="Vertical"/>
+    <property name="span" type="float" value="700"/>
+    <property name="offset" type="float" value="0.72"/>
+    <property name="radius" type="float" value="36"/>
+   </properties>
+  </object>
+  <object id="70" name="decor-1" type="decoration" x="80" y="600"><point/>
+   <properties>
+    <property name="tile" value="TileCrystalA"/>
+    <property name="scale" type="float" value="1.35"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="71" name="decor-2" type="decoration" x="145" y="1105"><point/>
+   <properties>
+    <property name="tile" value="TileCrystalB"/>
+    <property name="scale" type="float" value="1.2"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="72" name="decor-3" type="decoration" x="635" y="65"><point/>
+   <properties>
+    <property name="tile" value="TilePlantA"/>
+    <property name="scale" type="float" value="1.35"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="73" name="decor-4" type="decoration" x="910" y="705"><point/>
+   <properties>
+    <property name="tile" value="TileMarker"/>
+    <property name="scale" type="float" value="1.15"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="74" name="decor-5" type="decoration" x="1500" y="310"><point/>
+   <properties>
+    <property name="tile" value="TileBlockA"/>
+    <property name="scale" type="float" value="1.1"/>
+    <property name="rotation" type="float" value="12"/>
+   </properties>
+  </object>
+  <object id="75" name="decor-6" type="decoration" x="1830" y="710"><point/>
+   <properties>
+    <property name="tile" value="TileRockA"/>
+    <property name="scale" type="float" value="1.45"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="76" name="decor-7" type="decoration" x="1755" y="1305"><point/>
+   <properties>
+    <property name="tile" value="TileBlockB"/>
+    <property name="scale" type="float" value="1.2"/>
+    <property name="rotation" type="float" value="-14"/>
+   </properties>
+  </object>
+  <object id="77" name="decor-8" type="decoration" x="1035" y="1495"><point/>
+   <properties>
+    <property name="tile" value="TileFlowerA"/>
+    <property name="scale" type="float" value="1.05"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="78" name="decor-9" type="decoration" x="325" y="1480"><point/>
+   <properties>
+    <property name="tile" value="TileFlowerB"/>
+    <property name="scale" type="float" value="0.9"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+  <object id="79" name="decor-10" type="decoration" x="1905" y="1255"><point/>
+   <properties>
+    <property name="tile" value="TileSparkA"/>
+    <property name="scale" type="float" value="0.7"/>
+    <property name="rotation" type="float" value="20"/>
+   </properties>
+  </object>
+  <object id="80" name="decor-11" type="decoration" x="2000" y="125"><point/>
+   <properties>
+    <property name="tile" value="TileSparkB"/>
+    <property name="scale" type="float" value="0.72"/>
+    <property name="rotation" type="float" value="-18"/>
+   </properties>
+  </object>
+  <object id="81" name="decor-12" type="decoration" x="105" y="115"><point/>
+   <properties>
+    <property name="tile" value="TilePlantB"/>
+    <property name="scale" type="float" value="1.1"/>
+    <property name="rotation" type="float" value="0"/>
+   </properties>
+  </object>
+ </objectgroup>
+</map>

@@ -1,10 +1,12 @@
 //! Raylib backend wrapper.
 //!
-//! This module provides a clean interface to raylib, accepting safe Zig types
-//! from types.zig and converting them to raylib's C types. All C interop
-//! is isolated here.
+//! This module provides a clean interface to raylib, accepting ABI types
+//! from roc_abi.zig and converting them to raylib's C types.
+//! All C interop is isolated here.
 
-const types = @import("types.zig");
+const std = @import("std");
+const abi = @import("roc_abi.zig");
+const ffi = @import("roc_ffi.zig");
 
 /// Raw raylib C bindings.
 pub const rl = @cImport({
@@ -12,111 +14,385 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
-/// Convert safe Color enum to raylib Color.
-pub fn colorToRl(color: types.Color) rl.Color {
-    return switch (color) {
-        .black => rl.BLACK,
-        .blue => rl.BLUE,
-        .dark_gray => rl.DARKGRAY,
-        .gray => rl.GRAY,
-        .green => rl.GREEN,
-        .light_gray => rl.LIGHTGRAY,
-        .orange => rl.ORANGE,
-        .pink => rl.PINK,
-        .purple => rl.PURPLE,
-        .ray_white => rl.RAYWHITE,
-        .red => rl.RED,
-        .white => rl.WHITE,
-        .yellow => rl.YELLOW,
-    };
-}
+/// Persistent keyboard state - updated each frame.
+/// `key_state` is the held (down) state; `key_pressed_state` is the edge
+/// (pressed-this-frame) state; `key_released_state` is the release edge state.
+var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+var key_pressed_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+var key_released_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 
-/// Draw a circle using safe types.
-pub fn drawCircle(circle: types.Circle) void {
-    rl.DrawCircle(
-        @intFromFloat(circle.center.x),
-        @intFromFloat(circle.center.y),
-        circle.radius,
-        colorToRl(circle.color),
-    );
-}
+/// Persistent mouse button state - updated each frame.
+var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+var mouse_button_pressed_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+var mouse_button_released_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 
-/// Draw a rectangle using safe types.
-pub fn drawRectangle(rect: types.Rectangle) void {
-    rl.DrawRectangle(
-        @intFromFloat(rect.x),
-        @intFromFloat(rect.y),
-        @intFromFloat(rect.width),
-        @intFromFloat(rect.height),
-        colorToRl(rect.color),
-    );
-}
-
-/// Draw a line using safe types.
-pub fn drawLine(line: types.Line) void {
-    rl.DrawLine(
-        @intFromFloat(line.start.x),
-        @intFromFloat(line.start.y),
-        @intFromFloat(line.end.x),
-        @intFromFloat(line.end.y),
-        colorToRl(line.color),
-    );
-}
-
-/// Draw text using safe types.
-/// Note: The text content must be null-terminated or fit in internal buffer.
-pub fn drawText(text: types.Text, buf: *[256:0]u8) void {
-    if (text.content.len < buf.len) {
-        @memcpy(buf[0..text.content.len], text.content);
-        buf[text.content.len] = 0;
-        rl.DrawText(
-            buf[0..text.content.len :0],
-            @intFromFloat(text.pos.x),
-            @intFromFloat(text.pos.y),
-            text.size,
-            colorToRl(text.color),
-        );
+/// Update keyboard state from raylib (call once per frame)
+pub fn updateKeyboardState() void {
+    for (0..ffi.KEY_COUNT) |i| {
+        const key: c_int = @intCast(i);
+        key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
+        key_pressed_state[i] = if (rl.IsKeyPressed(key)) 1 else 0;
+        key_released_state[i] = if (rl.IsKeyReleased(key)) 1 else 0;
     }
 }
 
-/// Draw text with a null-terminated string (for overlay/UI code).
-pub fn drawTextZ(text: [*:0]const u8, x: c_int, y: c_int, size: c_int, color: types.Color) void {
-    rl.DrawText(text, x, y, size, colorToRl(color));
+/// Get the current keyboard down-state array
+pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
+    return &key_state;
 }
 
-/// Draw a rectangle with vertical gradient using safe types.
-pub fn drawRectangleGradientV(rg: types.RectangleGradientV) void {
+/// Get the keyboard pressed-this-frame (edge) state array
+pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
+    return &key_pressed_state;
+}
+
+/// Get the keyboard released-this-frame (edge) state array
+pub fn getKeyReleasedState() *const [ffi.KEY_COUNT]u8 {
+    return &key_released_state;
+}
+
+/// Update mouse button state from raylib (call once per frame)
+pub fn updateMouseButtonState() void {
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
+        const button: c_int = @intCast(i);
+        mouse_button_state[i] = if (rl.IsMouseButtonDown(button)) 1 else 0;
+        mouse_button_pressed_state[i] = if (rl.IsMouseButtonPressed(button)) 1 else 0;
+        mouse_button_released_state[i] = if (rl.IsMouseButtonReleased(button)) 1 else 0;
+    }
+}
+
+/// Get the current mouse button down-state array
+pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_state;
+}
+
+/// Get the mouse button pressed-this-frame (edge) state array
+pub fn getMouseButtonPressedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_pressed_state;
+}
+
+/// Get the mouse button released-this-frame (edge) state array
+pub fn getMouseButtonReleasedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
+    return &mouse_button_released_state;
+}
+
+const MAX_FONTS: usize = 32;
+const MAX_TEXTURES: usize = 128;
+
+/// Custom fonts loaded by the host. Handle 0 is always raylib's default font;
+/// loaded fonts use handles 1..MAX_FONTS.
+var fonts: [MAX_FONTS]rl.Font = undefined;
+var font_count: usize = 0;
+
+/// Textures loaded by the host. Handle 0 is invalid; loaded textures use
+/// handles 1..MAX_TEXTURES.
+var textures: [MAX_TEXTURES]rl.Texture2D = undefined;
+var texture_count: usize = 0;
+
+/// Host texture handle and dimensions returned to Roc after loading.
+pub const TextureInfo = struct {
+    handle: u64,
+    width: f32,
+    height: f32,
+};
+
+fn fontFromHandle(handle: u64) rl.Font {
+    if (handle == 0) return rl.GetFontDefault();
+    if (handle > @as(u64, @intCast(font_count))) return rl.GetFontDefault();
+
+    const index: usize = @intCast(handle - 1);
+    return fonts[index];
+}
+
+/// Load a custom font and return its handle, or null on failure.
+pub fn loadFont(path: [*:0]const u8, size: c_int) ?u64 {
+    if (font_count >= MAX_FONTS) return null;
+
+    const font_size = if (size < 1) 1 else size;
+    const font = rl.LoadFontEx(path, font_size, null, 0);
+    if (!rl.IsFontValid(font)) return null;
+
+    fonts[font_count] = font;
+    font_count += 1;
+    return @intCast(font_count);
+}
+
+/// Unload all custom fonts. The default font is owned by raylib.
+pub fn unloadFonts() void {
+    var i: usize = 0;
+    while (i < font_count) : (i += 1) {
+        rl.UnloadFont(fonts[i]);
+    }
+    font_count = 0;
+}
+
+fn textureFromHandle(handle: u64) ?rl.Texture2D {
+    if (handle == 0) return null;
+    if (handle > @as(u64, @intCast(texture_count))) return null;
+
+    const index: usize = @intCast(handle - 1);
+    return textures[index];
+}
+
+/// Load a texture from disk and return its handle plus dimensions, or null on failure.
+pub fn loadTexture(path: [*:0]const u8) ?TextureInfo {
+    if (texture_count >= MAX_TEXTURES) return null;
+
+    const texture = rl.LoadTexture(path);
+    if (!rl.IsTextureValid(texture)) return null;
+
+    textures[texture_count] = texture;
+    texture_count += 1;
+
+    return .{
+        .handle = @intCast(texture_count),
+        .width = @floatFromInt(texture.width),
+        .height = @floatFromInt(texture.height),
+    };
+}
+
+/// Unload all custom textures.
+pub fn unloadTextures() void {
+    var i: usize = 0;
+    while (i < texture_count) : (i += 1) {
+        rl.UnloadTexture(textures[i]);
+    }
+    texture_count = 0;
+}
+
+/// Convert an ABI RGBA color record to raylib Color.
+pub fn colorToRl(color: anytype) rl.Color {
+    return .{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
+    };
+}
+
+fn toVector2(point: anytype) rl.Vector2 {
+    return .{ .x = point.x, .y = point.y };
+}
+
+fn rectFromArgs(args: anytype) rl.Rectangle {
+    return .{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
+}
+
+fn cameraFromArgs(args: anytype) rl.Camera2D {
+    return .{
+        .target = toVector2(args.target),
+        .offset = toVector2(args.offset),
+        .rotation = args.rotation,
+        .zoom = args.zoom,
+    };
+}
+
+fn positiveThickness(thickness: f32) ?f32 {
+    if (thickness <= 0) return null;
+    return thickness;
+}
+
+fn positiveSegments(segments: i32) c_int {
+    return if (segments < 4) 8 else @intCast(segments);
+}
+
+fn absF32(value: f32) f32 {
+    return if (value < 0) -value else value;
+}
+
+fn roundedness(width: f32, height: f32, radius: f32) f32 {
+    if (radius <= 0) return 0;
+    const min_dim = @min(absF32(width), absF32(height));
+    if (min_dim <= 0) return 0;
+    return @min(1, radius / min_dim);
+}
+
+fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) void {
+    const thick = positiveThickness(thickness) orelse return;
+    rl.DrawLineEx(toVector2(start), toVector2(end), thick, colorToRl(color));
+}
+
+/// Draw a circle from abi args.
+pub fn drawCircle(args: anytype) void {
+    rl.DrawCircle(
+        @intFromFloat(args.center.x),
+        @intFromFloat(args.center.y),
+        args.radius,
+        colorToRl(args.color),
+    );
+}
+
+/// Draw a thick circle outline from abi args.
+pub fn drawCircleLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    const half = thick * 0.5;
+    const inner_radius = @max(0, args.radius - half);
+    const outer_radius = args.radius + half;
+
+    rl.DrawRing(
+        toVector2(args.center),
+        inner_radius,
+        outer_radius,
+        0,
+        360,
+        64,
+        colorToRl(args.color),
+    );
+}
+
+/// Draw a rectangle from abi args.
+pub fn drawRectangle(args: anytype) void {
+    rl.DrawRectangle(
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color),
+    );
+}
+
+/// Draw a rectangle outline from abi args.
+pub fn drawRectangleLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    rl.DrawRectangleLinesEx(rectFromArgs(args), thick, colorToRl(args.color));
+}
+
+/// Draw a rounded rectangle from abi args.
+pub fn drawRoundedRectangle(args: anytype) void {
+    rl.DrawRectangleRounded(
+        rectFromArgs(args),
+        roundedness(args.width, args.height, args.radius),
+        positiveSegments(args.segments),
+        colorToRl(args.color),
+    );
+}
+
+/// Draw a rounded rectangle outline from abi args.
+pub fn drawRoundedRectangleLines(args: anytype) void {
+    const thick = positiveThickness(args.thickness) orelse return;
+    rl.DrawRectangleRoundedLinesEx(
+        rectFromArgs(args),
+        roundedness(args.width, args.height, args.radius),
+        positiveSegments(args.segments),
+        thick,
+        colorToRl(args.color),
+    );
+}
+
+/// Draw a line from abi args.
+pub fn drawLine(args: anytype) void {
+    drawSegment(args.start, args.end, args.thickness, args.color);
+}
+
+/// Draw a triangle from abi args.
+pub fn drawTriangle(args: anytype) void {
+    rl.DrawTriangle(toVector2(args.a), toVector2(args.b), toVector2(args.c), colorToRl(args.color));
+}
+
+/// Draw a triangle outline from abi args.
+pub fn drawTriangleLines(args: anytype) void {
+    drawSegment(args.a, args.b, args.thickness, args.color);
+    drawSegment(args.b, args.c, args.thickness, args.color);
+    drawSegment(args.c, args.a, args.thickness, args.color);
+}
+
+/// Draw a filled polygon by fanning triangles from the point centroid.
+pub fn drawPolygon(points: anytype, color: abi.Color) void {
+    if (points.len < 3) return;
+
+    var center = rl.Vector2{ .x = 0, .y = 0 };
+    for (points) |point| {
+        center.x += point.x;
+        center.y += point.y;
+    }
+    const len_f: f32 = @floatFromInt(points.len);
+    center.x /= len_f;
+    center.y /= len_f;
+
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        rl.DrawTriangle(center, toVector2(point), toVector2(next), colorToRl(color));
+    }
+}
+
+/// Draw a polygon outline from abi args.
+pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void {
+    if (points.len < 2) return;
+    const thick = positiveThickness(thickness) orelse return;
+
+    if (points.len == 2) {
+        drawSegment(points[0], points[1], thick, color);
+        return;
+    }
+
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        drawSegment(point, next, thick, color);
+    }
+}
+
+/// Draw text with a null-terminated string.
+pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+    rl.DrawTextEx(fontFromHandle(font_handle), text, pos, size, spacing, colorToRl(color));
+}
+
+/// Draw a texture region into a destination rectangle.
+pub fn drawTexture(args: anytype) void {
+    const texture = textureFromHandle(args.texture) orelse return;
+    rl.DrawTexturePro(
+        texture,
+        rectFromArgs(args.source),
+        rectFromArgs(args.dest),
+        toVector2(args.origin),
+        args.rotation,
+        colorToRl(args.tint),
+    );
+}
+
+/// Measure text with a null-terminated string.
+pub fn measureTextZ(text: [*:0]const u8, font_handle: u64, size: f32, spacing: f32) rl.Vector2 {
+    return rl.MeasureTextEx(fontFromHandle(font_handle), text, size, spacing);
+}
+
+/// Draw a rectangle with vertical gradient from abi args.
+pub fn drawRectangleGradientV(args: anytype) void {
     rl.DrawRectangleGradientV(
-        @intFromFloat(rg.x),
-        @intFromFloat(rg.y),
-        @intFromFloat(rg.width),
-        @intFromFloat(rg.height),
-        colorToRl(rg.color_top),
-        colorToRl(rg.color_bottom),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color_top),
+        colorToRl(args.color_bottom),
     );
 }
 
-/// Draw a rectangle with horizontal gradient using safe types.
-pub fn drawRectangleGradientH(rg: types.RectangleGradientH) void {
+/// Draw a rectangle with horizontal gradient from abi args.
+pub fn drawRectangleGradientH(args: anytype) void {
     rl.DrawRectangleGradientH(
-        @intFromFloat(rg.x),
-        @intFromFloat(rg.y),
-        @intFromFloat(rg.width),
-        @intFromFloat(rg.height),
-        colorToRl(rg.color_left),
-        colorToRl(rg.color_right),
+        @intFromFloat(args.x),
+        @intFromFloat(args.y),
+        @intFromFloat(args.width),
+        @intFromFloat(args.height),
+        colorToRl(args.color_left),
+        colorToRl(args.color_right),
     );
 }
 
-/// Draw a circle with radial gradient using safe types.
-pub fn drawCircleGradient(cg: types.CircleGradient) void {
+/// Draw a circle with radial gradient from abi args.
+pub fn drawCircleGradient(args: anytype) void {
     rl.DrawCircleGradient(
-        @intFromFloat(cg.center.x),
-        @intFromFloat(cg.center.y),
-        cg.radius,
-        colorToRl(cg.color_inner),
-        colorToRl(cg.color_outer),
+        toVector2(args.center),
+        args.radius,
+        colorToRl(args.color_inner),
+        colorToRl(args.color_outer),
     );
+}
+
+/// Draw FPS counter at specified position.
+pub fn drawFps(args: anytype) void {
+    var buf: [32:0]u8 = undefined;
+    const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
+    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 
 /// Begin drawing frame.
@@ -124,13 +400,23 @@ pub fn beginDrawing() void {
     rl.BeginDrawing();
 }
 
+/// Begin drawing in 2D camera mode.
+pub fn beginMode2D(camera: anytype) void {
+    rl.BeginMode2D(cameraFromArgs(camera));
+}
+
+/// End drawing in 2D camera mode.
+pub fn endMode2D() void {
+    rl.EndMode2D();
+}
+
 /// End drawing frame.
 pub fn endDrawing() void {
     rl.EndDrawing();
 }
 
-/// Clear the background with a safe color.
-pub fn clearBackground(color: types.Color) void {
+/// Clear the background with a color.
+pub fn clearBackground(color: anytype) void {
     rl.ClearBackground(colorToRl(color));
 }
 
@@ -139,8 +425,24 @@ pub fn initWindow(width: c_int, height: c_int, title: [*:0]const u8) void {
     rl.InitWindow(width, height, title);
 }
 
+/// Set flags that must be configured before InitWindow.
+pub fn setConfigFlags(flags: c_uint) void {
+    rl.SetConfigFlags(flags);
+}
+
+/// Build raylib window config flags from Roc app config booleans.
+pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint {
+    var flags: c_uint = 0;
+    if (resizable) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_RESIZABLE));
+    if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
+    if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
+    return flags;
+}
+
 /// Close the window.
 pub fn closeWindow() void {
+    unloadTextures();
+    unloadFonts();
     rl.CloseWindow();
 }
 
@@ -154,9 +456,301 @@ pub fn setTargetFps(fps: c_int) void {
     rl.SetTargetFPS(fps);
 }
 
-/// Get frame time (delta time).
+/// Show the OS cursor.
+pub fn showCursor() void {
+    rl.ShowCursor();
+}
+
+/// Hide the OS cursor.
+pub fn hideCursor() void {
+    rl.HideCursor();
+}
+
+/// Set window size.
+pub fn setWindowSize(width: c_int, height: c_int) void {
+    rl.SetWindowSize(width, height);
+}
+
+/// Get frame time (delta time) in seconds since the previous frame.
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();
+}
+
+/// Get elapsed time in seconds since the window was initialized (monotonic).
+pub fn getTime() f64 {
+    return rl.GetTime();
+}
+
+/// Seed raylib's random number generator.
+pub fn setRandomSeed(seed: u32) void {
+    rl.SetRandomSeed(seed);
+}
+
+/// Get a random value in the range [min, max] (both endpoints included).
+pub fn getRandomValue(min: c_int, max: c_int) c_int {
+    return rl.GetRandomValue(min, max);
+}
+
+// --- Audio ---------------------------------------------------------------
+
+const AUDIO_SAMPLE_RATE: u32 = 44100;
+const MAX_GEN_SOUND_MS: i32 = 5000;
+const MAX_SOUNDS: usize = 128;
+const MAX_MUSIC: usize = 16;
+
+/// Sounds, owned by the host and addressed by one-based handle.
+var sounds: [MAX_SOUNDS]rl.Sound = undefined;
+var sound_count: usize = 0;
+
+/// Music streams, owned by the host and addressed by one-based handle.
+var music_streams: [MAX_MUSIC]rl.Music = undefined;
+var music_count: usize = 0;
+
+/// Scratch buffer for procedural generation (mono 16-bit).
+var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
+
+/// Initialize the audio device (call once, after the window exists).
+pub fn initAudioDevice() void {
+    rl.InitAudioDevice();
+}
+
+/// Unload audio resources and close the audio device.
+pub fn closeAudioDevice() void {
+    var music_index: usize = 0;
+    while (music_index < music_count) : (music_index += 1) rl.UnloadMusicStream(music_streams[music_index]);
+    music_count = 0;
+
+    var sound_index: usize = 0;
+    while (sound_index < sound_count) : (sound_index += 1) rl.UnloadSound(sounds[sound_index]);
+    sound_count = 0;
+
+    rl.CloseAudioDevice();
+}
+
+fn clampF32(value: f32, min: f32, max: f32) f32 {
+    return if (value < min) min else if (value > max) max else value;
+}
+
+fn clampI32(value: i32, min: i32, max: i32) i32 {
+    return if (value < min) min else if (value > max) max else value;
+}
+
+fn handleIndex(handle: u64, count: usize) ?usize {
+    if (handle == 0) return null;
+    if (handle > @as(u64, @intCast(count))) return null;
+    return @intCast(handle - 1);
+}
+
+fn storeSound(sound: rl.Sound) u64 {
+    if (sound_count >= MAX_SOUNDS) return 0;
+    sounds[sound_count] = sound;
+    sound_count += 1;
+    return @intCast(sound_count);
+}
+
+fn soundFromHandle(handle: u64) ?rl.Sound {
+    const index = handleIndex(handle, sound_count) orelse return null;
+    return sounds[index];
+}
+
+fn musicFromHandle(handle: u64) ?rl.Music {
+    const index = handleIndex(handle, music_count) orelse return null;
+    return music_streams[index];
+}
+
+fn musicPtrFromHandle(handle: u64) ?*rl.Music {
+    const index = handleIndex(handle, music_count) orelse return null;
+    return &music_streams[index];
+}
+
+fn msToFrames(ms: i32) usize {
+    const clamped = if (ms <= 0) 0 else ms;
+    return @intCast(@divTrunc(@as(i64, AUDIO_SAMPLE_RATE) * clamped, 1000));
+}
+
+fn envelopeAt(frame: usize, frames: usize, attack: usize, decay: usize, sustain_in: f32, release: usize) f32 {
+    if (frames == 0) return 0;
+
+    const sustain = clampF32(sustain_in, 0.0, 1.0);
+    const frame_f: f32 = @floatFromInt(frame);
+
+    if (attack > 0 and frame < attack) {
+        return frame_f / @as(f32, @floatFromInt(attack));
+    }
+
+    if (decay > 0 and frame < attack + decay) {
+        const amount = (frame_f - @as(f32, @floatFromInt(attack))) / @as(f32, @floatFromInt(decay));
+        return 1.0 + (sustain - 1.0) * clampF32(amount, 0.0, 1.0);
+    }
+
+    if (release > 0) {
+        const release_start = if (release >= frames) 0 else frames - release;
+        if (frame >= release_start) {
+            const tail = frames - frame;
+            return sustain * (@as(f32, @floatFromInt(tail)) / @as(f32, @floatFromInt(release)));
+        }
+    }
+
+    return sustain;
+}
+
+fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
+    return switch (waveform) {
+        1 => if (phase < 0.5) 1.0 else -1.0,
+        2 => 1.0 - 4.0 * absF32(phase - 0.5),
+        3 => phase * 2.0 - 1.0,
+        4 => blk: {
+            random_state.* = random_state.* *% 1664525 +% 1013904223;
+            const raw: f32 = @floatFromInt(random_state.* >> 8);
+            break :blk raw / 16777215.0 * 2.0 - 1.0;
+        },
+        else => std.math.sin(2.0 * std.math.pi * phase),
+    };
+}
+
+/// Load a sound effect from disk and return a one-based handle, or 0 on failure.
+pub fn loadSound(path: [*:0]const u8) u64 {
+    if (sound_count >= MAX_SOUNDS) return 0;
+    const sound = rl.LoadSound(path);
+    if (!rl.IsSoundValid(sound)) return 0;
+    return storeSound(sound);
+}
+
+/// Generate a short procedural sound, store it, and return a one-based handle.
+pub fn genSound(args: anytype) u64 {
+    if (sound_count >= MAX_SOUNDS) return 0;
+
+    const dur_ms = clampI32(args.ms, 1, MAX_GEN_SOUND_MS);
+    const frames = msToFrames(dur_ms);
+    if (frames == 0 or frames > gen_sound_buf.len) return 0;
+
+    const attack = msToFrames(args.attack_ms);
+    const decay = msToFrames(args.decay_ms);
+    const release = msToFrames(args.release_ms);
+    const volume = clampF32(args.volume, 0.0, 1.0);
+
+    var phase: f32 = 0.0;
+    var random_state: u32 = 0x9e3779b9 ^ @as(u32, @bitCast(args.freq_start));
+    const sample_rate: f32 = @floatFromInt(AUDIO_SAMPLE_RATE);
+    const frames_f: f32 = @floatFromInt(frames);
+
+    var i: usize = 0;
+    while (i < frames) : (i += 1) {
+        const amount = @as(f32, @floatFromInt(i)) / frames_f;
+        const freq = @max(1.0, args.freq_start + (args.freq_end - args.freq_start) * amount);
+        phase += freq / sample_rate;
+        phase -= @floor(phase);
+
+        const env = envelopeAt(i, frames, attack, decay, args.sustain, release);
+        const sample = waveformSample(args.waveform, phase, &random_state) * env * volume;
+        gen_sound_buf[i] = @intFromFloat(clampF32(sample, -1.0, 1.0) * 32767.0);
+    }
+
+    const wave = rl.Wave{
+        .frameCount = @intCast(frames),
+        .sampleRate = AUDIO_SAMPLE_RATE,
+        .sampleSize = 16,
+        .channels = 1,
+        .data = @ptrCast(&gen_sound_buf),
+    };
+
+    const sound = rl.LoadSoundFromWave(wave);
+    if (!rl.IsSoundValid(sound)) return 0;
+    return storeSound(sound);
+}
+
+/// Generate a short sine tone, store it, and return a one-based handle.
+pub fn genTone(freq: f32, ms: i32) u64 {
+    return genSound(.{
+        .waveform = @as(u8, 0),
+        .freq_start = freq,
+        .freq_end = freq,
+        .ms = ms,
+        .attack_ms = 5,
+        .decay_ms = 12,
+        .sustain = 0.8,
+        .release_ms = 8,
+        .volume = 0.55,
+    });
+}
+
+/// Play a previously loaded/generated sound by handle (no-op if out of range).
+pub fn playSoundHandle(handle: u64) void {
+    if (soundFromHandle(handle)) |sound| rl.PlaySound(sound);
+}
+
+/// Set volume for a sound by handle (no-op if out of range).
+pub fn setSoundVolumeHandle(handle: u64, volume: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
+}
+
+/// Set pitch for a sound by handle (no-op if out of range).
+pub fn setSoundPitchHandle(handle: u64, pitch: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
+}
+
+/// Set pan for a sound by handle (no-op if out of range).
+pub fn setSoundPanHandle(handle: u64, pan: f32) void {
+    if (soundFromHandle(handle)) |sound| rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
+}
+
+/// Load a music stream from disk and return a one-based handle, or 0 on failure.
+pub fn loadMusic(path: [*:0]const u8) u64 {
+    if (music_count >= MAX_MUSIC) return 0;
+
+    var stream = rl.LoadMusicStream(path);
+    if (!rl.IsMusicValid(stream)) return 0;
+    stream.looping = true;
+
+    music_streams[music_count] = stream;
+    music_count += 1;
+    return @intCast(music_count);
+}
+
+/// Update all loaded music streams. Call once per frame.
+pub fn updateMusicStreams() void {
+    var i: usize = 0;
+    while (i < music_count) : (i += 1) rl.UpdateMusicStream(music_streams[i]);
+}
+
+/// Play a music stream by handle (no-op if out of range).
+pub fn playMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.PlayMusicStream(stream);
+}
+
+/// Stop a music stream by handle (no-op if out of range).
+pub fn stopMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.StopMusicStream(stream);
+}
+
+/// Pause a music stream by handle (no-op if out of range).
+pub fn pauseMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.PauseMusicStream(stream);
+}
+
+/// Resume a music stream by handle (no-op if out of range).
+pub fn resumeMusicHandle(handle: u64) void {
+    if (musicFromHandle(handle)) |stream| rl.ResumeMusicStream(stream);
+}
+
+/// Set volume for a music stream by handle (no-op if out of range).
+pub fn setMusicVolumeHandle(handle: u64, volume: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
+}
+
+/// Set pitch for a music stream by handle (no-op if out of range).
+pub fn setMusicPitchHandle(handle: u64, pitch: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
+}
+
+/// Set pan for a music stream by handle (no-op if out of range).
+pub fn setMusicPanHandle(handle: u64, pan: f32) void {
+    if (musicFromHandle(handle)) |stream| rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
+}
+
+/// Set looping for a music stream by handle (no-op if out of range).
+pub fn setMusicLoopingHandle(handle: u64, looping: bool) void {
+    if (musicPtrFromHandle(handle)) |stream| stream.looping = looping;
 }
 
 /// Keyboard key enum for type-safe key handling.
@@ -185,12 +779,19 @@ pub fn isKeyDown(key: Key) bool {
 /// Mouse button enum for type-safe button handling.
 pub const MouseButton = enum(c_int) {
     left = rl.MOUSE_BUTTON_LEFT,
-    middle = rl.MOUSE_BUTTON_MIDDLE,
     right = rl.MOUSE_BUTTON_RIGHT,
+    middle = rl.MOUSE_BUTTON_MIDDLE,
+    side = rl.MOUSE_BUTTON_SIDE,
+    extra = rl.MOUSE_BUTTON_EXTRA,
+    forward = rl.MOUSE_BUTTON_FORWARD,
+    back = rl.MOUSE_BUTTON_BACK,
 };
 
-/// Get mouse position as safe Vector2.
-pub fn getMousePosition() types.Vector2 {
+/// Simple 2D vector for mouse position.
+pub const Vec2 = struct { x: f32, y: f32 };
+
+/// Get mouse position.
+pub fn getMousePosition() Vec2 {
     const pos = rl.GetMousePosition();
     return .{ .x = pos.x, .y = pos.y };
 }
@@ -200,28 +801,19 @@ pub fn isMouseButtonDown(button: MouseButton) bool {
     return rl.IsMouseButtonDown(@intFromEnum(button));
 }
 
+/// Check if a mouse button was pressed.
+pub fn isMouseButtonPressed(button: MouseButton) bool {
+    return rl.IsMouseButtonPressed(@intFromEnum(button));
+}
+
+/// Check if a mouse button was released.
+pub fn isMouseButtonReleased(button: MouseButton) bool {
+    return rl.IsMouseButtonReleased(@intFromEnum(button));
+}
+
 /// Get mouse wheel movement.
 pub fn getMouseWheelMove() f32 {
     return rl.GetMouseWheelMove();
-}
-
-/// Get current input state.
-pub fn getInputState(frame_count: u64) types.InputState {
-    const pos = rl.GetMousePosition();
-    return .{
-        .frame_count = frame_count,
-        .mouse_x = pos.x,
-        .mouse_y = pos.y,
-        .mouse_wheel = rl.GetMouseWheelMove(),
-        .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
-        .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
-        .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
-    };
-}
-
-/// Measure text width.
-pub fn measureText(text: [*:0]const u8, font_size: c_int) c_int {
-    return rl.MeasureText(text, font_size);
 }
 
 /// Get screen width.

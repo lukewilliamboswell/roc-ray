@@ -1,18 +1,30 @@
 # RocRay Platform
 
-A [Roc platform](https://www.roc-lang.org/platforms) for creating simple graphics applications.
+A [Roc platform](https://www.roc-lang.org/platforms) for creating simple native graphics applications, built on [raylib](https://www.raylib.com/).
+
+> **Work in Progress:** This platform targets the new Roc compiler and Zig 0.16. Expect breaking changes and incomplete functionality.
 
 ## Features
 
-- 2D drawing primitives (rectangles, circles, lines, text)
-- Mouse input handling (position, buttons, wheel)
-- Cross-platform support (macOS, Linux, Windows, Web/WASM)
-- Native rendering via raylib, web rendering via Canvas 2D
+- 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
+- Asset loading for host-owned textures, with source/destination rectangles, rotation, origin, scale, and tint
+- Pure 2D camera values with scoped world-space drawing
+- Sprite helpers for spritesheet frames and simple frame-rate-based animation
+- 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
+- Tiled TMX tilemap loading, drawing, layer/object roles, solid queries, and object/property access
+- Physics helpers backed by compact 3D PGA points, vectors, planes, lines, and translation motors
+- RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
+- Explicit FPS/debug text drawing
+- Text measurement, alignment helpers, long-string rendering, and custom font loading
+- Mouse and keyboard input handling
+- Loaded sound effects and generated procedural sounds with volume, pitch, and pan
+- Streamed music playback with host-managed per-frame updates
+- Native rendering via raylib (macOS, Linux, Windows)
 
 ## Requirements
 
-- [Zig](https://ziglang.org/download/) 0.15.2 or later
-- [Roc](https://www.roc-lang.org/)
+- [Zig](https://ziglang.org/download/) 0.16.0
+- [Roc](https://www.roc-lang.org/) (the pinned compiler commit is in [`ci/ROC_COMMIT`](ci/ROC_COMMIT))
 
 ## Running Examples
 
@@ -28,34 +40,65 @@ Then run an example:
 roc examples/hello_world.roc
 ```
 
-For web/WASM, build with the wasm32 target and serve the files:
+Sprite and texture drawing are demonstrated in:
 
 ```bash
-roc build --target=wasm32 examples/hello_world.roc
+roc examples/sprites.roc
 ```
 
-Helper scripts are available to build and serve WASM:
+World-space camera drawing is demonstrated in:
 
 ```bash
-# Linux/macOS
-./build_wasm.sh examples/hello_world.roc
+roc examples/camera.roc
+```
 
-# Windows (PowerShell)
-.\build_wasm.ps1 examples\hello_world.roc
+The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
+
+The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Physics distance checks with selected CC0 assets from Kenney's New Platformer Pack.
+
+Beginner game examples are available in:
+
+```bash
+roc examples/snake.roc
+roc examples/breakout.roc
+roc examples/top_down.roc
+roc examples/cave_climb.roc
+```
+
+For smoother game-loop performance, build and run the executable:
+
+```bash
+roc build examples/breakout.roc
+./breakout
 ```
 
 ## Testing
 
-Run Zig unit tests and WASM integration tests:
+Run code-quality lints (tidiness + style):
+
+```bash
+zig build lint
+```
+
+Run the full test suite (lints, Zig unit tests, and `roc check`/`fmt`/`test`/`build` over the examples):
 
 ```bash
 zig build test
 ```
 
-Run all Roc example tests (check, format, test, build, simulation):
+Profile Roc compiler build time on Linux with `perf`:
 
 ```bash
-python3 ci/all_tests.py
+scripts/profile-roc-build.sh examples/cave_climb.roc 20
+```
+
+Set `ROC=/path/to/roc` to compare compiler builds. A Debug-built Roc compiler can spend substantial time in Zig's debug allocator; the cumulative call-stack report is usually more useful than self time for finding the compiler phase.
+
+Or run just the Roc example tests directly:
+
+```bash
+python3 ci/all_tests.py            # check, fmt, test, build
+python3 ci/all_tests.py --skip-build
 ```
 
 Enable the pre-commit hook (run once after cloning):
@@ -64,47 +107,13 @@ Enable the pre-commit hook (run once after cloning):
 git config core.hooksPath .githooks
 ```
 
-## Simulation Testing
+## Glue Bindings
 
-RocRay includes a simulation recording and replay system for deterministic testing of graphical applications. This enables regression testing without requiring a display—useful for CI environments.
-
-### How It Works
-
-1. **Record** a session while running the app normally—inputs (mouse position, buttons, frame count) and outputs (draw commands) are captured to a `.rrsim` file
-2. **Replay** the session visually to debug or inspect what was recorded
-3. **Test** headlessly by re-running the app with recorded inputs and verifying outputs match
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `SIM_RECORD=path.rrsim` | Record session to file |
-| `SIM_REPLAY=path.rrsim` | Replay visually |
-| `SIM_TEST=path.rrsim` | Headless test mode (verify Roc app behaviour) |
-| `SIM_LOG=path.log` | Write all mismatches to file (no limit) |
-
-### Recording a Session
+The Zig host's ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`. Regenerate them after changing the hosted functions in `platform/main.roc`:
 
 ```bash
-# Build and run the app with recording enabled
-roc build examples/hello_world.roc
-SIM_RECORD=examples/hello_world_1.rrsim ./examples/hello_world
-
-# Interact with the app, then close the window
-# The .rrsim file is written on exit
+roc glue <path-to-roc>/src/glue/src/ZigGlue.roc ./src/ ./platform/main.roc
 ```
-
-### Running Simulation Tests
-
-```bash
-# Headless verification—exits 0 if outputs match, 1 if mismatch
-SIM_TEST=examples/hello_world_1.rrsim ./examples/hello_world
-
-# With full mismatch log for debugging
-SIM_TEST=examples/hello_world_1.rrsim SIM_LOG=mismatches.log ./examples/hello_world
-```
-
-In CI, simulation tests run automatically for any `.rrsim` files found in `examples/`. The naming convention `<app>_<n>.rrsim` maps to `<app>.roc`.
 
 ## Bundling
 
@@ -112,7 +121,7 @@ In CI, simulation tests run automatically for any `.rrsim` files found in `examp
 ./bundle.sh
 ```
 
-This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host libraries. To use a Roc package bundle it should be hosted online with a `https:` url.
+This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host libraries. To use a Roc package bundle it should be hosted online with an `https:` url.
 
 ## Supported Targets
 
@@ -122,11 +131,6 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | arm64mac | macOS Apple Silicon |
 | x64glibc | Linux x64 |
 | x64win | Windows x64 |
-| wasm32 | Web/WASM |
 
-- We vendor the pre-compiled libraries from [raylib v5.5](https://github.com/raysan5/raylib/releases/tag/5.5)
+- We vendor the pre-compiled libraries from [raylib v6.0](https://github.com/raysan5/raylib/releases/tag/6.0)
 - ARM Linux is not available (raylib doesn't provide pre-built libraries)
-
-## Future Ideas
-
-- Extend simulation recording/replay/testing to WASM target for browser-based deterministic testing

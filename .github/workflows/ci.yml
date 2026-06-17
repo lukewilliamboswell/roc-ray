@@ -25,12 +25,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.15.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          version: 0.16.0
 
       - name: Build Roc from pinned commit
         run: |
@@ -53,7 +48,7 @@ jobs:
       - name: Run Zig tests
         # Native tests require MSVC libraries on Windows which aren't available in CI
         if: runner.os != 'Windows'
-        run: zig build test
+        run: zig build test -Droc-tests=false
 
       - name: Bundle platform
         run: ./bundle.sh
@@ -85,13 +80,7 @@ jobs:
             rm -f "$example.bak"
           done
 
-      - name: Run all Roc tests
+      - name: Run Roc check/test
         # Skip on Windows - roc executable PATH issues and MSVC requirements
-        # Simulation tests only run on macOS (where .rrsim files were recorded)
         if: runner.os != 'Windows'
-        run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            python3 ci/all_tests.py
-          else
-            python3 ci/all_tests.py --skip-sim
-          fi
+        run: python3 ci/all_tests.py --skip-build --skip-bundle-test

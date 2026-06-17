@@ -7,6 +7,7 @@ import argparse
 import functools
 import http.server
 import platform
+import shutil
 import subprocess
 import sys
 import threading
@@ -33,9 +34,10 @@ def serve_dir(directory: Path) -> tuple[http.server.ThreadingHTTPServer, int]:
 
 def check_bundle_url(url: str) -> None:
     last_error: Exception | None = None
+    request = urllib.request.Request(url, method="HEAD")
     for _ in range(10):
         try:
-            with urllib.request.urlopen(url, timeout=10) as response:
+            with urllib.request.urlopen(request, timeout=10) as response:
                 if response.status == 200:
                     return
                 raise RuntimeError(f"Bundle URL returned HTTP {response.status}: {url}")
@@ -46,12 +48,20 @@ def check_bundle_url(url: str) -> None:
     raise RuntimeError(f"Bundle URL was not accessible: {url}") from last_error
 
 
-def build_example(examples_dir: Path, example: Path) -> bool:
+def find_roc(root: Path) -> str | None:
+    exe_name = "roc.exe" if IS_WINDOWS else "roc"
+    built_roc = root / "roc-src" / "zig-out" / "bin" / exe_name
+    if built_roc.is_file():
+        return str(built_roc)
+
+    return shutil.which("roc")
+
+
+def build_example(roc: str, examples_dir: Path, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
     result = subprocess.run(
-        ["roc", "build", example.name],
+        [roc, "build", example.name],
         cwd=examples_dir,
-        shell=IS_WINDOWS,
     )
     return result.returncode == 0
 
@@ -74,6 +84,13 @@ def main() -> int:
         print("No .roc examples found", file=sys.stderr)
         return 1
 
+    roc = find_roc(root)
+    if roc is None:
+        expected = root / "roc-src" / "zig-out" / "bin" / ("roc.exe" if IS_WINDOWS else "roc")
+        print(f"Could not find Roc executable at {expected} or on PATH", file=sys.stderr)
+        return 1
+    print(f"Using Roc executable: {roc}")
+
     httpd, port = serve_dir(root)
     bundle_url = f"http://127.0.0.1:{port}/{bundle_path.name}"
     print(f"Bundle URL: {bundle_url}")
@@ -93,7 +110,7 @@ def main() -> int:
             example.write_text(original.replace(LOCAL_PLATFORM_REF, f'"{bundle_url}"'))
 
         for example in examples:
-            if not build_example(examples_dir, example):
+            if not build_example(roc, examples_dir, example):
                 failures.append(example.name)
     finally:
         for example, original in originals.items():

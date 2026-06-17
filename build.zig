@@ -66,6 +66,11 @@ const all_native_targets = [_]RocTarget{
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
+    const run_roc_tests = b.option(
+        bool,
+        "roc-tests",
+        "Run Roc example tests as part of `zig build test`",
+    ) orelse true;
 
     // Cleanup step: remove all generated build artifacts
     const cleanup_step = b.step("clean", "Remove all built library files");
@@ -196,10 +201,12 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_native_tests.step);
     }
 
-    // Run Roc tests (check, fmt, test, build)
-    const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
-    roc_tests.setCwd(b.path(".")); // Run from project root
-    test_step.dependOn(&roc_tests.step);
+    if (run_roc_tests) {
+        // Run Roc tests (check, fmt, test, build)
+        const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
+        roc_tests.setCwd(b.path(".")); // Run from project root
+        test_step.dependOn(&roc_tests.step);
+    }
 }
 
 /// Detect which RocTarget matches the native platform

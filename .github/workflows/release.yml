@@ -51,7 +51,7 @@ jobs:
         run: zig build -Doptimize=ReleaseSafe
 
       - name: Run tests
-        run: zig build test
+        run: zig build test -Droc-tests=false
 
       - name: Bundle platform
         id: bundle

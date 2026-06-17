@@ -176,7 +176,7 @@ jobs:
             --generate-notes \
             --notes "Platform bundle built with Zig 0.16.0 and Roc ${ROC_COMMIT}
 
-Download the bundle and use it as a Roc platform:
-\`\`\`roc
-platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
-\`\`\`"
+            Download the bundle and use it as a Roc platform:
+            \`\`\`roc
+            platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
+            \`\`\`"

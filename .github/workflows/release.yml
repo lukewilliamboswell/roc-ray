@@ -32,19 +32,7 @@ jobs:
           version: 0.16.0
 
       - name: Build Roc from pinned commit
-        run: |
-          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
-          echo "Building Roc from commit: $ROC_COMMIT"
-
-          git init roc-src
-          cd roc-src
-          git remote add origin https://github.com/roc-lang/roc
-          git fetch --depth 1 origin "$ROC_COMMIT"
-          git checkout FETCH_HEAD
-
-          zig build roc
-
-          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+        run: ci/build_roc.sh
 
       - name: Build platform
         run: zig build -Doptimize=ReleaseSafe
@@ -98,52 +86,15 @@ jobs:
           version: 0.16.0
 
       - name: Build Roc from pinned commit
-        run: |
-          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
-          echo "Building Roc from commit: $ROC_COMMIT"
-
-          git init roc-src
-          cd roc-src
-          git remote add origin https://github.com/roc-lang/roc
-          git fetch --depth 1 origin "$ROC_COMMIT"
-          git checkout FETCH_HEAD
-
-          zig build roc
-
-          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+        run: ci/build_roc.sh
 
       - name: Download bundle artifact
         uses: actions/download-artifact@v4
         with:
           name: platform-bundle
 
-      - name: Start HTTP server for bundle
-        run: |
-          python3 -m http.server 8000 &
-          sleep 3
-
-          BUNDLE_FILE="${{ needs.build-and-bundle.outputs.bundle_filename }}"
-          if ! curl -sf "http://localhost:8000/$BUNDLE_FILE" -o /dev/null; then
-            echo "Error: Bundle not accessible at http://localhost:8000/$BUNDLE_FILE"
-            exit 1
-          fi
-          echo "Bundle accessible at http://localhost:8000/$BUNDLE_FILE"
-
-      - name: Modify examples to use bundled platform
-        run: |
-          BUNDLE_URL="http://localhost:8000/${{ needs.build-and-bundle.outputs.bundle_filename }}"
-          for example in examples/*.roc; do
-            echo "Updating: $example"
-            sed -i.bak "s|platform \"../platform/main.roc\"|platform \"$BUNDLE_URL\"|g" "$example"
-            rm -f "$example.bak"
-          done
-
       - name: Test bundled platform with examples
-        run: |
-          for example in examples/*.roc; do
-            echo "Building: $example"
-            roc build "$example"
-          done
+        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.bundle_filename }}"
 
   create-release:
     name: Create GitHub Release

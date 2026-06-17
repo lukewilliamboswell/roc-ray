@@ -28,19 +28,7 @@ jobs:
           version: 0.16.0
 
       - name: Build Roc from pinned commit
-        run: |
-          ROC_COMMIT=$(python3 ci/get_roc_commit.py)
-          echo "Building Roc from commit: $ROC_COMMIT"
-
-          git init roc-src
-          cd roc-src
-          git remote add origin https://github.com/roc-lang/roc
-          git fetch --depth 1 origin "$ROC_COMMIT"
-          git checkout FETCH_HEAD
-
-          zig build roc
-
-          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+        run: ci/build_roc.sh
 
       - name: Build platform
         run: zig build

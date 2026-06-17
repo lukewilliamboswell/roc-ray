@@ -463,8 +463,9 @@ fn buildHostLib(
         host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
-    // Bundle compiler_rt for non-Windows targets. Windows gets compiler_rt from Roc's shim.
-    host_lib.bundle_compiler_rt = (target.result.os.tag != .windows);
+    // Roc links the static host library directly, so include Zig compiler-rt
+    // helpers such as __divti3 in the archive for every target.
+    host_lib.bundle_compiler_rt = true;
 
     const raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, roc_target.raylibFilename() }));
 

@@ -71,7 +71,7 @@ jobs:
           fi
 
           version="${{ inputs.raylib_version }}"
-          branch="update-raylib-wayland-${version}-${{ github.run_id }}"
+          branch="update-raylib-wayland-${version}-${{ github.run_id }}-${{ github.run_attempt }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -80,7 +80,30 @@ jobs:
           git commit -m "Add raylib ${version} Wayland archive"
           git push -u origin "$branch"
 
-          gh pr create \
+          manual_pr_url="https://github.com/${{ github.repository }}/pull/new/${branch}"
+
+          if pr_url="$(gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
             --title "Add raylib ${version} Wayland archive" \
             --body "Builds and vendors the Linux x64 raylib archive with GLFW Wayland support enabled." \
-            --head "$branch"
+            --head "$branch" 2>pr-error.log)"; then
+            echo "Created pull request: $pr_url"
+            {
+              echo "### Wayland raylib archive PR"
+              echo
+              echo "$pr_url"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::The archive branch was pushed, but this token could not create a pull request."
+            cat pr-error.log
+            echo "Open the pull request manually: $manual_pr_url"
+            {
+              echo "### Wayland raylib archive branch"
+              echo
+              echo "The archive branch was pushed, but this token could not create a pull request."
+              echo
+              echo "- Branch: \`$branch\`"
+              echo "- Manual PR URL: $manual_pr_url"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

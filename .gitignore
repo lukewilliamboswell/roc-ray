@@ -73,6 +73,7 @@ build
 app
 
 .DS_Store
+.bundle-stage-*/
 
 # generated files
 #host/roc/

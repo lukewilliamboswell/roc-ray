@@ -14,10 +14,11 @@ concurrency:
 
 jobs:
   build-and-bundle:
-    name: Build and Bundle Platform
+    name: Build and Bundle Platform Packages
     runs-on: ubuntu-22.04
     outputs:
-      bundle_filename: ${{ steps.bundle.outputs.bundle_filename }}
+      default_bundle_filename: ${{ steps.bundle.outputs.default_bundle_filename }}
+      wayland_bundle_filename: ${{ steps.bundle.outputs.wayland_bundle_filename }}
     defaults:
       run:
         shell: bash
@@ -40,29 +41,67 @@ jobs:
       - name: Run tests
         run: zig build test -Droc-tests=false
 
-      - name: Bundle platform
+      # Release artifacts:
+      #
+      # 1. The default bundle is the cross-platform package. It contains macOS
+      #    Intel, macOS Apple Silicon, Linux x64, and Windows x64 host inputs.
+      #    On Linux this package uses the raylib X11 build.
+      #
+      # 2. The Wayland bundle is a dedicated Linux x64 package. It stages
+      #    platform/main-wayland.roc as main.roc, includes only x64glibc host
+      #    inputs, omits the X11 shim, and uses the vendored Wayland raylib
+      #    archive built by .github/workflows/build-raylib-wayland.yml.
+      - name: Bundle platform packages
         id: bundle
         run: |
-          ./bundle.sh
+          if [ ! -f vendor/raylib/linux-x64-wayland/libraylib.a ]; then
+            cat <<'EOF'
+          Missing vendor/raylib/linux-x64-wayland/libraylib.a.
 
-          BUNDLE_FILE=$(ls *.tar.zst 2>/dev/null | head -1)
-          if [ -z "$BUNDLE_FILE" ]; then
-            echo "Error: No bundle file found"
+          Run the "Build raylib Wayland Archive" workflow first. It builds the
+          Linux x64 raylib archive with GLFW Wayland support and opens a PR that
+          vendors the archive.
+          EOF
             exit 1
           fi
 
-          echo "Bundle created: $BUNDLE_FILE"
-          echo "bundle_filename=$BUNDLE_FILE" >> "$GITHUB_OUTPUT"
+          default_output="$(./bundle.sh --platform default)"
+          echo "$default_output"
+          default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | xargs basename)"
+          if [ -z "$default_bundle" ]; then
+            echo "Error: could not determine default bundle filename"
+            exit 1
+          fi
 
-      - name: Upload bundle artifact
+          wayland_output="$(./bundle.sh --platform wayland)"
+          echo "$wayland_output"
+          wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | xargs basename)"
+          if [ -z "$wayland_bundle" ]; then
+            echo "Error: could not determine Wayland bundle filename"
+            exit 1
+          fi
+
+          echo "Default bundle created: $default_bundle"
+          echo "Wayland bundle created: $wayland_bundle"
+          echo "default_bundle_filename=$default_bundle" >> "$GITHUB_OUTPUT"
+          echo "wayland_bundle_filename=$wayland_bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Upload default bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: platform-bundle
-          path: ${{ steps.bundle.outputs.bundle_filename }}
+          name: platform-bundle-default
+          path: ${{ steps.bundle.outputs.default_bundle_filename }}
           retention-days: 30
 
-  test-bundle:
-    name: Test Bundle (${{ matrix.os }})
+      - name: Upload Wayland bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-bundle-wayland
+          path: ${{ steps.bundle.outputs.wayland_bundle_filename }}
+          retention-days: 30
+
+  test-default-bundle:
+    name: Test Default Bundle (${{ matrix.os }})
     needs: build-and-bundle
     strategy:
       fail-fast: false
@@ -91,14 +130,42 @@ jobs:
       - name: Download bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: platform-bundle
+          name: platform-bundle-default
 
       - name: Test bundled platform with examples
-        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.bundle_filename }}"
+        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.default_bundle_filename }}"
+
+  test-wayland-bundle:
+    name: Test Wayland Bundle
+    needs: build-and-bundle
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.16.0
+
+      - name: Build Roc from pinned commit
+        run: ci/build_roc.sh
+
+      - name: Download Wayland bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: platform-bundle-wayland
+
+      - name: Test bundled Wayland platform with examples
+        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.wayland_bundle_filename }}"
 
   create-release:
     name: Create GitHub Release
-    needs: [build-and-bundle, test-bundle]
+    needs: [build-and-bundle, test-default-bundle, test-wayland-bundle]
     runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch'
     permissions:
@@ -111,22 +178,49 @@ jobs:
       - name: Download bundle artifact
         uses: actions/download-artifact@v4
         with:
-          name: platform-bundle
+          name: platform-bundle-default
+
+      - name: Download Wayland bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: platform-bundle-wayland
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BUNDLE_FILE="${{ needs.build-and-bundle.outputs.bundle_filename }}"
+          DEFAULT_BUNDLE_FILE="${{ needs.build-and-bundle.outputs.default_bundle_filename }}"
+          WAYLAND_BUNDLE_FILE="${{ needs.build-and-bundle.outputs.wayland_bundle_filename }}"
           ROC_COMMIT=$(python3 ci/get_roc_commit.py | cut -c1-8)
 
-          gh release create "${{ github.event.inputs.release_tag }}" \
-            "$BUNDLE_FILE" \
-            --title "${{ github.event.inputs.release_tag }}" \
-            --generate-notes \
-            --notes "Platform bundle built with Zig 0.16.0 and Roc ${ROC_COMMIT}
+          cat > release-notes.md <<EOF
+          Platform bundles built with Zig 0.16.0 and Roc ${ROC_COMMIT}.
 
-            Download the bundle and use it as a Roc platform:
-            \`\`\`roc
-            platform \"https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${BUNDLE_FILE}\"
-            \`\`\`"
+          ## Bundles
+
+          ### Default bundle
+
+          Use this bundle for macOS Intel, macOS Apple Silicon, Windows x64,
+          and Linux x64 systems that can use the X11 raylib build.
+
+          \`\`\`roc
+          platform "https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${DEFAULT_BUNDLE_FILE}"
+          \`\`\`
+
+          ### Wayland bundle
+
+          Use this bundle on Linux x64 Wayland systems when you want the
+          Wayland raylib build instead of the default X11/XWayland path. This
+          bundle is Linux x64 only; it does not include macOS or Windows host
+          inputs.
+
+          \`\`\`roc
+          platform "https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${WAYLAND_BUNDLE_FILE}"
+          \`\`\`
+          EOF
+
+          gh release create "${{ github.event.inputs.release_tag }}" \
+            "$DEFAULT_BUNDLE_FILE" \
+            "$WAYLAND_BUNDLE_FILE" \
+            --title "${{ github.event.inputs.release_tag }}" \
+            --notes-file release-notes.md

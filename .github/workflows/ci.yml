@@ -41,6 +41,22 @@ jobs:
       - name: Bundle platform
         run: ./bundle.sh
 
+      - name: Test Wayland bundle package
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          import ci.all_tests as tests
+
+          root = Path(".").resolve()
+          failures = tests.run_wayland_bundle_test(root, root / "examples/hello_world.roc", False)
+          if failures:
+              for failure in failures:
+                  print(f"FAILED: {failure}")
+              raise SystemExit(1)
+          PY
+
       - name: Start HTTP server for bundle
         run: |
           python3 -m http.server 8000 &
@@ -62,11 +78,22 @@ jobs:
 
       - name: Update examples to use bundled platform
         run: |
-          for example in examples/*.roc; do
-            echo "Updating: $example"
-            sed -i.bak "s|platform \"../platform/main.roc\"|platform \"$BUNDLE_URL\"|g" "$example"
-            rm -f "$example.bak"
-          done
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          from ci.all_tests import _rewrite_platform_ref
+
+          replacement = f'"{os.environ["BUNDLE_URL"]}"'
+          for example in sorted(Path("examples").glob("*.roc")):
+              original = example.read_text()
+              rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
+              if did_rewrite:
+                  print(f"Updating: {example}")
+                  example.write_text(rewritten)
+              else:
+                  print(f"Skipping: {example} (no platform reference)")
+          PY
 
       - name: Run Roc check/test
         # Skip on Windows - roc executable PATH issues and MSVC requirements

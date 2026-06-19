@@ -22,18 +22,25 @@ TODO replace me with a Roc script when basic-cli is implemented
 import argparse
 import functools
 import http.server
+import io
 import os
 import platform
+import re
+import shutil
 import subprocess
 import sys
+import tarfile
 import threading
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
 
-# The platform reference each example uses for local builds. The bundle test
-# temporarily rewrites this to the localhost bundle URL.
-LOCAL_PLATFORM_REF = '"../platform/main.roc"'
+# Platform references used by examples. Bundle tests temporarily rewrite one of
+# these to the localhost bundle URL.
+LOCAL_PLATFORM_REF = '"../platform/main-default.roc"'
+RELEASE_PLATFORM_REF_RE = re.compile(
+    r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
+)
 
 # Examples to skip in the bundled-platform build test, mapping filename -> reason.
 # Use this when a specific example can't build against the bundled platform yet
@@ -94,6 +101,40 @@ def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTT
     return httpd, port
 
 
+def _bundle_name_from_output(output: str) -> str | None:
+    """Extract the generated bundle filename from bundle.sh output."""
+    for line in output.splitlines():
+        if line.startswith("Created:"):
+            return Path(line.split(maxsplit=1)[1].strip()).name
+    return None
+
+
+def _rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
+    """Rewrite an example's platform reference to a bundle URL."""
+    if LOCAL_PLATFORM_REF in source:
+        return source.replace(LOCAL_PLATFORM_REF, replacement), True
+
+    rewritten, count = RELEASE_PLATFORM_REF_RE.subn(replacement, source)
+    return rewritten, count > 0
+
+
+def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
+    """Read a .tar.zst Roc bundle into a TarFile for content assertions."""
+    zstd = shutil.which("zstd")
+    if zstd is None:
+        raise RuntimeError("zstd executable not found; cannot inspect bundle contents")
+
+    zstd_proc = subprocess.run(
+        [zstd, "-dc", str(bundle_path)],
+        capture_output=True,
+    )
+    if zstd_proc.returncode != 0:
+        stderr = zstd_proc.stderr.decode(errors="replace")
+        raise RuntimeError(f"failed to decompress {bundle_path.name}: {stderr}")
+
+    return tarfile.open(fileobj=io.BytesIO(zstd_proc.stdout), mode="r:")
+
+
 def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str]:
     """Bundle the platform, host it on localhost, and build each example against
     that bundle URL (mirrors the template's release check). Returns failures.
@@ -118,11 +159,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
         return ["bundle.sh"]
 
     # bundle.sh prints "Created: /abs/path/<hash>.tar.zst"
-    bundle_name = None
-    for line in bundle_proc.stdout.splitlines():
-        if line.startswith("Created:"):
-            bundle_name = Path(line.split(maxsplit=1)[1].strip()).name
-            break
+    bundle_name = _bundle_name_from_output(bundle_proc.stdout)
     if not bundle_name:
         print(bundle_proc.stdout)
         print("  Could not determine bundle filename from bundle.sh output")
@@ -141,11 +178,12 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
 
             print(f"  Building {example.name} (URL)...", end=" ", flush=True)
             original = example.read_text()
-            if LOCAL_PLATFORM_REF not in original:
-                print(f"SKIPPED (no {LOCAL_PLATFORM_REF} to rewrite)")
+            rewritten, did_rewrite = _rewrite_platform_ref(original, url)
+            if not did_rewrite:
+                print("SKIPPED (no platform reference to rewrite)")
                 continue
 
-            example.write_text(original.replace(LOCAL_PLATFORM_REF, url))
+            example.write_text(rewritten)
             try:
                 ok = run_cmd(
                     ["roc", "build", example.name],
@@ -166,6 +204,145 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
         bundle_path.unlink(missing_ok=True)
 
     return failed
+
+
+def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[str]:
+    """Build and inspect the Wayland platform package bundle."""
+    examples_dir = root / "examples"
+    failed: list[str] = []
+
+    print("\nRunning Wayland bundle package test...")
+
+    fixture_archive = root / "vendor/raylib/linux-x64/libraylib.a"
+    wayland_archive = root / "vendor/raylib/linux-x64-wayland/libraylib.a"
+    created_archive = False
+    created_archive_dirs: list[Path] = []
+
+    if not wayland_archive.is_file():
+        if not fixture_archive.is_file():
+            print(f"  Missing Linux raylib fixture archive: {fixture_archive}")
+            return ["wayland bundle fixture"]
+
+        parent = wayland_archive.parent
+        while not parent.exists() and parent != root:
+            created_archive_dirs.append(parent)
+            parent = parent.parent
+        wayland_archive.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(fixture_archive, wayland_archive)
+        created_archive = True
+
+    bundle_path: Path | None = None
+    try:
+        bundle_proc = subprocess.run(
+            ["bash", "bundle.sh", "--platform", "wayland"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+        )
+        if bundle_proc.returncode != 0:
+            print(bundle_proc.stdout)
+            print(bundle_proc.stderr, file=sys.stderr)
+            print("  bundle.sh --platform wayland FAILED")
+            return ["bundle.sh --platform wayland"]
+
+        bundle_name = _bundle_name_from_output(bundle_proc.stdout)
+        if not bundle_name:
+            print(bundle_proc.stdout)
+            print("  Could not determine bundle filename from Wayland bundle output")
+            return ["bundle.sh --platform wayland (no Created: line)"]
+
+        bundle_path = root / bundle_name
+        print(f"  Bundled Wayland platform: {bundle_name}")
+
+        with _read_tar_zst(bundle_path) as bundle:
+            names = set(bundle.getnames())
+            main_file = bundle.extractfile("main.roc")
+            if main_file is None:
+                print("  Wayland bundle is missing main.roc")
+                failed.append("wayland bundle missing main.roc")
+            else:
+                main_text = main_file.read().decode()
+                forbidden_main_tokens = ["x64mac:", "arm64mac:", "x64win:", "libX11.so"]
+                for token in forbidden_main_tokens:
+                    if token in main_text:
+                        print(f"  Wayland main.roc unexpectedly contains {token}")
+                        failed.append(f"wayland main.roc contains {token}")
+
+                expected_target = (
+                    'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
+                    '"libraylib.a", "libm.so", app, "libc.so", "crtn.o"] }'
+                )
+                if expected_target not in main_text:
+                    print("  Wayland main.roc does not contain the expected Linux-only target")
+                    failed.append("wayland main.roc target section")
+
+            expected_files = {
+                "targets/x64glibc/Scrt1.o",
+                "targets/x64glibc/crti.o",
+                "targets/x64glibc/crtn.o",
+                "targets/x64glibc/libhost.a",
+                "targets/x64glibc/libraylib.a",
+                "targets/x64glibc/libm.so",
+                "targets/x64glibc/libc.so",
+            }
+            for expected_file in expected_files:
+                if expected_file not in names:
+                    print(f"  Wayland bundle is missing {expected_file}")
+                    failed.append(f"wayland bundle missing {expected_file}")
+
+            forbidden_prefixes = (
+                "targets/x64mac/",
+                "targets/arm64mac/",
+                "targets/x64win/",
+                "targets/macos-sysroot/",
+            )
+            for name in sorted(names):
+                if name == "targets/x64glibc/libX11.so":
+                    print("  Wayland bundle unexpectedly includes libX11.so")
+                    failed.append("wayland bundle includes libX11.so")
+                if name.startswith(forbidden_prefixes):
+                    print(f"  Wayland bundle unexpectedly includes {name}")
+                    failed.append(f"wayland bundle includes {name}")
+                    break
+
+        if failed:
+            return failed
+
+        httpd, port = _serve_dir(root, verbose)
+        url = f'"http://localhost:{port}/{bundle_name}"'
+        original = example.read_text()
+        try:
+            rewritten, did_rewrite = _rewrite_platform_ref(original, url)
+            if not did_rewrite:
+                print(f"  Skipping URL import check for {example.name} (no platform ref)")
+            else:
+                example.write_text(rewritten)
+                ok = run_cmd(
+                    ["roc", "check", example.name],
+                    f"wayland bundle check {example.name}",
+                    verbose,
+                    cwd=examples_dir,
+                )
+                if ok:
+                    print(f"  Checking {example.name} against Wayland bundle URL... ok")
+                else:
+                    print(f"  Checking {example.name} against Wayland bundle URL... FAILED")
+                    failed.append(f"wayland bundle check {example.name}")
+        finally:
+            example.write_text(original)
+            httpd.shutdown()
+
+        return failed
+    finally:
+        if bundle_path is not None:
+            bundle_path.unlink(missing_ok=True)
+        if created_archive:
+            wayland_archive.unlink(missing_ok=True)
+        for created_dir in created_archive_dirs:
+            try:
+                created_dir.rmdir()
+            except OSError:
+                pass
 
 
 def main() -> int:
@@ -257,6 +434,7 @@ def main() -> int:
         print("\nSkipping bundle test (requires bash for bundle.sh; not run on Windows)")
     else:
         failed.extend(run_bundle_test(root, examples, args.verbose))
+        failed.extend(run_wayland_bundle_test(root, examples[0], args.verbose))
 
     # Summary
     print("\n" + "=" * 50)

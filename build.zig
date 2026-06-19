@@ -279,7 +279,7 @@ const x11_libs = [_][]const u8{
 /// into the final executable link, so these symbols must resolve. We ship a
 /// `libX11.so` stub (SONAME `libX11.so.6`) that declares them; at runtime the
 /// real libX11 (already loaded by GLFW) provides the implementations. See
-/// `generateX11SoStub` and the `x64glibc` link list in `platform/main.roc`.
+/// `generateX11SoStub` and the `x64glibc` link list in `platform/main-default.roc`.
 const x11_clipboard_syms = [_][]const u8{
     "XConvertSelection", "XNextEvent",      "XGetWindowProperty", "XFree",
     "XDestroyWindow",    "XCreateSimpleWindow", "XInternAtom",

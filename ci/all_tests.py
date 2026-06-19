@@ -34,6 +34,7 @@ import threading
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
+IS_LINUX = platform.system() == "Linux"
 
 # Platform references used by examples. Bundle tests temporarily rewrite one of
 # these to the localhost bundle URL.
@@ -317,17 +318,24 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
                 print(f"  Skipping URL import check for {example.name} (no platform ref)")
             else:
                 example.write_text(rewritten)
+                command = "build" if IS_LINUX else "check"
                 ok = run_cmd(
-                    ["roc", "check", example.name],
-                    f"wayland bundle check {example.name}",
+                    ["roc", command, example.name],
+                    f"wayland bundle {command} {example.name}",
                     verbose,
                     cwd=examples_dir,
                 )
                 if ok:
-                    print(f"  Checking {example.name} against Wayland bundle URL... ok")
+                    print(
+                        f"  {command.capitalize()}ing {example.name} "
+                        "against Wayland bundle URL... ok"
+                    )
                 else:
-                    print(f"  Checking {example.name} against Wayland bundle URL... FAILED")
-                    failed.append(f"wayland bundle check {example.name}")
+                    print(
+                        f"  {command.capitalize()}ing {example.name} "
+                        "against Wayland bundle URL... FAILED"
+                    )
+                    failed.append(f"wayland bundle {command} {example.name}")
         finally:
             example.write_text(original)
             httpd.shutdown()

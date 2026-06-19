@@ -1,0 +1,86 @@
+name: Build raylib Wayland Archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      raylib_version:
+        description: "raylib tag to build"
+        required: true
+        default: "6.0"
+        type: string
+      create_pr:
+        description: "Commit the archive to a branch and open a PR"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build-raylib-wayland:
+    name: Build Wayland raylib archive
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            curl \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            pkg-config \
+            wayland-protocols
+
+      - name: Download raylib source
+        run: |
+          version="${{ inputs.raylib_version }}"
+          curl -L "https://github.com/raysan5/raylib/archive/refs/tags/${version}.tar.gz" -o raylib.tar.gz
+          tar -xzf raylib.tar.gz
+          echo "RAYLIB_SOURCE=$PWD/raylib-${version}" >> "$GITHUB_ENV"
+
+      - name: Build Wayland archive
+        run: scripts/build-raylib-wayland.sh "$RAYLIB_SOURCE"
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raylib-wayland-${{ inputs.raylib_version }}
+          path: vendor/raylib/linux-x64-wayland/libraylib.a
+          retention-days: 30
+
+      - name: Create pull request
+        if: ${{ inputs.create_pr }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --short -- vendor/raylib/linux-x64-wayland/libraylib.a)" ]; then
+            echo "Wayland raylib archive is already up to date"
+            exit 0
+          fi
+
+          version="${{ inputs.raylib_version }}"
+          branch="update-raylib-wayland-${version}-${{ github.run_id }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add vendor/raylib/linux-x64-wayland/libraylib.a
+          git commit -m "Add raylib ${version} Wayland archive"
+          git push -u origin "$branch"
+
+          gh pr create \
+            --title "Add raylib ${version} Wayland archive" \
+            --body "Builds and vendors the Linux x64 raylib archive with GLFW Wayland support enabled." \
+            --head "$branch"

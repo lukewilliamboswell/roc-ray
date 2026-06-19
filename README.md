@@ -90,6 +90,7 @@ The cave climber demonstrates TMX tile layers, object roles, sprite sheets, came
 | x64win | Windows x64 |
 
 - We vendor the pre-compiled libraries from [raylib v6.0](https://github.com/raysan5/raylib/releases/tag/6.0)
+- The default Linux bundle uses raylib's X11 build. A separate Linux x64 Wayland bundle can be created with `./bundle.sh --platform wayland` after building `vendor/raylib/linux-x64-wayland/libraylib.a`.
 - ARM Linux is not available (raylib doesn't provide pre-built libraries)
 
 ## Contributing

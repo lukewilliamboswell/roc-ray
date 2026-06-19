@@ -7,6 +7,7 @@ import argparse
 import functools
 import http.server
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,18 @@ from pathlib import Path
 
 
 IS_WINDOWS = platform.system() == "Windows"
-LOCAL_PLATFORM_REF = '"../platform/main.roc"'
+LOCAL_PLATFORM_REF = '"../platform/main-default.roc"'
+RELEASE_PLATFORM_REF_RE = re.compile(
+    r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
+)
+
+
+def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
+    if LOCAL_PLATFORM_REF in source:
+        return source.replace(LOCAL_PLATFORM_REF, replacement), True
+
+    rewritten, count = RELEASE_PLATFORM_REF_RE.subn(replacement, source)
+    return rewritten, count > 0
 
 
 def serve_dir(directory: Path) -> tuple[http.server.ThreadingHTTPServer, int]:
@@ -103,11 +115,12 @@ def main() -> int:
             original = example.read_text()
             originals[example] = original
 
-            if LOCAL_PLATFORM_REF not in original:
-                print(f"Skipping rewrite for {example}: no {LOCAL_PLATFORM_REF}")
+            rewritten, did_rewrite = rewrite_platform_ref(original, f'"{bundle_url}"')
+            if not did_rewrite:
+                print(f"Skipping rewrite for {example}: no platform reference")
                 continue
 
-            example.write_text(original.replace(LOCAL_PLATFORM_REF, f'"{bundle_url}"'))
+            example.write_text(rewritten)
 
         for example in examples:
             if not build_example(roc, examples_dir, example):

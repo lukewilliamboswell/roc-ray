@@ -1217,6 +1217,13 @@ pipe:
     ret
 
 .balign 8
+.globl pipe2
+.type pipe2, %function
+pipe2:
+    mov x0, #0
+    ret
+
+.balign 8
 .globl dup
 .type dup, %function
 dup:
@@ -1683,6 +1690,41 @@ ftruncate:
 .globl ftruncate64
 .type ftruncate64, %function
 ftruncate64:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl memfd_create
+.type memfd_create, %function
+memfd_create:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl posix_fallocate
+.type posix_fallocate, %function
+posix_fallocate:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl mkostemp
+.type mkostemp, %function
+mkostemp:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl timerfd_create
+.type timerfd_create, %function
+timerfd_create:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl timerfd_settime
+.type timerfd_settime, %function
+timerfd_settime:
     mov x0, #0
     ret
 

@@ -6,7 +6,7 @@
 //!
 //! All are designed to reduce boilerplate and improve type safety in host code.
 
-const abi = @import("roc_abi.zig");
+const abi = @import("roc_platform_abi.zig");
 
 // Re-export host helper context for convenience.
 pub const RocHost = abi.RocHost;

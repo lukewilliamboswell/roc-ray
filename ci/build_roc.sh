@@ -2,6 +2,29 @@
 set -euo pipefail
 
 ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+
+if [ "${ROC_SKIP_BUILD:-}" = "1" ]; then
+  if ! command -v roc >/dev/null 2>&1; then
+    echo "ROC_SKIP_BUILD=1 was set, but no roc executable was found on PATH" >&2
+    exit 1
+  fi
+
+  ROC_PATH=$(command -v roc)
+  ROC_VERSION=$(roc --version)
+  SHORT_COMMIT=${ROC_COMMIT:0:8}
+
+  echo "Skipping Roc build because ROC_SKIP_BUILD=1"
+  echo "Using Roc executable from PATH: $ROC_PATH"
+  echo "Roc version: $ROC_VERSION"
+  echo "Expected pinned Roc commit: $ROC_COMMIT"
+
+  if [[ "$ROC_VERSION" != *"$SHORT_COMMIT"* ]]; then
+    echo "warning: roc --version did not include pinned commit prefix $SHORT_COMMIT" >&2
+  fi
+
+  exit 0
+fi
+
 echo "Building Roc from commit: $ROC_COMMIT"
 
 if [ ! -d roc-src/.git ]; then

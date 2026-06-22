@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import os
 import platform
 import re
 import shutil
@@ -62,11 +63,15 @@ def check_bundle_url(url: str) -> None:
 
 def find_roc(root: Path) -> str | None:
     exe_name = "roc.exe" if IS_WINDOWS else "roc"
+    path_roc = shutil.which("roc")
+    if os.environ.get("ROC_SKIP_BUILD") == "1":
+        return path_roc
+
     built_roc = root / "roc-src" / "zig-out" / "bin" / exe_name
     if built_roc.is_file():
         return str(built_roc)
 
-    return shutil.which("roc")
+    return path_roc
 
 
 def build_example(roc: str, examples_dir: Path, example: Path) -> bool:

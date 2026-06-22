@@ -3,7 +3,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 // Import generated platform ABI (use for hosted function arg/ret types)
-const abi = @import("roc_abi.zig");
+const abi = @import("roc_platform_abi.zig");
 
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
@@ -23,6 +23,13 @@ const ReadEnvResult = abi.Try;
 const HostReadFileRawResult = abi.HostRead_file_rawRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapLoad_tmx_rawRetRecord;
 const AppConfig = abi.__AnonStruct100;
+const TilemapRawMap = abi.__AnonStruct64;
+const TilemapRawLayer = abi.__AnonStruct68;
+const TilemapRawObject = abi.__AnonStruct73;
+const TilemapRawPoint = abi.__AnonStruct75;
+const TilemapRawProperty = abi.__AnonStruct77;
+const TilemapRawTileProperties = abi.__AnonStruct80;
+const TilemapRawTileset = abi.__AnonStruct82;
 
 const HOST_ERR_NOT_FOUND: u8 = 1;
 const HOST_ERR_READ_FAILED: u8 = 2;
@@ -172,18 +179,18 @@ fn emptyHostReadFileRawResult() HostReadFileRawResult {
     return .{ .contents = abi.RocStr.empty(), .err = 0, .ok = false };
 }
 
-fn emptyTilemapRawMap() abi.TilemapRawMap {
+fn emptyTilemapRawMap() TilemapRawMap {
     return .{
         .gids = abi.RocListWith(u64, false).empty(),
         .height = 0,
-        .layers = abi.RocListWith(abi.TilemapRawLayer, true).empty(),
+        .layers = abi.RocListWith(TilemapRawLayer, true).empty(),
         .map_property_count = 0,
         .map_property_start = 0,
-        .objects = abi.RocListWith(abi.TilemapRawObject, true).empty(),
-        .points = abi.RocListWith(abi.TilemapRawPoint, false).empty(),
-        .properties = abi.RocListWith(abi.TilemapRawProperty, true).empty(),
-        .tile_properties = abi.RocListWith(abi.TilemapRawTileProperties, false).empty(),
-        .tilesets = abi.RocListWith(abi.TilemapRawTileset, true).empty(),
+        .objects = abi.RocListWith(TilemapRawObject, true).empty(),
+        .points = abi.RocListWith(TilemapRawPoint, false).empty(),
+        .properties = abi.RocListWith(TilemapRawProperty, true).empty(),
+        .tile_properties = abi.RocListWith(TilemapRawTileProperties, false).empty(),
+        .tilesets = abi.RocListWith(TilemapRawTileset, true).empty(),
         .width = 0,
         .tile_height = 0,
         .tile_width = 0,
@@ -203,7 +210,7 @@ fn tilemapLoadErrorCode(err: tmx_loader.LoadError) u8 {
     };
 }
 
-fn convertTilemapRawMap(host: *RocHost, raw: tmx_loader.RawMap) abi.TilemapRawMap {
+fn convertTilemapRawMap(host: *RocHost, raw: tmx_loader.RawMap) TilemapRawMap {
     return .{
         .gids = abi.RocListWith(u64, false).fromSlice(raw.gids, host),
         .height = raw.height,
@@ -221,8 +228,8 @@ fn convertTilemapRawMap(host: *RocHost, raw: tmx_loader.RawMap) abi.TilemapRawMa
     };
 }
 
-fn convertTilemapLayers(host: *RocHost, layers: []const tmx_loader.Layer) abi.RocListWith(abi.TilemapRawLayer, true) {
-    const list = abi.RocListWith(abi.TilemapRawLayer, true).allocate(layers.len, host);
+fn convertTilemapLayers(host: *RocHost, layers: []const tmx_loader.Layer) abi.RocListWith(TilemapRawLayer, true) {
+    const list = abi.RocListWith(TilemapRawLayer, true).allocate(layers.len, host);
     if (list.elements_ptr) |elements| {
         for (layers, 0..) |layer, i| {
             elements[i] = .{
@@ -241,8 +248,8 @@ fn convertTilemapLayers(host: *RocHost, layers: []const tmx_loader.Layer) abi.Ro
     return list;
 }
 
-fn convertTilemapObjects(host: *RocHost, objects: []const tmx_loader.Object) abi.RocListWith(abi.TilemapRawObject, true) {
-    const list = abi.RocListWith(abi.TilemapRawObject, true).allocate(objects.len, host);
+fn convertTilemapObjects(host: *RocHost, objects: []const tmx_loader.Object) abi.RocListWith(TilemapRawObject, true) {
+    const list = abi.RocListWith(TilemapRawObject, true).allocate(objects.len, host);
     if (list.elements_ptr) |elements| {
         for (objects, 0..) |object, i| {
             elements[i] = .{
@@ -265,8 +272,8 @@ fn convertTilemapObjects(host: *RocHost, objects: []const tmx_loader.Object) abi
     return list;
 }
 
-fn convertTilemapPoints(host: *RocHost, points: []const tmx_loader.Point) abi.RocListWith(abi.TilemapRawPoint, false) {
-    const list = abi.RocListWith(abi.TilemapRawPoint, false).allocate(points.len, host);
+fn convertTilemapPoints(host: *RocHost, points: []const tmx_loader.Point) abi.RocListWith(TilemapRawPoint, false) {
+    const list = abi.RocListWith(TilemapRawPoint, false).allocate(points.len, host);
     if (list.elements_ptr) |elements| {
         for (points, 0..) |point, i| {
             elements[i] = .{ .x = point.x, .y = point.y };
@@ -275,8 +282,8 @@ fn convertTilemapPoints(host: *RocHost, points: []const tmx_loader.Point) abi.Ro
     return list;
 }
 
-fn convertTilemapProperties(host: *RocHost, properties: []const tmx_loader.Property) abi.RocListWith(abi.TilemapRawProperty, true) {
-    const list = abi.RocListWith(abi.TilemapRawProperty, true).allocate(properties.len, host);
+fn convertTilemapProperties(host: *RocHost, properties: []const tmx_loader.Property) abi.RocListWith(TilemapRawProperty, true) {
+    const list = abi.RocListWith(TilemapRawProperty, true).allocate(properties.len, host);
     if (list.elements_ptr) |elements| {
         for (properties, 0..) |property, i| {
             elements[i] = .{
@@ -292,8 +299,8 @@ fn convertTilemapProperties(host: *RocHost, properties: []const tmx_loader.Prope
     return list;
 }
 
-fn convertTilemapTileProperties(host: *RocHost, ranges: []const tmx_loader.TileProperties) abi.RocListWith(abi.TilemapRawTileProperties, false) {
-    const list = abi.RocListWith(abi.TilemapRawTileProperties, false).allocate(ranges.len, host);
+fn convertTilemapTileProperties(host: *RocHost, ranges: []const tmx_loader.TileProperties) abi.RocListWith(TilemapRawTileProperties, false) {
+    const list = abi.RocListWith(TilemapRawTileProperties, false).allocate(ranges.len, host);
     if (list.elements_ptr) |elements| {
         for (ranges, 0..) |range, i| {
             elements[i] = .{
@@ -306,8 +313,8 @@ fn convertTilemapTileProperties(host: *RocHost, ranges: []const tmx_loader.TileP
     return list;
 }
 
-fn convertTilemapTilesets(host: *RocHost, tilesets: []const tmx_loader.Tileset) abi.RocListWith(abi.TilemapRawTileset, true) {
-    const list = abi.RocListWith(abi.TilemapRawTileset, true).allocate(tilesets.len, host);
+fn convertTilemapTilesets(host: *RocHost, tilesets: []const tmx_loader.Tileset) abi.RocListWith(TilemapRawTileset, true) {
+    const list = abi.RocListWith(TilemapRawTileset, true).allocate(tilesets.len, host);
     if (list.elements_ptr) |elements| {
         for (tilesets, 0..) |tileset, i| {
             elements[i] = .{

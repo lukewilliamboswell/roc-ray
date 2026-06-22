@@ -13,6 +13,21 @@ Contributions that move that work forward are very welcome: new examples, bug fi
 
 ## Building the Platform
 
+CI builds Roc from the pinned commit before building the platform:
+
+```bash
+ci/build_roc.sh
+```
+
+If you already have the matching `roc` on your `PATH`, skip rebuilding it:
+
+```bash
+ROC_SKIP_BUILD=1 ci/build_roc.sh
+```
+
+Other CI helper scripts also honor `ROC_SKIP_BUILD=1` when choosing between
+`roc` on `PATH` and an existing `roc-src` build cache.
+
 Build the platform and cross-compile the pre-built host libraries for all supported targets:
 
 ```bash

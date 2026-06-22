@@ -77,7 +77,7 @@ platform ""
 		"roc_draw_end_camera": Draw.end_camera!,
 	}
 	targets: {
-		inputs: "targets/",
+		inputs_dir: "targets/",
 		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"] },
 	}
 

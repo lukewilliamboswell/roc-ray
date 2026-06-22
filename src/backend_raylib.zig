@@ -1,11 +1,11 @@
 //! Raylib backend wrapper.
 //!
-//! This module provides a clean interface to raylib, accepting ABI types
-//! from roc_abi.zig and converting them to raylib's C types.
+//! This module provides a clean interface to raylib, accepting generated ABI
+//! types and converting them to raylib's C types.
 //! All C interop is isolated here.
 
 const std = @import("std");
-const abi = @import("roc_abi.zig");
+const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
 
 /// Raw raylib C bindings.

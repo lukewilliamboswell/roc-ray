@@ -13,6 +13,8 @@ This script runs:
 Usage:
     ./ci/all_tests.py                   # Run all tests
     ./ci/all_tests.py --skip-build      # Skip roc build
+    ./ci/all_tests.py --skip-runtime    # Skip running built examples
+    ./ci/all_tests.py --runtime-only    # Only build and run examples headlessly
     ./ci/all_tests.py --skip-bundle-test # Skip the bundle test
     ./ci/all_tests.py --verbose         # Show all output
 
@@ -45,10 +47,19 @@ RELEASE_PLATFORM_REF_RE = re.compile(
 
 # Examples to skip in the bundled-platform build test, mapping filename -> reason.
 # Use this when a specific example can't build against the bundled platform yet
-# (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED. All
-# examples currently build from the bundle, so this is empty.
+# (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
 #   e.g. "kitchen_sink.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
-BUNDLE_TEST_SKIP: dict[str, str] = {}
+TOP_DOWN_POSTCHECK_SKIP = "blocked on Roc postcheck invariant for imported nominal declarations"
+BUNDLE_TEST_SKIP: dict[str, str] = {
+    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
+}
+
+# Examples to skip in native `roc build` / headless runtime checks.
+# Keep these explicit so CI still exercises every example that currently
+# compiles, without hiding unrelated build/runtime failures.
+BUILD_RUNTIME_SKIP: dict[str, str] = {
+    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
+}
 
 
 def run_cmd(
@@ -84,6 +95,46 @@ def run_cmd(
 def find_examples(examples_dir: Path) -> list[Path]:
     """Find all .roc files in examples directory."""
     return sorted(examples_dir.glob("*.roc"))
+
+
+def executable_for_example(root: Path, example: Path) -> Path:
+    """Return the executable path produced by `roc build examples/<name>.roc`."""
+    suffix = ".exe" if IS_WINDOWS else ""
+    return root / "examples" / f"{example.stem}{suffix}"
+
+
+def run_headless_examples(
+    root: Path, examples: list[Path], frames: int, verbose: bool
+) -> list[str]:
+    """Run each already-built example executable in bounded headless mode."""
+    failed: list[str] = []
+
+    print(f"\nRunning built examples headlessly ({frames} frame(s))...")
+    for example in examples:
+        executable = executable_for_example(root, example)
+        print(f"  Running {example.stem}...", end=" ", flush=True)
+        if not executable.is_file():
+            print("FAILED (missing executable)")
+            failed.append(f"headless run {example.name} (missing executable)")
+            continue
+
+        ok = run_cmd(
+            [
+                str(executable),
+                "--headless",
+                f"--headless-frames={frames}",
+            ],
+            f"headless run {example.name}",
+            verbose,
+            cwd=root,
+        )
+        if ok:
+            print("ok")
+        else:
+            print("FAILED")
+            failed.append(f"headless run {example.name}")
+
+    return failed
 
 
 def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTTPServer, int]:
@@ -357,6 +408,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
     parser.add_argument("--skip-build", action="store_true", help="Skip roc build")
     parser.add_argument(
+        "--skip-runtime",
+        action="store_true",
+        help="Skip running built examples in host headless mode",
+    )
+    parser.add_argument(
+        "--runtime-only",
+        action="store_true",
+        help="Only build examples and run them in host headless mode",
+    )
+    parser.add_argument(
+        "--headless-frames",
+        type=int,
+        default=3,
+        help="Number of frames to run each example in headless mode",
+    )
+    parser.add_argument(
         "--skip-bundle-test",
         action="store_true",
         help="Skip the bundle test (build platform package, host locally, build apps from URL)",
@@ -365,6 +432,10 @@ def main() -> int:
         "--verbose", "-v", action="store_true", help="Show all command output"
     )
     args = parser.parse_args()
+    if args.headless_frames < 1:
+        parser.error("--headless-frames must be greater than zero")
+    if args.runtime_only and args.skip_build:
+        parser.error("--runtime-only cannot be combined with --skip-build")
 
     # Find project root (parent of ci/)
     root = Path(__file__).resolve().parent.parent
@@ -387,56 +458,76 @@ def main() -> int:
     else:
         print("  ok")
 
-    # roc check
-    print("\nRunning roc check...")
-    for example in examples:
-        print(f"  Checking {example.name}...", end=" ", flush=True)
-        if run_cmd(["roc", "check", str(example)], f"check {example.name}", args.verbose):
-            print("ok")
-        else:
-            print("FAILED")
-            failed.append(f"roc check {example.name}")
+    if args.runtime_only:
+        print("\nSkipping roc check/fmt/test (--runtime-only)")
+    else:
+        # roc check
+        print("\nRunning roc check...")
+        for example in examples:
+            print(f"  Checking {example.name}...", end=" ", flush=True)
+            if run_cmd(["roc", "check", str(example)], f"check {example.name}", args.verbose):
+                print("ok")
+            else:
+                print("FAILED")
+                failed.append(f"roc check {example.name}")
 
-    # roc fmt --check
-    print("\nRunning roc fmt --check...")
-    for example in examples:
-        print(f"  Formatting {example.name}...", end=" ", flush=True)
-        if run_cmd(
-            ["roc", "fmt", "--check", str(example)], f"fmt {example.name}", args.verbose
-        ):
-            print("ok")
-        else:
-            print("FAILED")
-            failed.append(f"roc fmt {example.name}")
+        # roc fmt --check
+        print("\nRunning roc fmt --check...")
+        for example in examples:
+            print(f"  Formatting {example.name}...", end=" ", flush=True)
+            if run_cmd(
+                ["roc", "fmt", "--check", str(example)], f"fmt {example.name}", args.verbose
+            ):
+                print("ok")
+            else:
+                print("FAILED")
+                failed.append(f"roc fmt {example.name}")
 
-    # roc test
-    print("\nRunning roc test...")
-    for example in examples:
-        print(f"  Testing {example.name}...", end=" ", flush=True)
-        if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
-            print("ok")
-        else:
-            print("FAILED")
-            failed.append(f"roc test {example.name}")
+        # roc test
+        print("\nRunning roc test...")
+        for example in examples:
+            print(f"  Testing {example.name}...", end=" ", flush=True)
+            if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
+                print("ok")
+            else:
+                print("FAILED")
+                failed.append(f"roc test {example.name}")
 
     # roc build (run from examples dir so executables are created there)
+    built_examples: list[Path] = []
     if args.skip_build:
         print("\nSkipping roc build (--skip-build)")
     else:
         print("\nRunning roc build...")
         for example in examples:
+            if example.name in BUILD_RUNTIME_SKIP:
+                print(f"  Building {example.name}... SKIPPED ({BUILD_RUNTIME_SKIP[example.name]})")
+                continue
+
             print(f"  Building {example.name}...", end=" ", flush=True)
             if run_cmd(
                 ["roc", "build", example.name], f"build {example.name}", args.verbose, cwd=examples_dir
             ):
                 print("ok")
+                built_examples.append(example)
             else:
                 print("FAILED")
                 failed.append(f"roc build {example.name}")
 
+    if args.skip_runtime:
+        print("\nSkipping headless runtime (--skip-runtime)")
+    elif args.skip_build:
+        print("\nSkipping headless runtime (--skip-build)")
+    else:
+        failed.extend(
+            run_headless_examples(root, built_examples, args.headless_frames, args.verbose)
+        )
+
     # Bundle test: build the platform package, host it on localhost, and build
     # each example against the bundle URL (mirrors the platform-template check).
-    if args.skip_bundle_test:
+    if args.runtime_only:
+        print("\nSkipping bundle test (--runtime-only)")
+    elif args.skip_bundle_test:
         print("\nSkipping bundle test (--skip-bundle-test)")
     elif IS_WINDOWS:
         print("\nSkipping bundle test (requires bash for bundle.sh; not run on Windows)")

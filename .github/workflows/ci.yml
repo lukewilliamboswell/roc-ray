@@ -99,3 +99,8 @@ jobs:
         # Skip on Windows - roc executable PATH issues and MSVC requirements
         if: runner.os != 'Windows'
         run: python3 ci/all_tests.py --skip-build --skip-bundle-test
+
+      - name: Build and run examples headlessly
+        # Skip on Windows - roc executable PATH issues and MSVC requirements
+        if: runner.os != 'Windows'
+        run: python3 ci/all_tests.py --runtime-only --skip-bundle-test

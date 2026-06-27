@@ -34,6 +34,8 @@ import subprocess
 import sys
 import tarfile
 import threading
+import time
+import urllib.request
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -148,10 +150,30 @@ def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTT
 
     handler = functools.partial(Handler, directory=str(directory))
     # Port 0 -> OS picks a free ephemeral port.
-    httpd = http.server.ThreadingHTTPServer(("localhost", 0), handler)
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, port
+
+
+def _wait_for_url(url: str) -> bool:
+    """Return True once a local test URL is reachable."""
+    last_error: Exception | None = None
+    request = urllib.request.Request(url, method="HEAD")
+    for _ in range(10):
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if response.status == 200:
+                    return True
+                last_error = RuntimeError(f"HTTP {response.status}")
+        except Exception as err:
+            last_error = err
+            time.sleep(0.5)
+
+    print(f"  Bundle URL was not accessible: {url}")
+    if last_error is not None:
+        print(f"  Last error: {last_error}")
+    return False
 
 
 def _bundle_name_from_output(output: str) -> str | None:
@@ -222,8 +244,12 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
     print(f"  Bundled platform: {bundle_name}")
 
     httpd, port = _serve_dir(root, verbose)
-    url = f'"http://localhost:{port}/{bundle_name}"'
+    bundle_url = f"http://127.0.0.1:{port}/{bundle_name}"
+    url = f'"{bundle_url}"'
     try:
+        if not _wait_for_url(bundle_url):
+            return ["bundle URL unavailable"]
+
         for example in examples:
             if example.name in BUNDLE_TEST_SKIP:
                 print(f"  Building {example.name} (URL)... SKIPPED ({BUNDLE_TEST_SKIP[example.name]})")
@@ -362,9 +388,13 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
             return failed
 
         httpd, port = _serve_dir(root, verbose)
-        url = f'"http://localhost:{port}/{bundle_name}"'
+        bundle_url = f"http://127.0.0.1:{port}/{bundle_name}"
+        url = f'"{bundle_url}"'
         original = example.read_text()
         try:
+            if not _wait_for_url(bundle_url):
+                return ["wayland bundle URL unavailable"]
+
             rewritten, did_rewrite = _rewrite_platform_ref(original, url)
             if not did_rewrite:
                 print(f"  Skipping URL import check for {example.name} (no platform ref)")

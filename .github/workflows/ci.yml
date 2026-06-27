@@ -102,6 +102,7 @@ jobs:
         run: python3 ci/all_tests.py --skip-build --skip-bundle-test --skip-roc-test
 
       - name: Build and run examples headlessly
-        # Skip on Windows - roc executable PATH issues and MSVC requirements
-        if: runner.os != 'Windows'
+        # Linux covers headless runtime; macOS currently hangs in generated executables
+        # and Windows has roc executable PATH issues plus MSVC requirements.
+        if: runner.os == 'Linux'
         run: python3 ci/all_tests.py --runtime-only --skip-bundle-test

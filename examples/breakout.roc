@@ -497,38 +497,23 @@ expect ball_circle(launch_ball(start_paddle_x)).radius == ball_radius
 
 expect {
 	result = advance_ready(new_game_state(), { paddle_move: PaddleStill, action_pressed: Bool.True, dt: 0 })
-	result.game.state == Playing and match List.first(result.events) {
-		Ok(GameStarted) => Bool.True
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.state == Playing and List.first(result.events) == Ok(GameStarted)
 }
 
 expect {
 	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 20, y: top_wall_y + ball_radius - 1 }, vel: { x: 0, y: -100 } } }
 	result = advance_playing(game, still_input)
-	result.game.ball.vel.y == 100 and match List.first(result.events) {
-		Ok(WallHit) => Bool.True
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.ball.vel.y == 100 and List.first(result.events) == Ok(WallHit)
 }
 
 expect {
 	game = { ..new_game_state(), state: Playing, lives: 1, ball: { pos: { x: 10, y: screen_h + ball_radius + 1 }, vel: { x: 0, y: 0 } } }
 	result = advance_playing(game, still_input)
-	result.game.state == GameOver and result.game.lives == 0 and match List.first(result.events) {
-		Ok(LifeLost(state)) => state == GameOver
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.state == GameOver and result.game.lives == 0 and List.first(result.events) == Ok(LifeLost(GameOver))
 }
 
 expect {
 	brick = brick_at(99, 100, 100, Color.red)
 	result = find_hit_brick([brick], Math.circle({ x: 105, y: 105 }, 1), 0)
-	match result {
-		Ok(hit) => hit.id == 99
-		Err(_) => Bool.False
-	}
+	result == Ok(brick)
 }

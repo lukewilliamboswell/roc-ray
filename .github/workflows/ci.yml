@@ -95,10 +95,11 @@ jobs:
                   print(f"Skipping: {example} (no platform reference)")
           PY
 
-      - name: Run Roc check/test
+      - name: Run Roc check/fmt
         # Skip on Windows - roc executable PATH issues and MSVC requirements
+        # roc test is blocked on roc-lang/roc#9752 in the pinned compiler
         if: runner.os != 'Windows'
-        run: python3 ci/all_tests.py --skip-build --skip-bundle-test
+        run: python3 ci/all_tests.py --skip-build --skip-bundle-test --skip-roc-test
 
       - name: Build and run examples headlessly
         # Skip on Windows - roc executable PATH issues and MSVC requirements

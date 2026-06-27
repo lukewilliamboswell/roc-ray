@@ -14,6 +14,7 @@ Usage:
     ./ci/all_tests.py                   # Run all tests
     ./ci/all_tests.py --skip-build      # Skip roc build
     ./ci/all_tests.py --skip-runtime    # Skip running built examples
+    ./ci/all_tests.py --skip-roc-test   # Skip roc test
     ./ci/all_tests.py --runtime-only    # Only build and run examples headlessly
     ./ci/all_tests.py --skip-bundle-test # Skip the bundle test
     ./ci/all_tests.py --verbose         # Show all output
@@ -408,6 +409,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
     parser.add_argument("--skip-build", action="store_true", help="Skip roc build")
     parser.add_argument(
+        "--skip-roc-test",
+        action="store_true",
+        help="Skip roc test over examples",
+    )
+    parser.add_argument(
         "--skip-runtime",
         action="store_true",
         help="Skip running built examples in host headless mode",
@@ -483,15 +489,18 @@ def main() -> int:
                 print("FAILED")
                 failed.append(f"roc fmt {example.name}")
 
-        # roc test
-        print("\nRunning roc test...")
-        for example in examples:
-            print(f"  Testing {example.name}...", end=" ", flush=True)
-            if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
-                print("ok")
-            else:
-                print("FAILED")
-                failed.append(f"roc test {example.name}")
+        if args.skip_roc_test:
+            print("\nSkipping roc test (--skip-roc-test)")
+        else:
+            # roc test
+            print("\nRunning roc test...")
+            for example in examples:
+                print(f"  Testing {example.name}...", end=" ", flush=True)
+                if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
+                    print("ok")
+                else:
+                    print("FAILED")
+                    failed.append(f"roc test {example.name}")
 
     # roc build (run from examples dir so executables are created there)
     built_examples: list[Path] = []

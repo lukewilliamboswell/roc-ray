@@ -1019,15 +1019,17 @@ const InputState = struct {
             .keys = self.keys.list,
             .keys_pressed = self.keys_pressed.list,
             .keys_released = self.keys_released.list,
-            .mouse_buttons = self.mouse_buttons.list,
-            .mouse_buttons_pressed = self.mouse_buttons_pressed.list,
-            .mouse_buttons_released = self.mouse_buttons_released.list,
-            .mouse_wheel = mouse_wheel,
-            .mouse_x = mouse_x,
-            .mouse_y = mouse_y,
-            .mouse_left = mouse_left,
-            .mouse_middle = mouse_middle,
-            .mouse_right = mouse_right,
+            .mouse = .{
+                .buttons = self.mouse_buttons.list,
+                .buttons_pressed = self.mouse_buttons_pressed.list,
+                .buttons_released = self.mouse_buttons_released.list,
+                .wheel = mouse_wheel,
+                .x = mouse_x,
+                .y = mouse_y,
+                .left = mouse_left,
+                .middle = mouse_middle,
+                .right = mouse_right,
+            },
         };
     }
 

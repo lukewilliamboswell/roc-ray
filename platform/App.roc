@@ -14,9 +14,9 @@ AppConfig : {
 App(_field) := { apply : AppConfig -> AppConfig }.{
 	Config : AppConfig
 
-	## TODO(roc#9655): make this `Try(model, [Exit(I64), ..])` once open
-	## error rows through exposed platform aliases like `App.Init(Model)` no
-	## longer panic the compiler.
+	## Effectful startup callback run after the host has initialized raylib and
+	## audio. Return `Ok(model)` to start the app, or `Err(Exit(code))` to quit
+	## before the first frame.
 	InitCallback(model) : Host => Try(model, [Exit(I64)])
 
 	Init(model) : {

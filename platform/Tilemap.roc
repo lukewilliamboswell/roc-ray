@@ -577,6 +577,33 @@ find_texture = |textures, first_gid| {
 	$found
 }
 
+test_tileset : TilemapRawTileset
+test_tileset = {
+	first_gid: 1,
+	name: "test",
+	tile_width: 16,
+	tile_height: 16,
+	tile_count: 4,
+	columns: 2,
+	image_source: "tiles.png",
+	image_width: 32,
+	image_height: 32,
+	property_start: 0,
+	property_count: 0,
+}
+
+test_ground_layer : TilemapRawLayer
+test_ground_layer = { name: "Ground", width: 3, height: 2, gid_start: 0, gid_count: 6, property_start: 0, property_count: 0, visible: Bool.True, opacity: 1 }
+
+test_walls_layer : TilemapRawLayer
+test_walls_layer = { name: "Walls", width: 3, height: 2, gid_start: 6, gid_count: 6, property_start: 0, property_count: 0, visible: Bool.True, opacity: 1 }
+
+test_spawn_object : TilemapRawObject
+test_spawn_object = { id: 1, name: "spawn-a", type_name: "spawn", x: 8, y: 8, width: 0, height: 0, rotation: 0, kind: 1, point_start: 0, point_count: 0, property_start: 0, property_count: 1 }
+
+test_speed_property : TilemapRawProperty
+test_speed_property = { name: "speed", kind: 2, text: "12.5", number: 12.5, integer: 12, bool_value: Bool.True }
+
 test_raw : TilemapRawMap
 test_raw = {
 	width: 3,
@@ -585,34 +612,13 @@ test_raw = {
 	tile_height: 16,
 	map_property_start: 0,
 	map_property_count: 0,
-	tilesets: [
-		{
-			first_gid: 1,
-			name: "test",
-			tile_width: 16,
-			tile_height: 16,
-			tile_count: 4,
-			columns: 2,
-			image_source: "tiles.png",
-			image_width: 32,
-			image_height: 32,
-			property_start: 0,
-			property_count: 0,
-		},
-	],
+	tilesets: [test_tileset],
 	tile_properties: [],
-	layers: [
-		{ name: "Ground", width: 3, height: 2, gid_start: 0, gid_count: 6, property_start: 0, property_count: 0, visible: Bool.True, opacity: 1 },
-		{ name: "Walls", width: 3, height: 2, gid_start: 6, gid_count: 6, property_start: 0, property_count: 0, visible: Bool.True, opacity: 1 },
-	],
+	layers: [test_ground_layer, test_walls_layer],
 	gids: [1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0],
-	objects: [
-		{ id: 1, name: "spawn-a", type_name: "spawn", x: 8, y: 8, width: 0, height: 0, rotation: 0, kind: 1, point_start: 0, point_count: 0, property_start: 0, property_count: 1 },
-	],
+	objects: [test_spawn_object],
 	points: [],
-	properties: [
-		{ name: "speed", kind: 2, text: "12.5", number: 12.5, integer: 12, bool_value: Bool.True },
-	],
+	properties: [test_speed_property],
 }
 
 test_map : Tilemap
@@ -638,39 +644,14 @@ offset_test_map = Tilemap.from_raw(test_raw)
 	)
 	.build()
 
-expect {
-	match List.get(test_raw.layers, 1) {
-		Ok(layer) => Tilemap.layer_role_for(test_map, layer) == Solid
-		Err(_) => Bool.False
-	}
-}
-expect {
-	match List.get(test_raw.objects, 0) {
-		Ok(object) => Tilemap.object_role_for(test_map, object) == Spawn
-		Err(_) => Bool.False
-	}
-}
+expect Tilemap.layer_role_for(test_map, test_walls_layer) == Solid
+expect Tilemap.object_role_for(test_map, test_spawn_object) == Spawn
 expect Tilemap.world_rect_for_cell(test_map, { col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
 expect Tilemap.gid_at(test_map, "Walls", { col: 1, row: 0 }) == Ok(2)
 expect Tilemap.solid_cell(test_map, { col: 1, row: 0 })
 expect Tilemap.solid_at_world(test_map, { x: 20, y: 4 })
 expect Tilemap.circle_touches_solid(test_map, Math.circle({ x: 24, y: 8 }, 7))
-expect {
-	match Tilemap.cell_at_world(test_map, { x: 34, y: 18 }) {
-		Ok(cell) => cell == { col: 2, row: 1 }
-		Err(_) => Bool.False
-	}
-}
-expect {
-	match Tilemap.first_object(test_map, Spawn) {
-		Ok(object) => Tilemap.property_f32(test_raw, object, "speed", 0) == 12.5
-		Err(_) => Bool.False
-	}
-}
-expect {
-	match Tilemap.first_object(offset_test_map, Spawn) {
-		Ok(object) => Tilemap.object_world_center(offset_test_map, object) == { x: 108, y: 208 }
-		Err(_) => Bool.False
-	}
-}
+expect Tilemap.cell_at_world(test_map, { x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
+expect Tilemap.property_f32(test_raw, test_spawn_object, "speed", 0) == 12.5
+expect Tilemap.object_world_center(offset_test_map, test_spawn_object) == { x: 108, y: 208 }
 expect Tilemap.clean_gid(2_147_483_648 + 17) == 17

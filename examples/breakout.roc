@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.6/YsrMnLJw2ahDsyFXNEpipwWQfiM5DSxq5Ve6SyHczN7.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Audio
@@ -25,7 +25,7 @@ PaddleMove := [PaddleLeft, PaddleRight, PaddleStill]
 
 GameState := [Ready, Playing, Won, GameOver]
 
-StepEvent := [GameStarted, WallHit, PaddleHit, BrickHit(Brick), LifeLost(GameState), WallCleared]
+StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCleared]
 
 Game : {
 	bricks : List(Brick),
@@ -58,6 +58,7 @@ FrameInput : {
 StepResult : {
 	game : Game,
 	events : List(StepEvent),
+	paddle_hit : Bool,
 }
 
 program = { init!, render! }
@@ -298,18 +299,18 @@ advance_ready = |game, input| {
 	ready_game = ball_on_paddle(game, paddle_x, game.lives, Ready)
 
 	if input.action_pressed {
-		{ game: { ..ready_game, state: Playing }, events: [GameStarted] }
+		{ game: { ..ready_game, state: Playing }, events: [GameStarted], paddle_hit: Bool.False }
 	} else {
-		{ game: ready_game, events: [] }
+		{ game: ready_game, events: [], paddle_hit: Bool.False }
 	}
 }
 
 advance_finished : Game, FrameInput -> StepResult
 advance_finished = |game, input| {
 	if input.action_pressed {
-		{ game: new_game_state(), events: [GameStarted] }
+		{ game: new_game_state(), events: [GameStarted], paddle_hit: Bool.False }
 	} else {
-		{ game, events: [] }
+		{ game, events: [], paddle_hit: Bool.False }
 	}
 }
 
@@ -338,6 +339,7 @@ advance_playing = |game, input| {
 		{
 			game: ball_on_paddle(game, paddle_x, next_lives, next_state),
 			events: [LifeLost(next_state)],
+			paddle_hit: Bool.False,
 		}
 	} else {
 		hit_left = next_ball.pos.x - ball_radius < 0
@@ -371,7 +373,7 @@ advance_playing = |game, input| {
 		ball_shape = ball_circle(paddle_ball)
 		near_bricks = paddle_ball.pos.y + ball_radius >= brick_band_top and paddle_ball.pos.y - ball_radius <= brick_band_bottom
 		hit_result = if near_bricks find_hit_brick(game.bricks, ball_shape, 0) else Err(NotFound)
-		base_events = List.concat(event_when(hit_wall, WallHit), event_when(hit_paddle, PaddleHit))
+		base_events = event_when(hit_wall, WallHit)
 
 		match hit_result {
 			Ok(hit_brick) => {
@@ -388,11 +390,13 @@ advance_playing = |game, input| {
 						state,
 					},
 					events,
+					paddle_hit: hit_paddle,
 				}
 			}
 			Err(_) => {
 				game: { ..game, paddle_x, ball: paddle_ball, state: Playing },
 				events: base_events,
+				paddle_hit: hit_paddle,
 			}
 		}
 	}
@@ -413,7 +417,6 @@ play_step_events! = |sounds, events| {
 		match event {
 			GameStarted => Audio.play!(sounds.start)
 			WallHit => Audio.play!(sounds.wall)
-			PaddleHit => Audio.play!(sounds.paddle)
 			BrickHit(_) => Audio.play!(sounds.brick)
 			LifeLost(_) => Audio.play!(sounds.lose)
 			WallCleared => Audio.play!(sounds.start)
@@ -428,6 +431,9 @@ render! = |model, host| {
 	}
 
 	result = advance_game(model.game, frame_input(host))
+	if result.paddle_hit {
+		Audio.play!(model.sounds.paddle)
+	}
 	play_step_events!(model.sounds, result.events)
 	next = { ..model, game: result.game }
 
@@ -497,38 +503,29 @@ expect ball_circle(launch_ball(start_paddle_x)).radius == ball_radius
 
 expect {
 	result = advance_ready(new_game_state(), { paddle_move: PaddleStill, action_pressed: Bool.True, dt: 0 })
-	result.game.state == Playing and match List.first(result.events) {
-		Ok(GameStarted) => Bool.True
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.state == Playing and List.first(result.events) == Ok(GameStarted)
 }
 
 expect {
 	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 20, y: top_wall_y + ball_radius - 1 }, vel: { x: 0, y: -100 } } }
 	result = advance_playing(game, still_input)
-	result.game.ball.vel.y == 100 and match List.first(result.events) {
-		Ok(WallHit) => Bool.True
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.ball.vel.y == 100 and List.first(result.events) == Ok(WallHit)
+}
+
+expect {
+	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 400, y: paddle_y - ball_radius - 3 }, vel: { x: 0, y: 120 } } }
+	result = advance_playing(game, { ..still_input, dt: 0.05 })
+	result.game.ball.vel.y < 0 and result.game.ball.pos.y == paddle_y - ball_radius - ball_bounce_gap and result.paddle_hit
 }
 
 expect {
 	game = { ..new_game_state(), state: Playing, lives: 1, ball: { pos: { x: 10, y: screen_h + ball_radius + 1 }, vel: { x: 0, y: 0 } } }
 	result = advance_playing(game, still_input)
-	result.game.state == GameOver and result.game.lives == 0 and match List.first(result.events) {
-		Ok(LifeLost(state)) => state == GameOver
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	result.game.state == GameOver and result.game.lives == 0 and List.first(result.events) == Ok(LifeLost(GameOver))
 }
 
 expect {
 	brick = brick_at(99, 100, 100, Color.red)
 	result = find_hit_brick([brick], Math.circle({ x: 105, y: 105 }, 1), 0)
-	match result {
-		Ok(hit) => hit.id == 99
-		Err(_) => Bool.False
-	}
+	result == Ok(brick)
 }

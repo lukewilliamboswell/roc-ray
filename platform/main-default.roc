@@ -77,7 +77,7 @@ platform ""
 		"roc_draw_end_camera": Draw.end_camera!,
 	}
 	targets: {
-		inputs: "targets/",
+		inputs_dir: "targets/",
 		x64mac: { inputs: ["libhost.a", "libraylib.a", app] },
 		arm64mac: { inputs: ["libhost.a", "libraylib.a", app] },
 		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
@@ -105,24 +105,27 @@ import Physics
 ## the function pointers.
 ## Re-run glue without that patch once the upstream glue bug is fixed.
 
-## Internal type for host boundary - kept simple/flat for C compatibility
-## Field order must match FFI struct in types.zig (alignment then alphabetical)
+## Internal type for host boundary.
+## Keep this layout-compatible with the public Host record; the compiler may
+## optimize the reshaping below into a direct pass-through.
 HostStateFromHost : {
 	frame_count : U64,
+	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
+	frame_time : F32, ## seconds since previous frame (0 on first frame)
 	keys : List(U8), ## 349 bytes, held state, one per raylib key code 0-348
 	keys_pressed : List(U8), ## 349 bytes, pressed-this-frame (edge) state
 	keys_released : List(U8), ## 349 bytes, released-this-frame (edge) state
-	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
-	frame_time : F32, ## seconds since previous frame (0 on first frame)
-	mouse_buttons : List(U8), ## 7 bytes, held state, one per raylib mouse button code 0-6
-	mouse_buttons_pressed : List(U8), ## 7 bytes, pressed-this-frame (edge) state
-	mouse_buttons_released : List(U8), ## 7 bytes, released-this-frame (edge) state
-	mouse_wheel : F32,
-	mouse_x : F32,
-	mouse_y : F32,
-	mouse_left : Bool,
-	mouse_middle : Bool,
-	mouse_right : Bool,
+	mouse : {
+		buttons : List(U8), ## 7 bytes, held state, one per raylib mouse button code 0-6
+		buttons_pressed : List(U8), ## 7 bytes, pressed-this-frame (edge) state
+		buttons_released : List(U8), ## 7 bytes, released-this-frame (edge) state
+		wheel : F32,
+		x : F32,
+		y : F32,
+		left : Bool,
+		middle : Bool,
+		right : Bool,
+	},
 }
 
 app_config_for_host! : () => App.Config
@@ -137,17 +140,7 @@ init_for_host! = |host_state| {
 		keys: host_state.keys,
 		keys_pressed: host_state.keys_pressed,
 		keys_released: host_state.keys_released,
-		mouse: {
-			buttons: host_state.mouse_buttons,
-			buttons_pressed: host_state.mouse_buttons_pressed,
-			buttons_released: host_state.mouse_buttons_released,
-			x: host_state.mouse_x,
-			y: host_state.mouse_y,
-			left: host_state.mouse_left,
-			right: host_state.mouse_right,
-			middle: host_state.mouse_middle,
-			wheel: host_state.mouse_wheel,
-		},
+		mouse: host_state.mouse,
 	}
 	match (program.init!.run!)(host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
@@ -164,17 +157,7 @@ render_for_host! = |boxed_model, host_state| {
 		keys: host_state.keys,
 		keys_pressed: host_state.keys_pressed,
 		keys_released: host_state.keys_released,
-		mouse: {
-			buttons: host_state.mouse_buttons,
-			buttons_pressed: host_state.mouse_buttons_pressed,
-			buttons_released: host_state.mouse_buttons_released,
-			x: host_state.mouse_x,
-			y: host_state.mouse_y,
-			left: host_state.mouse_left,
-			right: host_state.mouse_right,
-			middle: host_state.mouse_middle,
-			wheel: host_state.mouse_wheel,
-		},
+		mouse: host_state.mouse,
 	}
 	match (program.render!)(Box.unbox(boxed_model), host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))

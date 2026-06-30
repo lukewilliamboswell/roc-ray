@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.6/YsrMnLJw2ahDsyFXNEpipwWQfiM5DSxq5Ve6SyHczN7.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Assets
@@ -1356,20 +1356,14 @@ expect approx_vec(test_hazard.pos(0), { x: -10, y: 0 })
 expect approx_vec(test_hazard.pos(0.25), { x: 0, y: 0 })
 
 expect {
-	result = find_hit_spark([World.Spark.new(7, 10, 20)], Math.circle({ x: 10, y: 20 }, 1), 0)
-	match result {
-		Ok(spark) => spark.id == 7
-		Err(_) => Bool.False
-	}
+	spark = World.Spark.new(7, 10, 20)
+	find_hit_spark([spark], Math.circle({ x: 10, y: 20 }, 1), 0) == Ok(spark)
 }
 
 expect {
 	world = { ..World.new(fallback_level), player: World.Player.new({ x: -430, y: -150 }) }
 	result = collect_spark(world)
-	result.world.score == 1 and match result.collected {
-		Ok(spark) => spark.id == 0
-		Err(_) => Bool.False
-	}
+	result.world.score == 1 and result.collected == Ok(World.Spark.new(0, -430, -150))
 }
 
 expect {
@@ -1393,9 +1387,5 @@ expect {
 
 expect {
 	result = advance_playing(fallback_level, World.new(fallback_level), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
-	match List.first(result.events) {
-		Ok(DashStarted(pos)) => pos == fallback_spawn and result.world.player.dash_timer == dash_duration
-		Ok(_) => Bool.False
-		Err(_) => Bool.False
-	}
+	List.first(result.events) == Ok(DashStarted(fallback_spawn)) and result.world.player.dash_timer == dash_duration
 }

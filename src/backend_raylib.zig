@@ -1,11 +1,11 @@
 //! Raylib backend wrapper.
 //!
-//! This module provides a clean interface to raylib, accepting ABI types
-//! from roc_abi.zig and converting them to raylib's C types.
+//! This module provides a clean interface to raylib, accepting generated ABI
+//! types and converting them to raylib's C types.
 //! All C interop is isolated here.
 
 const std = @import("std");
-const abi = @import("roc_abi.zig");
+const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
 
 /// Raw raylib C bindings.
@@ -163,11 +163,37 @@ pub fn unloadTextures() void {
 /// Convert an ABI RGBA color record to raylib Color.
 pub fn colorToRl(color: anytype) rl.Color {
     return .{
-        .r = color.r,
-        .g = color.g,
-        .b = color.b,
-        .a = color.a,
+        // TODO: remove this channel remap once Roc glue emits opaque record
+        // fields in the same order Roc passes them across the host boundary.
+        .r = color.a,
+        .g = color.b,
+        .b = color.g,
+        .a = color.r,
     };
+}
+
+test "colorToRl maps Roc Color declaration order to raylib" {
+    const black = colorToRl(abi.Color{
+        .a = 0,
+        .b = 0,
+        .g = 0,
+        .r = 255,
+    });
+    try std.testing.expectEqual(@as(u8, 0), black.r);
+    try std.testing.expectEqual(@as(u8, 0), black.g);
+    try std.testing.expectEqual(@as(u8, 0), black.b);
+    try std.testing.expectEqual(@as(u8, 255), black.a);
+
+    const red = colorToRl(abi.Color{
+        .a = 230,
+        .b = 41,
+        .g = 55,
+        .r = 255,
+    });
+    try std.testing.expectEqual(@as(u8, 230), red.r);
+    try std.testing.expectEqual(@as(u8, 41), red.g);
+    try std.testing.expectEqual(@as(u8, 55), red.b);
+    try std.testing.expectEqual(@as(u8, 255), red.a);
 }
 
 fn toVector2(point: anytype) rl.Vector2 {

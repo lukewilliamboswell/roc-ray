@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.6/YsrMnLJw2ahDsyFXNEpipwWQfiM5DSxq5Ve6SyHczN7.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Assets
@@ -1272,7 +1272,7 @@ expect steered_x_velocity(20, 0, Bool.True, 1) == 0
 expect wrap_turn(1.25) == 0.25
 expect Physics.components(unit_from_turn(0)) == { x: 1, y: 0, z: 0 }
 expect point_segment_distance(Physics.point_xy(5, 3), { start: Physics.point_xy(0, 0), end: Physics.point_xy(10, 0) }) == 3
-expect match List.first(kill_laser_enemies([{ id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }], [1])) {
-	Ok(enemy) => !(enemy.alive)
-	Err(_) => Bool.False
+expect {
+	enemy = { id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }
+	List.first(kill_laser_enemies([enemy], [1])) == Ok({ ..enemy, alive: Bool.False })
 }

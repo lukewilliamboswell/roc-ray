@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.6/YsrMnLJw2ahDsyFXNEpipwWQfiM5DSxq5Ve6SyHczN7.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Audio

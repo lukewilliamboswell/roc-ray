@@ -63,7 +63,7 @@ Host := {
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env! : Host, Str => Try(Str, [NotFound, ..])
+	read_env! : Host, Str => Try(Str, [NotFound])
 
 	## Raw hosted file read. Prefer `read_file!`.
 	read_file_raw! : Str => ReadFileRawResult
@@ -89,7 +89,7 @@ Host := {
 
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported, ..])
+	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported])
 
 	## Set the target frames per second for the render loop.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.

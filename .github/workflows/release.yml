@@ -238,8 +238,8 @@ jobs:
           release_version: ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
 
-  docs-followup:
-    name: Open docs follow-up PR
+  publish-docs:
+    name: Publish versioned docs
     needs:
       - build
       - publish-release
@@ -248,6 +248,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -290,3 +295,15 @@ jobs:
           commit_message: Update docs for ${{ needs.build.outputs.release_version }}
           pr_title: Update docs for ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: www
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -52,17 +52,12 @@ RELEASE_PLATFORM_REF_RE = re.compile(
 # Use this when a specific example can't build against the bundled platform yet
 # (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
 #   e.g. "kitchen_sink.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
-TOP_DOWN_POSTCHECK_SKIP = "blocked on Roc postcheck invariant for imported nominal declarations"
-BUNDLE_TEST_SKIP: dict[str, str] = {
-    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
-}
+BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 # Examples to skip in native `roc build` / headless runtime checks.
 # Keep these explicit so CI still exercises every example that currently
 # compiles, without hiding unrelated build/runtime failures.
-BUILD_RUNTIME_SKIP: dict[str, str] = {
-    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
-}
+BUILD_RUNTIME_SKIP: dict[str, str] = {}
 
 
 def run_cmd(

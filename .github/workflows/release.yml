@@ -73,7 +73,7 @@ jobs:
 
       - name: Validate Roc examples and docs
         run: |
-          python3 ci/all_tests.py --skip-build --skip-bundle-test --skip-roc-test
+          python3 ci/all_tests.py --skip-build --skip-bundle-test
           rm -rf /tmp/roc-ray-release-docs
           roc docs platform/main-default.roc --output=/tmp/roc-ray-release-docs
 

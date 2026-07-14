@@ -3,22 +3,32 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: "Release tag (e.g., v0.1.0)"
+      release_version:
+        description: "Release version, e.g. 0.8.0"
         required: true
         type: string
+      previous_release_url:
+        description: "Previous default bundle URL for roc bump; empty resolves from latest release notes"
+        required: false
+        default: ""
+        type: string
+  pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', github.repository) || format('release-validate-{0}-{1}', github.repository, github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  build-and-bundle:
-    name: Build and Bundle Platform Packages
-    runs-on: ubuntu-22.04
+  build:
+    name: Build release bundles
+    runs-on: ubuntu-latest
     outputs:
-      default_bundle_filename: ${{ steps.bundle.outputs.default_bundle_filename }}
-      wayland_bundle_filename: ${{ steps.bundle.outputs.wayland_bundle_filename }}
+      release_version: ${{ steps.validate.outputs.release_version }}
+      docs_version: ${{ steps.validate.outputs.docs_version }}
+      test_matrix: ${{ steps.bundles.outputs.test_matrix }}
     defaults:
       run:
         shell: bash
@@ -26,91 +36,139 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        with:
+          version: nightly-new-compiler
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
         with:
           version: 0.16.0
 
-      - name: Build Roc from pinned commit
-        run: ci/build_roc.sh
+      - name: Validate release request
+        id: validate
+        uses: roc-lang/release-package/actions/validate-release@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          release_version: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
+          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          github_token: ${{ github.token }}
+
+      - name: Validate release branch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "${GITHUB_REF_TYPE:-}" != "branch" ]]; then
+            echo "Release workflow must be run from a branch so generated docs can be opened as a follow-up PR."
+            exit 1
+          fi
 
       - name: Build platform
         run: zig build -Doptimize=ReleaseSafe
 
-      - name: Run tests
+      - name: Run Zig tests
         run: zig build test -Droc-tests=false
 
-      # Release artifacts:
-      #
-      # 1. The default bundle is the cross-platform package. It contains macOS
-      #    Intel, macOS Apple Silicon, Linux x64, and Windows x64 host inputs.
-      #    On Linux this package uses the raylib X11 build.
-      #
-      # 2. The Wayland bundle is a dedicated Linux x64 package. It stages
-      #    platform/main-wayland.roc as main.roc, includes only x64glibc host
-      #    inputs, omits the X11 shim, and uses the vendored Wayland raylib
-      #    archive built by .github/workflows/build-raylib-wayland.yml.
+      - name: Validate Roc examples and docs
+        run: |
+          python3 ci/all_tests.py --skip-build --skip-bundle-test --skip-roc-test
+          rm -rf /tmp/roc-ray-release-docs
+          roc docs platform/main-default.roc --output=/tmp/roc-ray-release-docs
+
+      - name: Resolve previous default bundle
+        if: github.event_name == 'workflow_dispatch'
+        id: previous
+        run: |
+          python3 scripts/release_helpers.py resolve-previous-default-url \
+            --provided-url "${{ inputs.previous_release_url }}" \
+            --repo "${{ github.repository }}" \
+            --output-file .release/previous-url.txt \
+            --github-output "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Check version bump
+        uses: roc-lang/release-package/actions/run-bump-check@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          release_version: ${{ steps.validate.outputs.release_version }}
+          dry_run: ${{ github.event_name != 'workflow_dispatch' }}
+          # The legacy 0.7 bundle is rejected by current host-boundary validation.
+          # Strict-semver releases and all PR dry runs continue to require the check.
+          bump_check: ${{ steps.previous.outputs.bump_check || 'require' }}
+          bump_entrypoint: platform/main-default.roc
+          previous_url: ${{ steps.previous.outputs.previous_url }}
+
+      - name: Ensure release metadata files exist
+        run: touch .release/previous-url.txt
+
       - name: Bundle platform packages
         id: bundle
         run: |
-          if [ ! -f vendor/raylib/linux-x64-wayland/libraylib.a ]; then
-            cat <<'EOF'
-          Missing vendor/raylib/linux-x64-wayland/libraylib.a.
+          mkdir -p dist
 
-          Run the "Build raylib Wayland Archive" workflow first. It builds the
-          Linux x64 raylib archive with GLFW Wayland support and opens a PR that
-          vendors the archive.
-          EOF
-            exit 1
-          fi
-
-          default_output="$(./bundle.sh --platform default)"
+          default_output="$(./bundle.sh --platform default --output-dir dist)"
           echo "$default_output"
-          default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | xargs basename)"
-          if [ -z "$default_bundle" ]; then
+          default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | tail -1)"
+          if [[ -z "$default_bundle" || ! -f "$default_bundle" ]]; then
             echo "Error: could not determine default bundle filename"
             exit 1
           fi
 
-          wayland_output="$(./bundle.sh --platform wayland)"
+          wayland_output="$(./bundle.sh --platform wayland --output-dir dist)"
           echo "$wayland_output"
-          wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | xargs basename)"
-          if [ -z "$wayland_bundle" ]; then
+          wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | tail -1)"
+          if [[ -z "$wayland_bundle" || ! -f "$wayland_bundle" ]]; then
             echo "Error: could not determine Wayland bundle filename"
             exit 1
           fi
 
-          echo "Default bundle created: $default_bundle"
-          echo "Wayland bundle created: $wayland_bundle"
-          echo "default_bundle_filename=$default_bundle" >> "$GITHUB_OUTPUT"
-          echo "wayland_bundle_filename=$wayland_bundle" >> "$GITHUB_OUTPUT"
+          echo "default_bundle=$default_bundle" >> "$GITHUB_OUTPUT"
+          echo "wayland_bundle=$wayland_bundle" >> "$GITHUB_OUTPUT"
 
-      - name: Upload default bundle artifact
+      - name: Write bundle test manifest
+        run: |
+          python3 scripts/release_helpers.py write-bundle-manifest \
+            --default-bundle "${{ steps.bundle.outputs.default_bundle }}" \
+            --wayland-bundle "${{ steps.bundle.outputs.wayland_bundle }}" \
+            --output .release/bundle-manifest.json
+
+      - name: Prepare release bundle metadata
+        id: bundles
+        uses: roc-lang/release-package/actions/prepare-bundles@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          bundle_glob: dist/*.tar.zst
+          bundle_manifest_path: .release/bundle-manifest.json
+
+      - name: Upload release bundles
         uses: actions/upload-artifact@v4
         with:
-          name: platform-bundle-default
-          path: ${{ steps.bundle.outputs.default_bundle_filename }}
-          retention-days: 30
+          name: release-bundles
+          path: .release/bundles/*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Upload Wayland bundle artifact
+      - name: Upload release metadata
         uses: actions/upload-artifact@v4
         with:
-          name: platform-bundle-wayland
-          path: ${{ steps.bundle.outputs.wayland_bundle_filename }}
-          retention-days: 30
+          name: release-metadata
+          path: |
+            .release/bump-output.txt
+            .release/previous-url.txt
+            .release/release-bundles.json
+            .release/test-matrix.json
+          if-no-files-found: error
+          retention-days: 7
 
-  test-default-bundle:
-    name: Test Default Bundle (${{ matrix.os }})
-    needs: build-and-bundle
+  test-bundles:
+    name: Test ${{ matrix.bundle_name }} bundle (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-15         # arm64mac
-          - ubuntu-24.04     # x64glibc
-          - windows-2022     # x64win
-    runs-on: ${{ matrix.os }}
+        include: ${{ fromJson(needs.build.outputs.test_matrix) }}
     defaults:
       run:
         shell: bash
@@ -119,108 +177,116 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2.0.5
+      - name: Install Roc
+        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
         with:
-          version: 0.16.0
+          version: nightly-new-compiler
 
-      - name: Build Roc from pinned commit
-        run: ci/build_roc.sh
-
-      - name: Download bundle artifact
+      - name: Download release bundles
         uses: actions/download-artifact@v4
         with:
-          name: platform-bundle-default
+          name: release-bundles
+          path: .release/test-bundles
 
-      - name: Test bundled platform with examples
-        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.default_bundle_filename }}"
-
-  test-wayland-bundle:
-    name: Test Wayland Bundle
-    needs: build-and-bundle
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2.0.5
+      - name: Test release bundle
+        uses: roc-lang/release-package/actions/test-bundle@d2560ead9f724bfaabfbc8134b8895e120171064
         with:
-          version: 0.16.0
+          test_bundle_command: python3 ci/test_bundle_artifact.py
+          bundle_path: .release/test-bundles/${{ matrix.artifact_file }}
+          bundle_name: ${{ matrix.bundle_name }}
+          release_version: ${{ needs.build.outputs.release_version }}
 
-      - name: Build Roc from pinned commit
-        run: ci/build_roc.sh
-
-      - name: Download Wayland bundle artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: platform-bundle-wayland
-
-      - name: Test bundled Wayland platform with examples
-        run: python3 ci/test_bundle_artifact.py "${{ needs.build-and-bundle.outputs.wayland_bundle_filename }}"
-
-  create-release:
-    name: Create GitHub Release
-    needs: [build-and-bundle, test-default-bundle, test-wayland-bundle]
-    runs-on: ubuntu-24.04
+  publish-release:
+    name: Publish GitHub release
+    needs:
+      - build
+      - test-bundles
     if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Download bundle artifact
+      - name: Download release bundles
         uses: actions/download-artifact@v4
         with:
-          name: platform-bundle-default
+          name: release-bundles
+          path: .release/bundles
 
-      - name: Download Wayland bundle artifact
+      - name: Download release metadata
         uses: actions/download-artifact@v4
         with:
-          name: platform-bundle-wayland
+          name: release-metadata
+          path: .release
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Make release notes
+        uses: roc-lang/release-package/actions/make-release-notes@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          release_version: ${{ needs.build.outputs.release_version }}
+          docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
+          release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL"
+          github_token: ${{ github.token }}
+
+      - name: Publish release
+        uses: roc-lang/release-package/actions/publish-release@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          release_version: ${{ needs.build.outputs.release_version }}
+          github_token: ${{ github.token }}
+
+  docs-followup:
+    name: Open docs follow-up PR
+    needs:
+      - build
+      - publish-release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        with:
+          version: nightly-new-compiler
+
+      - name: Snapshot existing docs
+        uses: roc-lang/release-package/actions/docs-snapshot@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          docs_root: www
+
+      - name: Generate docs
         run: |
-          DEFAULT_BUNDLE_FILE="${{ needs.build-and-bundle.outputs.default_bundle_filename }}"
-          WAYLAND_BUNDLE_FILE="${{ needs.build-and-bundle.outputs.wayland_bundle_filename }}"
-          ROC_COMMIT=$(python3 ci/get_roc_commit.py | cut -c1-8)
+          rm -rf "www/${{ needs.build.outputs.docs_version }}"
+          roc docs platform/main-default.roc --output="www/${{ needs.build.outputs.docs_version }}"
 
-          cat > release-notes.md <<EOF
-          Platform bundles built with Zig 0.16.0 and Roc ${ROC_COMMIT}.
+      - name: Update docs index
+        uses: roc-lang/release-package/actions/docs-index@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          docs_root: www
+          docs_version: ${{ needs.build.outputs.docs_version }}
 
-          ## Bundles
+      - name: Validate docs
+        uses: roc-lang/release-package/actions/docs-validate@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          docs_root: www
+          docs_version: ${{ needs.build.outputs.docs_version }}
 
-          ### Default bundle
-
-          Use this bundle for macOS Intel, macOS Apple Silicon, Windows x64,
-          and Linux x64 systems that can use the X11 raylib build.
-
-          \`\`\`roc
-          platform "https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${DEFAULT_BUNDLE_FILE}"
-          \`\`\`
-
-          ### Wayland bundle
-
-          Use this bundle on Linux x64 Wayland systems when you want the
-          Wayland raylib build instead of the default X11/XWayland path. This
-          bundle is Linux x64 only; it does not include macOS or Windows host
-          inputs.
-
-          \`\`\`roc
-          platform "https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.release_tag }}/${WAYLAND_BUNDLE_FILE}"
-          \`\`\`
-          EOF
-
-          gh release create "${{ github.event.inputs.release_tag }}" \
-            "$DEFAULT_BUNDLE_FILE" \
-            "$WAYLAND_BUNDLE_FILE" \
-            --title "${{ github.event.inputs.release_tag }}" \
-            --notes-file release-notes.md
+      - name: Open docs follow-up PR
+        uses: roc-lang/release-package/actions/create-followup-pr@d2560ead9f724bfaabfbc8134b8895e120171064
+        with:
+          release_version: ${{ needs.build.outputs.release_version }}
+          paths: www
+          branch_prefix: release-followup
+          base_branch: ${{ github.ref_name }}
+          commit_message: Update docs for ${{ needs.build.outputs.release_version }}
+          pr_title: Update docs for ${{ needs.build.outputs.release_version }}
+          github_token: ${{ github.token }}

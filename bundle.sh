@@ -3,12 +3,18 @@ set -euo pipefail
 
 root_dir="$(cd "$(dirname "$0")" && pwd)"
 platform_dir="$root_dir/platform"
+output_dir="$root_dir"
 package="default"
 roc_bundle_args=()
+roc_bin="${ROC:-roc}"
+
+if [[ "$roc_bin" == */* ]]; then
+    roc_bin="$(cd "$(dirname "$roc_bin")" && pwd)/$(basename "$roc_bin")"
+fi
 
 usage() {
     cat <<'EOF'
-Usage: ./bundle.sh [--platform default|wayland] [roc bundle args...]
+Usage: ./bundle.sh [--platform default|wayland] [--output-dir DIR] [roc bundle args...]
 
 The default package includes all supported native targets. The Wayland package
 is Linux x64 only and requires vendor/raylib/linux-x64-wayland/libraylib.a.
@@ -39,6 +45,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --host=*)
             package="${1#--host=}"
+            shift
+            ;;
+        --output-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "error: --output-dir requires a directory" >&2
+                exit 1
+            fi
+            output_dir="$2"
+            shift 2
+            ;;
+        --output-dir=*)
+            output_dir="${1#--output-dir=}"
             shift
             ;;
         -h|--help)
@@ -72,6 +90,9 @@ case "$package" in
         ;;
 esac
 
+mkdir -p "$output_dir"
+output_dir="$(cd "$output_dir" && pwd)"
+
 stage_dir=""
 cleanup_stage() {
     if [[ -n "${stage_dir:-}" && -z "${ROC_RAY_KEEP_BUNDLE_STAGE:-}" ]]; then
@@ -95,7 +116,16 @@ copy_required() {
 
 copy_shared_roc_files() {
     local roc
-    for roc in "$platform_dir"/*.roc; do
+    local files=()
+    if git -C "$root_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        while IFS= read -r roc; do
+            files+=("$root_dir/$roc")
+        done < <(git -C "$root_dir" ls-files "platform/*.roc")
+    else
+        files=("$platform_dir"/*.roc)
+    fi
+
+    for roc in "${files[@]}"; do
         case "$(basename "$roc")" in
             main.roc|main-default.roc|main-wayland.roc)
                 ;;
@@ -188,9 +218,9 @@ fi
 if [[ "${#sysroot_files[@]}" -gt 0 ]]; then
     bundle_args+=("${sysroot_files[@]}")
 fi
-bundle_args+=(--output-dir "$root_dir")
+bundle_args+=(--output-dir "$output_dir")
 if [[ "${#roc_bundle_args[@]}" -gt 0 ]]; then
     bundle_args+=("${roc_bundle_args[@]}")
 fi
 
-roc bundle "${bundle_args[@]}"
+"$roc_bin" bundle "${bundle_args[@]}"

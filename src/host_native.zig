@@ -765,7 +765,7 @@ fn hostedGetScreenSize() callconv(.c) abi.HostGet_screen_sizeRetRecord {
     return .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
 }
 
-fn hostedSetScreenSize(args: abi.HostSet_screen_sizeArgs) callconv(.c) u8 {
+fn hostedSetScreenSize(args: abi.HostSet_screen_size_rawArgs) callconv(.c) u8 {
     if (active_headless) {
         headless_screen_width = positiveI32(@intFromFloat(args.width), headless_screen_width);
         headless_screen_height = positiveI32(@intFromFloat(args.height), headless_screen_height);

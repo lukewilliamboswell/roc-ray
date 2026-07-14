@@ -32,10 +32,8 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		match Assets.load_texture!(asset_path) {
-			Ok(texture) => Ok({ texture, angle: 0, animation: Sprite.animation({ frame_count: 4, fps: 6 }) })
-			Err(_) => Err(Exit(1))
-		}
+		texture = Assets.load_texture!(asset_path) ? |_| Exit(1)
+		Ok({ texture, angle: 0, animation: Sprite.animation({ frame_count: 4, fps: 6 }) })
 	},
 )
 

@@ -243,65 +243,48 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		# TODO(roc#9655): replace these nested matches with `?` once App.Init
-		# can expose open init error rows through platform module aliases.
-		match Assets.load_texture!(tiles_path) {
-			Ok(tiles) =>
-				match Assets.load_texture!(characters_path) {
-					Ok(characters) =>
-						match Assets.load_texture!(enemies_path) {
-							Ok(enemies_texture) =>
-								match Assets.load_texture!(background_path) {
-									Ok(background) =>
-										match Tilemap.load_tmx!(map_path) {
-											Ok(raw_map) => {
-												tilemap = Tilemap.from_raw(raw_map)
-													.with_tileset_texture(
-														1,
-														tiles,
-													)
-													.layer_role(
-														"Platforms",
-														Solid,
-													)
-													.layer_role(
-														"Hazards",
-														Drawn,
-													)
-													.object_role(
-														"spawn",
-														Spawn,
-													)
-													.object_role(
-														"gem",
-														Collectible,
-													)
-													.object_role(
-														"hazard",
-														Hazard,
-													)
-													.object_role(
-														"checkpoint",
-														Checkpoint,
-													)
-													.object_role(
-														"goal",
-														Goal,
-													)
-													.build()
-												level = level_from_tilemap(tilemap)
-												Ok({ tiles, characters, enemies_texture, background, level, world: new_world(level) })
-											}
-											Err(_) => Err(Exit(1))
-										}
-									Err(_) => Err(Exit(1))
-								}
-							Err(_) => Err(Exit(1))
-						}
-					Err(_) => Err(Exit(1))
-				}
-			Err(_) => Err(Exit(1))
-		}
+		tiles = Assets.load_texture!(tiles_path) ? |_| Exit(1)
+		characters = Assets.load_texture!(characters_path) ? |_| Exit(1)
+		enemies_texture = Assets.load_texture!(enemies_path) ? |_| Exit(1)
+		background = Assets.load_texture!(background_path) ? |_| Exit(1)
+		raw_map = Tilemap.load_tmx!(map_path) ? |_| Exit(1)
+
+		tilemap = Tilemap.from_raw(raw_map)
+			.with_tileset_texture(
+				1,
+				tiles,
+			)
+			.layer_role(
+				"Platforms",
+				Solid,
+			)
+			.layer_role(
+				"Hazards",
+				Drawn,
+			)
+			.object_role(
+				"spawn",
+				Spawn,
+			)
+			.object_role(
+				"gem",
+				Collectible,
+			)
+			.object_role(
+				"hazard",
+				Hazard,
+			)
+			.object_role(
+				"checkpoint",
+				Checkpoint,
+			)
+			.object_role(
+				"goal",
+				Goal,
+			)
+			.build()
+		level = level_from_tilemap(tilemap)
+		Ok({ tiles, characters, enemies_texture, background, level, world: new_world(level) })
 	},
 )
 
@@ -743,13 +726,11 @@ kill_laser_enemies = |enemies, killed| {
 launch_hook : Player, Physics.Point -> HookState
 launch_hook = |player, aim| {
 	direction = direction_to(player.pos, aim, player.facing)
-	HookFlying(
-		{
-			pos: player.pos,
-			velocity: Physics.add_vec(player.velocity, Physics.scale(direction, hook_launch_speed)),
-			age: 0,
-		},
-	)
+	HookFlying({
+		pos: player.pos,
+		velocity: Physics.add_vec(player.velocity, Physics.scale(direction, hook_launch_speed)),
+		age: 0,
+	})
 }
 
 solid_hit_between : Level, Physics.Point, Physics.Point -> Try(Physics.Point, [NoHit])

@@ -112,6 +112,8 @@ pub fn loadFont(path: [*:0]const u8, size: c_int) ?u64 {
     const font = rl.LoadFontEx(path, font_size, null, 0);
     if (!rl.IsFontValid(font)) return null;
 
+    rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
+
     fonts[font_count] = font;
     font_count += 1;
     return @intCast(font_count);
@@ -458,7 +460,7 @@ pub fn setConfigFlags(flags: c_uint) void {
 
 /// Build raylib window config flags from Roc app config booleans.
 pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint {
-    var flags: c_uint = 0;
+    var flags: c_uint = @as(c_uint, @intCast(rl.FLAG_WINDOW_HIGHDPI));
     if (resizable) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_RESIZABLE));
     if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
     if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));

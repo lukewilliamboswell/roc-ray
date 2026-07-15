@@ -39,8 +39,8 @@ cd roc-src
 
 attempts="${ROC_BUILD_ATTEMPTS:-3}"
 for attempt in $(seq 1 "$attempts"); do
-  echo "zig build roc (attempt $attempt/$attempts)"
-  if zig build roc; then
+  echo "zig build roc -Doptimize=ReleaseFast (attempt $attempt/$attempts)"
+  if zig build roc -Doptimize=ReleaseFast; then
     if [ -n "${GITHUB_PATH:-}" ]; then
       echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
     fi

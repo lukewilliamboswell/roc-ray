@@ -71,6 +71,24 @@ jobs:
       - name: Run Zig tests
         run: zig build test -Droc-tests=false
 
+      - name: Update examples to use source platform
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          from ci.all_tests import _rewrite_platform_ref
+
+          replacement = '"../platform/main-default.roc"'
+          for example in sorted(Path("examples").glob("*.roc")):
+              original = example.read_text()
+              rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
+              if did_rewrite:
+                  print(f"Updating: {example}")
+                  example.write_text(rewritten)
+              else:
+                  print(f"Skipping: {example} (no platform reference)")
+          PY
+
       - name: Validate Roc examples and docs
         run: |
           python3 ci/all_tests.py --skip-build --skip-bundle-test

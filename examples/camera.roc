@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../platform/main-default.roc" }
+app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.7/8gdZaHEpySPZUzMBCT6RkEF9CBpcbi5F3E7QmNu4NTCU.tar.zst" }
 
 import rr.App
 import rr.Camera

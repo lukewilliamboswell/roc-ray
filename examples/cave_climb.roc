@@ -235,7 +235,7 @@ ground_friction = 70
 air_drag : F32
 air_drag = 0.35
 
-init! : App.Init(Model)
+init! : App.Init(Model, _)
 init! = App.init(
 	{
 		..App.default,
@@ -243,11 +243,11 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		tiles = Assets.load_texture!(tiles_path) ? |_| Exit(1)
-		characters = Assets.load_texture!(characters_path) ? |_| Exit(1)
-		enemies_texture = Assets.load_texture!(enemies_path) ? |_| Exit(1)
-		background = Assets.load_texture!(background_path) ? |_| Exit(1)
-		raw_map = Tilemap.load_tmx!(map_path) ? |_| Exit(1)
+		tiles = Assets.load_texture!(tiles_path)?
+		characters = Assets.load_texture!(characters_path)?
+		enemies_texture = Assets.load_texture!(enemies_path)?
+		background = Assets.load_texture!(background_path)?
+		raw_map = Tilemap.load_tmx!(map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_tileset_texture(

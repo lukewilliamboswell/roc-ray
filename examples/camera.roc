@@ -34,7 +34,7 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
-init! : App.Init(Model)
+init! : App.Init(Model, [])
 init! = App.init(
 	{
 		..App.default,

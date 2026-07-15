@@ -360,7 +360,7 @@ fallback_exit_radius = 58
 burst_duration : F32
 burst_duration = 0.36
 
-init! : App.Init(Model)
+init! : App.Init(Model, _)
 init! = App.init(
 	{
 		..App.default,
@@ -368,9 +368,9 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		characters = Assets.load_texture!(characters_path) ? |_| Exit(1)
-		tiles = Assets.load_texture!(tiles_path) ? |_| Exit(1)
-		raw_map = Tilemap.load_tmx!(top_down_map_path) ? |_| Exit(1)
+		characters = Assets.load_texture!(characters_path)?
+		tiles = Assets.load_texture!(tiles_path)?
+		raw_map = Tilemap.load_tmx!(top_down_map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
 			.with_origin(

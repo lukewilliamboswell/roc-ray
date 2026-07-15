@@ -132,7 +132,7 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
-init! : App.Init(Model)
+init! : App.Init(Model, [])
 init! = App.init(
 	{
 		..App.default,

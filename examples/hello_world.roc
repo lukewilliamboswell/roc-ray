@@ -11,7 +11,7 @@ Model : {
 
 program = { init!, render! }
 
-init! : App.Init(Model)
+init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_host| Ok({ message: "Roc :heart: Raylib!" }),

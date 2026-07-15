@@ -12,7 +12,7 @@ platform ""
 					vsync : Bool,
 					cursor_visible : Bool,
 				},
-				run! : Host => Try(model, [Exit(I64)]),
+				run! : Host => Try(model, [Exit(I64), ..]),
 			},
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
@@ -145,6 +145,7 @@ init_for_host! = |host_state| {
 	match (program.init!.run!)(host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
 	}
 }
 

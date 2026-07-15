@@ -2,6 +2,9 @@
 """
 Run all tests for the roc-ray platform.
 
+Source checks temporarily point checked-in examples at platform/main-default.roc,
+then restore their release URLs. Roc is always resolved from PATH.
+
 This script runs:
 - zig build      - Build the native host libraries
 - roc check      - Type check all examples
@@ -36,6 +39,7 @@ import tarfile
 import threading
 import time
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -180,12 +184,29 @@ def _bundle_name_from_output(output: str) -> str | None:
 
 
 def _rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
-    """Rewrite an example's platform reference to a bundle URL."""
+    """Rewrite an example's recognized local or release platform reference."""
     if LOCAL_PLATFORM_REF in source:
         return source.replace(LOCAL_PLATFORM_REF, replacement), True
 
     rewritten, count = RELEASE_PLATFORM_REF_RE.subn(replacement, source)
     return rewritten, count > 0
+
+
+@contextmanager
+def _temporary_platform_refs(examples: list[Path], replacement: str):
+    """Temporarily rewrite example platform references and always restore them."""
+    originals: dict[Path, str] = {}
+    try:
+        for example in examples:
+            original = example.read_text()
+            rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
+            if did_rewrite and rewritten != original:
+                originals[example] = original
+                example.write_text(rewritten)
+        yield len(originals)
+    finally:
+        for example, original in originals.items():
+            example.write_text(original)
 
 
 def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
@@ -477,6 +498,14 @@ def main() -> int:
         print("Error: No .roc files found in examples/")
         return 1
 
+    with _temporary_platform_refs(examples, LOCAL_PLATFORM_REF) as rewritten_count:
+        if rewritten_count:
+            print(f"Using local source platform for {rewritten_count} example(s)")
+        return _run_tests(args, root, examples)
+
+
+def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> int:
+    examples_dir = root / "examples"
     print(f"Found {len(examples)} example(s): {', '.join(e.stem for e in examples)}")
 
     failed = []

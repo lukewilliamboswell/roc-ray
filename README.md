@@ -32,7 +32,7 @@ The goal isn't to build or support a large game engine. We're happy to help wher
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- [Roc](https://www.roc-lang.org/) (the pinned compiler commit is in [`ci/ROC_COMMIT`](ci/ROC_COMMIT))
+- [Roc](https://www.roc-lang.org/) nightly available as `roc` on `PATH`
 
 ## Quick Start
 

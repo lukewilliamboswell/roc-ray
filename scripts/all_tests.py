@@ -14,13 +14,13 @@ This script runs:
 - bundle test    - Bundle the platform, host it on localhost, build apps from the URL
 
 Usage:
-    ./ci/all_tests.py                   # Run all tests
-    ./ci/all_tests.py --skip-build      # Skip roc build
-    ./ci/all_tests.py --skip-runtime    # Skip running built examples
-    ./ci/all_tests.py --skip-roc-test   # Skip roc test
-    ./ci/all_tests.py --runtime-only    # Only build and run examples headlessly
-    ./ci/all_tests.py --skip-bundle-test # Skip the bundle test
-    ./ci/all_tests.py --verbose         # Show all output
+    ./scripts/all_tests.py                   # Run all tests
+    ./scripts/all_tests.py --skip-build      # Skip roc build
+    ./scripts/all_tests.py --skip-runtime    # Skip running built examples
+    ./scripts/all_tests.py --skip-roc-test   # Skip roc test
+    ./scripts/all_tests.py --runtime-only    # Only build and run examples headlessly
+    ./scripts/all_tests.py --skip-bundle-test # Skip the bundle test
+    ./scripts/all_tests.py --verbose         # Show all output
 
 TODO replace me with a Roc script when basic-cli is implemented
 """
@@ -230,7 +230,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
     """Bundle the platform, host it on localhost, and build each example against
     that bundle URL (mirrors the template's release check). Returns failures.
 
-    Steps: `./bundle.sh` -> HTTP server on localhost -> rewrite each example's
+    Steps: `scripts/bundle.sh` -> HTTP server on localhost -> rewrite each example's
     platform reference to the bundle URL -> `roc build`. Examples listed in
     BUNDLE_TEST_SKIP are reported as skipped, not failed.
     """
@@ -241,7 +241,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
 
     # bundle.sh is a bash script; on Windows (without bash) skip the whole step.
     bundle_proc = subprocess.run(
-        ["bash", "bundle.sh"], capture_output=True, text=True, cwd=root
+        ["bash", "scripts/bundle.sh"], capture_output=True, text=True, cwd=root
     )
     if bundle_proc.returncode != 0:
         print(bundle_proc.stdout)
@@ -329,7 +329,7 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
     bundle_path: Path | None = None
     try:
         bundle_proc = subprocess.run(
-            ["bash", "bundle.sh", "--platform", "wayland"],
+            ["bash", "scripts/bundle.sh", "--platform", "wayland"],
             capture_output=True,
             text=True,
             cwd=root,
@@ -489,7 +489,7 @@ def main() -> int:
     if args.runtime_only and args.skip_build:
         parser.error("--runtime-only cannot be combined with --skip-build")
 
-    # Find project root (parent of ci/)
+    # Find project root (parent of scripts/)
     root = Path(__file__).resolve().parent.parent
     examples_dir = root / "examples"
 

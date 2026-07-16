@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root_dir="$(cd "$(dirname "$0")" && pwd)"
+root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 platform_dir="$root_dir/platform"
 output_dir="$root_dir"
 package="default"
@@ -14,7 +14,7 @@ fi
 
 usage() {
     cat <<'EOF'
-Usage: ./bundle.sh [--platform default|wayland] [--output-dir DIR] [roc bundle args...]
+Usage: scripts/bundle.sh [--platform default|wayland] [--output-dir DIR] [roc bundle args...]
 
 The default package includes all supported native targets. The Wayland package
 is Linux x64 only and requires vendor/raylib/linux-x64-wayland/libraylib.a.

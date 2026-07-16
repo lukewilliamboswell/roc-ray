@@ -41,13 +41,22 @@ bundle.
 Use the repository test script while developing the platform:
 
 ```bash
-python3 ci/all_tests.py
+scripts/all_tests.py
 ```
 
-The script temporarily rewrites recognized release references to
-`../platform/main-default.roc`, tests the examples against the current local
-platform, and restores their published URLs afterward, including when a test
-fails. CI follows the same policy using a freshly built bundle. Do not commit a
+To run one example interactively against the local platform:
+
+```bash
+scripts/run-example.py examples/cave_climb.roc
+```
+
+The runner builds the host, temporarily points that example at
+`../platform/main-default.roc`, launches it, and restores its published URL on
+exit. Pass `--skip-platform-build` to reuse host libraries from an earlier
+`zig build`.
+
+The test script applies the same temporary substitution across the example
+suite. CI follows the same policy using a freshly built bundle. Do not commit a
 local platform reference in an example merely to make an unreleased API change
 testable. Keep the published URLs in source, then update them to the new default
 bundle after the release is available.
@@ -69,8 +78,8 @@ zig build test
 Or run just the Roc example tests directly:
 
 ```bash
-python3 ci/all_tests.py            # check, fmt, test, build, headless runtime
-python3 ci/all_tests.py --skip-build
+scripts/all_tests.py            # check, fmt, test, build, headless runtime
+scripts/all_tests.py --skip-build
 ```
 
 Enable the pre-commit hook (run once after cloning):
@@ -100,7 +109,7 @@ roc glue <path-to-roc>/src/glue/src/ZigGlue.roc ./src/ ./platform/main-default.r
 ## Bundling
 
 ```bash
-./bundle.sh
+scripts/bundle.sh
 ```
 
 This creates a `.tar.zst` bundle containing the default platform package, all shared `.roc` files, and prebuilt host libraries for all supported native targets.
@@ -108,7 +117,7 @@ This creates a `.tar.zst` bundle containing the default platform package, all sh
 The Wayland package is Linux x64 only and uses `platform/main-wayland.roc`:
 
 ```bash
-./bundle.sh --platform wayland
+scripts/bundle.sh --platform wayland
 ```
 
 The Wayland bundle requires `vendor/raylib/linux-x64-wayland/libraylib.a`. Build it from a raylib 6.0 source checkout on Linux with:

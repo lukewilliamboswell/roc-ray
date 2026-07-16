@@ -73,7 +73,7 @@ jobs:
 
       - name: Validate Roc examples and docs
         run: |
-          python3 ci/all_tests.py --skip-build --skip-bundle-test
+          scripts/all_tests.py --skip-build --skip-bundle-test
           rm -rf /tmp/roc-ray-release-docs
           roc docs platform/main-default.roc --output=/tmp/roc-ray-release-docs
 
@@ -108,7 +108,7 @@ jobs:
         run: |
           mkdir -p dist
 
-          default_output="$(./bundle.sh --platform default --output-dir dist)"
+          default_output="$(scripts/bundle.sh --platform default --output-dir dist)"
           echo "$default_output"
           default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$default_bundle" || ! -f "$default_bundle" ]]; then
@@ -116,7 +116,7 @@ jobs:
             exit 1
           fi
 
-          wayland_output="$(./bundle.sh --platform wayland --output-dir dist)"
+          wayland_output="$(scripts/bundle.sh --platform wayland --output-dir dist)"
           echo "$wayland_output"
           wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$wayland_bundle" || ! -f "$wayland_bundle" ]]; then
@@ -191,7 +191,7 @@ jobs:
       - name: Test release bundle
         uses: roc-lang/release-package/actions/test-bundle@d2560ead9f724bfaabfbc8134b8895e120171064
         with:
-          test_bundle_command: python3 ci/test_bundle_artifact.py
+          test_bundle_command: scripts/test_bundle_artifact.py
           bundle_path: .release/test-bundles/${{ matrix.artifact_file }}
           bundle_name: ${{ matrix.bundle_name }}
           release_version: ${{ needs.build.outputs.release_version }}

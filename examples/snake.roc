@@ -59,7 +59,7 @@ step_time = 0.115
 start_snake : List(Cell)
 start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
-init! : App.Init(Model)
+init! : App.Init(Model, [])
 init! = App.init(
 	{
 		..App.default,

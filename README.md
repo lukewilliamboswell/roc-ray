@@ -32,7 +32,7 @@ The goal isn't to build or support a large game engine. We're happy to help wher
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- [Roc](https://www.roc-lang.org/) (the pinned compiler commit is in [`ci/ROC_COMMIT`](ci/ROC_COMMIT))
+- [Roc](https://www.roc-lang.org/) nightly available as `roc` on `PATH`
 
 ## Quick Start
 
@@ -90,7 +90,7 @@ The cave climber demonstrates TMX tile layers, object roles, sprite sheets, came
 | x64win | Windows x64 |
 
 - We vendor the pre-compiled libraries from [raylib v6.0](https://github.com/raysan5/raylib/releases/tag/6.0)
-- The default Linux bundle uses raylib's X11 build. A separate Linux x64 Wayland bundle can be created with `./bundle.sh --platform wayland` after building `vendor/raylib/linux-x64-wayland/libraylib.a`.
+- The default Linux bundle uses raylib's X11 build. A separate Linux x64 Wayland bundle can be created with `scripts/bundle.sh --platform wayland` after building `vendor/raylib/linux-x64-wayland/libraylib.a`.
 - ARM Linux is not available (raylib doesn't provide pre-built libraries)
 
 ## Contributing

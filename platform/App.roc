@@ -15,13 +15,13 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 	Config : AppConfig
 
 	## Effectful startup callback run after the host has initialized raylib and
-	## audio. Return `Ok(model)` to start the app, or `Err(Exit(code))` to quit
-	## before the first frame.
-	InitCallback(model) : Host => Try(model, [Exit(I64)])
+	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
+	## before the first frame, or let other initialization errors propagate.
+	InitCallback(model, errors) : Host => Try(model, [Exit(I64), ..errors])
 
-	Init(model) : {
+	Init(model, errors) : {
 		config : Config,
-		run! : InitCallback(model),
+		run! : InitCallback(model, errors),
 	}
 
 	default : Config
@@ -46,7 +46,7 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 
 	## Build app initialization from pure startup config plus the effectful
 	## callback that creates the first model after raylib/audio are ready.
-	init : Config, InitCallback(model) -> Init(model)
+	init : Config, InitCallback(model, errors) -> Init(model, errors)
 	init = |cfg, callback!| { config: cfg, run!: callback! }
 
 	title : Str -> App(Str)

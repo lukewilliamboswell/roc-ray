@@ -63,13 +63,22 @@ Host := {
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env! : Host, Str => Try(Str, [NotFound, ..])
+	read_env_raw! : Host, Str => Try(Str, [NotFound])
+
+	## Read an environment variable by key.
+	## Returns Ok with the value if found, or Err NotFound if not set.
+	read_env! : Host, Str => Try(Str, [NotFound])
+	read_env! = |host, key|
+		match Host.read_env_raw!(host, key) {
+			Ok(value) => Ok(value)
+			Err(NotFound) => Err(NotFound)
+		}
 
 	## Raw hosted file read. Prefer `read_file!`.
 	read_file_raw! : Str => ReadFileRawResult
 
 	## Read a UTF-8 text file from disk.
-	read_file! : Str => Try(Str, [NotFound, ReadFailed, ..])
+	read_file! : Str => Try(Str, [NotFound, ReadFailed])
 	read_file! = |path| {
 		result = Host.read_file_raw!(path)
 		if result.ok {
@@ -89,7 +98,16 @@ Host := {
 
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported, ..])
+	set_screen_size_raw! : { width : F32, height : F32 } => Try({}, [NotSupported])
+
+	## Set the window/screen size.
+	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
+	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported])
+	set_screen_size! = |size|
+		match Host.set_screen_size_raw!(size) {
+			Ok({}) => Ok({})
+			Err(NotSupported) => Err(NotSupported)
+		}
 
 	## Set the target frames per second for the render loop.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.

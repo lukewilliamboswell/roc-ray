@@ -12,7 +12,7 @@ platform ""
 					vsync : Bool,
 					cursor_visible : Bool,
 				},
-				run! : Host => Try(model, [Exit(I64)]),
+				run! : Host => Try(model, [Exit(I64), ..]),
 			},
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
@@ -68,9 +68,9 @@ platform ""
 		"roc_host_exit": Host.exit!,
 		"roc_host_get_screen_size": Host.get_screen_size!,
 		"roc_host_random_i32": Host.random_i32!,
-		"roc_host_read_env": Host.read_env!,
+		"roc_host_read_env": Host.read_env_raw!,
 		"roc_host_read_file_raw": Host.read_file_raw!,
-		"roc_host_set_screen_size": Host.set_screen_size!,
+		"roc_host_set_screen_size": Host.set_screen_size_raw!,
 		"roc_host_set_target_fps": Host.set_target_fps!,
 		"roc_tilemap_load_tmx_raw": Tilemap.load_tmx_raw!,
 		"roc_draw_begin_camera": Draw.begin_camera!,
@@ -142,6 +142,7 @@ init_for_host! = |host_state| {
 	match (program.init!.run!)(host) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
 	}
 }
 

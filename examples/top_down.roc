@@ -360,7 +360,7 @@ fallback_exit_radius = 58
 burst_duration : F32
 burst_duration = 0.36
 
-init! : App.Init(Model)
+init! : App.Init(Model, _)
 init! = App.init(
 	{
 		..App.default,
@@ -368,78 +368,67 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		match Assets.load_texture!(characters_path) {
-			Ok(characters) =>
-				match Assets.load_texture!(tiles_path) {
-					Ok(tiles) =>
-						match Tilemap.load_tmx!(top_down_map_path) {
-							Ok(raw_map) => {
-								tilemap = Tilemap.from_raw(raw_map)
-									.with_origin(
-										{ x: world_left, y: world_top },
-									)
-									.with_tileset_texture(
-										1,
-										tiles,
-									)
-									.layer_role(
-										"Ground",
-										Drawn,
-									)
-									.layer_role(
-										"Decor",
-										Drawn,
-									)
-									.layer_role(
-										"Walls",
-										Solid,
-									)
-									.object_role(
-										"spawn",
-										Spawn,
-									)
-									.object_role(
-										"spark",
-										Collectible,
-									)
-									.object_role(
-										"hazard",
-										Hazard,
-									)
-									.object_role(
-										"exit",
-										Exit,
-									)
-									.build()
-								level = level_from_tilemap(tilemap)
-								sounds = make_sounds!()
-								Audio.play_music!(sounds.music)
-								Ok(new_game(characters, tiles, level, sounds))
-							}
-							Err(_) => Err(Exit(1))
-						}
-					Err(_) => Err(Exit(1))
-				}
-			Err(_) => Err(Exit(1))
-		}
+		characters = Assets.load_texture!(characters_path)?
+		tiles = Assets.load_texture!(tiles_path)?
+		raw_map = Tilemap.load_tmx!(top_down_map_path)?
+
+		tilemap = Tilemap.from_raw(raw_map)
+			.with_origin(
+				{ x: world_left, y: world_top },
+			)
+			.with_tileset_texture(
+				1,
+				tiles,
+			)
+			.layer_role(
+				"Ground",
+				Drawn,
+			)
+			.layer_role(
+				"Decor",
+				Drawn,
+			)
+			.layer_role(
+				"Walls",
+				Solid,
+			)
+			.object_role(
+				"spawn",
+				Spawn,
+			)
+			.object_role(
+				"spark",
+				Collectible,
+			)
+			.object_role(
+				"hazard",
+				Hazard,
+			)
+			.object_role(
+				"exit",
+				Exit,
+			)
+			.build()
+		level = level_from_tilemap(tilemap)
+		sounds = make_sounds!()
+		Audio.play_music!(sounds.music)
+		Ok(new_game(characters, tiles, level, sounds))
 	},
 )
 
-make_sound : Audio.Waveform, F32, F32, I32, F32 => Audio.Sound
-make_sound = |waveform, from, to, ms, volume|
-	Audio.gen_sound!(
-		{
-			waveform,
-			freq_start: from,
-			freq_end: to,
-			ms,
-			attack_ms: 2,
-			decay_ms: 24,
-			sustain: 0.45,
-			release_ms: 45,
-			volume,
-		},
-	)
+make_sound! : Audio.Waveform, F32, F32, I32, F32 => Audio.Sound
+make_sound! = |waveform, from, to, ms, volume|
+	Audio.gen_sound!({
+		waveform,
+		freq_start: from,
+		freq_end: to,
+		ms,
+		attack_ms: 2,
+		decay_ms: 24,
+		sustain: 0.45,
+		release_ms: 45,
+		volume,
+	})
 
 load_sound_or! : Str, Audio.Sound => Audio.Sound
 load_sound_or! = |path, fallback|
@@ -457,13 +446,13 @@ load_music_or_invalid! = |path|
 
 make_sounds! : () => Sounds
 make_sounds! = || {
-	collect = load_sound_or!(collect_path, make_sound(Sine, 880, 1160, 110, 0.55))
-	hurt = load_sound_or!(hurt_path, make_sound(Noise, 180, 70, 220, 0.7))
-	win = load_sound_or!(win_path, make_sound(Square, 640, 1280, 520, 0.45))
-	lose = load_sound_or!(lose_path, make_sound(Saw, 120, 45, 520, 0.5))
-	gate = load_sound_or!(gate_path, make_sound(Square, 220, 390, 240, 0.45))
-	dash = load_sound_or!(dash_path, make_sound(Noise, 520, 120, 130, 0.38))
-	sparkle = make_sound(Sine, 980, 1620, 140, 0.36)
+	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55))
+	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7))
+	win = load_sound_or!(win_path, make_sound!(Square, 640, 1280, 520, 0.45))
+	lose = load_sound_or!(lose_path, make_sound!(Saw, 120, 45, 520, 0.5))
+	gate = load_sound_or!(gate_path, make_sound!(Square, 220, 390, 240, 0.45))
+	dash = load_sound_or!(dash_path, make_sound!(Noise, 520, 120, 130, 0.38))
+	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)
 	music = load_music_or_invalid!(music_path)
 
 	Audio.set_volume!(collect, 0.58)

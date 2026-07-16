@@ -2,6 +2,9 @@
 """
 Run all tests for the roc-ray platform.
 
+Source checks temporarily point checked-in examples at platform/main-default.roc,
+then restore their release URLs. Roc is always resolved from PATH.
+
 This script runs:
 - zig build      - Build the native host libraries
 - roc check      - Type check all examples
@@ -11,13 +14,13 @@ This script runs:
 - bundle test    - Bundle the platform, host it on localhost, build apps from the URL
 
 Usage:
-    ./ci/all_tests.py                   # Run all tests
-    ./ci/all_tests.py --skip-build      # Skip roc build
-    ./ci/all_tests.py --skip-runtime    # Skip running built examples
-    ./ci/all_tests.py --skip-roc-test   # Skip roc test
-    ./ci/all_tests.py --runtime-only    # Only build and run examples headlessly
-    ./ci/all_tests.py --skip-bundle-test # Skip the bundle test
-    ./ci/all_tests.py --verbose         # Show all output
+    ./scripts/all_tests.py                   # Run all tests
+    ./scripts/all_tests.py --skip-build      # Skip roc build
+    ./scripts/all_tests.py --skip-runtime    # Skip running built examples
+    ./scripts/all_tests.py --skip-roc-test   # Skip roc test
+    ./scripts/all_tests.py --runtime-only    # Only build and run examples headlessly
+    ./scripts/all_tests.py --skip-bundle-test # Skip the bundle test
+    ./scripts/all_tests.py --verbose         # Show all output
 
 TODO replace me with a Roc script when basic-cli is implemented
 """
@@ -36,6 +39,7 @@ import tarfile
 import threading
 import time
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -52,17 +56,12 @@ RELEASE_PLATFORM_REF_RE = re.compile(
 # Use this when a specific example can't build against the bundled platform yet
 # (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
 #   e.g. "kitchen_sink.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
-TOP_DOWN_POSTCHECK_SKIP = "blocked on Roc postcheck invariant for imported nominal declarations"
-BUNDLE_TEST_SKIP: dict[str, str] = {
-    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
-}
+BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 # Examples to skip in native `roc build` / headless runtime checks.
 # Keep these explicit so CI still exercises every example that currently
 # compiles, without hiding unrelated build/runtime failures.
-BUILD_RUNTIME_SKIP: dict[str, str] = {
-    "top_down.roc": TOP_DOWN_POSTCHECK_SKIP,
-}
+BUILD_RUNTIME_SKIP: dict[str, str] = {}
 
 
 def run_cmd(
@@ -185,12 +184,29 @@ def _bundle_name_from_output(output: str) -> str | None:
 
 
 def _rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
-    """Rewrite an example's platform reference to a bundle URL."""
+    """Rewrite an example's recognized local or release platform reference."""
     if LOCAL_PLATFORM_REF in source:
         return source.replace(LOCAL_PLATFORM_REF, replacement), True
 
     rewritten, count = RELEASE_PLATFORM_REF_RE.subn(replacement, source)
     return rewritten, count > 0
+
+
+@contextmanager
+def _temporary_platform_refs(examples: list[Path], replacement: str):
+    """Temporarily rewrite example platform references and always restore them."""
+    originals: dict[Path, str] = {}
+    try:
+        for example in examples:
+            original = example.read_text()
+            rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
+            if did_rewrite and rewritten != original:
+                originals[example] = original
+                example.write_text(rewritten)
+        yield len(originals)
+    finally:
+        for example, original in originals.items():
+            example.write_text(original)
 
 
 def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
@@ -214,7 +230,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
     """Bundle the platform, host it on localhost, and build each example against
     that bundle URL (mirrors the template's release check). Returns failures.
 
-    Steps: `./bundle.sh` -> HTTP server on localhost -> rewrite each example's
+    Steps: `scripts/bundle.sh` -> HTTP server on localhost -> rewrite each example's
     platform reference to the bundle URL -> `roc build`. Examples listed in
     BUNDLE_TEST_SKIP are reported as skipped, not failed.
     """
@@ -225,7 +241,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
 
     # bundle.sh is a bash script; on Windows (without bash) skip the whole step.
     bundle_proc = subprocess.run(
-        ["bash", "bundle.sh"], capture_output=True, text=True, cwd=root
+        ["bash", "scripts/bundle.sh"], capture_output=True, text=True, cwd=root
     )
     if bundle_proc.returncode != 0:
         print(bundle_proc.stdout)
@@ -313,7 +329,7 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
     bundle_path: Path | None = None
     try:
         bundle_proc = subprocess.run(
-            ["bash", "bundle.sh", "--platform", "wayland"],
+            ["bash", "scripts/bundle.sh", "--platform", "wayland"],
             capture_output=True,
             text=True,
             cwd=root,
@@ -473,7 +489,7 @@ def main() -> int:
     if args.runtime_only and args.skip_build:
         parser.error("--runtime-only cannot be combined with --skip-build")
 
-    # Find project root (parent of ci/)
+    # Find project root (parent of scripts/)
     root = Path(__file__).resolve().parent.parent
     examples_dir = root / "examples"
 
@@ -482,6 +498,14 @@ def main() -> int:
         print("Error: No .roc files found in examples/")
         return 1
 
+    with _temporary_platform_refs(examples, LOCAL_PLATFORM_REF) as rewritten_count:
+        if rewritten_count:
+            print(f"Using local source platform for {rewritten_count} example(s)")
+        return _run_tests(args, root, examples)
+
+
+def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> int:
+    examples_dir = root / "examples"
     print(f"Found {len(examples)} example(s): {', '.join(e.stem for e in examples)}")
 
     failed = []

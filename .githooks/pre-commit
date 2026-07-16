@@ -12,6 +12,6 @@ set -e
 echo "Running pre-commit checks..."
 
 # Run all tests
-python3 ci/all_tests.py
+scripts/all_tests.py
 
 echo "Pre-commit checks passed!"

@@ -27,8 +27,10 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Build Roc from pinned commit
-        run: ci/build_roc.sh
+      - name: Install Roc
+        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        with:
+          version: nightly-new-compiler
 
       - name: Build platform
         run: zig build
@@ -39,7 +41,7 @@ jobs:
         run: zig build test -Droc-tests=false
 
       - name: Bundle platform
-        run: ./bundle.sh
+        run: scripts/bundle.sh
 
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
@@ -47,7 +49,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          import ci.all_tests as tests
+          import scripts.all_tests as tests
 
           root = Path(".").resolve()
           failures = tests.run_wayland_bundle_test(root, root / "examples/hello_world.roc", False)
@@ -82,7 +84,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from ci.all_tests import _rewrite_platform_ref
+          from scripts.all_tests import _rewrite_platform_ref
 
           replacement = f'"{os.environ["BUNDLE_URL"]}"'
           for example in sorted(Path("examples").glob("*.roc")):
@@ -95,14 +97,13 @@ jobs:
                   print(f"Skipping: {example} (no platform reference)")
           PY
 
-      - name: Run Roc check/fmt
+      - name: Run Roc check/fmt/test
         # Skip on Windows - roc executable PATH issues and MSVC requirements
-        # roc test is blocked on roc-lang/roc#9752 in the pinned compiler
         if: runner.os != 'Windows'
-        run: python3 ci/all_tests.py --skip-build --skip-bundle-test --skip-roc-test
+        run: scripts/all_tests.py --skip-build --skip-bundle-test
 
       - name: Build and run examples headlessly
         # Linux covers headless runtime; macOS currently hangs in generated executables
         # and Windows has roc executable PATH issues plus MSVC requirements.
         if: runner.os == 'Linux'
-        run: python3 ci/all_tests.py --runtime-only --skip-bundle-test
+        run: scripts/all_tests.py --runtime-only --skip-bundle-test

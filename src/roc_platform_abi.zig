@@ -2425,10 +2425,10 @@ pub const HostRandom_i32Args = extern struct {
     arg1: i32,
 };
 
-/// Arguments for Host.read_env!
+/// Arguments for Host.read_env_raw!
 /// Roc signature: Host, Str => Try(Str, [NotFound])
 /// Refcounted fields are owned by the hosted function.
-pub const HostRead_envArgs = extern struct {
+pub const HostRead_env_rawArgs = extern struct {
     arg0: Host,
     arg1: RocStr,
 };
@@ -2440,18 +2440,18 @@ pub const HostRead_file_rawArgs = extern struct {
     arg0: RocStr,
 };
 
-/// Arguments for Host.set_screen_size!
+/// Arguments for Host.set_screen_size_raw!
 /// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
-pub const HostSet_screen_sizeArgs = extern struct {
+pub const HostSet_screen_size_rawArgs = extern struct {
     @"height": f32,
     @"width": f32,
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(HostSet_screen_sizeArgs) != 8) @compileError("HostSet_screen_sizeArgs size mismatch");
-        if (@alignOf(HostSet_screen_sizeArgs) != 4) @compileError("HostSet_screen_sizeArgs alignment mismatch");
+        if (@sizeOf(HostSet_screen_size_rawArgs) != 8) @compileError("HostSet_screen_size_rawArgs size mismatch");
+        if (@alignOf(HostSet_screen_size_rawArgs) != 4) @compileError("HostSet_screen_size_rawArgs alignment mismatch");
     }
 }
 
@@ -3423,7 +3423,7 @@ pub extern fn roc_host_get_screen_size() callconv(.c) __AnonStruct47;
 /// Roc signature: I32, I32 => I32
 pub extern fn roc_host_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
 
-/// Hosted symbol for Host.read_env!
+/// Hosted symbol for Host.read_env_raw!
 /// Roc signature: Host, Str => Try(Str, [NotFound])
 pub extern fn roc_host_read_env(arg0: Host, arg1: RocStr) callconv(.c) Try;
 
@@ -3431,9 +3431,9 @@ pub extern fn roc_host_read_env(arg0: Host, arg1: RocStr) callconv(.c) Try;
 /// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
 pub extern fn roc_host_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct58;
 
-/// Hosted symbol for Host.set_screen_size!
+/// Hosted symbol for Host.set_screen_size_raw!
 /// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
-pub extern fn roc_host_set_screen_size(arg0: HostSet_screen_sizeArgs) callconv(.c) Try;
+pub extern fn roc_host_set_screen_size(arg0: HostSet_screen_size_rawArgs) callconv(.c) Try;
 
 /// Hosted symbol for Host.set_target_fps!
 /// Roc signature: I32 => {}

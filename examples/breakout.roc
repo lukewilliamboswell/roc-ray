@@ -132,7 +132,7 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
-init! : App.Init(Model)
+init! : App.Init(Model, [])
 init! = App.init(
 	{
 		..App.default,
@@ -140,18 +140,16 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		Ok(
-			{
-				game: new_game_state(),
-				sounds: {
-					paddle: Audio.gen_tone!({ freq: 440, ms: 50 }),
-					brick: Audio.gen_tone!({ freq: 760, ms: 45 }),
-					wall: Audio.gen_tone!({ freq: 260, ms: 40 }),
-					lose: Audio.gen_tone!({ freq: 140, ms: 180 }),
-					start: Audio.gen_tone!({ freq: 520, ms: 70 }),
-				},
+		Ok({
+			game: new_game_state(),
+			sounds: {
+				paddle: Audio.gen_tone!({ freq: 440, ms: 50 }),
+				brick: Audio.gen_tone!({ freq: 760, ms: 45 }),
+				wall: Audio.gen_tone!({ freq: 260, ms: 40 }),
+				lose: Audio.gen_tone!({ freq: 140, ms: 180 }),
+				start: Audio.gen_tone!({ freq: 520, ms: 70 }),
 			},
-		)
+		})
 	},
 )
 

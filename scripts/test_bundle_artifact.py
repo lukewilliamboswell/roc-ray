@@ -108,7 +108,7 @@ def main() -> int:
         return 1
     print(f"Using Roc executable: {roc}")
 
-    httpd, port = serve_dir(root)
+    httpd, port = serve_dir(bundle_path.parent)
     bundle_url = f"http://127.0.0.1:{port}/{bundle_path.name}"
     print(f"Bundle URL: {bundle_url}")
     check_bundle_url(bundle_url)

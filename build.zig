@@ -203,7 +203,7 @@ pub fn build(b: *std.Build) void {
 
     if (run_roc_tests) {
         // Run Roc tests (check, fmt, test, build)
-        const roc_tests = b.addSystemCommand(&.{ "python3", "ci/all_tests.py" });
+        const roc_tests = b.addSystemCommand(&.{ "python3", "scripts/all_tests.py" });
         roc_tests.setCwd(b.path(".")); // Run from project root
         test_step.dependOn(&roc_tests.step);
     }

@@ -9,24 +9,9 @@ Contributions that move that work forward are very welcome: new examples, bug fi
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- [Roc](https://www.roc-lang.org/) (the pinned compiler commit is in [`ci/ROC_COMMIT`](ci/ROC_COMMIT))
+- [Roc](https://www.roc-lang.org/) nightly for the new compiler, available as `roc` on `PATH`
 
 ## Building the Platform
-
-CI builds Roc from the pinned commit before building the platform:
-
-```bash
-ci/build_roc.sh
-```
-
-If you already have the matching `roc` on your `PATH`, skip rebuilding it:
-
-```bash
-ROC_SKIP_BUILD=1 ci/build_roc.sh
-```
-
-Other CI helper scripts also honor `ROC_SKIP_BUILD=1` when choosing between
-`roc` on `PATH` and an existing `roc-src` build cache.
 
 Build the platform and cross-compile the pre-built host libraries for all supported targets:
 
@@ -34,7 +19,9 @@ Build the platform and cross-compile the pre-built host libraries for all suppor
 zig build
 ```
 
-Then you can build and run any of the examples, e.g.:
+The checked-in examples intentionally reference the latest published RocRay
+bundle so that their source can be copied into another project and used as-is.
+You can normally build and run them directly, e.g.:
 
 ```bash
 roc build examples/hello_world.roc
@@ -42,6 +29,28 @@ roc build examples/hello_world.roc
 ```
 
 For the best performance, prefer `roc build` over running a file directly with `roc examples/hello_world.roc`; the latter uses the in-development backends. See the performance note in the [README](README.md).
+
+### Developing against unreleased platform changes
+
+After a platform API change, the examples may temporarily require APIs that are
+not present in the published bundle they reference. This is expected between
+that change and the next release; a direct `roc check`, `roc build`, or
+`roc examples/example.roc` can consequently report errors from the older
+bundle.
+
+Use the repository test script while developing the platform:
+
+```bash
+python3 ci/all_tests.py
+```
+
+The script temporarily rewrites recognized release references to
+`../platform/main-default.roc`, tests the examples against the current local
+platform, and restores their published URLs afterward, including when a test
+fails. CI follows the same policy using a freshly built bundle. Do not commit a
+local platform reference in an example merely to make an unreleased API change
+testable. Keep the published URLs in source, then update them to the new default
+bundle after the release is available.
 
 ## Testing
 
@@ -60,7 +69,7 @@ zig build test
 Or run just the Roc example tests directly:
 
 ```bash
-python3 ci/all_tests.py            # check, fmt, test, build
+python3 ci/all_tests.py            # check, fmt, test, build, headless runtime
 python3 ci/all_tests.py --skip-build
 ```
 

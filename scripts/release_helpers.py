@@ -16,6 +16,10 @@ from typing import Any
 BUNDLE_SUFFIX = ".tar.zst"
 DEFAULT_TEST_OS = ["ubuntu-latest", "macos-15-intel", "macos-latest", "windows-latest"]
 WAYLAND_TEST_OS = ["ubuntu-latest"]
+PLATFORM_REF_RE = re.compile(
+    r'"(?:\.\./platform/main-default\.roc|'
+    r'https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^\"]+\.tar\.zst)"'
+)
 
 
 def main() -> int:
@@ -41,6 +45,14 @@ def main() -> int:
     notes.add_argument("--output-file", required=True)
     notes.add_argument("--docs-url", default="")
     notes.set_defaults(func=cmd_make_release_notes)
+
+    examples = subcommands.add_parser("update-example-urls")
+    examples.add_argument("--release-version", default="")
+    examples.add_argument("--release-bundles", default="")
+    examples.add_argument("--default-url", default="")
+    examples.add_argument("--examples-dir", default="examples")
+    examples.add_argument("--repo", default="")
+    examples.set_defaults(func=cmd_update_example_urls)
 
     args = parser.parse_args()
     try:
@@ -136,6 +148,43 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
 
     Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output_file).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return 0
+
+
+def cmd_update_example_urls(args: argparse.Namespace) -> int:
+    if args.default_url:
+        default_url = require_url(args.default_url)
+    else:
+        release_version = args.release_version or os.environ.get("RELEASE_VERSION", "")
+        if not release_version:
+            raise RuntimeError("release version is required")
+        if not args.release_bundles:
+            raise RuntimeError("release bundle metadata is required")
+
+        repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
+        if not repo:
+            raise RuntimeError("repo is required")
+
+        bundles = read_json(args.release_bundles)
+        default_file = artifact_file_for(bundles, "default")
+        default_url = release_asset_url(repo, release_version, default_file)
+
+    examples_dir = Path(args.examples_dir)
+    examples = sorted(examples_dir.glob("*.roc"))
+    if not examples:
+        raise RuntimeError(f"no Roc examples found in {examples_dir}")
+
+    replacement = f'"{default_url}"'
+    for example in examples:
+        original = example.read_text(encoding="utf-8")
+        rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
+        if count != 1:
+            raise RuntimeError(
+                f"expected one recognized platform reference in {example}, found {count}"
+            )
+        example.write_text(rewritten, encoding="utf-8")
+
+    print(f"Updated {len(examples)} example(s) to {default_url}")
     return 0
 
 

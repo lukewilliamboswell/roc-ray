@@ -263,6 +263,19 @@ jobs:
         with:
           version: nightly-new-compiler
 
+      - name: Download release metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: release-metadata
+          path: .release
+
+      - name: Update example bundle URLs
+        run: |
+          python3 scripts/release_helpers.py update-example-urls \
+            --release-version "${{ needs.build.outputs.release_version }}" \
+            --release-bundles .release/release-bundles.json \
+            --examples-dir examples
+
       - name: Snapshot existing docs
         uses: roc-lang/release-package/actions/docs-snapshot@d2560ead9f724bfaabfbc8134b8895e120171064
         with:
@@ -285,15 +298,15 @@ jobs:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
 
-      - name: Open docs follow-up PR
+      - name: Open release follow-up PR
         uses: roc-lang/release-package/actions/create-followup-pr@d2560ead9f724bfaabfbc8134b8895e120171064
         with:
           release_version: ${{ needs.build.outputs.release_version }}
-          paths: www
+          paths: www examples
           branch_prefix: release-followup
           base_branch: ${{ github.ref_name }}
-          commit_message: Update docs for ${{ needs.build.outputs.release_version }}
-          pr_title: Update docs for ${{ needs.build.outputs.release_version }}
+          commit_message: Update release references for ${{ needs.build.outputs.release_version }}
+          pr_title: Update release references for ${{ needs.build.outputs.release_version }}
           github_token: ${{ github.token }}
 
       - name: Setup Pages

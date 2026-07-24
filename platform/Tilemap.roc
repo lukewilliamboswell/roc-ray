@@ -111,7 +111,43 @@ TilemapLayerRole := [Drawn, Solid, Hidden].{
 	}
 }
 
-TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown]
+TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown].{
+	is_eq : TilemapObjectRole, TilemapObjectRole -> Bool
+	is_eq = |left, right| match left {
+		Spawn => match right {
+			Spawn => True
+			_ => False
+		}
+		Collectible => match right {
+			Collectible => True
+			_ => False
+		}
+		Hazard => match right {
+			Hazard => True
+			_ => False
+		}
+		Goal => match right {
+			Goal => True
+			_ => False
+		}
+		Checkpoint => match right {
+			Checkpoint => True
+			_ => False
+		}
+		Decoration => match right {
+			Decoration => True
+			_ => False
+		}
+		Exit => match right {
+			Exit => True
+			_ => False
+		}
+		Unknown => match right {
+			Unknown => True
+			_ => False
+		}
+	}
+}
 
 TilemapLayerRoleRule : {
 	name : Str,

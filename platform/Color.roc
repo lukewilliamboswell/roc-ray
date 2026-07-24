@@ -76,4 +76,7 @@ Color := {
 
 	yellow : Color
 	yellow = Color.rgb(253, 249, 0)
+
+	is_eq : Color, Color -> Bool
+	is_eq = |left, right| left.r == right.r and left.g == right.g and left.b == right.b and left.a == right.a
 }

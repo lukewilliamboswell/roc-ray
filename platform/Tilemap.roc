@@ -93,7 +93,23 @@ TilemapTextureBinding : {
 	texture : Assets.Texture,
 }
 
-TilemapLayerRole := [Drawn, Solid, Hidden]
+TilemapLayerRole := [Drawn, Solid, Hidden].{
+	is_eq : TilemapLayerRole, TilemapLayerRole -> Bool
+	is_eq = |left, right| match left {
+		Drawn => match right {
+			Drawn => True
+			_ => False
+		}
+		Solid => match right {
+			Solid => True
+			_ => False
+		}
+		Hidden => match right {
+			Hidden => True
+			_ => False
+		}
+	}
+}
 
 TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown]
 

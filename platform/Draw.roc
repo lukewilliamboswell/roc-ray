@@ -171,6 +171,13 @@ Draw := [].{
 		color : Color,
 	}
 
+	ScissorRaw : {
+		x : F32,
+		y : F32,
+		width : F32,
+		height : F32,
+	}
+
 	RectangleLinesRaw : {
 		x : F32,
 		y : F32,
@@ -396,11 +403,13 @@ Draw := [].{
 	## Hosted effects - implemented by the host
 	begin_camera! : CameraMode => {}
 	begin_frame! : () => {}
+	begin_scissor_raw! : ScissorRaw => {}
 	circle_raw! : CircleRaw => {}
 	circle_gradient! : CircleGradient => {}
 	circle_lines_raw! : CircleLinesRaw => {}
 	clear! : Color => {}
 	end_frame! : () => {}
+	end_scissor_raw! : () => {}
 	fps! : Fps => {}
 	line_raw! : LineRaw => {}
 	load_font_raw! : LoadFont => U64

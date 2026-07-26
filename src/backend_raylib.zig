@@ -428,6 +428,21 @@ pub fn beginDrawing() void {
     rl.BeginDrawing();
 }
 
+/// Begin clipping subsequent draw calls to screen-space bounds.
+pub fn beginScissor(x: f32, y: f32, width: f32, height: f32) void {
+    rl.BeginScissorMode(
+        @intFromFloat(x),
+        @intFromFloat(y),
+        @intFromFloat(width),
+        @intFromFloat(height),
+    );
+}
+
+/// End the active screen-space clipping region.
+pub fn endScissor() void {
+    rl.EndScissorMode();
+}
+
 /// Begin drawing in 2D camera mode.
 pub fn beginMode2D(camera: anytype) void {
     rl.BeginMode2D(cameraFromArgs(camera));

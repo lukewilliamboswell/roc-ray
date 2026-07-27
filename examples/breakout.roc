@@ -23,9 +23,55 @@ BrickRow := [RedRow, OrangeRow, YellowRow, GreenRow, BlueRow]
 
 PaddleMove := [PaddleLeft, PaddleRight, PaddleStill]
 
-GameState := [Ready, Playing, Won, GameOver]
+GameState := [Ready, Playing, Won, GameOver].{
+	is_eq : GameState, GameState -> Bool
+	is_eq = |left, right|
+		match left {
+			Ready => match right {
+				Ready => Bool.True
+				_ => Bool.False
+			}
+			Playing => match right {
+				Playing => Bool.True
+				_ => Bool.False
+			}
+			Won => match right {
+				Won => Bool.True
+				_ => Bool.False
+			}
+			GameOver => match right {
+				GameOver => Bool.True
+				_ => Bool.False
+			}
+		}
+}
 
-StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCleared]
+StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCleared].{
+	is_eq : StepEvent, StepEvent -> Bool
+	is_eq = |left, right|
+		match left {
+			GameStarted => match right {
+				GameStarted => Bool.True
+				_ => Bool.False
+			}
+			WallHit => match right {
+				WallHit => Bool.True
+				_ => Bool.False
+			}
+			BrickHit(left_brick) => match right {
+				BrickHit(right_brick) => left_brick == right_brick
+				_ => Bool.False
+			}
+			LifeLost(left_state) => match right {
+				LifeLost(right_state) => left_state == right_state
+				_ => Bool.False
+			}
+			WallCleared => match right {
+				WallCleared => Bool.True
+				_ => Bool.False
+			}
+		}
+}
 
 Game : {
 	bricks : List(Brick),

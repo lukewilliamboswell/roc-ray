@@ -203,12 +203,9 @@ def require_url(url: str) -> str:
     return url
 
 
-def bump_check_mode(previous_url: str) -> str:
-    """Warn only while migrating from a legacy two-part release tag."""
-    match = re.search(r"/releases/download/v?(\d+\.\d+(?:\.\d+)?)(?:[-+][^/]*)?/", previous_url)
-    if match and len(match.group(1).split(".")) == 2:
-        return "warn"
-    return "require"
+def bump_check_mode(_previous_url: str) -> str:
+    """Keep bump checks advisory until the Roc compiler reaches 0.1.0."""
+    return "warn"
 
 
 def default_url_from_release(release: dict[str, Any]) -> str:

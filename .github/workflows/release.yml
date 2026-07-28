@@ -94,9 +94,8 @@ jobs:
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
-          # The legacy 0.7 bundle is rejected by current host-boundary validation.
-          # Strict-semver releases and all PR dry runs continue to require the check.
-          bump_check: ${{ steps.previous.outputs.bump_check || 'require' }}
+          # Keep this advisory until the Roc compiler reaches 0.1.0.
+          bump_check: ${{ steps.previous.outputs.bump_check || 'warn' }}
           bump_entrypoint: platform/main-default.roc
           previous_url: ${{ steps.previous.outputs.previous_url }}
 

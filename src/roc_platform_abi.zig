@@ -2051,6 +2051,21 @@ pub const DrawBegin_cameraArgs = extern struct {
     @"zoom": f32,
 };
 
+/// Arguments for Draw.begin_scissor_raw!
+/// Roc signature: { x : F32, y : F32, width : F32, height : F32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const DrawBegin_scissor_rawArgs = extern struct {
+    @"height": f32,
+    @"width": f32,
+    @"x": f32,
+    @"y": f32,
+};
+
+comptime {
+    if (@sizeOf(DrawBegin_scissor_rawArgs) != 16) @compileError("DrawBegin_scissor_rawArgs size mismatch");
+    if (@alignOf(DrawBegin_scissor_rawArgs) != 4) @compileError("DrawBegin_scissor_rawArgs alignment mismatch");
+}
+
 comptime {
     if (@sizeOf(usize) == 8) {
         if (@sizeOf(DrawBegin_cameraArgs) != 24) @compileError("DrawBegin_cameraArgs size mismatch");
@@ -3323,6 +3338,10 @@ pub extern fn roc_draw_begin_camera(arg0: DrawBegin_cameraArgs) callconv(.c) voi
 /// Roc signature: {} => {}
 pub extern fn roc_draw_begin_frame() callconv(.c) void;
 
+/// Hosted symbol for Draw.begin_scissor_raw!
+/// Roc signature: { x : F32, y : F32, width : F32, height : F32 } => {}
+pub extern fn roc_draw_begin_scissor_raw(arg0: DrawBegin_scissor_rawArgs) callconv(.c) void;
+
 /// Hosted symbol for Draw.circle_gradient!
 /// Roc signature: { center : { x : F32, y : F32 }, color_inner : Color, color_outer : Color, radius : F32 } => {}
 pub extern fn roc_draw_circle_gradient(arg0: DrawCircle_gradientArgs) callconv(.c) void;
@@ -3350,6 +3369,10 @@ pub extern fn roc_draw_end_camera() callconv(.c) void;
 /// Hosted symbol for Draw.end_frame!
 /// Roc signature: {} => {}
 pub extern fn roc_draw_end_frame() callconv(.c) void;
+
+/// Hosted symbol for Draw.end_scissor_raw!
+/// Roc signature: {} => {}
+pub extern fn roc_draw_end_scissor_raw() callconv(.c) void;
 
 /// Hosted symbol for Draw.fps!
 /// Roc signature: { color : Color, pos : { x : F32, y : F32 }, size : F32 } => {}

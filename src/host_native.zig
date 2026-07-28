@@ -487,6 +487,18 @@ fn hostedDrawBeginFrame() callconv(.c) void {
     raylib.beginDrawing();
 }
 
+/// Forward Roc scissor bounds to the raylib backend.
+fn hostedDrawBeginScissorRaw(args: abi.DrawBegin_scissor_rawArgs) callconv(.c) void {
+    if (active_headless) return;
+    raylib.beginScissor(args.x, args.y, args.width, args.height);
+}
+
+/// End the scissor region opened by the Roc renderer.
+fn hostedDrawEndScissorRaw() callconv(.c) void {
+    if (active_headless) return;
+    raylib.endScissor();
+}
+
 fn hostedDrawBeginCamera(args: abi.DrawBegin_cameraArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.beginMode2D(args);
@@ -923,6 +935,7 @@ comptime {
         @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
+        @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
         @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
@@ -930,6 +943,7 @@ comptime {
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
+        @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedDrawLoadFontRaw, .{ .name = "roc_draw_load_font_raw" });

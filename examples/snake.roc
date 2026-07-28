@@ -13,7 +13,9 @@ Cell : {
 	y : I32,
 }
 
-Direction := [DirUp, DirDown, DirLeft, DirRight]
+Direction := [DirUp, DirDown, DirLeft, DirRight].{
+	is_eq : _
+}
 
 GameState := [Playing, GameOver]
 

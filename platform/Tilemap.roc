@@ -93,9 +93,13 @@ TilemapTextureBinding : {
 	texture : Assets.Texture,
 }
 
-TilemapLayerRole := [Drawn, Solid, Hidden]
+TilemapLayerRole := [Drawn, Solid, Hidden].{
+	is_eq : _
+}
 
-TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown]
+TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown].{
+	is_eq : _
+}
 
 TilemapLayerRoleRule : {
 	name : Str,

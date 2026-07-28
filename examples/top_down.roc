@@ -13,57 +13,11 @@ import rr.Sprite
 import rr.Tilemap
 
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
-	is_eq : Facing, Facing -> Bool
-	is_eq = |left, right|
-		match left {
-			North => match right {
-				North => Bool.True
-				_ => Bool.False
-			}
-			NorthEast => match right {
-				NorthEast => Bool.True
-				_ => Bool.False
-			}
-			East => match right {
-				East => Bool.True
-				_ => Bool.False
-			}
-			SouthEast => match right {
-				SouthEast => Bool.True
-				_ => Bool.False
-			}
-			South => match right {
-				South => Bool.True
-				_ => Bool.False
-			}
-			SouthWest => match right {
-				SouthWest => Bool.True
-				_ => Bool.False
-			}
-			West => match right {
-				West => Bool.True
-				_ => Bool.False
-			}
-			NorthWest => match right {
-				NorthWest => Bool.True
-				_ => Bool.False
-			}
-		}
+	is_eq : _
 }
 
 GateState := [GateLocked, GateOpen].{
-	is_eq : GateState, GateState -> Bool
-	is_eq = |left, right|
-		match left {
-			GateLocked => match right {
-				GateLocked => Bool.True
-				_ => Bool.False
-			}
-			GateOpen => match right {
-				GateOpen => Bool.True
-				_ => Bool.False
-			}
-		}
+	is_eq : _
 }
 
 Lane := [Horizontal, Vertical]
@@ -105,22 +59,7 @@ Level : {
 }
 
 GameState := [Playing, Won, GameOver].{
-	is_eq : GameState, GameState -> Bool
-	is_eq = |left, right|
-		match left {
-			Playing => match right {
-				Playing => Bool.True
-				_ => Bool.False
-			}
-			Won => match right {
-				Won => Bool.True
-				_ => Bool.False
-			}
-			GameOver => match right {
-				GameOver => Bool.True
-				_ => Bool.False
-			}
-		}
+	is_eq : _
 }
 
 World := {
@@ -212,8 +151,7 @@ World := {
 		id : U64,
 		pos : Math.Vec2,
 	}.{
-		is_eq : Spark, Spark -> Bool
-		is_eq = |left, right| left.id == right.id and left.pos == right.pos
+		is_eq : _
 
 		new : U64, F32, F32 -> Spark
 		new = |id, x, y| { id, pos: { x, y } }
@@ -289,30 +227,7 @@ World := {
 	}
 
 	StepEvent := [DashStarted(Math.Vec2), SparkCollected(Spark), GateOpened, Escaped, Damaged(GameState)].{
-		is_eq : StepEvent, StepEvent -> Bool
-		is_eq = |left, right|
-			match left {
-				DashStarted(left_pos) => match right {
-					DashStarted(right_pos) => left_pos == right_pos
-					_ => Bool.False
-				}
-				SparkCollected(left_spark) => match right {
-					SparkCollected(right_spark) => left_spark == right_spark
-					_ => Bool.False
-				}
-				GateOpened => match right {
-					GateOpened => Bool.True
-					_ => Bool.False
-				}
-				Escaped => match right {
-					Escaped => Bool.True
-					_ => Bool.False
-				}
-				Damaged(left_state) => match right {
-					Damaged(right_state) => left_state == right_state
-					_ => Bool.False
-				}
-			}
+		is_eq : _
 	}
 
 	StepResult : {

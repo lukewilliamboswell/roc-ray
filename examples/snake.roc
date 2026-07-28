@@ -14,26 +14,7 @@ Cell : {
 }
 
 Direction := [DirUp, DirDown, DirLeft, DirRight].{
-	is_eq : Direction, Direction -> Bool
-	is_eq = |left, right|
-		match left {
-			DirUp => match right {
-				DirUp => Bool.True
-				_ => Bool.False
-			}
-			DirDown => match right {
-				DirDown => Bool.True
-				_ => Bool.False
-			}
-			DirLeft => match right {
-				DirLeft => Bool.True
-				_ => Bool.False
-			}
-			DirRight => match right {
-				DirRight => Bool.True
-				_ => Bool.False
-			}
-		}
+	is_eq : _
 }
 
 GameState := [Playing, GameOver]

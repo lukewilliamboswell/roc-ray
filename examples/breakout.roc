@@ -23,9 +23,13 @@ BrickRow := [RedRow, OrangeRow, YellowRow, GreenRow, BlueRow]
 
 PaddleMove := [PaddleLeft, PaddleRight, PaddleStill]
 
-GameState := [Ready, Playing, Won, GameOver]
+GameState := [Ready, Playing, Won, GameOver].{
+	is_eq : _
+}
 
-StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCleared]
+StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCleared].{
+	is_eq : _
+}
 
 Game : {
 	bricks : List(Brick),

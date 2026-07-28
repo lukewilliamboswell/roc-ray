@@ -76,4 +76,6 @@ Color := {
 
 	yellow : Color
 	yellow = Color.rgb(253, 249, 0)
+
+	is_eq : _
 }

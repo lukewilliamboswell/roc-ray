@@ -12,9 +12,13 @@ import rr.Math
 import rr.Sprite
 import rr.Tilemap
 
-Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest]
+Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
+	is_eq : _
+}
 
-GateState := [GateLocked, GateOpen]
+GateState := [GateLocked, GateOpen].{
+	is_eq : _
+}
 
 Lane := [Horizontal, Vertical]
 
@@ -54,7 +58,9 @@ Level : {
 	bounds : Math.Rect,
 }
 
-GameState := [Playing, Won, GameOver]
+GameState := [Playing, Won, GameOver].{
+	is_eq : _
+}
 
 World := {
 	player : World.Player,
@@ -145,6 +151,8 @@ World := {
 		id : U64,
 		pos : Math.Vec2,
 	}.{
+		is_eq : _
+
 		new : U64, F32, F32 -> Spark
 		new = |id, x, y| { id, pos: { x, y } }
 
@@ -218,7 +226,9 @@ World := {
 		dt : F32,
 	}
 
-	StepEvent := [DashStarted(Math.Vec2), SparkCollected(Spark), GateOpened, Escaped, Damaged(GameState)]
+	StepEvent := [DashStarted(Math.Vec2), SparkCollected(Spark), GateOpened, Escaped, Damaged(GameState)].{
+		is_eq : _
+	}
 
 	StepResult : {
 		world : World,

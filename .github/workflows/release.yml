@@ -39,10 +39,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc
-        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2.0.5
@@ -66,7 +70,7 @@ jobs:
           fi
 
       - name: Build platform
-        run: zig build -Doptimize=ReleaseSafe
+        run: zig build -Doptimize=ReleaseFast
 
       - name: Run Zig tests
         run: zig build test -Droc-tests=false
@@ -176,10 +180,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc
-        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Download release bundles
         uses: actions/download-artifact@v4
@@ -257,10 +265,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc
-        uses: roc-lang/setup-roc@bd311e2fb815a3d2255f7ee14a922f0b736e020b
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Download release metadata
         uses: actions/download-artifact@v4

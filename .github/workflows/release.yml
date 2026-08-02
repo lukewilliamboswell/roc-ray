@@ -77,9 +77,12 @@ jobs:
 
       - name: Validate Roc examples and docs
         run: |
-          scripts/all_tests.py --skip-build --skip-bundle-test
+          scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
           rm -rf /tmp/roc-ray-release-docs
           roc docs platform/main-default.roc --output=/tmp/roc-ray-release-docs
+
+      - name: Verify release hosts
+        run: scripts/check_release_hosts.py
 
       - name: Resolve previous default bundle
         if: github.event_name == 'workflow_dispatch'

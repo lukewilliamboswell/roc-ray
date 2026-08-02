@@ -15,7 +15,8 @@ This script runs:
 
 Usage:
     ./scripts/all_tests.py                   # Run all tests
-    ./scripts/all_tests.py --skip-build      # Skip roc build
+    ./scripts/all_tests.py --skip-platform-build # Reuse existing host libraries
+    ./scripts/all_tests.py --skip-roc-build  # Skip roc build
     ./scripts/all_tests.py --skip-runtime    # Skip running built examples
     ./scripts/all_tests.py --skip-roc-test   # Skip roc test
     ./scripts/all_tests.py --runtime-only    # Only build and run examples headlessly
@@ -453,7 +454,18 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
-    parser.add_argument("--skip-build", action="store_true", help="Skip roc build")
+    parser.add_argument(
+        "--skip-platform-build",
+        action="store_true",
+        help="Reuse existing host libraries instead of running zig build first",
+    )
+    parser.add_argument(
+        "--skip-roc-build",
+        "--skip-build",
+        dest="skip_roc_build",
+        action="store_true",
+        help="Skip roc build (--skip-build is a deprecated alias)",
+    )
     parser.add_argument(
         "--skip-roc-test",
         action="store_true",
@@ -486,8 +498,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.headless_frames < 1:
         parser.error("--headless-frames must be greater than zero")
-    if args.runtime_only and args.skip_build:
-        parser.error("--runtime-only cannot be combined with --skip-build")
+    if args.runtime_only and args.skip_roc_build:
+        parser.error("--runtime-only cannot be combined with --skip-roc-build")
 
     # Find project root (parent of scripts/)
     root = Path(__file__).resolve().parent.parent
@@ -510,13 +522,17 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
 
     failed = []
 
-    # Build platform (ensures fresh host, not cached)
-    print("\nBuilding platform (zig build)...")
-    if not run_cmd(["zig", "build"], "zig build", args.verbose, cwd=root):
-        print("  FAILED")
-        failed.append("zig build")
+    if args.skip_platform_build:
+        print("\nReusing existing host libraries (--skip-platform-build)")
     else:
-        print("  ok")
+        # Standalone runs build a fresh host. Orchestrators that already chose
+        # an optimization mode must pass --skip-platform-build.
+        print("\nBuilding platform (zig build)...")
+        if not run_cmd(["zig", "build"], "zig build", args.verbose, cwd=root):
+            print("  FAILED")
+            failed.append("zig build")
+        else:
+            print("  ok")
 
     if args.runtime_only:
         print("\nSkipping roc check/fmt/test (--runtime-only)")
@@ -558,8 +574,8 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
 
     # roc build (run from examples dir so executables are created there)
     built_examples: list[Path] = []
-    if args.skip_build:
-        print("\nSkipping roc build (--skip-build)")
+    if args.skip_roc_build:
+        print("\nSkipping roc build (--skip-roc-build)")
     else:
         print("\nRunning roc build...")
         for example in examples:
@@ -579,8 +595,8 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
 
     if args.skip_runtime:
         print("\nSkipping headless runtime (--skip-runtime)")
-    elif args.skip_build:
-        print("\nSkipping headless runtime (--skip-build)")
+    elif args.skip_roc_build:
+        print("\nSkipping headless runtime (--skip-roc-build)")
     else:
         failed.extend(
             run_headless_examples(root, built_examples, args.headless_frames, args.verbose)

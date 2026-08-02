@@ -83,10 +83,6 @@ pub fn build(b: *std.Build) void {
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 
-    // Default step: build the host library for all native targets
-    const all_step = b.getInstallStep();
-    all_step.dependOn(cleanup_step);
-
     // Generate X11 stubs step (needed for Linux cross-compilation)
     const x11_stubs_step = b.step("generate-x11-stubs", "Generate X11 stub libraries for Linux cross-compilation");
     const x11_stub_target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu });
@@ -95,6 +91,12 @@ pub fn build(b: *std.Build) void {
 
     // Create copy step for all targets
     const copy_all = b.addUpdateSourceFiles();
+    copy_all.step.dependOn(cleanup_step);
+
+    // Default step: build the host library for all native targets. Ensure the
+    // cleanup completes before generated libraries are copied into the source
+    // tree; sibling dependencies would be free to run in either order.
+    const all_step = b.getInstallStep();
     all_step.dependOn(&copy_all.step);
 
     // Generate Windows import libraries (needed for Windows cross-compilation)
@@ -203,8 +205,13 @@ pub fn build(b: *std.Build) void {
 
     if (run_roc_tests) {
         // Run Roc tests (check, fmt, test, build)
-        const roc_tests = b.addSystemCommand(&.{ "python3", "scripts/all_tests.py" });
+        const roc_tests = b.addSystemCommand(&.{
+            "python3",
+            "scripts/all_tests.py",
+            "--skip-platform-build",
+        });
         roc_tests.setCwd(b.path(".")); // Run from project root
+        roc_tests.step.dependOn(&copy_all.step);
         test_step.dependOn(&roc_tests.step);
     }
 }

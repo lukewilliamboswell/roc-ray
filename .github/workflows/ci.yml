@@ -104,10 +104,10 @@ jobs:
       - name: Run Roc check/fmt/test
         # Skip on Windows - roc executable PATH issues and MSVC requirements
         if: runner.os != 'Windows'
-        run: scripts/all_tests.py --skip-build --skip-bundle-test
+        run: scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
 
       - name: Build and run examples headlessly
         # Linux covers headless runtime; macOS currently hangs in generated executables
         # and Windows has roc executable PATH issues plus MSVC requirements.
         if: runner.os == 'Linux'
-        run: scripts/all_tests.py --runtime-only --skip-bundle-test
+        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test

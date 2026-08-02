@@ -50,6 +50,7 @@ const DEFAULT_HEADLESS_FRAMES: u64 = 3;
 const HEADLESS_FRAME_NANOS: u64 = 16_666_667;
 const HEADLESS_FRAME_TIME: f32 = 1.0 / 60.0;
 const HEADLESS_RESOURCE_SIZE: f32 = 64;
+const use_debug_allocator = builtin.mode == .Debug;
 
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
@@ -1281,16 +1282,21 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         host_environ = @as([*]const [*:0]u8, @ptrCast(std.c.environ))[0..n];
     }
 
-    var gpa: std.heap.DebugAllocator(.{}) = .{};
-    defer {
-        if (gpa.deinit() == .leak) std.log.warn("Memory leak detected", .{});
-    }
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .{};
+    defer if (use_debug_allocator) {
+        if (debug_allocator.deinit() == .leak) std.log.warn("Memory leak detected", .{});
+    };
+
+    const allocator = if (use_debug_allocator)
+        debug_allocator.allocator()
+    else
+        std.heap.smp_allocator;
 
     // The Roc runtime environment: allocator + I/O backend. We supply our own
     // dbg/expect/crashed handlers below, so the I/O backend (only used by the
     // generated DefaultHandlers) is left as a no-op freestanding implementation.
     var roc_env = abi.RocEnv{
-        .allocator = gpa.allocator(),
+        .allocator = allocator,
         .roc_io = abi.RocIo.freestanding(),
     };
 
@@ -1321,5 +1327,5 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         return runHeadlessApp(&roc_host, app_config, options.headless_frames);
     }
 
-    return runNormalApp(&roc_host, gpa.allocator(), app_config);
+    return runNormalApp(&roc_host, allocator, app_config);
 }

@@ -79,7 +79,8 @@ Or run just the Roc example tests directly:
 
 ```bash
 scripts/all_tests.py            # check, fmt, test, build, headless runtime
-scripts/all_tests.py --skip-build
+scripts/all_tests.py --skip-platform-build # reuse host libraries from zig build
+scripts/all_tests.py --skip-roc-build      # skip building and running Roc apps
 ```
 
 Enable the pre-commit hook (run once after cloning):

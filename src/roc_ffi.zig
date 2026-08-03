@@ -185,6 +185,57 @@ pub fn ValueList(comptime T: type, comptime COUNT: usize) type {
 /// Sampled gamepad axis state manager.
 pub const GamepadAxes = ValueList(f32, GAMEPAD_COUNT * GAMEPAD_AXIS_COUNT);
 
+/// Variable-length primitive list that retains capacity across frames.
+///
+/// The common unique-reference path only updates the existing allocation's
+/// length and contents. Retained Roc snapshots trigger copy-on-write, while a
+/// larger value grows the host's backing list without mutating older frames.
+pub fn DynamicValueList(comptime T: type, comptime initial_capacity: usize) type {
+    return struct {
+        list: abi.RocListWith(T, false),
+        roc_host: *RocHost,
+
+        const Self = @This();
+
+        pub fn init(roc_host: *RocHost) Self {
+            var list = abi.RocListWith(T, false).allocate(initial_capacity, roc_host);
+            list.length = 0;
+            return .{ .list = list, .roc_host = roc_host };
+        }
+
+        fn capacity(self: *const Self) usize {
+            if (self.list.isSeamlessSlice()) return self.list.len();
+            return self.list.capacity_or_alloc_ptr >> 1;
+        }
+
+        pub fn update(self: *Self, source: []const T) void {
+            const current_capacity = self.capacity();
+            if (!self.list.isUnique() or source.len > current_capacity) {
+                const retained_snapshot = self.list;
+                const next_capacity = @max(initial_capacity, @max(source.len, current_capacity));
+                self.list = abi.RocListWith(T, false).allocate(next_capacity, self.roc_host);
+                retained_snapshot.decref(self.roc_host);
+            }
+            self.list.length = source.len;
+            if (source.len > 0) {
+                @memcpy(self.list.elements_ptr.?[0..source.len], source);
+            }
+        }
+
+        pub fn incref(self: *Self) void {
+            self.list.incref(1);
+        }
+
+        pub fn decref(self: *Self) void {
+            self.list.decref(self.roc_host);
+        }
+    };
+}
+
+/// Typed text entered in one frame. raylib currently drains at most 32 values,
+/// but the list can grow if that host contract changes.
+pub const TextInput = DynamicValueList(u32, 32);
+
 test "fixed input lists reuse unique storage and copy retained snapshots" {
     var env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.default() };
     var host = RocHost{
@@ -210,6 +261,40 @@ test "fixed input lists reuse unique storage and copy retained snapshots" {
     try std.testing.expect(original_ptr != state.list.elements_ptr);
     try std.testing.expectEqualSlices(u8, &.{ 1, 2 }, retained.items());
     try std.testing.expectEqualSlices(u8, &.{ 3, 4 }, state.list.items());
+}
+
+test "dynamic input lists reuse capacity and preserve retained snapshots" {
+    var env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.default() };
+    var host = RocHost{
+        .env = &env,
+        .roc_alloc = &abi.DefaultAllocators.rocAlloc,
+        .roc_dealloc = &abi.DefaultAllocators.rocDealloc,
+        .roc_realloc = &abi.DefaultAllocators.rocRealloc,
+        .roc_dbg = &abi.DefaultHandlers.rocDbg,
+        .roc_expect_failed = &abi.DefaultHandlers.rocExpectFailed,
+        .roc_crashed = &abi.DefaultHandlers.rocCrashed,
+    };
+
+    var input = TextInput.init(&host);
+    defer input.decref();
+    const original_ptr = input.list.elements_ptr;
+    input.update(&.{ 'a', 'b' });
+    try std.testing.expectEqual(original_ptr, input.list.elements_ptr);
+    try std.testing.expectEqualSlices(u32, &.{ 'a', 'b' }, input.list.items());
+
+    const retained = input.list;
+    retained.incref(1);
+    defer retained.decref(&host);
+    input.update(&.{'c'});
+    try std.testing.expect(original_ptr != input.list.elements_ptr);
+    try std.testing.expectEqualSlices(u32, &.{ 'a', 'b' }, retained.items());
+    try std.testing.expectEqualSlices(u32, &.{'c'}, input.list.items());
+
+    var long: [40]u32 = undefined;
+    @memset(&long, 'x');
+    input.update(&long);
+    try std.testing.expectEqual(@as(usize, 40), input.list.len());
+    try std.testing.expect(input.capacity() >= 40);
 }
 
 /// Flat state for init_for_host!/render_for_host!.

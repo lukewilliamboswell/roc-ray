@@ -714,14 +714,18 @@ laser_state_from_trace = |input, trace| {
 }
 
 kill_laser_enemies : List(Enemy), List(U64) -> List(Enemy)
-kill_laser_enemies = |enemies, killed| {
-	var $next = []
-	for enemy in enemies {
-		dead = enemy.alive and List.contains(killed, enemy.id)
-		$next = List.append($next, { ..enemy, alive: enemy.alive and !(dead) })
+kill_laser_enemies = |enemies, killed|
+	if List.len(killed) == 0 {
+		enemies
+	} else {
+		List.map(
+			enemies,
+			|enemy| {
+				dead = enemy.alive and List.contains(killed, enemy.id)
+				{ ..enemy, alive: enemy.alive and !(dead) }
+			},
+		)
 	}
-	$next
-}
 
 launch_hook : Player, Physics.Point -> HookState
 launch_hook = |player, aim| {
@@ -815,16 +819,26 @@ CollectResult : {
 
 collect_gems : List(Gem), Physics.Point -> CollectResult
 collect_gems = |gems, player_pos| {
-	var $next = []
 	var $taken = 0
 	for gem in gems {
 		hit = !(gem.taken) and physics_distance(gem.pos, player_pos) <= gem_radius
-		$next = List.append($next, { ..gem, taken: gem.taken or hit })
 		if hit {
 			$taken = $taken + 1
 		}
 	}
-	{ gems: $next, taken: $taken }
+
+	if $taken == 0 {
+		{ gems, taken: 0 }
+	} else {
+		next = List.map(
+			gems,
+			|gem| {
+				hit = !(gem.taken) and physics_distance(gem.pos, player_pos) <= gem_radius
+				{ ..gem, taken: gem.taken or hit }
+			},
+		)
+		{ gems: next, taken: $taken }
+	}
 }
 
 checkpoint_hit : List(Physics.Point), Physics.Point -> Try(Physics.Point, [NoCheckpoint])
@@ -1255,5 +1269,31 @@ expect Physics.components(unit_from_turn(0)) == { x: 1, y: 0, z: 0 }
 expect point_segment_distance(Physics.point_xy(5, 3), { start: Physics.point_xy(0, 0), end: Physics.point_xy(10, 0) }) == 3
 expect {
 	enemy = { id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }
-	List.first(kill_laser_enemies([enemy], [1])) == Ok({ ..enemy, alive: Bool.False })
+	match List.first(kill_laser_enemies([enemy], [1])) {
+		Ok(result) => result.id == enemy.id and !(result.alive)
+		Err(_) => Bool.False
+	}
+}
+expect {
+	enemy = { id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }
+	match List.first(kill_laser_enemies([enemy], [])) {
+		Ok(result) => result.id == enemy.id and result.alive
+		Err(_) => Bool.False
+	}
+}
+expect {
+	gem = { id: 1, pos: Physics.origin, taken: Bool.False }
+	result = collect_gems([gem], Physics.point_xy(100, 100))
+	match List.first(result.gems) {
+		Ok(remaining) => result.taken == 0 and remaining.id == gem.id and !(remaining.taken)
+		Err(_) => Bool.False
+	}
+}
+expect {
+	gem = { id: 1, pos: Physics.origin, taken: Bool.False }
+	result = collect_gems([gem], Physics.origin)
+	match List.first(result.gems) {
+		Ok(collected) => result.taken == 1 and collected.id == gem.id and collected.taken
+		Err(_) => Bool.False
+	}
 }

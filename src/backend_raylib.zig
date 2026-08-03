@@ -344,22 +344,40 @@ pub fn drawTriangleLines(args: anytype) void {
     drawSegment(args.c, args.a, args.thickness, args.color);
 }
 
-/// Draw a filled polygon by fanning triangles from the point centroid.
+fn polygonSignedArea(points: anytype) f32 {
+    var twice_area: f32 = 0;
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        twice_area += point.x * next.y - next.x * point.y;
+    }
+    return twice_area * 0.5;
+}
+
+test "polygonSignedArea detects either boundary order" {
+    const Point = struct { x: f32, y: f32 };
+    const clockwise = [_]Point{
+        .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 2 }, .{ .x = 2, .y = 2 }, .{ .x = 2, .y = 0 },
+    };
+    const counter_clockwise = [_]Point{
+        .{ .x = 0, .y = 0 }, .{ .x = 2, .y = 0 }, .{ .x = 2, .y = 2 }, .{ .x = 0, .y = 2 },
+    };
+    try std.testing.expect(polygonSignedArea(&clockwise) < 0);
+    try std.testing.expect(polygonSignedArea(&counter_clockwise) > 0);
+}
+
+/// Draw a filled convex polygon as an allocation-free triangle fan.
+/// Points must be ordered clockwise or counter-clockwise around the boundary.
 pub fn drawPolygon(points: anytype, color: abi.Color) void {
     if (points.len < 3) return;
 
-    var center = rl.Vector2{ .x = 0, .y = 0 };
-    for (points) |point| {
-        center.x += point.x;
-        center.y += point.y;
-    }
-    const len_f: f32 = @floatFromInt(points.len);
-    center.x /= len_f;
-    center.y /= len_f;
-
-    for (points, 0..) |point, i| {
-        const next = points[(i + 1) % points.len];
-        rl.DrawTriangle(center, toVector2(point), toVector2(next), colorToRl(color));
+    const reverse = polygonSignedArea(points) > 0;
+    var i: usize = 1;
+    while (i + 1 < points.len) : (i += 1) {
+        if (reverse) {
+            rl.DrawTriangle(toVector2(points[0]), toVector2(points[i + 1]), toVector2(points[i]), colorToRl(color));
+        } else {
+            rl.DrawTriangle(toVector2(points[0]), toVector2(points[i]), toVector2(points[i + 1]), colorToRl(color));
+        }
     }
 }
 
@@ -422,22 +440,55 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
     );
 }
 
-/// Draw a full texture across an arbitrary screen-space quadrilateral.
+fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {
+    return .{
+        .x = x / @as(f32, @floatFromInt(texture.width)),
+        .y = y / @as(f32, @floatFromInt(texture.height)),
+    };
+}
+
+test "textureRegionUv normalizes source pixels" {
+    const texture = Texture{ .id = 1, .width = 64, .height = 32, .mipmaps = 1, .format = 1 };
+    const uv = textureRegionUv(texture, 16, 24);
+    try std.testing.expectEqual(@as(f32, 0.25), uv.x);
+    try std.testing.expectEqual(@as(f32, 0.75), uv.y);
+}
+
+/// Draw a texture source region across an arbitrary screen-space quadrilateral.
 pub fn drawTextureQuad(texture: Texture, args: anytype) void {
     const tint = colorToRl(args.tint);
+    if (texture.width <= 0 or texture.height <= 0) return;
+    const uv_top_left = textureRegionUv(texture, args.source.x, args.source.y);
+    const uv_bottom_left = textureRegionUv(texture, args.source.x, args.source.y + args.source.height);
+    const uv_bottom_right = textureRegionUv(texture, args.source.x + args.source.width, args.source.y + args.source.height);
+    const uv_top_right = textureRegionUv(texture, args.source.x + args.source.width, args.source.y);
+
+    const uvs = [_]rl.Vector2{ uv_top_left, uv_bottom_left, uv_bottom_right, uv_top_right };
+    const vertices = [_]rl.Vector2{
+        toVector2(args.top_left),
+        toVector2(args.bottom_left),
+        toVector2(args.bottom_right),
+        toVector2(args.top_right),
+    };
+    // Horizontal/vertical Tiled flips can reverse the destination winding.
+    // Reverse vertex/UV pairs together so raylib's back-face culling still
+    // accepts the quad without changing global rlgl state for every tile.
+    const cross = (vertices[1].x - vertices[0].x) * (vertices[2].y - vertices[0].y) -
+        (vertices[1].y - vertices[0].y) * (vertices[2].x - vertices[0].x);
+    const order = if (cross > 0)
+        [_]usize{ 3, 2, 1, 0 }
+    else
+        [_]usize{ 0, 1, 2, 3 };
 
     rl.rlSetTexture(texture.id);
     rl.rlBegin(rl.RL_QUADS);
     rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
-    rl.rlTexCoord2f(0, 0);
-    rl.rlVertex2f(args.top_left.x, args.top_left.y);
-    rl.rlTexCoord2f(0, 1);
-    rl.rlVertex2f(args.bottom_left.x, args.bottom_left.y);
-    rl.rlTexCoord2f(1, 1);
-    rl.rlVertex2f(args.bottom_right.x, args.bottom_right.y);
-    rl.rlTexCoord2f(1, 0);
-    rl.rlVertex2f(args.top_right.x, args.top_right.y);
+    for (order) |i| {
+        rl.rlTexCoord2f(uvs[i].x, uvs[i].y);
+        rl.rlVertex2f(vertices[i].x, vertices[i].y);
+    }
     rl.rlEnd();
+    rl.rlSetTexture(0);
 }
 
 /// Measure text with a null-terminated string.

@@ -85,6 +85,20 @@ Run the full test suite (lints, Zig unit tests, and `roc check`/`fmt`/`test`/`bu
 zig build test
 ```
 
+Rendering code also has an opt-in pixel-level smoke test. It opens a hidden
+raylib window and validates scissoring, convex polygon rasterization, texture
+source regions, and flipped quads against framebuffer pixels:
+
+```bash
+zig build graphical-smoke
+# On a headless Linux CI worker with Xvfb installed:
+xvfb-run -a zig build graphical-smoke
+```
+
+The regular headless example runs intentionally do not assert pixels, so run
+this step whenever changing rendering primitives, texture coordinates, or
+paired drawing modes.
+
 Or run just the Roc example tests directly:
 
 ```bash
@@ -146,6 +160,12 @@ the Roc-facing API ergonomic and independent of its transport representation.
 For example, callers can use `host.key_pressed(KeySpace)` while the host packs
 held/pressed/released bits into one persistent key-state list; the equivalent
 module-style call is `Keys.key_pressed(host, KeySpace)`.
+
+Keep per-frame culling and coordinate lookup in pure Roc. Tilemap's
+`draw_all_in!`/`draw_layer_in!` APIs bound work before drawing so each visible
+tile crosses the host boundary exactly once and offscreen tiles do not cross it
+at all. Do not create per-tile host resources or temporary Roc lists in a draw
+loop.
 
 The host allocates the keyboard and mouse state lists once, updates their bytes
 in place, and retains them only while Roc owns the frame snapshot. Do not rebuild

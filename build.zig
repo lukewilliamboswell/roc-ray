@@ -201,6 +201,39 @@ pub fn build(b: *std.Build) void {
         native_tests.root_module.link_libc = true;
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
+
+        // Pixel-level rendering checks need a real graphics context, so keep
+        // them opt-in for local/CI runs with a display (for example xvfb-run).
+        const graphical_smoke = b.addExecutable(.{
+            .name = "graphical-smoke",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/graphical_smoke.zig"),
+                .target = native_target,
+                .optimize = optimize,
+            }),
+        });
+        graphical_smoke.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        graphical_smoke.root_module.addLibraryPath(b.path(raylib_lib_dir));
+        graphical_smoke.root_module.linkSystemLibrary("raylib", .{});
+        switch (native_target.result.os.tag) {
+            .linux => graphical_smoke.root_module.linkSystemLibrary("X11", .{}),
+            .macos => {
+                graphical_smoke.root_module.linkFramework("Cocoa", .{});
+                graphical_smoke.root_module.linkFramework("IOKit", .{});
+                graphical_smoke.root_module.linkFramework("CoreVideo", .{});
+                graphical_smoke.root_module.linkFramework("OpenGL", .{});
+            },
+            .windows => {
+                inline for (windows_import_libs) |lib_name| {
+                    graphical_smoke.root_module.linkSystemLibrary(lib_name, .{});
+                }
+            },
+            else => {},
+        }
+        graphical_smoke.root_module.link_libc = true;
+        const run_graphical_smoke = b.addRunArtifact(graphical_smoke);
+        const graphical_smoke_step = b.step("graphical-smoke", "Run pixel-level rendering smoke tests (requires a display)");
+        graphical_smoke_step.dependOn(&run_graphical_smoke.step);
     }
 
     if (run_roc_tests) {

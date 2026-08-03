@@ -126,6 +126,9 @@ copy_shared_roc_files() {
     fi
 
     for roc in "${files[@]}"; do
+        # A tracked module can be intentionally deleted in the worktree before
+        # the deletion is committed (for example while consolidating APIs).
+        [[ -f "$roc" ]] || continue
         case "$(basename "$roc")" in
             main.roc|main-default.roc|main-wayland.roc)
                 ;;

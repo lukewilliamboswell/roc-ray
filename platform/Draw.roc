@@ -297,10 +297,17 @@ Draw := [].{
 		thickness : F32,
 	}
 
-	Polygon : {
+	## A simple convex polygon. Points must be ordered around the boundary (clockwise
+	## or counter-clockwise). Filled concave or self-intersecting polygons are not
+	## supported; outlines accept any ordered point path.
+	ConvexPolygon : {
 		points : List(Vector2),
 		style : ShapeStyle,
 	}
+
+	## Compatibility alias for ConvexPolygon. Prefer `ConvexPolygon` and
+	## `convex_polygon!` in new code so the fill constraint is visible at call sites.
+	Polygon : ConvexPolygon
 
 	PolygonRaw : {
 		points : List(Vector2),
@@ -415,6 +422,7 @@ Draw := [].{
 
 	TextureQuadRaw : {
 		texture : U64,
+		source : Math.Rect,
 		top_left : Math.Vec2,
 		bottom_left : Math.Vec2,
 		bottom_right : Math.Vec2,
@@ -612,7 +620,12 @@ Draw := [].{
 	}
 
 	polygon! : Polygon => {}
-	polygon! = |cfg| {
+	polygon! = |cfg| Draw.convex_polygon!(cfg)
+
+	## Draw a convex filled polygon and/or an ordered polygon outline. The host
+	## triangulates the fill without allocating; fewer than three points do not fill.
+	convex_polygon! : ConvexPolygon => {}
+	convex_polygon! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => Draw.polygon_raw!({ points: cfg.points, color })
@@ -675,6 +688,15 @@ Draw := [].{
 
 	with_mode_2d! : CameraMode, (() => {}) => {}
 	with_mode_2d! = |camera, callback| Draw.with_camera!(camera, callback)
+
+	## Restrict callback drawing to screen-space `bounds`, then always close the
+	## scissor before returning. Use this instead of manually pairing the raw effects.
+	with_scissor! : Math.Rect, (() => {}) => {}
+	with_scissor! = |bounds, callback| {
+		Draw.begin_scissor_raw!(bounds)
+		callback()
+		Draw.end_scissor_raw!()
+	}
 
 	text! : Text => {}
 	text! = |cfg| {

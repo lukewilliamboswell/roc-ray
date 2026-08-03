@@ -25,12 +25,12 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 
 ## Features
 
-- 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
+- 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, convex polygons, gradients, text) and callback-scoped camera/scissor modes
 - Loaded and procedurally generated host-owned textures, with full-pixel updates, filter/wrap controls, source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
 - Pure 2D camera values with scoped world-space drawing
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
-- Tiled TMX tilemap loading, drawing, layer/object roles, solid queries, and object/property access
+- Tiled TMX tilemap loading, viewport-culled drawing, orthogonal tile flips, O(1) world-to-cell lookup, bounded solid queries, layer/object roles, and object/property access
 - Physics helpers backed by compact 3D PGA points, vectors, planes, lines, and translation motors
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
@@ -98,6 +98,22 @@ roc build examples/cave_climb.roc && ./cave_climb
 The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
 
 The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Physics distance checks with selected CC0 assets from Kenney's New Platformer Pack.
+
+For large maps, pass the visible world rectangle to the culled drawing API so
+offscreen tiles do not cross the host boundary:
+
+```roc
+Draw.with_camera!(camera, || {
+	Tilemap.draw_all_for_camera!(level.tilemap, camera, screen_size)
+})
+```
+
+If bounds are already available, use `Tilemap.draw_all_in!(map, world_view)`;
+both forms visit only the intersecting cell range.
+
+Use `Draw.with_scissor!(screen_rect, || { ... })` for paired screen-space
+clipping. Filled polygon points must describe a simple convex boundary; use
+`Draw.convex_polygon!` to make that requirement explicit.
 
 ## Supported Targets
 

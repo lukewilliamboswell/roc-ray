@@ -1,5 +1,6 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
 import Assets
+import Camera
 import Color
 import Draw
 import Math
@@ -116,6 +117,19 @@ TilemapCell : {
 	row : U64,
 }
 
+TilemapCellRange : {
+	min_col : U64,
+	min_row : U64,
+	max_col : U64,
+	max_row : U64,
+}
+
+TilemapFlip : {
+	horizontal : Bool,
+	vertical : Bool,
+	diagonal : Bool,
+}
+
 TilemapBuilder :: {
 	raw : TilemapRawMap,
 	textures : List(TilemapTextureBinding),
@@ -169,6 +183,8 @@ Tilemap :: {
 	RawTileset : TilemapRawTileset
 	RawPoint : TilemapRawPoint
 	Cell : TilemapCell
+	CellRange : TilemapCellRange
+	Flip : TilemapFlip
 	LayerRole : TilemapLayerRole
 	ObjectRole : TilemapObjectRole
 	LoadTmxRawResult : TilemapLoadTmxRawResult
@@ -338,7 +354,61 @@ Tilemap :: {
 		}
 
 	cell_at_world : Tilemap, Math.Vec2 -> Try(TilemapCell, [OutOfBounds])
-	cell_at_world = |map, pos| cell_at_world_row(map, pos, 0)
+	cell_at_world = |map, pos| {
+		rel_x = pos.x - map.origin.x
+		rel_y = pos.y - map.origin.y
+		if map.raw.tile_width <= 0 or map.raw.tile_height <= 0 or rel_x < 0 or rel_y < 0 {
+			Err(OutOfBounds)
+		} else {
+			match F32.floor_to_u64_try(rel_x / map.raw.tile_width) {
+				Ok(col) =>
+					match F32.floor_to_u64_try(rel_y / map.raw.tile_height) {
+						Ok(row) =>
+							if col < map.raw.width and row < map.raw.height {
+								Ok({ col, row })
+							} else {
+								Err(OutOfBounds)
+							}
+						Err(_) => Err(OutOfBounds)
+					}
+				Err(_) => Err(OutOfBounds)
+			}
+		}
+	}
+
+	## Return the inclusive cell range overlapping a world-space rectangle's
+	## half-open area. The arithmetic is O(1), allocation-free, and clamps the
+	## range to map bounds.
+	cell_range_for_world_rect : Tilemap, Math.Rect -> Try(TilemapCellRange, [OutOfBounds])
+	cell_range_for_world_rect = |map, bounds| {
+		map_right = map.origin.x + U64.to_f32(map.raw.width) * map.raw.tile_width
+		map_bottom = map.origin.y + U64.to_f32(map.raw.height) * map.raw.tile_height
+		left = F32.max(bounds.x, map.origin.x)
+		top = F32.max(bounds.y, map.origin.y)
+		right = F32.min(Math.right(bounds), map_right)
+		bottom = F32.min(Math.bottom(bounds), map_bottom)
+
+		if map.raw.width == 0 or map.raw.height == 0 or map.raw.tile_width <= 0 or map.raw.tile_height <= 0 or right <= left or bottom <= top {
+			Err(OutOfBounds)
+		} else {
+			match F32.floor_to_u64_try((left - map.origin.x) / map.raw.tile_width) {
+				Ok(min_col) =>
+					match F32.floor_to_u64_try((top - map.origin.y) / map.raw.tile_height) {
+						Ok(min_row) =>
+							match F32.ceiling_to_u64_try((right - map.origin.x) / map.raw.tile_width) {
+								Ok(max_col_exclusive) =>
+									match F32.ceiling_to_u64_try((bottom - map.origin.y) / map.raw.tile_height) {
+										Ok(max_row_exclusive) => Ok({ min_col, min_row, max_col: max_col_exclusive - 1, max_row: max_row_exclusive - 1 })
+										Err(_) => Err(OutOfBounds)
+									}
+								Err(_) => Err(OutOfBounds)
+							}
+						Err(_) => Err(OutOfBounds)
+					}
+				Err(_) => Err(OutOfBounds)
+			}
+		}
+	}
 
 	world_rect_for_cell : Tilemap, TilemapCell -> Math.Rect
 	world_rect_for_cell = |map, cell| {
@@ -379,7 +449,25 @@ Tilemap :: {
 		}
 
 	circle_touches_solid : Tilemap, Math.Circle -> Bool
-	circle_touches_solid = |map, circle| circle_touches_solid_row(map, circle, 0)
+	circle_touches_solid = |map, circle| {
+
+		## Expand very slightly so a circle exactly tangent to a neighbouring cell
+		## still tests that cell despite the culling range's half-open semantics.
+		extent = circle.radius + 0.0001
+		bounds = Math.rect(circle.center.x - extent, circle.center.y - extent, extent * 2, extent * 2)
+		match Tilemap.cell_range_for_world_rect(map, bounds) {
+			Ok(range) => {
+				var $touches = Bool.False
+				for layer in map.raw.layers {
+					if !$touches and Tilemap.layer_role_for(map, layer) == Solid {
+						$touches = circle_touches_solid_row(map, layer, circle, range, range.min_row)
+					}
+				}
+				$touches
+			}
+			Err(_) => Bool.False
+		}
+	}
 
 	draw_layer! : Tilemap, Str => {}
 	draw_layer! = |map, layer_name| {
@@ -389,11 +477,30 @@ Tilemap :: {
 		}
 	}
 
+	## Draw only cells intersecting `world_view`. This is the preferred hot path
+	## for maps larger than the viewport: culled cells perform no hosted effects.
+	draw_layer_in! : Tilemap, Str, Math.Rect => {}
+	draw_layer_in! = |map, layer_name, world_view| {
+		match find_layer(map.raw.layers, layer_name) {
+			Ok(layer) => draw_layer_view!(map, layer, world_view)
+			Err(_) => {}
+		}
+	}
+
 	draw_layers! : Tilemap, TilemapLayerRole => {}
 	draw_layers! = |map, role| {
 		for layer in map.raw.layers {
 			if Tilemap.layer_role_for(map, layer) == role {
 				draw_layer_cells!(map, layer, 0)
+			}
+		}
+	}
+
+	draw_layers_in! : Tilemap, TilemapLayerRole, Math.Rect => {}
+	draw_layers_in! = |map, role, world_view| {
+		for layer in map.raw.layers {
+			if Tilemap.layer_role_for(map, layer) == role {
+				draw_layer_view!(map, layer, world_view)
 			}
 		}
 	}
@@ -408,12 +515,63 @@ Tilemap :: {
 		}
 	}
 
+	draw_all_in! : Tilemap, Math.Rect => {}
+	draw_all_in! = |map, world_view| {
+		for layer in map.raw.layers {
+			role = Tilemap.layer_role_for(map, layer)
+			if role == Drawn or role == Solid {
+				draw_layer_view!(map, layer, world_view)
+			}
+		}
+	}
+
+	## Compute the world-space axis-aligned bounds visible through a 2D camera,
+	## including non-centered offsets and rotation. This is pure and allocates no
+	## temporary list.
+	viewport_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Rect
+	viewport_for_camera = |camera, screen_size| {
+		top_left = world_corner_for_camera(camera, { x: 0, y: 0 })
+		top_right = world_corner_for_camera(camera, { x: screen_size.x, y: 0 })
+		bottom_left = world_corner_for_camera(camera, { x: 0, y: screen_size.y })
+		bottom_right = world_corner_for_camera(camera, screen_size)
+		left = F32.min(F32.min(top_left.x, top_right.x), F32.min(bottom_left.x, bottom_right.x))
+		top = F32.min(F32.min(top_left.y, top_right.y), F32.min(bottom_left.y, bottom_right.y))
+		right = F32.max(F32.max(top_left.x, top_right.x), F32.max(bottom_left.x, bottom_right.x))
+		bottom = F32.max(F32.max(top_left.y, top_right.y), F32.max(bottom_left.y, bottom_right.y))
+		Math.rect(left, top, right - left, bottom - top)
+	}
+
+	## Convenience form of `draw_all_in!` for camera-driven scenes.
+	draw_all_for_camera! : Tilemap, Camera.Camera2D, Math.Vec2 => {}
+	draw_all_for_camera! = |map, camera, screen_size| Tilemap.draw_all_in!(map, Tilemap.viewport_for_camera(camera, screen_size))
+
+	flip_for_gid : U64 -> TilemapFlip
+	flip_for_gid = |gid| {
+		horizontal: gid >= 2_147_483_648,
+		vertical: (gid % 2_147_483_648) >= 1_073_741_824,
+		diagonal: (gid % 1_073_741_824) >= 536_870_912,
+	}
+
 	clean_gid : U64 -> U64
 	clean_gid = |gid| {
 		without_h = if gid >= 2_147_483_648 gid - 2_147_483_648 else gid
 		without_v = if without_h >= 1_073_741_824 without_h - 1_073_741_824 else without_h
 		without_d = if without_v >= 536_870_912 without_v - 536_870_912 else without_v
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
+	}
+}
+
+world_corner_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Vec2
+world_corner_for_camera = |camera, screen_point| {
+	zoom = if camera.zoom > 0 camera.zoom else 1
+	dx = (screen_point.x - camera.offset.x) / zoom
+	dy = (screen_point.y - camera.offset.y) / zoom
+	radians = camera.rotation * F32.pi / 180
+	cosine = F32.cos(radians)
+	sine = F32.sin(radians)
+	{
+		x: camera.target.x + cosine * dx + sine * dy,
+		y: camera.target.y - sine * dx + cosine * dy,
 	}
 }
 
@@ -458,53 +616,31 @@ gid_at_layer = |raw, layer, cell| {
 	}
 }
 
-cell_at_world_row : Tilemap, Math.Vec2, U64 -> Try(TilemapCell, [OutOfBounds])
-cell_at_world_row = |map, pos, row| {
-	if row >= map.raw.height {
-		Err(OutOfBounds)
-	} else {
-		match cell_at_world_col(map, pos, row, 0) {
-			Ok(cell) => Ok(cell)
-			Err(_) => cell_at_world_row(map, pos, row + 1)
-		}
-	}
-}
-
-cell_at_world_col : Tilemap, Math.Vec2, U64, U64 -> Try(TilemapCell, [OutOfBounds])
-cell_at_world_col = |map, pos, row, col| {
-	if col >= map.raw.width {
-		Err(OutOfBounds)
-	} else {
-		cell = { col, row }
-		if Math.contains(Tilemap.world_rect_for_cell(map, cell), pos) {
-			Ok(cell)
-		} else {
-			cell_at_world_col(map, pos, row, col + 1)
-		}
-	}
-}
-
-circle_touches_solid_row : Tilemap, Math.Circle, U64 -> Bool
-circle_touches_solid_row = |map, circle, row| {
-	if row >= map.raw.height {
+circle_touches_solid_row : Tilemap, TilemapRawLayer, Math.Circle, TilemapCellRange, U64 -> Bool
+circle_touches_solid_row = |map, layer, circle, range, row| {
+	if row > range.max_row {
 		Bool.False
-	} else if circle_touches_solid_col(map, circle, row, 0) {
+	} else if circle_touches_solid_col(map, layer, circle, range, row, range.min_col) {
 		Bool.True
 	} else {
-		circle_touches_solid_row(map, circle, row + 1)
+		circle_touches_solid_row(map, layer, circle, range, row + 1)
 	}
 }
 
-circle_touches_solid_col : Tilemap, Math.Circle, U64, U64 -> Bool
-circle_touches_solid_col = |map, circle, row, col| {
-	if col >= map.raw.width {
+circle_touches_solid_col : Tilemap, TilemapRawLayer, Math.Circle, TilemapCellRange, U64, U64 -> Bool
+circle_touches_solid_col = |map, layer, circle, range, row, col| {
+	if col > range.max_col {
 		Bool.False
 	} else {
 		cell = { col, row }
-		if Tilemap.solid_cell(map, cell) and Math.circle_rect(circle, Tilemap.world_rect_for_cell(map, cell)) {
+		gid_is_solid = match gid_at_layer(map.raw, layer, cell) {
+			Ok(gid) => Tilemap.clean_gid(gid) != 0
+			Err(_) => Bool.False
+		}
+		if gid_is_solid and Math.circle_rect(circle, Tilemap.world_rect_for_cell(map, cell)) {
 			Bool.True
 		} else {
-			circle_touches_solid_col(map, circle, row, col + 1)
+			circle_touches_solid_col(map, layer, circle, range, row, col + 1)
 		}
 	}
 }
@@ -519,7 +655,7 @@ draw_layer_cells! = |map, layer, index| {
 				gid = Tilemap.clean_gid(raw_gid)
 				if gid != 0 {
 					cell = { col: index % layer.width, row: index // layer.width }
-					draw_gid!(map, gid, cell)
+					draw_gid!(map, raw_gid, cell)
 				}
 			}
 			Err(_) => {}
@@ -528,8 +664,41 @@ draw_layer_cells! = |map, layer, index| {
 	}
 }
 
+draw_layer_view! : Tilemap, TilemapRawLayer, Math.Rect => {}
+draw_layer_view! = |map, layer, world_view| {
+	if layer.visible {
+		match Tilemap.cell_range_for_world_rect(map, world_view) {
+			Ok(range) => draw_layer_range_rows!(map, layer, range, range.min_row)
+			Err(_) => {}
+		}
+	}
+}
+
+draw_layer_range_rows! : Tilemap, TilemapRawLayer, TilemapCellRange, U64 => {}
+draw_layer_range_rows! = |map, layer, range, row| {
+	if row <= range.max_row and row < layer.height {
+		draw_layer_range_cols!(map, layer, range, row, range.min_col)
+		draw_layer_range_rows!(map, layer, range, row + 1)
+	}
+}
+
+draw_layer_range_cols! : Tilemap, TilemapRawLayer, TilemapCellRange, U64, U64 => {}
+draw_layer_range_cols! = |map, layer, range, row, col| {
+	if col <= range.max_col and col < layer.width {
+		index = row * layer.width + col
+		if index < layer.gid_count {
+			match List.get(map.raw.gids, layer.gid_start + index) {
+				Ok(raw_gid) => if Tilemap.clean_gid(raw_gid) != 0 draw_gid!(map, raw_gid, { col, row })
+				Err(_) => {}
+			}
+		}
+		draw_layer_range_cols!(map, layer, range, row, col + 1)
+	}
+}
+
 draw_gid! : Tilemap, U64, TilemapCell => {}
-draw_gid! = |map, gid, cell| {
+draw_gid! = |map, raw_gid, cell| {
+	gid = Tilemap.clean_gid(raw_gid)
 	match find_tileset(map.raw.tilesets, gid) {
 		Ok(tileset) =>
 			match find_texture(map.textures, tileset.first_gid) {
@@ -542,12 +711,15 @@ draw_gid! = |map, gid, cell| {
 						width: tileset.tile_width,
 						height: tileset.tile_height,
 					}
-					Draw.texture!({
-						texture,
+					dest = Tilemap.world_rect_for_cell(map, cell)
+					flip = Tilemap.flip_for_gid(raw_gid)
+					Draw.draw_texture_quad_raw!({
+						texture: (Assets.info(texture)).handle,
 						source,
-						dest: Tilemap.world_rect_for_cell(map, cell),
-						origin: Math.zero,
-						rotation: 0,
+						top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),
+						bottom_left: transformed_corner(dest, { x: 0, y: 1 }, flip),
+						bottom_right: transformed_corner(dest, { x: 1, y: 1 }, flip),
+						top_right: transformed_corner(dest, { x: 1, y: 0 }, flip),
 						tint: Color.white,
 					})
 				}
@@ -555,6 +727,16 @@ draw_gid! = |map, gid, cell| {
 			}
 		Err(_) => {}
 	}
+}
+
+transformed_corner : Math.Rect, Math.Vec2, TilemapFlip -> Math.Vec2
+transformed_corner = |dest, corner, flip| {
+
+	## Tiled applies the anti-diagonal transform before horizontal/vertical flips.
+	diagonal = if flip.diagonal { x: 1 - corner.y, y: 1 - corner.x } else corner
+	x = if flip.horizontal 1 - diagonal.x else diagonal.x
+	y = if flip.vertical 1 - diagonal.y else diagonal.y
+	{ x: dest.x + x * dest.width, y: dest.y + y * dest.height }
 }
 
 find_tileset : List(TilemapRawTileset), U64 -> Try(TilemapRawTileset, [NotFound])
@@ -653,7 +835,13 @@ expect Tilemap.gid_at(test_map, "Walls", { col: 1, row: 0 }) == Ok(2)
 expect Tilemap.solid_cell(test_map, { col: 1, row: 0 })
 expect Tilemap.solid_at_world(test_map, { x: 20, y: 4 })
 expect Tilemap.circle_touches_solid(test_map, Math.circle({ x: 24, y: 8 }, 7))
+expect Tilemap.circle_touches_solid(test_map, Math.circle({ x: 8, y: 8 }, 8))
 expect Tilemap.cell_at_world(test_map, { x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
+expect Tilemap.cell_at_world(test_map, { x: -0.01, y: 0 }) == Err(OutOfBounds)
+expect Tilemap.cell_range_for_world_rect(test_map, Math.rect(15, 0, 18, 17)) == Ok({ min_col: 0, min_row: 0, max_col: 2, max_row: 1 })
 expect Tilemap.property_f32(test_raw, test_spawn_object, "speed", 0) == 12.5
 expect Tilemap.object_world_center(offset_test_map, test_spawn_object) == { x: 108, y: 208 }
 expect Tilemap.clean_gid(2_147_483_648 + 17) == 17
+expect Tilemap.flip_for_gid(2_147_483_648 + 1) == { horizontal: Bool.True, vertical: Bool.False, diagonal: Bool.False }
+expect transformed_corner(Math.rect(10, 20, 30, 40), { x: 0, y: 0 }, { horizontal: Bool.False, vertical: Bool.False, diagonal: Bool.True }) == { x: 40, y: 60 }
+expect Tilemap.viewport_for_camera({ target: { x: 100, y: 50 }, offset: { x: 20, y: 10 }, rotation: 0, zoom: 2 }, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)

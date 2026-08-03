@@ -2061,11 +2061,12 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_654c17296928b300
-pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_f101ee3be4bc47fa
+pub const __AnonStruct_f101ee3be4bc47fa = if (@sizeOf(usize) == 4) extern struct {
     @"texture": u64,
     @"bottom_left": __AnonStruct_2818a50bdccefb1e,
     @"bottom_right": __AnonStruct_2818a50bdccefb1e,
+    @"source": __AnonStruct_5d393593a1f032cb,
     @"top_left": __AnonStruct_2818a50bdccefb1e,
     @"top_right": __AnonStruct_2818a50bdccefb1e,
     @"tint": Color,
@@ -2074,6 +2075,7 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.@"bottom_left".decref(roc_host);
         value.@"bottom_right".decref(roc_host);
+        value.@"source".decref(roc_host);
         value.@"top_left".decref(roc_host);
         value.@"top_right".decref(roc_host);
         value.@"tint".decref(roc_host);
@@ -2084,6 +2086,7 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.@"bottom_left".incref(amount);
         value.@"bottom_right".incref(amount);
+        value.@"source".incref(amount);
         value.@"top_left".incref(amount);
         value.@"top_right".incref(amount);
         value.@"tint".incref(amount);
@@ -2092,6 +2095,7 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
     @"texture": u64,
     @"bottom_left": __AnonStruct_2818a50bdccefb1e,
     @"bottom_right": __AnonStruct_2818a50bdccefb1e,
+    @"source": __AnonStruct_5d393593a1f032cb,
     @"top_left": __AnonStruct_2818a50bdccefb1e,
     @"top_right": __AnonStruct_2818a50bdccefb1e,
     @"tint": Color,
@@ -2100,6 +2104,7 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.@"bottom_left".decref(roc_host);
         value.@"bottom_right".decref(roc_host);
+        value.@"source".decref(roc_host);
         value.@"top_left".decref(roc_host);
         value.@"top_right".decref(roc_host);
         value.@"tint".decref(roc_host);
@@ -2110,6 +2115,7 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
         const value = self;
         value.@"bottom_left".incref(amount);
         value.@"bottom_right".incref(amount);
+        value.@"source".incref(amount);
         value.@"top_left".incref(amount);
         value.@"top_right".incref(amount);
         value.@"tint".incref(amount);
@@ -2118,12 +2124,12 @@ pub const __AnonStruct_654c17296928b300 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_654c17296928b300) != 48) @compileError("__AnonStruct_654c17296928b300 size mismatch");
-        if (@alignOf(__AnonStruct_654c17296928b300) != 8) @compileError("__AnonStruct_654c17296928b300 alignment mismatch");
+        if (@sizeOf(__AnonStruct_f101ee3be4bc47fa) != 64) @compileError("__AnonStruct_f101ee3be4bc47fa size mismatch");
+        if (@alignOf(__AnonStruct_f101ee3be4bc47fa) != 8) @compileError("__AnonStruct_f101ee3be4bc47fa alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_654c17296928b300) != 48) @compileError("__AnonStruct_654c17296928b300 size mismatch");
-        if (@alignOf(__AnonStruct_654c17296928b300) != 8) @compileError("__AnonStruct_654c17296928b300 alignment mismatch");
+        if (@sizeOf(__AnonStruct_f101ee3be4bc47fa) != 64) @compileError("__AnonStruct_f101ee3be4bc47fa size mismatch");
+        if (@alignOf(__AnonStruct_f101ee3be4bc47fa) != 8) @compileError("__AnonStruct_f101ee3be4bc47fa alignment mismatch");
     }
 }
 
@@ -3836,12 +3842,13 @@ comptime {
 }
 
 /// Arguments for Draw.draw_texture_quad_raw!
-/// Roc signature: { bottom_left : { x : F32, y : F32 }, bottom_right : { x : F32, y : F32 }, texture : U64, tint : Color, top_left : { x : F32, y : F32 }, top_right : { x : F32, y : F32 } } => {}
+/// Roc signature: { bottom_left : { x : F32, y : F32 }, bottom_right : { x : F32, y : F32 }, source : { height : F32, width : F32, x : F32, y : F32 }, texture : U64, tint : Color, top_left : { x : F32, y : F32 }, top_right : { x : F32, y : F32 } } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawDraw_texture_quad_rawArgs = if (@sizeOf(usize) == 4) extern struct {
     @"texture": u64,
     @"bottom_left": __AnonStruct_2818a50bdccefb1e,
     @"bottom_right": __AnonStruct_2818a50bdccefb1e,
+    @"source": __AnonStruct_5d393593a1f032cb,
     @"top_left": __AnonStruct_2818a50bdccefb1e,
     @"top_right": __AnonStruct_2818a50bdccefb1e,
     @"tint": Color,
@@ -3849,6 +3856,7 @@ pub const DrawDraw_texture_quad_rawArgs = if (@sizeOf(usize) == 4) extern struct
     @"texture": u64,
     @"bottom_left": __AnonStruct_2818a50bdccefb1e,
     @"bottom_right": __AnonStruct_2818a50bdccefb1e,
+    @"source": __AnonStruct_5d393593a1f032cb,
     @"top_left": __AnonStruct_2818a50bdccefb1e,
     @"top_right": __AnonStruct_2818a50bdccefb1e,
     @"tint": Color,
@@ -3856,11 +3864,11 @@ pub const DrawDraw_texture_quad_rawArgs = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawDraw_texture_quad_rawArgs) != 48) @compileError("DrawDraw_texture_quad_rawArgs size mismatch");
+        if (@sizeOf(DrawDraw_texture_quad_rawArgs) != 64) @compileError("DrawDraw_texture_quad_rawArgs size mismatch");
         if (@alignOf(DrawDraw_texture_quad_rawArgs) != 8) @compileError("DrawDraw_texture_quad_rawArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawDraw_texture_quad_rawArgs) != 48) @compileError("DrawDraw_texture_quad_rawArgs size mismatch");
+        if (@sizeOf(DrawDraw_texture_quad_rawArgs) != 64) @compileError("DrawDraw_texture_quad_rawArgs size mismatch");
         if (@alignOf(DrawDraw_texture_quad_rawArgs) != 8) @compileError("DrawDraw_texture_quad_rawArgs alignment mismatch");
     }
 }
@@ -4427,9 +4435,10 @@ pub const DrawCircle_lines_rawArg0 = __AnonStruct_885dd656cb7463a3;
 pub const DrawCircle_lines_rawArg0Center = __AnonStruct_2818a50bdccefb1e;
 pub const DrawCircle_rawArg0 = __AnonStruct_71f1fe332dd64d50;
 pub const DrawCircle_rawArg0Center = __AnonStruct_2818a50bdccefb1e;
-pub const DrawDraw_texture_quad_rawArg0 = __AnonStruct_654c17296928b300;
+pub const DrawDraw_texture_quad_rawArg0 = __AnonStruct_f101ee3be4bc47fa;
 pub const DrawDraw_texture_quad_rawArg0BottomLeft = __AnonStruct_2818a50bdccefb1e;
 pub const DrawDraw_texture_quad_rawArg0BottomRight = __AnonStruct_2818a50bdccefb1e;
+pub const DrawDraw_texture_quad_rawArg0Source = __AnonStruct_5d393593a1f032cb;
 pub const DrawDraw_texture_quad_rawArg0TopLeft = __AnonStruct_2818a50bdccefb1e;
 pub const DrawDraw_texture_quad_rawArg0TopRight = __AnonStruct_2818a50bdccefb1e;
 pub const DrawDraw_texture_rawArg0 = __AnonStruct_aa14b329c58d1290;
@@ -4724,7 +4733,7 @@ pub extern fn roc_draw_circle_raw(arg0: DrawCircle_rawArgs) callconv(.c) void;
 pub extern fn roc_draw_clear(arg0: Color) callconv(.c) void;
 
 /// Hosted symbol for Draw.draw_texture_quad_raw!
-/// Roc signature: { bottom_left : { x : F32, y : F32 }, bottom_right : { x : F32, y : F32 }, texture : U64, tint : Color, top_left : { x : F32, y : F32 }, top_right : { x : F32, y : F32 } } => {}
+/// Roc signature: { bottom_left : { x : F32, y : F32 }, bottom_right : { x : F32, y : F32 }, source : { height : F32, width : F32, x : F32, y : F32 }, texture : U64, tint : Color, top_left : { x : F32, y : F32 }, top_right : { x : F32, y : F32 } } => {}
 pub extern fn roc_draw_draw_texture_quad_raw(arg0: DrawDraw_texture_quad_rawArgs) callconv(.c) void;
 
 /// Hosted symbol for Draw.draw_texture_raw!

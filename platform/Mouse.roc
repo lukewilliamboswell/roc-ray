@@ -4,6 +4,27 @@
 ## bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 ## Pass `host.mouse` directly to these helpers.
 Mouse := [].{
+	State := {
+		buttons : List(U8),
+		left : Bool,
+		middle : Bool,
+		right : Bool,
+		wheel : F32,
+		x : F32,
+		y : F32,
+	}.{
+		button_down : State, MouseButton -> Bool
+		button_down = |mouse, button| Mouse.button_down(mouse, button)
+
+		button_up : State, MouseButton -> Bool
+		button_up = |mouse, button| Mouse.button_up(mouse, button)
+
+		button_pressed : State, MouseButton -> Bool
+		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
+
+		button_released : State, MouseButton -> Bool
+		button_released = |mouse, button| Mouse.button_released(mouse, button)
+	}
 
 	button_count : U64
 	button_count = 7

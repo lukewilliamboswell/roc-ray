@@ -26,7 +26,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
-- Asset loading for host-owned textures, with source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
+- Loaded and procedurally generated host-owned textures, with full-pixel updates, filter/wrap controls, source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
 - Pure 2D camera values with scoped world-space drawing
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
@@ -37,8 +37,8 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
 - Per-frame logical screen dimensions for resize-aware rendering and UI layout
-- Loaded sound effects and generated procedural sounds with volume, pitch, and pan
-- Streamed music playback with host-managed per-frame updates
+- Loaded sound effects and generated procedural sounds with playback state, pause/resume/stop, volume, pitch, and pan
+- Streamed music playback with host-managed per-frame updates, seeking, timing, and playback state
 - Native rendering via raylib (macOS, Linux, Windows)
 
 ## Requirements
@@ -77,6 +77,13 @@ World-space camera drawing:
 ```bash
 roc build examples/camera.roc
 ./camera
+```
+
+Generated and mutable textures plus sound transport controls:
+
+```bash
+roc build examples/generated_assets.roc
+./generated_assets
 ```
 
 Beginner game examples:

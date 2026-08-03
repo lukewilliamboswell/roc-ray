@@ -165,6 +165,12 @@ plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
 also include immutable metadata: `Assets.Texture` stores dimensions beside its
 token in the host slot, keeping the Roc model representation to one pointer.
 
+Generated textures follow the same ARC ownership path as loaded textures. CPU
+images used during generation are released before the hosted effect returns.
+`Assets.update_texture!` borrows the contiguous Roc color list for one call and
+does not copy or retain it in the host; build reusable pixel buffers outside the
+render loop when possible.
+
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables
 should populate that model once; event-driven effects such as audio playback or

@@ -93,7 +93,7 @@ const FontResource = union(enum) {
 };
 
 const TextureResource = union(enum) {
-    headless,
+    headless: struct { width: i32, height: i32 },
     native: raylib.Texture,
 };
 
@@ -550,13 +550,24 @@ fn storeTexture(resource: TextureResource, width: f32, height: f32) *abi.AssetsL
     };
 }
 
+fn texturePixelCount(width: i32, height: i32) ?usize {
+    if (width <= 0 or height <= 0) return null;
+    return std.math.mul(usize, @intCast(width), @intCast(height)) catch null;
+}
+
+test "texture pixel count validates dimensions" {
+    try std.testing.expectEqual(@as(?usize, 16), texturePixelCount(4, 4));
+    try std.testing.expectEqual(@as(?usize, null), texturePixelCount(0, 4));
+    try std.testing.expectEqual(@as(?usize, null), texturePixelCount(4, -1));
+}
+
 fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
     if (active_headless) {
         if (!pathExists(path_slice)) return &invalid_texture_box.payload;
-        return storeTexture(.headless, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE);
+        return storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE);
     }
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -574,6 +585,59 @@ fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c)
 
 fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
     return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
+}
+
+fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsGenerate_color_texture_rawArgs) callconv(.c) *abi.AssetsGenerate_color_texture_raw {
+    if (args.width <= 0 or args.height <= 0) return &invalid_texture_box.payload;
+    if (active_headless) {
+        return storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height));
+    }
+    const texture = raylib.generateColorTexture(args.width, args.height, args.color) orelse return &invalid_texture_box.payload;
+    return storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture));
+}
+
+fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsGenerate_checked_texture_rawArgs) callconv(.c) *abi.AssetsGenerate_checked_texture_raw {
+    if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return &invalid_texture_box.payload;
+    if (active_headless) {
+        return storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height));
+    }
+    const texture = raylib.generateCheckedTexture(args) orelse return &invalid_texture_box.payload;
+    return storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture));
+}
+
+fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsUpdate_texture_rawArgs) callconv(.c) bool {
+    defer args.pixels.decref(host);
+    const resource = texture_heap.get(args.texture) orelse return false;
+    const expected: usize = switch (resource.*) {
+        .headless => |texture| texturePixelCount(texture.width, texture.height) orelse return false,
+        .native => |texture| texturePixelCount(texture.width, texture.height) orelse return false,
+    };
+    if (args.pixels.len() != expected) return false;
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.updateTexture(texture, args.pixels.items()),
+    }
+    return true;
+}
+
+fn exportedAssetsUpdateTextureRaw(args: abi.AssetsUpdate_texture_rawArgs) callconv(.c) bool {
+    return hostedAssetsUpdateTextureRaw(activeHost(), args);
+}
+
+fn hostedAssetsSetTextureFilterRaw(handle: u64, code: u8) callconv(.c) void {
+    const resource = texture_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.setTextureFilter(texture, code),
+    }
+}
+
+fn hostedAssetsSetTextureWrapRaw(handle: u64, code: u8) callconv(.c) void {
+    const resource = texture_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.setTextureWrap(texture, code),
+    }
 }
 
 fn hostedDrawBeginFrame() callconv(.c) void {
@@ -816,27 +880,20 @@ fn hostedDrawTextureQuadRaw(args: abi.DrawDraw_texture_quad_rawArgs) callconv(.c
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
-fn decrefHostArg(roc_host: *RocHost, host: *const abi.Host) void {
-    host.keys.decref(roc_host);
-    host.mouse.buttons.decref(roc_host);
-}
-
-fn hostedReadEnvWindows(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+fn hostedReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     // Windows doesn't link libc, so env var reading is not yet supported
     var result: ReadEnvResult = undefined;
     result.tag = .Err;
 
-    // Roc transfers ownership of refcounted args to the hosted fn; release them.
-    decrefHostArg(roc_host, &host);
     key_arg.decref(roc_host);
     return result;
 }
 
-fn exportedReadEnvWindows(host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    return hostedReadEnvWindows(activeHost(), host, key_arg);
+fn exportedReadEnvWindows(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+    return hostedReadEnvWindows(activeHost(), key_arg);
 }
 
-fn hostedReadEnvPosix(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+fn hostedReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     var result: ReadEnvResult = undefined;
     const key = key_arg.asSlice();
     const value = hostGetEnv(key);
@@ -850,13 +907,12 @@ fn hostedReadEnvPosix(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) c
 
     // Roc transfers ownership of refcounted args to the hosted fn; release them.
     // `key` (a slice into key_arg) is fully consumed above before key_arg is dropped.
-    decrefHostArg(roc_host, &host);
     key_arg.decref(roc_host);
     return result;
 }
 
-fn exportedReadEnvPosix(host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    return hostedReadEnvPosix(activeHost(), host, key_arg);
+fn exportedReadEnvPosix(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+    return hostedReadEnvPosix(activeHost(), key_arg);
 }
 
 fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
@@ -1026,6 +1082,38 @@ fn hostedAudioPlay(handle: u64) callconv(.c) void {
     }
 }
 
+fn hostedAudioStop(handle: u64) callconv(.c) void {
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.stopSound(sound),
+    }
+}
+
+fn hostedAudioPause(handle: u64) callconv(.c) void {
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.pauseSound(sound),
+    }
+}
+
+fn hostedAudioResume(handle: u64) callconv(.c) void {
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.resumeSound(sound),
+    }
+}
+
+fn hostedAudioIsPlaying(handle: u64) callconv(.c) bool {
+    const resource = sound_heap.get(handle) orelse return false;
+    return switch (resource.*) {
+        .headless => false,
+        .native => |sound| raylib.isSoundPlaying(sound),
+    };
+}
+
 fn hostedAudioSetVolume(handle: u64, volume: f32) callconv(.c) void {
     const resource = sound_heap.get(handle) orelse return;
     switch (resource.*) {
@@ -1114,6 +1202,43 @@ fn hostedAudioSetMusicLooping(handle: u64, looping: bool) callconv(.c) void {
     }
 }
 
+fn hostedAudioIsMusicPlaying(handle: u64) callconv(.c) bool {
+    const resource = music_heap.get(handle) orelse return false;
+    return switch (resource.*) {
+        .headless => false,
+        .native => |music| raylib.isMusicPlaying(music),
+    };
+}
+
+fn hostedAudioSeekMusic(handle: u64, seconds: f32) callconv(.c) void {
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.seekMusic(music, seconds),
+    }
+}
+
+fn hostedAudioMusicLength(handle: u64) callconv(.c) f32 {
+    const resource = music_heap.get(handle) orelse return 0;
+    return switch (resource.*) {
+        .headless => 0,
+        .native => |music| raylib.musicLength(music),
+    };
+}
+
+fn hostedAudioMusicTimePlayed(handle: u64) callconv(.c) f32 {
+    const resource = music_heap.get(handle) orelse return 0;
+    return switch (resource.*) {
+        .headless => 0,
+        .native => |music| raylib.musicTimePlayed(music),
+    };
+}
+
+fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
+    if (active_headless) return;
+    raylib.setMasterVolume(volume);
+}
+
 fn updateMusicResource(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
@@ -1149,14 +1274,27 @@ comptime {
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
 
         @export(&exportedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
+        @export(&hostedAssetsGenerateColorTextureRaw, .{ .name = "roc_assets_generate_color_texture_raw" });
+        @export(&hostedAssetsGenerateCheckedTextureRaw, .{ .name = "roc_assets_generate_checked_texture_raw" });
+        @export(&exportedAssetsUpdateTextureRaw, .{ .name = "roc_assets_update_texture_raw" });
+        @export(&hostedAssetsSetTextureFilterRaw, .{ .name = "roc_assets_set_texture_filter_raw" });
+        @export(&hostedAssetsSetTextureWrapRaw, .{ .name = "roc_assets_set_texture_wrap_raw" });
         @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
         @export(&hostedAudioGenTone, .{ .name = "roc_audio_gen_tone_raw" });
         @export(&exportedAudioLoadMusic, .{ .name = "roc_audio_load_music_raw" });
         @export(&exportedAudioLoadSound, .{ .name = "roc_audio_load_sound_raw" });
         @export(&hostedAudioPauseMusic, .{ .name = "roc_audio_pause_music_raw" });
+        @export(&hostedAudioPause, .{ .name = "roc_audio_pause_raw" });
         @export(&hostedAudioPlayMusic, .{ .name = "roc_audio_play_music_raw" });
         @export(&hostedAudioPlay, .{ .name = "roc_audio_play_raw" });
         @export(&hostedAudioResumeMusic, .{ .name = "roc_audio_resume_music_raw" });
+        @export(&hostedAudioResume, .{ .name = "roc_audio_resume_raw" });
+        @export(&hostedAudioIsMusicPlaying, .{ .name = "roc_audio_is_music_playing_raw" });
+        @export(&hostedAudioIsPlaying, .{ .name = "roc_audio_is_playing_raw" });
+        @export(&hostedAudioSeekMusic, .{ .name = "roc_audio_seek_music_raw" });
+        @export(&hostedAudioMusicLength, .{ .name = "roc_audio_music_length_raw" });
+        @export(&hostedAudioMusicTimePlayed, .{ .name = "roc_audio_music_time_played_raw" });
+        @export(&hostedAudioSetMasterVolume, .{ .name = "roc_audio_set_master_volume_raw" });
         @export(&hostedAudioSetMusicLooping, .{ .name = "roc_audio_set_music_looping_raw" });
         @export(&hostedAudioSetMusicPan, .{ .name = "roc_audio_set_music_pan_raw" });
         @export(&hostedAudioSetMusicPitch, .{ .name = "roc_audio_set_music_pitch_raw" });
@@ -1165,6 +1303,7 @@ comptime {
         @export(&hostedAudioSetPitch, .{ .name = "roc_audio_set_pitch_raw" });
         @export(&hostedAudioSetVolume, .{ .name = "roc_audio_set_volume_raw" });
         @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
+        @export(&hostedAudioStop, .{ .name = "roc_audio_stop_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
         @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });

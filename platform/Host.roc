@@ -24,20 +24,7 @@ Host := {
 	## Packed per-key state, updated in place by the host. Each byte stores held,
 	## pressed-this-frame, and released-this-frame bits. Use the `Keys` helpers.
 	keys : List(U8),
-	mouse : {
-
-		## Packed per-button state, updated in place by the host. Each byte stores
-		## held, pressed-this-frame, and released-this-frame bits.
-		buttons : List(U8),
-
-		## Convenient held-state aliases for the three primary buttons.
-		left : Bool,
-		middle : Bool,
-		right : Bool,
-		wheel : F32,
-		x : F32,
-		y : F32,
-	},
+	mouse : Mouse.State,
 }.{
 
 	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
@@ -75,13 +62,13 @@ Host := {
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env_raw! : Host, Str => Try(Str, [NotFound])
+	read_env_raw! : Str => Try(Str, [NotFound])
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
 	read_env! : Host, Str => Try(Str, [NotFound])
-	read_env! = |host, key|
-		match Host.read_env_raw!(host, key) {
+	read_env! = |_host, key|
+		match Host.read_env_raw!(key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
 		}

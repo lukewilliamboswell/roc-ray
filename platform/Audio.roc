@@ -46,6 +46,10 @@ Audio := [].{
 	load_sound_raw! : Str => Sound
 	load_music_raw! : Str => Music
 	play_raw! : U64 => {}
+	stop_raw! : U64 => {}
+	pause_raw! : U64 => {}
+	resume_raw! : U64 => {}
+	is_playing_raw! : U64 => Bool
 	set_volume_raw! : U64, F32 => {}
 	set_pitch_raw! : U64, F32 => {}
 	set_pan_raw! : U64, F32 => {}
@@ -57,6 +61,11 @@ Audio := [].{
 	set_music_pitch_raw! : U64, F32 => {}
 	set_music_pan_raw! : U64, F32 => {}
 	set_music_looping_raw! : U64, Bool => {}
+	is_music_playing_raw! : U64 => Bool
+	seek_music_raw! : U64, F32 => {}
+	music_length_raw! : U64 => F32
+	music_time_played_raw! : U64 => F32
+	set_master_volume_raw! : F32 => {}
 
 	waveform_code : Waveform -> U8
 	waveform_code = |waveform|
@@ -133,6 +142,18 @@ Audio := [].{
 	play! : Sound => {}
 	play! = |sound| Audio.play_raw!(Box.unbox(sound))
 
+	stop! : Sound => {}
+	stop! = |sound| Audio.stop_raw!(Box.unbox(sound))
+
+	pause! : Sound => {}
+	pause! = |sound| Audio.pause_raw!(Box.unbox(sound))
+
+	resume! : Sound => {}
+	resume! = |sound| Audio.resume_raw!(Box.unbox(sound))
+
+	is_playing! : Sound => Bool
+	is_playing! = |sound| Audio.is_playing_raw!(Box.unbox(sound))
+
 	## Set playback volume for a sound. The host clamps volume to [0, 1].
 	set_volume! : Sound, F32 => {}
 	set_volume! = |sound, volume| Audio.set_volume_raw!(Box.unbox(sound), volume)
@@ -168,6 +189,24 @@ Audio := [].{
 
 	set_music_looping! : Music, Bool => {}
 	set_music_looping! = |music, looping| Audio.set_music_looping_raw!(Box.unbox(music), looping)
+
+	is_music_playing! : Music => Bool
+	is_music_playing! = |music| Audio.is_music_playing_raw!(Box.unbox(music))
+
+	## Seek a music stream to a position in seconds. The host clamps negative
+	## positions to zero; raylib clamps positions beyond the stream duration.
+	seek_music! : Music, F32 => {}
+	seek_music! = |music, seconds| Audio.seek_music_raw!(Box.unbox(music), seconds)
+
+	music_length! : Music => F32
+	music_length! = |music| Audio.music_length_raw!(Box.unbox(music))
+
+	music_time_played! : Music => F32
+	music_time_played! = |music| Audio.music_time_played_raw!(Box.unbox(music))
+
+	## Set global output volume for all sounds and music. Clamped to [0, 1].
+	set_master_volume! : F32 => {}
+	set_master_volume! = |volume| Audio.set_master_volume_raw!(volume)
 
 	expect waveform_code(Sine) == 0
 	expect waveform_code(Noise) == 4

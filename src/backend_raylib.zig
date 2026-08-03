@@ -111,6 +111,69 @@ pub fn unloadTexture(texture: Texture) void {
     rl.UnloadTexture(texture);
 }
 
+/// Generate a solid-color texture, releasing the temporary CPU image before return.
+pub fn generateColorTexture(width: i32, height: i32, color: abi.Color) ?Texture {
+    if (width <= 0 or height <= 0) return null;
+    const image = rl.GenImageColor(width, height, colorToRl(color));
+    defer rl.UnloadImage(image);
+    if (!rl.IsImageValid(image)) return null;
+
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
+
+/// Generate a checkerboard texture, releasing the temporary CPU image before return.
+pub fn generateCheckedTexture(args: anytype) ?Texture {
+    if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return null;
+    const image = rl.GenImageChecked(
+        args.width,
+        args.height,
+        args.checks_x,
+        args.checks_y,
+        colorToRl(args.color_a),
+        colorToRl(args.color_b),
+    );
+    defer rl.UnloadImage(image);
+    if (!rl.IsImageValid(image)) return null;
+
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
+
+/// Replace all pixels in a texture from tightly packed RGBA colors.
+pub fn updateTexture(texture: Texture, pixels: []const abi.Color) void {
+    comptime std.debug.assert(@sizeOf(abi.Color) == @sizeOf(rl.Color));
+    rl.UpdateTexture(texture, pixels.ptr);
+}
+
+/// Set a texture's scaling filter from the Roc enum code.
+pub fn setTextureFilter(texture: Texture, code: u8) void {
+    const filter: c_int = switch (code) {
+        0 => rl.TEXTURE_FILTER_POINT,
+        1 => rl.TEXTURE_FILTER_BILINEAR,
+        2 => rl.TEXTURE_FILTER_TRILINEAR,
+        3 => rl.TEXTURE_FILTER_ANISOTROPIC_4X,
+        4 => rl.TEXTURE_FILTER_ANISOTROPIC_8X,
+        5 => rl.TEXTURE_FILTER_ANISOTROPIC_16X,
+        else => return,
+    };
+    rl.SetTextureFilter(texture, filter);
+}
+
+/// Set a texture's coordinate wrapping mode from the Roc enum code.
+pub fn setTextureWrap(texture: Texture, code: u8) void {
+    const wrap: c_int = switch (code) {
+        0 => rl.TEXTURE_WRAP_REPEAT,
+        1 => rl.TEXTURE_WRAP_CLAMP,
+        2 => rl.TEXTURE_WRAP_MIRROR_REPEAT,
+        3 => rl.TEXTURE_WRAP_MIRROR_CLAMP,
+        else => return,
+    };
+    rl.SetTextureWrap(texture, wrap);
+}
+
 /// Return a native texture's width in pixels.
 pub fn textureWidth(texture: Texture) f32 {
     return @floatFromInt(texture.width);
@@ -700,6 +763,26 @@ pub fn playSound(sound: Sound) void {
     rl.PlaySound(sound);
 }
 
+/// Stop a native sound and rewind it.
+pub fn stopSound(sound: Sound) void {
+    rl.StopSound(sound);
+}
+
+/// Pause a native sound.
+pub fn pauseSound(sound: Sound) void {
+    rl.PauseSound(sound);
+}
+
+/// Resume a paused native sound.
+pub fn resumeSound(sound: Sound) void {
+    rl.ResumeSound(sound);
+}
+
+/// Check whether a native sound is currently playing.
+pub fn isSoundPlaying(sound: Sound) bool {
+    return rl.IsSoundPlaying(sound);
+}
+
 /// Set a native sound's volume.
 pub fn setSoundVolume(sound: Sound, volume: f32) void {
     rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
@@ -766,6 +849,31 @@ pub fn setMusicPan(stream: Music, pan: f32) void {
 /// Enable or disable looping on a native music stream.
 pub fn setMusicLooping(stream: *Music, looping: bool) void {
     stream.looping = looping;
+}
+
+/// Check whether a native music stream is currently playing.
+pub fn isMusicPlaying(stream: Music) bool {
+    return rl.IsMusicStreamPlaying(stream);
+}
+
+/// Seek a native music stream to a position in seconds.
+pub fn seekMusic(stream: Music, seconds: f32) void {
+    rl.SeekMusicStream(stream, @max(0, seconds));
+}
+
+/// Return a native music stream's duration in seconds.
+pub fn musicLength(stream: Music) f32 {
+    return rl.GetMusicTimeLength(stream);
+}
+
+/// Return a native music stream's current playback position in seconds.
+pub fn musicTimePlayed(stream: Music) f32 {
+    return rl.GetMusicTimePlayed(stream);
+}
+
+/// Set global audio output volume.
+pub fn setMasterVolume(volume: f32) void {
+    rl.SetMasterVolume(clampF32(volume, 0, 1));
 }
 
 /// Keyboard key enum for type-safe key handling.

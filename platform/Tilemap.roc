@@ -63,6 +63,25 @@ TilemapFlip : {
 	diagonal : Bool,
 }
 
+## A resolved tile draw. Tileset and texture lookup happen once in `build`,
+## leaving the per-frame path as culling plus draw calls.
+TilemapPreparedDraw : {
+	texture_handle : U64,
+	source : Math.Rect,
+	top_left : Math.Vec2,
+	bottom_left : Math.Vec2,
+	bottom_right : Math.Vec2,
+	top_right : Math.Vec2,
+	bounds : Math.Rect,
+}
+
+TilemapPreparedLayer : {
+	name : Str,
+	role : TilemapLayerRole,
+	visible : Bool,
+	draws : List(TilemapPreparedDraw),
+}
+
 TilemapBuilder :: {
 	raw : TilemapRawMap,
 	textures : List(TilemapTextureBinding),
@@ -98,6 +117,7 @@ TilemapBuilder :: {
 		layer_roles: builder.layer_roles,
 		object_roles: builder.object_roles,
 		origin: builder.origin,
+		prepared_layers: Box.box(prepare_layers(builder.raw, builder.textures, builder.layer_roles, builder.origin)),
 	}
 }
 
@@ -107,6 +127,7 @@ Tilemap :: {
 	layer_roles : List(TilemapLayerRoleRule),
 	object_roles : List(TilemapObjectRoleRule),
 	origin : Math.Vec2,
+	prepared_layers : Box(List(TilemapPreparedLayer)),
 }.{
 
 	## Parsed TMX data stored in flat lists to avoid a heap allocation per nested item.
@@ -135,6 +156,8 @@ Tilemap :: {
 
 	## Decoded Tiled tile-transform flags.
 	Flip : TilemapFlip
+	PreparedDraw : TilemapPreparedDraw
+	PreparedLayer : TilemapPreparedLayer
 
 	## Application-level behavior assigned to a named layer.
 	LayerRole : TilemapLayerRole
@@ -197,15 +220,7 @@ Tilemap :: {
 
 	## Resolve a layer's configured semantic role; unmatched layers are drawn.
 	layer_role_for : Tilemap, TilemapRawLayer -> TilemapLayerRole
-	layer_role_for = |map, layer| {
-		var $role = Drawn
-		for rule in map.layer_roles {
-			if rule.name == layer.name {
-				$role = rule.role
-			}
-		}
-		$role
-	}
+	layer_role_for = |map, layer| layer_role_for_rules(map.layer_roles, layer.name)
 
 	## Resolve an object's configured semantic role; unmatched objects are unknown.
 	object_role_for : Tilemap, TilemapRawObject -> TilemapObjectRole
@@ -444,9 +459,10 @@ Tilemap :: {
 	## Draw one named visible layer without camera culling.
 	draw_layer! : Tilemap, Str => {}
 	draw_layer! = |map, layer_name| {
-		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_cells!(map, layer, 0)
-			Err(_) => {}
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.name == layer_name {
+				draw_prepared_layer!(layer)
+			}
 		}
 	}
 
@@ -454,18 +470,19 @@ Tilemap :: {
 	## for maps larger than the viewport: culled cells perform no hosted effects.
 	draw_layer_in! : Tilemap, Str, Math.Rect => {}
 	draw_layer_in! = |map, layer_name, world_view| {
-		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_view!(map, layer, world_view)
-			Err(_) => {}
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.name == layer_name {
+				draw_prepared_layer_in!(layer, world_view)
+			}
 		}
 	}
 
 	## Draw every visible layer configured with the `Drawn` role.
 	draw_layers! : Tilemap, TilemapLayerRole => {}
 	draw_layers! = |map, role| {
-		for layer in map.raw.layers {
-			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_cells!(map, layer, 0)
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.role == role {
+				draw_prepared_layer!(layer)
 			}
 		}
 	}
@@ -473,9 +490,9 @@ Tilemap :: {
 	## Draw visible configured layers culled to a world-space viewport.
 	draw_layers_in! : Tilemap, TilemapLayerRole, Math.Rect => {}
 	draw_layers_in! = |map, role, world_view| {
-		for layer in map.raw.layers {
-			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_view!(map, layer, world_view)
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.role == role {
+				draw_prepared_layer_in!(layer, world_view)
 			}
 		}
 	}
@@ -483,21 +500,19 @@ Tilemap :: {
 	## Draw every visible tile layer, regardless of configured role.
 	draw_all! : Tilemap => {}
 	draw_all! = |map| {
-		for layer in map.raw.layers {
-			role = Tilemap.layer_role_for(map, layer)
-			if role == Drawn or role == Solid {
-				draw_layer_cells!(map, layer, 0)
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.role == Drawn or layer.role == Solid {
+				draw_prepared_layer!(layer)
 			}
 		}
 	}
 
 	## Draw every visible tile layer culled to a world-space viewport.
 	draw_all_in! : Tilemap, Math.Rect => {}
-	draw_all_in! = |map, world_view| {
-		for layer in map.raw.layers {
-			role = Tilemap.layer_role_for(map, layer)
-			if role == Drawn or role == Solid {
-				draw_layer_view!(map, layer, world_view)
+	draw_all_in! = |map, viewport| {
+		for layer in Box.unbox(map.prepared_layers) {
+			if layer.role == Drawn or layer.role == Solid {
+				draw_prepared_layer_in!(layer, viewport)
 			}
 		}
 	}
@@ -551,6 +566,123 @@ err_unsupported = 4
 
 world_corner_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 world_corner_for_camera = |camera, screen_point| Camera.screen_to_world(camera, screen_point)
+
+layer_role_for_rules : List(TilemapLayerRoleRule), Str -> TilemapLayerRole
+layer_role_for_rules = |rules, layer_name| {
+	var $role = Drawn
+	for rule in rules {
+		if rule.name == layer_name {
+			$role = rule.role
+		}
+	}
+	$role
+}
+
+prepare_layers : TilemapRawMap, List(TilemapTextureBinding), List(TilemapLayerRoleRule), Math.Vec2 -> List(TilemapPreparedLayer)
+prepare_layers = |raw, textures, layer_roles, origin| {
+	var $prepared = []
+	for layer in raw.layers {
+		$prepared = List.append(
+			$prepared,
+			{
+				name: layer.name,
+				role: layer_role_for_rules(layer_roles, layer.name),
+				visible: layer.visible,
+				draws: prepare_layer_draws(raw, textures, origin, layer, 0, []),
+			},
+		)
+	}
+	$prepared
+}
+
+prepare_layer_draws : TilemapRawMap, List(TilemapTextureBinding), Math.Vec2, TilemapRawLayer, U64, List(TilemapPreparedDraw) -> List(TilemapPreparedDraw)
+prepare_layer_draws = |raw, textures, origin, layer, index, draws| {
+	if index >= layer.gid_count or !(layer.visible) {
+		draws
+	} else {
+		next_draws = match List.get(raw.gids, layer.gid_start + index) {
+			Ok(raw_gid) => {
+				gid = Tilemap.clean_gid(raw_gid)
+				if gid == 0 {
+					draws
+				} else {
+					match find_tileset(raw.tilesets, gid) {
+						Ok(tileset) =>
+							match find_texture(textures, tileset.first_gid) {
+								Ok(texture) => {
+									local = gid - tileset.first_gid
+									columns = if tileset.columns == 0 1 else tileset.columns
+									col = index % layer.width
+									row = index // layer.width
+									dest = {
+										x: origin.x + U64.to_f32(col) * raw.tile_width,
+										y: origin.y + U64.to_f32(row) * raw.tile_height,
+										width: raw.tile_width,
+										height: raw.tile_height,
+									}
+									flip = Tilemap.flip_for_gid(raw_gid)
+									List.append(
+										draws,
+										{
+											texture_handle: (Assets.info(texture)).handle,
+											source: {
+												x: U64.to_f32(local % columns) * tileset.tile_width,
+												y: U64.to_f32(local // columns) * tileset.tile_height,
+												width: tileset.tile_width,
+												height: tileset.tile_height,
+											},
+											top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),
+											bottom_left: transformed_corner(dest, { x: 0, y: 1 }, flip),
+											bottom_right: transformed_corner(dest, { x: 1, y: 1 }, flip),
+											top_right: transformed_corner(dest, { x: 1, y: 0 }, flip),
+											bounds: dest,
+										},
+									)
+								}
+								Err(_) => draws
+							}
+						Err(_) => draws
+					}
+				}
+			}
+			Err(_) => draws
+		}
+		prepare_layer_draws(raw, textures, origin, layer, index + 1, next_draws)
+	}
+}
+
+draw_prepared! : TilemapPreparedDraw => {}
+draw_prepared! = |draw| {
+	Draw.draw_texture_quad_raw!({
+		texture: draw.texture_handle,
+		source: draw.source,
+		top_left: draw.top_left,
+		bottom_left: draw.bottom_left,
+		bottom_right: draw.bottom_right,
+		top_right: draw.top_right,
+		tint: Color.white,
+	})
+}
+
+draw_prepared_layer! : TilemapPreparedLayer => {}
+draw_prepared_layer! = |layer| {
+	if layer.visible {
+		for draw in layer.draws {
+			draw_prepared!(draw)
+		}
+	}
+}
+
+draw_prepared_layer_in! : TilemapPreparedLayer, Math.Rect => {}
+draw_prepared_layer_in! = |layer, viewport| {
+	if layer.visible {
+		for draw in layer.draws {
+			if Math.overlaps(draw.bounds, viewport) {
+				draw_prepared!(draw)
+			}
+		}
+	}
+}
 
 property_named_at : TilemapRawMap, U64, U64, Str, U64 -> Try(TilemapRawProperty, [NotFound])
 property_named_at = |raw, start, count, name, offset| {
@@ -805,6 +937,18 @@ offset_test_map = Tilemap.from_raw(test_raw)
 	)
 	.build()
 
+prepared_test_map : Tilemap
+prepared_test_map = Tilemap.from_raw(test_raw)
+	.with_tileset_texture(
+		1,
+		Box.box({ handle: 1, width: 32, height: 32 }),
+	)
+	.layer_role(
+		"Walls",
+		Solid,
+	)
+	.build()
+
 expect Tilemap.layer_role_for(test_map, test_walls_layer) == Solid
 expect Tilemap.object_role_for(test_map, test_spawn_object) == Spawn
 expect Tilemap.world_rect_for_cell(test_map, { col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
@@ -823,3 +967,16 @@ expect Tilemap.flip_for_gid(2_147_483_648 + 1) == { horizontal: Bool.True, verti
 expect transformed_corner(Math.rect(10, 20, 30, 40), { x: 0, y: 0 }, { horizontal: Bool.False, vertical: Bool.False, diagonal: Bool.True }) == { x: 40, y: 60 }
 expect Tilemap.viewport_for_camera({ target: { x: 100, y: 50 }, offset: { x: 20, y: 10 }, rotation: 0, zoom: 2 }, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
 expect Tilemap.viewport_for_camera({ target: { x: 0, y: 0 }, offset: { x: 0, y: 0 }, rotation: 0, zoom: -2 }, { x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
+expect List.len(Box.unbox(prepared_test_map.prepared_layers)) == 2
+expect match List.get(Box.unbox(prepared_test_map.prepared_layers), 0) {
+	Ok(layer) => List.len(layer.draws) == 6
+	Err(_) => Bool.False
+}
+expect match List.get(Box.unbox(prepared_test_map.prepared_layers), 1) {
+	Ok(layer) => List.len(layer.draws) == 1 and layer.role == Solid
+	Err(_) => Bool.False
+}
+expect Tilemap.viewport_for_camera(
+	Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 }),
+	{ x: 800, y: 600 },
+) == Math.rect(-100, 50, 400, 300)

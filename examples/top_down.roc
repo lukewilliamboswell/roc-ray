@@ -1032,13 +1032,14 @@ render! = |model, host| {
 		}
 
 	camera = Camera.follow(shaken_target(next.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
+	viewport = Tilemap.viewport_for_camera(camera, { x: screen_w, y: screen_h })
 
 	Draw.draw!(
 		Color.from_hex_rgb(0x071018),
 		|| {
 			Draw.with_camera!(
 				camera,
-				|| draw_world!(next.level, next.characters, next.tiles, next.world),
+				|| draw_world!(next.level, next.characters, next.tiles, next.world, viewport),
 			)
 
 			draw_hud!(next.level, next.world)
@@ -1059,10 +1060,10 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Level, Assets.Texture, Assets.Texture, World => {}
-draw_world! = |level, characters, tiles, world| {
+draw_world! : Level, Assets.Texture, Assets.Texture, World, Math.Rect => {}
+draw_world! = |level, characters, tiles, world, viewport| {
 	Draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
-	Tilemap.draw_all!(level.tilemap)
+	Tilemap.draw_all_in!(level.tilemap, viewport)
 	draw_hazard_lanes!(level, world.phase)
 	draw_props!(level, tiles)
 	Draw.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })

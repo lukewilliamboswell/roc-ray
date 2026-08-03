@@ -967,13 +967,14 @@ render! = |model, host| {
 
 	next = { ..model, world: next_world }
 	camera = camera_for(model.level, next_world.player.pos)
+	viewport = Tilemap.viewport_for_camera(camera, { x: screen_w, y: screen_h })
 
 	Draw.draw!(
 		Color.from_hex_rgb(0x101820),
 		|| {
 			Draw.with_camera!(
 				camera,
-				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world),
+				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport),
 			)
 			draw_hud!(next.level, next.world)
 		},
@@ -995,11 +996,11 @@ camera_for = |level, target| {
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
 
-draw_world! : Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World => {}
-draw_world! = |level, background, tiles, characters, enemies_texture, world| {
+draw_world! : Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World, Math.Rect => {}
+draw_world! = |level, background, tiles, characters, enemies_texture, world, viewport| {
 	Draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
 	Draw.texture!({ texture: background, source: Assets.rect(background), dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
-	Tilemap.draw_all!(level.tilemap)
+	Tilemap.draw_all_in!(level.tilemap, viewport)
 	draw_checkpoints!(tiles, level, world)
 	draw_goal!(tiles, level, world)
 	draw_gems!(tiles, world.gems, world.phase)

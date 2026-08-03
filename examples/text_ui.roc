@@ -1,12 +1,20 @@
 app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.Draw
+import rr.Text
 import rr.Color
 import rr.Host
 import rr.App
 
 Model : {
-	title_font : Draw.Font,
+	ui : Box(
+		{
+			title : Text.Prepared,
+			menu : Text.Prepared,
+			hud : Text.Prepared,
+			bottom : Text.Prepared,
+		},
+	),
 }
 
 program = { init!, render! }
@@ -27,20 +35,28 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_host| {
-		font = match Draw.load_font!({ path: title_font_path, size: 48 }) {
+		font = match Text.load_font!({ path: title_font_path, size: 48 }) {
 			Ok(loaded) => loaded
-			Err(_) => Draw.default_font
+			Err(_) => Text.default_font
 		}
 
-		Ok({ title_font: font })
+		Ok({
+			ui: Box.box({
+				title: Text.from("Text UI").size(48).font(font).prepare!(),
+				menu: Text.from("Start Game").size(28).prepare!(),
+				hud: Text.from("SCORE 1200").size(24).prepare!(),
+				bottom: Text.from("bottom right").size(20).prepare!(),
+			}),
+		})
 	},
 )
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, _host| {
-	title_size = Draw.measure_text!({ text: "Text UI", size: 48, spacing: Draw.default_spacing, font: model.title_font })
-	menu_size = Draw.measure_text!({ text: "Start Game", size: 28, spacing: Draw.default_spacing, font: Draw.default_font })
-	hud_size = Draw.measure_text!({ text: "SCORE 1200", size: 24, spacing: Draw.default_spacing, font: Draw.default_font })
+	ui = Box.unbox(model.ui)
+	title_size = ui.title.bounds()
+	menu_size = ui.menu.bounds()
+	hud_size = ui.hud.bounds()
 
 	title_pad = 16
 	button = { x: screen_w * 0.5 - (menu_size.width + 48) * 0.5, y: 230, width: menu_size.width + 48, height: menu_size.height + 24, style: Draw.filled_and_outlined(Color.light_gray, Color.gray, 2) }
@@ -49,16 +65,16 @@ render! = |model, _host| {
 		Color.ray_white,
 		|| {
 			Draw.rounded_rectangle!({ x: screen_w * 0.5 - title_size.width * 0.5 - title_pad, y: 44, width: title_size.width + title_pad * 2, height: title_size.height + title_pad, radius: 12, segments: 8, style: Draw.filled(Color.light_gray) })
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 56 }, text: "Text UI", size: 48, spacing: Draw.default_spacing, color: Color.dark_gray, font: model.title_font, align: Draw.align_top_center })
+			ui.title.draw!({ pos: { x: screen_w * 0.5, y: 56 }, color: Color.dark_gray, align: Text.align_top_center })
 
 			Draw.rectangle!(button)
-			Draw.text!({ pos: { x: button.x + button.width * 0.5, y: button.y + button.height * 0.5 }, text: "Start Game", size: 28, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+			ui.menu.draw!({ pos: { x: button.x + button.width * 0.5, y: button.y + button.height * 0.5 }, color: Color.black, align: Text.align_center })
 
 			Draw.rectangle!({ x: 20, y: 20, width: hud_size.width + 20, height: hud_size.height + 12, style: Draw.filled(Color.black) })
-			Draw.text!({ pos: { x: 30, y: 26 }, text: "SCORE 1200", size: 24, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_top_left })
+			ui.hud.draw!({ pos: { x: 30, y: 26 }, color: Color.yellow, align: Text.align_top_left })
 
 			Draw.text!({ pos: { x: 40, y: 360 }, text: long_message, size: 18, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: screen_w - 24, y: screen_h - 24 }, text: "bottom right", size: 20, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_bottom_right })
+			ui.bottom.draw!({ pos: { x: screen_w - 24, y: screen_h - 24 }, color: Color.blue, align: Text.align_bottom_right })
 		},
 	)
 

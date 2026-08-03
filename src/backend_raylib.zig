@@ -74,6 +74,14 @@ fn disconnectedInputState(previous: u8) u8 {
     return if (previous & ffi.INPUT_HELD != 0) ffi.INPUT_RELEASED else 0;
 }
 
+/// Derive this frame's packed state from the previous state and one held query.
+/// Raylib's pressed/released queries are equivalent to these transitions for
+/// keys and mouse buttons, so the host only needs one boundary call per input.
+fn nextInputState(previous: u8, down: bool) u8 {
+    const was_down = previous & ffi.INPUT_HELD != 0;
+    return inputStateBits(down, down and !was_down, !down and was_down);
+}
+
 test "input state packs held and edge flags" {
     try std.testing.expectEqual(@as(u8, 0), inputStateBits(false, false, false));
     try std.testing.expectEqual(@as(u8, 7), inputStateBits(true, true, true));
@@ -85,15 +93,26 @@ test "disconnecting a held input synthesizes one release edge" {
     try std.testing.expectEqual(@as(u8, 0), disconnectedInputState(ffi.INPUT_RELEASED));
 }
 
+test "input state derives press and release edges from held transitions" {
+    const up = nextInputState(0, false);
+    try std.testing.expectEqual(@as(u8, 0), up);
+
+    const pressed = nextInputState(up, true);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, pressed);
+
+    const held = nextInputState(pressed, true);
+    try std.testing.expectEqual(ffi.INPUT_HELD, held);
+
+    const released = nextInputState(held, false);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, released);
+    try std.testing.expectEqual(@as(u8, 0), nextInputState(released, false));
+}
+
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = inputStateBits(
-            rl.IsKeyDown(key),
-            rl.IsKeyPressed(key),
-            rl.IsKeyReleased(key),
-        );
+        key_state[i] = nextInputState(key_state[i], rl.IsKeyDown(key));
     }
 }
 
@@ -106,11 +125,7 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = inputStateBits(
-            rl.IsMouseButtonDown(button),
-            rl.IsMouseButtonPressed(button),
-            rl.IsMouseButtonReleased(button),
-        );
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], rl.IsMouseButtonDown(button));
     }
 }
 

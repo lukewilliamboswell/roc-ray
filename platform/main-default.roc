@@ -17,7 +17,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
+	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
 	packages {}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -124,6 +124,7 @@ platform ""
 
 import Draw
 import DrawHost
+import Text
 import Color
 import Host
 import HostHost

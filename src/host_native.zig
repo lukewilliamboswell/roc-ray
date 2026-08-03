@@ -20,17 +20,17 @@ const HostState = ffi.HostState;
 const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
-const ReadEnvResult = abi.HostRead_env_rawResult;
-const HostReadFileRawResult = abi.HostRead_file_rawRetRecord;
-const TilemapLoadTmxRawResult = abi.TilemapLoad_tmx_rawRetRecord;
+const ReadEnvResult = abi.HostHostRead_envResult;
+const HostReadFileRawResult = abi.HostHostRead_fileRetRecord;
+const TilemapLoadTmxRawResult = abi.TilemapHostLoad_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
-const TilemapRawMap = abi.TilemapLoad_tmx_rawMap;
-const TilemapRawLayer = abi.TilemapLoad_tmx_rawMapLayers;
-const TilemapRawObject = abi.TilemapLoad_tmx_rawMapObjects;
-const TilemapRawPoint = abi.TilemapLoad_tmx_rawMapPoints;
-const TilemapRawProperty = abi.TilemapLoad_tmx_rawMapProperties;
-const TilemapRawTileProperties = abi.TilemapLoad_tmx_rawMapTileProperties;
-const TilemapRawTileset = abi.TilemapLoad_tmx_rawMapTilesets;
+const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
+const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
+const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
+const TilemapRawPoint = abi.TilemapHostLoad_tmxMapPoints;
+const TilemapRawProperty = abi.TilemapHostLoad_tmxMapProperties;
+const TilemapRawTileProperties = abi.TilemapHostLoad_tmxMapTileProperties;
+const TilemapRawTileset = abi.TilemapHostLoad_tmxMapTilesets;
 
 const HOST_ERR_NOT_FOUND: u8 = 1;
 const HOST_ERR_READ_FAILED: u8 = 2;
@@ -75,7 +75,7 @@ var invalid_resource_box: InvalidResourceBox = .{};
 
 const InvalidTextureBox = extern struct {
     refcount: isize = 0,
-    payload: abi.AssetsLoad_texture_raw = .{ .handle = 0, .height = 0, .width = 0 },
+    payload: abi.AssetsHostLoad_texture = .{ .handle = 0, .height = 0, .width = 0 },
 };
 
 var invalid_texture_box: InvalidTextureBox = .{};
@@ -160,19 +160,19 @@ fn readU64Token(payload: *const u64) u64 {
     return payload.*;
 }
 
-fn writeTextureToken(payload: *abi.AssetsLoad_texture_raw, token: u64) void {
+fn writeTextureToken(payload: *abi.AssetsHostLoad_texture, token: u64) void {
     payload.handle = token;
 }
 
-fn readTextureToken(payload: *const abi.AssetsLoad_texture_raw) u64 {
+fn readTextureToken(payload: *const abi.AssetsHostLoad_texture) u64 {
     return payload.handle;
 }
 
 const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, writeU64Token, readU64Token, destroySound);
 const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
 const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
-const TextureHeap = host_resource.HostResourceHeap(abi.AssetsLoad_texture_raw, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
-const RenderTextureHeap = host_resource.HostResourceHeap(abi.DrawLoad_render_texture_raw, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
+const TextureHeap = host_resource.HostResourceHeap(abi.AssetsHostLoad_texture, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
+const RenderTextureHeap = host_resource.HostResourceHeap(abi.DrawHostLoad_render_texture, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 
 var sound_heap: SoundHeap = .{};
@@ -537,7 +537,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_blend_depth = 0;
 }
 
-fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawMeasure_text_rawRetRecord {
+fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawHostMeasure_textRetRecord {
     const font_size = if (size > 0) size else 1;
     const glyph_count: f32 = @floatFromInt(text.len);
     const gap_count: f32 = if (text.len > 1) @floatFromInt(text.len - 1) else 0;
@@ -648,7 +648,7 @@ fn storeFont(resource: FontResource) *u64 {
     };
 }
 
-fn storeTexture(resource: TextureResource, width: f32, height: f32) *abi.AssetsLoad_texture_raw {
+fn storeTexture(resource: TextureResource, width: f32, height: f32) *abi.AssetsHostLoad_texture {
     return texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
         var rejected = resource;
         destroyTexture(&rejected);
@@ -667,7 +667,7 @@ test "texture pixel count validates dimensions" {
     try std.testing.expectEqual(@as(?usize, null), texturePixelCount(4, -1));
 }
 
-fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
+fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *abi.AssetsHostLoad_texture {
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -689,11 +689,11 @@ fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c)
     return &invalid_texture_box.payload;
 }
 
-fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
+fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) *abi.AssetsHostLoad_texture {
     return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
 }
 
-fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsGenerate_color_texture_rawArgs) callconv(.c) *abi.AssetsGenerate_color_texture_raw {
+fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textureArgs) callconv(.c) *abi.AssetsHostGenerate_color_texture {
     if (args.width <= 0 or args.height <= 0) return &invalid_texture_box.payload;
     if (active_headless) {
         return storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height));
@@ -702,7 +702,7 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsGenerate_color_texture_ra
     return storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture));
 }
 
-fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsGenerate_checked_texture_rawArgs) callconv(.c) *abi.AssetsGenerate_checked_texture_raw {
+fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_textureArgs) callconv(.c) *abi.AssetsHostGenerate_checked_texture {
     if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return &invalid_texture_box.payload;
     if (active_headless) {
         return storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height));
@@ -711,7 +711,7 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsGenerate_checked_textur
     return storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture));
 }
 
-fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsUpdate_texture_rawArgs) callconv(.c) bool {
+fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) bool {
     defer args.pixels.decref(host);
     const resource = texture_heap.get(args.texture) orelse return false;
     const expected: usize = switch (resource.*) {
@@ -726,7 +726,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsUpdate_texture_r
     return true;
 }
 
-fn exportedAssetsUpdateTextureRaw(args: abi.AssetsUpdate_texture_rawArgs) callconv(.c) bool {
+fn exportedAssetsUpdateTextureRaw(args: abi.AssetsHostUpdate_textureArgs) callconv(.c) bool {
     return hostedAssetsUpdateTextureRaw(activeHost(), args);
 }
 
@@ -740,7 +740,7 @@ fn hostedAssetsSetTextureWrapRaw(handle: u64, code: u8) callconv(.c) void {
     raylib.setTextureWrap(texture, code);
 }
 
-fn storeRenderTexture(resource: RenderTextureResource, width: f32, height: f32) *abi.DrawLoad_render_texture_raw {
+fn storeRenderTexture(resource: RenderTextureResource, width: f32, height: f32) *abi.DrawHostLoad_render_texture {
     return render_texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
         var rejected = resource;
         destroyRenderTexture(&rejected);
@@ -756,7 +756,7 @@ fn storeShader(resource: ShaderResource) *u64 {
     };
 }
 
-fn hostedDrawLoadRenderTextureRaw(args: abi.DrawLoad_render_texture_rawArgs) callconv(.c) *abi.DrawLoad_render_texture_raw {
+fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) *abi.DrawHostLoad_render_texture {
     if (args.width <= 0 or args.height <= 0) return &invalid_texture_box.payload;
     if (active_headless) {
         return storeRenderTexture(.headless, @floatFromInt(args.width), @floatFromInt(args.height));
@@ -770,7 +770,7 @@ fn shaderPathsExist(vertex: []const u8, fragment: []const u8) bool {
     return (vertex.len == 0 or pathExists(vertex)) and (fragment.len == 0 or pathExists(fragment));
 }
 
-fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawLoad_shader_rawArgs) callconv(.c) *u64 {
+fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawHostLoad_shaderArgs) callconv(.c) *u64 {
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     const vertex_slice = args.vertex_path.asSlice();
@@ -789,11 +789,11 @@ fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawLoad_shader_rawArgs) ca
     return storeShader(.{ .native = shader });
 }
 
-fn exportedDrawLoadShaderRaw(args: abi.DrawLoad_shader_rawArgs) callconv(.c) *u64 {
+fn exportedDrawLoadShaderRaw(args: abi.DrawHostLoad_shaderArgs) callconv(.c) *u64 {
     return hostedDrawLoadShaderRaw(activeHost(), args);
 }
 
-fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawLoad_shader_source_rawArgs) callconv(.c) *u64 {
+fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) *u64 {
     defer args.vertex_source.decref(host);
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
@@ -812,7 +812,7 @@ fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawLoad_shader_sourc
     return storeShader(.{ .native = shader });
 }
 
-fn exportedDrawLoadShaderSourceRaw(args: abi.DrawLoad_shader_source_rawArgs) callconv(.c) *u64 {
+fn exportedDrawLoadShaderSourceRaw(args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) *u64 {
     return hostedDrawLoadShaderSourceRaw(activeHost(), args);
 }
 
@@ -832,7 +832,7 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
     return null;
 }
 
-fn hostedDrawBeginRenderTextureRaw(args: abi.DrawBegin_render_texture_rawArgs) callconv(.c) bool {
+fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) bool {
     const resource = render_texture_heap.get(args.arg0) orelse return false;
     switch (resource.*) {
         .headless => headless_render_texture_depth +|= 1,
@@ -849,7 +849,7 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     raylib.endTextureMode();
 }
 
-fn hostedDrawBeginShaderRaw(args: abi.DrawBegin_shader_rawArgs) callconv(.c) bool {
+fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) bool {
     const resource = shader_heap.get(args.arg0) orelse return false;
     switch (resource.*) {
         .headless => headless_shader_depth +|= 1,
@@ -866,7 +866,7 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
     raylib.endShaderMode();
 }
 
-fn hostedDrawBeginBlendRaw(args: abi.DrawBegin_blend_rawArgs) callconv(.c) bool {
+fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) bool {
     if (args.arg0 > 5) return false;
     if (active_headless) {
         headless_blend_depth +|= 1;
@@ -884,7 +884,7 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
     raylib.endBlendMode();
 }
 
-fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawShader_location_rawArgs) callconv(.c) i32 {
+fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
     defer args.name.decref(host);
     const resource = shader_heap.get(args.shader) orelse return -1;
     const name_slice = args.name.asSlice();
@@ -900,41 +900,41 @@ fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawShader_location_raw
     }
 }
 
-fn exportedDrawShaderLocationRaw(args: abi.DrawShader_location_rawArgs) callconv(.c) i32 {
+fn exportedDrawShaderLocationRaw(args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
     return hostedDrawShaderLocationRaw(activeHost(), args);
 }
 
-fn hostedDrawSetShaderFloatRaw(args: abi.DrawSet_shader_float_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderFloat(resource.native, args.location, args.value);
 }
 
-fn hostedDrawSetShaderIntRaw(args: abi.DrawSet_shader_int_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderInt(resource.native, args.location, args.value);
 }
 
-fn hostedDrawSetShaderVec2Raw(args: abi.DrawSet_shader_vec2_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec2(resource.native, args.location, .{ args.value.x, args.value.y });
 }
 
-fn hostedDrawSetShaderVec3Raw(args: abi.DrawSet_shader_vec3_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec3(resource.native, args.location, .{ args.value.x, args.value.y, args.value.z });
 }
 
-fn hostedDrawSetShaderVec4Raw(args: abi.DrawSet_shader_vec4_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec4(resource.native, args.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
 }
 
-fn hostedDrawSetShaderTextureRaw(args: abi.DrawSet_shader_texture_rawArgs) callconv(.c) void {
+fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callconv(.c) void {
     const resource = shader_heap.get(args.shader) orelse return;
     if (resource.* == .headless) return;
     const texture = nativeTextureForToken(args.texture) orelse return;
@@ -947,7 +947,7 @@ fn hostedDrawBeginFrame() callconv(.c) void {
 }
 
 /// Forward Roc scissor bounds to the raylib backend.
-fn hostedDrawBeginScissorRaw(args: abi.DrawBegin_scissor_rawArgs) callconv(.c) void {
+fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.beginScissor(args.x, args.y, args.width, args.height);
 }
@@ -958,22 +958,22 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
     raylib.endScissor();
 }
 
-fn hostedDrawBeginCamera(args: abi.DrawBegin_cameraArgs) callconv(.c) void {
+fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.beginMode2D(args);
 }
 
-fn hostedDrawCircleRaw(args: abi.DrawCircle_rawArgs) callconv(.c) void {
+fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawCircle(args);
 }
 
-fn hostedDrawCircleGradient(args: abi.DrawCircle_gradientArgs) callconv(.c) void {
+fn hostedDrawCircleGradient(args: abi.DrawHostCircle_gradientArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawCircleGradient(args);
 }
 
-fn hostedDrawCircleLinesRaw(args: abi.DrawCircle_lines_rawArgs) callconv(.c) void {
+fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawCircleLines(args);
 }
@@ -993,77 +993,77 @@ fn hostedDrawEndCamera() callconv(.c) void {
     raylib.endMode2D();
 }
 
-fn hostedDrawFps(args: abi.DrawFpsArgs) callconv(.c) void {
+fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawFps(args);
 }
 
-fn hostedDrawLineRaw(args: abi.DrawLine_rawArgs) callconv(.c) void {
+fn hostedDrawLineRaw(args: abi.DrawHostLineArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawLine(args);
 }
 
-fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawPolygon_rawArgs) callconv(.c) void {
+fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawHostPolygonArgs) callconv(.c) void {
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygon(args.points.items(), args.color);
 }
 
-fn exportedDrawPolygonRaw(args: abi.DrawPolygon_rawArgs) callconv(.c) void {
+fn exportedDrawPolygonRaw(args: abi.DrawHostPolygonArgs) callconv(.c) void {
     hostedDrawPolygonRaw(activeHost(), args);
 }
 
-fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
+fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawHostPolygon_linesArgs) callconv(.c) void {
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
 }
 
-fn exportedDrawPolygonLinesRaw(args: abi.DrawPolygon_lines_rawArgs) callconv(.c) void {
+fn exportedDrawPolygonLinesRaw(args: abi.DrawHostPolygon_linesArgs) callconv(.c) void {
     hostedDrawPolygonLinesRaw(activeHost(), args);
 }
 
-fn hostedDrawRectangleRaw(args: abi.DrawRectangle_rawArgs) callconv(.c) void {
+fn hostedDrawRectangleRaw(args: abi.DrawHostRectangleArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRectangle(args);
 }
 
-fn hostedDrawRectangleLinesRaw(args: abi.DrawRectangle_lines_rawArgs) callconv(.c) void {
+fn hostedDrawRectangleLinesRaw(args: abi.DrawHostRectangle_linesArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRectangleLines(args);
 }
 
-fn hostedDrawRectangleGradientH(args: abi.DrawRectangle_gradient_hArgs) callconv(.c) void {
+fn hostedDrawRectangleGradientH(args: abi.DrawHostRectangle_gradient_hArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRectangleGradientH(args);
 }
 
-fn hostedDrawRectangleGradientV(args: abi.DrawRectangle_gradient_vArgs) callconv(.c) void {
+fn hostedDrawRectangleGradientV(args: abi.DrawHostRectangle_gradient_vArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRectangleGradientV(args);
 }
 
-fn hostedDrawRoundedRectangleRaw(args: abi.DrawRounded_rectangle_rawArgs) callconv(.c) void {
+fn hostedDrawRoundedRectangleRaw(args: abi.DrawHostRounded_rectangleArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRoundedRectangle(args);
 }
 
-fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawRounded_rectangle_lines_rawArgs) callconv(.c) void {
+fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawHostRounded_rectangle_linesArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawRoundedRectangleLines(args);
 }
 
-fn hostedDrawTriangleRaw(args: abi.DrawTriangle_rawArgs) callconv(.c) void {
+fn hostedDrawTriangleRaw(args: abi.DrawHostTriangleArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawTriangle(args);
 }
 
-fn hostedDrawTriangleLinesRaw(args: abi.DrawTriangle_lines_rawArgs) callconv(.c) void {
+fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c) void {
     if (active_headless) return;
     raylib.drawTriangleLines(args);
 }
 
-fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawLoad_font_rawArgs) callconv(.c) *u64 {
+fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawHostLoad_fontArgs) callconv(.c) *u64 {
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
@@ -1080,7 +1080,7 @@ fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawLoad_font_rawArgs) callco
     return storeFont(.{ .native = font });
 }
 
-fn exportedDrawLoadFontRaw(args: abi.DrawLoad_font_rawArgs) callconv(.c) *u64 {
+fn exportedDrawLoadFontRaw(args: abi.DrawHostLoad_fontArgs) callconv(.c) *u64 {
     return hostedDrawLoadFontRaw(activeHost(), args);
 }
 
@@ -1093,9 +1093,9 @@ fn fontForToken(token: u64) raylib.Font {
     };
 }
 
-fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.DrawMeasure_text_rawRetRecord {
+fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
     defer args.text.decref(host);
-    var result: abi.DrawMeasure_text_rawRetRecord = .{ .height = 0, .width = 0 };
+    var result: abi.DrawHostMeasure_textRetRecord = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
     if (active_headless) return headlessMeasureText(text_slice, args.size, args.spacing);
@@ -1109,11 +1109,11 @@ fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) 
     return result;
 }
 
-fn exportedDrawMeasureTextRaw(args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.DrawMeasure_text_rawRetRecord {
+fn exportedDrawMeasureTextRaw(args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
     return hostedDrawMeasureTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawText_rawArgs) callconv(.c) void {
+fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
     defer args.text.decref(host);
     if (active_headless) return;
 
@@ -1132,11 +1132,11 @@ fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawText_rawArgs) callconv(.c) vo
     );
 }
 
-fn exportedDrawTextRaw(args: abi.DrawText_rawArgs) callconv(.c) void {
+fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
     hostedDrawTextRaw(activeHost(), args);
 }
 
-fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawText_aligned_rawArgs) callconv(.c) void {
+fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) callconv(.c) void {
     defer args.text.decref(host);
     if (active_headless) return;
 
@@ -1156,17 +1156,17 @@ fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawText_aligned_rawArgs) 
     );
 }
 
-fn exportedDrawTextAlignedRaw(args: abi.DrawText_aligned_rawArgs) callconv(.c) void {
+fn exportedDrawTextAlignedRaw(args: abi.DrawHostText_alignedArgs) callconv(.c) void {
     hostedDrawTextAlignedRaw(activeHost(), args);
 }
 
-fn hostedDrawTextureRaw(args: abi.DrawDraw_texture_rawArgs) callconv(.c) void {
+fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     if (active_headless) return;
     const texture = nativeTextureForToken(args.texture) orelse return;
     raylib.drawTexture(texture, args);
 }
 
-fn hostedDrawTextureQuadRaw(args: abi.DrawDraw_texture_quad_rawArgs) callconv(.c) void {
+fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
     if (active_headless) return;
     const texture = nativeTextureForToken(args.texture) orelse return;
     raylib.drawTextureQuad(texture, args);
@@ -1260,7 +1260,7 @@ fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
 
-fn hostedSetScreenSize(args: abi.HostSet_screen_size_rawArgs) callconv(.c) u8 {
+fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
     if (active_headless) {
         headless_screen_width = positiveI32(@intFromFloat(args.width), headless_screen_width);
         headless_screen_height = positiveI32(@intFromFloat(args.height), headless_screen_height);
@@ -1331,13 +1331,13 @@ fn storeMusic(resource: MusicResource) *u64 {
     };
 }
 
-fn hostedAudioGenTone(args: abi.AudioGen_tone_rawArgs) callconv(.c) *u64 {
+fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) *u64 {
     if (active_headless) return storeSound(.headless);
     const sound = raylib.genTone(args.freq, args.ms) orelse return invalidResourceHandle();
     return storeSound(.{ .native = sound });
 }
 
-fn hostedAudioGenSound(args: abi.AudioGen_sound_rawArgs) callconv(.c) *u64 {
+fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) *u64 {
     if (active_headless) return storeSound(.headless);
     const sound = raylib.genSound(args) orelse return invalidResourceHandle();
     return storeSound(.{ .native = sound });

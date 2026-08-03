@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Audio
@@ -145,7 +145,7 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [SoundGenerationFailed])
 init! = App.init(
 	{
 		..App.default,
@@ -156,11 +156,11 @@ init! = App.init(
 		Ok({
 			game: new_game_state(),
 			sounds: {
-				paddle: Audio.gen_tone!({ freq: 440, ms: 50 }),
-				brick: Audio.gen_tone!({ freq: 760, ms: 45 }),
-				wall: Audio.gen_tone!({ freq: 260, ms: 40 }),
-				lose: Audio.gen_tone!({ freq: 140, ms: 180 }),
-				start: Audio.gen_tone!({ freq: 520, ms: 70 }),
+				paddle: Audio.gen_tone!({ freq: 440, ms: 50 })?,
+				brick: Audio.gen_tone!({ freq: 760, ms: 45 })?,
+				wall: Audio.gen_tone!({ freq: 260, ms: 40 })?,
+				lose: Audio.gen_tone!({ freq: 140, ms: 180 })?,
+				start: Audio.gen_tone!({ freq: 520, ms: 70 })?,
 			},
 		})
 	},
@@ -426,11 +426,11 @@ play_step_events! : Sounds, List(StepEvent) => {}
 play_step_events! = |sounds, events| {
 	for event in events {
 		match event {
-			GameStarted => Audio.play!(sounds.start)
-			WallHit => Audio.play!(sounds.wall)
-			BrickHit(_) => Audio.play!(sounds.brick)
-			LifeLost(_) => Audio.play!(sounds.lose)
-			WallCleared => Audio.play!(sounds.start)
+			GameStarted => sounds.start.play!()
+			WallHit => sounds.wall.play!()
+			BrickHit(_) => sounds.brick.play!()
+			LifeLost(_) => sounds.lose.play!()
+			WallCleared => sounds.start.play!()
 		}
 	}
 }
@@ -443,7 +443,7 @@ render! = |model, host| {
 
 	result = advance_game(model.game, frame_input(host))
 	if result.paddle_hit {
-		Audio.play!(model.sounds.paddle)
+		model.sounds.paddle.play!()
 	}
 	play_step_events!(model.sounds, result.events)
 	next = { ..model, game: result.game }

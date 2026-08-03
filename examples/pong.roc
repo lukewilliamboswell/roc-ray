@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.Draw
 import rr.Color
@@ -101,11 +101,11 @@ new_round! = |model| {
 
 # Play a sound only when `cond` is true (a no-op otherwise).
 play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond Audio.play!(sound) else {}
+play_if! = |cond, sound| if cond sound.play!() else {}
 
 program = { init!, render! }
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [SoundGenerationFailed])
 init! = App.init(
 	{
 		..App.default,
@@ -122,9 +122,9 @@ init! = App.init(
 			right_y: 250,
 			left_score: 0,
 			right_score: 0,
-			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 }),
-			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 }),
-			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 }),
+			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
+			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
+			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 		}
 
 		Ok(new_round!(seed))

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Audio
@@ -61,7 +61,7 @@ step_time = 0.115
 start_snake : List(Cell)
 start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [SoundGenerationFailed])
 init! = App.init(
 	{
 		..App.default,
@@ -77,9 +77,9 @@ init! = App.init(
 			score: 0,
 			accumulator: 0,
 			state: Playing,
-			eat_sound: Audio.gen_tone!({ freq: 620, ms: 70 }),
-			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 }),
-			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 }),
+			eat_sound: Audio.gen_tone!({ freq: 620, ms: 70 })?,
+			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 })?,
+			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 		}
 
 		Ok(new_game!(seed))
@@ -199,14 +199,14 @@ step_snake! = |model| {
 	hit_self = List.contains(body_for_collision, next_head)
 
 	if hit_wall or hit_self {
-		Audio.play!(model.crash_sound)
+		model.crash_sound.play!()
 		{ ..model, accumulator: 0, state: GameOver }
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
 		next_snake = List.prepend(next_body, next_head)
 
 		if ate {
-			Audio.play!(model.eat_sound)
+			model.eat_sound.play!()
 			{
 				..model,
 				snake: next_snake,
@@ -253,7 +253,7 @@ render! = |model, host| {
 		Playing => advance_playing!(model, host)
 		GameOver =>
 			if Keys.key_pressed(host, KeySpace) {
-				Audio.play!(model.start_sound)
+				model.start_sound.play!()
 				new_game!(model)
 			} else {
 				model

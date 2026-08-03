@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Assets
@@ -420,13 +420,13 @@ init! = App.init(
 			)
 			.build()
 		level = level_from_tilemap(tilemap)
-		sounds = make_sounds!()
-		Audio.play_music!(sounds.music)
+		sounds = make_sounds!()?
+		sounds.music.play!()
 		Ok(new_game(characters, tiles, level, sounds))
 	},
 )
 
-make_sound! : Audio.Waveform, F32, F32, I32, F32 => Audio.Sound
+make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [SoundGenerationFailed, ..])
 make_sound! = |waveform, from, to, ms, volume|
 	Audio.gen_sound!({
 		waveform,
@@ -447,35 +447,28 @@ load_sound_or! = |path, fallback|
 		Err(_) => fallback
 	}
 
-load_music_or_invalid! : Str => Audio.Music
-load_music_or_invalid! = |path|
-	match Audio.load_music!(path) {
-		Ok(music) => music
-		Err(_) => Box.box(0)
-	}
-
-make_sounds! : () => Sounds
+make_sounds! : () => Try(Sounds, [SoundGenerationFailed, MusicLoadFailed, ..])
 make_sounds! = || {
-	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55))
-	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7))
-	win = load_sound_or!(win_path, make_sound!(Square, 640, 1280, 520, 0.45))
-	lose = load_sound_or!(lose_path, make_sound!(Saw, 120, 45, 520, 0.5))
-	gate = load_sound_or!(gate_path, make_sound!(Square, 220, 390, 240, 0.45))
-	dash = load_sound_or!(dash_path, make_sound!(Noise, 520, 120, 130, 0.38))
-	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)
-	music = load_music_or_invalid!(music_path)
+	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
+	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)
+	win = load_sound_or!(win_path, make_sound!(Square, 640, 1280, 520, 0.45)?)
+	lose = load_sound_or!(lose_path, make_sound!(Saw, 120, 45, 520, 0.5)?)
+	gate = load_sound_or!(gate_path, make_sound!(Square, 220, 390, 240, 0.45)?)
+	dash = load_sound_or!(dash_path, make_sound!(Noise, 520, 120, 130, 0.38)?)
+	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)?
+	music = Audio.load_music!(music_path)?
 
-	Audio.set_volume!(collect, 0.58)
-	Audio.set_volume!(hurt, 0.55)
-	Audio.set_volume!(win, 0.48)
-	Audio.set_volume!(lose, 0.58)
-	Audio.set_volume!(gate, 0.46)
-	Audio.set_volume!(dash, 0.3)
-	Audio.set_volume!(sparkle, 0.16)
-	Audio.set_music_volume!(music, 0.13)
-	Audio.set_music_looping!(music, Bool.True)
+	collect.set_volume!(0.58)
+	hurt.set_volume!(0.55)
+	win.set_volume!(0.48)
+	lose.set_volume!(0.58)
+	gate.set_volume!(0.46)
+	dash.set_volume!(0.3)
+	sparkle.set_volume!(0.16)
+	music.set_volume!(0.13)
+	music.set_looping!(Bool.True)
 
-	{ collect, hurt, win, lose, gate, dash, sparkle, music }
+	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
 }
 
 new_game : Assets.Texture, Assets.Texture, Level, Sounds -> Model
@@ -771,7 +764,7 @@ find_hit_spark = |sparks, player_circle, index|
 	}
 
 play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond Audio.play!(sound) else {}
+play_if! = |cond, sound| if cond sound.play!() else {}
 
 pan_for_world_x : F32 -> F32
 pan_for_world_x = |x| Math.clamp((x - world_left) / (world_right - world_left) * 2 - 1, -1, 1)
@@ -979,22 +972,22 @@ play_step_events! = |model, result| {
 	for event in result.events {
 		match event {
 			DashStarted(pos) => {
-				Audio.set_pan!(sounds.dash, pan_for_world_x(pos.x))
-				Audio.set_pitch!(sounds.dash, 0.95 + U64.to_f32(model.world.score) * 0.015)
-				Audio.play!(sounds.dash)
+				sounds.dash.set_pan!(pan_for_world_x(pos.x))
+				sounds.dash.set_pitch!(0.95 + U64.to_f32(model.world.score) * 0.015)
+				sounds.dash.play!()
 			}
 			SparkCollected(spark) => {
-				Audio.set_pan!(sounds.collect, pan_for_world_x(spark.pos.x))
-				Audio.set_pitch!(sounds.sparkle, 0.92 + U64.to_f32(result.world.score) * 0.045)
-				Audio.play!(sounds.collect)
+				sounds.collect.set_pan!(pan_for_world_x(spark.pos.x))
+				sounds.sparkle.set_pitch!(0.92 + U64.to_f32(result.world.score) * 0.045)
+				sounds.collect.play!()
 				play_if!(result.world.score % 3 == 0, sounds.sparkle)
 			}
-			GateOpened => Audio.play!(sounds.gate)
+			GateOpened => sounds.gate.play!()
 			Escaped => {
-				Audio.set_music_volume!(sounds.music, 0.08)
-				Audio.play!(sounds.win)
+				sounds.music.set_volume!(0.08)
+				sounds.win.play!()
 			}
-			Damaged(state) => Audio.play!(if state == GameOver sounds.lose else sounds.hurt)
+			Damaged(state) => (if state == GameOver sounds.lose else sounds.hurt).play!()
 		}
 	}
 }
@@ -1024,14 +1017,14 @@ render! = |model, host| {
 		Playing => advance_playing!(model, host)
 		Won =>
 			if Keys.key_pressed(host, KeySpace) {
-				Audio.set_music_volume!(model.sounds.music, 0.13)
+				model.sounds.music.set_volume!(0.13)
 				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {
 				model
 			}
 		GameOver =>
 			if Keys.key_pressed(host, KeySpace) {
-				Audio.set_music_volume!(model.sounds.music, 0.13)
+				model.sounds.music.set_volume!(0.13)
 				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {
 				model

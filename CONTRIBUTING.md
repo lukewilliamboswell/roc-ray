@@ -182,21 +182,22 @@ retained value stays immutable; that unusual case necessarily allocates a new
 backing list. Do not rebuild these lists in the normal per-frame path.
 
 Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
-heaps. Their handle allocation is ABI-compatible with Roc's `Box`: the final Roc
-ARC release routes through `roc_dealloc`, unloads the native value, and makes the
-slot reusable. Creation effects return these host-backed boxes directly; do not
-wrap a scalar handle with `Box.box` on the Roc side. Hot draw and audio effects
-unbox the lifecycle token before crossing the boundary, so they pass a scalar
-without per-call retain/release traffic. A live Roc reference pins the slot, and
-the host validates its type, generation, and liveness on every lookup.
+heaps. Their handle allocation is ABI-compatible with Roc's `Box`: releasing the
+final Roc reference routes through `roc_dealloc`, unloads the native value, and
+makes the slot reusable. Creation effects return these host-backed boxes
+directly; do not wrap a scalar handle with `Box.box` on the Roc side. Hot draw
+and audio effects unbox the lifecycle token before crossing the boundary, so
+they pass a scalar without per-call retain/release traffic. A live Roc reference
+pins the slot, and the host validates its type, generation, and liveness on
+every lookup.
 
 Keep built-in resources allocation-free. For example, `Draw.default_font` is a
 plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
 also include immutable metadata: `Assets.Texture` stores dimensions beside its
 token in the host slot, keeping the Roc model representation to one pointer.
 
-Generated textures follow the same ARC ownership path as loaded textures. CPU
-images used during generation are released before the hosted effect returns.
+Generated textures follow the same host-owned lifetime path as loaded textures.
+CPU images used during generation are released before the hosted effect returns.
 `Assets.update_texture!` borrows the contiguous Roc color list for one call and
 does not copy or retain it in the host; build reusable pixel buffers outside the
 render loop when possible.
@@ -205,11 +206,11 @@ Render textures and shaders follow the same ownership contract, but use distinct
 resource kinds so a stale or cross-typed scalar token cannot resolve. A render
 texture box stores its dimensions beside the token and owns its framebuffer,
 color texture, and depth attachment as one unit. `Draw.render_texture` is an
-allocation-free view: the returned ARC reference still owns the complete render
-target. Shader uniforms retain their shader and cache the native location once;
-per-frame setters therefore pass only the shader token, location, and scalar or
-small vector value. Avoid resolving uniform names, creating render targets, or
-compiling shaders in the render loop.
+allocation-free view: the returned host-managed reference still owns the complete
+render target. Shader uniforms retain their shader and cache the native location
+once; per-frame setters therefore pass only the shader token, location, and
+scalar or small vector value. Avoid resolving uniform names, creating render
+targets, or compiling shaders in the render loop.
 
 Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
 `Draw.with_blend_mode!` for paired begin/end state changes. Render-texture color

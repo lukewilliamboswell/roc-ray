@@ -6,6 +6,7 @@ import Math
 
 Camera := [].{
 
+	## Target, screen offset, clockwise rotation in degrees, and zoom factor.
 	Settings : {
 		target : Math.Vec2,
 		offset : Math.Vec2,
@@ -13,8 +14,10 @@ Camera := [].{
 		zoom : F32,
 	}
 
+	## Immutable camera value accepted by drawing and coordinate transforms.
 	Camera2D : Settings
 
+	## Identity camera: no offset or rotation, with unit zoom.
 	default : Camera2D
 	default = {
 		target: Math.zero,
@@ -23,6 +26,7 @@ Camera := [].{
 		zoom: 1,
 	}
 
+	## Construct a camera from explicit settings.
 	new : Settings -> Camera2D
 	new = |settings| settings
 
@@ -44,6 +48,7 @@ Camera := [].{
 		zoom: cfg.zoom,
 	}
 
+	## Return a copy focused on a new world-space target.
 	with_target : Camera2D, Math.Vec2 -> Camera2D
 	with_target = |camera, target| {
 		target,
@@ -52,6 +57,7 @@ Camera := [].{
 		zoom: camera.zoom,
 	}
 
+	## Return a copy with a new logical screen-space offset.
 	with_offset : Camera2D, Math.Vec2 -> Camera2D
 	with_offset = |camera, offset| {
 		target: camera.target,
@@ -60,6 +66,7 @@ Camera := [].{
 		zoom: camera.zoom,
 	}
 
+	## Return a copy with a new clockwise rotation in degrees.
 	with_rotation : Camera2D, F32 -> Camera2D
 	with_rotation = |camera, rotation| {
 		target: camera.target,
@@ -68,6 +75,7 @@ Camera := [].{
 		zoom: camera.zoom,
 	}
 
+	## Return a copy with a new zoom factor.
 	with_zoom : Camera2D, F32 -> Camera2D
 	with_zoom = |camera, zoom| {
 		target: camera.target,
@@ -76,6 +84,7 @@ Camera := [].{
 		zoom,
 	}
 
+	## Clamp the current zoom to inclusive minimum and maximum limits.
 	clamp_zoom : Camera2D, { min : F32, max : F32 } -> Camera2D
 	clamp_zoom = |camera, limits| Camera.with_zoom(camera, Math.clamp(camera.zoom, limits.min, limits.max))
 

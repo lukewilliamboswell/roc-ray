@@ -36,7 +36,7 @@ pixels = [
 	Color.green,
 ]
 
-init! : App.Init(Model, [PixelCountMismatch, TextureGenerationFailed])
+init! : App.Init(Model, [PixelCountMismatch, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init(
 	{ ..App.default, title: "Generated Assets", target_fps: 120 },
 	|_host| {
@@ -49,7 +49,7 @@ init! = App.init(
 						Assets.set_filter!(texture, Bilinear)
 						Assets.set_wrap!(texture, Clamp)
 
-						sound = Audio.gen_tone!({ freq: 440, ms: 180 })
+						sound = Audio.gen_tone!({ freq: 440, ms: 180 })?
 						Audio.set_master_volume!(0.8)
 						Ok({ texture, sound })
 					}
@@ -60,10 +60,10 @@ init! = App.init(
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if host.key_pressed(KeySpace) Audio.play!(model.sound)
-	if host.key_pressed(KeyS) Audio.stop!(model.sound)
-	if host.key_pressed(KeyP) Audio.pause!(model.sound)
-	if host.key_pressed(KeyR) Audio.resume!(model.sound)
+	if host.key_pressed(KeySpace) model.sound.play!()
+	if host.key_pressed(KeyS) model.sound.stop!()
+	if host.key_pressed(KeyP) model.sound.pause!()
+	if host.key_pressed(KeyR) model.sound.resume!()
 
 	sprite = Sprite.from_texture(model.texture)
 		.pos({ x: 400, y: 285 })

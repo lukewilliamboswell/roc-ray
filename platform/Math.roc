@@ -4,11 +4,13 @@
 ## right, y grows downward, and rectangles are top-left plus width/height.
 Math := [].{
 
+	## Two-dimensional floating-point vector.
 	Vec2 : {
 		x : F32,
 		y : F32,
 	}
 
+	## Axis-aligned rectangle represented by top-left position and size.
 	Rect : {
 		x : F32,
 		y : F32,
@@ -16,29 +18,37 @@ Math := [].{
 		height : F32,
 	}
 
+	## Circle represented by center and radius.
 	Circle : {
 		center : Vec2,
 		radius : F32,
 	}
 
+	## Construct a two-dimensional vector.
 	vec2 : F32, F32 -> Vec2
 	vec2 = |x, y| { x, y }
 
+	## The zero vector.
 	zero : Vec2
 	zero = { x: 0, y: 0 }
 
+	## Construct an axis-aligned rectangle.
 	rect : F32, F32, F32, F32 -> Rect
 	rect = |x, y, width, height| { x, y, width, height }
 
+	## Construct a circle.
 	circle : Vec2, F32 -> Circle
 	circle = |center, radius| { center, radius }
 
+	## Clamp a value to inclusive lower and upper bounds.
 	clamp : F32, F32, F32 -> F32
 	clamp = |value, lo, hi| if value < lo lo else if value > hi hi else value
 
+	## Clamp a value to the inclusive 0-to-1 range.
 	clamp01 : F32 -> F32
 	clamp01 = |value| Math.clamp(value, 0, 1)
 
+	## Linearly interpolate between two scalars; amounts outside 0 to 1 extrapolate.
 	lerp : F32, F32, F32 -> F32
 	lerp = |from, to, amount| from + (to - from) * amount
 
@@ -69,81 +79,102 @@ Math := [].{
 			step(guess15)
 		}
 
+	## Add two vectors component-wise.
 	add : Vec2, Vec2 -> Vec2
 	add = |a, b| { x: a.x + b.x, y: a.y + b.y }
 
+	## Subtract two vectors component-wise.
 	sub : Vec2, Vec2 -> Vec2
 	sub = |a, b| { x: a.x - b.x, y: a.y - b.y }
 
+	## Multiply both vector components by a scalar.
 	scale : Vec2, F32 -> Vec2
 	scale = |v, amount| { x: v.x * amount, y: v.y * amount }
 
+	## Compute the vector dot product.
 	dot : Vec2, Vec2 -> F32
 	dot = |a, b| a.x * b.x + a.y * b.y
 
+	## Squared vector length, avoiding a square root.
 	length_squared : Vec2 -> F32
 	length_squared = |v| Math.dot(v, v)
 
+	## Euclidean vector length.
 	length : Vec2 -> F32
 	length = |v| Math.sqrt(Math.length_squared(v))
 
+	## Squared distance between two points.
 	distance_squared : Vec2, Vec2 -> F32
 	distance_squared = |a, b| Math.length_squared(Math.sub(a, b))
 
+	## Euclidean distance between two points.
 	distance : Vec2, Vec2 -> F32
 	distance = |a, b| Math.sqrt(Math.distance_squared(a, b))
 
+	## Return a unit vector, or zero when the input has zero length.
 	normalize : Vec2 -> Vec2
 	normalize = |v| {
 		len = Math.length(v)
 		if len == 0 Math.zero else Math.scale(v, 1 / len)
 	}
 
+	## Linearly interpolate between two vectors.
 	lerp_vec2 : Vec2, Vec2, F32 -> Vec2
 	lerp_vec2 = |from, to, amount| {
 		x: Math.lerp(from.x, to.x, amount),
 		y: Math.lerp(from.y, to.y, amount),
 	}
 
+	## Left edge of a rectangle.
 	left : Rect -> F32
 	left = |r| r.x
 
+	## Right edge of a rectangle.
 	right : Rect -> F32
 	right = |r| r.x + r.width
 
+	## Top edge of a rectangle.
 	top : Rect -> F32
 	top = |r| r.y
 
+	## Bottom edge of a rectangle.
 	bottom : Rect -> F32
 	bottom = |r| r.y + r.height
 
+	## Center point of a rectangle.
 	center : Rect -> Vec2
 	center = |r| {
 		x: r.x + r.width * 0.5,
 		y: r.y + r.height * 0.5,
 	}
 
+	## Closest point in or on a rectangle.
 	closest_point : Rect, Vec2 -> Vec2
 	closest_point = |r, point| {
 		x: Math.clamp(point.x, Math.left(r), Math.right(r)),
 		y: Math.clamp(point.y, Math.top(r), Math.bottom(r)),
 	}
 
+	## Whether a rectangle contains a point, including its edges.
 	contains : Rect, Vec2 -> Bool
 	contains = |r, point| point.x >= Math.left(r) and point.x <= Math.right(r) and point.y >= Math.top(r) and point.y <= Math.bottom(r)
 
+	## Whether a circle contains a point, including its edge.
 	circle_contains : Circle, Vec2 -> Bool
 	circle_contains = |c, point| Math.distance_squared(c.center, point) <= c.radius * c.radius
 
+	## Whether two rectangles overlap or touch.
 	overlaps : Rect, Rect -> Bool
 	overlaps = |a, b| Math.left(a) <= Math.right(b) and Math.right(a) >= Math.left(b) and Math.top(a) <= Math.bottom(b) and Math.bottom(a) >= Math.top(b)
 
+	## Whether two circles overlap or touch.
 	circle_overlaps : Circle, Circle -> Bool
 	circle_overlaps = |a, b| {
 		radius_sum = a.radius + b.radius
 		Math.distance_squared(a.center, b.center) <= radius_sum * radius_sum
 	}
 
+	## Whether a circle and rectangle overlap or touch.
 	circle_rect : Circle, Rect -> Bool
 	circle_rect = |c, r| Math.circle_contains(c, Math.closest_point(r, c.center))
 

@@ -1,93 +1,26 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
 import Assets
+import AssetsHost
 import Camera
 import Color
 import Draw
+import DrawHost
 import Math
+import TilemapHost
 
-TilemapRawProperty : {
-	name : Str,
-	kind : U8,
-	text : Str,
-	number : F32,
-	integer : I64,
-	bool_value : Bool,
-}
+TilemapRawProperty : TilemapHost.Property
 
-TilemapRawTileset : {
-	first_gid : U64,
-	name : Str,
-	tile_width : F32,
-	tile_height : F32,
-	tile_count : U64,
-	columns : U64,
-	image_source : Str,
-	image_width : F32,
-	image_height : F32,
-	property_start : U64,
-	property_count : U64,
-}
+TilemapRawTileset : TilemapHost.Tileset
 
-TilemapRawTileProperties : {
-	gid : U64,
-	property_start : U64,
-	property_count : U64,
-}
+TilemapRawTileProperties : TilemapHost.TileProperties
 
-TilemapRawLayer : {
-	name : Str,
-	width : U64,
-	height : U64,
-	gid_start : U64,
-	gid_count : U64,
-	property_start : U64,
-	property_count : U64,
-	visible : Bool,
-	opacity : F32,
-}
+TilemapRawLayer : TilemapHost.Layer
 
-TilemapRawPoint : {
-	x : F32,
-	y : F32,
-}
+TilemapRawPoint : TilemapHost.Point
 
-TilemapRawObject : {
-	id : U64,
-	name : Str,
-	type_name : Str,
-	x : F32,
-	y : F32,
-	width : F32,
-	height : F32,
-	rotation : F32,
-	kind : U8,
-	point_start : U64,
-	point_count : U64,
-	property_start : U64,
-	property_count : U64,
-}
+TilemapRawObject : TilemapHost.Object
 
-TilemapRawMap : {
-	width : U64,
-	height : U64,
-	tile_width : F32,
-	tile_height : F32,
-	map_property_start : U64,
-	map_property_count : U64,
-	tilesets : List(TilemapRawTileset),
-	tile_properties : List(TilemapRawTileProperties),
-	layers : List(TilemapRawLayer),
-	gids : List(U64),
-	objects : List(TilemapRawObject),
-	points : List(TilemapRawPoint),
-	properties : List(TilemapRawProperty),
-}
-
-TilemapLoadTmxRawResult : {
-	ok : Bool,
-	err : U8,
-	map : TilemapRawMap,
-}
+TilemapRawMap : TilemapHost.Map
 
 TilemapTextureBinding : {
 	first_gid : U64,
@@ -176,32 +109,43 @@ Tilemap :: {
 	origin : Math.Vec2,
 }.{
 
+	## Parsed TMX data stored in flat lists to avoid a heap allocation per nested item.
 	RawMap : TilemapRawMap
+
+	## Parsed tile-layer metadata and a range into the map GID list.
 	RawLayer : TilemapRawLayer
+
+	## Parsed Tiled object metadata and ranges into point and property lists.
 	RawObject : TilemapRawObject
+
+	## Parsed Tiled property with tagged scalar storage.
 	RawProperty : TilemapRawProperty
+
+	## Parsed tileset metadata and its property range.
 	RawTileset : TilemapRawTileset
+
+	## Parsed object point in map-local coordinates.
 	RawPoint : TilemapRawPoint
+
+	## Zero-based tile column and row.
 	Cell : TilemapCell
+
+	## Inclusive rectangular range of map cells.
 	CellRange : TilemapCellRange
+
+	## Decoded Tiled tile-transform flags.
 	Flip : TilemapFlip
+
+	## Application-level behavior assigned to a named layer.
 	LayerRole : TilemapLayerRole
+
+	## Application-level behavior assigned to an object name or type.
 	ObjectRole : TilemapObjectRole
-	LoadTmxRawResult : TilemapLoadTmxRawResult
+
+	## Immutable tilemap configuration builder.
 	Builder : TilemapBuilder
 
-	err_not_found : U8
-	err_not_found = 1
-
-	err_read_failed : U8
-	err_read_failed = 2
-
-	err_parse_failed : U8
-	err_parse_failed = 3
-
-	err_unsupported : U8
-	err_unsupported = 4
-
+	## Empty parsed map value, useful as a deliberate fallback.
 	empty_raw_map : TilemapRawMap
 	empty_raw_map = {
 		width: 0,
@@ -219,24 +163,25 @@ Tilemap :: {
 		properties: [],
 	}
 
-	load_tmx_raw! : Str => TilemapLoadTmxRawResult
-
+	## Parse a Tiled TMX map. The returned data is an allocation-efficient set of
+	## flat lists with index ranges for nested properties, objects, and tile data.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
 	load_tmx! = |path| {
-		result = Tilemap.load_tmx_raw!(path)
+		result = TilemapHost.load_tmx!(path)
 		if result.ok {
 			Ok(result.map)
-		} else if result.err == Tilemap.err_not_found {
+		} else if result.err == err_not_found {
 			Err(NotFound)
-		} else if result.err == Tilemap.err_read_failed {
+		} else if result.err == err_read_failed {
 			Err(ReadFailed)
-		} else if result.err == Tilemap.err_unsupported {
+		} else if result.err == err_unsupported {
 			Err(Unsupported)
 		} else {
 			Err(ParseFailed)
 		}
 	}
 
+	## Begin configuring a drawable and queryable tilemap from parsed TMX data.
 	from_raw : TilemapRawMap -> TilemapBuilder
 	from_raw = |raw| {
 		raw,
@@ -246,9 +191,11 @@ Tilemap :: {
 		origin: Math.zero,
 	}
 
+	## Access the parsed flat-map data backing a configured tilemap.
 	raw_map : Tilemap -> TilemapRawMap
 	raw_map = |map| map.raw
 
+	## Resolve a layer's configured semantic role; unmatched layers are drawn.
 	layer_role_for : Tilemap, TilemapRawLayer -> TilemapLayerRole
 	layer_role_for = |map, layer| {
 		var $role = Drawn
@@ -260,6 +207,7 @@ Tilemap :: {
 		$role
 	}
 
+	## Resolve an object's configured semantic role; unmatched objects are unknown.
 	object_role_for : Tilemap, TilemapRawObject -> TilemapObjectRole
 	object_role_for = |map, object| {
 		var $role = Unknown
@@ -271,18 +219,23 @@ Tilemap :: {
 		$role
 	}
 
+	## Return every parsed object in source order.
 	objects : Tilemap -> List(TilemapRawObject)
 	objects = |map| map.raw.objects
 
+	## Return objects whose Tiled name matches exactly.
 	objects_named : Tilemap, Str -> List(TilemapRawObject)
 	objects_named = |map, name| List.keep_if(map.raw.objects, |object| object.name == name)
 
+	## Return objects whose Tiled type matches exactly.
 	objects_typed : Tilemap, Str -> List(TilemapRawObject)
 	objects_typed = |map, type_name| List.keep_if(map.raw.objects, |object| object.type_name == type_name)
 
+	## Return objects matching a configured semantic role.
 	objects_with_role : Tilemap, TilemapObjectRole -> List(TilemapRawObject)
 	objects_with_role = |map, role| List.keep_if(map.raw.objects, |object| Tilemap.object_role_for(map, object) == role)
 
+	## Return the first object matching a configured semantic role.
 	first_object : Tilemap, TilemapObjectRole -> Try(TilemapRawObject, [NotFound])
 	first_object = |map, role|
 		match List.first(Tilemap.objects_with_role(map, role)) {
@@ -290,6 +243,7 @@ Tilemap :: {
 			Err(_) => Err(NotFound)
 		}
 
+	## Return an object's center in map-local coordinates.
 	object_center : TilemapRawObject -> Math.Vec2
 	object_center = |object| {
 		if object.width == 0 and object.height == 0 {
@@ -299,32 +253,41 @@ Tilemap :: {
 		}
 	}
 
+	## Return an object's bounding rectangle in map-local coordinates.
 	object_rect : TilemapRawObject -> Math.Rect
 	object_rect = |object| Math.rect(object.x, object.y, object.width, object.height)
 
+	## Approximate an object as a circle centered in its bounds.
 	object_circle : TilemapRawObject -> Math.Circle
 	object_circle = |object| Math.circle(Tilemap.object_center(object), F32.max(object.width, object.height) * 0.5)
 
+	## Return an object's center translated by the tilemap origin.
 	object_world_center : Tilemap, TilemapRawObject -> Math.Vec2
 	object_world_center = |map, object| Math.add(map.origin, Tilemap.object_center(object))
 
+	## Return an object's bounds translated by the tilemap origin.
 	object_world_rect : Tilemap, TilemapRawObject -> Math.Rect
 	object_world_rect = |map, object| Math.rect(map.origin.x + object.x, map.origin.y + object.y, object.width, object.height)
 
+	## Return an object's circle translated by the tilemap origin.
 	object_world_circle : Tilemap, TilemapRawObject -> Math.Circle
 	object_world_circle = |map, object| Math.circle(Tilemap.object_world_center(map, object), F32.max(object.width, object.height) * 0.5)
 
+	## Look up a property within an explicit flat-list range.
 	property_named : TilemapRawMap, U64, U64, Str -> Try(TilemapRawProperty, [NotFound])
 	property_named = |raw, start, count, name| {
 		property_named_at(raw, start, count, name, 0)
 	}
 
+	## Look up a property attached to an object.
 	object_property : TilemapRawMap, TilemapRawObject, Str -> Try(TilemapRawProperty, [NotFound])
 	object_property = |raw, object, name| Tilemap.property_named(raw, object.property_start, object.property_count, name)
 
+	## Look up a property attached to a layer.
 	layer_property : TilemapRawMap, TilemapRawLayer, Str -> Try(TilemapRawProperty, [NotFound])
 	layer_property = |raw, layer, name| Tilemap.property_named(raw, layer.property_start, layer.property_count, name)
 
+	## Read an object's string property, or return the supplied default.
 	property_str : TilemapRawMap, TilemapRawObject, Str, Str -> Str
 	property_str = |raw, object, name, default|
 		match Tilemap.object_property(raw, object, name) {
@@ -332,6 +295,7 @@ Tilemap :: {
 			Err(_) => default
 		}
 
+	## Read an object's numeric property, or return the supplied default.
 	property_f32 : TilemapRawMap, TilemapRawObject, Str, F32 -> F32
 	property_f32 = |raw, object, name, default|
 		match Tilemap.object_property(raw, object, name) {
@@ -339,6 +303,7 @@ Tilemap :: {
 			Err(_) => default
 		}
 
+	## Read an object's integer property, or return the supplied default.
 	property_i64 : TilemapRawMap, TilemapRawObject, Str, I64 -> I64
 	property_i64 = |raw, object, name, default|
 		match Tilemap.object_property(raw, object, name) {
@@ -346,6 +311,7 @@ Tilemap :: {
 			Err(_) => default
 		}
 
+	## Read an object's boolean property, or return the supplied default.
 	property_bool : TilemapRawMap, TilemapRawObject, Str, Bool -> Bool
 	property_bool = |raw, object, name, default|
 		match Tilemap.object_property(raw, object, name) {
@@ -353,6 +319,7 @@ Tilemap :: {
 			Err(_) => default
 		}
 
+	## Convert a world-space position to a map cell, accounting for map origin.
 	cell_at_world : Tilemap, Math.Vec2 -> Try(TilemapCell, [OutOfBounds])
 	cell_at_world = |map, pos| {
 		rel_x = pos.x - map.origin.x
@@ -410,6 +377,7 @@ Tilemap :: {
 		}
 	}
 
+	## Return the world-space rectangle covered by a map cell.
 	world_rect_for_cell : Tilemap, TilemapCell -> Math.Rect
 	world_rect_for_cell = |map, cell| {
 		x: map.origin.x + U64.to_f32(cell.col) * map.raw.tile_width,
@@ -418,6 +386,7 @@ Tilemap :: {
 		height: map.raw.tile_height,
 	}
 
+	## Read the cleaned tile GID at a named layer and cell.
 	gid_at : Tilemap, Str, TilemapCell -> Try(U64, [NotFound, OutOfBounds])
 	gid_at = |map, layer_name, cell|
 		match find_layer(map.raw.layers, layer_name) {
@@ -425,6 +394,7 @@ Tilemap :: {
 			Err(_) => Err(NotFound)
 		}
 
+	## Whether any layer configured as solid contains a tile in this cell.
 	solid_cell : Tilemap, TilemapCell -> Bool
 	solid_cell = |map, cell| {
 		var $solid = Bool.False
@@ -441,6 +411,7 @@ Tilemap :: {
 		$solid
 	}
 
+	## Whether a world-space point falls in a solid cell.
 	solid_at_world : Tilemap, Math.Vec2 -> Bool
 	solid_at_world = |map, pos|
 		match Tilemap.cell_at_world(map, pos) {
@@ -448,6 +419,7 @@ Tilemap :: {
 			Err(_) => Bool.False
 		}
 
+	## Whether a world-space circle overlaps any configured solid tile.
 	circle_touches_solid : Tilemap, Math.Circle -> Bool
 	circle_touches_solid = |map, circle| {
 
@@ -469,6 +441,7 @@ Tilemap :: {
 		}
 	}
 
+	## Draw one named visible layer without camera culling.
 	draw_layer! : Tilemap, Str => {}
 	draw_layer! = |map, layer_name| {
 		match find_layer(map.raw.layers, layer_name) {
@@ -487,6 +460,7 @@ Tilemap :: {
 		}
 	}
 
+	## Draw every visible layer configured with the `Drawn` role.
 	draw_layers! : Tilemap, TilemapLayerRole => {}
 	draw_layers! = |map, role| {
 		for layer in map.raw.layers {
@@ -496,6 +470,7 @@ Tilemap :: {
 		}
 	}
 
+	## Draw visible configured layers culled to a world-space viewport.
 	draw_layers_in! : Tilemap, TilemapLayerRole, Math.Rect => {}
 	draw_layers_in! = |map, role, world_view| {
 		for layer in map.raw.layers {
@@ -505,6 +480,7 @@ Tilemap :: {
 		}
 	}
 
+	## Draw every visible tile layer, regardless of configured role.
 	draw_all! : Tilemap => {}
 	draw_all! = |map| {
 		for layer in map.raw.layers {
@@ -515,6 +491,7 @@ Tilemap :: {
 		}
 	}
 
+	## Draw every visible tile layer culled to a world-space viewport.
 	draw_all_in! : Tilemap, Math.Rect => {}
 	draw_all_in! = |map, world_view| {
 		for layer in map.raw.layers {
@@ -545,6 +522,7 @@ Tilemap :: {
 	draw_all_for_camera! : Tilemap, Camera.Camera2D, Math.Vec2 => {}
 	draw_all_for_camera! = |map, camera, screen_size| Tilemap.draw_all_in!(map, Tilemap.viewport_for_camera(camera, screen_size))
 
+	## Decode Tiled horizontal, vertical, and diagonal flip flags.
 	flip_for_gid : U64 -> TilemapFlip
 	flip_for_gid = |gid| {
 		horizontal: gid >= 2_147_483_648,
@@ -552,6 +530,7 @@ Tilemap :: {
 		diagonal: (gid % 1_073_741_824) >= 536_870_912,
 	}
 
+	## Remove Tiled flip flags from a packed global tile ID.
 	clean_gid : U64 -> U64
 	clean_gid = |gid| {
 		without_h = if gid >= 2_147_483_648 gid - 2_147_483_648 else gid
@@ -560,6 +539,15 @@ Tilemap :: {
 		if without_d >= 268_435_456 without_d - 268_435_456 else without_d
 	}
 }
+
+err_not_found : U8
+err_not_found = 1
+
+err_read_failed : U8
+err_read_failed = 2
+
+err_unsupported : U8
+err_unsupported = 4
 
 world_corner_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 world_corner_for_camera = |camera, screen_point| Camera.screen_to_world(camera, screen_point)
@@ -702,8 +690,8 @@ draw_gid! = |map, raw_gid, cell| {
 					}
 					dest = Tilemap.world_rect_for_cell(map, cell)
 					flip = Tilemap.flip_for_gid(raw_gid)
-					Draw.draw_texture_quad_raw!({
-						texture: (Assets.info(texture)).handle,
+					DrawHost.draw_texture_quad!({
+						texture: AssetsHost.Texture.handle(texture),
 						source,
 						top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),
 						bottom_left: transformed_corner(dest, { x: 0, y: 1 }, flip),

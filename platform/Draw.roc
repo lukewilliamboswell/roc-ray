@@ -1,7 +1,15 @@
-## Draw module - provides drawing primitives for the Roc raylib platform
+## Immediate-mode 2D drawing, text, textures, cameras, and render effects.
+##
+## `draw!` owns the frame scope. Nested helpers such as `with_camera!`,
+## `with_scissor!`, `with_render_texture!`, `with_shader!`, and
+## `with_blend_mode!` keep raylib's begin/end state transitions paired. Create
+## host-owned fonts, render textures, and shaders during initialization and keep
+## them in the model; per-frame drawing and uniform updates do not allocate.
 import Assets
+import AssetsHost
 import Camera
 import Color
+import DrawHost
 import Math
 
 TextureDrawConfig : {
@@ -140,21 +148,28 @@ TextureDrawBuilder(field) := {
 
 Draw := [].{
 
+	## Two-dimensional vector used by drawing records.
 	Vector2 : Math.Vec2
 
+	## Axis-aligned rectangle used by drawing records.
 	Rect : Math.Rect
 
+	## Pure 2D camera settings.
 	Camera2D : Camera.Camera2D
 
+	## Optional shape fill.
 	Fill : [NoFill, Fill(Color)]
 
+	## Optional shape outline with color and thickness.
 	Stroke : [NoStroke, Stroke({ color : Color, thickness : F32 })]
 
+	## Combined fill and outline applied by shape helpers.
 	ShapeStyle : {
 		fill : Fill,
 		stroke : Stroke,
 	}
 
+	## Axis-aligned rectangle and its style.
 	Rectangle : {
 		x : F32,
 		y : F32,
@@ -163,30 +178,7 @@ Draw := [].{
 		style : ShapeStyle,
 	}
 
-	RectangleRaw : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		color : Color,
-	}
-
-	ScissorRaw : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-	}
-
-	RectangleLinesRaw : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		color : Color,
-		thickness : F32,
-	}
-
+	## Rounded rectangle; radius and segment count control corner tessellation.
 	RoundedRectangle : {
 		x : F32,
 		y : F32,
@@ -197,27 +189,7 @@ Draw := [].{
 		style : ShapeStyle,
 	}
 
-	RoundedRectangleRaw : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		radius : F32,
-		segments : I32,
-		color : Color,
-	}
-
-	RoundedRectangleLinesRaw : {
-		x : F32,
-		y : F32,
-		width : F32,
-		height : F32,
-		radius : F32,
-		segments : I32,
-		color : Color,
-		thickness : F32,
-	}
-
+	## Vertical rectangle gradient from top to bottom.
 	RectangleGradientV : {
 		x : F32,
 		y : F32,
@@ -227,6 +199,7 @@ Draw := [].{
 		color_bottom : Color,
 	}
 
+	## Horizontal rectangle gradient from left to right.
 	RectangleGradientH : {
 		x : F32,
 		y : F32,
@@ -236,25 +209,14 @@ Draw := [].{
 		color_right : Color,
 	}
 
+	## Circle and its style.
 	Circle : {
 		center : Vector2,
 		radius : F32,
 		style : ShapeStyle,
 	}
 
-	CircleRaw : {
-		center : Vector2,
-		radius : F32,
-		color : Color,
-	}
-
-	CircleLinesRaw : {
-		center : Vector2,
-		radius : F32,
-		color : Color,
-		thickness : F32,
-	}
-
+	## Radial gradient from inner to outer color.
 	CircleGradient : {
 		center : Vector2,
 		radius : F32,
@@ -262,39 +224,19 @@ Draw := [].{
 		color_outer : Color,
 	}
 
+	## Line segment and stroke.
 	Line : {
 		start : Vector2,
 		end : Vector2,
 		stroke : Stroke,
 	}
 
-	LineRaw : {
-		start : Vector2,
-		end : Vector2,
-		color : Color,
-		thickness : F32,
-	}
-
+	## Triangle vertices and style.
 	Triangle : {
 		a : Vector2,
 		b : Vector2,
 		c : Vector2,
 		style : ShapeStyle,
-	}
-
-	TriangleRaw : {
-		a : Vector2,
-		b : Vector2,
-		c : Vector2,
-		color : Color,
-	}
-
-	TriangleLinesRaw : {
-		a : Vector2,
-		b : Vector2,
-		c : Vector2,
-		color : Color,
-		thickness : F32,
 	}
 
 	## A simple convex polygon. Points must be ordered around the boundary (clockwise
@@ -309,41 +251,36 @@ Draw := [].{
 	## `convex_polygon!` in new code so the fill constraint is visible at call sites.
 	Polygon : ConvexPolygon
 
-	PolygonRaw : {
-		points : List(Vector2),
-		color : Color,
-	}
-
-	PolygonLinesRaw : {
-		points : List(Vector2),
-		color : Color,
-		thickness : F32,
-	}
-
+	## Position, size, and color for the FPS counter.
 	Fps : {
 		pos : Vector2,
 		size : F32,
 		color : Color,
 	}
 
-	## The built-in font is a zero-allocation tag. Loaded fonts carry a Box whose
-	## allocation lives in a typed host heap and whose final ARC release unloads it.
-	Font : [DefaultFont, LoadedFont(Box(U64))]
+	## The built-in font is allocation-free. A loaded font is an opaque host-owned
+	## resource whose final reference unloads its texture automatically.
+	Font : [DefaultFont, LoadedFont(DrawHost.Font)]
 
+	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
 
+	## Vertical text anchor.
 	VAlign : [Top, Middle, Bottom]
 
+	## Horizontal and vertical text anchor.
 	TextAlign : {
 		horizontal : HAlign,
 		vertical : VAlign,
 	}
 
+	## Measured text dimensions in logical pixels.
 	TextSize : {
 		width : F32,
 		height : F32,
 	}
 
+	## Fully configured text draw.
 	Text : {
 		pos : Vector2,
 		text : Str,
@@ -354,6 +291,7 @@ Draw := [].{
 		align : TextAlign,
 	}
 
+	## Built-in-font text intended for quick diagnostics.
 	DebugText : {
 		pos : Vector2,
 		text : Str,
@@ -361,6 +299,7 @@ Draw := [].{
 		color : Color,
 	}
 
+	## Built-in-font text with default spacing.
 	SimpleText : {
 		pos : Vector2,
 		text : Str,
@@ -368,26 +307,7 @@ Draw := [].{
 		color : Color,
 	}
 
-	TextRaw : {
-		pos : Vector2,
-		text : Str,
-		size : F32,
-		spacing : F32,
-		color : Color,
-		font : U64,
-	}
-
-	TextAlignedRaw : {
-		pos : Vector2,
-		text : Str,
-		size : F32,
-		spacing : F32,
-		color : Color,
-		font : U64,
-		align_x : F32,
-		align_y : F32,
-	}
-
+	## Text measurement configuration.
 	MeasureText : {
 		text : Str,
 		size : F32,
@@ -395,62 +315,40 @@ Draw := [].{
 		font : Font,
 	}
 
-	MeasureTextRaw : {
-		text : Str,
-		size : F32,
-		spacing : F32,
-		font : U64,
-	}
-
+	## Font path and base pixel size.
 	LoadFont : {
 		path : Str,
 		size : I32,
 	}
 
+	## Resolved texture draw configuration.
 	TextureDraw : TextureDrawConfig
 
+	## Camera accepted by scoped 2D drawing.
 	CameraMode : Camera2D
 
-	TextureDrawRaw : {
-		texture : U64,
-		source : Math.Rect,
-		dest : Math.Rect,
-		origin : Math.Vec2,
-		rotation : F32,
-		tint : Color,
-	}
-
-	## ARC-owned framebuffer. Its texture-shaped box has a distinct host kind;
+	## Host-owned framebuffer. Its texture-shaped box has a distinct host kind;
 	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
-	RenderTexture :: { texture : Assets.Texture }.{
-		from_texture : Assets.Texture -> RenderTexture
-		from_texture = |texture| { texture: texture }
+	RenderTexture : DrawHost.RenderTexture
 
-		as_texture : RenderTexture -> Assets.Texture
-		as_texture = |target| target.texture
-	}
-
+	## Pixel dimensions for a new offscreen render target.
 	RenderTextureSize : {
 		width : I32,
 		height : I32,
 	}
 
-	## ARC-owned GPU shader. Empty vertex/fragment strings select raylib's default
+	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader :: { resource : Box(U64) }.{
-		from_box : Box(U64) -> Shader
-		from_box = |resource| { resource: resource }
+	Shader : DrawHost.Shader
 
-		handle : Shader -> U64
-		handle = |shader| Box.unbox(shader.resource)
-	}
-
+	## File paths for shader stages. An empty path selects the default stage.
 	LoadShader : {
 		vertex_path : Str,
 		fragment_path : Str,
 	}
 
+	## Shader source strings. An empty string selects the default stage.
 	LoadShaderSource : {
 		vertex_source : Str,
 		fragment_source : Str,
@@ -463,10 +361,13 @@ Draw := [].{
 		location : I32,
 	}
 
+	## Three-component shader uniform value.
 	Vec3 : { x : F32, y : F32, z : F32 }
 
+	## Four-component shader uniform value.
 	Vec4 : { x : F32, y : F32, z : F32, w : F32 }
 
+	## Built-in blend equations with scoped application through `with_blend_mode!`.
 	BlendMode : [
 		Alpha,
 		Additive,
@@ -476,149 +377,91 @@ Draw := [].{
 		AlphaPremultiply,
 	]
 
+	## Conventional source-alpha compositing.
 	alpha_blend : BlendMode
 	alpha_blend = Alpha
 
+	## Add source and destination colors, useful for light and glow effects.
 	additive_blend : BlendMode
 	additive_blend = Additive
 
+	## Multiply source and destination colors.
 	multiplied_blend : BlendMode
 	multiplied_blend = Multiplied
 
+	## Add source and destination color channels.
 	add_colors_blend : BlendMode
 	add_colors_blend = AddColors
 
+	## Subtract source color channels from the destination.
 	subtract_colors_blend : BlendMode
 	subtract_colors_blend = SubtractColors
 
+	## Alpha compositing for textures whose RGB channels are premultiplied.
 	premultiplied_alpha_blend : BlendMode
 	premultiplied_alpha_blend = AlphaPremultiply
 
-	ShaderLocationRaw : {
-		shader : U64,
-		name : Str,
-	}
-
-	ShaderFloatRaw : { shader : U64, location : I32, value : F32 }
-
-	ShaderIntRaw : { shader : U64, location : I32, value : I32 }
-
-	ShaderVec2Raw : { shader : U64, location : I32, value : Vector2 }
-
-	ShaderVec3Raw : { shader : U64, location : I32, value : Vec3 }
-
-	ShaderVec4Raw : { shader : U64, location : I32, value : Vec4 }
-
-	ShaderTextureRaw : { shader : U64, location : I32, texture : U64 }
-
-	TextureQuadRaw : {
-		texture : U64,
-		source : Math.Rect,
-		top_left : Math.Vec2,
-		bottom_left : Math.Vec2,
-		bottom_right : Math.Vec2,
-		top_right : Math.Vec2,
-		tint : Color,
-	}
-
-	## Hosted effects - implemented by the host
-	begin_camera! : CameraMode => {}
-	begin_blend_raw! : U8 => Bool
-	begin_frame! : () => {}
-	begin_render_texture_raw! : U64 => Bool
-	begin_scissor_raw! : ScissorRaw => {}
-	begin_shader_raw! : U64 => Bool
-	circle_raw! : CircleRaw => {}
-	circle_gradient! : CircleGradient => {}
-	circle_lines_raw! : CircleLinesRaw => {}
-	clear! : Color => {}
-	end_frame! : () => {}
-	end_blend_raw! : () => {}
-	end_render_texture_raw! : () => {}
-	end_scissor_raw! : () => {}
-	end_shader_raw! : () => {}
-	fps! : Fps => {}
-	line_raw! : LineRaw => {}
-	load_font_raw! : LoadFont => Box(U64)
-	load_render_texture_raw! : RenderTextureSize => Assets.Texture
-	load_shader_raw! : LoadShader => Box(U64)
-	load_shader_source_raw! : LoadShaderSource => Box(U64)
-	measure_text_raw! : MeasureTextRaw => TextSize
-	polygon_raw! : PolygonRaw => {}
-	polygon_lines_raw! : PolygonLinesRaw => {}
-	rectangle_raw! : RectangleRaw => {}
-	rectangle_gradient_h! : RectangleGradientH => {}
-	rectangle_gradient_v! : RectangleGradientV => {}
-	rectangle_lines_raw! : RectangleLinesRaw => {}
-	rounded_rectangle_raw! : RoundedRectangleRaw => {}
-	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
-	text_raw! : TextRaw => {}
-	text_aligned_raw! : TextAlignedRaw => {}
-	draw_texture_raw! : TextureDrawRaw => {}
-	draw_texture_quad_raw! : TextureQuadRaw => {}
-	end_camera! : () => {}
-	triangle_raw! : TriangleRaw => {}
-	triangle_lines_raw! : TriangleLinesRaw => {}
-	shader_location_raw! : ShaderLocationRaw => I32
-	set_shader_float_raw! : ShaderFloatRaw => {}
-	set_shader_int_raw! : ShaderIntRaw => {}
-	set_shader_vec2_raw! : ShaderVec2Raw => {}
-	set_shader_vec3_raw! : ShaderVec3Raw => {}
-	set_shader_vec4_raw! : ShaderVec4Raw => {}
-	set_shader_texture_raw! : ShaderTextureRaw => {}
-
+	## Create a fill-only shape style.
 	filled : Color -> ShapeStyle
 	filled = |color| { fill: Fill(color), stroke: NoStroke }
 
+	## Create a stroke with color and thickness in logical pixels.
 	stroke : Color, F32 -> Stroke
 	stroke = |color, thickness| Stroke({ color, thickness })
 
+	## Create a stroke-only shape style.
 	outlined : Color, F32 -> ShapeStyle
 	outlined = |color, thickness| { fill: NoFill, stroke: Draw.stroke(color, thickness) }
 
+	## Create a shape style with both fill and outline.
 	filled_and_outlined : Color, Color, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
+	## The built-in font, which requires no loading or host-owned resource.
 	default_font : Font
 	default_font = DefaultFont
 
-	font_handle : Font -> U64
-	font_handle = |font|
-		match font {
-			DefaultFont => 0
-			LoadedFont(handle) => Box.unbox(handle)
-		}
-
+	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
 	default_spacing = 1
 
+	## Top-left text anchor.
 	align_top_left : TextAlign
 	align_top_left = { horizontal: Left, vertical: Top }
 
+	## Top-center text anchor.
 	align_top_center : TextAlign
 	align_top_center = { horizontal: Center, vertical: Top }
 
+	## Top-right text anchor.
 	align_top_right : TextAlign
 	align_top_right = { horizontal: Right, vertical: Top }
 
+	## Centered text anchor.
 	align_center : TextAlign
 	align_center = { horizontal: Center, vertical: Middle }
 
+	## Middle-left text anchor.
 	align_middle_left : TextAlign
 	align_middle_left = { horizontal: Left, vertical: Middle }
 
+	## Middle-right text anchor.
 	align_middle_right : TextAlign
 	align_middle_right = { horizontal: Right, vertical: Middle }
 
+	## Bottom-left text anchor.
 	align_bottom_left : TextAlign
 	align_bottom_left = { horizontal: Left, vertical: Bottom }
 
+	## Bottom-center text anchor.
 	align_bottom_center : TextAlign
 	align_bottom_center = { horizontal: Center, vertical: Bottom }
 
+	## Bottom-right text anchor.
 	align_bottom_right : TextAlign
 	align_bottom_right = { horizontal: Right, vertical: Bottom }
 
+	## Convert a measured size and alignment into an anchor offset.
 	align_offset : TextSize, TextAlign -> Vector2
 	align_offset = |size, align| {
 		x = match align.horizontal {
@@ -636,12 +479,14 @@ Draw := [].{
 		{ x, y }
 	}
 
+	## Find the top-left text origin for an anchored position.
 	origin_for : Vector2, TextSize, TextAlign -> Vector2
 	origin_for = |pos, size, align| {
 		offset = Draw.align_offset(size, align)
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
+	## Convert text alignment into horizontal and vertical factors from 0 to 1.
 	align_factor : TextAlign -> Vector2
 	align_factor = |align| {
 		x = match align.horizontal {
@@ -659,6 +504,7 @@ Draw := [].{
 		{ x, y }
 	}
 
+	## Find the top-left position that centers measured text in a rectangle.
 	center_in_rect : Rectangle, TextSize -> Vector2
 	center_in_rect = |rect, size| {
 		{
@@ -667,65 +513,91 @@ Draw := [].{
 		}
 	}
 
+	## Clear the active drawing target to a solid color.
+	clear! : Color => {}
+	clear! = |color| DrawHost.clear!(color)
+
+	## Draw a vertical rectangle gradient.
+	rectangle_gradient_v! : RectangleGradientV => {}
+	rectangle_gradient_v! = |cfg| DrawHost.rectangle_gradient_v!(cfg)
+
+	## Draw a horizontal rectangle gradient.
+	rectangle_gradient_h! : RectangleGradientH => {}
+	rectangle_gradient_h! = |cfg| DrawHost.rectangle_gradient_h!(cfg)
+
+	## Draw a radial circle gradient.
+	circle_gradient! : CircleGradient => {}
+	circle_gradient! = |cfg| DrawHost.circle_gradient!(cfg)
+
+	## Draw raylib's current frames-per-second counter.
+	fps! : Fps => {}
+	fps! = |cfg| DrawHost.fps!(cfg)
+
+	## Draw a filled and/or outlined axis-aligned rectangle.
 	rectangle! : Rectangle => {}
 	rectangle! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => Draw.rectangle_raw!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
+			Fill(color) => DrawHost.rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.rectangle_lines_raw!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
+	## Draw a filled and/or outlined rounded rectangle.
 	rounded_rectangle! : RoundedRectangle => {}
 	rounded_rectangle! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => Draw.rounded_rectangle_raw!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
+			Fill(color) => DrawHost.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.rounded_rectangle_lines_raw!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.rounded_rectangle_lines!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
+	## Draw a filled and/or outlined circle.
 	circle! : Circle => {}
 	circle! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => Draw.circle_raw!({ center: cfg.center, radius: cfg.radius, color })
+			Fill(color) => DrawHost.circle!({ center: cfg.center, radius: cfg.radius, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.circle_lines_raw!({ center: cfg.center, radius: cfg.radius, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.circle_lines!({ center: cfg.center, radius: cfg.radius, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
+	## Draw a stroked line segment. `NoStroke` performs no drawing.
 	line! : Line => {}
 	line! = |cfg|
 		match cfg.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.line_raw!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 
+	## Draw a filled and/or outlined triangle.
 	triangle! : Triangle => {}
 	triangle! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => Draw.triangle_raw!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
+			Fill(color) => DrawHost.triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.triangle_lines_raw!({ a: cfg.a, b: cfg.b, c: cfg.c, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.triangle_lines!({ a: cfg.a, b: cfg.b, c: cfg.c, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
+	## Compatibility alias for `convex_polygon!`.
 	polygon! : Polygon => {}
 	polygon! = |cfg| Draw.convex_polygon!(cfg)
 
@@ -735,46 +607,50 @@ Draw := [].{
 	convex_polygon! = |cfg| {
 		match cfg.style.fill {
 			NoFill => {}
-			Fill(color) => Draw.polygon_raw!({ points: cfg.points, color })
+			Fill(color) => DrawHost.polygon!({ points: cfg.points, color })
 		}
 
 		match cfg.style.stroke {
 			NoStroke => {}
-			Stroke(stroke_cfg) => Draw.polygon_lines_raw!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
+			Stroke(stroke_cfg) => DrawHost.polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 	}
 
+	## Measure text without drawing it, using the selected font and spacing.
 	measure_text! : MeasureText => TextSize
 	measure_text! = |cfg| {
-		Draw.measure_text_raw!({
+		DrawHost.measure_text!({
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
-			font: Draw.font_handle(cfg.font),
+			font: font_handle(cfg.font),
 		})
 	}
 
+	## Load a host-owned font from disk at the requested base size.
 	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
 	load_font! = |cfg| {
-		handle = Draw.load_font_raw!(cfg)
+		handle = DrawHost.load_font!(cfg)
 		if Box.unbox(handle) == 0 {
 			Err(FontLoadFailed)
 		} else {
-			Ok(LoadedFont(handle))
+			Ok(LoadedFont(DrawHost.Font.from_resource(handle)))
 		}
 	}
 
+	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Assets.Texture -> TextureDraw
 	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
+	## Create a draw configuration covering the whole texture at `pos`.
 	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
 	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
+	## Draw a texture with explicit source, destination, origin, rotation, and tint.
 	texture! : TextureDraw => {}
 	texture! = |cfg| {
-		texture_info = Assets.info(cfg.texture)
-		Draw.draw_texture_raw!({
-			texture: texture_info.handle,
+		DrawHost.draw_texture!({
+			texture: AssetsHost.Texture.handle(cfg.texture),
 			source: cfg.source,
 			dest: cfg.dest,
 			origin: cfg.origin,
@@ -783,6 +659,7 @@ Draw := [].{
 		})
 	}
 
+	## Compatibility alias for `texture!`.
 	draw_texture! : TextureDraw => {}
 	draw_texture! = |cfg| Draw.texture!(cfg)
 
@@ -790,39 +667,36 @@ Draw := [].{
 	## frame; creation allocates GPU resources and one fixed host-heap slot.
 	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ..])
 	load_render_texture! = |size| {
-		texture = Draw.load_render_texture_raw!(size)
-		if (Box.unbox(texture)).handle == 0 {
+		texture = AssetsHost.Texture.from_resource(DrawHost.load_render_texture!(size))
+		if AssetsHost.Texture.handle(texture) == 0 {
 			Err(RenderTextureLoadFailed)
 		} else {
-			Ok(RenderTexture.from_texture(texture))
+			Ok(DrawHost.RenderTexture.from_texture(texture))
 		}
 	}
 
 	## View the color attachment as a normal Texture without allocating or copying.
-	## The returned ARC reference keeps the owning framebuffer alive.
+	## The returned reference keeps the owning framebuffer alive.
 	render_texture : RenderTexture -> Assets.Texture
-	render_texture = |target| target.as_texture()
+	render_texture = |target| DrawHost.RenderTexture.texture(target)
 
 	## Render textures use OpenGL framebuffer coordinates, so their color
 	## attachment is vertically inverted when sampled on screen.
 	render_texture_source : RenderTexture -> Math.Rect
 	render_texture_source = |target| {
-		info = Assets.info(target.as_texture())
-		{ x: 0, y: 0, width: info.width, height: -info.height }
+		texture = Draw.render_texture(target)
+		{ x: 0, y: 0, width: Assets.width(texture), height: 0 - Assets.height(texture) }
 	}
-
-	shader_handle : Shader -> U64
-	shader_handle = |shader| shader.handle()
 
 	## Load shader stages from files. Pass an empty string to use raylib's default
 	## vertex or fragment stage.
 	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ..])
 	load_shader! = |cfg| {
-		resource = Draw.load_shader_raw!(cfg)
+		resource = DrawHost.load_shader!(cfg)
 		if Box.unbox(resource) == 0 {
 			Err(ShaderLoadFailed)
 		} else {
-			Ok(Shader.from_box(resource))
+			Ok(DrawHost.Shader.from_resource(resource))
 		}
 	}
 
@@ -830,18 +704,18 @@ Draw := [].{
 	## stage, which is useful for fragment-only 2D post-processing.
 	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ..])
 	load_shader_source! = |cfg| {
-		resource = Draw.load_shader_source_raw!(cfg)
+		resource = DrawHost.load_shader_source!(cfg)
 		if Box.unbox(resource) == 0 {
 			Err(ShaderLoadFailed)
 		} else {
-			Ok(Shader.from_box(resource))
+			Ok(DrawHost.Shader.from_resource(resource))
 		}
 	}
 
 	## Resolve a uniform name once and retain the shader beside its location.
 	uniform! : Shader, Str => Try(Uniform, [UniformNotFound, ..])
 	uniform! = |shader, name| {
-		location = Draw.shader_location_raw!({ shader: Draw.shader_handle(shader), name })
+		location = DrawHost.shader_location!({ shader: DrawHost.Shader.handle(shader), name })
 		if location < 0 {
 			Err(UniformNotFound)
 		} else {
@@ -849,21 +723,27 @@ Draw := [].{
 		}
 	}
 
+	## Update a cached scalar floating-point uniform.
 	set_uniform_f32! : Uniform, F32 => {}
-	set_uniform_f32! = |uniform, value| Draw.set_shader_float_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+	set_uniform_f32! = |uniform, value| DrawHost.set_shader_float!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
 
+	## Update a cached scalar integer uniform.
 	set_uniform_i32! : Uniform, I32 => {}
-	set_uniform_i32! = |uniform, value| Draw.set_shader_int_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+	set_uniform_i32! = |uniform, value| DrawHost.set_shader_int!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
 
+	## Update a cached two-component vector uniform.
 	set_uniform_vec2! : Uniform, Vector2 => {}
-	set_uniform_vec2! = |uniform, value| Draw.set_shader_vec2_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec2! = |uniform, value| DrawHost.set_shader_vec2!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
 
+	## Update a cached three-component vector uniform.
 	set_uniform_vec3! : Uniform, Vec3 => {}
-	set_uniform_vec3! = |uniform, value| Draw.set_shader_vec3_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec3! = |uniform, value| DrawHost.set_shader_vec3!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
 
+	## Update a cached four-component vector uniform.
 	set_uniform_vec4! : Uniform, Vec4 => {}
-	set_uniform_vec4! = |uniform, value| Draw.set_shader_vec4_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec4! = |uniform, value| DrawHost.set_shader_vec4!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
 
+	## Update a vec4 uniform from normalized RGBA color channels.
 	set_uniform_color! : Uniform, Color => {}
 	set_uniform_color! = |uniform, color|
 		Draw.set_uniform_vec4!(
@@ -876,39 +756,29 @@ Draw := [].{
 			},
 		)
 
+	## Bind a host-owned texture to a cached sampler uniform.
 	set_uniform_texture! : Uniform, Assets.Texture => {}
-	set_uniform_texture! = |uniform, texture| Draw.set_shader_texture_raw!({
-		shader: Draw.shader_handle(uniform.shader),
+	set_uniform_texture! = |uniform, texture| DrawHost.set_shader_texture!({
+		shader: DrawHost.Shader.handle(uniform.shader),
 		location: uniform.location,
-		texture: (Assets.info(texture)).handle,
+		texture: AssetsHost.Texture.handle(texture),
 	})
-
-	blend_mode_raw : BlendMode -> U8
-	blend_mode_raw = |mode|
-		match mode {
-			Alpha => 0
-			Additive => 1
-			Multiplied => 2
-			AddColors => 3
-			SubtractColors => 4
-			AlphaPremultiply => 5
-		}
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
 	with_render_texture! : RenderTexture, (() => {}) => {}
 	with_render_texture! = |target, callback| {
-		if Draw.begin_render_texture_raw!((Assets.info(target.as_texture())).handle) {
+		if DrawHost.begin_render_texture!(AssetsHost.Texture.handle(Draw.render_texture(target))) {
 			callback()
-			Draw.end_render_texture_raw!()
+			DrawHost.end_render_texture!()
 		}
 	}
 
 	## Scope shader application so the default shader is always restored.
 	with_shader! : Shader, (() => {}) => {}
 	with_shader! = |shader, callback| {
-		if Draw.begin_shader_raw!(Draw.shader_handle(shader)) {
+		if DrawHost.begin_shader!(DrawHost.Shader.handle(shader)) {
 			callback()
-			Draw.end_shader_raw!()
+			DrawHost.end_shader!()
 		}
 	}
 
@@ -916,19 +786,21 @@ Draw := [].{
 	## deliberately excluded until they can be represented without global state.
 	with_blend_mode! : BlendMode, (() => {}) => {}
 	with_blend_mode! = |mode, callback| {
-		if Draw.begin_blend_raw!(Draw.blend_mode_raw(mode)) {
+		if DrawHost.begin_blend!(blend_mode_code(mode)) {
 			callback()
-			Draw.end_blend_raw!()
+			DrawHost.end_blend!()
 		}
 	}
 
+	## Draw the callback in world space using this camera.
 	with_camera! : CameraMode, (() => {}) => {}
 	with_camera! = |camera, callback| {
-		Draw.begin_camera!(camera)
+		DrawHost.begin_camera!(camera)
 		callback()
-		Draw.end_camera!()
+		DrawHost.end_camera!()
 	}
 
+	## Compatibility alias for `with_camera!`.
 	with_mode_2d! : CameraMode, (() => {}) => {}
 	with_mode_2d! = |camera, callback| Draw.with_camera!(camera, callback)
 
@@ -936,26 +808,28 @@ Draw := [].{
 	## scissor before returning. Use this instead of manually pairing the raw effects.
 	with_scissor! : Math.Rect, (() => {}) => {}
 	with_scissor! = |bounds, callback| {
-		Draw.begin_scissor_raw!(bounds)
+		DrawHost.begin_scissor!(bounds)
 		callback()
-		Draw.end_scissor_raw!()
+		DrawHost.end_scissor!()
 	}
 
+	## Draw text using explicit font, spacing, color, and anchor alignment.
 	text! : Text => {}
 	text! = |cfg| {
 		align = Draw.align_factor(cfg.align)
-		Draw.text_aligned_raw!({
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: Draw.font_handle(cfg.font),
+			font: font_handle(cfg.font),
 			align_x: align.x,
 			align_y: align.y,
 		})
 	}
 
+	## Draw top-left aligned text with the built-in font and default spacing.
 	debug_text! : DebugText => {}
 	debug_text! = |cfg|
 		Draw.text!({
@@ -968,6 +842,7 @@ Draw := [].{
 			align: Draw.align_top_left,
 		})
 
+	## Draw simple top-left aligned text with the built-in font.
 	text_at! : SimpleText => {}
 	text_at! = |cfg|
 		Draw.text!({
@@ -980,6 +855,7 @@ Draw := [].{
 			align: Draw.align_top_left,
 		})
 
+	## Draw simple text centered on its position.
 	text_centered! : SimpleText => {}
 	text_centered! = |cfg|
 		Draw.text!({
@@ -996,19 +872,39 @@ Draw := [].{
 	## Ensures begin/end frame are properly paired
 	draw! : Color, (() => {}) => {}
 	draw! = |bg_color, callback| {
-		Draw.begin_frame!()
+		DrawHost.begin_frame!()
 		Draw.clear!(bg_color)
 		callback()
-		Draw.end_frame!()
+		DrawHost.end_frame!()
 	}
 }
 
-expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, Box.box({ handle: 1, width: 8, height: 4 }))).source == Math.rect(0, 0, 8, 4)
-expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), Box.box({ handle: 1, width: 8, height: 4 }))).dest == Math.rect(0, 0, 16, 8)
-expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, Box.box({ handle: 1, width: 8, height: 4 }))).origin == { x: 4, y: 2 }
+font_handle : Draw.Font -> U64
+font_handle = |font|
+	match font {
+		DefaultFont => 0
+		LoadedFont(resource) => DrawHost.Font.handle(resource)
+	}
+
+blend_mode_code : Draw.BlendMode -> U8
+blend_mode_code = |mode|
+	match mode {
+		Alpha => 0
+		Additive => 1
+		Multiplied => 2
+		AddColors => 3
+		SubtractColors => 4
+		AlphaPremultiply => 5
+	}
+
+test_texture = AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 }))
+
+expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, test_texture)).source == Math.rect(0, 0, 8, 4)
+expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), test_texture)).dest == Math.rect(0, 0, 16, 8)
+expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, test_texture)).origin == { x: 4, y: 2 }
 expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
 expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
 expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
-expect Draw.blend_mode_raw(Draw.alpha_blend) == 0
-expect Draw.blend_mode_raw(Draw.premultiplied_alpha_blend) == 5
-expect Draw.render_texture_source(Draw.RenderTexture.from_texture(Box.box({ handle: 7, width: 320, height: 180 }))) == Math.rect(0, 0, 320, -180)
+expect blend_mode_code(Draw.alpha_blend) == 0
+expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
+expect Draw.render_texture_source(DrawHost.RenderTexture.from_texture(AssetsHost.Texture.from_resource(Box.box({ handle: 7, width: 320, height: 180 })))) == Math.rect(0, 0, 320, -180)

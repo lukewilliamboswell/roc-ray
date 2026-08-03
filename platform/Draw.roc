@@ -319,7 +319,9 @@ Draw := [].{
 		color : Color,
 	}
 
-	Font : Box(U64)
+	## Host-owned font handle. The host unloads fonts at shutdown, so this does
+	## not need a refcounted Roc allocation.
+	Font : U64
 
 	HAlign : [Left, Center, Right]
 
@@ -463,7 +465,10 @@ Draw := [].{
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
 	default_font : Font
-	default_font = Box.box(0)
+	default_font = 0
+
+	font_handle : Font -> U64
+	font_handle = |handle| handle
 
 	default_spacing : F32
 	default_spacing = 1
@@ -621,7 +626,7 @@ Draw := [].{
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
-			font: Box.unbox(cfg.font),
+			font: Draw.font_handle(cfg.font),
 		})
 	}
 
@@ -631,7 +636,7 @@ Draw := [].{
 		if handle == 0 {
 			Err(FontLoadFailed)
 		} else {
-			Ok(Box.box(handle))
+			Ok(handle)
 		}
 	}
 
@@ -676,7 +681,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: Box.unbox(cfg.font),
+			font: Draw.font_handle(cfg.font),
 			align_x: align.x,
 			align_y: align.y,
 		})

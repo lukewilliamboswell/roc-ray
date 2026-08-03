@@ -7,7 +7,9 @@ import Math
 
 Text := [].{
 
-	Font : Box(U64)
+	## Host-owned font handle. The host unloads fonts at shutdown, so this does
+	## not need a refcounted Roc allocation.
+	Font : U64
 
 	HAlign : [Left, Center, Right]
 
@@ -109,7 +111,10 @@ Text := [].{
 	draw_raw! : Raw => {}
 
 	default_font : Font
-	default_font = Box.box(0)
+	default_font = 0
+
+	font_handle : Font -> U64
+	font_handle = |handle| handle
 
 	default_spacing : F32
 	default_spacing = 1
@@ -128,7 +133,7 @@ Text := [].{
 		if handle == 0 {
 			Err(FontLoadFailed)
 		} else {
-			Ok(Box.box(handle))
+			Ok(handle)
 		}
 	}
 
@@ -138,7 +143,7 @@ Text := [].{
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
-			font: Box.unbox(builder.font),
+			font: Text.font_handle(builder.font),
 		})
 	}
 
@@ -210,7 +215,7 @@ Text := [].{
 			size: cfg.text.size,
 			spacing: cfg.text.spacing,
 			color: cfg.color,
-			font: Box.unbox(cfg.text.font),
+			font: Text.font_handle(cfg.text.font),
 		})
 	}
 

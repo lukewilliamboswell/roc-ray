@@ -99,6 +99,11 @@ pub fn StateList(comptime COUNT: usize) type {
         }
 
         /// Update state from a fixed-size source array.
+        ///
+        /// The host normally owns the list's only reference between callbacks,
+        /// so the common path updates its allocation in place. If Roc retained
+        /// an earlier frame snapshot, first move the host to a fresh allocation
+        /// so the retained list remains immutable.
         pub fn update(self: *Self, source: *const [COUNT]u8) void {
             if (!self.list.isUnique()) {
                 const retained_snapshot = self.list;

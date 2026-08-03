@@ -1827,6 +1827,25 @@ fn dropFinalModel(boxed_model: RocBox) void {
     }
 }
 
+/// Transfer the host's current model reference into a Roc entrypoint.
+///
+/// `render_for_host` consumes its Box argument even when it returns `Err`, so
+/// clear the host slot before the call. Only an `Ok` result installs a new
+/// owned model reference.
+fn takeModelForRender(boxed_model: *RocBox) RocBox {
+    const transferred = boxed_model.*;
+    boxed_model.* = null;
+    return transferred;
+}
+
+test "taking a model for render clears the host-owned reference" {
+    const model: *anyopaque = @ptrFromInt(@alignOf(usize));
+    var boxed_model: RocBox = model;
+
+    try std.testing.expectEqual(model, takeModelForRender(&boxed_model));
+    try std.testing.expectEqual(null, boxed_model);
+}
+
 fn initModel(input: *InputState) RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
     const init_state = input.hostState(0, 0, 0, 0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, &.{});
@@ -1905,7 +1924,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             text_input,
         );
 
-        const render_result = render_for_host(boxed_model, platform_state);
+        const render_result = render_for_host(takeModelForRender(&boxed_model), platform_state);
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});
@@ -1956,7 +1975,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             &.{},
         );
 
-        const render_result = render_for_host(boxed_model, platform_state);
+        const render_result = render_for_host(takeModelForRender(&boxed_model), platform_state);
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});

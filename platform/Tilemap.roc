@@ -562,18 +562,7 @@ Tilemap :: {
 }
 
 world_corner_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Vec2
-world_corner_for_camera = |camera, screen_point| {
-	zoom = if camera.zoom > 0 camera.zoom else 1
-	dx = (screen_point.x - camera.offset.x) / zoom
-	dy = (screen_point.y - camera.offset.y) / zoom
-	radians = camera.rotation * F32.pi / 180
-	cosine = F32.cos(radians)
-	sine = F32.sin(radians)
-	{
-		x: camera.target.x + cosine * dx + sine * dy,
-		y: camera.target.y - sine * dx + cosine * dy,
-	}
-}
+world_corner_for_camera = |camera, screen_point| Camera.screen_to_world(camera, screen_point)
 
 property_named_at : TilemapRawMap, U64, U64, Str, U64 -> Try(TilemapRawProperty, [NotFound])
 property_named_at = |raw, start, count, name, offset| {
@@ -845,3 +834,4 @@ expect Tilemap.clean_gid(2_147_483_648 + 17) == 17
 expect Tilemap.flip_for_gid(2_147_483_648 + 1) == { horizontal: Bool.True, vertical: Bool.False, diagonal: Bool.False }
 expect transformed_corner(Math.rect(10, 20, 30, 40), { x: 0, y: 0 }, { horizontal: Bool.False, vertical: Bool.False, diagonal: Bool.True }) == { x: 40, y: 60 }
 expect Tilemap.viewport_for_camera({ target: { x: 100, y: 50 }, offset: { x: 20, y: 10 }, rotation: 0, zoom: 2 }, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
+expect Tilemap.viewport_for_camera({ target: { x: 0, y: 0 }, offset: { x: 0, y: 0 }, rotation: 0, zoom: -2 }, { x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)

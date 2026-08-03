@@ -4268,7 +4268,7 @@ pub const AudioStop_rawArgs = extern struct {
 };
 
 /// Arguments for Draw.begin_blend_raw!
-/// Roc signature: U8 => {}
+/// Roc signature: U8 => Bool
 /// Refcounted fields are owned by the hosted function.
 pub const DrawBegin_blend_rawArgs = extern struct {
     arg0: u8,
@@ -4301,7 +4301,7 @@ comptime {
 }
 
 /// Arguments for Draw.begin_render_texture_raw!
-/// Roc signature: U64 => {}
+/// Roc signature: U64 => Bool
 /// Refcounted fields are owned by the hosted function.
 pub const DrawBegin_render_texture_rawArgs = extern struct {
     arg0: u64,
@@ -4334,7 +4334,7 @@ comptime {
 }
 
 /// Arguments for Draw.begin_shader_raw!
-/// Roc signature: U64 => {}
+/// Roc signature: U64 => Bool
 /// Refcounted fields are owned by the hosted function.
 pub const DrawBegin_shader_rawArgs = extern struct {
     arg0: u64,
@@ -5561,8 +5561,8 @@ pub extern fn roc_audio_stop_music_raw(arg0: u64) callconv(.c) void;
 pub extern fn roc_audio_stop_raw(arg0: u64) callconv(.c) void;
 
 /// Hosted symbol for Draw.begin_blend_raw!
-/// Roc signature: U8 => {}
-pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) void;
+/// Roc signature: U8 => Bool
+pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) bool;
 
 /// Hosted symbol for Draw.begin_camera!
 /// Roc signature: { offset : { x : F32, y : F32 }, rotation : F32, target : { x : F32, y : F32 }, zoom : F32 } => {}
@@ -5573,16 +5573,16 @@ pub extern fn roc_draw_begin_camera(arg0: DrawBegin_cameraArgs) callconv(.c) voi
 pub extern fn roc_draw_begin_frame() callconv(.c) void;
 
 /// Hosted symbol for Draw.begin_render_texture_raw!
-/// Roc signature: U64 => {}
-pub extern fn roc_draw_begin_render_texture_raw(arg0: u64) callconv(.c) void;
+/// Roc signature: U64 => Bool
+pub extern fn roc_draw_begin_render_texture_raw(arg0: u64) callconv(.c) bool;
 
 /// Hosted symbol for Draw.begin_scissor_raw!
 /// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => {}
 pub extern fn roc_draw_begin_scissor_raw(arg0: DrawBegin_scissor_rawArgs) callconv(.c) void;
 
 /// Hosted symbol for Draw.begin_shader_raw!
-/// Roc signature: U64 => {}
-pub extern fn roc_draw_begin_shader_raw(arg0: u64) callconv(.c) void;
+/// Roc signature: U64 => Bool
+pub extern fn roc_draw_begin_shader_raw(arg0: u64) callconv(.c) bool;
 
 /// Hosted symbol for Draw.circle_gradient!
 /// Roc signature: { center : { x : F32, y : F32 }, color_inner : Color, color_outer : Color, radius : F32 } => {}

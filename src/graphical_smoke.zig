@@ -15,6 +15,9 @@ const green = Color{ .r = 0, .g = 228, .b = 48, .a = 255 };
 const blue = Color{ .r = 0, .g = 121, .b = 241, .a = 255 };
 const yellow = Color{ .r = 253, .g = 249, .b = 0, .a = 255 };
 const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
+const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
+const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 
 fn expectPixel(image: rl.Image, x: c_int, y: c_int, expected: Color) !void {
     const actual = rl.GetImageColor(image, x, y);
@@ -39,6 +42,37 @@ pub fn main() !void {
     rl.ImageDrawRectangle(&atlas_image, 8, 0, 8, 8, backend.colorToRl(blue));
     const atlas = rl.LoadTextureFromImage(atlas_image);
     defer rl.UnloadTexture(atlas);
+
+    const target = backend.loadRenderTexture(24, 8) orelse return error.RenderTextureUnavailable;
+    defer backend.unloadRenderTexture(target);
+    const fragment_source =
+        \\#version 330
+        \\in vec2 fragTexCoord;
+        \\in vec4 fragColor;
+        \\uniform sampler2D texture0;
+        \\out vec4 finalColor;
+        \\void main() { finalColor = vec4(0.0, 1.0, 0.0, 1.0); }
+    ;
+    const shader = backend.loadShaderFromMemory(null, fragment_source) orelse return error.ShaderUnavailable;
+    defer backend.unloadShader(shader);
+
+    backend.beginTextureMode(target);
+    backend.clearBackground(black);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 8, .height = 8, .color = red });
+    backend.drawRectangle(.{ .x = 8, .y = 0, .width = 8, .height = 8, .color = red });
+    backend.beginBlendMode(1);
+    backend.drawRectangle(.{ .x = 8, .y = 0, .width = 8, .height = 8, .color = blue });
+    backend.endBlendMode();
+    backend.beginShaderMode(shader);
+    backend.drawRectangle(.{ .x = 16, .y = 0, .width = 8, .height = 8, .color = white });
+    backend.endShaderMode();
+    backend.endTextureMode();
+
+    const pipeline_image = rl.LoadImageFromTexture(backend.renderTextureColor(target));
+    defer rl.UnloadImage(pipeline_image);
+    try expectPixel(pipeline_image, 4, 4, red);
+    try expectPixel(pipeline_image, 12, 4, additive_mix);
+    try expectPixel(pipeline_image, 20, 4, shader_green);
 
     rl.BeginDrawing();
     backend.clearBackground(black);

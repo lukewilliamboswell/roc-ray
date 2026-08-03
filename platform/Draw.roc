@@ -421,7 +421,7 @@ Draw := [].{
 	}
 
 	## ARC-owned framebuffer. Its texture-shaped box has a distinct host kind;
-	## this wrapper prevents an ordinary image texture being used as a target.
+	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
 	RenderTexture :: { texture : Assets.Texture }.{
 		from_texture : Assets.Texture -> RenderTexture
@@ -523,11 +523,11 @@ Draw := [].{
 
 	## Hosted effects - implemented by the host
 	begin_camera! : CameraMode => {}
-	begin_blend_raw! : U8 => {}
+	begin_blend_raw! : U8 => Bool
 	begin_frame! : () => {}
-	begin_render_texture_raw! : U64 => {}
+	begin_render_texture_raw! : U64 => Bool
 	begin_scissor_raw! : ScissorRaw => {}
-	begin_shader_raw! : U64 => {}
+	begin_shader_raw! : U64 => Bool
 	circle_raw! : CircleRaw => {}
 	circle_gradient! : CircleGradient => {}
 	circle_lines_raw! : CircleLinesRaw => {}
@@ -897,26 +897,29 @@ Draw := [].{
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
 	with_render_texture! : RenderTexture, (() => {}) => {}
 	with_render_texture! = |target, callback| {
-		Draw.begin_render_texture_raw!((Assets.info(target.as_texture())).handle)
-		callback()
-		Draw.end_render_texture_raw!()
+		if Draw.begin_render_texture_raw!((Assets.info(target.as_texture())).handle) {
+			callback()
+			Draw.end_render_texture_raw!()
+		}
 	}
 
 	## Scope shader application so the default shader is always restored.
 	with_shader! : Shader, (() => {}) => {}
 	with_shader! = |shader, callback| {
-		Draw.begin_shader_raw!(Draw.shader_handle(shader))
-		callback()
-		Draw.end_shader_raw!()
+		if Draw.begin_shader_raw!(Draw.shader_handle(shader)) {
+			callback()
+			Draw.end_shader_raw!()
+		}
 	}
 
 	## Scope one of raylib's built-in blend equations. Custom blend factors are
 	## deliberately excluded until they can be represented without global state.
 	with_blend_mode! : BlendMode, (() => {}) => {}
 	with_blend_mode! = |mode, callback| {
-		Draw.begin_blend_raw!(Draw.blend_mode_raw(mode))
-		callback()
-		Draw.end_blend_raw!()
+		if Draw.begin_blend_raw!(Draw.blend_mode_raw(mode)) {
+			callback()
+			Draw.end_blend_raw!()
+		}
 	}
 
 	with_camera! : CameraMode, (() => {}) => {}

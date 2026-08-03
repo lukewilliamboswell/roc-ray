@@ -597,7 +597,7 @@ test "headless render targets and shaders retain typed lifecycle tokens" {
     try std.testing.expect(texture_heap.get(target.handle) == null);
     try std.testing.expect(render_texture_heap.get(target.handle) != null);
 
-    hostedDrawBeginRenderTextureRaw(.{ .arg0 = target.handle });
+    try std.testing.expect(hostedDrawBeginRenderTextureRaw(.{ .arg0 = target.handle }));
     try std.testing.expectEqual(@as(u8, 1), headless_render_texture_depth);
     hostedDrawEndRenderTextureRaw();
     try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
@@ -605,15 +605,22 @@ test "headless render targets and shaders retain typed lifecycle tokens" {
     const shader = storeShader(.headless);
     try std.testing.expect(shader.* != 0);
     try std.testing.expect(render_texture_heap.get(shader.*) == null);
-    hostedDrawBeginShaderRaw(.{ .arg0 = shader.* });
+    try std.testing.expect(hostedDrawBeginShaderRaw(.{ .arg0 = shader.* }));
     hostedDrawSetShaderVec2Raw(.{ .shader = shader.*, .location = 0, .value = .{ .x = 1, .y = 2 } });
     try std.testing.expectEqual(@as(u8, 1), headless_shader_depth);
     hostedDrawEndShaderRaw();
     try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
 
-    hostedDrawBeginBlendRaw(.{ .arg0 = 1 });
+    try std.testing.expect(hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
     try std.testing.expectEqual(@as(u8, 1), headless_blend_depth);
     hostedDrawEndBlendRaw();
+    try std.testing.expectEqual(@as(u8, 0), headless_blend_depth);
+
+    try std.testing.expect(!hostedDrawBeginRenderTextureRaw(.{ .arg0 = shader.* }));
+    try std.testing.expect(!hostedDrawBeginShaderRaw(.{ .arg0 = target.handle }));
+    try std.testing.expect(!hostedDrawBeginBlendRaw(.{ .arg0 = 6 }));
+    try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
+    try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
     try std.testing.expectEqual(@as(u8, 0), headless_blend_depth);
 
     const target_base: *isize = @ptrFromInt(@intFromPtr(target) - @sizeOf(isize));
@@ -825,12 +832,13 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
     return null;
 }
 
-fn hostedDrawBeginRenderTextureRaw(args: abi.DrawBegin_render_texture_rawArgs) callconv(.c) void {
-    const resource = render_texture_heap.get(args.arg0) orelse return;
+fn hostedDrawBeginRenderTextureRaw(args: abi.DrawBegin_render_texture_rawArgs) callconv(.c) bool {
+    const resource = render_texture_heap.get(args.arg0) orelse return false;
     switch (resource.*) {
         .headless => headless_render_texture_depth +|= 1,
         .native => |target| raylib.beginTextureMode(target),
     }
+    return true;
 }
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
@@ -841,12 +849,13 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     raylib.endTextureMode();
 }
 
-fn hostedDrawBeginShaderRaw(args: abi.DrawBegin_shader_rawArgs) callconv(.c) void {
-    const resource = shader_heap.get(args.arg0) orelse return;
+fn hostedDrawBeginShaderRaw(args: abi.DrawBegin_shader_rawArgs) callconv(.c) bool {
+    const resource = shader_heap.get(args.arg0) orelse return false;
     switch (resource.*) {
         .headless => headless_shader_depth +|= 1,
         .native => |shader| raylib.beginShaderMode(shader),
     }
+    return true;
 }
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
@@ -857,13 +866,14 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
     raylib.endShaderMode();
 }
 
-fn hostedDrawBeginBlendRaw(args: abi.DrawBegin_blend_rawArgs) callconv(.c) void {
-    if (args.arg0 > 5) return;
+fn hostedDrawBeginBlendRaw(args: abi.DrawBegin_blend_rawArgs) callconv(.c) bool {
+    if (args.arg0 > 5) return false;
     if (active_headless) {
         headless_blend_depth +|= 1;
-        return;
+        return true;
     }
     raylib.beginBlendMode(args.arg0);
+    return true;
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {

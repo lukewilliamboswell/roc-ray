@@ -70,9 +70,8 @@ fn inputStateBits(down: bool, pressed: bool, released: bool) u8 {
         (if (released) ffi.INPUT_RELEASED else 0);
 }
 
-fn nextInputState(previous: u8, down: bool) u8 {
-    const was_down = previous & ffi.INPUT_HELD != 0;
-    return inputStateBits(down, down and !was_down, !down and was_down);
+fn disconnectedInputState(previous: u8) u8 {
+    return if (previous & ffi.INPUT_HELD != 0) ffi.INPUT_RELEASED else 0;
 }
 
 test "input state packs held and edge flags" {
@@ -81,18 +80,20 @@ test "input state packs held and edge flags" {
     try std.testing.expectEqual(ffi.INPUT_RELEASED, inputStateBits(false, false, true));
 }
 
-test "input state derives edge transitions from one held-state sample" {
-    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, nextInputState(0, true));
-    try std.testing.expectEqual(ffi.INPUT_HELD, nextInputState(ffi.INPUT_HELD, true));
-    try std.testing.expectEqual(ffi.INPUT_RELEASED, nextInputState(ffi.INPUT_HELD, false));
-    try std.testing.expectEqual(@as(u8, 0), nextInputState(ffi.INPUT_RELEASED, false));
+test "disconnecting a held input synthesizes one release edge" {
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, disconnectedInputState(ffi.INPUT_HELD));
+    try std.testing.expectEqual(@as(u8, 0), disconnectedInputState(ffi.INPUT_RELEASED));
 }
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = nextInputState(key_state[i], rl.IsKeyDown(key));
+        key_state[i] = inputStateBits(
+            rl.IsKeyDown(key),
+            rl.IsKeyPressed(key),
+            rl.IsKeyReleased(key),
+        );
     }
 }
 
@@ -105,7 +106,11 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = nextInputState(mouse_button_state[i], rl.IsMouseButtonDown(button));
+        mouse_button_state[i] = inputStateBits(
+            rl.IsMouseButtonDown(button),
+            rl.IsMouseButtonPressed(button),
+            rl.IsMouseButtonReleased(button),
+        );
     }
 }
 
@@ -125,12 +130,13 @@ pub fn updateGamepadState() void {
             const flat_index = gamepadButtonIndex(gamepad, button);
             if (available) {
                 const button_id: c_int = @intCast(button);
-                gamepad_button_state[flat_index] = nextInputState(
-                    gamepad_button_state[flat_index],
+                gamepad_button_state[flat_index] = inputStateBits(
                     rl.IsGamepadButtonDown(gamepad_id, button_id),
+                    rl.IsGamepadButtonPressed(gamepad_id, button_id),
+                    rl.IsGamepadButtonReleased(gamepad_id, button_id),
                 );
             } else {
-                gamepad_button_state[flat_index] = nextInputState(gamepad_button_state[flat_index], false);
+                gamepad_button_state[flat_index] = disconnectedInputState(gamepad_button_state[flat_index]);
             }
         }
 

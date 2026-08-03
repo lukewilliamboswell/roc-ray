@@ -216,7 +216,10 @@ Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
 attachments are vertically inverted when sampled, so use
 `Draw.render_texture_source` when drawing them to the screen. The headless host
 allocates typed lifecycle slots without creating GPU objects, allowing ownership
-and effect composition to run in normal example tests.
+and effect composition to run in normal example tests. The host validates typed
+resource tokens before a scope callback runs, so an invalid or cross-kind handle
+cannot trigger an unmatched end call. Do not nest scopes of the same mode; raylib
+does not restore an outer render target, shader, or blend mode.
 
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables

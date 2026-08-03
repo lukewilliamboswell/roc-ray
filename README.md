@@ -76,7 +76,8 @@ and axes can be read individually or as left/right stick vectors.
 `host.text_input` contains the Unicode codepoints entered during the frame. It
 tracks text entry and the active keyboard layout, unlike physical key state.
 Empty text-input frames allocate nothing; a frame with entered text creates one
-right-sized list because the queue length is variable. `Mouse.delta` and
+right-sized list because the queue length is variable. Up to 32 codepoints are
+delivered per frame; additional queued input is drained. `Mouse.delta` and
 `Mouse.wheel_delta` return the sampled movement vectors. Cursor visibility,
 locking, and native shape are controlled with the `Mouse` effects.
 

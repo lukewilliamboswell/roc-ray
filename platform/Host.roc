@@ -30,6 +30,7 @@ Host := {
 	## from physical key state and respects the active keyboard layout. Empty
 	## frames are allocation-free; a non-empty list requires one variable-size
 	## allocation because raylib's text queue length varies from frame to frame.
+	## At most 32 codepoints are delivered; excess queued input is drained.
 	text_input : List(U32),
 
 	## Gamepad input sampled once per frame. Use the `Gamepad` helpers rather

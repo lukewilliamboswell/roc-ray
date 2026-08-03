@@ -3473,61 +3473,125 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_5f7b2a7b80a0d28a
-pub const __AnonStruct_5f7b2a7b80a0d28a = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_e43e1f68febb5517
+pub const __AnonStruct_e43e1f68febb5517 = if (@sizeOf(usize) == 4) extern struct {
     @"frame_count": u64,
     @"timestamp_nanos": u64,
+    @"gamepads": __AnonStruct_1c8617e96852f779,
     @"keys": RocListWith(u8, false),
     @"mouse": MouseState,
+    @"text_input": RocListWith(u32, false),
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.@"gamepads".decref(roc_host);
         value.@"keys".decref(roc_host);
         value.@"mouse".decref(roc_host);
+        value.@"text_input".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.@"gamepads".incref(amount);
         value.@"keys".incref(amount);
         value.@"mouse".incref(amount);
+        value.@"text_input".incref(amount);
         value.@"screen".incref(amount);
     }
 } else extern struct {
     @"frame_count": u64,
     @"timestamp_nanos": u64,
+    @"gamepads": __AnonStruct_1c8617e96852f779,
     @"keys": RocListWith(u8, false),
     @"mouse": MouseState,
+    @"text_input": RocListWith(u32, false),
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.@"gamepads".decref(roc_host);
         value.@"keys".decref(roc_host);
         value.@"mouse".decref(roc_host);
+        value.@"text_input".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.@"gamepads".incref(amount);
         value.@"keys".incref(amount);
         value.@"mouse".incref(amount);
+        value.@"text_input".incref(amount);
         value.@"screen".incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_5f7b2a7b80a0d28a) != 96) @compileError("__AnonStruct_5f7b2a7b80a0d28a size mismatch");
-        if (@alignOf(__AnonStruct_5f7b2a7b80a0d28a) != 8) @compileError("__AnonStruct_5f7b2a7b80a0d28a alignment mismatch");
+        if (@sizeOf(__AnonStruct_e43e1f68febb5517) != 208) @compileError("__AnonStruct_e43e1f68febb5517 size mismatch");
+        if (@alignOf(__AnonStruct_e43e1f68febb5517) != 8) @compileError("__AnonStruct_e43e1f68febb5517 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_5f7b2a7b80a0d28a) != 72) @compileError("__AnonStruct_5f7b2a7b80a0d28a size mismatch");
-        if (@alignOf(__AnonStruct_5f7b2a7b80a0d28a) != 8) @compileError("__AnonStruct_5f7b2a7b80a0d28a alignment mismatch");
+        if (@sizeOf(__AnonStruct_e43e1f68febb5517) != 136) @compileError("__AnonStruct_e43e1f68febb5517 size mismatch");
+        if (@alignOf(__AnonStruct_e43e1f68febb5517) != 8) @compileError("__AnonStruct_e43e1f68febb5517 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_1c8617e96852f779
+pub const __AnonStruct_1c8617e96852f779 = if (@sizeOf(usize) == 4) extern struct {
+    @"available": RocListWith(u8, false),
+    @"axes": RocListWith(f32, false),
+    @"buttons": RocListWith(u8, false),
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.@"available".decref(roc_host);
+        value.@"axes".decref(roc_host);
+        value.@"buttons".decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.@"available".incref(amount);
+        value.@"axes".incref(amount);
+        value.@"buttons".incref(amount);
+    }
+} else extern struct {
+    @"available": RocListWith(u8, false),
+    @"axes": RocListWith(f32, false),
+    @"buttons": RocListWith(u8, false),
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.@"available".decref(roc_host);
+        value.@"axes".decref(roc_host);
+        value.@"buttons".decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.@"available".incref(amount);
+        value.@"axes".incref(amount);
+        value.@"buttons".incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_1c8617e96852f779) != 72) @compileError("__AnonStruct_1c8617e96852f779 size mismatch");
+        if (@alignOf(__AnonStruct_1c8617e96852f779) != 8) @compileError("__AnonStruct_1c8617e96852f779 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_1c8617e96852f779) != 36) @compileError("__AnonStruct_1c8617e96852f779 size mismatch");
+        if (@alignOf(__AnonStruct_1c8617e96852f779) != 4) @compileError("__AnonStruct_1c8617e96852f779 alignment mismatch");
     }
 }
 
@@ -3535,6 +3599,10 @@ comptime {
 pub const MouseState = if (@sizeOf(usize) == 4) extern struct {
     @"buttons": RocListWith(u8, false),
     @"wheel": f32,
+    @"wheel_x": f32,
+    @"wheel_y": f32,
+    @"delta_x": f32,
+    @"delta_y": f32,
     @"x": f32,
     @"y": f32,
     @"left": bool,
@@ -3554,6 +3622,10 @@ pub const MouseState = if (@sizeOf(usize) == 4) extern struct {
 } else extern struct {
     @"buttons": RocListWith(u8, false),
     @"wheel": f32,
+    @"wheel_x": f32,
+    @"wheel_y": f32,
+    @"delta_x": f32,
+    @"delta_y": f32,
     @"x": f32,
     @"y": f32,
     @"left": bool,
@@ -3574,11 +3646,11 @@ pub const MouseState = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(MouseState) != 40) @compileError("MouseState size mismatch");
+        if (@sizeOf(MouseState) != 56) @compileError("MouseState size mismatch");
         if (@alignOf(MouseState) != 8) @compileError("MouseState alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(MouseState) != 28) @compileError("MouseState size mismatch");
+        if (@sizeOf(MouseState) != 44) @compileError("MouseState size mismatch");
         if (@alignOf(MouseState) != 4) @compileError("MouseState alignment mismatch");
     }
 }
@@ -5168,6 +5240,13 @@ pub const HostSet_target_fpsArgs = extern struct {
     arg0: i32,
 };
 
+/// Arguments for Mouse.set_cursor_raw!
+/// Roc signature: U8 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const MouseSet_cursor_rawArgs = extern struct {
+    arg0: u8,
+};
+
 /// Arguments for Tilemap.load_tmx_raw!
 /// Roc signature: Str => { err : U8, map : { gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, ok : Bool }
 /// Refcounted fields are owned by the hosted function.
@@ -5261,9 +5340,11 @@ pub const TilemapLoad_tmx_rawMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapLoad_tmx_rawMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapLoad_tmx_rawMapTilesets = __AnonStruct_756aabd194c61573;
 pub const App_config_for_host = __AnonStruct_eba854e503b8b9e2;
-pub const Init_for_hostArg0 = __AnonStruct_5f7b2a7b80a0d28a;
+pub const Init_for_hostArg0 = __AnonStruct_e43e1f68febb5517;
+pub const Init_for_hostArg0Gamepads = __AnonStruct_1c8617e96852f779;
 pub const Init_for_hostArg0Screen = __AnonStruct_bc8fa73ca49a5ac0;
-pub const Render_for_hostArg1 = __AnonStruct_5f7b2a7b80a0d28a;
+pub const Render_for_hostArg1 = __AnonStruct_e43e1f68febb5517;
+pub const Render_for_hostArg1Gamepads = __AnonStruct_1c8617e96852f779;
 pub const Render_for_hostArg1Screen = __AnonStruct_bc8fa73ca49a5ac0;
 
 // Generated Refcount Helpers
@@ -5679,9 +5760,25 @@ pub extern fn roc_host_set_screen_size(arg0: HostSet_screen_size_rawArgs) callco
 /// Roc signature: I32 => {}
 pub extern fn roc_host_set_target_fps(arg0: i32) callconv(.c) void;
 
+/// Hosted symbol for Mouse.hide_cursor!
+/// Roc signature: {} => {}
+pub extern fn roc_mouse_hide_cursor() callconv(.c) void;
+
+/// Hosted symbol for Mouse.lock_cursor!
+/// Roc signature: {} => {}
+pub extern fn roc_mouse_lock_cursor() callconv(.c) void;
+
 /// Hosted symbol for Mouse.set_cursor_raw!
 /// Roc signature: U8 => {}
 pub extern fn roc_mouse_set_cursor_raw(arg0: u8) callconv(.c) void;
+
+/// Hosted symbol for Mouse.show_cursor!
+/// Roc signature: {} => {}
+pub extern fn roc_mouse_show_cursor() callconv(.c) void;
+
+/// Hosted symbol for Mouse.unlock_cursor!
+/// Roc signature: {} => {}
+pub extern fn roc_mouse_unlock_cursor() callconv(.c) void;
 
 /// Hosted symbol for Tilemap.load_tmx_raw!
 /// Roc signature: Str => { err : U8, map : { gids : List(U64), height : U64, layers : List({ gid_count : U64, gid_start : U64, height : U64, name : Str, opacity : F32, property_count : U64, property_start : U64, visible : Bool, width : U64 }), map_property_count : U64, map_property_start : U64, objects : List({ height : F32, id : U64, kind : U8, name : Str, point_count : U64, point_start : U64, property_count : U64, property_start : U64, rotation : F32, type_name : Str, width : F32, x : F32, y : F32 }), points : List({ x : F32, y : F32 }), properties : List({ bool_value : Bool, integer : I64, kind : U8, name : Str, number : F32, text : Str }), tile_height : F32, tile_properties : List({ gid : U64, property_count : U64, property_start : U64 }), tile_width : F32, tilesets : List({ columns : U64, first_gid : U64, image_height : F32, image_source : Str, image_width : F32, name : Str, property_count : U64, property_start : U64, tile_count : U64, tile_height : F32, tile_width : F32 }), width : U64 }, ok : Bool }
@@ -5831,10 +5928,11 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 pub extern fn app_config_for_host() callconv(.c) __AnonStruct_eba854e503b8b9e2;
 
 /// Entrypoint: init_for_host!
-pub extern fn init_for_host(arg0: __AnonStruct_5f7b2a7b80a0d28a) callconv(.c) Init_for_hostResult;
+pub extern fn init_for_host(arg0: __AnonStruct_e43e1f68febb5517) callconv(.c) Init_for_hostResult;
 
 /// Entrypoint: render_for_host!
-pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct_5f7b2a7b80a0d28a) callconv(.c) Render_for_hostResult;
+pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct_e43e1f68febb5517) callconv(.c) Render_for_hostResult;
 
 /// Entrypoint: drop_model_for_host!
 pub extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
+

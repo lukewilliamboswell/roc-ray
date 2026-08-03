@@ -1265,6 +1265,22 @@ fn hostedSetTargetFps(fps: i32) callconv(.c) void {
     raylib.setTargetFps(fps);
 }
 
+fn hostedMouseShowCursor() callconv(.c) void {
+    if (!active_headless) raylib.showCursor();
+}
+
+fn hostedMouseHideCursor() callconv(.c) void {
+    if (!active_headless) raylib.hideCursor();
+}
+
+fn hostedMouseLockCursor() callconv(.c) void {
+    if (!active_headless) raylib.disableCursor();
+}
+
+fn hostedMouseUnlockCursor() callconv(.c) void {
+    if (!active_headless) raylib.enableCursor();
+}
+
 fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
     if (code > @intFromEnum(raylib.MouseCursor.not_allowed)) return .default;
     return @enumFromInt(code);
@@ -1643,6 +1659,10 @@ comptime {
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
+        @export(&hostedMouseShowCursor, .{ .name = "roc_mouse_show_cursor" });
+        @export(&hostedMouseHideCursor, .{ .name = "roc_mouse_hide_cursor" });
+        @export(&hostedMouseLockCursor, .{ .name = "roc_mouse_lock_cursor" });
+        @export(&hostedMouseUnlockCursor, .{ .name = "roc_mouse_unlock_cursor" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
     }
@@ -1658,15 +1678,24 @@ const RuntimeOptions = struct {
 const InputState = struct {
     keys: ffi.Keys,
     mouse_buttons: ffi.MouseButtons,
+    gamepad_available: ffi.GamepadAvailability,
+    gamepad_buttons: ffi.GamepadButtons,
+    gamepad_axes: ffi.GamepadAxes,
 
     fn init(roc_host: *RocHost) InputState {
         return .{
             .keys = ffi.Keys.init(roc_host),
             .mouse_buttons = ffi.MouseButtons.init(roc_host),
+            .gamepad_available = ffi.GamepadAvailability.init(roc_host),
+            .gamepad_buttons = ffi.GamepadButtons.init(roc_host),
+            .gamepad_axes = ffi.GamepadAxes.init(roc_host),
         };
     }
 
     fn deinit(self: *InputState) void {
+        self.gamepad_axes.decref();
+        self.gamepad_buttons.decref();
+        self.gamepad_available.decref();
         self.mouse_buttons.decref();
         self.keys.decref();
     }
@@ -1674,6 +1703,9 @@ const InputState = struct {
     fn retainForRoc(self: *InputState) void {
         self.keys.incref();
         self.mouse_buttons.incref();
+        self.gamepad_available.incref();
+        self.gamepad_buttons.incref();
+        self.gamepad_axes.incref();
     }
 
     fn hostState(
@@ -1683,7 +1715,9 @@ const InputState = struct {
         frame_time: f32,
         mouse_x: f32,
         mouse_y: f32,
-        mouse_wheel: f32,
+        mouse_delta: raylib.Vec2,
+        mouse_wheel: raylib.Vec2,
+        text_input: []const u32,
     ) HostState {
         self.retainForRoc();
         return .{
@@ -1695,12 +1729,22 @@ const InputState = struct {
                 .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
             },
             .keys = self.keys.list,
+            .text_input = abi.RocListWith(u32, false).fromSlice(text_input, self.keys.roc_host),
+            .gamepads = .{
+                .available = self.gamepad_available.list,
+                .buttons = self.gamepad_buttons.list,
+                .axes = self.gamepad_axes.list,
+            },
             .mouse = .{
                 .buttons = self.mouse_buttons.list,
                 .left = self.mouse_buttons.hasFlag(0, ffi.INPUT_HELD),
                 .middle = self.mouse_buttons.hasFlag(2, ffi.INPUT_HELD),
                 .right = self.mouse_buttons.hasFlag(1, ffi.INPUT_HELD),
-                .wheel = mouse_wheel,
+                .wheel = mouse_wheel.y,
+                .wheel_x = mouse_wheel.x,
+                .wheel_y = mouse_wheel.y,
+                .delta_x = mouse_delta.x,
+                .delta_y = mouse_delta.y,
                 .x = mouse_x,
                 .y = mouse_y,
             },
@@ -1713,6 +1757,11 @@ const InputState = struct {
 
         raylib.updateMouseButtonState();
         self.mouse_buttons.update(raylib.getMouseButtonState());
+
+        raylib.updateGamepadState();
+        self.gamepad_available.update(raylib.getGamepadAvailability());
+        self.gamepad_buttons.update(raylib.getGamepadButtonState());
+        self.gamepad_axes.update(raylib.getGamepadAxes());
     }
 };
 
@@ -1770,7 +1819,7 @@ fn dropFinalModel(boxed_model: RocBox) void {
 
 fn initModel(input: *InputState) RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
-    const init_state = input.hostState(0, 0, 0, 0, 0, 0);
+    const init_state = input.hostState(0, 0, 0, 0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, &.{});
     const init_result = init_for_host(init_state);
     if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
     return init_result;
@@ -1832,13 +1881,18 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
         input.updateFromRaylib();
         const mouse_pos = raylib.getMousePosition();
+        const mouse_delta = raylib.getMouseDelta();
+        const mouse_wheel = raylib.getMouseWheelMoveV();
+        const text_input = raylib.getTextInput();
         const platform_state = input.hostState(
             frame_count,
             now_ns,
             frame_time,
             mouse_pos.x,
             mouse_pos.y,
-            raylib.getMouseWheelMove(),
+            mouse_delta,
+            mouse_wheel,
+            text_input,
         );
 
         const render_result = render_for_host(boxed_model, platform_state);
@@ -1887,7 +1941,9 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             frame_time,
             0,
             0,
-            0,
+            .{ .x = 0, .y = 0 },
+            .{ .x = 0, .y = 0 },
+            &.{},
         );
 
         const render_result = render_for_host(boxed_model, platform_state);

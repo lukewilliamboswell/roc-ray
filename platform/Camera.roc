@@ -79,7 +79,50 @@ Camera := [].{
 	clamp_zoom : Camera2D, { min : F32, max : F32 } -> Camera2D
 	clamp_zoom = |camera, limits| Camera.with_zoom(camera, Math.clamp(camera.zoom, limits.min, limits.max))
 
+	## Convert a world-space point to logical screen coordinates.
+	## Rotation uses degrees, matching raylib and `Draw.with_camera!`.
+	world_to_screen : Camera2D, Math.Vec2 -> Math.Vec2
+	world_to_screen = |camera, world| {
+		radians = camera.rotation * 0.017453292519943295
+		cos_rotation = F32.cos(radians)
+		sin_rotation = F32.sin(radians)
+		relative = Math.sub(world, camera.target)
+		{
+			x: (relative.x * cos_rotation - relative.y * sin_rotation) * camera.zoom + camera.offset.x,
+			y: (relative.x * sin_rotation + relative.y * cos_rotation) * camera.zoom + camera.offset.y,
+		}
+	}
+
+	## Convert logical screen coordinates back to world space. A zero-zoom
+	## camera has no inverse and returns the camera target deterministically.
+	screen_to_world : Camera2D, Math.Vec2 -> Math.Vec2
+	screen_to_world = |camera, screen| {
+		if camera.zoom == 0 {
+			camera.target
+		} else {
+			radians = 0 - camera.rotation * 0.017453292519943295
+			cos_rotation = F32.cos(radians)
+			sin_rotation = F32.sin(radians)
+			relative = Math.scale(Math.sub(screen, camera.offset), 1 / camera.zoom)
+			Math.add(
+				camera.target,
+				{
+					x: relative.x * cos_rotation - relative.y * sin_rotation,
+					y: relative.x * sin_rotation + relative.y * cos_rotation,
+				},
+			)
+		}
+	}
+
 }
 
 expect Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }).offset == { x: 400, y: 300 }
 expect Camera.clamp_zoom(Camera.with_zoom(Camera.default, 0.05), { min: 0.25, max: 4 }).zoom == 0.25
+expect Camera.world_to_screen(Camera.default, { x: 12, y: 34 }) == { x: 12, y: 34 }
+expect Camera.world_to_screen(Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }), { x: 10, y: 20 }) == { x: 400, y: 300 }
+expect {
+	camera = Camera.new({ target: { x: 10, y: -5 }, offset: { x: 320, y: 240 }, rotation: 37, zoom: 2.5 })
+	world = { x: 42, y: 11 }
+	round_trip = Camera.screen_to_world(camera, Camera.world_to_screen(camera, world))
+	F32.abs(round_trip.x - world.x) < 0.001 and F32.abs(round_trip.y - world.y) < 0.001
+}

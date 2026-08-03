@@ -83,6 +83,8 @@ render! = |model, host| {
 		Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom }),
 		rotation,
 	)
+	mouse_world = Camera.screen_to_world(camera, { x: host.mouse.x, y: host.mouse.y })
+	mouse_screen = Camera.world_to_screen(camera, mouse_world)
 
 	next = { player, zoom, rotation }
 
@@ -92,9 +94,10 @@ render! = |model, host| {
 			Draw.with_camera!(
 				camera,
 				|| {
-					draw_world!(player)
+					draw_world!(player, mouse_world)
 				},
 			)
+			Draw.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
 
 			draw_hud!(next)
 		},
@@ -103,8 +106,8 @@ render! = |model, host| {
 	Ok(next)
 }
 
-draw_world! : Math.Vec2 => {}
-draw_world! = |player| {
+draw_world! : Math.Vec2, Math.Vec2 => {}
+draw_world! = |player, mouse_world| {
 	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled(Color.from_hex_rgb(0x23323a)) })
 	draw_grid_x!(world_left)
 	draw_grid_y!(world_top)
@@ -119,6 +122,7 @@ draw_world! = |player| {
 	Draw.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.red, Color.white, 4) })
 	Draw.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
 	Draw.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
+	Draw.circle!({ center: mouse_world, radius: 8, style: Draw.outlined(Color.yellow, 2) })
 }
 
 draw_grid_x! : F32 => {}

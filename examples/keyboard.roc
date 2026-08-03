@@ -5,6 +5,7 @@ import rr.Color
 import rr.Host
 import rr.Keys
 import rr.Mouse
+import rr.Gamepad
 import rr.App
 
 Model : {}
@@ -22,6 +23,19 @@ title = "Keyboard + mouse input"
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
+	if host.key_pressed(KeyH) {
+		Mouse.hide_cursor!()
+	}
+	if host.key_pressed(KeyJ) {
+		Mouse.show_cursor!()
+	}
+	if host.key_pressed(KeyK) {
+		Mouse.lock_cursor!()
+	}
+	if host.key_pressed(KeyL) {
+		Mouse.unlock_cursor!()
+	}
+
 	w_down = host.key_down(KeyW)
 	a_down = host.key_down(KeyA)
 	s_down = host.key_down(KeyS)
@@ -37,6 +51,14 @@ render! = |model, host| {
 	space_released = host.key_released(KeySpace)
 	mouse_left_pressed = Mouse.button_pressed(host.mouse, Left)
 	mouse_left_released = Mouse.button_released(host.mouse, Left)
+	mouse_delta = Mouse.delta(host.mouse)
+	wheel_delta = Mouse.wheel_delta(host.mouse)
+	gamepad_connected = Gamepad.available(host.gamepads, One)
+	left_stick = Gamepad.left_stick(host.gamepads, One)
+	text_entered = List.len(host.text_input) > 0
+	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
+	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
+	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
 
 	Draw.draw!(
 		Color.ray_white,
@@ -93,6 +115,19 @@ render! = |model, host| {
 			Draw.text!({ pos: { x: 95, y: 285 }, text: "Mouse down", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
 			Draw.rectangle!({ x: 170, y: 270, width: 110, height: 30, style: Draw.filled(mouse_release_color) })
 			Draw.text!({ pos: { x: 225, y: 285 }, text: "Mouse up", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+
+			Draw.text_at!({ pos: { x: 30, y: 330 }, text: "Typed Unicode", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 175, y: 328, width: 24, height: 24, style: Draw.filled(if text_entered Color.green else Color.light_gray) })
+			Draw.text_at!({ pos: { x: 220, y: 330 }, text: "Mouse delta", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 345, y: 328, width: 24, height: 24, style: Draw.filled(if mouse_moved Color.green else Color.light_gray) })
+			Draw.text_at!({ pos: { x: 390, y: 330 }, text: "Wheel x/y", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 505, y: 328, width: 24, height: 24, style: Draw.filled(if wheel_moved Color.green else Color.light_gray) })
+
+			Draw.text_at!({ pos: { x: 30, y: 370 }, text: "Gamepad 1", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 135, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_connected Color.green else Color.light_gray) })
+			Draw.text_at!({ pos: { x: 180, y: 370 }, text: "Left stick", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 285, y: 368, width: 24, height: 24, style: Draw.filled(if stick_moved Color.green else Color.light_gray) })
+			Draw.text_at!({ pos: { x: 30, y: 410 }, text: "Cursor: H hide, J show, K lock, L unlock", size: 18, color: Color.dark_gray })
 		},
 	)
 

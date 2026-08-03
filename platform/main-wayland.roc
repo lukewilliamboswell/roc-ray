@@ -17,7 +17,7 @@ platform ""
 			render! : model, Host => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Color, Host, Keys, Mouse, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
+	exposes [Draw, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
 	packages {}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -89,7 +89,11 @@ platform ""
 		"roc_host_read_file_raw": Host.read_file_raw!,
 		"roc_host_set_screen_size": Host.set_screen_size_raw!,
 		"roc_host_set_target_fps": Host.set_target_fps!,
-		"roc_mouse_set_cursor_raw": Host.set_cursor_raw!,
+		"roc_mouse_show_cursor": Mouse.show_cursor!,
+		"roc_mouse_hide_cursor": Mouse.hide_cursor!,
+		"roc_mouse_lock_cursor": Mouse.lock_cursor!,
+		"roc_mouse_unlock_cursor": Mouse.unlock_cursor!,
+		"roc_mouse_set_cursor_raw": Mouse.set_cursor_raw!,
 		"roc_tilemap_load_tmx_raw": Tilemap.load_tmx_raw!,
 		"roc_draw_begin_camera": Draw.begin_camera!,
 		"roc_draw_begin_blend_raw": Draw.begin_blend_raw!,
@@ -120,6 +124,7 @@ import Color
 import Host
 import Keys
 import Mouse
+import Gamepad
 import Time
 import Audio
 import App
@@ -139,12 +144,22 @@ HostStateFromHost : {
 	frame_time : F32, ## seconds since previous frame (0 on first frame)
 	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
+	text_input : List(U32), ## Unicode codepoints entered this frame
+	gamepads : {
+		available : List(U8), ## 4 availability bytes
+		buttons : List(U8), ## 4 * 18 packed button-state bytes
+		axes : List(F32), ## 4 * 6 sampled axis values
+	},
 	mouse : {
 		buttons : List(U8), ## 7 packed state bytes, one per raylib mouse button code 0-6
 		left : Bool,
 		middle : Bool,
 		right : Bool,
 		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
 		x : F32,
 		y : F32,
 	},
@@ -161,6 +176,8 @@ init_for_host! = |host_state| {
 		frame_time: host_state.frame_time,
 		screen: host_state.screen,
 		keys: host_state.keys,
+		text_input: host_state.text_input,
+		gamepads: host_state.gamepads,
 		mouse: host_state.mouse,
 	}
 	match (program.init!.run!)(host) {
@@ -178,6 +195,8 @@ render_for_host! = |boxed_model, host_state| {
 		frame_time: host_state.frame_time,
 		screen: host_state.screen,
 		keys: host_state.keys,
+		text_input: host_state.text_input,
+		gamepads: host_state.gamepads,
 		mouse: host_state.mouse,
 	}
 	match (program.render!)(Box.unbox(boxed_model), host) {

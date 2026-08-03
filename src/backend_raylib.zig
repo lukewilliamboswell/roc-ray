@@ -39,10 +39,40 @@ var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 /// Persistent packed mouse button state - updated each frame, with the same bits.
 var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 
+/// Persistent gamepad snapshot, flattened by gamepad then control index.
+var gamepad_available: [ffi.GAMEPAD_COUNT]u8 = [_]u8{0} ** ffi.GAMEPAD_COUNT;
+var gamepad_button_state: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+var gamepad_axes: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 = [_]f32{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT);
+
+/// raylib's internal codepoint queue is bounded; this also leaves room if its
+/// default grows. Any excess is drained so it cannot leak into a later frame.
+pub const TEXT_INPUT_CAPACITY: usize = 32;
+var text_input: [TEXT_INPUT_CAPACITY]u32 = [_]u32{0} ** TEXT_INPUT_CAPACITY;
+
+fn gamepadButtonIndex(gamepad: usize, button: usize) usize {
+    return gamepad * ffi.GAMEPAD_BUTTON_COUNT + button;
+}
+
+fn gamepadAxisIndex(gamepad: usize, axis: usize) usize {
+    return gamepad * ffi.GAMEPAD_AXIS_COUNT + axis;
+}
+
+test "gamepad snapshot indexing is contiguous per device" {
+    try std.testing.expectEqual(@as(usize, 0), gamepadButtonIndex(0, 0));
+    try std.testing.expectEqual(@as(usize, 17), gamepadButtonIndex(0, 17));
+    try std.testing.expectEqual(@as(usize, 18), gamepadButtonIndex(1, 0));
+    try std.testing.expectEqual(@as(usize, 23), gamepadAxisIndex(3, 5));
+}
+
 fn inputStateBits(down: bool, pressed: bool, released: bool) u8 {
     return (if (down) ffi.INPUT_HELD else 0) |
         (if (pressed) ffi.INPUT_PRESSED else 0) |
         (if (released) ffi.INPUT_RELEASED else 0);
+}
+
+fn nextInputState(previous: u8, down: bool) u8 {
+    const was_down = previous & ffi.INPUT_HELD != 0;
+    return inputStateBits(down, down and !was_down, !down and was_down);
 }
 
 test "input state packs held and edge flags" {
@@ -51,15 +81,18 @@ test "input state packs held and edge flags" {
     try std.testing.expectEqual(ffi.INPUT_RELEASED, inputStateBits(false, false, true));
 }
 
+test "input state derives edge transitions from one held-state sample" {
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, nextInputState(0, true));
+    try std.testing.expectEqual(ffi.INPUT_HELD, nextInputState(ffi.INPUT_HELD, true));
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, nextInputState(ffi.INPUT_HELD, false));
+    try std.testing.expectEqual(@as(u8, 0), nextInputState(ffi.INPUT_RELEASED, false));
+}
+
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = inputStateBits(
-            rl.IsKeyDown(key),
-            rl.IsKeyPressed(key),
-            rl.IsKeyReleased(key),
-        );
+        key_state[i] = nextInputState(key_state[i], rl.IsKeyDown(key));
     }
 }
 
@@ -72,17 +105,76 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = inputStateBits(
-            rl.IsMouseButtonDown(button),
-            rl.IsMouseButtonPressed(button),
-            rl.IsMouseButtonReleased(button),
-        );
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], rl.IsMouseButtonDown(button));
     }
 }
 
 /// Get the current packed mouse button state array.
 pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
+}
+
+/// Sample all supported gamepads once for this frame.
+pub fn updateGamepadState() void {
+    for (0..ffi.GAMEPAD_COUNT) |gamepad| {
+        const gamepad_id: c_int = @intCast(gamepad);
+        const available = rl.IsGamepadAvailable(gamepad_id);
+        gamepad_available[gamepad] = if (available) 1 else 0;
+
+        for (0..ffi.GAMEPAD_BUTTON_COUNT) |button| {
+            const flat_index = gamepadButtonIndex(gamepad, button);
+            if (available) {
+                const button_id: c_int = @intCast(button);
+                gamepad_button_state[flat_index] = nextInputState(
+                    gamepad_button_state[flat_index],
+                    rl.IsGamepadButtonDown(gamepad_id, button_id),
+                );
+            } else {
+                gamepad_button_state[flat_index] = nextInputState(gamepad_button_state[flat_index], false);
+            }
+        }
+
+        const native_axis_count: usize = if (available)
+            @intCast(@max(rl.GetGamepadAxisCount(gamepad_id), 0))
+        else
+            0;
+        for (0..ffi.GAMEPAD_AXIS_COUNT) |axis| {
+            const flat_index = gamepadAxisIndex(gamepad, axis);
+            gamepad_axes[flat_index] = if (axis < native_axis_count)
+                rl.GetGamepadAxisMovement(gamepad_id, @intCast(axis))
+            else
+                0;
+        }
+    }
+}
+
+/// Get the sampled gamepad availability array.
+pub fn getGamepadAvailability() *const [ffi.GAMEPAD_COUNT]u8 {
+    return &gamepad_available;
+}
+
+/// Get the sampled packed gamepad button-state array.
+pub fn getGamepadButtonState() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 {
+    return &gamepad_button_state;
+}
+
+/// Get the sampled gamepad axis array.
+pub fn getGamepadAxes() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 {
+    return &gamepad_axes;
+}
+
+/// Drain this frame's queued Unicode input and return a stable scratch slice.
+pub fn getTextInput() []const u32 {
+    var count: usize = 0;
+    while (true) {
+        const codepoint = rl.GetCharPressed();
+        if (codepoint <= 0) break;
+        if (count < text_input.len) {
+            text_input[count] = @intCast(codepoint);
+            count += 1;
+        }
+    }
+    return text_input[0..count];
 }
 
 /// Return raylib's built-in font, which is not owned by a resource heap.
@@ -748,6 +840,21 @@ pub fn hideCursor() void {
     rl.HideCursor();
 }
 
+/// Lock and hide the OS cursor.
+pub fn disableCursor() void {
+    rl.DisableCursor();
+}
+
+/// Unlock the OS cursor and make it visible.
+pub fn enableCursor() void {
+    rl.EnableCursor();
+}
+
+/// Set the native OS cursor shape.
+pub fn setMouseCursor(cursor: u8) void {
+    rl.SetMouseCursor(@intCast(@min(cursor, @as(u8, 10))));
+}
+
 /// Set window size.
 pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
@@ -1077,6 +1184,12 @@ pub fn getMousePosition() Vec2 {
     return .{ .x = pos.x, .y = pos.y };
 }
 
+/// Get mouse movement since the previous frame.
+pub fn getMouseDelta() Vec2 {
+    const delta = rl.GetMouseDelta();
+    return .{ .x = delta.x, .y = delta.y };
+}
+
 /// Check if a mouse button is down.
 pub fn isMouseButtonDown(button: MouseButton) bool {
     return rl.IsMouseButtonDown(@intFromEnum(button));
@@ -1095,6 +1208,12 @@ pub fn isMouseButtonReleased(button: MouseButton) bool {
 /// Get mouse wheel movement.
 pub fn getMouseWheelMove() f32 {
     return rl.GetMouseWheelMove();
+}
+
+/// Get horizontal and vertical mouse wheel movement.
+pub fn getMouseWheelMoveV() Vec2 {
+    const movement = rl.GetMouseWheelMoveV();
+    return .{ .x = movement.x, .y = movement.y };
 }
 
 /// Get screen width.

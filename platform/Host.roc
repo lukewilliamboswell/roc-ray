@@ -1,6 +1,7 @@
 ## Host module - provides platform state and system effects
 import Keys
 import Mouse
+import Gamepad
 
 Host := {
 	frame_count : U64,
@@ -24,6 +25,19 @@ Host := {
 	## Packed per-key state, updated in place by the host. Each byte stores held,
 	## pressed-this-frame, and released-this-frame bits. Use the `Keys` helpers.
 	keys : List(U8),
+
+	## Unicode codepoints entered this frame, in input order. This is distinct
+	## from physical key state and respects the active keyboard layout. Empty
+	## frames are allocation-free; a non-empty list requires one variable-size
+	## allocation because raylib's text queue length varies from frame to frame.
+	text_input : List(U32),
+
+	## Gamepad input sampled once per frame. Use the `Gamepad` helpers rather
+	## than indexing these persistent flat lists directly.
+	gamepads : Gamepad.Snapshot,
+
+	## Mouse buttons, position, delta, and two-axis wheel movement sampled once
+	## for this frame. Receiver helpers are available on `Mouse.State`.
 	mouse : Mouse.State,
 }.{
 
@@ -52,13 +66,6 @@ Host := {
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : I32 => {}
-
-	## Hosted cursor setter. Prefer `set_cursor!` in application code.
-	set_cursor_raw! : U8 => {}
-
-	## Set the OS cursor shape.
-	set_cursor! : Mouse.Cursor => {}
-	set_cursor! = |cursor| Host.set_cursor_raw!(Mouse.cursor_code(cursor))
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.

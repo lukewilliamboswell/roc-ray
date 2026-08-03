@@ -10,6 +10,10 @@ Mouse := [].{
 		middle : Bool,
 		right : Bool,
 		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
 		x : F32,
 		y : F32,
 	}.{
@@ -26,23 +30,16 @@ Mouse := [].{
 		button_released = |mouse, button| Mouse.button_released(mouse, button)
 	}
 
-	button_count : U64
-	button_count = 7
-
-	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
-
-	## Cursor shapes supported by raylib. `Default` restores the platform's
-	## standard cursor.
 	Cursor := [
 		Default,
 		Arrow,
 		IBeam,
 		Crosshair,
 		PointingHand,
-		ResizeEw,
-		ResizeNs,
-		ResizeNwse,
-		ResizeNesw,
+		ResizeEastWest,
+		ResizeNorthSouth,
+		ResizeNorthwestSoutheast,
+		ResizeNortheastSouthwest,
 		ResizeAll,
 		NotAllowed,
 	]
@@ -55,13 +52,48 @@ Mouse := [].{
 			IBeam => 2
 			Crosshair => 3
 			PointingHand => 4
-			ResizeEw => 5
-			ResizeNs => 6
-			ResizeNwse => 7
-			ResizeNesw => 8
+			ResizeEastWest => 5
+			ResizeNorthSouth => 6
+			ResizeNorthwestSoutheast => 7
+			ResizeNortheastSouthwest => 8
 			ResizeAll => 9
 			NotAllowed => 10
 		}
+
+	## Current cursor position in logical drawing coordinates.
+	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
+	position = |mouse| { x: mouse.x, y: mouse.y }
+
+	## Cursor movement since the previous frame, sampled once by the host.
+	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
+	delta = |mouse| { x: mouse.delta_x, y: mouse.delta_y }
+
+	## Horizontal and vertical wheel movement sampled for this frame.
+	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
+	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
+
+	## Show the OS cursor. This does not unlock a cursor locked with `lock_cursor!`.
+	show_cursor! : () => {}
+
+	## Hide the OS cursor. This does not lock its position.
+	hide_cursor! : () => {}
+
+	## Lock and hide the cursor for relative-look controls.
+	lock_cursor! : () => {}
+
+	## Unlock a cursor locked with `lock_cursor!` and make it visible.
+	unlock_cursor! : () => {}
+
+	set_cursor_raw! : U8 => {}
+
+	## Set the native cursor shape.
+	set_cursor! : Cursor => {}
+	set_cursor! = |cursor| Mouse.set_cursor_raw!(cursor_code(cursor))
+
+	button_count : U64
+	button_count = 7
+
+	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
 
 	button_code : MouseButton -> U64
 	button_code = |button|
@@ -100,8 +132,6 @@ Mouse := [].{
 
 	expect button_code(Left) == 0
 	expect button_code(Back) == 6
+	expect cursor_code(PointingHand) == 4
 	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
-	expect cursor_code(Default) == 0
-	expect cursor_code(NotAllowed) == 10
-
 }

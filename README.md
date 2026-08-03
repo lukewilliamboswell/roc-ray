@@ -28,7 +28,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, convex polygons, gradients, text) and callback-scoped camera/scissor modes
 - Loaded and procedurally generated host-owned textures, with full-pixel updates, filter/wrap controls, source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
 - ARC-owned render textures and shaders, cached typed uniforms, and scoped shader/blend/offscreen drawing for 2D post-processing
-- Pure 2D camera values with scoped world-space drawing
+- Pure 2D camera values with scoped drawing and world/screen transforms
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
 - Tiled TMX tilemap loading, viewport-culled drawing, orthogonal tile flips, O(1) world-to-cell lookup, bounded solid queries, layer/object roles, and object/property access
@@ -36,7 +36,8 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
-- Mouse and keyboard input handling
+- Mouse, keyboard, Unicode text-entry, and gamepad input snapshots
+- Mouse delta/two-axis wheel input and runtime cursor visibility, locking, and shapes
 - Per-frame logical screen dimensions for resize-aware rendering and UI layout
 - Loaded sound effects and generated procedural sounds with playback state, pause/resume/stop, volume, pitch, and pan
 - Streamed music playback with host-managed per-frame updates, seeking, timing, and playback state
@@ -63,6 +64,24 @@ roc build examples/hello_world.roc
 ```
 
 > Use `roc build` (rather than `roc examples/hello_world.roc`) for the best performance — see the note above.
+
+## Interaction snapshots
+
+`Host` carries one input snapshot per frame. Keyboard, mouse-button, and up to
+four gamepad states use persistent flat lists that are updated by the host and
+queried through `Keys`, `Mouse`, and `Gamepad`; checking several controls does
+not make several host calls. Gamepad buttons expose held/pressed/released edges,
+and axes can be read individually or as left/right stick vectors.
+
+`host.text_input` contains the Unicode codepoints entered during the frame. It
+tracks text entry and the active keyboard layout, unlike physical key state.
+Empty text-input frames allocate nothing; a frame with entered text creates one
+right-sized list because the queue length is variable. `Mouse.delta` and
+`Mouse.wheel_delta` return the sampled movement vectors. Cursor visibility,
+locking, and native shape are controlled with the `Mouse` effects.
+
+`Camera.world_to_screen` and `Camera.screen_to_world` perform the same 2D
+transform used by `Draw.with_camera!` without crossing the host boundary.
 
 ## Examples
 

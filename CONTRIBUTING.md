@@ -167,9 +167,19 @@ tile crosses the host boundary exactly once and offscreen tiles do not cross it
 at all. Do not create per-tile host resources or temporary Roc lists in a draw
 loop.
 
-The host allocates the keyboard and mouse state lists once, updates their bytes
-in place, and retains them only while Roc owns the frame snapshot. Do not rebuild
-these lists per frame.
+Gamepad availability, buttons, and axes follow the same rule: the host samples
+four fixed slots into flat persistent lists, and `Gamepad` helpers perform all
+indexing on the Roc side. Mouse position, delta, and two-axis wheel movement are
+sampled into scalar fields. Unicode text input is the intentional exception to
+fixed-size storage: empty frames use the empty-list representation, while a
+frame containing text allocates one exact-size `List(U32)` for the variable
+number of queued codepoints.
+
+The host allocates keyboard, mouse, and gamepad state lists once, updates them
+in place, and retains them only while Roc owns the frame snapshot. If an app
+keeps a snapshot list in its model, the next update uses copy-on-write so the
+retained value stays immutable; that unusual case necessarily allocates a new
+backing list. Do not rebuild these lists in the normal per-frame path.
 
 Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
 heaps. Their handle allocation is ABI-compatible with Roc's `Box`: the final Roc

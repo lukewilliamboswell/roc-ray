@@ -6,6 +6,7 @@
 //!
 //! All are designed to reduce boilerplate and improve type safety in host code.
 
+const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 
 // Re-export host helper context for convenience.
@@ -63,6 +64,15 @@ pub const KEY_COUNT: usize = 349;
 /// Number of mouse buttons to track (raylib mouse button codes 0-6)
 pub const MOUSE_BUTTON_COUNT: usize = 7;
 
+/// Number of gamepads sampled into each Host snapshot.
+pub const GAMEPAD_COUNT: usize = 4;
+
+/// Number of raylib gamepad button codes (0-17).
+pub const GAMEPAD_BUTTON_COUNT: usize = 18;
+
+/// Number of raylib gamepad axes (0-5).
+pub const GAMEPAD_AXIS_COUNT: usize = 6;
+
 /// Held bit used by packed keyboard and mouse button state bytes.
 pub const INPUT_HELD: u8 = 1;
 /// Pressed-this-frame bit used by packed input state bytes.
@@ -90,6 +100,11 @@ pub fn StateList(comptime COUNT: usize) type {
 
         /// Update state from a fixed-size source array.
         pub fn update(self: *Self, source: *const [COUNT]u8) void {
+            if (!self.list.isUnique()) {
+                const retained_snapshot = self.list;
+                self.list = abi.RocListWith(u8, false).allocate(COUNT, self.roc_host);
+                retained_snapshot.decref(self.roc_host);
+            }
             if (self.list.elements_ptr) |elements| {
                 @memcpy(elements[0..COUNT], source);
             }
@@ -119,6 +134,78 @@ pub const Keys = StateList(KEY_COUNT);
 
 /// Mouse button state manager.
 pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
+
+/// Gamepad availability and packed button state managers.
+pub const GamepadAvailability = StateList(GAMEPAD_COUNT);
+/// Packed gamepad button state manager.
+pub const GamepadButtons = StateList(GAMEPAD_COUNT * GAMEPAD_BUTTON_COUNT);
+
+/// Fixed-size value list manager for non-byte input state such as axes.
+pub fn ValueList(comptime T: type, comptime COUNT: usize) type {
+    return struct {
+        list: abi.RocListWith(T, false),
+        roc_host: *RocHost,
+
+        const Self = @This();
+
+        pub fn init(roc_host: *RocHost) Self {
+            const list = abi.RocListWith(T, false).allocate(COUNT, roc_host);
+            if (list.elements_ptr) |elements| {
+                @memset(elements[0..COUNT], 0);
+            }
+            return .{ .list = list, .roc_host = roc_host };
+        }
+
+        pub fn update(self: *Self, source: *const [COUNT]T) void {
+            if (!self.list.isUnique()) {
+                const retained_snapshot = self.list;
+                self.list = abi.RocListWith(T, false).allocate(COUNT, self.roc_host);
+                retained_snapshot.decref(self.roc_host);
+            }
+            if (self.list.elements_ptr) |elements| {
+                @memcpy(elements[0..COUNT], source);
+            }
+        }
+
+        pub fn incref(self: *Self) void {
+            self.list.incref(1);
+        }
+
+        pub fn decref(self: *Self) void {
+            self.list.decref(self.roc_host);
+        }
+    };
+}
+
+/// Sampled gamepad axis state manager.
+pub const GamepadAxes = ValueList(f32, GAMEPAD_COUNT * GAMEPAD_AXIS_COUNT);
+
+test "fixed input lists reuse unique storage and copy retained snapshots" {
+    var env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.default() };
+    var host = RocHost{
+        .env = &env,
+        .roc_alloc = &abi.DefaultAllocators.rocAlloc,
+        .roc_dealloc = &abi.DefaultAllocators.rocDealloc,
+        .roc_realloc = &abi.DefaultAllocators.rocRealloc,
+        .roc_dbg = &abi.DefaultHandlers.rocDbg,
+        .roc_expect_failed = &abi.DefaultHandlers.rocExpectFailed,
+        .roc_crashed = &abi.DefaultHandlers.rocCrashed,
+    };
+
+    var state = StateList(2).init(&host);
+    defer state.decref();
+    const original_ptr = state.list.elements_ptr;
+    state.update(&.{ 1, 2 });
+    try std.testing.expectEqual(original_ptr, state.list.elements_ptr);
+
+    const retained = state.list;
+    retained.incref(1);
+    defer retained.decref(&host);
+    state.update(&.{ 3, 4 });
+    try std.testing.expect(original_ptr != state.list.elements_ptr);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2 }, retained.items());
+    try std.testing.expectEqualSlices(u8, &.{ 3, 4 }, state.list.items());
+}
 
 /// Flat state for init_for_host!/render_for_host!.
 /// This is not the public nested `Host` record exposed to Roc apps.

@@ -924,6 +924,21 @@ fn hostedSetTargetFps(fps: i32) callconv(.c) void {
     raylib.setTargetFps(fps);
 }
 
+fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
+    if (code > @intFromEnum(raylib.MouseCursor.not_allowed)) return .default;
+    return @enumFromInt(code);
+}
+
+fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
+    if (active_headless) return;
+    raylib.setMouseCursor(mouseCursorFromCode(cursor));
+}
+
+test "mouse cursor codes map invalid values to default" {
+    try std.testing.expectEqual(raylib.MouseCursor.pointing_hand, mouseCursorFromCode(4));
+    try std.testing.expectEqual(raylib.MouseCursor.default, mouseCursorFromCode(255));
+}
+
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
@@ -1184,6 +1199,7 @@ comptime {
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
+        @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
     }
 }

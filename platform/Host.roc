@@ -1,5 +1,6 @@
 ## Host module - provides platform state and system effects
 import Keys
+import Mouse
 
 Host := {
 	frame_count : U64,
@@ -64,6 +65,13 @@ Host := {
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : I32 => {}
+
+	## Hosted cursor setter. Prefer `set_cursor!` in application code.
+	set_cursor_raw! : U8 => {}
+
+	## Set the OS cursor shape.
+	set_cursor! : Mouse.Cursor => {}
+	set_cursor! = |cursor| Host.set_cursor_raw!(Mouse.cursor_code(cursor))
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.

@@ -70,16 +70,12 @@ render! = |model, host| {
 		.scale(64)
 		.centered()
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			sprite.draw!()
-			# Keep both labels within RocStr's inline representation so this
-			# example's steady-state render loop only allocates its model box.
-			Draw.text_centered!({ pos: { x: 400, y: 445 }, text: "SPACE play | S stop", size: 20, color: Color.dark_gray })
-			Draw.text_centered!({ pos: { x: 400, y: 475 }, text: "P pause | R resume", size: 20, color: Color.dark_gray })
-		},
-	)
+	Draw.clear!(Color.ray_white)
+	sprite.draw!()
+	# Keep both labels within RocStr's inline representation so this
+	# example's steady-state render loop only allocates its model box.
+	Draw.text_centered!({ pos: { x: 400, y: 445 }, text: "SPACE play | S stop", size: 20, color: Color.dark_gray })
+	Draw.text_centered!({ pos: { x: 400, y: 475 }, text: "P pause | R resume", size: 20, color: Color.dark_gray })
 
 	Ok(model)
 }

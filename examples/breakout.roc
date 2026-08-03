@@ -448,10 +448,8 @@ render! = |model, host| {
 	play_step_events!(model.sounds, result.events)
 	next = { ..model, game: result.game }
 
-	Draw.draw!(
-		Color.ray_white,
-		|| draw_game!(next.game),
-	)
+	Draw.clear!(Color.ray_white)
+	draw_game!(next.game)
 
 	Ok(next)
 }

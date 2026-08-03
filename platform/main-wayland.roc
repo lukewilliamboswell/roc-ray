@@ -214,7 +214,10 @@ render_for_host! = |boxed_model, host_state| {
 		},
 		mouse: host_state.mouse,
 	}
-	match (program.render!)(Box.unbox(boxed_model), host) {
+	DrawHost.begin_frame!()
+	render_result = (program.render!)(Box.unbox(boxed_model), host)
+	DrawHost.end_frame!()
+	match render_result {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

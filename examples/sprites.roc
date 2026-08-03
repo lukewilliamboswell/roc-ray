@@ -89,17 +89,13 @@ render! = |model, host| {
 			Color.with_alpha(Color.purple, 210),
 		)
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			main_sprite.draw!()
-			top_left.draw!()
-			bottom_right.draw!()
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 52 }, text: "Sprites", size: 42, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_center })
-			Draw.text!({ pos: { x: 90, y: 504 }, text: "source rect", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: screen_w - 90, y: 504 }, text: "rotation + tint", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_right })
-		},
-	)
+	Draw.clear!(Color.ray_white)
+	main_sprite.draw!()
+	top_left.draw!()
+	bottom_right.draw!()
+	Draw.text!({ pos: { x: screen_w * 0.5, y: 52 }, text: "Sprites", size: 42, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_center })
+	Draw.text!({ pos: { x: 90, y: 504 }, text: "source rect", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: screen_w - 90, y: 504 }, text: "rotation + tint", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_right })
 
 	Ok({ ..model, angle: next_angle, animation: next_animation })
 }

@@ -1034,17 +1034,13 @@ render! = |model, host| {
 	camera = Camera.follow(shaken_target(next.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
 	viewport = Tilemap.viewport_for_camera(camera, { x: screen_w, y: screen_h })
 
-	Draw.draw!(
-		Color.from_hex_rgb(0x071018),
-		|| {
-			Draw.with_camera!(
-				camera,
-				|| draw_world!(next.level, next.characters, next.tiles, next.world, viewport),
-			)
-
-			draw_hud!(next.level, next.world)
-		},
+	Draw.clear!(Color.from_hex_rgb(0x071018))
+	Draw.with_camera!(
+		camera,
+		|| draw_world!(next.level, next.characters, next.tiles, next.world, viewport),
 	)
+
+	draw_hud!(next.level, next.world)
 
 	Ok(next)
 }

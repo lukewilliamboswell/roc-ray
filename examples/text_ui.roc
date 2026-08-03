@@ -61,22 +61,18 @@ render! = |model, _host| {
 	title_pad = 16
 	button = { x: screen_w * 0.5 - (menu_size.width + 48) * 0.5, y: 230, width: menu_size.width + 48, height: menu_size.height + 24, style: Draw.filled_and_outlined(Color.light_gray, Color.gray, 2) }
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			Draw.rounded_rectangle!({ x: screen_w * 0.5 - title_size.width * 0.5 - title_pad, y: 44, width: title_size.width + title_pad * 2, height: title_size.height + title_pad, radius: 12, segments: 8, style: Draw.filled(Color.light_gray) })
-			ui.title.draw!({ pos: { x: screen_w * 0.5, y: 56 }, color: Color.dark_gray, align: Text.align_top_center })
+	Draw.clear!(Color.ray_white)
+	Draw.rounded_rectangle!({ x: screen_w * 0.5 - title_size.width * 0.5 - title_pad, y: 44, width: title_size.width + title_pad * 2, height: title_size.height + title_pad, radius: 12, segments: 8, style: Draw.filled(Color.light_gray) })
+	ui.title.draw!({ pos: { x: screen_w * 0.5, y: 56 }, color: Color.dark_gray, align: Text.align_top_center })
 
-			Draw.rectangle!(button)
-			ui.menu.draw!({ pos: { x: button.x + button.width * 0.5, y: button.y + button.height * 0.5 }, color: Color.black, align: Text.align_center })
+	Draw.rectangle!(button)
+	ui.menu.draw!({ pos: { x: button.x + button.width * 0.5, y: button.y + button.height * 0.5 }, color: Color.black, align: Text.align_center })
 
-			Draw.rectangle!({ x: 20, y: 20, width: hud_size.width + 20, height: hud_size.height + 12, style: Draw.filled(Color.black) })
-			ui.hud.draw!({ pos: { x: 30, y: 26 }, color: Color.yellow, align: Text.align_top_left })
+	Draw.rectangle!({ x: 20, y: 20, width: hud_size.width + 20, height: hud_size.height + 12, style: Draw.filled(Color.black) })
+	ui.hud.draw!({ pos: { x: 30, y: 26 }, color: Color.yellow, align: Text.align_top_left })
 
-			Draw.text!({ pos: { x: 40, y: 360 }, text: long_message, size: 18, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
-			ui.bottom.draw!({ pos: { x: screen_w - 24, y: screen_h - 24 }, color: Color.blue, align: Text.align_bottom_right })
-		},
-	)
+	Draw.text!({ pos: { x: 40, y: 360 }, text: long_message, size: 18, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
+	ui.bottom.draw!({ pos: { x: screen_w - 24, y: screen_h - 24 }, color: Color.blue, align: Text.align_bottom_right })
 
 	Ok(model)
 }

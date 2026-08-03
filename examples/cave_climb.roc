@@ -969,16 +969,12 @@ render! = |model, host| {
 	camera = camera_for(model.level, next_world.player.pos)
 	viewport = Tilemap.viewport_for_camera(camera, { x: screen_w, y: screen_h })
 
-	Draw.draw!(
-		Color.from_hex_rgb(0x101820),
-		|| {
-			Draw.with_camera!(
-				camera,
-				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport),
-			)
-			draw_hud!(next.level, next.world)
-		},
+	Draw.clear!(Color.from_hex_rgb(0x101820))
+	Draw.with_camera!(
+		camera,
+		|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport),
 	)
+	draw_hud!(next.level, next.world)
 
 	Ok(next)
 }

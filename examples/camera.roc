@@ -88,20 +88,16 @@ render! = |model, host| {
 
 	next = { player, zoom, rotation }
 
-	Draw.draw!(
-		Color.ray_white,
+	Draw.clear!(Color.ray_white)
+	Draw.with_camera!(
+		camera,
 		|| {
-			Draw.with_camera!(
-				camera,
-				|| {
-					draw_world!(player, mouse_world)
-				},
-			)
-			Draw.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
-
-			draw_hud!(next)
+			draw_world!(player, mouse_world)
 		},
 	)
+	Draw.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
+
+	draw_hud!(next)
 
 	Ok(next)
 }

@@ -143,14 +143,10 @@ render_game_over! = |model, host| {
 	restart = Keys.key_pressed(host, KeySpace)
 	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
 
-	Draw.draw!(
-		Color.black,
-		|| {
-			draw_field!(model)
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
-		},
-	)
+	Draw.clear!(Color.black)
+	draw_field!(model)
+	Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
+	Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
 
 	Ok(if restart new_round!(model) else model)
 }
@@ -231,10 +227,8 @@ render_playing! = |model, host| {
 	play_if!(hit_top or hit_bottom, model.wall_sound)
 	play_if!(out_left or out_right, model.score_sound)
 
-	Draw.draw!(
-		Color.black,
-		|| draw_field!(next),
-	)
+	Draw.clear!(Color.black)
+	draw_field!(next)
 
 	Ok(next)
 }

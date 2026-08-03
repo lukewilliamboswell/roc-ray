@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main-default.roc" }
 
 import rr.App
 import rr.Assets
@@ -74,7 +74,10 @@ render! = |model, host| {
 		Color.ray_white,
 		|| {
 			sprite.draw!()
-			Draw.text_centered!({ pos: { x: 400, y: 455 }, text: "SPACE play  P pause  R resume  S stop", size: 20, color: Color.dark_gray })
+			# Keep both labels within RocStr's inline representation so this
+			# example's steady-state render loop only allocates its model box.
+			Draw.text_centered!({ pos: { x: 400, y: 445 }, text: "SPACE play | S stop", size: 20, color: Color.dark_gray })
+			Draw.text_centered!({ pos: { x: 400, y: 475 }, text: "P pause | R resume", size: 20, color: Color.dark_gray })
 		},
 	)
 

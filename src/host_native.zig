@@ -50,8 +50,6 @@ const DEFAULT_HEADLESS_FRAMES: u64 = 3;
 const HEADLESS_FRAME_NANOS: u64 = 16_666_667;
 const HEADLESS_FRAME_TIME: f32 = 1.0 / 60.0;
 const HEADLESS_RESOURCE_SIZE: f32 = 64;
-const use_debug_allocator = builtin.mode == .Debug;
-
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
 var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
@@ -999,6 +997,7 @@ comptime {
 const RuntimeOptions = struct {
     headless: bool = false,
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
+    debug_allocator: bool = false,
     help: bool = false,
 };
 
@@ -1091,7 +1090,7 @@ const InputState = struct {
 };
 
 fn printUsage() void {
-    std.debug.print("usage: app [--headless] [--headless-frames=N]\n", .{});
+    std.debug.print("usage: app [--headless] [--headless-frames=N] [--debug-allocator]\n", .{});
 }
 
 fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
@@ -1113,6 +1112,8 @@ fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
                 return error.InvalidArgument;
             }
             options.headless_frames = frames;
+        } else if (std.mem.eql(u8, arg, "--debug-allocator")) {
+            options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             options.help = true;
         } else {
@@ -1311,6 +1312,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         host_environ = @as([*]const [*:0]u8, @ptrCast(std.c.environ))[0..n];
     }
 
+    const use_debug_allocator = builtin.mode == .Debug and options.debug_allocator;
     var debug_allocator: std.heap.DebugAllocator(.{}) = .{};
     defer if (use_debug_allocator) {
         if (debug_allocator.deinit() == .leak) std.log.warn("Memory leak detected", .{});

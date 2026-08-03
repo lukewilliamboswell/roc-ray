@@ -55,6 +55,16 @@ The runner builds the host, temporarily points that example at
 exit. Pass `--skip-platform-build` to reuse host libraries from an earlier
 `zig build`.
 
+Debug host builds use the fast thread-safe allocator by default so
+allocation-heavy interactive examples remain responsive. To diagnose Roc-side
+leaks with Zig's stack-tracing allocator, opt in when launching an app:
+
+```bash
+./example --debug-allocator
+```
+
+The flag only changes allocator selection in a Debug host build.
+
 The test script applies the same temporary substitution across the example
 suite. CI follows the same policy using a freshly built bundle. Do not commit a
 local platform reference in an example merely to make an unreleased API change

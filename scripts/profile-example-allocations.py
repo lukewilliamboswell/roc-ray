@@ -47,6 +47,7 @@ import json
 stats = {{
     "alloc_calls": 0,
     "alloc_bytes": 0,
+    "alloc_sizes": {{}},
     "realloc_calls": 0,
     "dealloc_calls": 0,
     "unreadable_alloc_sizes": 0,
@@ -63,7 +64,9 @@ class CountBreakpoint(gdb.Breakpoint):
         stats[self.counter] += 1
         if self.size_expression is not None:
             try:
-                stats["alloc_bytes"] += int(gdb.parse_and_eval(self.size_expression))
+                size = int(gdb.parse_and_eval(self.size_expression))
+                stats["alloc_bytes"] += size
+                stats["alloc_sizes"][str(size)] = stats["alloc_sizes"].get(str(size), 0) + 1
             except gdb.error:
                 stats["unreadable_alloc_sizes"] += 1
         return False
@@ -117,6 +120,14 @@ def subtract_startup(
         delta = int(many_frames[key]) - int(one_frame[key])
         result[key] = delta
         result[f"{key}_per_frame"] = delta / measured_frames
+    sizes = set(one_frame["alloc_sizes"]) | set(many_frames["alloc_sizes"])
+    result["alloc_sizes"] = {
+        size: int(many_frames["alloc_sizes"].get(size, 0))
+        - int(one_frame["alloc_sizes"].get(size, 0))
+        for size in sorted(sizes, key=int)
+        if int(many_frames["alloc_sizes"].get(size, 0))
+        != int(one_frame["alloc_sizes"].get(size, 0))
+    }
     return result
 
 
@@ -150,6 +161,11 @@ def main() -> int:
         help="Build every example against the local platform before profiling",
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    parser.add_argument(
+        "--sizes",
+        action="store_true",
+        help="Show the steady-state allocation-size histogram for each example",
+    )
     args = parser.parse_args()
 
     if args.frames < 2:
@@ -202,6 +218,12 @@ def main() -> int:
             f"{steady['alloc_bytes_per_frame']:>12.1f} "
             f"{steady['realloc_calls_per_frame']:>15.3f}"
         )
+        if args.sizes:
+            histogram = ", ".join(
+                f"{size} B x {count / steady['measured_frames']:.3f}/frame"
+                for size, count in steady["alloc_sizes"].items()
+            )
+            print(f"  sizes: {histogram or 'none'}")
     return 0
 
 

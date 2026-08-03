@@ -25,6 +25,18 @@ init! = App.init(
 	},
 )
 
+target_fps_message : Str
+target_fps_message = "set_target_fps!(60) - called in init"
+
+screen_sample_message : Str
+screen_sample_message = "host.screen - sampled each frame"
+
+screen_size_message : Str
+screen_size_message = "set_screen_size!() - called in init"
+
+exit_message : Str
+exit_message = "exit!(0) - right-click to exit"
+
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
 	# Circle follows the mouse, changes color when clicked
@@ -37,10 +49,10 @@ render! = |model, host| {
 		Color.ray_white,
 		|| {
 			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "set_target_fps!(60) - called in init", size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 80 }, text: "host.screen - sampled each frame", size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 110 }, text: "set_screen_size!() - called in init", size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 140 }, text: "exit!(0) - right-click to exit", size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: target_fps_message, size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 80 }, text: screen_sample_message, size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 110 }, text: screen_size_message, size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 140 }, text: exit_message, size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.fps!({ pos: { x: 700, y: 10 }, size: 18, color: Color.gray })
 
 			# Show current size

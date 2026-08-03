@@ -418,7 +418,6 @@ pub fn drawTextureQuad(args: anytype) void {
     rl.rlTexCoord2f(1, 0);
     rl.rlVertex2f(args.top_right.x, args.top_right.y);
     rl.rlEnd();
-    rl.rlSetTexture(0);
 }
 
 /// Measure text with a null-terminated string.

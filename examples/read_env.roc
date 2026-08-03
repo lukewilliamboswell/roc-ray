@@ -6,8 +6,7 @@ import rr.Host
 import rr.App
 
 Model : {
-	greeting : Str,
-	username : Str,
+	message : Str,
 }
 
 program = { init!, render! }
@@ -25,21 +24,19 @@ init! = App.init(
 			Err(_) => "Hello"
 		}
 
-		Ok({ greeting, username })
+		Ok({ message: "${greeting}, ${username}!" })
 	},
 )
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
 
-	message = "${model.greeting}, ${model.username}!"
-
 	circle_color = if host.mouse.left Color.red else Color.green
 
 	Draw.draw!(
 		Color.ray_white,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 10 }, text: message, size: 40, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 40, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.text!({ pos: { x: 10, y: 60 }, text: "Set GREETING and USER env vars to customize!", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 30, style: Draw.filled(circle_color) })
 		},

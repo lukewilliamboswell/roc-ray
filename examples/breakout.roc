@@ -73,6 +73,15 @@ screen_w = 800
 screen_h : F32
 screen_h = 600
 
+ready_help : Str
+ready_help = "Move with A/D or arrow keys"
+
+won_help : Str
+won_help = "Press SPACE to play again"
+
+game_over_help : Str
+game_over_help = "Press SPACE to restart"
+
 top_wall_y : F32
 top_wall_y = 58
 
@@ -475,18 +484,18 @@ draw_game! = |game| {
 	match game.state {
 		Ready => {
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: "Move with A/D or arrow keys", size: 18, color: Color.gray })
+			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
 		}
 		Playing => {}
 		Won => {
 			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: "Press SPACE to play again", size: 20, color: Color.light_gray })
+			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
 		}
 		GameOver => {
 			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
 			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: "Press SPACE to restart", size: 20, color: Color.light_gray })
+			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
 		}
 	}
 }

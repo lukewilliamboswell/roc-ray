@@ -17,6 +17,9 @@ init! = App.init(
 	|_host| Ok({}),
 )
 
+title : Str
+title = "Keyboard and mouse input"
+
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
 	w_down = Keys.key_down(host.keys, KeyW)
@@ -38,7 +41,7 @@ render! = |model, host| {
 	Draw.draw!(
 		Color.ray_white,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "Keyboard and mouse input", size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
 
 			w_color = if w_down Color.green else Color.light_gray
 			a_color = if a_down Color.green else Color.light_gray

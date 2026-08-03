@@ -34,6 +34,12 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
+hud_subtitle : Str
+hud_subtitle = "world-space draw + screen-space HUD"
+
+hud_help : Str
+hud_help = "WASD move, wheel zoom, Q/E rotate, R reset"
+
 init! : App.Init(Model, [])
 init! = App.init(
 	{
@@ -139,6 +145,6 @@ draw_hud! : Model => {}
 draw_hud! = |_model| {
 	Draw.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
 	Draw.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 62 }, text: "world-space draw + screen-space HUD", size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 84 }, text: "WASD move, wheel zoom, Q/E rotate, R reset", size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 30, y: 62 }, text: hud_subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 30, y: 84 }, text: hud_help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 }

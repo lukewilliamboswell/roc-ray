@@ -20,6 +20,12 @@ pub const Sound = rl.Sound;
 /// Native music stream retained in the host resource heap.
 pub const Music = rl.Music;
 
+/// Native font retained in the host resource heap.
+pub const Font = rl.Font;
+
+/// Native texture retained in the host resource heap.
+pub const Texture = rl.Texture2D;
+
 /// Persistent packed keyboard state - updated each frame.
 /// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
@@ -73,90 +79,46 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
 }
 
-const MAX_FONTS: usize = 32;
-const MAX_TEXTURES: usize = 128;
-
-/// Custom fonts loaded by the host. Handle 0 is always raylib's default font;
-/// loaded fonts use handles 1..MAX_FONTS.
-var fonts: [MAX_FONTS]rl.Font = undefined;
-var font_count: usize = 0;
-
-/// Textures loaded by the host. Handle 0 is invalid; loaded textures use
-/// handles 1..MAX_TEXTURES.
-var textures: [MAX_TEXTURES]rl.Texture2D = undefined;
-var texture_count: usize = 0;
-
-/// Host texture handle and dimensions returned to Roc after loading.
-pub const TextureInfo = struct {
-    handle: u64,
-    width: f32,
-    height: f32,
-};
-
-fn fontFromHandle(handle: u64) rl.Font {
-    if (handle == 0) return rl.GetFontDefault();
-    if (handle > @as(u64, @intCast(font_count))) return rl.GetFontDefault();
-
-    const index: usize = @intCast(handle - 1);
-    return fonts[index];
+/// Return raylib's built-in font, which is not owned by a resource heap.
+pub fn defaultFont() Font {
+    return rl.GetFontDefault();
 }
 
-/// Load a custom font and return its handle, or null on failure.
-pub fn loadFont(path: [*:0]const u8, size: c_int) ?u64 {
-    if (font_count >= MAX_FONTS) return null;
-
+/// Load a custom font.
+pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
     const font_size = if (size < 1) 1 else size;
     const font = rl.LoadFontEx(path, font_size, null, 0);
     if (!rl.IsFontValid(font)) return null;
 
     rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
-
-    fonts[font_count] = font;
-    font_count += 1;
-    return @intCast(font_count);
+    return font;
 }
 
-/// Unload all custom fonts. The default font is owned by raylib.
-pub fn unloadFonts() void {
-    var i: usize = 0;
-    while (i < font_count) : (i += 1) {
-        rl.UnloadFont(fonts[i]);
-    }
-    font_count = 0;
+/// Unload a custom font when its host resource slot is released.
+pub fn unloadFont(font: Font) void {
+    rl.UnloadFont(font);
 }
 
-fn textureFromHandle(handle: u64) ?rl.Texture2D {
-    if (handle == 0) return null;
-    if (handle > @as(u64, @intCast(texture_count))) return null;
-
-    const index: usize = @intCast(handle - 1);
-    return textures[index];
-}
-
-/// Load a texture from disk and return its handle plus dimensions, or null on failure.
-pub fn loadTexture(path: [*:0]const u8) ?TextureInfo {
-    if (texture_count >= MAX_TEXTURES) return null;
-
+/// Load a texture from disk.
+pub fn loadTexture(path: [*:0]const u8) ?Texture {
     const texture = rl.LoadTexture(path);
     if (!rl.IsTextureValid(texture)) return null;
-
-    textures[texture_count] = texture;
-    texture_count += 1;
-
-    return .{
-        .handle = @intCast(texture_count),
-        .width = @floatFromInt(texture.width),
-        .height = @floatFromInt(texture.height),
-    };
+    return texture;
 }
 
-/// Unload all custom textures.
-pub fn unloadTextures() void {
-    var i: usize = 0;
-    while (i < texture_count) : (i += 1) {
-        rl.UnloadTexture(textures[i]);
-    }
-    texture_count = 0;
+/// Unload a texture when its host resource slot is released.
+pub fn unloadTexture(texture: Texture) void {
+    rl.UnloadTexture(texture);
+}
+
+/// Return a native texture's width in pixels.
+pub fn textureWidth(texture: Texture) f32 {
+    return @floatFromInt(texture.width);
+}
+
+/// Return a native texture's height in pixels.
+pub fn textureHeight(texture: Texture) f32 {
+    return @floatFromInt(texture.height);
 }
 
 /// Convert an ABI RGBA color record to raylib Color.
@@ -355,18 +317,18 @@ pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void 
 }
 
 /// Draw text with a null-terminated string.
-pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
-    rl.DrawTextEx(fontFromHandle(font_handle), text, pos, size, spacing, colorToRl(color));
+pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+    rl.DrawTextEx(font, text, pos, size, spacing, colorToRl(color));
 }
 
 /// Draw text anchored at a fractional point within its measured bounds.
 /// Top-left alignment ({ 0, 0 }) skips measurement entirely.
-pub fn drawTextAlignedZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color, alignment: rl.Vector2) void {
+pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color, alignment: rl.Vector2) void {
     const origin = if (alignment.x == 0 and alignment.y == 0) pos else blk: {
-        const measured = rl.MeasureTextEx(fontFromHandle(font_handle), text, size, spacing);
+        const measured = rl.MeasureTextEx(font, text, size, spacing);
         break :blk textOrigin(pos, measured, alignment);
     };
-    rl.DrawTextEx(fontFromHandle(font_handle), text, origin, size, spacing, colorToRl(color));
+    rl.DrawTextEx(font, text, origin, size, spacing, colorToRl(color));
 }
 
 /// Resolve an anchor position to the top-left drawing origin for measured text.
@@ -386,8 +348,7 @@ test "textOrigin applies fractional alignment" {
 }
 
 /// Draw a texture region into a destination rectangle.
-pub fn drawTexture(args: anytype) void {
-    const texture = textureFromHandle(args.texture) orelse return;
+pub fn drawTexture(texture: Texture, args: anytype) void {
     rl.DrawTexturePro(
         texture,
         rectFromArgs(args.source),
@@ -399,8 +360,7 @@ pub fn drawTexture(args: anytype) void {
 }
 
 /// Draw a full texture across an arbitrary screen-space quadrilateral.
-pub fn drawTextureQuad(args: anytype) void {
-    const texture = textureFromHandle(args.texture) orelse return;
+pub fn drawTextureQuad(texture: Texture, args: anytype) void {
     const tint = colorToRl(args.tint);
 
     rl.rlSetTexture(texture.id);
@@ -418,8 +378,8 @@ pub fn drawTextureQuad(args: anytype) void {
 }
 
 /// Measure text with a null-terminated string.
-pub fn measureTextZ(text: [*:0]const u8, font_handle: u64, size: f32, spacing: f32) rl.Vector2 {
-    return rl.MeasureTextEx(fontFromHandle(font_handle), text, size, spacing);
+pub fn measureTextZ(text: [*:0]const u8, font: Font, size: f32, spacing: f32) rl.Vector2 {
+    return rl.MeasureTextEx(font, text, size, spacing);
 }
 
 /// Draw a rectangle with vertical gradient from abi args.
@@ -460,7 +420,7 @@ pub fn drawCircleGradient(args: anytype) void {
 pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
     const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
-    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
+    rl.DrawTextEx(defaultFont(), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 
 /// Begin drawing frame.
@@ -524,8 +484,6 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint 
 
 /// Close the window.
 pub fn closeWindow() void {
-    unloadTextures();
-    unloadFonts();
     rl.CloseWindow();
 }
 

@@ -149,9 +149,21 @@ module-style call is `Keys.key_pressed(host, KeySpace)`.
 
 The host allocates the keyboard and mouse state lists once, updates their bytes
 in place, and retains them only while Roc owns the frame snapshot. Do not rebuild
-these lists per frame. Likewise, host-owned resources that live until shutdown
-should cross as scalar handles where possible; adding a Roc `Box` solely around
-a numeric host handle introduces avoidable ARC and can allocate in render code.
+these lists per frame.
+
+Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
+heaps. Their handle allocation is ABI-compatible with Roc's `Box`: the final Roc
+ARC release routes through `roc_dealloc`, unloads the native value, and makes the
+slot reusable. Creation effects return these host-backed boxes directly; do not
+wrap a scalar handle with `Box.box` on the Roc side. Hot draw and audio effects
+unbox the lifecycle token before crossing the boundary, so they pass a scalar
+without per-call retain/release traffic. A live Roc reference pins the slot, and
+the host validates its type, generation, and liveness on every lookup.
+
+Keep built-in resources allocation-free. For example, `Draw.default_font` is a
+plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
+also include immutable metadata: `Assets.Texture` stores dimensions beside its
+token in the host slot, keeping the Roc model representation to one pointer.
 
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables

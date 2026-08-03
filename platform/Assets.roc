@@ -1,8 +1,8 @@
 ## Assets module - host-owned textures and other resources.
 ##
-## A `Texture` is a refcounted `Box` containing a small handle plus metadata.
-## The box memory is managed by Roc; the underlying raylib texture is owned by
-## the host and unloaded at shutdown.
+## A `Texture` is a host-backed ARC box containing its lifecycle token and
+## immutable dimensions. Final Roc ARC release unloads the native texture and
+## makes its typed host heap slot reusable.
 import Math
 
 Assets := [].{
@@ -15,23 +15,19 @@ Assets := [].{
 
 	Texture : Box(TextureInfo)
 
-	LoadTextureRawResult : {
-		handle : U64,
-		width : F32,
-		height : F32,
-	}
+	LoadTextureRawResult : Texture
 
-	## Raw hosted effect. The host returns handle 0 on load failure.
+	## Raw hosted effect. The host returns a static handle with token 0 on failure.
 	load_texture_raw! : Str => LoadTextureRawResult
 
 	## Load an image file into GPU texture memory.
 	load_texture! : Str => Try(Texture, [TextureLoadFailed, ..])
 	load_texture! = |path| {
-		info = Assets.load_texture_raw!(path)
-		if info.handle == 0 {
+		texture = Assets.load_texture_raw!(path)
+		if (Box.unbox(texture)).handle == 0 {
 			Err(TextureLoadFailed)
 		} else {
-			Ok(Box.box(info))
+			Ok(texture)
 		}
 	}
 

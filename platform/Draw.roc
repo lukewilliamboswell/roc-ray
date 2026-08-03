@@ -319,9 +319,9 @@ Draw := [].{
 		color : Color,
 	}
 
-	## Host-owned font handle. The host unloads fonts at shutdown, so this does
-	## not need a refcounted Roc allocation.
-	Font : U64
+	## The built-in font is a zero-allocation tag. Loaded fonts carry a Box whose
+	## allocation lives in a typed host heap and whose final ARC release unloads it.
+	Font : [DefaultFont, LoadedFont(Box(U64))]
 
 	HAlign : [Left, Center, Right]
 
@@ -434,7 +434,7 @@ Draw := [].{
 	end_scissor_raw! : () => {}
 	fps! : Fps => {}
 	line_raw! : LineRaw => {}
-	load_font_raw! : LoadFont => U64
+	load_font_raw! : LoadFont => Box(U64)
 	measure_text_raw! : MeasureTextRaw => TextSize
 	polygon_raw! : PolygonRaw => {}
 	polygon_lines_raw! : PolygonLinesRaw => {}
@@ -465,10 +465,14 @@ Draw := [].{
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
 	default_font : Font
-	default_font = 0
+	default_font = DefaultFont
 
 	font_handle : Font -> U64
-	font_handle = |handle| handle
+	font_handle = |font|
+		match font {
+			DefaultFont => 0
+			LoadedFont(handle) => Box.unbox(handle)
+		}
 
 	default_spacing : F32
 	default_spacing = 1
@@ -633,10 +637,10 @@ Draw := [].{
 	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
 	load_font! = |cfg| {
 		handle = Draw.load_font_raw!(cfg)
-		if handle == 0 {
+		if Box.unbox(handle) == 0 {
 			Err(FontLoadFailed)
 		} else {
-			Ok(handle)
+			Ok(LoadedFont(handle))
 		}
 	}
 

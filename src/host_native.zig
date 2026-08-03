@@ -62,8 +62,6 @@ var active_headless = false;
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
-var headless_next_texture_handle: u64 = 1;
-var headless_next_font_handle: u64 = 1;
 
 const InvalidResourceBox = extern struct {
     refcount: isize = 0,
@@ -71,6 +69,13 @@ const InvalidResourceBox = extern struct {
 };
 
 var invalid_resource_box: InvalidResourceBox = .{};
+
+const InvalidTextureBox = extern struct {
+    refcount: isize = 0,
+    payload: abi.AssetsLoad_texture_raw = .{ .handle = 0, .height = 0, .width = 0 },
+};
+
+var invalid_texture_box: InvalidTextureBox = .{};
 
 const SoundResource = union(enum) {
     headless,
@@ -80,6 +85,16 @@ const SoundResource = union(enum) {
 const MusicResource = union(enum) {
     headless,
     native: raylib.Music,
+};
+
+const FontResource = union(enum) {
+    headless,
+    native: raylib.Font,
+};
+
+const TextureResource = union(enum) {
+    headless,
+    native: raylib.Texture,
 };
 
 fn destroySound(resource: *SoundResource) void {
@@ -96,11 +111,45 @@ fn destroyMusic(resource: *MusicResource) void {
     }
 }
 
-const SoundHeap = host_resource.HostResourceHeap(SoundResource, 128, destroySound);
-const MusicHeap = host_resource.HostResourceHeap(MusicResource, 16, destroyMusic);
+fn destroyFont(resource: *FontResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |font| raylib.unloadFont(font),
+    }
+}
+
+fn destroyTexture(resource: *TextureResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.unloadTexture(texture),
+    }
+}
+
+fn writeU64Token(payload: *u64, token: u64) void {
+    payload.* = token;
+}
+
+fn readU64Token(payload: *const u64) u64 {
+    return payload.*;
+}
+
+fn writeTextureToken(payload: *abi.AssetsLoad_texture_raw, token: u64) void {
+    payload.handle = token;
+}
+
+fn readTextureToken(payload: *const abi.AssetsLoad_texture_raw) u64 {
+    return payload.handle;
+}
+
+const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, writeU64Token, readU64Token, destroySound);
+const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
+const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
+const TextureHeap = host_resource.HostResourceHeap(abi.AssetsLoad_texture_raw, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
 
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
+var font_heap: FontHeap = .{};
+var texture_heap: TextureHeap = .{};
 
 /// Captured `envp` for the process. On Linux the host runs with `-nostdlib`, so
 /// glibc never populates an environ global; we capture it from the process stack
@@ -157,7 +206,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -431,19 +480,10 @@ fn pathExists(path: []const u8) bool {
     return true;
 }
 
-fn nextFakeHandle(counter: *u64) u64 {
-    const handle = counter.*;
-    counter.* +%= 1;
-    if (counter.* == 0) counter.* = 1;
-    return handle;
-}
-
 fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_screen_width = positiveI32(app_config.width, 800);
     headless_screen_height = positiveI32(app_config.height, 600);
     headless_random_state = 0x4d595df4;
-    headless_next_texture_handle = 1;
-    headless_next_font_handle = 1;
 }
 
 fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawMeasure_text_rawRetRecord {
@@ -494,38 +534,45 @@ test "makeTempCString stops at embedded nul" {
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
-fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AssetsLoad_texture_raw {
+fn storeFont(resource: FontResource) *u64 {
+    return font_heap.insert(0, resource) orelse {
+        var rejected = resource;
+        destroyFont(&rejected);
+        return invalidResourceHandle();
+    };
+}
+
+fn storeTexture(resource: TextureResource, width: f32, height: f32) *abi.AssetsLoad_texture_raw {
+    return texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
+        var rejected = resource;
+        destroyTexture(&rejected);
+        return &invalid_texture_box.payload;
+    };
+}
+
+fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
     defer path_arg.decref(host);
-    var result: abi.AssetsLoad_texture_raw = .{ .handle = 0, .height = 0, .width = 0 };
 
     const path_slice = path_arg.asSlice();
     if (active_headless) {
-        if (pathExists(path_slice)) {
-            result = .{
-                .handle = nextFakeHandle(&headless_next_texture_handle),
-                .height = HEADLESS_RESOURCE_SIZE,
-                .width = HEADLESS_RESOURCE_SIZE,
-            };
-        }
-        return result;
+        if (!pathExists(path_slice)) return &invalid_texture_box.payload;
+        return storeTexture(.headless, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE);
     }
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return result;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return &invalid_texture_box.payload;
     defer path.deinit();
 
     if (raylib.loadTexture(path.ptr)) |texture| {
-        result = .{
-            .handle = texture.handle,
-            .height = texture.height,
-            .width = texture.width,
-        };
+        const height = raylib.textureHeight(texture);
+        const width = raylib.textureWidth(texture);
+        return storeTexture(.{ .native = texture }, width, height);
     }
 
-    return result;
+    return &invalid_texture_box.payload;
 }
 
-fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.AssetsLoad_texture_raw {
+fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) *abi.AssetsLoad_texture_raw {
     return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
 }
 
@@ -651,24 +698,34 @@ fn hostedDrawTriangleLinesRaw(args: abi.DrawTriangle_lines_rawArgs) callconv(.c)
     raylib.drawTriangleLines(args);
 }
 
-fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawLoad_font_rawArgs) callconv(.c) u64 {
+fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawLoad_font_rawArgs) callconv(.c) *u64 {
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
     if (active_headless) {
-        if (!pathExists(path_slice)) return 0;
-        return nextFakeHandle(&headless_next_font_handle);
+        if (!pathExists(path_slice)) return invalidResourceHandle();
+        return storeFont(.headless);
     }
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return invalidResourceHandle();
     defer path.deinit();
 
-    return raylib.loadFont(path.ptr, args.size) orelse 0;
+    const font = raylib.loadFont(path.ptr, args.size) orelse return invalidResourceHandle();
+    return storeFont(.{ .native = font });
 }
 
-fn exportedDrawLoadFontRaw(args: abi.DrawLoad_font_rawArgs) callconv(.c) u64 {
+fn exportedDrawLoadFontRaw(args: abi.DrawLoad_font_rawArgs) callconv(.c) *u64 {
     return hostedDrawLoadFontRaw(activeHost(), args);
+}
+
+fn fontForToken(token: u64) raylib.Font {
+    if (token == 0) return raylib.defaultFont();
+    const resource = font_heap.get(token) orelse return raylib.defaultFont();
+    return switch (resource.*) {
+        .headless => raylib.defaultFont(),
+        .native => |font| font,
+    };
 }
 
 fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) callconv(.c) abi.DrawMeasure_text_rawRetRecord {
@@ -682,7 +739,7 @@ fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawMeasure_text_rawArgs) 
     var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return result;
     defer text.deinit();
 
-    const measured = raylib.measureTextZ(text.ptr, args.font, args.size, args.spacing);
+    const measured = raylib.measureTextZ(text.ptr, fontForToken(args.font), args.size, args.spacing);
     result = .{ .height = measured.y, .width = measured.x };
     return result;
 }
@@ -702,7 +759,7 @@ fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawText_rawArgs) callconv(.c) vo
 
     raylib.drawTextZ(
         text.ptr,
-        args.font,
+        fontForToken(args.font),
         .{ .x = args.pos.x, .y = args.pos.y },
         args.size,
         args.spacing,
@@ -725,7 +782,7 @@ fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawText_aligned_rawArgs) 
 
     raylib.drawTextAlignedZ(
         text.ptr,
-        args.font,
+        fontForToken(args.font),
         .{ .x = args.pos.x, .y = args.pos.y },
         args.size,
         args.spacing,
@@ -740,12 +797,20 @@ fn exportedDrawTextAlignedRaw(args: abi.DrawText_aligned_rawArgs) callconv(.c) v
 
 fn hostedDrawTextureRaw(args: abi.DrawDraw_texture_rawArgs) callconv(.c) void {
     if (active_headless) return;
-    raylib.drawTexture(args);
+    const resource = texture_heap.get(args.texture) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.drawTexture(texture, args),
+    }
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawDraw_texture_quad_rawArgs) callconv(.c) void {
     if (active_headless) return;
-    raylib.drawTextureQuad(args);
+    const resource = texture_heap.get(args.texture) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| raylib.drawTextureQuad(texture, args),
+    }
 }
 
 /// Global flag for deferred exit request (exit after current frame completes)
@@ -869,7 +934,7 @@ fn invalidResourceHandle() *u64 {
 }
 
 fn storeSound(resource: SoundResource) *u64 {
-    return sound_heap.insert(resource) orelse {
+    return sound_heap.insert(0, resource) orelse {
         var rejected = resource;
         destroySound(&rejected);
         return invalidResourceHandle();
@@ -877,7 +942,7 @@ fn storeSound(resource: SoundResource) *u64 {
 }
 
 fn storeMusic(resource: MusicResource) *u64 {
-    return music_heap.insert(resource) orelse {
+    return music_heap.insert(0, resource) orelse {
         var rejected = resource;
         destroyMusic(&rejected);
         return invalidResourceHandle();
@@ -1045,7 +1110,16 @@ fn updateMusicStreams() void {
     music_heap.forEach(updateMusicResource);
 }
 
-fn deinitAudioResources() void {
+fn deinitResources() void {
+    // Roc should have released every handle by the time the final model is
+    // dropped. Keep a shutdown drain for optimized builds, but catch lifecycle
+    // regressions in the debug host used by the test suite.
+    std.debug.assert(texture_heap.active() == 0);
+    std.debug.assert(font_heap.active() == 0);
+    std.debug.assert(music_heap.active() == 0);
+    std.debug.assert(sound_heap.active() == 0);
+    texture_heap.deinitAll();
+    font_heap.deinitAll();
     music_heap.deinitAll();
     sound_heap.deinitAll();
 }
@@ -1275,7 +1349,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // Audio device must be ready before init! generates/plays any sounds.
     raylib.initAudioDevice();
     defer raylib.closeAudioDevice();
-    defer deinitAudioResources();
+    defer deinitResources();
 
     const init_result = initModel(&input);
     if (init_result.isErr()) {
@@ -1329,7 +1403,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
 fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
     resetHeadlessRuntime(app_config);
-    defer deinitAudioResources();
+    defer deinitResources();
 
     var input = InputState.init(roc_host);
     defer input.deinit();

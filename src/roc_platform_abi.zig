@@ -3206,29 +3206,6 @@ comptime {
     }
 }
 
-/// Return type record for Assets.load_texture_raw!
-/// Fields ordered by compiler-emitted ABI offsets.
-pub const AssetsLoad_texture_rawRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    @"handle": u64,
-    @"height": f32,
-    @"width": f32,
-} else extern struct {
-    @"handle": u64,
-    @"height": f32,
-    @"width": f32,
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AssetsLoad_texture_rawRetRecord) != 16) @compileError("AssetsLoad_texture_rawRetRecord size mismatch");
-        if (@alignOf(AssetsLoad_texture_rawRetRecord) != 8) @compileError("AssetsLoad_texture_rawRetRecord alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AssetsLoad_texture_rawRetRecord) != 16) @compileError("AssetsLoad_texture_rawRetRecord size mismatch");
-        if (@alignOf(AssetsLoad_texture_rawRetRecord) != 8) @compileError("AssetsLoad_texture_rawRetRecord alignment mismatch");
-    }
-}
-
 /// Return type record for Draw.measure_text_raw!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const DrawMeasure_text_rawRetRecord = if (@sizeOf(usize) == 4) extern struct {
@@ -3297,7 +3274,7 @@ comptime {
 }
 
 /// Arguments for Assets.load_texture_raw!
-/// Roc signature: Str => { handle : U64, height : F32, width : F32 }
+/// Roc signature: Str => Box({ handle : U64, height : F32, width : F32 })
 /// Refcounted fields are owned by the hosted function.
 pub const AssetsLoad_texture_rawArgs = extern struct {
     arg0: RocStr,
@@ -3731,7 +3708,7 @@ comptime {
 }
 
 /// Arguments for Draw.load_font_raw!
-/// Roc signature: { path : Str, size : I32 } => U64
+/// Roc signature: { path : Str, size : I32 } => Box(U64)
 /// Refcounted fields are owned by the hosted function.
 pub const DrawLoad_font_rawArgs = if (@sizeOf(usize) == 4) extern struct {
     @"path": RocStr,
@@ -4356,8 +4333,8 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // Refcounted arguments are owned by the hosted function.
 
 /// Hosted symbol for Assets.load_texture_raw!
-/// Roc signature: Str => { handle : U64, height : F32, width : F32 }
-pub extern fn roc_assets_load_texture_raw(arg0: RocStr) callconv(.c) __AnonStruct_8b7fc2d8f8794eb4;
+/// Roc signature: Str => Box({ handle : U64, height : F32, width : F32 })
+pub extern fn roc_assets_load_texture_raw(arg0: RocStr) callconv(.c) *__AnonStruct_8b7fc2d8f8794eb4;
 
 /// Hosted symbol for Audio.gen_sound_raw!
 /// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Box(U64)
@@ -4480,8 +4457,8 @@ pub extern fn roc_draw_fps(arg0: DrawFpsArgs) callconv(.c) void;
 pub extern fn roc_draw_line_raw(arg0: DrawLine_rawArgs) callconv(.c) void;
 
 /// Hosted symbol for Draw.load_font_raw!
-/// Roc signature: { path : Str, size : I32 } => U64
-pub extern fn roc_draw_load_font_raw(arg0: DrawLoad_font_rawArgs) callconv(.c) u64;
+/// Roc signature: { path : Str, size : I32 } => Box(U64)
+pub extern fn roc_draw_load_font_raw(arg0: DrawLoad_font_rawArgs) callconv(.c) *u64;
 
 /// Hosted symbol for Draw.measure_text_raw!
 /// Roc signature: { font : U64, size : F32, spacing : F32, text : Str } => { height : F32, width : F32 }

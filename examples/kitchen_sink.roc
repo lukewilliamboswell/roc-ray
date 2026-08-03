@@ -27,22 +27,18 @@ init! = App.init(
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-
-	# Test: call get_screen_size!
-	screen = Host.get_screen_size!()
-
 	# Circle follows the mouse, changes color when clicked
 	circle_color = if host.mouse.left Color.red else Color.green
 
-	# Use screen.width to prove the effect worked
-	is_wide = screen.width > 600
+	# Use the per-frame logical screen dimensions.
+	is_wide = host.screen.width > 600
 
 	Draw.draw!(
 		Color.ray_white,
 		|| {
 			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.text!({ pos: { x: 10, y: 50 }, text: "set_target_fps!(60) - called in init", size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 80 }, text: "get_screen_size!() - called each frame", size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 80 }, text: "host.screen - sampled each frame", size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.text!({ pos: { x: 10, y: 110 }, text: "set_screen_size!() - called in init", size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.text!({ pos: { x: 10, y: 140 }, text: "exit!(0) - right-click to exit", size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
 			Draw.fps!({ pos: { x: 700, y: 10 }, size: 18, color: Color.gray })

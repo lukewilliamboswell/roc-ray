@@ -25,6 +25,7 @@ The goal isn't to build or support a large game engine. We're happy to help wher
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
+- Per-frame logical screen dimensions for resize-aware rendering and UI layout
 - Loaded sound effects and generated procedural sounds with volume, pitch, and pan
 - Streamed music playback with host-managed per-frame updates
 - Native rendering via raylib (macOS, Linux, Windows)

@@ -288,7 +288,7 @@ const x11_libs = [_][]const u8{
 /// real libX11 (already loaded by GLFW) provides the implementations. See
 /// `generateX11SoStub` and the `x64glibc` link list in `platform/main-default.roc`.
 const x11_clipboard_syms = [_][]const u8{
-    "XConvertSelection", "XNextEvent",      "XGetWindowProperty", "XFree",
+    "XConvertSelection", "XNextEvent",          "XGetWindowProperty", "XFree",
     "XDestroyWindow",    "XCreateSimpleWindow", "XInternAtom",
 };
 

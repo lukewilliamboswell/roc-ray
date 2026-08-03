@@ -14,6 +14,11 @@ Host := {
 	## `x + velocity * host.frame_time`.
 	frame_time : F32,
 
+	## Logical drawing dimensions sampled for this frame. These coordinates
+	## match mouse input and raylib drawing units; they are not HiDPI framebuffer
+	## pixel dimensions.
+	screen : { width : I32, height : I32 },
+
 	## Per-key held state: 1 while the key is down, 0 otherwise.
 	## Use with `Keys.key_down` / `Keys.key_up`.
 	keys : List(U8),
@@ -46,8 +51,6 @@ Host := {
 		y : F32,
 	},
 }.{
-	ScreenSize : { width : I32, height : I32 }
-
 	ReadFileRawResult : {
 		ok : Bool,
 		err : U8,
@@ -57,9 +60,6 @@ Host := {
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : I32 => {}
-
-	## Get the current screen/window dimensions.
-	get_screen_size! : () => ScreenSize
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.

@@ -117,19 +117,17 @@ Audio := [].{
 	## once at startup - and reuse the handle, rather than per frame.
 	gen_tone! : { freq : F32, ms : I32 } => Sound
 	gen_tone! = |cfg|
-		Audio.gen_sound!(
-			{
-				waveform: Sine,
-				freq_start: cfg.freq,
-				freq_end: cfg.freq,
-				ms: cfg.ms,
-				attack_ms: 5,
-				decay_ms: 12,
-				sustain: 0.8,
-				release_ms: 8,
-				volume: 0.55,
-			},
-		)
+		Audio.gen_sound!({
+			waveform: Sine,
+			freq_start: cfg.freq,
+			freq_end: cfg.freq,
+			ms: cfg.ms,
+			attack_ms: 5,
+			decay_ms: 12,
+			sustain: 0.8,
+			release_ms: 8,
+			volume: 0.55,
+		})
 
 	## Play a previously generated sound.
 	play! : Sound => {}

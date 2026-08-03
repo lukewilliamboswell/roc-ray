@@ -578,14 +578,12 @@ Draw := [].{
 
 	measure_text! : MeasureText => TextSize
 	measure_text! = |cfg| {
-		Draw.measure_text_raw!(
-			{
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				font: Box.unbox(cfg.font),
-			},
-		)
+		Draw.measure_text_raw!({
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			font: Box.unbox(cfg.font),
+		})
 	}
 
 	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
@@ -607,16 +605,14 @@ Draw := [].{
 	texture! : TextureDraw => {}
 	texture! = |cfg| {
 		texture_info = Assets.info(cfg.texture)
-		Draw.draw_texture_raw!(
-			{
-				texture: texture_info.handle,
-				source: cfg.source,
-				dest: cfg.dest,
-				origin: cfg.origin,
-				rotation: cfg.rotation,
-				tint: cfg.tint,
-			},
-		)
+		Draw.draw_texture_raw!({
+			texture: texture_info.handle,
+			source: cfg.source,
+			dest: cfg.dest,
+			origin: cfg.origin,
+			rotation: cfg.rotation,
+			tint: cfg.tint,
+		})
 	}
 
 	draw_texture! : TextureDraw => {}
@@ -634,68 +630,58 @@ Draw := [].{
 
 	text! : Text => {}
 	text! = |cfg| {
-		size = Draw.measure_text!(
-			{
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				font: cfg.font,
-			},
-		)
+		size = Draw.measure_text!({
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			font: cfg.font,
+		})
 		pos = Draw.origin_for(cfg.pos, size, cfg.align)
-		Draw.text_raw!(
-			{
-				pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				color: cfg.color,
-				font: Box.unbox(cfg.font),
-			},
-		)
+		Draw.text_raw!({
+			pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			color: cfg.color,
+			font: Box.unbox(cfg.font),
+		})
 	}
 
 	debug_text! : DebugText => {}
 	debug_text! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_top_left,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_top_left,
+		})
 
 	text_at! : SimpleText => {}
 	text_at! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_top_left,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_top_left,
+		})
 
 	text_centered! : SimpleText => {}
 	text_centered! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_center,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_center,
+		})
 
 	## High-level draw function with callback pattern
 	## Ensures begin/end frame are properly paired

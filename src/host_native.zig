@@ -19,17 +19,17 @@ const HostState = ffi.HostState;
 const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
-const ReadEnvResult = abi.Try;
+const ReadEnvResult = abi.HostRead_env_rawResult;
 const HostReadFileRawResult = abi.HostRead_file_rawRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapLoad_tmx_rawRetRecord;
-const AppConfig = abi.__AnonStruct100;
-const TilemapRawMap = abi.__AnonStruct64;
-const TilemapRawLayer = abi.__AnonStruct68;
-const TilemapRawObject = abi.__AnonStruct73;
-const TilemapRawPoint = abi.__AnonStruct75;
-const TilemapRawProperty = abi.__AnonStruct77;
-const TilemapRawTileProperties = abi.__AnonStruct80;
-const TilemapRawTileset = abi.__AnonStruct82;
+const AppConfig = abi.App_config_for_host;
+const TilemapRawMap = abi.TilemapLoad_tmx_rawMap;
+const TilemapRawLayer = abi.TilemapLoad_tmx_rawMapLayers;
+const TilemapRawObject = abi.TilemapLoad_tmx_rawMapObjects;
+const TilemapRawPoint = abi.TilemapLoad_tmx_rawMapPoints;
+const TilemapRawProperty = abi.TilemapLoad_tmx_rawMapProperties;
+const TilemapRawTileProperties = abi.TilemapLoad_tmx_rawMapTileProperties;
+const TilemapRawTileset = abi.TilemapLoad_tmx_rawMapTilesets;
 
 const HOST_ERR_NOT_FOUND: u8 = 1;
 const HOST_ERR_READ_FAILED: u8 = 2;
@@ -448,9 +448,9 @@ test "makeTempCString stops at embedded nul" {
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
 }
 
-fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
+fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AssetsLoad_texture_raw {
     defer path_arg.decref(host);
-    var result: abi.__AnonStruct0 = .{ .handle = 0, .height = 0, .width = 0 };
+    var result: abi.AssetsLoad_texture_raw = .{ .handle = 0, .height = 0, .width = 0 };
 
     const path_slice = path_arg.asSlice();
     if (active_headless) {
@@ -479,7 +479,7 @@ fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c)
     return result;
 }
 
-fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.__AnonStruct0 {
+fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.AssetsLoad_texture_raw {
     return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
 }
 
@@ -773,11 +773,6 @@ fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
 
-fn hostedGetScreenSize() callconv(.c) abi.HostGet_screen_sizeRetRecord {
-    if (active_headless) return .{ .height = headless_screen_height, .width = headless_screen_width };
-    return .{ .height = raylib.getScreenHeight(), .width = raylib.getScreenWidth() };
-}
-
 fn hostedSetScreenSize(args: abi.HostSet_screen_size_rawArgs) callconv(.c) u8 {
     if (active_headless) {
         headless_screen_width = positiveI32(@intFromFloat(args.width), headless_screen_width);
@@ -961,7 +956,6 @@ comptime {
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
-        @export(&hostedGetScreenSize, .{ .name = "roc_host_get_screen_size" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
@@ -1031,6 +1025,10 @@ const InputState = struct {
             .frame_count = frame_count,
             .timestamp_nanos = timestamp_nanos,
             .frame_time = frame_time,
+            .screen = .{
+                .width = if (active_headless) headless_screen_width else raylib.getScreenWidth(),
+                .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
+            },
             .keys = self.keys.list,
             .keys_pressed = self.keys_pressed.list,
             .keys_released = self.keys_released.list,

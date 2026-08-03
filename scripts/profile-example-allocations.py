@@ -37,7 +37,17 @@ def find_examples(root: Path, requested: list[str]) -> list[Path]:
     return examples
 
 
+def allocation_size_expression() -> str:
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "$rdi"
+    if machine in ("aarch64", "arm64"):
+        return "$x0"
+    raise RuntimeError(f"unsupported allocation-profiler architecture: {machine}")
+
+
 def gdb_commands(frames: int) -> str:
+    size_expression = allocation_size_expression()
     return f"""\
 set pagination off
 set debuginfod enabled off
@@ -74,7 +84,7 @@ class CountBreakpoint(gdb.Breakpoint):
 def record_exit(event):
     stats["exit_code"] = getattr(event, "exit_code", None)
 
-CountBreakpoint("roc_alloc", "alloc_calls", "length")
+CountBreakpoint("roc_alloc", "alloc_calls", "{size_expression}")
 CountBreakpoint("roc_realloc", "realloc_calls")
 CountBreakpoint("roc_dealloc", "dealloc_calls")
 gdb.events.exited.connect(record_exit)

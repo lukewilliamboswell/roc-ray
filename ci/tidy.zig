@@ -619,6 +619,7 @@ const DeadFilesDetector = struct {
         // Entry points in src/ that are invoked directly (not via @import)
         const entry_points: []const []const u8 = &.{
             "host_native.zig", // Native platform host (built as library)
+            "graphical_smoke.zig", // Opt-in pixel-level smoke test executable
         };
         for (entry_points) |entry_point| {
             if (std.mem.startsWith(u8, &file, entry_point)) return true;

@@ -62,6 +62,9 @@ var active_headless = false;
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
+var headless_render_texture_depth: u8 = 0;
+var headless_shader_depth: u8 = 0;
+var headless_blend_depth: u8 = 0;
 
 const InvalidResourceBox = extern struct {
     refcount: isize = 0,
@@ -97,6 +100,16 @@ const TextureResource = union(enum) {
     native: raylib.Texture,
 };
 
+const RenderTextureResource = union(enum) {
+    headless,
+    native: raylib.RenderTexture,
+};
+
+const ShaderResource = union(enum) {
+    headless,
+    native: raylib.Shader,
+};
+
 fn destroySound(resource: *SoundResource) void {
     switch (resource.*) {
         .headless => {},
@@ -125,6 +138,20 @@ fn destroyTexture(resource: *TextureResource) void {
     }
 }
 
+fn destroyRenderTexture(resource: *RenderTextureResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |target| raylib.unloadRenderTexture(target),
+    }
+}
+
+fn destroyShader(resource: *ShaderResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |shader| raylib.unloadShader(shader),
+    }
+}
+
 fn writeU64Token(payload: *u64, token: u64) void {
     payload.* = token;
 }
@@ -145,11 +172,15 @@ const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, wri
 const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
 const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
 const TextureHeap = host_resource.HostResourceHeap(abi.AssetsLoad_texture_raw, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
+const RenderTextureHeap = host_resource.HostResourceHeap(abi.DrawLoad_render_texture_raw, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
+const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
 var font_heap: FontHeap = .{};
 var texture_heap: TextureHeap = .{};
+var render_texture_heap: RenderTextureHeap = .{};
+var shader_heap: ShaderHeap = .{};
 
 /// Captured `envp` for the process. On Linux the host runs with `-nostdlib`, so
 /// glibc never populates an environ global; we capture it from the process stack
@@ -206,7 +237,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -270,6 +301,23 @@ const TempCString = struct {
 
     fn deinit(self: *TempCString) void {
         if (self.heap) |buf| self.allocator.free(buf);
+    }
+};
+
+const OptionalTempCString = struct {
+    value: ?TempCString,
+
+    fn init(allocator: std.mem.Allocator, stack: *[CSTRING_STACK_CAPACITY:0]u8, bytes: []const u8) !OptionalTempCString {
+        if (bytes.len == 0) return .{ .value = null };
+        return .{ .value = try makeTempCString(allocator, stack, bytes) };
+    }
+
+    fn ptr(self: *const OptionalTempCString) ?[*:0]const u8 {
+        return if (self.value) |value| value.ptr else null;
+    }
+
+    fn deinit(self: *OptionalTempCString) void {
+        if (self.value) |*value| value.deinit();
     }
 };
 
@@ -484,6 +532,9 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_screen_width = positiveI32(app_config.width, 800);
     headless_screen_height = positiveI32(app_config.height, 600);
     headless_random_state = 0x4d595df4;
+    headless_render_texture_depth = 0;
+    headless_shader_depth = 0;
+    headless_blend_depth = 0;
 }
 
 fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawMeasure_text_rawRetRecord {
@@ -532,6 +583,54 @@ test "makeTempCString stops at embedded nul" {
     defer c_string.deinit();
 
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
+}
+
+test "headless render targets and shaders retain typed lifecycle tokens" {
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    active_headless = true;
+    defer active_headless = false;
+
+    const target = hostedDrawLoadRenderTextureRaw(.{ .height = 90, .width = 160 });
+    try std.testing.expect(target.handle != 0);
+    try std.testing.expectEqual(@as(f32, 160), target.width);
+    try std.testing.expect(texture_heap.get(target.handle) == null);
+    try std.testing.expect(render_texture_heap.get(target.handle) != null);
+
+    hostedDrawBeginRenderTextureRaw(.{ .arg0 = target.handle });
+    try std.testing.expectEqual(@as(u8, 1), headless_render_texture_depth);
+    hostedDrawEndRenderTextureRaw();
+    try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
+
+    const shader = storeShader(.headless);
+    try std.testing.expect(shader.* != 0);
+    try std.testing.expect(render_texture_heap.get(shader.*) == null);
+    hostedDrawBeginShaderRaw(.{ .arg0 = shader.* });
+    hostedDrawSetShaderVec2Raw(.{ .shader = shader.*, .location = 0, .value = .{ .x = 1, .y = 2 } });
+    try std.testing.expectEqual(@as(u8, 1), headless_shader_depth);
+    hostedDrawEndShaderRaw();
+    try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
+
+    hostedDrawBeginBlendRaw(.{ .arg0 = 1 });
+    try std.testing.expectEqual(@as(u8, 1), headless_blend_depth);
+    hostedDrawEndBlendRaw();
+    try std.testing.expectEqual(@as(u8, 0), headless_blend_depth);
+
+    const target_base: *isize = @ptrFromInt(@intFromPtr(target) - @sizeOf(isize));
+    target_base.* = 0;
+    try std.testing.expectEqual(host_resource.DeallocRoute.deallocated, render_texture_heap.routeDealloc(target_base));
+    const shader_base: *isize = @ptrFromInt(@intFromPtr(shader) - @sizeOf(isize));
+    shader_base.* = 0;
+    try std.testing.expectEqual(host_resource.DeallocRoute.deallocated, shader_heap.routeDealloc(shader_base));
+}
+
+test "invalid headless render target dimensions do not consume a heap slot" {
+    active_headless = true;
+    defer active_headless = false;
+    const before = render_texture_heap.active();
+    const target = hostedDrawLoadRenderTextureRaw(.{ .height = 0, .width = 160 });
+    try std.testing.expectEqual(@as(u64, 0), target.handle);
+    try std.testing.expectEqual(before, render_texture_heap.active());
 }
 
 fn storeFont(resource: FontResource) *u64 {
@@ -638,6 +737,204 @@ fn hostedAssetsSetTextureWrapRaw(handle: u64, code: u8) callconv(.c) void {
         .headless => {},
         .native => |texture| raylib.setTextureWrap(texture, code),
     }
+}
+
+fn storeRenderTexture(resource: RenderTextureResource, width: f32, height: f32) *abi.DrawLoad_render_texture_raw {
+    return render_texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
+        var rejected = resource;
+        destroyRenderTexture(&rejected);
+        return &invalid_texture_box.payload;
+    };
+}
+
+fn storeShader(resource: ShaderResource) *u64 {
+    return shader_heap.insert(0, resource) orelse {
+        var rejected = resource;
+        destroyShader(&rejected);
+        return invalidResourceHandle();
+    };
+}
+
+fn hostedDrawLoadRenderTextureRaw(args: abi.DrawLoad_render_texture_rawArgs) callconv(.c) *abi.DrawLoad_render_texture_raw {
+    if (args.width <= 0 or args.height <= 0) return &invalid_texture_box.payload;
+    if (active_headless) {
+        return storeRenderTexture(.headless, @floatFromInt(args.width), @floatFromInt(args.height));
+    }
+    const target = raylib.loadRenderTexture(args.width, args.height) orelse return &invalid_texture_box.payload;
+    return storeRenderTexture(.{ .native = target }, @floatFromInt(args.width), @floatFromInt(args.height));
+}
+
+fn shaderPathsExist(vertex: []const u8, fragment: []const u8) bool {
+    if (vertex.len == 0 and fragment.len == 0) return false;
+    return (vertex.len == 0 or pathExists(vertex)) and (fragment.len == 0 or pathExists(fragment));
+}
+
+fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawLoad_shader_rawArgs) callconv(.c) *u64 {
+    defer args.vertex_path.decref(host);
+    defer args.fragment_path.decref(host);
+    const vertex_slice = args.vertex_path.asSlice();
+    const fragment_slice = args.fragment_path.asSlice();
+    if (!shaderPathsExist(vertex_slice, fragment_slice)) return invalidResourceHandle();
+    if (active_headless) return storeShader(.headless);
+
+    const allocator = allocatorFromHost(host);
+    var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var vertex = OptionalTempCString.init(allocator, &vertex_stack, vertex_slice) catch return invalidResourceHandle();
+    defer vertex.deinit();
+    var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return invalidResourceHandle();
+    defer fragment.deinit();
+    const shader = raylib.loadShader(vertex.ptr(), fragment.ptr()) orelse return invalidResourceHandle();
+    return storeShader(.{ .native = shader });
+}
+
+fn exportedDrawLoadShaderRaw(args: abi.DrawLoad_shader_rawArgs) callconv(.c) *u64 {
+    return hostedDrawLoadShaderRaw(activeHost(), args);
+}
+
+fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawLoad_shader_source_rawArgs) callconv(.c) *u64 {
+    defer args.vertex_source.decref(host);
+    defer args.fragment_source.decref(host);
+    const vertex_slice = args.vertex_source.asSlice();
+    const fragment_slice = args.fragment_source.asSlice();
+    if (vertex_slice.len == 0 and fragment_slice.len == 0) return invalidResourceHandle();
+    if (active_headless) return storeShader(.headless);
+
+    const allocator = allocatorFromHost(host);
+    var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var vertex = OptionalTempCString.init(allocator, &vertex_stack, vertex_slice) catch return invalidResourceHandle();
+    defer vertex.deinit();
+    var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return invalidResourceHandle();
+    defer fragment.deinit();
+    const shader = raylib.loadShaderFromMemory(vertex.ptr(), fragment.ptr()) orelse return invalidResourceHandle();
+    return storeShader(.{ .native = shader });
+}
+
+fn exportedDrawLoadShaderSourceRaw(args: abi.DrawLoad_shader_source_rawArgs) callconv(.c) *u64 {
+    return hostedDrawLoadShaderSourceRaw(activeHost(), args);
+}
+
+fn nativeTextureForToken(token: u64) ?raylib.Texture {
+    if (texture_heap.get(token)) |resource| {
+        return switch (resource.*) {
+            .headless => null,
+            .native => |texture| texture,
+        };
+    }
+    if (render_texture_heap.get(token)) |resource| {
+        return switch (resource.*) {
+            .headless => null,
+            .native => |target| raylib.renderTextureColor(target),
+        };
+    }
+    return null;
+}
+
+fn hostedDrawBeginRenderTextureRaw(args: abi.DrawBegin_render_texture_rawArgs) callconv(.c) void {
+    const resource = render_texture_heap.get(args.arg0) orelse return;
+    switch (resource.*) {
+        .headless => headless_render_texture_depth +|= 1,
+        .native => |target| raylib.beginTextureMode(target),
+    }
+}
+
+fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
+    if (active_headless) {
+        headless_render_texture_depth -|= 1;
+        return;
+    }
+    raylib.endTextureMode();
+}
+
+fn hostedDrawBeginShaderRaw(args: abi.DrawBegin_shader_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.arg0) orelse return;
+    switch (resource.*) {
+        .headless => headless_shader_depth +|= 1,
+        .native => |shader| raylib.beginShaderMode(shader),
+    }
+}
+
+fn hostedDrawEndShaderRaw() callconv(.c) void {
+    if (active_headless) {
+        headless_shader_depth -|= 1;
+        return;
+    }
+    raylib.endShaderMode();
+}
+
+fn hostedDrawBeginBlendRaw(args: abi.DrawBegin_blend_rawArgs) callconv(.c) void {
+    if (args.arg0 > 5) return;
+    if (active_headless) {
+        headless_blend_depth +|= 1;
+        return;
+    }
+    raylib.beginBlendMode(args.arg0);
+}
+
+fn hostedDrawEndBlendRaw() callconv(.c) void {
+    if (active_headless) {
+        headless_blend_depth -|= 1;
+        return;
+    }
+    raylib.endBlendMode();
+}
+
+fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawShader_location_rawArgs) callconv(.c) i32 {
+    defer args.name.decref(host);
+    const resource = shader_heap.get(args.shader) orelse return -1;
+    const name_slice = args.name.asSlice();
+    if (name_slice.len == 0) return -1;
+    switch (resource.*) {
+        .headless => return 0,
+        .native => |shader| {
+            var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+            var name = makeTempCString(allocatorFromHost(host), &stack, name_slice) catch return -1;
+            defer name.deinit();
+            return raylib.shaderLocation(shader, name.ptr);
+        },
+    }
+}
+
+fn exportedDrawShaderLocationRaw(args: abi.DrawShader_location_rawArgs) callconv(.c) i32 {
+    return hostedDrawShaderLocationRaw(activeHost(), args);
+}
+
+fn hostedDrawSetShaderFloatRaw(args: abi.DrawSet_shader_float_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    raylib.setShaderFloat(resource.native, args.location, args.value);
+}
+
+fn hostedDrawSetShaderIntRaw(args: abi.DrawSet_shader_int_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    raylib.setShaderInt(resource.native, args.location, args.value);
+}
+
+fn hostedDrawSetShaderVec2Raw(args: abi.DrawSet_shader_vec2_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    raylib.setShaderVec2(resource.native, args.location, .{ args.value.x, args.value.y });
+}
+
+fn hostedDrawSetShaderVec3Raw(args: abi.DrawSet_shader_vec3_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    raylib.setShaderVec3(resource.native, args.location, .{ args.value.x, args.value.y, args.value.z });
+}
+
+fn hostedDrawSetShaderVec4Raw(args: abi.DrawSet_shader_vec4_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    raylib.setShaderVec4(resource.native, args.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
+}
+
+fn hostedDrawSetShaderTextureRaw(args: abi.DrawSet_shader_texture_rawArgs) callconv(.c) void {
+    const resource = shader_heap.get(args.shader) orelse return;
+    if (resource.* == .headless) return;
+    const texture = nativeTextureForToken(args.texture) orelse return;
+    raylib.setShaderTexture(resource.native, args.location, texture);
 }
 
 fn hostedDrawBeginFrame() callconv(.c) void {
@@ -861,20 +1158,14 @@ fn exportedDrawTextAlignedRaw(args: abi.DrawText_aligned_rawArgs) callconv(.c) v
 
 fn hostedDrawTextureRaw(args: abi.DrawDraw_texture_rawArgs) callconv(.c) void {
     if (active_headless) return;
-    const resource = texture_heap.get(args.texture) orelse return;
-    switch (resource.*) {
-        .headless => {},
-        .native => |texture| raylib.drawTexture(texture, args),
-    }
+    const texture = nativeTextureForToken(args.texture) orelse return;
+    raylib.drawTexture(texture, args);
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawDraw_texture_quad_rawArgs) callconv(.c) void {
     if (active_headless) return;
-    const resource = texture_heap.get(args.texture) orelse return;
-    switch (resource.*) {
-        .headless => {},
-        .native => |texture| raylib.drawTextureQuad(texture, args),
-    }
+    const texture = nativeTextureForToken(args.texture) orelse return;
+    raylib.drawTextureQuad(texture, args);
 }
 
 /// Global flag for deferred exit request (exit after current frame completes)
@@ -1255,9 +1546,13 @@ fn deinitResources() void {
     // dropped. Keep a shutdown drain for optimized builds, but catch lifecycle
     // regressions in the debug host used by the test suite.
     std.debug.assert(texture_heap.active() == 0);
+    std.debug.assert(render_texture_heap.active() == 0);
+    std.debug.assert(shader_heap.active() == 0);
     std.debug.assert(font_heap.active() == 0);
     std.debug.assert(music_heap.active() == 0);
     std.debug.assert(sound_heap.active() == 0);
+    shader_heap.deinitAll();
+    render_texture_heap.deinitAll();
     texture_heap.deinitAll();
     font_heap.deinitAll();
     music_heap.deinitAll();
@@ -1305,8 +1600,11 @@ comptime {
         @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
         @export(&hostedAudioStop, .{ .name = "roc_audio_stop_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
+        @export(&hostedDrawBeginBlendRaw, .{ .name = "roc_draw_begin_blend_raw" });
         @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
+        @export(&hostedDrawBeginRenderTextureRaw, .{ .name = "roc_draw_begin_render_texture_raw" });
         @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });
+        @export(&hostedDrawBeginShaderRaw, .{ .name = "roc_draw_begin_shader_raw" });
         @export(&hostedDrawCircleGradient, .{ .name = "roc_draw_circle_gradient" });
         @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
@@ -1314,14 +1612,27 @@ comptime {
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
+        @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });
         @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
+        @export(&hostedDrawEndRenderTextureRaw, .{ .name = "roc_draw_end_render_texture_raw" });
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
+        @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedDrawLoadFontRaw, .{ .name = "roc_draw_load_font_raw" });
+        @export(&hostedDrawLoadRenderTextureRaw, .{ .name = "roc_draw_load_render_texture_raw" });
+        @export(&exportedDrawLoadShaderRaw, .{ .name = "roc_draw_load_shader_raw" });
+        @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
         @export(&exportedDrawMeasureTextRaw, .{ .name = "roc_draw_measure_text_raw" });
         @export(&exportedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
         @export(&exportedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });
+        @export(&exportedDrawShaderLocationRaw, .{ .name = "roc_draw_shader_location_raw" });
+        @export(&hostedDrawSetShaderFloatRaw, .{ .name = "roc_draw_set_shader_float_raw" });
+        @export(&hostedDrawSetShaderIntRaw, .{ .name = "roc_draw_set_shader_int_raw" });
+        @export(&hostedDrawSetShaderTextureRaw, .{ .name = "roc_draw_set_shader_texture_raw" });
+        @export(&hostedDrawSetShaderVec2Raw, .{ .name = "roc_draw_set_shader_vec2_raw" });
+        @export(&hostedDrawSetShaderVec3Raw, .{ .name = "roc_draw_set_shader_vec3_raw" });
+        @export(&hostedDrawSetShaderVec4Raw, .{ .name = "roc_draw_set_shader_vec4_raw" });
         @export(&hostedDrawRectangleGradientH, .{ .name = "roc_draw_rectangle_gradient_h" });
         @export(&hostedDrawRectangleGradientV, .{ .name = "roc_draw_rectangle_gradient_v" });
         @export(&hostedDrawRectangleLinesRaw, .{ .name = "roc_draw_rectangle_lines_raw" });

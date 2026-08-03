@@ -191,6 +191,23 @@ images used during generation are released before the hosted effect returns.
 does not copy or retain it in the host; build reusable pixel buffers outside the
 render loop when possible.
 
+Render textures and shaders follow the same ownership contract, but use distinct
+resource kinds so a stale or cross-typed scalar token cannot resolve. A render
+texture box stores its dimensions beside the token and owns its framebuffer,
+color texture, and depth attachment as one unit. `Draw.render_texture` is an
+allocation-free view: the returned ARC reference still owns the complete render
+target. Shader uniforms retain their shader and cache the native location once;
+per-frame setters therefore pass only the shader token, location, and scalar or
+small vector value. Avoid resolving uniform names, creating render targets, or
+compiling shaders in the render loop.
+
+Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
+`Draw.with_blend_mode!` for paired begin/end state changes. Render-texture color
+attachments are vertically inverted when sampled, so use
+`Draw.render_texture_source` when drawing them to the screen. The headless host
+allocates typed lifecycle slots without creating GPU objects, allowing ownership
+and effect composition to run in normal example tests.
+
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables
 should populate that model once; event-driven effects such as audio playback or

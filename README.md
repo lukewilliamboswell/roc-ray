@@ -27,6 +27,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, convex polygons, gradients, text) and callback-scoped camera/scissor modes
 - Loaded and procedurally generated host-owned textures, with full-pixel updates, filter/wrap controls, source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
+- ARC-owned render textures and shaders, cached typed uniforms, and scoped shader/blend/offscreen drawing for 2D post-processing
 - Pure 2D camera values with scoped world-space drawing
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
@@ -84,6 +85,13 @@ Generated and mutable textures plus sound transport controls:
 ```bash
 roc build examples/generated_assets.roc
 ./generated_assets
+```
+
+Offscreen rendering, additive blending, and fragment-shader post-processing:
+
+```bash
+roc build examples/post_process.roc
+./post_process
 ```
 
 Beginner game examples:

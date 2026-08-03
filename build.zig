@@ -198,6 +198,11 @@ pub fn build(b: *std.Build) void {
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
         native_tests.root_module.addLibraryPath(b.path(raylib_lib_dir));
         native_tests.root_module.linkSystemLibrary("raylib", .{});
+        if (native_target.result.os.tag == .linux) {
+            // Render-texture and shader tests reach raylib's rcore object, whose
+            // X11 backend symbols must be available to the native test binary.
+            native_tests.root_module.linkSystemLibrary("X11", .{});
+        }
         native_tests.root_module.link_libc = true;
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);

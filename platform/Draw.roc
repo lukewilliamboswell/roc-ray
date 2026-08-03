@@ -420,6 +420,97 @@ Draw := [].{
 		tint : Color,
 	}
 
+	## ARC-owned framebuffer. Its texture-shaped box has a distinct host kind;
+	## this wrapper prevents an ordinary image texture being used as a target.
+	## Releasing the final reference unloads the framebuffer and both attachments.
+	RenderTexture :: { texture : Assets.Texture }.{
+		from_texture : Assets.Texture -> RenderTexture
+		from_texture = |texture| { texture: texture }
+
+		as_texture : RenderTexture -> Assets.Texture
+		as_texture = |target| target.texture
+	}
+
+	RenderTextureSize : {
+		width : I32,
+		height : I32,
+	}
+
+	## ARC-owned GPU shader. Empty vertex/fragment strings select raylib's default
+	## stage. Keep this value alive for every cached Uniform derived from it.
+	Shader :: { resource : Box(U64) }.{
+		from_box : Box(U64) -> Shader
+		from_box = |resource| { resource: resource }
+
+		handle : Shader -> U64
+		handle = |shader| Box.unbox(shader.resource)
+	}
+
+	LoadShader : {
+		vertex_path : Str,
+		fragment_path : Str,
+	}
+
+	LoadShaderSource : {
+		vertex_source : Str,
+		fragment_source : Str,
+	}
+
+	## A cached location retains its shader. Resolve it once during initialization,
+	## then setters cross the host boundary with only scalar tokens and values.
+	Uniform : {
+		shader : Shader,
+		location : I32,
+	}
+
+	Vec3 : { x : F32, y : F32, z : F32 }
+
+	Vec4 : { x : F32, y : F32, z : F32, w : F32 }
+
+	BlendMode : [
+		Alpha,
+		Additive,
+		Multiplied,
+		AddColors,
+		SubtractColors,
+		AlphaPremultiply,
+	]
+
+	alpha_blend : BlendMode
+	alpha_blend = Alpha
+
+	additive_blend : BlendMode
+	additive_blend = Additive
+
+	multiplied_blend : BlendMode
+	multiplied_blend = Multiplied
+
+	add_colors_blend : BlendMode
+	add_colors_blend = AddColors
+
+	subtract_colors_blend : BlendMode
+	subtract_colors_blend = SubtractColors
+
+	premultiplied_alpha_blend : BlendMode
+	premultiplied_alpha_blend = AlphaPremultiply
+
+	ShaderLocationRaw : {
+		shader : U64,
+		name : Str,
+	}
+
+	ShaderFloatRaw : { shader : U64, location : I32, value : F32 }
+
+	ShaderIntRaw : { shader : U64, location : I32, value : I32 }
+
+	ShaderVec2Raw : { shader : U64, location : I32, value : Vector2 }
+
+	ShaderVec3Raw : { shader : U64, location : I32, value : Vec3 }
+
+	ShaderVec4Raw : { shader : U64, location : I32, value : Vec4 }
+
+	ShaderTextureRaw : { shader : U64, location : I32, texture : U64 }
+
 	TextureQuadRaw : {
 		texture : U64,
 		source : Math.Rect,
@@ -432,17 +523,26 @@ Draw := [].{
 
 	## Hosted effects - implemented by the host
 	begin_camera! : CameraMode => {}
+	begin_blend_raw! : U8 => {}
 	begin_frame! : () => {}
+	begin_render_texture_raw! : U64 => {}
 	begin_scissor_raw! : ScissorRaw => {}
+	begin_shader_raw! : U64 => {}
 	circle_raw! : CircleRaw => {}
 	circle_gradient! : CircleGradient => {}
 	circle_lines_raw! : CircleLinesRaw => {}
 	clear! : Color => {}
 	end_frame! : () => {}
+	end_blend_raw! : () => {}
+	end_render_texture_raw! : () => {}
 	end_scissor_raw! : () => {}
+	end_shader_raw! : () => {}
 	fps! : Fps => {}
 	line_raw! : LineRaw => {}
 	load_font_raw! : LoadFont => Box(U64)
+	load_render_texture_raw! : RenderTextureSize => Assets.Texture
+	load_shader_raw! : LoadShader => Box(U64)
+	load_shader_source_raw! : LoadShaderSource => Box(U64)
 	measure_text_raw! : MeasureTextRaw => TextSize
 	polygon_raw! : PolygonRaw => {}
 	polygon_lines_raw! : PolygonLinesRaw => {}
@@ -459,6 +559,13 @@ Draw := [].{
 	end_camera! : () => {}
 	triangle_raw! : TriangleRaw => {}
 	triangle_lines_raw! : TriangleLinesRaw => {}
+	shader_location_raw! : ShaderLocationRaw => I32
+	set_shader_float_raw! : ShaderFloatRaw => {}
+	set_shader_int_raw! : ShaderIntRaw => {}
+	set_shader_vec2_raw! : ShaderVec2Raw => {}
+	set_shader_vec3_raw! : ShaderVec3Raw => {}
+	set_shader_vec4_raw! : ShaderVec4Raw => {}
+	set_shader_texture_raw! : ShaderTextureRaw => {}
 
 	filled : Color -> ShapeStyle
 	filled = |color| { fill: Fill(color), stroke: NoStroke }
@@ -679,6 +786,139 @@ Draw := [].{
 	draw_texture! : TextureDraw => {}
 	draw_texture! = |cfg| Draw.texture!(cfg)
 
+	## Allocate an offscreen framebuffer. Do this during initialization, not per
+	## frame; creation allocates GPU resources and one fixed host-heap slot.
+	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ..])
+	load_render_texture! = |size| {
+		texture = Draw.load_render_texture_raw!(size)
+		if (Box.unbox(texture)).handle == 0 {
+			Err(RenderTextureLoadFailed)
+		} else {
+			Ok(RenderTexture.from_texture(texture))
+		}
+	}
+
+	## View the color attachment as a normal Texture without allocating or copying.
+	## The returned ARC reference keeps the owning framebuffer alive.
+	render_texture : RenderTexture -> Assets.Texture
+	render_texture = |target| target.as_texture()
+
+	## Render textures use OpenGL framebuffer coordinates, so their color
+	## attachment is vertically inverted when sampled on screen.
+	render_texture_source : RenderTexture -> Math.Rect
+	render_texture_source = |target| {
+		info = Assets.info(target.as_texture())
+		{ x: 0, y: 0, width: info.width, height: -info.height }
+	}
+
+	shader_handle : Shader -> U64
+	shader_handle = |shader| shader.handle()
+
+	## Load shader stages from files. Pass an empty string to use raylib's default
+	## vertex or fragment stage.
+	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ..])
+	load_shader! = |cfg| {
+		resource = Draw.load_shader_raw!(cfg)
+		if Box.unbox(resource) == 0 {
+			Err(ShaderLoadFailed)
+		} else {
+			Ok(Shader.from_box(resource))
+		}
+	}
+
+	## Compile shader stages from source strings. Empty strings select the default
+	## stage, which is useful for fragment-only 2D post-processing.
+	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ..])
+	load_shader_source! = |cfg| {
+		resource = Draw.load_shader_source_raw!(cfg)
+		if Box.unbox(resource) == 0 {
+			Err(ShaderLoadFailed)
+		} else {
+			Ok(Shader.from_box(resource))
+		}
+	}
+
+	## Resolve a uniform name once and retain the shader beside its location.
+	uniform! : Shader, Str => Try(Uniform, [UniformNotFound, ..])
+	uniform! = |shader, name| {
+		location = Draw.shader_location_raw!({ shader: Draw.shader_handle(shader), name })
+		if location < 0 {
+			Err(UniformNotFound)
+		} else {
+			Ok({ shader, location })
+		}
+	}
+
+	set_uniform_f32! : Uniform, F32 => {}
+	set_uniform_f32! = |uniform, value| Draw.set_shader_float_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+
+	set_uniform_i32! : Uniform, I32 => {}
+	set_uniform_i32! = |uniform, value| Draw.set_shader_int_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+
+	set_uniform_vec2! : Uniform, Vector2 => {}
+	set_uniform_vec2! = |uniform, value| Draw.set_shader_vec2_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+
+	set_uniform_vec3! : Uniform, Vec3 => {}
+	set_uniform_vec3! = |uniform, value| Draw.set_shader_vec3_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+
+	set_uniform_vec4! : Uniform, Vec4 => {}
+	set_uniform_vec4! = |uniform, value| Draw.set_shader_vec4_raw!({ shader: Draw.shader_handle(uniform.shader), location: uniform.location, value })
+
+	set_uniform_color! : Uniform, Color => {}
+	set_uniform_color! = |uniform, color|
+		Draw.set_uniform_vec4!(
+			uniform,
+			{
+				x: U8.to_f32(color.r) / 255,
+				y: U8.to_f32(color.g) / 255,
+				z: U8.to_f32(color.b) / 255,
+				w: U8.to_f32(color.a) / 255,
+			},
+		)
+
+	set_uniform_texture! : Uniform, Assets.Texture => {}
+	set_uniform_texture! = |uniform, texture| Draw.set_shader_texture_raw!({
+		shader: Draw.shader_handle(uniform.shader),
+		location: uniform.location,
+		texture: (Assets.info(texture)).handle,
+	})
+
+	blend_mode_raw : BlendMode -> U8
+	blend_mode_raw = |mode|
+		match mode {
+			Alpha => 0
+			Additive => 1
+			Multiplied => 2
+			AddColors => 3
+			SubtractColors => 4
+			AlphaPremultiply => 5
+		}
+
+	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
+	with_render_texture! : RenderTexture, (() => {}) => {}
+	with_render_texture! = |target, callback| {
+		Draw.begin_render_texture_raw!((Assets.info(target.as_texture())).handle)
+		callback()
+		Draw.end_render_texture_raw!()
+	}
+
+	## Scope shader application so the default shader is always restored.
+	with_shader! : Shader, (() => {}) => {}
+	with_shader! = |shader, callback| {
+		Draw.begin_shader_raw!(Draw.shader_handle(shader))
+		callback()
+		Draw.end_shader_raw!()
+	}
+
+	## Scope one of raylib's built-in blend equations. Custom blend factors are
+	## deliberately excluded until they can be represented without global state.
+	with_blend_mode! : BlendMode, (() => {}) => {}
+	with_blend_mode! = |mode, callback| {
+		Draw.begin_blend_raw!(Draw.blend_mode_raw(mode))
+		callback()
+		Draw.end_blend_raw!()
+	}
+
 	with_camera! : CameraMode, (() => {}) => {}
 	with_camera! = |camera, callback| {
 		Draw.begin_camera!(camera)
@@ -766,3 +1006,6 @@ expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, Box.box({ handl
 expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
 expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
 expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
+expect Draw.blend_mode_raw(Draw.alpha_blend) == 0
+expect Draw.blend_mode_raw(Draw.premultiplied_alpha_blend) == 5
+expect Draw.render_texture_source(Draw.RenderTexture.from_texture(Box.box({ handle: 7, width: 320, height: 180 }))) == Math.rect(0, 0, 320, -180)

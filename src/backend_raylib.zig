@@ -26,6 +26,12 @@ pub const Font = rl.Font;
 /// Native texture retained in the host resource heap.
 pub const Texture = rl.Texture2D;
 
+/// Native framebuffer-backed texture retained in the host resource heap.
+pub const RenderTexture = rl.RenderTexture2D;
+
+/// Native shader program retained in the host resource heap.
+pub const Shader = rl.Shader;
+
 /// Persistent packed keyboard state - updated each frame.
 /// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
@@ -172,6 +178,77 @@ pub fn setTextureWrap(texture: Texture, code: u8) void {
         else => return,
     };
     rl.SetTextureWrap(texture, wrap);
+}
+
+/// Create a framebuffer-backed texture for offscreen 2D rendering.
+pub fn loadRenderTexture(width: c_int, height: c_int) ?RenderTexture {
+    const target = rl.LoadRenderTexture(width, height);
+    if (!rl.IsRenderTextureValid(target)) return null;
+    return target;
+}
+
+/// Release a framebuffer and its color/depth attachments.
+pub fn unloadRenderTexture(target: RenderTexture) void {
+    rl.UnloadRenderTexture(target);
+}
+
+/// Return the color attachment so normal texture drawing can sample it.
+pub fn renderTextureColor(target: RenderTexture) Texture {
+    return target.texture;
+}
+
+/// Load a shader, using raylib's default stage when a path pointer is null.
+pub fn loadShader(vertex_path: ?[*:0]const u8, fragment_path: ?[*:0]const u8) ?Shader {
+    const shader = rl.LoadShader(vertex_path, fragment_path);
+    if (!rl.IsShaderValid(shader)) return null;
+    return shader;
+}
+
+/// Load shader source code, using raylib's default stage when a pointer is null.
+pub fn loadShaderFromMemory(vertex_source: ?[*:0]const u8, fragment_source: ?[*:0]const u8) ?Shader {
+    const shader = rl.LoadShaderFromMemory(vertex_source, fragment_source);
+    if (!rl.IsShaderValid(shader)) return null;
+    return shader;
+}
+
+/// Release a GPU shader program.
+pub fn unloadShader(shader: Shader) void {
+    rl.UnloadShader(shader);
+}
+
+/// Resolve and cache a uniform location on the Roc side.
+pub fn shaderLocation(shader: Shader, name: [*:0]const u8) c_int {
+    return rl.GetShaderLocation(shader, name);
+}
+
+/// Update scalar/vector shader values without allocating.
+pub fn setShaderFloat(shader: Shader, location: c_int, value: f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_FLOAT);
+}
+
+/// Update a signed integer uniform.
+pub fn setShaderInt(shader: Shader, location: c_int, value: i32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_INT);
+}
+
+/// Update a two-component float vector uniform.
+pub fn setShaderVec2(shader: Shader, location: c_int, value: [2]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC2);
+}
+
+/// Update a three-component float vector uniform.
+pub fn setShaderVec3(shader: Shader, location: c_int, value: [3]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC3);
+}
+
+/// Update a four-component float vector uniform.
+pub fn setShaderVec4(shader: Shader, location: c_int, value: [4]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC4);
+}
+
+/// Bind a texture to a sampler2D uniform.
+pub fn setShaderTexture(shader: Shader, location: c_int, texture: Texture) void {
+    rl.SetShaderValueTexture(shader, location, texture);
 }
 
 /// Return a native texture's width in pixels.
@@ -565,6 +642,36 @@ pub fn beginMode2D(camera: anytype) void {
 /// End drawing in 2D camera mode.
 pub fn endMode2D() void {
     rl.EndMode2D();
+}
+
+/// Redirect subsequent draws to an offscreen framebuffer.
+pub fn beginTextureMode(target: RenderTexture) void {
+    rl.BeginTextureMode(target);
+}
+
+/// Restore drawing to the previous framebuffer.
+pub fn endTextureMode() void {
+    rl.EndTextureMode();
+}
+
+/// Apply a custom shader to subsequent draw calls.
+pub fn beginShaderMode(shader: Shader) void {
+    rl.BeginShaderMode(shader);
+}
+
+/// Restore raylib's default shader.
+pub fn endShaderMode() void {
+    rl.EndShaderMode();
+}
+
+/// Apply one of raylib's built-in blend equations.
+pub fn beginBlendMode(mode: c_int) void {
+    rl.BeginBlendMode(mode);
+}
+
+/// Restore normal alpha blending.
+pub fn endBlendMode() void {
+    rl.EndBlendMode();
 }
 
 /// End drawing frame.

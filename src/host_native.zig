@@ -65,6 +65,13 @@ var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init
 /// host context. Keep the active per-process helper context here for callbacks.
 var active_roc_host: ?*RocHost = null;
 var active_headless = false;
+
+/// Unit tests exercise host ownership in headless mode; native rendering has
+/// its own opt-in graphical smoke target and must not leak GUI link dependencies.
+inline fn headlessMode() bool {
+    return builtin.is_test or active_headless;
+}
+
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
@@ -124,42 +131,42 @@ const ShaderResource = union(enum) {
 fn destroySound(resource: *SoundResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.unloadSound(sound),
+        .native => |sound| if (!builtin.is_test) raylib.unloadSound(sound),
     }
 }
 
 fn destroyMusic(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.unloadMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.unloadMusic(music),
     }
 }
 
 fn destroyFont(resource: *FontResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |font| raylib.unloadFont(font),
+        .native => |font| if (!builtin.is_test) raylib.unloadFont(font),
     }
 }
 
 fn destroyTexture(resource: *TextureResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |texture| raylib.unloadTexture(texture),
+        .native => |texture| if (!builtin.is_test) raylib.unloadTexture(texture),
     }
 }
 
 fn destroyRenderTexture(resource: *RenderTextureResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |target| raylib.unloadRenderTexture(target),
+        .native => |target| if (!builtin.is_test) raylib.unloadRenderTexture(target),
     }
 }
 
 fn destroyShader(resource: *ShaderResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |shader| raylib.unloadShader(shader),
+        .native => |shader| if (!builtin.is_test) raylib.unloadShader(shader),
     }
 }
 
@@ -850,7 +857,7 @@ fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c)
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
-    if (active_headless) {
+    if (headlessMode()) {
         if (!pathExists(path_slice)) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
         const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE) orelse
             return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
@@ -878,7 +885,7 @@ fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.AssetsHos
 
 fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textureArgs) callconv(.c) abi.AssetsHostGenerate_color_textureRetRecord {
     if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-    if (active_headless) {
+    if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
             return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
         return .{ .texture = .{ .resource = texture }, .err = RESOURCE_ERR_NONE };
@@ -915,7 +922,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
     if (args.pixels.len() != expected) return TEXTURE_UPDATE_PIXEL_COUNT;
     switch (resource.*) {
         .headless => {},
-        .native => |texture| raylib.updateTexture(texture, args.pixels.items()),
+        .native => |texture| if (!builtin.is_test) raylib.updateTexture(texture, args.pixels.items()),
     }
     return TEXTURE_UPDATE_OK;
 }
@@ -926,12 +933,14 @@ fn exportedAssetsUpdateTextureRaw(args: abi.AssetsHostUpdate_textureArgs) callco
 
 fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
     defer texture_owner.decref(activeHost());
+    if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
     raylib.setTextureFilter(texture, code);
 }
 
 fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
     defer texture_owner.decref(activeHost());
+    if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
     raylib.setTextureWrap(texture, code);
 }
@@ -954,7 +963,7 @@ fn storeShader(resource: ShaderResource) ?*u64 {
 
 fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) abi.DrawHostLoad_render_textureRetRecord {
     if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_FAILED };
-    if (active_headless) {
+    if (headlessMode()) {
         const target = storeRenderTexture(.headless, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
             return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_LIMIT };
         return .{ .target = .{ .resource = target }, .err = RESOURCE_ERR_NONE };
@@ -977,7 +986,7 @@ fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawHostLoad_shaderArgs) ca
     const vertex_slice = args.vertex_path.asSlice();
     const fragment_slice = args.fragment_path.asSlice();
     if (!shaderPathsExist(vertex_slice, fragment_slice)) return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    if (active_headless) {
+    if (headlessMode()) {
         const shader = storeShader(.headless) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .shader = shader, .err = RESOURCE_ERR_NONE };
     }
@@ -1004,7 +1013,7 @@ fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_s
     const vertex_slice = args.vertex_source.asSlice();
     const fragment_slice = args.fragment_source.asSlice();
     if (vertex_slice.len == 0 and fragment_slice.len == 0) return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    if (active_headless) {
+    if (headlessMode()) {
         const shader = storeShader(.headless) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .shader = shader, .err = RESOURCE_ERR_NONE };
     }
@@ -1054,7 +1063,7 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
     };
     switch (resource.*) {
         .headless => headless_render_texture_depth +|= 1,
-        .native => |target| raylib.beginTextureMode(target),
+        .native => |target| if (!builtin.is_test) raylib.beginTextureMode(target),
     }
     render_texture_leases[render_texture_lease_count] = owner;
     render_texture_lease_count += 1;
@@ -1063,11 +1072,11 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     if (render_texture_lease_count == 0) return;
-    if (active_headless) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
+    if (headlessMode()) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
     render_texture_lease_count -= 1;
     const owner = render_texture_leases[render_texture_lease_count].?;
     render_texture_leases[render_texture_lease_count] = null;
-    if (!active_headless and render_texture_lease_count > 0) {
+    if (!headlessMode() and render_texture_lease_count > 0) {
         const outer = render_texture_leases[render_texture_lease_count - 1].?;
         if (render_texture_heap.get(outer.handle)) |resource| raylib.beginTextureMode(resource.native);
     }
@@ -1087,7 +1096,7 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) boo
     };
     switch (resource.*) {
         .headless => headless_shader_depth +|= 1,
-        .native => |shader| raylib.beginShaderMode(shader),
+        .native => |shader| if (!builtin.is_test) raylib.beginShaderMode(shader),
     }
     shader_leases[shader_lease_count] = owner;
     shader_lease_count += 1;
@@ -1096,11 +1105,11 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) boo
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
     if (shader_lease_count == 0) return;
-    if (active_headless) headless_shader_depth -|= 1 else raylib.endShaderMode();
+    if (headlessMode()) headless_shader_depth -|= 1 else raylib.endShaderMode();
     shader_lease_count -= 1;
     const owner = shader_leases[shader_lease_count].?;
     shader_leases[shader_lease_count] = null;
-    if (!active_headless and shader_lease_count > 0) {
+    if (!headlessMode() and shader_lease_count > 0) {
         const outer = shader_leases[shader_lease_count - 1].?;
         if (shader_heap.get(outer.*)) |resource| raylib.beginShaderMode(resource.native);
     }
@@ -1109,7 +1118,7 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
 
 fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) bool {
     if (args.arg0 > 5) return false;
-    if (active_headless) {
+    if (headlessMode()) {
         headless_blend_depth +|= 1;
         return true;
     }
@@ -1118,7 +1127,7 @@ fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) bool 
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
-    if (active_headless) {
+    if (headlessMode()) {
         headless_blend_depth -|= 1;
         return;
     }
@@ -1148,6 +1157,7 @@ fn exportedDrawShaderLocationRaw(args: abi.DrawHostShader_locationArgs) callconv
 
 fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(.c) void {
     defer args.uniform.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderFloat(resource.native, args.uniform.location, args.value);
@@ -1155,6 +1165,7 @@ fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(
 
 fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) void {
     defer args.uniform.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderInt(resource.native, args.uniform.location, args.value);
@@ -1162,6 +1173,7 @@ fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) 
 
 fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c) void {
     defer args.uniform.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec2(resource.native, args.uniform.location, .{ args.value.x, args.value.y });
@@ -1169,6 +1181,7 @@ fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c
 
 fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c) void {
     defer args.uniform.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec3(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z });
@@ -1176,6 +1189,7 @@ fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c
 
 fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c) void {
     defer args.uniform.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     raylib.setShaderVec4(resource.native, args.uniform.location, .{ args.value.x, args.value.y, args.value.z, args.value.w });
@@ -1184,6 +1198,7 @@ fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c
 fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callconv(.c) void {
     defer args.uniform.decref(activeHost());
     defer args.texture.decref(activeHost());
+    if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
@@ -1316,7 +1331,7 @@ fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawHostLoad_fontArgs) callco
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
-    if (active_headless) {
+    if (headlessMode()) {
         if (!pathExists(path_slice)) return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
         const font = storeFont(.headless) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .font = font, .err = RESOURCE_ERR_NONE };
@@ -1350,7 +1365,7 @@ fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawHostMeasure_textArgs) 
     var result: abi.DrawHostMeasure_textRetRecord = .{ .height = 0, .width = 0 };
 
     const text_slice = args.text.asSlice();
-    if (active_headless) return headlessMeasureText(text_slice, args.size, args.spacing);
+    if (headlessMode()) return headlessMeasureText(text_slice, args.size, args.spacing);
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return result;
@@ -1368,7 +1383,7 @@ fn exportedDrawMeasureTextRaw(args: abi.DrawHostMeasure_textArgs) callconv(.c) a
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
     defer args.text.decref(host);
     defer args.font.decref(host);
-    if (active_headless) return;
+    if (headlessMode()) return;
 
     const text_slice = args.text.asSlice();
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -1416,7 +1431,7 @@ fn exportedDrawTextAlignedRaw(args: abi.DrawHostText_alignedArgs) callconv(.c) v
 
 fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     defer args.texture.decref(activeHost());
-    if (active_headless) return;
+    if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
     raylib.drawTexture(texture, args);
 }
@@ -1588,7 +1603,7 @@ fn storeMusic(resource: MusicResource) ?*u64 {
 }
 
 fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHostGen_toneRetRecord {
-    if (active_headless) {
+    if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
     }
@@ -1598,7 +1613,7 @@ fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHos
 }
 
 fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioHostGen_soundRetRecord {
-    if (active_headless) {
+    if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
     }
@@ -1634,7 +1649,7 @@ fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.A
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
-    if (active_headless) {
+    if (headlessMode()) {
         if (!pathExists(path_slice)) return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
         const music = storeMusic(.headless) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .music = music, .err = RESOURCE_ERR_NONE };
@@ -1655,6 +1670,7 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
 
 fn hostedAudioPlay(handle: *u64) callconv(.c) void {
     defer releaseResourceBox(activeHost(), handle);
+    if (builtin.is_test) return;
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
@@ -1817,6 +1833,7 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
 
 fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
     defer releaseResourceBox(activeHost(), handle);
+    if (builtin.is_test) return 0;
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
         .headless => 0,

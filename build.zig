@@ -186,8 +186,6 @@ pub fn build(b: *std.Build) void {
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {
-        const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
-
         const native_tests = b.addTest(.{
             .root_module = b.createModule(.{
                 .root_source_file = b.path("src/host_native.zig"),
@@ -196,19 +194,13 @@ pub fn build(b: *std.Build) void {
             }),
         });
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
-        native_tests.root_module.addLibraryPath(b.path(raylib_lib_dir));
-        native_tests.root_module.linkSystemLibrary("raylib", .{});
-        if (native_target.result.os.tag == .linux) {
-            // Render-texture and shader tests reach raylib's rcore object, whose
-            // X11 backend symbols must be available to the native test binary.
-            native_tests.root_module.linkSystemLibrary("X11", .{});
-        }
         native_tests.root_module.link_libc = true;
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
 
         // Pixel-level rendering checks need a real graphics context, so keep
         // them opt-in for local/CI runs with a display (for example xvfb-run).
+        const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
         const graphical_smoke = b.addExecutable(.{
             .name = "graphical-smoke",
             .root_module = b.createModule(.{

@@ -184,7 +184,11 @@ init_for_host! = |host_state| {
 		screen: host_state.screen,
 		keys: host_state.keys,
 		text_input: host_state.text_input,
-		gamepads: host_state.gamepads,
+		gamepads: {
+			connected: host_state.gamepads.available,
+			buttons: host_state.gamepads.buttons,
+			axes: host_state.gamepads.axes,
+		},
 		mouse: host_state.mouse,
 	}
 	match (program.init!.run!)(host) {
@@ -203,7 +207,11 @@ render_for_host! = |boxed_model, host_state| {
 		screen: host_state.screen,
 		keys: host_state.keys,
 		text_input: host_state.text_input,
-		gamepads: host_state.gamepads,
+		gamepads: {
+			connected: host_state.gamepads.available,
+			buttons: host_state.gamepads.buttons,
+			axes: host_state.gamepads.axes,
+		},
 		mouse: host_state.mouse,
 	}
 	match (program.render!)(Box.unbox(boxed_model), host) {

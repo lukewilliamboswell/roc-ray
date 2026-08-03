@@ -7,8 +7,8 @@
 Gamepad := [].{
 
 	## Fixed-size input snapshot stored on `Host` and sampled once per frame.
-	Snapshot : {
-		available : List(U8),
+	Snapshot := {
+		connected : List(U8),
 		buttons : List(U8),
 		axes : List(F32),
 	}
@@ -56,7 +56,7 @@ Gamepad := [].{
 	## Whether a gamepad was connected when this frame was sampled.
 	available : Snapshot, GamepadId -> Bool
 	available = |snapshot, gamepad|
-		match List.get(snapshot.available, index(gamepad)) {
+		match List.get(snapshot.connected, index(gamepad)) {
 			Ok(value) => value != 0
 			Err(_) => False
 		}
@@ -105,9 +105,21 @@ Gamepad := [].{
 	expect index(One) == 0
 	expect index(Four) == 3
 	expect from_index(4) == Err(InvalidGamepadIndex)
-	expect available({ available: [1, 0, 0, 0], buttons: [], axes: [] }, One)
-	expect button_pressed({ available: [], buttons: [0, 0, 7], axes: [] }, One, DpadRight)
-	expect axis({ available: [], buttons: [], axes: [0.25, -0.5] }, One, LeftY) == -0.5
+	expect available({ connected: [1, 0, 0, 0], buttons: [], axes: [] }, One)
+	expect button_pressed({ connected: [], buttons: [0, 0, 7], axes: [] }, One, DpadRight)
+	expect axis({ connected: [], buttons: [], axes: [0.25, -0.5] }, One, LeftY) == -0.5
+	expect {
+		snapshot : Snapshot
+		snapshot = { connected: [1, 0, 0, 0], buttons: [0, 0, 7], axes: [0.25, -0.5, 0.75, 1] }
+		snapshot.available(One)
+			and snapshot.button_down(One, DpadRight)
+				and !(snapshot.button_up(One, DpadRight))
+					and snapshot.button_pressed(One, DpadRight)
+						and snapshot.button_released(One, DpadRight)
+							and snapshot.axis(One, LeftY) == -0.5
+								and snapshot.left_stick(One) == { x: 0.25, y: -0.5 }
+									and snapshot.right_stick(One) == { x: 0.75, y: 1 }
+	}
 
 }
 

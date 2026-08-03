@@ -49,12 +49,14 @@ render! = |model, host| {
 	ctrl_down = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
 	escape_pressed = host.key_pressed(KeyEscape)
 	space_released = host.key_released(KeySpace)
-	mouse_left_pressed = Mouse.button_pressed(host.mouse, Left)
-	mouse_left_released = Mouse.button_released(host.mouse, Left)
-	mouse_delta = Mouse.delta(host.mouse)
-	wheel_delta = Mouse.wheel_delta(host.mouse)
-	gamepad_connected = Gamepad.available(host.gamepads, One)
-	left_stick = Gamepad.left_stick(host.gamepads, One)
+	mouse_left_pressed = host.mouse.button_pressed(Left)
+	mouse_left_released = host.mouse.button_released(Left)
+	_mouse_position = host.mouse.position()
+	mouse_delta = host.mouse.delta()
+	wheel_delta = host.mouse.wheel_delta()
+	gamepad_connected = host.gamepads.available(One)
+	left_stick = host.gamepads.left_stick(One)
+	gamepad_action_pressed = host.gamepads.button_pressed(One, FaceDown)
 	text_entered = List.len(host.text_input) > 0
 	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
@@ -127,6 +129,8 @@ render! = |model, host| {
 			Draw.rectangle!({ x: 135, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_connected Color.green else Color.light_gray) })
 			Draw.text_at!({ pos: { x: 180, y: 370 }, text: "Left stick", size: 18, color: Color.dark_gray })
 			Draw.rectangle!({ x: 285, y: 368, width: 24, height: 24, style: Draw.filled(if stick_moved Color.green else Color.light_gray) })
+			Draw.text_at!({ pos: { x: 330, y: 370 }, text: "Face down", size: 18, color: Color.dark_gray })
+			Draw.rectangle!({ x: 440, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_action_pressed Color.green else Color.light_gray) })
 			Draw.text_at!({ pos: { x: 30, y: 410 }, text: "Cursor: H hide, J show, K lock, L unlock", size: 18, color: Color.dark_gray })
 		},
 	)

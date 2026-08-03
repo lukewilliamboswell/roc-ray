@@ -35,6 +35,18 @@ Mouse := [].{
 		## Whether a button was released this frame.
 		button_released : State, MouseButton -> Bool
 		button_released = |mouse, button| Mouse.button_released(mouse, button)
+
+		## Current cursor position in logical drawing coordinates.
+		position : State -> { x : F32, y : F32 }
+		position = |mouse| Mouse.position(mouse)
+
+		## Cursor movement since the previous frame.
+		delta : State -> { x : F32, y : F32 }
+		delta = |mouse| Mouse.delta(mouse)
+
+		## Horizontal and vertical wheel movement for this frame.
+		wheel_delta : State -> { x : F32, y : F32 }
+		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
 	}
 
 	## Native operating-system cursor shapes.
@@ -107,6 +119,15 @@ Mouse := [].{
 	expect button_code(Back) == 6
 	expect cursor_code(PointingHand) == 4
 	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
+	expect {
+		mouse : State
+		mouse = { buttons: [7], left: True, middle: False, right: False, wheel: -2, wheel_x: 1, wheel_y: -2, delta_x: 3, delta_y: 4, x: 10, y: 20 }
+		mouse.position() == { x: 10, y: 20 }
+			and mouse.delta() == { x: 3, y: 4 }
+				and mouse.wheel_delta() == { x: 1, y: -2 }
+					and mouse.button_pressed(Left)
+	}
+
 }
 
 cursor_code : Mouse.Cursor -> U8

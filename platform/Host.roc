@@ -51,11 +51,14 @@ Host := {
 	key_up : Host, Keys.KeyboardKey -> Bool
 	key_up = |host, key| Keys.key_up(host, key)
 
-	## Check whether a key was pressed this frame.
+	## Check whether a key was pressed this frame. Receiver form:
+	## `host.key_pressed(KeyW)`. Static `Keys.key_pressed(host, KeyW)` remains
+	## available; combine singular queries with `or` when checking alternatives.
 	key_pressed : Host, Keys.KeyboardKey -> Bool
 	key_pressed = |host, key| Keys.key_pressed(host, key)
 
-	## Check whether a key was released this frame.
+	## Check whether a key was released this frame. Receiver form:
+	## `host.key_released(KeyW)`. Static `Keys.key_released(host, KeyW)` remains.
 	key_released : Host, Keys.KeyboardKey -> Bool
 	key_released = |host, key| Keys.key_released(host, key)
 

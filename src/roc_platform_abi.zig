@@ -3304,7 +3304,7 @@ pub const AssetsLoad_texture_rawArgs = extern struct {
 };
 
 /// Arguments for Audio.gen_sound_raw!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => U64
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Box(U64)
 /// Refcounted fields are owned by the hosted function.
 pub const AudioGen_sound_rawArgs = if (@sizeOf(usize) == 4) extern struct {
     @"attack_ms": i32,
@@ -3340,7 +3340,7 @@ comptime {
 }
 
 /// Arguments for Audio.gen_tone_raw!
-/// Roc signature: { freq : F32, ms : I32 } => U64
+/// Roc signature: { freq : F32, ms : I32 } => Box(U64)
 /// Refcounted fields are owned by the hosted function.
 pub const AudioGen_tone_rawArgs = if (@sizeOf(usize) == 4) extern struct {
     @"freq": f32,
@@ -3362,14 +3362,14 @@ comptime {
 }
 
 /// Arguments for Audio.load_music_raw!
-/// Roc signature: Str => U64
+/// Roc signature: Str => Box(U64)
 /// Refcounted fields are owned by the hosted function.
 pub const AudioLoad_music_rawArgs = extern struct {
     arg0: RocStr,
 };
 
 /// Arguments for Audio.load_sound_raw!
-/// Roc signature: Str => U64
+/// Roc signature: Str => Box(U64)
 /// Refcounted fields are owned by the hosted function.
 pub const AudioLoad_sound_rawArgs = extern struct {
     arg0: RocStr,
@@ -4360,20 +4360,20 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_assets_load_texture_raw(arg0: RocStr) callconv(.c) __AnonStruct_8b7fc2d8f8794eb4;
 
 /// Hosted symbol for Audio.gen_sound_raw!
-/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => U64
-pub extern fn roc_audio_gen_sound_raw(arg0: AudioGen_sound_rawArgs) callconv(.c) u64;
+/// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => Box(U64)
+pub extern fn roc_audio_gen_sound_raw(arg0: AudioGen_sound_rawArgs) callconv(.c) *u64;
 
 /// Hosted symbol for Audio.gen_tone_raw!
-/// Roc signature: { freq : F32, ms : I32 } => U64
-pub extern fn roc_audio_gen_tone_raw(arg0: AudioGen_tone_rawArgs) callconv(.c) u64;
+/// Roc signature: { freq : F32, ms : I32 } => Box(U64)
+pub extern fn roc_audio_gen_tone_raw(arg0: AudioGen_tone_rawArgs) callconv(.c) *u64;
 
 /// Hosted symbol for Audio.load_music_raw!
-/// Roc signature: Str => U64
-pub extern fn roc_audio_load_music_raw(arg0: RocStr) callconv(.c) u64;
+/// Roc signature: Str => Box(U64)
+pub extern fn roc_audio_load_music_raw(arg0: RocStr) callconv(.c) *u64;
 
 /// Hosted symbol for Audio.load_sound_raw!
-/// Roc signature: Str => U64
-pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) u64;
+/// Roc signature: Str => Box(U64)
+pub extern fn roc_audio_load_sound_raw(arg0: RocStr) callconv(.c) *u64;
 
 /// Hosted symbol for Audio.pause_music_raw!
 /// Roc signature: U64 => {}

@@ -14,6 +14,12 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
+/// Native sound value retained in the host resource heap.
+pub const Sound = rl.Sound;
+
+/// Native music stream retained in the host resource heap.
+pub const Music = rl.Music;
+
 /// Persistent packed keyboard state - updated each frame.
 /// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
@@ -572,17 +578,6 @@ pub fn getRandomValue(min: c_int, max: c_int) c_int {
 
 const AUDIO_SAMPLE_RATE: u32 = 44100;
 const MAX_GEN_SOUND_MS: i32 = 5000;
-const MAX_SOUNDS: usize = 128;
-const MAX_MUSIC: usize = 16;
-
-/// Sounds, owned by the host and addressed by one-based handle.
-var sounds: [MAX_SOUNDS]rl.Sound = undefined;
-var sound_count: usize = 0;
-
-/// Music streams, owned by the host and addressed by one-based handle.
-var music_streams: [MAX_MUSIC]rl.Music = undefined;
-var music_count: usize = 0;
-
 /// Scratch buffer for procedural generation (mono 16-bit).
 var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
 
@@ -591,17 +586,19 @@ pub fn initAudioDevice() void {
     rl.InitAudioDevice();
 }
 
-/// Unload audio resources and close the audio device.
+/// Close the audio device after all host resource heaps have been drained.
 pub fn closeAudioDevice() void {
-    var music_index: usize = 0;
-    while (music_index < music_count) : (music_index += 1) rl.UnloadMusicStream(music_streams[music_index]);
-    music_count = 0;
-
-    var sound_index: usize = 0;
-    while (sound_index < sound_count) : (sound_index += 1) rl.UnloadSound(sounds[sound_index]);
-    sound_count = 0;
-
     rl.CloseAudioDevice();
+}
+
+/// Unload a native sound when its host resource slot is released.
+pub fn unloadSound(sound: Sound) void {
+    rl.UnloadSound(sound);
+}
+
+/// Unload a native music stream when its host resource slot is released.
+pub fn unloadMusic(music: Music) void {
+    rl.UnloadMusicStream(music);
 }
 
 fn clampF32(value: f32, min: f32, max: f32) f32 {
@@ -610,34 +607,6 @@ fn clampF32(value: f32, min: f32, max: f32) f32 {
 
 fn clampI32(value: i32, min: i32, max: i32) i32 {
     return if (value < min) min else if (value > max) max else value;
-}
-
-fn handleIndex(handle: u64, count: usize) ?usize {
-    if (handle == 0) return null;
-    if (handle > @as(u64, @intCast(count))) return null;
-    return @intCast(handle - 1);
-}
-
-fn storeSound(sound: rl.Sound) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
-    sounds[sound_count] = sound;
-    sound_count += 1;
-    return @intCast(sound_count);
-}
-
-fn soundFromHandle(handle: u64) ?rl.Sound {
-    const index = handleIndex(handle, sound_count) orelse return null;
-    return sounds[index];
-}
-
-fn musicFromHandle(handle: u64) ?rl.Music {
-    const index = handleIndex(handle, music_count) orelse return null;
-    return music_streams[index];
-}
-
-fn musicPtrFromHandle(handle: u64) ?*rl.Music {
-    const index = handleIndex(handle, music_count) orelse return null;
-    return &music_streams[index];
 }
 
 fn msToFrames(ms: i32) usize {
@@ -685,21 +654,18 @@ fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
     };
 }
 
-/// Load a sound effect from disk and return a one-based handle, or 0 on failure.
-pub fn loadSound(path: [*:0]const u8) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
+/// Load a sound effect from disk.
+pub fn loadSound(path: [*:0]const u8) ?Sound {
     const sound = rl.LoadSound(path);
-    if (!rl.IsSoundValid(sound)) return 0;
-    return storeSound(sound);
+    if (!rl.IsSoundValid(sound)) return null;
+    return sound;
 }
 
-/// Generate a short procedural sound, store it, and return a one-based handle.
-pub fn genSound(args: anytype) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
-
+/// Generate a short procedural sound.
+pub fn genSound(args: anytype) ?Sound {
     const dur_ms = clampI32(args.ms, 1, MAX_GEN_SOUND_MS);
     const frames = msToFrames(dur_ms);
-    if (frames == 0 or frames > gen_sound_buf.len) return 0;
+    if (frames == 0 or frames > gen_sound_buf.len) return null;
 
     const attack = msToFrames(args.attack_ms);
     const decay = msToFrames(args.decay_ms);
@@ -732,12 +698,12 @@ pub fn genSound(args: anytype) u64 {
     };
 
     const sound = rl.LoadSoundFromWave(wave);
-    if (!rl.IsSoundValid(sound)) return 0;
-    return storeSound(sound);
+    if (!rl.IsSoundValid(sound)) return null;
+    return sound;
 }
 
-/// Generate a short sine tone, store it, and return a one-based handle.
-pub fn genTone(freq: f32, ms: i32) u64 {
+/// Generate a short sine tone.
+pub fn genTone(freq: f32, ms: i32) ?Sound {
     return genSound(.{
         .waveform = @as(u8, 0),
         .freq_start = freq,
@@ -751,83 +717,77 @@ pub fn genTone(freq: f32, ms: i32) u64 {
     });
 }
 
-/// Play a previously loaded/generated sound by handle (no-op if out of range).
-pub fn playSoundHandle(handle: u64) void {
-    if (soundFromHandle(handle)) |sound| rl.PlaySound(sound);
+/// Play a native sound.
+pub fn playSound(sound: Sound) void {
+    rl.PlaySound(sound);
 }
 
-/// Set volume for a sound by handle (no-op if out of range).
-pub fn setSoundVolumeHandle(handle: u64, volume: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
+/// Set a native sound's volume.
+pub fn setSoundVolume(sound: Sound, volume: f32) void {
+    rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
 }
 
-/// Set pitch for a sound by handle (no-op if out of range).
-pub fn setSoundPitchHandle(handle: u64, pitch: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
+/// Set a native sound's pitch.
+pub fn setSoundPitch(sound: Sound, pitch: f32) void {
+    rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
 }
 
-/// Set pan for a sound by handle (no-op if out of range).
-pub fn setSoundPanHandle(handle: u64, pan: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
+/// Set a native sound's stereo pan.
+pub fn setSoundPan(sound: Sound, pan: f32) void {
+    rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
 }
 
-/// Load a music stream from disk and return a one-based handle, or 0 on failure.
-pub fn loadMusic(path: [*:0]const u8) u64 {
-    if (music_count >= MAX_MUSIC) return 0;
-
+/// Load a music stream from disk.
+pub fn loadMusic(path: [*:0]const u8) ?Music {
     var stream = rl.LoadMusicStream(path);
-    if (!rl.IsMusicValid(stream)) return 0;
+    if (!rl.IsMusicValid(stream)) return null;
     stream.looping = true;
-
-    music_streams[music_count] = stream;
-    music_count += 1;
-    return @intCast(music_count);
+    return stream;
 }
 
-/// Update all loaded music streams. Call once per frame.
-pub fn updateMusicStreams() void {
-    var i: usize = 0;
-    while (i < music_count) : (i += 1) rl.UpdateMusicStream(music_streams[i]);
+/// Advance one native music stream.
+pub fn updateMusicStream(stream: *Music) void {
+    rl.UpdateMusicStream(stream.*);
 }
 
-/// Play a music stream by handle (no-op if out of range).
-pub fn playMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.PlayMusicStream(stream);
+/// Start a native music stream.
+pub fn playMusic(stream: Music) void {
+    rl.PlayMusicStream(stream);
 }
 
-/// Stop a music stream by handle (no-op if out of range).
-pub fn stopMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.StopMusicStream(stream);
+/// Stop a native music stream.
+pub fn stopMusic(stream: Music) void {
+    rl.StopMusicStream(stream);
 }
 
-/// Pause a music stream by handle (no-op if out of range).
-pub fn pauseMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.PauseMusicStream(stream);
+/// Pause a native music stream.
+pub fn pauseMusic(stream: Music) void {
+    rl.PauseMusicStream(stream);
 }
 
-/// Resume a music stream by handle (no-op if out of range).
-pub fn resumeMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.ResumeMusicStream(stream);
+/// Resume a native music stream.
+pub fn resumeMusic(stream: Music) void {
+    rl.ResumeMusicStream(stream);
 }
 
-/// Set volume for a music stream by handle (no-op if out of range).
-pub fn setMusicVolumeHandle(handle: u64, volume: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
+/// Set a native music stream's volume.
+pub fn setMusicVolume(stream: Music, volume: f32) void {
+    rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
 }
 
-/// Set pitch for a music stream by handle (no-op if out of range).
-pub fn setMusicPitchHandle(handle: u64, pitch: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
+/// Set a native music stream's pitch.
+pub fn setMusicPitch(stream: Music, pitch: f32) void {
+    rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
 }
 
-/// Set pan for a music stream by handle (no-op if out of range).
-pub fn setMusicPanHandle(handle: u64, pan: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
+/// Set a native music stream's stereo pan.
+pub fn setMusicPan(stream: Music, pan: f32) void {
+    rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
 }
 
-/// Set looping for a music stream by handle (no-op if out of range).
-pub fn setMusicLoopingHandle(handle: u64, looping: bool) void {
-    if (musicPtrFromHandle(handle)) |stream| stream.looping = looping;
+/// Enable or disable looping on a native music stream.
+pub fn setMusicLooping(stream: *Music, looping: bool) void {
+    stream.looping = looping;
 }
 
 /// Keyboard key enum for type-safe key handling.

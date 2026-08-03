@@ -7,6 +7,7 @@ const abi = @import("roc_platform_abi.zig");
 
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
+const host_resource = @import("host_resource.zig");
 const tmx_loader = @import("tmx_loader.zig");
 
 // Import backend
@@ -63,8 +64,43 @@ var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
 var headless_next_texture_handle: u64 = 1;
 var headless_next_font_handle: u64 = 1;
-var headless_next_sound_handle: u64 = 1;
-var headless_next_music_handle: u64 = 1;
+
+const InvalidResourceBox = extern struct {
+    refcount: isize = 0,
+    token: u64 = 0,
+};
+
+var invalid_resource_box: InvalidResourceBox = .{};
+
+const SoundResource = union(enum) {
+    headless,
+    native: raylib.Sound,
+};
+
+const MusicResource = union(enum) {
+    headless,
+    native: raylib.Music,
+};
+
+fn destroySound(resource: *SoundResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.unloadSound(sound),
+    }
+}
+
+fn destroyMusic(resource: *MusicResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.unloadMusic(music),
+    }
+}
+
+const SoundHeap = host_resource.HostResourceHeap(SoundResource, 128, destroySound);
+const MusicHeap = host_resource.HostResourceHeap(MusicResource, 16, destroyMusic);
+
+var sound_heap: SoundHeap = .{};
+var music_heap: MusicHeap = .{};
 
 /// Captured `envp` for the process. On Linux the host runs with `-nostdlib`, so
 /// glibc never populates an environ global; we capture it from the process stack
@@ -120,8 +156,22 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
     return abi.DefaultAllocators.rocAlloc(activeHost(), length, alignment);
 }
 
+fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
+    inline for (.{ &sound_heap, &music_heap }) |heap| {
+        switch (heap.routeDealloc(ptr)) {
+            .not_owned => {},
+            .deallocated => return,
+            .corrupt => {
+                std.debug.print("invalid host resource deallocation at 0x{x}\n", .{@intFromPtr(ptr)});
+                std.process.exit(1);
+            },
+        }
+    }
+    abi.DefaultAllocators.rocDealloc(host, ptr, alignment);
+}
+
 fn exportedRocDealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    abi.DefaultAllocators.rocDealloc(activeHost(), ptr, alignment);
+    nativeRocDealloc(activeHost(), ptr, alignment);
 }
 
 fn exportedRocRealloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
@@ -394,8 +444,6 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_random_state = 0x4d595df4;
     headless_next_texture_handle = 1;
     headless_next_font_handle = 1;
-    headless_next_sound_handle = 1;
-    headless_next_music_handle = 1;
 }
 
 fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawMeasure_text_rawRetRecord {
@@ -816,114 +864,190 @@ fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     return raylib.getRandomValue(min, max);
 }
 
-fn hostedAudioGenTone(args: abi.AudioGen_tone_rawArgs) callconv(.c) u64 {
-    if (active_headless) return nextFakeHandle(&headless_next_sound_handle);
-    return raylib.genTone(args.freq, args.ms);
+fn invalidResourceHandle() *u64 {
+    return &invalid_resource_box.token;
 }
 
-fn hostedAudioGenSound(args: abi.AudioGen_sound_rawArgs) callconv(.c) u64 {
-    if (active_headless) return nextFakeHandle(&headless_next_sound_handle);
-    return raylib.genSound(args);
+fn storeSound(resource: SoundResource) *u64 {
+    return sound_heap.insert(resource) orelse {
+        var rejected = resource;
+        destroySound(&rejected);
+        return invalidResourceHandle();
+    };
 }
 
-fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) u64 {
+fn storeMusic(resource: MusicResource) *u64 {
+    return music_heap.insert(resource) orelse {
+        var rejected = resource;
+        destroyMusic(&rejected);
+        return invalidResourceHandle();
+    };
+}
+
+fn hostedAudioGenTone(args: abi.AudioGen_tone_rawArgs) callconv(.c) *u64 {
+    if (active_headless) return storeSound(.headless);
+    const sound = raylib.genTone(args.freq, args.ms) orelse return invalidResourceHandle();
+    return storeSound(.{ .native = sound });
+}
+
+fn hostedAudioGenSound(args: abi.AudioGen_sound_rawArgs) callconv(.c) *u64 {
+    if (active_headless) return storeSound(.headless);
+    const sound = raylib.genSound(args) orelse return invalidResourceHandle();
+    return storeSound(.{ .native = sound });
+}
+
+fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *u64 {
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
     if (active_headless) {
-        if (!pathExists(path_slice)) return 0;
-        return nextFakeHandle(&headless_next_sound_handle);
+        if (!pathExists(path_slice)) return invalidResourceHandle();
+        return storeSound(.headless);
     }
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return invalidResourceHandle();
     defer path.deinit();
 
-    return raylib.loadSound(path.ptr);
+    const sound = raylib.loadSound(path.ptr) orelse return invalidResourceHandle();
+    return storeSound(.{ .native = sound });
 }
 
-fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) u64 {
+fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) *u64 {
     return hostedAudioLoadSound(activeHost(), path_arg);
 }
 
-fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) u64 {
+fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) *u64 {
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
     if (active_headless) {
-        if (!pathExists(path_slice)) return 0;
-        return nextFakeHandle(&headless_next_music_handle);
+        if (!pathExists(path_slice)) return invalidResourceHandle();
+        return storeMusic(.headless);
     }
 
     var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return 0;
+    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return invalidResourceHandle();
     defer path.deinit();
 
-    return raylib.loadMusic(path.ptr);
+    const music = raylib.loadMusic(path.ptr) orelse return invalidResourceHandle();
+    return storeMusic(.{ .native = music });
 }
 
-fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) u64 {
+fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) *u64 {
     return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
 fn hostedAudioPlay(handle: u64) callconv(.c) void {
-    if (active_headless) return;
-    raylib.playSoundHandle(handle);
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.playSound(sound),
+    }
 }
 
 fn hostedAudioSetVolume(handle: u64, volume: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setSoundVolumeHandle(handle, volume);
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.setSoundVolume(sound, volume),
+    }
 }
 
 fn hostedAudioSetPitch(handle: u64, pitch: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setSoundPitchHandle(handle, pitch);
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.setSoundPitch(sound, pitch),
+    }
 }
 
 fn hostedAudioSetPan(handle: u64, pan: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setSoundPanHandle(handle, pan);
+    const resource = sound_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |sound| raylib.setSoundPan(sound, pan),
+    }
 }
 
 fn hostedAudioPlayMusic(handle: u64) callconv(.c) void {
-    if (active_headless) return;
-    raylib.playMusicHandle(handle);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.playMusic(music),
+    }
 }
 
 fn hostedAudioStopMusic(handle: u64) callconv(.c) void {
-    if (active_headless) return;
-    raylib.stopMusicHandle(handle);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.stopMusic(music),
+    }
 }
 
 fn hostedAudioPauseMusic(handle: u64) callconv(.c) void {
-    if (active_headless) return;
-    raylib.pauseMusicHandle(handle);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.pauseMusic(music),
+    }
 }
 
 fn hostedAudioResumeMusic(handle: u64) callconv(.c) void {
-    if (active_headless) return;
-    raylib.resumeMusicHandle(handle);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.resumeMusic(music),
+    }
 }
 
 fn hostedAudioSetMusicVolume(handle: u64, volume: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setMusicVolumeHandle(handle, volume);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.setMusicVolume(music, volume),
+    }
 }
 
 fn hostedAudioSetMusicPitch(handle: u64, pitch: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setMusicPitchHandle(handle, pitch);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.setMusicPitch(music, pitch),
+    }
 }
 
 fn hostedAudioSetMusicPan(handle: u64, pan: f32) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setMusicPanHandle(handle, pan);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |music| raylib.setMusicPan(music, pan),
+    }
 }
 
 fn hostedAudioSetMusicLooping(handle: u64, looping: bool) callconv(.c) void {
-    if (active_headless) return;
-    raylib.setMusicLoopingHandle(handle, looping);
+    const resource = music_heap.get(handle) orelse return;
+    switch (resource.*) {
+        .headless => {},
+        .native => |*music| raylib.setMusicLooping(music, looping),
+    }
+}
+
+fn updateMusicResource(resource: *MusicResource) void {
+    switch (resource.*) {
+        .headless => {},
+        .native => |*music| raylib.updateMusicStream(music),
+    }
+}
+
+fn updateMusicStreams() void {
+    music_heap.forEach(updateMusicResource);
+}
+
+fn deinitAudioResources() void {
+    music_heap.deinitAll();
+    sound_heap.deinitAll();
 }
 
 comptime {
@@ -1151,6 +1275,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // Audio device must be ready before init! generates/plays any sounds.
     raylib.initAudioDevice();
     defer raylib.closeAudioDevice();
+    defer deinitAudioResources();
 
     const init_result = initModel(&input);
     if (init_result.isErr()) {
@@ -1169,7 +1294,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // raylib's own delta, forced to 0 on the first frame.
         const now_ns: u64 = @intFromFloat(raylib.getTime() * 1_000_000_000.0);
         const frame_time: f32 = if (frame_count == 0) 0 else raylib.getFrameTime();
-        raylib.updateMusicStreams();
+        updateMusicStreams();
 
         input.updateFromRaylib();
         const mouse_pos = raylib.getMousePosition();
@@ -1204,6 +1329,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
 fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
     resetHeadlessRuntime(app_config);
+    defer deinitAudioResources();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -1298,7 +1424,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var roc_host = RocHost{
         .env = @ptrCast(&roc_env),
         .roc_alloc = &abi.DefaultAllocators.rocAlloc,
-        .roc_dealloc = &abi.DefaultAllocators.rocDealloc,
+        .roc_dealloc = &nativeRocDealloc,
         .roc_realloc = &abi.DefaultAllocators.rocRealloc,
         .roc_dbg = &nativeDbg,
         .roc_expect_failed = &nativeExpectFailed,

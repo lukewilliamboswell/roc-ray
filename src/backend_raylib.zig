@@ -82,6 +82,32 @@ fn nextInputState(previous: u8, down: bool) u8 {
     return inputStateBits(down, down and !was_down, !down and was_down);
 }
 
+fn raylibGamepadButtonDown(_: void, gamepad: c_int, button: c_int) bool {
+    return rl.IsGamepadButtonDown(gamepad, button);
+}
+
+fn updateGamepadButtonStates(
+    states: *[ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8,
+    gamepad: usize,
+    available: bool,
+    context: anytype,
+    comptime is_button_down: anytype,
+) void {
+    const gamepad_id: c_int = @intCast(gamepad);
+
+    for (0..ffi.GAMEPAD_BUTTON_COUNT) |button| {
+        const flat_index = gamepadButtonIndex(gamepad, button);
+        if (available) {
+            states[flat_index] = nextInputState(
+                states[flat_index],
+                is_button_down(context, gamepad_id, @intCast(button)),
+            );
+        } else {
+            states[flat_index] = disconnectedInputState(states[flat_index]);
+        }
+    }
+}
+
 test "input state packs held and edge flags" {
     try std.testing.expectEqual(@as(u8, 0), inputStateBits(false, false, false));
     try std.testing.expectEqual(@as(u8, 7), inputStateBits(true, true, true));
@@ -106,6 +132,58 @@ test "input state derives press and release edges from held transitions" {
     const released = nextInputState(held, false);
     try std.testing.expectEqual(ffi.INPUT_RELEASED, released);
     try std.testing.expectEqual(@as(u8, 0), nextInputState(released, false));
+}
+
+test "gamepad buttons use one held query per connected button" {
+    const Query = struct {
+        count: usize = 0,
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+
+        fn isDown(self: *@This(), _: c_int, button: c_int) bool {
+            self.count += 1;
+            return self.down[@intCast(button)];
+        }
+    };
+
+    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var query = Query{};
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.GAMEPAD_BUTTON_COUNT, query.count);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.GAMEPAD_BUTTON_COUNT, query.count);
+}
+
+test "gamepad button edges survive disconnect and reconnect" {
+    const Query = struct {
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+
+        fn isDown(self: *@This(), _: c_int, button: c_int) bool {
+            return self.down[@intCast(button)];
+        }
+    };
+
+    const button = 3;
+    const index = gamepadButtonIndex(0, button);
+    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var query = Query{};
+
+    query.down[button] = true;
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, states[index]);
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD, states[index]);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, states[index]);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(@as(u8, 0), states[index]);
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, states[index]);
 }
 
 /// Update keyboard state from raylib (call once per frame)
@@ -140,20 +218,13 @@ pub fn updateGamepadState() void {
         const gamepad_id: c_int = @intCast(gamepad);
         const available = rl.IsGamepadAvailable(gamepad_id);
         gamepad_available[gamepad] = if (available) 1 else 0;
-
-        for (0..ffi.GAMEPAD_BUTTON_COUNT) |button| {
-            const flat_index = gamepadButtonIndex(gamepad, button);
-            if (available) {
-                const button_id: c_int = @intCast(button);
-                gamepad_button_state[flat_index] = inputStateBits(
-                    rl.IsGamepadButtonDown(gamepad_id, button_id),
-                    rl.IsGamepadButtonPressed(gamepad_id, button_id),
-                    rl.IsGamepadButtonReleased(gamepad_id, button_id),
-                );
-            } else {
-                gamepad_button_state[flat_index] = disconnectedInputState(gamepad_button_state[flat_index]);
-            }
-        }
+        updateGamepadButtonStates(
+            &gamepad_button_state,
+            gamepad,
+            available,
+            {},
+            raylibGamepadButtonDown,
+        );
 
         const native_axis_count: usize = if (available)
             @intCast(@max(rl.GetGamepadAxisCount(gamepad_id), 0))

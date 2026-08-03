@@ -1981,6 +1981,7 @@ const InputState = struct {
     gamepad_available: ffi.GamepadAvailability,
     gamepad_buttons: ffi.GamepadButtons,
     gamepad_axes: ffi.GamepadAxes,
+    text_input: ffi.TextInput,
 
     fn init(roc_host: *RocHost) InputState {
         return .{
@@ -1989,10 +1990,12 @@ const InputState = struct {
             .gamepad_available = ffi.GamepadAvailability.init(roc_host),
             .gamepad_buttons = ffi.GamepadButtons.init(roc_host),
             .gamepad_axes = ffi.GamepadAxes.init(roc_host),
+            .text_input = ffi.TextInput.init(roc_host),
         };
     }
 
     fn deinit(self: *InputState) void {
+        self.text_input.decref();
         self.gamepad_axes.decref();
         self.gamepad_buttons.decref();
         self.gamepad_available.decref();
@@ -2001,6 +2004,7 @@ const InputState = struct {
     }
 
     fn retainForRoc(self: *InputState) void {
+        self.text_input.incref();
         self.keys.incref();
         self.mouse_buttons.incref();
         self.gamepad_available.incref();
@@ -2019,6 +2023,7 @@ const InputState = struct {
         mouse_wheel: raylib.Vec2,
         text_input: []const u32,
     ) HostState {
+        self.text_input.update(text_input);
         self.retainForRoc();
         return .{
             .frame_count = frame_count,
@@ -2029,7 +2034,7 @@ const InputState = struct {
                 .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
             },
             .keys = self.keys.list,
-            .text_input = abi.RocListWith(u32, false).fromSlice(text_input, self.keys.roc_host),
+            .text_input = self.text_input.list,
             .gamepads = .{
                 .available = self.gamepad_available.list,
                 .buttons = self.gamepad_buttons.list,

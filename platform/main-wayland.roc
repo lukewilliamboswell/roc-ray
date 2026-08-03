@@ -75,6 +75,7 @@ platform ""
 		"roc_host_read_file_raw": Host.read_file_raw!,
 		"roc_host_set_screen_size": Host.set_screen_size_raw!,
 		"roc_host_set_target_fps": Host.set_target_fps!,
+		"roc_mouse_set_cursor_raw": Host.set_cursor_raw!,
 		"roc_tilemap_load_tmx_raw": Tilemap.load_tmx_raw!,
 		"roc_draw_begin_camera": Draw.begin_camera!,
 		"roc_draw_end_camera": Draw.end_camera!,

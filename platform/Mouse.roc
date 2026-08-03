@@ -10,6 +10,38 @@ Mouse := [].{
 
 	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
 
+	## Cursor shapes supported by raylib. `Default` restores the platform's
+	## standard cursor.
+	Cursor := [
+		Default,
+		Arrow,
+		IBeam,
+		Crosshair,
+		PointingHand,
+		ResizeEw,
+		ResizeNs,
+		ResizeNwse,
+		ResizeNesw,
+		ResizeAll,
+		NotAllowed,
+	]
+
+	cursor_code : Cursor -> U8
+	cursor_code = |cursor|
+		match cursor {
+			Default => 0
+			Arrow => 1
+			IBeam => 2
+			Crosshair => 3
+			PointingHand => 4
+			ResizeEw => 5
+			ResizeNs => 6
+			ResizeNwse => 7
+			ResizeNesw => 8
+			ResizeAll => 9
+			NotAllowed => 10
+		}
+
 	button_code : MouseButton -> U64
 	button_code = |button|
 		match button {
@@ -48,5 +80,7 @@ Mouse := [].{
 	expect button_code(Left) == 0
 	expect button_code(Back) == 6
 	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
+	expect cursor_code(Default) == 0
+	expect cursor_code(NotAllowed) == 10
 
 }

@@ -368,6 +368,17 @@ Draw := [].{
 		font : U64,
 	}
 
+	TextAlignedRaw : {
+		pos : Vector2,
+		text : Str,
+		size : F32,
+		spacing : F32,
+		color : Color,
+		font : U64,
+		align_x : F32,
+		align_y : F32,
+	}
+
 	MeasureText : {
 		text : Str,
 		size : F32,
@@ -432,6 +443,7 @@ Draw := [].{
 	rounded_rectangle_raw! : RoundedRectangleRaw => {}
 	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
 	text_raw! : TextRaw => {}
+	text_aligned_raw! : TextAlignedRaw => {}
 	draw_texture_raw! : TextureDrawRaw => {}
 	draw_texture_quad_raw! : TextureQuadRaw => {}
 	end_camera! : () => {}
@@ -504,6 +516,23 @@ Draw := [].{
 	origin_for = |pos, size, align| {
 		offset = Draw.align_offset(size, align)
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
+	}
+
+	align_factor : TextAlign -> Vector2
+	align_factor = |align| {
+		x = match align.horizontal {
+			Left => 0
+			Center => 0.5
+			Right => 1
+		}
+
+		y = match align.vertical {
+			Top => 0
+			Middle => 0.5
+			Bottom => 1
+		}
+
+		{ x, y }
 	}
 
 	center_in_rect : Rectangle, TextSize -> Vector2
@@ -640,20 +669,16 @@ Draw := [].{
 
 	text! : Text => {}
 	text! = |cfg| {
-		size = Draw.measure_text!({
-			text: cfg.text,
-			size: cfg.size,
-			spacing: cfg.spacing,
-			font: cfg.font,
-		})
-		pos = Draw.origin_for(cfg.pos, size, cfg.align)
-		Draw.text_raw!({
-			pos,
+		align = Draw.align_factor(cfg.align)
+		Draw.text_aligned_raw!({
+			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
 			font: Box.unbox(cfg.font),
+			align_x: align.x,
+			align_y: align.y,
 		})
 	}
 
@@ -707,3 +732,6 @@ Draw := [].{
 expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, Box.box({ handle: 1, width: 8, height: 4 }))).source == Math.rect(0, 0, 8, 4)
 expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), Box.box({ handle: 1, width: 8, height: 4 }))).dest == Math.rect(0, 0, 16, 8)
 expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, Box.box({ handle: 1, width: 8, height: 4 }))).origin == { x: 4, y: 2 }
+expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
+expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
+expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }

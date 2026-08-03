@@ -65,6 +65,7 @@ platform ""
 		"roc_draw_rectangle_raw": Draw.rectangle_raw!,
 		"roc_draw_rounded_rectangle_lines_raw": Draw.rounded_rectangle_lines_raw!,
 		"roc_draw_rounded_rectangle_raw": Draw.rounded_rectangle_raw!,
+		"roc_draw_text_aligned_raw": Draw.text_aligned_raw!,
 		"roc_draw_text_raw": Draw.text_raw!,
 		"roc_draw_triangle_lines_raw": Draw.triangle_lines_raw!,
 		"roc_draw_triangle_raw": Draw.triangle_raw!,

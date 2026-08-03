@@ -1797,6 +1797,68 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_56eaffd8928f0fea
+pub const __AnonStruct_56eaffd8928f0fea = if (@sizeOf(usize) == 4) extern struct {
+    @"font": u64,
+    @"text": RocStr,
+    @"align_x": f32,
+    @"align_y": f32,
+    @"pos": __AnonStruct_2818a50bdccefb1e,
+    @"size": f32,
+    @"spacing": f32,
+    @"color": Color,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.@"text".decref(roc_host);
+        value.@"pos".decref(roc_host);
+        value.@"color".decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.@"text".incref(amount);
+        value.@"pos".incref(amount);
+        value.@"color".incref(amount);
+    }
+} else extern struct {
+    @"font": u64,
+    @"text": RocStr,
+    @"align_x": f32,
+    @"align_y": f32,
+    @"pos": __AnonStruct_2818a50bdccefb1e,
+    @"size": f32,
+    @"spacing": f32,
+    @"color": Color,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.@"text".decref(roc_host);
+        value.@"pos".decref(roc_host);
+        value.@"color".decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.@"text".incref(amount);
+        value.@"pos".incref(amount);
+        value.@"color".incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_56eaffd8928f0fea) != 64) @compileError("__AnonStruct_56eaffd8928f0fea size mismatch");
+        if (@alignOf(__AnonStruct_56eaffd8928f0fea) != 8) @compileError("__AnonStruct_56eaffd8928f0fea alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_56eaffd8928f0fea) != 48) @compileError("__AnonStruct_56eaffd8928f0fea size mismatch");
+        if (@alignOf(__AnonStruct_56eaffd8928f0fea) != 8) @compileError("__AnonStruct_56eaffd8928f0fea alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_aa14b329c58d1290
 pub const __AnonStruct_aa14b329c58d1290 = if (@sizeOf(usize) == 4) extern struct {
     @"texture": u64,
@@ -3982,6 +4044,40 @@ comptime {
     }
 }
 
+/// Arguments for Draw.text_aligned_raw!
+/// Roc signature: { align_x : F32, align_y : F32, color : Color, font : U64, pos : { x : F32, y : F32 }, size : F32, spacing : F32, text : Str } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const DrawText_aligned_rawArgs = if (@sizeOf(usize) == 4) extern struct {
+    @"font": u64,
+    @"text": RocStr,
+    @"align_x": f32,
+    @"align_y": f32,
+    @"pos": __AnonStruct_2818a50bdccefb1e,
+    @"size": f32,
+    @"spacing": f32,
+    @"color": Color,
+} else extern struct {
+    @"font": u64,
+    @"text": RocStr,
+    @"align_x": f32,
+    @"align_y": f32,
+    @"pos": __AnonStruct_2818a50bdccefb1e,
+    @"size": f32,
+    @"spacing": f32,
+    @"color": Color,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawText_aligned_rawArgs) != 64) @compileError("DrawText_aligned_rawArgs size mismatch");
+        if (@alignOf(DrawText_aligned_rawArgs) != 8) @compileError("DrawText_aligned_rawArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawText_aligned_rawArgs) != 48) @compileError("DrawText_aligned_rawArgs size mismatch");
+        if (@alignOf(DrawText_aligned_rawArgs) != 8) @compileError("DrawText_aligned_rawArgs alignment mismatch");
+    }
+}
+
 /// Arguments for Draw.text_raw!
 /// Roc signature: { color : Color, font : U64, pos : { x : F32, y : F32 }, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -4174,6 +4270,8 @@ pub const DrawRectangle_lines_rawArg0 = __AnonStruct_1a288506a325237a;
 pub const DrawRectangle_rawArg0 = __AnonStruct_4e369207827dc800;
 pub const DrawRounded_rectangle_lines_rawArg0 = __AnonStruct_5880a8b432f47aaf;
 pub const DrawRounded_rectangle_rawArg0 = __AnonStruct_6b4b84b91d049b02;
+pub const DrawText_aligned_rawArg0 = __AnonStruct_56eaffd8928f0fea;
+pub const DrawText_aligned_rawArg0Pos = __AnonStruct_2818a50bdccefb1e;
 pub const DrawText_rawArg0 = __AnonStruct_bb646a3481ef0269;
 pub const DrawText_rawArg0Pos = __AnonStruct_2818a50bdccefb1e;
 pub const DrawTriangle_lines_rawArg0 = __AnonStruct_da1f4bfe39845144;
@@ -4456,6 +4554,10 @@ pub extern fn roc_draw_rounded_rectangle_lines_raw(arg0: DrawRounded_rectangle_l
 /// Hosted symbol for Draw.rounded_rectangle_raw!
 /// Roc signature: { color : Color, height : F32, radius : F32, segments : I32, width : F32, x : F32, y : F32 } => {}
 pub extern fn roc_draw_rounded_rectangle_raw(arg0: DrawRounded_rectangle_rawArgs) callconv(.c) void;
+
+/// Hosted symbol for Draw.text_aligned_raw!
+/// Roc signature: { align_x : F32, align_y : F32, color : Color, font : U64, pos : { x : F32, y : F32 }, size : F32, spacing : F32, text : Str } => {}
+pub extern fn roc_draw_text_aligned_raw(arg0: DrawText_aligned_rawArgs) callconv(.c) void;
 
 /// Hosted symbol for Draw.text_raw!
 /// Roc signature: { color : Color, font : U64, pos : { x : F32, y : F32 }, size : F32, spacing : F32, text : Str } => {}

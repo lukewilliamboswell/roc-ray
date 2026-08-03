@@ -724,19 +724,13 @@ fn exportedAssetsUpdateTextureRaw(args: abi.AssetsUpdate_texture_rawArgs) callco
 }
 
 fn hostedAssetsSetTextureFilterRaw(handle: u64, code: u8) callconv(.c) void {
-    const resource = texture_heap.get(handle) orelse return;
-    switch (resource.*) {
-        .headless => {},
-        .native => |texture| raylib.setTextureFilter(texture, code),
-    }
+    const texture = nativeTextureForToken(handle) orelse return;
+    raylib.setTextureFilter(texture, code);
 }
 
 fn hostedAssetsSetTextureWrapRaw(handle: u64, code: u8) callconv(.c) void {
-    const resource = texture_heap.get(handle) orelse return;
-    switch (resource.*) {
-        .headless => {},
-        .native => |texture| raylib.setTextureWrap(texture, code),
-    }
+    const texture = nativeTextureForToken(handle) orelse return;
+    raylib.setTextureWrap(texture, code);
 }
 
 fn storeRenderTexture(resource: RenderTextureResource, width: f32, height: f32) *abi.DrawLoad_render_texture_raw {

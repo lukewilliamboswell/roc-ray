@@ -17,6 +17,9 @@ init! = App.init(
 	|_host| Ok({ message: "Roc :heart: Raylib!" }),
 )
 
+pentagon_points : List(Draw.Vector2)
+pentagon_points = [{ x: 650, y: 120 }, { x: 720, y: 165 }, { x: 695, y: 235 }, { x: 605, y: 235 }, { x: 580, y: 165 }]
+
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
 
@@ -35,7 +38,7 @@ render! = |model, host| {
 			Draw.line!({ start: { x: 80, y: 250 }, end: { x: 260, y: 300 }, stroke: Draw.stroke(Color.blue, 8) })
 			Draw.rounded_rectangle!({ x: 260, y: 120, width: 150, height: 90, radius: 18, segments: 12, style: Draw.filled_and_outlined(Color.orange, Color.dark_gray, 3) })
 			Draw.triangle!({ a: { x: 500, y: 120 }, b: { x: 430, y: 220 }, c: { x: 570, y: 220 }, style: Draw.filled_and_outlined(Color.purple, Color.dark_gray, 3) })
-			Draw.polygon!({ points: [{ x: 650, y: 120 }, { x: 720, y: 165 }, { x: 695, y: 235 }, { x: 605, y: 235 }, { x: 580, y: 165 }], style: Draw.filled_and_outlined(Color.rgba(20, 190, 140, 180), Color.green, 4) })
+			Draw.polygon!({ points: pentagon_points, style: Draw.filled_and_outlined(Color.rgba(20, 190, 140, 180), Color.green, 4) })
 
 			# Gradient examples
 			Draw.rectangle_gradient_v!({ x: 80, y: 350, width: 130, height: 90, color_top: Color.blue, color_bottom: Color.red })

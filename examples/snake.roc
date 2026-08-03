@@ -163,10 +163,10 @@ spawn_food! = |snake| {
 
 requested_direction : Model, Host -> Direction
 requested_direction = |model, host| {
-	up = Keys.key_pressed(host.keys_pressed, KeyUp) or Keys.key_pressed(host.keys_pressed, KeyW)
-	down = Keys.key_pressed(host.keys_pressed, KeyDown) or Keys.key_pressed(host.keys_pressed, KeyS)
-	left = Keys.key_pressed(host.keys_pressed, KeyLeft) or Keys.key_pressed(host.keys_pressed, KeyA)
-	right = Keys.key_pressed(host.keys_pressed, KeyRight) or Keys.key_pressed(host.keys_pressed, KeyD)
+	up = Keys.key_pressed(host, KeyUp) or Keys.key_pressed(host, KeyW)
+	down = Keys.key_pressed(host, KeyDown) or Keys.key_pressed(host, KeyS)
+	left = Keys.key_pressed(host, KeyLeft) or Keys.key_pressed(host, KeyA)
+	right = Keys.key_pressed(host, KeyRight) or Keys.key_pressed(host, KeyD)
 
 	if up {
 		DirUp
@@ -245,14 +245,14 @@ advance_playing! = |model, host| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 
 	next = match model.state {
 		Playing => advance_playing!(model, host)
 		GameOver =>
-			if Keys.key_pressed(host.keys_pressed, KeySpace) {
+			if Keys.key_pressed(host, KeySpace) {
 				Audio.play!(model.start_sound)
 				new_game!(model)
 			} else {

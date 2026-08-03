@@ -1,4 +1,5 @@
 ## Host module - provides platform state and system effects
+import Keys
 
 Host := {
 	frame_count : U64,
@@ -14,30 +15,21 @@ Host := {
 	## `x + velocity * host.frame_time`.
 	frame_time : F32,
 
-	## Per-key held state: 1 while the key is down, 0 otherwise.
-	## Use with `Keys.key_down` / `Keys.key_up`.
+	## Logical drawing dimensions sampled for this frame. These coordinates
+	## match mouse input and raylib drawing units; they are not HiDPI framebuffer
+	## pixel dimensions.
+	screen : { width : I32, height : I32 },
+
+	## Packed per-key state, updated in place by the host. Each byte stores held,
+	## pressed-this-frame, and released-this-frame bits. Use the `Keys` helpers.
 	keys : List(U8),
-
-	## Per-key edge state: 1 only on the frame the key was first pressed
-	## (respecting key-repeat), 0 otherwise. Use with `Keys.key_pressed` for
-	## one-shot actions like menu/restart where holding shouldn't re-trigger.
-	keys_pressed : List(U8),
-
-	## Per-key release edge state: 1 only on the frame the key was released,
-	## 0 otherwise. Use with `Keys.key_released`.
-	keys_released : List(U8),
 	mouse : {
 
-		## Per-button held state for raylib mouse button codes 0-6.
-		## Prefer the `Mouse` module helpers for new code.
+		## Packed per-button state, updated in place by the host. Each byte stores
+		## held, pressed-this-frame, and released-this-frame bits.
 		buttons : List(U8),
 
-		## Per-button press edge state. Use with `Mouse.button_pressed`.
-		buttons_pressed : List(U8),
-
-		## Per-button release edge state. Use with `Mouse.button_released`.
-		buttons_released : List(U8),
-
+		## Convenient held-state aliases for the three primary buttons.
 		left : Bool,
 		middle : Bool,
 		right : Bool,
@@ -46,7 +38,22 @@ Host := {
 		y : F32,
 	},
 }.{
-	ScreenSize : { width : I32, height : I32 }
+
+	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
+	key_down : Host, Keys.KeyboardKey -> Bool
+	key_down = |host, key| Keys.key_down(host, key)
+
+	## Check whether a key is currently up. Receiver form: `host.key_up(KeyW)`.
+	key_up : Host, Keys.KeyboardKey -> Bool
+	key_up = |host, key| Keys.key_up(host, key)
+
+	## Check whether a key was pressed this frame.
+	key_pressed : Host, Keys.KeyboardKey -> Bool
+	key_pressed = |host, key| Keys.key_pressed(host, key)
+
+	## Check whether a key was released this frame.
+	key_released : Host, Keys.KeyboardKey -> Bool
+	key_released = |host, key| Keys.key_released(host, key)
 
 	ReadFileRawResult : {
 		ok : Bool,
@@ -57,9 +64,6 @@ Host := {
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : I32 => {}
-
-	## Get the current screen/window dimensions.
-	get_screen_size! : () => ScreenSize
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.

@@ -34,6 +34,12 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
+hud_subtitle : Str
+hud_subtitle = "world-space draw + screen-space HUD"
+
+hud_help : Str
+hud_help = "WASD move, wheel zoom, Q/E rotate, R reset"
+
 init! : App.Init(Model, [])
 init! = App.init(
 	{
@@ -49,10 +55,10 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 move_player : Math.Vec2, Host -> Math.Vec2
 move_player = |player, host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
-	up = Keys.key_down(host.keys, KeyUp) or Keys.key_down(host.keys, KeyW)
-	down = Keys.key_down(host.keys, KeyDown) or Keys.key_down(host.keys, KeyS)
+	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
+	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	up = Keys.key_down(host, KeyUp) or Keys.key_down(host, KeyW)
+	down = Keys.key_down(host, KeyDown) or Keys.key_down(host, KeyS)
 
 	speed = 360
 	dt = host.frame_time
@@ -64,14 +70,14 @@ move_player = |player, host| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 
 	player = move_player(model.player, host)
 	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(Keys.key_down(host.keys, KeyQ), Keys.key_down(host.keys, KeyE))
-	rotation = if Keys.key_pressed(host.keys_pressed, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+	rotation_dir = axis(Keys.key_down(host, KeyQ), Keys.key_down(host, KeyE))
+	rotation = if Keys.key_pressed(host, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
 
 	camera = Camera.with_rotation(
 		Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom }),
@@ -139,6 +145,6 @@ draw_hud! : Model => {}
 draw_hud! = |_model| {
 	Draw.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
 	Draw.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 62 }, text: "world-space draw + screen-space HUD", size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 84 }, text: "WASD move, wheel zoom, Q/E rotate, R reset", size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 30, y: 62 }, text: hud_subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	Draw.text!({ pos: { x: 30, y: 84 }, text: hud_help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 }

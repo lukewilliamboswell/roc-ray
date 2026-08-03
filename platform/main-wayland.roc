@@ -50,6 +50,7 @@ platform ""
 		"roc_draw_circle_raw": Draw.circle_raw!,
 		"roc_draw_clear": Draw.clear!,
 		"roc_draw_draw_texture_raw": Draw.draw_texture_raw!,
+		"roc_draw_draw_texture_quad_raw": Draw.draw_texture_quad_raw!,
 		"roc_draw_end_frame": Draw.end_frame!,
 		"roc_draw_end_scissor_raw": Draw.end_scissor_raw!,
 		"roc_draw_fps": Draw.fps!,
@@ -64,11 +65,11 @@ platform ""
 		"roc_draw_rectangle_raw": Draw.rectangle_raw!,
 		"roc_draw_rounded_rectangle_lines_raw": Draw.rounded_rectangle_lines_raw!,
 		"roc_draw_rounded_rectangle_raw": Draw.rounded_rectangle_raw!,
+		"roc_draw_text_aligned_raw": Draw.text_aligned_raw!,
 		"roc_draw_text_raw": Draw.text_raw!,
 		"roc_draw_triangle_lines_raw": Draw.triangle_lines_raw!,
 		"roc_draw_triangle_raw": Draw.triangle_raw!,
 		"roc_host_exit": Host.exit!,
-		"roc_host_get_screen_size": Host.get_screen_size!,
 		"roc_host_random_i32": Host.random_i32!,
 		"roc_host_read_env": Host.read_env_raw!,
 		"roc_host_read_file_raw": Host.read_file_raw!,
@@ -98,12 +99,6 @@ import Sprite
 import Tilemap
 import Physics
 
-## TODO: roc glue currently undercounts direct function fields in generated
-## records when they are mixed with non-function data. The generated
-## __AnonStruct57 and __AnonStruct70 size assertions are patched to include
-## the function pointers.
-## Re-run glue without that patch once the upstream glue bug is fixed.
-
 ## Internal type for host boundary.
 ## Keep this layout-compatible with the public Host record; the compiler may
 ## optimize the reshaping below into a direct pass-through.
@@ -111,19 +106,16 @@ HostStateFromHost : {
 	frame_count : U64,
 	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
 	frame_time : F32, ## seconds since previous frame (0 on first frame)
-	keys : List(U8), ## 349 bytes, held state, one per raylib key code 0-348
-	keys_pressed : List(U8), ## 349 bytes, pressed-this-frame (edge) state
-	keys_released : List(U8), ## 349 bytes, released-this-frame (edge) state
+	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
+	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	mouse : {
-		buttons : List(U8), ## 7 bytes, held state, one per raylib mouse button code 0-6
-		buttons_pressed : List(U8), ## 7 bytes, pressed-this-frame (edge) state
-		buttons_released : List(U8), ## 7 bytes, released-this-frame (edge) state
-		wheel : F32,
-		x : F32,
-		y : F32,
+		buttons : List(U8), ## 7 packed state bytes, one per raylib mouse button code 0-6
 		left : Bool,
 		middle : Bool,
 		right : Bool,
+		wheel : F32,
+		x : F32,
+		y : F32,
 	},
 }
 
@@ -136,9 +128,8 @@ init_for_host! = |host_state| {
 		frame_count: host_state.frame_count,
 		timestamp_nanos: host_state.timestamp_nanos,
 		frame_time: host_state.frame_time,
+		screen: host_state.screen,
 		keys: host_state.keys,
-		keys_pressed: host_state.keys_pressed,
-		keys_released: host_state.keys_released,
 		mouse: host_state.mouse,
 	}
 	match (program.init!.run!)(host) {
@@ -154,9 +145,8 @@ render_for_host! = |boxed_model, host_state| {
 		frame_count: host_state.frame_count,
 		timestamp_nanos: host_state.timestamp_nanos,
 		frame_time: host_state.frame_time,
+		screen: host_state.screen,
 		keys: host_state.keys,
-		keys_pressed: host_state.keys_pressed,
-		keys_released: host_state.keys_released,
 		mouse: host_state.mouse,
 	}
 	match (program.render!)(Box.unbox(boxed_model), host) {

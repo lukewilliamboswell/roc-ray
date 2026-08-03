@@ -319,7 +319,9 @@ Draw := [].{
 		color : Color,
 	}
 
-	Font : Box(U64)
+	## The built-in font is a zero-allocation tag. Loaded fonts carry a Box whose
+	## allocation lives in a typed host heap and whose final ARC release unloads it.
+	Font : [DefaultFont, LoadedFont(Box(U64))]
 
 	HAlign : [Left, Center, Right]
 
@@ -368,6 +370,17 @@ Draw := [].{
 		font : U64,
 	}
 
+	TextAlignedRaw : {
+		pos : Vector2,
+		text : Str,
+		size : F32,
+		spacing : F32,
+		color : Color,
+		font : U64,
+		align_x : F32,
+		align_y : F32,
+	}
+
 	MeasureText : {
 		text : Str,
 		size : F32,
@@ -400,6 +413,15 @@ Draw := [].{
 		tint : Color,
 	}
 
+	TextureQuadRaw : {
+		texture : U64,
+		top_left : Math.Vec2,
+		bottom_left : Math.Vec2,
+		bottom_right : Math.Vec2,
+		top_right : Math.Vec2,
+		tint : Color,
+	}
+
 	## Hosted effects - implemented by the host
 	begin_camera! : CameraMode => {}
 	begin_frame! : () => {}
@@ -412,7 +434,7 @@ Draw := [].{
 	end_scissor_raw! : () => {}
 	fps! : Fps => {}
 	line_raw! : LineRaw => {}
-	load_font_raw! : LoadFont => U64
+	load_font_raw! : LoadFont => Box(U64)
 	measure_text_raw! : MeasureTextRaw => TextSize
 	polygon_raw! : PolygonRaw => {}
 	polygon_lines_raw! : PolygonLinesRaw => {}
@@ -423,7 +445,9 @@ Draw := [].{
 	rounded_rectangle_raw! : RoundedRectangleRaw => {}
 	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
 	text_raw! : TextRaw => {}
+	text_aligned_raw! : TextAlignedRaw => {}
 	draw_texture_raw! : TextureDrawRaw => {}
+	draw_texture_quad_raw! : TextureQuadRaw => {}
 	end_camera! : () => {}
 	triangle_raw! : TriangleRaw => {}
 	triangle_lines_raw! : TriangleLinesRaw => {}
@@ -441,7 +465,14 @@ Draw := [].{
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
 	default_font : Font
-	default_font = Box.box(0)
+	default_font = DefaultFont
+
+	font_handle : Font -> U64
+	font_handle = |font|
+		match font {
+			DefaultFont => 0
+			LoadedFont(handle) => Box.unbox(handle)
+		}
 
 	default_spacing : F32
 	default_spacing = 1
@@ -494,6 +525,23 @@ Draw := [].{
 	origin_for = |pos, size, align| {
 		offset = Draw.align_offset(size, align)
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
+	}
+
+	align_factor : TextAlign -> Vector2
+	align_factor = |align| {
+		x = match align.horizontal {
+			Left => 0
+			Center => 0.5
+			Right => 1
+		}
+
+		y = match align.vertical {
+			Top => 0
+			Middle => 0.5
+			Bottom => 1
+		}
+
+		{ x, y }
 	}
 
 	center_in_rect : Rectangle, TextSize -> Vector2
@@ -578,23 +626,21 @@ Draw := [].{
 
 	measure_text! : MeasureText => TextSize
 	measure_text! = |cfg| {
-		Draw.measure_text_raw!(
-			{
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				font: Box.unbox(cfg.font),
-			},
-		)
+		Draw.measure_text_raw!({
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			font: Draw.font_handle(cfg.font),
+		})
 	}
 
 	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
 	load_font! = |cfg| {
 		handle = Draw.load_font_raw!(cfg)
-		if handle == 0 {
+		if Box.unbox(handle) == 0 {
 			Err(FontLoadFailed)
 		} else {
-			Ok(Box.box(handle))
+			Ok(LoadedFont(handle))
 		}
 	}
 
@@ -607,16 +653,14 @@ Draw := [].{
 	texture! : TextureDraw => {}
 	texture! = |cfg| {
 		texture_info = Assets.info(cfg.texture)
-		Draw.draw_texture_raw!(
-			{
-				texture: texture_info.handle,
-				source: cfg.source,
-				dest: cfg.dest,
-				origin: cfg.origin,
-				rotation: cfg.rotation,
-				tint: cfg.tint,
-			},
-		)
+		Draw.draw_texture_raw!({
+			texture: texture_info.handle,
+			source: cfg.source,
+			dest: cfg.dest,
+			origin: cfg.origin,
+			rotation: cfg.rotation,
+			tint: cfg.tint,
+		})
 	}
 
 	draw_texture! : TextureDraw => {}
@@ -634,68 +678,54 @@ Draw := [].{
 
 	text! : Text => {}
 	text! = |cfg| {
-		size = Draw.measure_text!(
-			{
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				font: cfg.font,
-			},
-		)
-		pos = Draw.origin_for(cfg.pos, size, cfg.align)
-		Draw.text_raw!(
-			{
-				pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: cfg.spacing,
-				color: cfg.color,
-				font: Box.unbox(cfg.font),
-			},
-		)
+		align = Draw.align_factor(cfg.align)
+		Draw.text_aligned_raw!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			color: cfg.color,
+			font: Draw.font_handle(cfg.font),
+			align_x: align.x,
+			align_y: align.y,
+		})
 	}
 
 	debug_text! : DebugText => {}
 	debug_text! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_top_left,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_top_left,
+		})
 
 	text_at! : SimpleText => {}
 	text_at! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_top_left,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_top_left,
+		})
 
 	text_centered! : SimpleText => {}
 	text_centered! = |cfg|
-		Draw.text!(
-			{
-				pos: cfg.pos,
-				text: cfg.text,
-				size: cfg.size,
-				spacing: Draw.default_spacing,
-				color: cfg.color,
-				font: Draw.default_font,
-				align: Draw.align_center,
-			},
-		)
+		Draw.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: Draw.default_spacing,
+			color: cfg.color,
+			font: Draw.default_font,
+			align: Draw.align_center,
+		})
 
 	## High-level draw function with callback pattern
 	## Ensures begin/end frame are properly paired
@@ -711,3 +741,6 @@ Draw := [].{
 expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, Box.box({ handle: 1, width: 8, height: 4 }))).source == Math.rect(0, 0, 8, 4)
 expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), Box.box({ handle: 1, width: 8, height: 4 }))).dest == Math.rect(0, 0, 16, 8)
 expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, Box.box({ handle: 1, width: 8, height: 4 }))).origin == { x: 4, y: 2 }
+expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
+expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
+expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }

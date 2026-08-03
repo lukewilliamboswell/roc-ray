@@ -140,7 +140,7 @@ render! = |model, host| {
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
 render_game_over! : Model, Host => Try(Model, [Exit(I64), ..])
 render_game_over! = |model, host| {
-	restart = Keys.key_pressed(host.keys_pressed, KeySpace)
+	restart = Keys.key_pressed(host, KeySpace)
 	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
 
 	Draw.draw!(
@@ -166,8 +166,8 @@ render_playing! = |model, host| {
 	serve_vy = random_serve_vy!()
 
 	# --- Left paddle: player input (W up, S down) ---
-	w_down = Keys.key_down(host.keys, KeyW)
-	s_down = Keys.key_down(host.keys, KeyS)
+	w_down = Keys.key_down(host, KeyW)
+	s_down = Keys.key_down(host, KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
 	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 

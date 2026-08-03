@@ -14,172 +14,129 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
-/// Persistent keyboard state - updated each frame.
-/// `key_state` is the held (down) state; `key_pressed_state` is the edge
-/// (pressed-this-frame) state; `key_released_state` is the release edge state.
-var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
-var key_pressed_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
-var key_released_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+/// Native sound value retained in the host resource heap.
+pub const Sound = rl.Sound;
 
-/// Persistent mouse button state - updated each frame.
+/// Native music stream retained in the host resource heap.
+pub const Music = rl.Music;
+
+/// Native font retained in the host resource heap.
+pub const Font = rl.Font;
+
+/// Native texture retained in the host resource heap.
+pub const Texture = rl.Texture2D;
+
+/// Persistent packed keyboard state - updated each frame.
+/// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
+var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
+
+/// Persistent packed mouse button state - updated each frame, with the same bits.
 var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
-var mouse_button_pressed_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
-var mouse_button_released_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+
+fn inputStateBits(down: bool, pressed: bool, released: bool) u8 {
+    return (if (down) ffi.INPUT_HELD else 0) |
+        (if (pressed) ffi.INPUT_PRESSED else 0) |
+        (if (released) ffi.INPUT_RELEASED else 0);
+}
+
+test "input state packs held and edge flags" {
+    try std.testing.expectEqual(@as(u8, 0), inputStateBits(false, false, false));
+    try std.testing.expectEqual(@as(u8, 7), inputStateBits(true, true, true));
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, inputStateBits(false, false, true));
+}
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
-        key_pressed_state[i] = if (rl.IsKeyPressed(key)) 1 else 0;
-        key_released_state[i] = if (rl.IsKeyReleased(key)) 1 else 0;
+        key_state[i] = inputStateBits(
+            rl.IsKeyDown(key),
+            rl.IsKeyPressed(key),
+            rl.IsKeyReleased(key),
+        );
     }
 }
 
-/// Get the current keyboard down-state array
+/// Get the current packed keyboard state array.
 pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
-}
-
-/// Get the keyboard pressed-this-frame (edge) state array
-pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
-    return &key_pressed_state;
-}
-
-/// Get the keyboard released-this-frame (edge) state array
-pub fn getKeyReleasedState() *const [ffi.KEY_COUNT]u8 {
-    return &key_released_state;
 }
 
 /// Update mouse button state from raylib (call once per frame)
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = if (rl.IsMouseButtonDown(button)) 1 else 0;
-        mouse_button_pressed_state[i] = if (rl.IsMouseButtonPressed(button)) 1 else 0;
-        mouse_button_released_state[i] = if (rl.IsMouseButtonReleased(button)) 1 else 0;
+        mouse_button_state[i] = inputStateBits(
+            rl.IsMouseButtonDown(button),
+            rl.IsMouseButtonPressed(button),
+            rl.IsMouseButtonReleased(button),
+        );
     }
 }
 
-/// Get the current mouse button down-state array
+/// Get the current packed mouse button state array.
 pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
 }
 
-/// Get the mouse button pressed-this-frame (edge) state array
-pub fn getMouseButtonPressedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
-    return &mouse_button_pressed_state;
+/// Return raylib's built-in font, which is not owned by a resource heap.
+pub fn defaultFont() Font {
+    return rl.GetFontDefault();
 }
 
-/// Get the mouse button released-this-frame (edge) state array
-pub fn getMouseButtonReleasedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
-    return &mouse_button_released_state;
-}
-
-const MAX_FONTS: usize = 32;
-const MAX_TEXTURES: usize = 128;
-
-/// Custom fonts loaded by the host. Handle 0 is always raylib's default font;
-/// loaded fonts use handles 1..MAX_FONTS.
-var fonts: [MAX_FONTS]rl.Font = undefined;
-var font_count: usize = 0;
-
-/// Textures loaded by the host. Handle 0 is invalid; loaded textures use
-/// handles 1..MAX_TEXTURES.
-var textures: [MAX_TEXTURES]rl.Texture2D = undefined;
-var texture_count: usize = 0;
-
-/// Host texture handle and dimensions returned to Roc after loading.
-pub const TextureInfo = struct {
-    handle: u64,
-    width: f32,
-    height: f32,
-};
-
-fn fontFromHandle(handle: u64) rl.Font {
-    if (handle == 0) return rl.GetFontDefault();
-    if (handle > @as(u64, @intCast(font_count))) return rl.GetFontDefault();
-
-    const index: usize = @intCast(handle - 1);
-    return fonts[index];
-}
-
-/// Load a custom font and return its handle, or null on failure.
-pub fn loadFont(path: [*:0]const u8, size: c_int) ?u64 {
-    if (font_count >= MAX_FONTS) return null;
-
+/// Load a custom font.
+pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
     const font_size = if (size < 1) 1 else size;
     const font = rl.LoadFontEx(path, font_size, null, 0);
     if (!rl.IsFontValid(font)) return null;
 
     rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
-
-    fonts[font_count] = font;
-    font_count += 1;
-    return @intCast(font_count);
+    return font;
 }
 
-/// Unload all custom fonts. The default font is owned by raylib.
-pub fn unloadFonts() void {
-    var i: usize = 0;
-    while (i < font_count) : (i += 1) {
-        rl.UnloadFont(fonts[i]);
-    }
-    font_count = 0;
+/// Unload a custom font when its host resource slot is released.
+pub fn unloadFont(font: Font) void {
+    rl.UnloadFont(font);
 }
 
-fn textureFromHandle(handle: u64) ?rl.Texture2D {
-    if (handle == 0) return null;
-    if (handle > @as(u64, @intCast(texture_count))) return null;
-
-    const index: usize = @intCast(handle - 1);
-    return textures[index];
-}
-
-/// Load a texture from disk and return its handle plus dimensions, or null on failure.
-pub fn loadTexture(path: [*:0]const u8) ?TextureInfo {
-    if (texture_count >= MAX_TEXTURES) return null;
-
+/// Load a texture from disk.
+pub fn loadTexture(path: [*:0]const u8) ?Texture {
     const texture = rl.LoadTexture(path);
     if (!rl.IsTextureValid(texture)) return null;
-
-    textures[texture_count] = texture;
-    texture_count += 1;
-
-    return .{
-        .handle = @intCast(texture_count),
-        .width = @floatFromInt(texture.width),
-        .height = @floatFromInt(texture.height),
-    };
+    return texture;
 }
 
-/// Unload all custom textures.
-pub fn unloadTextures() void {
-    var i: usize = 0;
-    while (i < texture_count) : (i += 1) {
-        rl.UnloadTexture(textures[i]);
-    }
-    texture_count = 0;
+/// Unload a texture when its host resource slot is released.
+pub fn unloadTexture(texture: Texture) void {
+    rl.UnloadTexture(texture);
+}
+
+/// Return a native texture's width in pixels.
+pub fn textureWidth(texture: Texture) f32 {
+    return @floatFromInt(texture.width);
+}
+
+/// Return a native texture's height in pixels.
+pub fn textureHeight(texture: Texture) f32 {
+    return @floatFromInt(texture.height);
 }
 
 /// Convert an ABI RGBA color record to raylib Color.
 pub fn colorToRl(color: anytype) rl.Color {
     return .{
-        // TODO: remove this channel remap once Roc glue emits opaque record
-        // fields in the same order Roc passes them across the host boundary.
-        .r = color.a,
-        .g = color.b,
-        .b = color.g,
-        .a = color.r,
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
     };
 }
 
-test "colorToRl maps Roc Color declaration order to raylib" {
+test "colorToRl preserves Roc RGBA channel order" {
     const black = colorToRl(abi.Color{
-        .a = 0,
-        .b = 0,
+        .r = 0,
         .g = 0,
-        .r = 255,
+        .b = 0,
+        .a = 255,
     });
     try std.testing.expectEqual(@as(u8, 0), black.r);
     try std.testing.expectEqual(@as(u8, 0), black.g);
@@ -187,10 +144,10 @@ test "colorToRl maps Roc Color declaration order to raylib" {
     try std.testing.expectEqual(@as(u8, 255), black.a);
 
     const red = colorToRl(abi.Color{
-        .a = 230,
-        .b = 41,
-        .g = 55,
-        .r = 255,
+        .r = 230,
+        .g = 41,
+        .b = 55,
+        .a = 255,
     });
     try std.testing.expectEqual(@as(u8, 230), red.r);
     try std.testing.expectEqual(@as(u8, 41), red.g);
@@ -360,13 +317,38 @@ pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void 
 }
 
 /// Draw text with a null-terminated string.
-pub fn drawTextZ(text: [*:0]const u8, font_handle: u64, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
-    rl.DrawTextEx(fontFromHandle(font_handle), text, pos, size, spacing, colorToRl(color));
+pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+    rl.DrawTextEx(font, text, pos, size, spacing, colorToRl(color));
+}
+
+/// Draw text anchored at a fractional point within its measured bounds.
+/// Top-left alignment ({ 0, 0 }) skips measurement entirely.
+pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color, alignment: rl.Vector2) void {
+    const origin = if (alignment.x == 0 and alignment.y == 0) pos else blk: {
+        const measured = rl.MeasureTextEx(font, text, size, spacing);
+        break :blk textOrigin(pos, measured, alignment);
+    };
+    rl.DrawTextEx(font, text, origin, size, spacing, colorToRl(color));
+}
+
+/// Resolve an anchor position to the top-left drawing origin for measured text.
+pub fn textOrigin(pos: rl.Vector2, measured: rl.Vector2, alignment: rl.Vector2) rl.Vector2 {
+    return .{
+        .x = pos.x - measured.x * alignment.x,
+        .y = pos.y - measured.y * alignment.y,
+    };
+}
+
+test "textOrigin applies fractional alignment" {
+    const pos = rl.Vector2{ .x = 100, .y = 80 };
+    const measured = rl.Vector2{ .x = 40, .y = 20 };
+    try std.testing.expectEqual(rl.Vector2{ .x = 100, .y = 80 }, textOrigin(pos, measured, .{ .x = 0, .y = 0 }));
+    try std.testing.expectEqual(rl.Vector2{ .x = 80, .y = 70 }, textOrigin(pos, measured, .{ .x = 0.5, .y = 0.5 }));
+    try std.testing.expectEqual(rl.Vector2{ .x = 60, .y = 60 }, textOrigin(pos, measured, .{ .x = 1, .y = 1 }));
 }
 
 /// Draw a texture region into a destination rectangle.
-pub fn drawTexture(args: anytype) void {
-    const texture = textureFromHandle(args.texture) orelse return;
+pub fn drawTexture(texture: Texture, args: anytype) void {
     rl.DrawTexturePro(
         texture,
         rectFromArgs(args.source),
@@ -377,9 +359,27 @@ pub fn drawTexture(args: anytype) void {
     );
 }
 
+/// Draw a full texture across an arbitrary screen-space quadrilateral.
+pub fn drawTextureQuad(texture: Texture, args: anytype) void {
+    const tint = colorToRl(args.tint);
+
+    rl.rlSetTexture(texture.id);
+    rl.rlBegin(rl.RL_QUADS);
+    rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    rl.rlTexCoord2f(0, 0);
+    rl.rlVertex2f(args.top_left.x, args.top_left.y);
+    rl.rlTexCoord2f(0, 1);
+    rl.rlVertex2f(args.bottom_left.x, args.bottom_left.y);
+    rl.rlTexCoord2f(1, 1);
+    rl.rlVertex2f(args.bottom_right.x, args.bottom_right.y);
+    rl.rlTexCoord2f(1, 0);
+    rl.rlVertex2f(args.top_right.x, args.top_right.y);
+    rl.rlEnd();
+}
+
 /// Measure text with a null-terminated string.
-pub fn measureTextZ(text: [*:0]const u8, font_handle: u64, size: f32, spacing: f32) rl.Vector2 {
-    return rl.MeasureTextEx(fontFromHandle(font_handle), text, size, spacing);
+pub fn measureTextZ(text: [*:0]const u8, font: Font, size: f32, spacing: f32) rl.Vector2 {
+    return rl.MeasureTextEx(font, text, size, spacing);
 }
 
 /// Draw a rectangle with vertical gradient from abi args.
@@ -420,7 +420,7 @@ pub fn drawCircleGradient(args: anytype) void {
 pub fn drawFps(args: anytype) void {
     var buf: [32:0]u8 = undefined;
     const text = std.fmt.bufPrintZ(&buf, "FPS: {d}", .{rl.GetFPS()}) catch return;
-    rl.DrawTextEx(fontFromHandle(0), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
+    rl.DrawTextEx(defaultFont(), text.ptr, toVector2(args.pos), args.size, 1, colorToRl(args.color));
 }
 
 /// Begin drawing frame.
@@ -484,8 +484,6 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint 
 
 /// Close the window.
 pub fn closeWindow() void {
-    unloadTextures();
-    unloadFonts();
     rl.CloseWindow();
 }
 
@@ -538,17 +536,6 @@ pub fn getRandomValue(min: c_int, max: c_int) c_int {
 
 const AUDIO_SAMPLE_RATE: u32 = 44100;
 const MAX_GEN_SOUND_MS: i32 = 5000;
-const MAX_SOUNDS: usize = 128;
-const MAX_MUSIC: usize = 16;
-
-/// Sounds, owned by the host and addressed by one-based handle.
-var sounds: [MAX_SOUNDS]rl.Sound = undefined;
-var sound_count: usize = 0;
-
-/// Music streams, owned by the host and addressed by one-based handle.
-var music_streams: [MAX_MUSIC]rl.Music = undefined;
-var music_count: usize = 0;
-
 /// Scratch buffer for procedural generation (mono 16-bit).
 var gen_sound_buf: [AUDIO_SAMPLE_RATE * @as(usize, @intCast(MAX_GEN_SOUND_MS)) / 1000]i16 = undefined;
 
@@ -557,17 +544,19 @@ pub fn initAudioDevice() void {
     rl.InitAudioDevice();
 }
 
-/// Unload audio resources and close the audio device.
+/// Close the audio device after all host resource heaps have been drained.
 pub fn closeAudioDevice() void {
-    var music_index: usize = 0;
-    while (music_index < music_count) : (music_index += 1) rl.UnloadMusicStream(music_streams[music_index]);
-    music_count = 0;
-
-    var sound_index: usize = 0;
-    while (sound_index < sound_count) : (sound_index += 1) rl.UnloadSound(sounds[sound_index]);
-    sound_count = 0;
-
     rl.CloseAudioDevice();
+}
+
+/// Unload a native sound when its host resource slot is released.
+pub fn unloadSound(sound: Sound) void {
+    rl.UnloadSound(sound);
+}
+
+/// Unload a native music stream when its host resource slot is released.
+pub fn unloadMusic(music: Music) void {
+    rl.UnloadMusicStream(music);
 }
 
 fn clampF32(value: f32, min: f32, max: f32) f32 {
@@ -576,34 +565,6 @@ fn clampF32(value: f32, min: f32, max: f32) f32 {
 
 fn clampI32(value: i32, min: i32, max: i32) i32 {
     return if (value < min) min else if (value > max) max else value;
-}
-
-fn handleIndex(handle: u64, count: usize) ?usize {
-    if (handle == 0) return null;
-    if (handle > @as(u64, @intCast(count))) return null;
-    return @intCast(handle - 1);
-}
-
-fn storeSound(sound: rl.Sound) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
-    sounds[sound_count] = sound;
-    sound_count += 1;
-    return @intCast(sound_count);
-}
-
-fn soundFromHandle(handle: u64) ?rl.Sound {
-    const index = handleIndex(handle, sound_count) orelse return null;
-    return sounds[index];
-}
-
-fn musicFromHandle(handle: u64) ?rl.Music {
-    const index = handleIndex(handle, music_count) orelse return null;
-    return music_streams[index];
-}
-
-fn musicPtrFromHandle(handle: u64) ?*rl.Music {
-    const index = handleIndex(handle, music_count) orelse return null;
-    return &music_streams[index];
 }
 
 fn msToFrames(ms: i32) usize {
@@ -651,21 +612,18 @@ fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
     };
 }
 
-/// Load a sound effect from disk and return a one-based handle, or 0 on failure.
-pub fn loadSound(path: [*:0]const u8) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
+/// Load a sound effect from disk.
+pub fn loadSound(path: [*:0]const u8) ?Sound {
     const sound = rl.LoadSound(path);
-    if (!rl.IsSoundValid(sound)) return 0;
-    return storeSound(sound);
+    if (!rl.IsSoundValid(sound)) return null;
+    return sound;
 }
 
-/// Generate a short procedural sound, store it, and return a one-based handle.
-pub fn genSound(args: anytype) u64 {
-    if (sound_count >= MAX_SOUNDS) return 0;
-
+/// Generate a short procedural sound.
+pub fn genSound(args: anytype) ?Sound {
     const dur_ms = clampI32(args.ms, 1, MAX_GEN_SOUND_MS);
     const frames = msToFrames(dur_ms);
-    if (frames == 0 or frames > gen_sound_buf.len) return 0;
+    if (frames == 0 or frames > gen_sound_buf.len) return null;
 
     const attack = msToFrames(args.attack_ms);
     const decay = msToFrames(args.decay_ms);
@@ -698,12 +656,12 @@ pub fn genSound(args: anytype) u64 {
     };
 
     const sound = rl.LoadSoundFromWave(wave);
-    if (!rl.IsSoundValid(sound)) return 0;
-    return storeSound(sound);
+    if (!rl.IsSoundValid(sound)) return null;
+    return sound;
 }
 
-/// Generate a short sine tone, store it, and return a one-based handle.
-pub fn genTone(freq: f32, ms: i32) u64 {
+/// Generate a short sine tone.
+pub fn genTone(freq: f32, ms: i32) ?Sound {
     return genSound(.{
         .waveform = @as(u8, 0),
         .freq_start = freq,
@@ -717,83 +675,77 @@ pub fn genTone(freq: f32, ms: i32) u64 {
     });
 }
 
-/// Play a previously loaded/generated sound by handle (no-op if out of range).
-pub fn playSoundHandle(handle: u64) void {
-    if (soundFromHandle(handle)) |sound| rl.PlaySound(sound);
+/// Play a native sound.
+pub fn playSound(sound: Sound) void {
+    rl.PlaySound(sound);
 }
 
-/// Set volume for a sound by handle (no-op if out of range).
-pub fn setSoundVolumeHandle(handle: u64, volume: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
+/// Set a native sound's volume.
+pub fn setSoundVolume(sound: Sound, volume: f32) void {
+    rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
 }
 
-/// Set pitch for a sound by handle (no-op if out of range).
-pub fn setSoundPitchHandle(handle: u64, pitch: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
+/// Set a native sound's pitch.
+pub fn setSoundPitch(sound: Sound, pitch: f32) void {
+    rl.SetSoundPitch(sound, clampF32(pitch, 0.05, 8.0));
 }
 
-/// Set pan for a sound by handle (no-op if out of range).
-pub fn setSoundPanHandle(handle: u64, pan: f32) void {
-    if (soundFromHandle(handle)) |sound| rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
+/// Set a native sound's stereo pan.
+pub fn setSoundPan(sound: Sound, pan: f32) void {
+    rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
 }
 
-/// Load a music stream from disk and return a one-based handle, or 0 on failure.
-pub fn loadMusic(path: [*:0]const u8) u64 {
-    if (music_count >= MAX_MUSIC) return 0;
-
+/// Load a music stream from disk.
+pub fn loadMusic(path: [*:0]const u8) ?Music {
     var stream = rl.LoadMusicStream(path);
-    if (!rl.IsMusicValid(stream)) return 0;
+    if (!rl.IsMusicValid(stream)) return null;
     stream.looping = true;
-
-    music_streams[music_count] = stream;
-    music_count += 1;
-    return @intCast(music_count);
+    return stream;
 }
 
-/// Update all loaded music streams. Call once per frame.
-pub fn updateMusicStreams() void {
-    var i: usize = 0;
-    while (i < music_count) : (i += 1) rl.UpdateMusicStream(music_streams[i]);
+/// Advance one native music stream.
+pub fn updateMusicStream(stream: *Music) void {
+    rl.UpdateMusicStream(stream.*);
 }
 
-/// Play a music stream by handle (no-op if out of range).
-pub fn playMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.PlayMusicStream(stream);
+/// Start a native music stream.
+pub fn playMusic(stream: Music) void {
+    rl.PlayMusicStream(stream);
 }
 
-/// Stop a music stream by handle (no-op if out of range).
-pub fn stopMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.StopMusicStream(stream);
+/// Stop a native music stream.
+pub fn stopMusic(stream: Music) void {
+    rl.StopMusicStream(stream);
 }
 
-/// Pause a music stream by handle (no-op if out of range).
-pub fn pauseMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.PauseMusicStream(stream);
+/// Pause a native music stream.
+pub fn pauseMusic(stream: Music) void {
+    rl.PauseMusicStream(stream);
 }
 
-/// Resume a music stream by handle (no-op if out of range).
-pub fn resumeMusicHandle(handle: u64) void {
-    if (musicFromHandle(handle)) |stream| rl.ResumeMusicStream(stream);
+/// Resume a native music stream.
+pub fn resumeMusic(stream: Music) void {
+    rl.ResumeMusicStream(stream);
 }
 
-/// Set volume for a music stream by handle (no-op if out of range).
-pub fn setMusicVolumeHandle(handle: u64, volume: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
+/// Set a native music stream's volume.
+pub fn setMusicVolume(stream: Music, volume: f32) void {
+    rl.SetMusicVolume(stream, clampF32(volume, 0.0, 1.0));
 }
 
-/// Set pitch for a music stream by handle (no-op if out of range).
-pub fn setMusicPitchHandle(handle: u64, pitch: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
+/// Set a native music stream's pitch.
+pub fn setMusicPitch(stream: Music, pitch: f32) void {
+    rl.SetMusicPitch(stream, clampF32(pitch, 0.05, 8.0));
 }
 
-/// Set pan for a music stream by handle (no-op if out of range).
-pub fn setMusicPanHandle(handle: u64, pan: f32) void {
-    if (musicFromHandle(handle)) |stream| rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
+/// Set a native music stream's stereo pan.
+pub fn setMusicPan(stream: Music, pan: f32) void {
+    rl.SetMusicPan(stream, clampF32(pan, -1.0, 1.0));
 }
 
-/// Set looping for a music stream by handle (no-op if out of range).
-pub fn setMusicLoopingHandle(handle: u64, looping: bool) void {
-    if (musicPtrFromHandle(handle)) |stream| stream.looping = looping;
+/// Enable or disable looping on a native music stream.
+pub fn setMusicLooping(stream: *Music, looping: bool) void {
+    stream.looping = looping;
 }
 
 /// Keyboard key enum for type-safe key handling.

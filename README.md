@@ -26,7 +26,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)
-- Asset loading for host-owned textures, with source/destination rectangles, rotation, origin, scale, and tint
+- Asset loading for host-owned textures, with source/destination rectangles, arbitrary quadrilateral projection, rotation, origin, scale, and tint
 - Pure 2D camera values with scoped world-space drawing
 - Sprite helpers for spritesheet frames and simple frame-rate-based animation
 - 2D math and collision helpers (Vec2, Rect, Circle, clamp, lerp, normalize, contains, overlaps)
@@ -36,6 +36,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
 - Mouse and keyboard input handling
+- Per-frame logical screen dimensions for resize-aware rendering and UI layout
 - Loaded sound effects and generated procedural sounds with volume, pitch, and pan
 - Streamed music playback with host-managed per-frame updates
 - Native rendering via raylib (macOS, Linux, Windows)

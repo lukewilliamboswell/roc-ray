@@ -63,6 +63,13 @@ pub const KEY_COUNT: usize = 349;
 /// Number of mouse buttons to track (raylib mouse button codes 0-6)
 pub const MOUSE_BUTTON_COUNT: usize = 7;
 
+/// Held bit used by packed keyboard and mouse button state bytes.
+pub const INPUT_HELD: u8 = 1;
+/// Pressed-this-frame bit used by packed input state bytes.
+pub const INPUT_PRESSED: u8 = 2;
+/// Released-this-frame bit used by packed input state bytes.
+pub const INPUT_RELEASED: u8 = 4;
+
 /// Fixed-size byte state list manager for FFI with Roc.
 /// Handles RocList allocation, refcounting, and data copying internally.
 pub fn StateList(comptime COUNT: usize) type {
@@ -88,6 +95,13 @@ pub fn StateList(comptime COUNT: usize) type {
             }
         }
 
+        /// Check a packed state flag without crossing the host boundary again.
+        pub fn hasFlag(self: *const Self, index: usize, flag: u8) bool {
+            if (index >= COUNT) return false;
+            const elements = self.list.elements_ptr orelse return false;
+            return elements[index] & flag != 0;
+        }
+
         /// Increment refcount before passing to Roc (prevents Roc from freeing our list).
         pub fn incref(self: *Self) void {
             self.list.incref(1);
@@ -108,4 +122,4 @@ pub const MouseButtons = StateList(MOUSE_BUTTON_COUNT);
 
 /// Flat state for init_for_host!/render_for_host!.
 /// This is not the public nested `Host` record exposed to Roc apps.
-pub const HostState = abi.__AnonStruct106;
+pub const HostState = abi.Init_for_hostArg0;

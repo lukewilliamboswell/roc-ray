@@ -542,16 +542,14 @@ draw_gid! = |map, gid, cell| {
 						width: tileset.tile_width,
 						height: tileset.tile_height,
 					}
-					Draw.texture!(
-						{
-							texture,
-							source,
-							dest: Tilemap.world_rect_for_cell(map, cell),
-							origin: Math.zero,
-							rotation: 0,
-							tint: Color.white,
-						},
-					)
+					Draw.texture!({
+						texture,
+						source,
+						dest: Tilemap.world_rect_for_cell(map, cell),
+						origin: Math.zero,
+						rotation: 0,
+						tint: Color.white,
+					})
 				}
 				Err(_) => {}
 			}

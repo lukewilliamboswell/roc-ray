@@ -17,28 +17,31 @@ init! = App.init(
 	|_host| Ok({}),
 )
 
+title : Str
+title = "Keyboard + mouse input"
+
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	w_down = Keys.key_down(host.keys, KeyW)
-	a_down = Keys.key_down(host.keys, KeyA)
-	s_down = Keys.key_down(host.keys, KeyS)
-	d_down = Keys.key_down(host.keys, KeyD)
-	up_down = Keys.key_down(host.keys, KeyUp)
-	left_down = Keys.key_down(host.keys, KeyLeft)
-	down_down = Keys.key_down(host.keys, KeyDown)
-	right_down = Keys.key_down(host.keys, KeyRight)
-	one_down = Keys.key_down(host.keys, Key1)
-	shift_down = Keys.key_down(host.keys, KeyLeftShift) or Keys.key_down(host.keys, KeyRightShift)
-	ctrl_down = Keys.key_down(host.keys, KeyLeftControl) or Keys.key_down(host.keys, KeyRightControl)
-	escape_pressed = Keys.key_pressed(host.keys_pressed, KeyEscape)
-	space_released = Keys.key_released(host.keys_released, KeySpace)
+	w_down = host.key_down(KeyW)
+	a_down = host.key_down(KeyA)
+	s_down = host.key_down(KeyS)
+	d_down = host.key_down(KeyD)
+	up_down = host.key_down(KeyUp)
+	left_down = host.key_down(KeyLeft)
+	down_down = host.key_down(KeyDown)
+	right_down = host.key_down(KeyRight)
+	one_down = host.key_down(Key1)
+	shift_down = host.key_down(KeyLeftShift) or host.key_down(KeyRightShift)
+	ctrl_down = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
+	escape_pressed = host.key_pressed(KeyEscape)
+	space_released = host.key_released(KeySpace)
 	mouse_left_pressed = Mouse.button_pressed(host.mouse, Left)
 	mouse_left_released = Mouse.button_released(host.mouse, Left)
 
 	Draw.draw!(
 		Color.ray_white,
 		|| {
-			Draw.text!({ pos: { x: 10, y: 50 }, text: "Keyboard and mouse input", size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
 
 			w_color = if w_down Color.green else Color.light_gray
 			a_color = if a_down Color.green else Color.light_gray

@@ -2,9 +2,9 @@
 ##
 ## `Sound` and `Music` are refcounted `Box` handles to host-owned audio
 ## resources. Load or generate them once (e.g. in init!), keep the handles in
-## your model, then play them on game events. Box memory is released by Roc's
-## refcounting when the last copy is dropped. The underlying raylib resources
-## are freed by the host at shutdown.
+## your model, then play them on game events. The Box allocation is a slot in a
+## typed host heap; final Roc ARC release unloads the native resource and makes
+## that slot reusable.
 Audio := [].{
 
 	## A handle to a host-owned sound.
@@ -39,12 +39,12 @@ Audio := [].{
 		volume : F32,
 	}
 
-	## Raw hosted effects: the host deals only in scalar handles. Public helpers
-	## wrap successful handles in Box values.
-	gen_tone_raw! : { freq : F32, ms : I32 } => U64
-	gen_sound_raw! : GenSoundRaw => U64
-	load_sound_raw! : Str => U64
-	load_music_raw! : Str => U64
+	## Creation returns host-backed ARC handles. Hot-path operations take only
+	## their scalar lifecycle token, avoiding retain/release work at the boundary.
+	gen_tone_raw! : { freq : F32, ms : I32 } => Sound
+	gen_sound_raw! : GenSoundRaw => Sound
+	load_sound_raw! : Str => Sound
+	load_music_raw! : Str => Music
 	play_raw! : U64 => {}
 	set_volume_raw! : U64, F32 => {}
 	set_pitch_raw! : U64, F32 => {}
@@ -81,20 +81,20 @@ Audio := [].{
 		volume: cfg.volume,
 	}
 
-	sound_from_handle : U64 -> Try(Sound, [SoundLoadFailed, ..])
+	sound_from_handle : Sound -> Try(Sound, [SoundLoadFailed, ..])
 	sound_from_handle = |handle|
-		if handle == 0 {
+		if Box.unbox(handle) == 0 {
 			Err(SoundLoadFailed)
 		} else {
-			Ok(Box.box(handle))
+			Ok(handle)
 		}
 
-	music_from_handle : U64 -> Try(Music, [MusicLoadFailed, ..])
+	music_from_handle : Music -> Try(Music, [MusicLoadFailed, ..])
 	music_from_handle = |handle|
-		if handle == 0 {
+		if Box.unbox(handle) == 0 {
 			Err(MusicLoadFailed)
 		} else {
-			Ok(Box.box(handle))
+			Ok(handle)
 		}
 
 	## Load a short sound effect from disk.
@@ -109,7 +109,7 @@ Audio := [].{
 	## Generate a short procedural sound and return a handle to it.
 	## Call this sparingly - e.g. once at startup - and reuse the handle.
 	gen_sound! : GenSound => Sound
-	gen_sound! = |cfg| Box.box(Audio.gen_sound_raw!(Audio.raw_config(cfg)))
+	gen_sound! = |cfg| Audio.gen_sound_raw!(Audio.raw_config(cfg))
 
 	## Generate a short sine tone and return a handle to it.
 	## `freq` is the pitch in Hz; `ms` is the duration in milliseconds
@@ -117,19 +117,17 @@ Audio := [].{
 	## once at startup - and reuse the handle, rather than per frame.
 	gen_tone! : { freq : F32, ms : I32 } => Sound
 	gen_tone! = |cfg|
-		Audio.gen_sound!(
-			{
-				waveform: Sine,
-				freq_start: cfg.freq,
-				freq_end: cfg.freq,
-				ms: cfg.ms,
-				attack_ms: 5,
-				decay_ms: 12,
-				sustain: 0.8,
-				release_ms: 8,
-				volume: 0.55,
-			},
-		)
+		Audio.gen_sound!({
+			waveform: Sine,
+			freq_start: cfg.freq,
+			freq_end: cfg.freq,
+			ms: cfg.ms,
+			attack_ms: 5,
+			decay_ms: 12,
+			sustain: 0.8,
+			release_ms: 8,
+			volume: 0.55,
+		})
 
 	## Play a previously generated sound.
 	play! : Sound => {}

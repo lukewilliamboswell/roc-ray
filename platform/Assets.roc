@@ -34,44 +34,42 @@ Assets := [].{
 
 	## Load an image file into GPU texture memory. The returned value owns the
 	## resource and may be safely shared between sprites, uniforms, and models.
-	load_texture! : Str => Try(Texture, [TextureLoadFailed, ..])
+	load_texture! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 	load_texture! = |path| {
-		texture = AssetsHost.Texture.from_resource(AssetsHost.load_texture!(path))
-		if AssetsHost.Texture.handle(texture) == 0 {
-			Err(TextureLoadFailed)
-		} else {
-			Ok(texture)
-		}
+		result = AssetsHost.load_texture!(path)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
 	}
 
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
-	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ..])
+	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
 	generate_color_texture! = |cfg| {
-		texture = AssetsHost.Texture.from_resource(AssetsHost.generate_color_texture!(cfg))
-		if AssetsHost.Texture.handle(texture) == 0 Err(TextureGenerationFailed) else Ok(texture)
+		result = AssetsHost.generate_color_texture!(cfg)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
 	}
 
 	## Generate a checkerboard GPU texture without retaining a CPU image.
-	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ..])
+	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
 	generate_checked_texture! = |cfg| {
-		texture = AssetsHost.Texture.from_resource(AssetsHost.generate_checked_texture!(cfg))
-		if AssetsHost.Texture.handle(texture) == 0 Err(TextureGenerationFailed) else Ok(texture)
+		result = AssetsHost.generate_checked_texture!(cfg)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
 	}
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch])
-	update_texture! = |texture, pixels|
-		if AssetsHost.update_texture!({ texture: AssetsHost.Texture.handle(texture), pixels }) Ok({}) else Err(PixelCountMismatch)
+	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch, TextureNotMutable])
+	update_texture! = |texture, pixels| {
+		err = AssetsHost.update_texture!({ texture, pixels })
+		if err == 0 Ok({}) else if err == 2 Err(TextureNotMutable) else Err(PixelCountMismatch)
+	}
 
 	## Change how this texture is sampled when scaled.
 	set_filter! : Texture, TextureFilter => {}
-	set_filter! = |texture, filter| AssetsHost.set_texture_filter!(AssetsHost.Texture.handle(texture), filter_code(filter))
+	set_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
 	## Change how texture coordinates outside the normal range are wrapped.
 	set_wrap! : Texture, TextureWrap => {}
-	set_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(AssetsHost.Texture.handle(texture), wrap_code(wrap))
+	set_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
 	## Width in pixels.
 	width : Texture -> F32

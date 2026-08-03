@@ -105,7 +105,7 @@ play_if! = |cond, sound| if cond sound.play!() else {}
 
 program = { init!, render! }
 
-init! : App.Init(Model, [SoundGenerationFailed])
+init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	{
 		..App.default,

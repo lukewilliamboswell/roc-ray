@@ -260,7 +260,7 @@ Draw := [].{
 
 	## The built-in font is allocation-free. A loaded font is an opaque host-owned
 	## resource whose final reference unloads its texture automatically.
-	Font : [DefaultFont, LoadedFont(DrawHost.Font)]
+	Font : DrawHost.Font
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -354,12 +354,9 @@ Draw := [].{
 		fragment_source : Str,
 	}
 
-	## A cached location retains its shader. Resolve it once during initialization,
-	## then setters cross the host boundary with only scalar tokens and values.
-	Uniform : {
-		shader : Shader,
-		location : I32,
-	}
+	## A cached location retains its shader. Resolve it once during initialization;
+	## setters transfer this owning value so the shader stays live for the call.
+	Uniform : DrawHost.Uniform
 
 	## Three-component shader uniform value.
 	Vec3 : { x : F32, y : F32, z : F32 }
@@ -623,19 +620,15 @@ Draw := [].{
 			text: cfg.text,
 			size: cfg.size,
 			spacing: cfg.spacing,
-			font: font_handle(cfg.font),
+			font: cfg.font,
 		})
 	}
 
 	## Load a host-owned font from disk at the requested base size.
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
+	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	load_font! = |cfg| {
-		handle = DrawHost.load_font!(cfg)
-		if Box.unbox(handle) == 0 {
-			Err(FontLoadFailed)
-		} else {
-			Ok(LoadedFont(DrawHost.Font.from_resource(handle)))
-		}
+		result = DrawHost.load_font!(cfg)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
@@ -650,7 +643,7 @@ Draw := [].{
 	texture! : TextureDraw => {}
 	texture! = |cfg| {
 		DrawHost.draw_texture!({
-			texture: AssetsHost.Texture.handle(cfg.texture),
+			texture: cfg.texture,
 			source: cfg.source,
 			dest: cfg.dest,
 			origin: cfg.origin,
@@ -665,14 +658,10 @@ Draw := [].{
 
 	## Allocate an offscreen framebuffer. Do this during initialization, not per
 	## frame; creation allocates GPU resources and one fixed host-heap slot.
-	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ..])
+	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
 	load_render_texture! = |size| {
-		texture = AssetsHost.Texture.from_resource(DrawHost.load_render_texture!(size))
-		if AssetsHost.Texture.handle(texture) == 0 {
-			Err(RenderTextureLoadFailed)
-		} else {
-			Ok(DrawHost.RenderTexture.from_texture(texture))
-		}
+		result = DrawHost.load_render_texture!(size)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(result.target)
 	}
 
 	## View the color attachment as a normal Texture without allocating or copying.
@@ -690,58 +679,50 @@ Draw := [].{
 
 	## Load shader stages from files. Pass an empty string to use raylib's default
 	## vertex or fragment stage.
-	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ..])
+	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 	load_shader! = |cfg| {
-		resource = DrawHost.load_shader!(cfg)
-		if Box.unbox(resource) == 0 {
-			Err(ShaderLoadFailed)
-		} else {
-			Ok(DrawHost.Shader.from_resource(resource))
-		}
+		result = DrawHost.load_shader!(cfg)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(result.shader)
 	}
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.
-	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ..])
+	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 	load_shader_source! = |cfg| {
-		resource = DrawHost.load_shader_source!(cfg)
-		if Box.unbox(resource) == 0 {
-			Err(ShaderLoadFailed)
-		} else {
-			Ok(DrawHost.Shader.from_resource(resource))
-		}
+		result = DrawHost.load_shader_source!(cfg)
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(result.shader)
 	}
 
 	## Resolve a uniform name once and retain the shader beside its location.
 	uniform! : Shader, Str => Try(Uniform, [UniformNotFound, ..])
 	uniform! = |shader, name| {
-		location = DrawHost.shader_location!({ shader: DrawHost.Shader.handle(shader), name })
+		location = DrawHost.shader_location!({ shader, name })
 		if location < 0 {
 			Err(UniformNotFound)
 		} else {
-			Ok({ shader, location })
+			Ok(DrawHost.Uniform.from_shader_location(shader, location))
 		}
 	}
 
 	## Update a cached scalar floating-point uniform.
 	set_uniform_f32! : Uniform, F32 => {}
-	set_uniform_f32! = |uniform, value| DrawHost.set_shader_float!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
+	set_uniform_f32! = |uniform, value| DrawHost.set_shader_float!({ uniform, value })
 
 	## Update a cached scalar integer uniform.
 	set_uniform_i32! : Uniform, I32 => {}
-	set_uniform_i32! = |uniform, value| DrawHost.set_shader_int!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
+	set_uniform_i32! = |uniform, value| DrawHost.set_shader_int!({ uniform, value })
 
 	## Update a cached two-component vector uniform.
 	set_uniform_vec2! : Uniform, Vector2 => {}
-	set_uniform_vec2! = |uniform, value| DrawHost.set_shader_vec2!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec2! = |uniform, value| DrawHost.set_shader_vec2!({ uniform, value })
 
 	## Update a cached three-component vector uniform.
 	set_uniform_vec3! : Uniform, Vec3 => {}
-	set_uniform_vec3! = |uniform, value| DrawHost.set_shader_vec3!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec3! = |uniform, value| DrawHost.set_shader_vec3!({ uniform, value })
 
 	## Update a cached four-component vector uniform.
 	set_uniform_vec4! : Uniform, Vec4 => {}
-	set_uniform_vec4! = |uniform, value| DrawHost.set_shader_vec4!({ shader: DrawHost.Shader.handle(uniform.shader), location: uniform.location, value })
+	set_uniform_vec4! = |uniform, value| DrawHost.set_shader_vec4!({ uniform, value })
 
 	## Update a vec4 uniform from normalized RGBA color channels.
 	set_uniform_color! : Uniform, Color => {}
@@ -759,15 +740,14 @@ Draw := [].{
 	## Bind a host-owned texture to a cached sampler uniform.
 	set_uniform_texture! : Uniform, Assets.Texture => {}
 	set_uniform_texture! = |uniform, texture| DrawHost.set_shader_texture!({
-		shader: DrawHost.Shader.handle(uniform.shader),
-		location: uniform.location,
-		texture: AssetsHost.Texture.handle(texture),
+		uniform,
+		texture,
 	})
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
 	with_render_texture! : RenderTexture, (() => {}) => {}
 	with_render_texture! = |target, callback| {
-		if DrawHost.begin_render_texture!(AssetsHost.Texture.handle(Draw.render_texture(target))) {
+		if DrawHost.begin_render_texture!(target) {
 			callback()
 			DrawHost.end_render_texture!()
 		}
@@ -776,7 +756,7 @@ Draw := [].{
 	## Scope shader application so the default shader is always restored.
 	with_shader! : Shader, (() => {}) => {}
 	with_shader! = |shader, callback| {
-		if DrawHost.begin_shader!(DrawHost.Shader.handle(shader)) {
+		if DrawHost.begin_shader!(shader) {
 			callback()
 			DrawHost.end_shader!()
 		}
@@ -823,7 +803,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: font_handle(cfg.font),
+			font: cfg.font,
 			align_x: align.x,
 			align_y: align.y,
 		})
@@ -878,13 +858,6 @@ Draw := [].{
 		DrawHost.end_frame!()
 	}
 }
-
-font_handle : Draw.Font -> U64
-font_handle = |font|
-	match font {
-		DefaultFont => 0
-		LoadedFont(resource) => DrawHost.Font.handle(resource)
-	}
 
 blend_mode_code : Draw.BlendMode -> U8
 blend_mode_code = |mode|

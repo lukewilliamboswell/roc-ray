@@ -186,10 +186,10 @@ heaps. Their handle allocation is ABI-compatible with Roc's `Box`: releasing the
 final Roc reference routes through `roc_dealloc`, unloads the native value, and
 makes the slot reusable. Creation effects return these host-backed boxes
 directly; do not wrap a scalar handle with `Box.box` on the Roc side. Hot draw
-and audio effects unbox the lifecycle token before crossing the boundary, so
-they pass a scalar without per-call retain/release traffic. A live Roc reference
-pins the slot, and the host validates its type, generation, and liveness on
-every lookup.
+and audio effects transfer the typed owning value across the boundary. The host
+resolves its internal token while that owner is live, performs the operation,
+then releases the transferred reference. It validates type, generation, and
+liveness on every lookup.
 
 Keep built-in resources allocation-free. For example, `Draw.default_font` is a
 plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
@@ -203,13 +203,13 @@ does not copy or retain it in the host; build reusable pixel buffers outside the
 render loop when possible.
 
 Render textures and shaders follow the same ownership contract, but use distinct
-resource kinds so a stale or cross-typed scalar token cannot resolve. A render
+resource kinds so a stale or cross-typed resource cannot resolve. A render
 texture box stores its dimensions beside the token and owns its framebuffer,
 color texture, and depth attachment as one unit. `Draw.render_texture` is an
 allocation-free view: the returned host-managed reference still owns the complete
 render target. Shader uniforms retain their shader and cache the native location
-once; per-frame setters therefore pass only the shader token, location, and
-scalar or small vector value. Avoid resolving uniform names, creating render
+once; per-frame setters transfer the opaque uniform with its scalar or small
+vector value. Avoid resolving uniform names, creating render
 targets, or compiling shaders in the render loop.
 
 Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
@@ -217,10 +217,10 @@ Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
 attachments are vertically inverted when sampled, so use
 `Draw.render_texture_source` when drawing them to the screen. The headless host
 allocates typed lifecycle slots without creating GPU objects, allowing ownership
-and effect composition to run in normal example tests. The host validates typed
-resource tokens before a scope callback runs, so an invalid or cross-kind handle
-cannot trigger an unmatched end call. Do not nest scopes of the same mode; raylib
-does not restore an outer render target, shader, or blend mode.
+and effect composition to run in normal example tests. Successful render-target
+and shader begins lease the transferred owner until the matching end; failed
+begins release it immediately. These two scopes may nest and restore the outer
+resource on unwind. Blend modes remain non-nesting.
 
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables

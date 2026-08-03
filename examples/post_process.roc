@@ -20,7 +20,7 @@ screen_w = 800
 screen_h : F32
 screen_h = 600
 
-init! : App.Init(Model, [RenderTextureLoadFailed, ShaderLoadFailed, UniformNotFound])
+init! : App.Init(Model, [RenderTextureLoadFailed, ResourceLimit, ShaderLoadFailed, UniformNotFound])
 init! = App.init(
 	{ ..App.default, title: "RocRay Offscreen Post-processing" },
 	|_host| {

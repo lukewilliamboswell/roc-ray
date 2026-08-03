@@ -8,91 +8,91 @@ import AudioHost
 Audio := [].{
 
 	## Host-owned short sound effect. Use receiver methods such as `sound.play!()`.
-	Sound :: { resource : Box(U64) }.{
+	Sound :: { resource : AudioHost.Sound }.{
 
 		## Start playback from the beginning.
 		play! : Sound => {}
-		play! = |sound| AudioHost.play_sound!(sound_handle(sound))
+		play! = |sound| AudioHost.play_sound!(sound.resource)
 
 		## Stop playback and rewind to the beginning.
 		stop! : Sound => {}
-		stop! = |sound| AudioHost.stop_sound!(sound_handle(sound))
+		stop! = |sound| AudioHost.stop_sound!(sound.resource)
 
 		## Pause playback at the current position.
 		pause! : Sound => {}
-		pause! = |sound| AudioHost.pause_sound!(sound_handle(sound))
+		pause! = |sound| AudioHost.pause_sound!(sound.resource)
 
 		## Resume a paused sound.
 		resume! : Sound => {}
-		resume! = |sound| AudioHost.resume_sound!(sound_handle(sound))
+		resume! = |sound| AudioHost.resume_sound!(sound.resource)
 
 		## Whether this sound is currently playing.
 		is_playing! : Sound => Bool
-		is_playing! = |sound| AudioHost.is_sound_playing!(sound_handle(sound))
+		is_playing! = |sound| AudioHost.is_sound_playing!(sound.resource)
 
 		## Set volume, clamped by the host to 0 through 1.
 		set_volume! : Sound, F32 => {}
-		set_volume! = |sound, volume| AudioHost.set_sound_volume!(sound_handle(sound), volume)
+		set_volume! = |sound, volume| AudioHost.set_sound_volume!(sound.resource, volume)
 
 		## Set pitch multiplier. Non-positive values are clamped by the host.
 		set_pitch! : Sound, F32 => {}
-		set_pitch! = |sound, pitch| AudioHost.set_sound_pitch!(sound_handle(sound), pitch)
+		set_pitch! = |sound, pitch| AudioHost.set_sound_pitch!(sound.resource, pitch)
 
 		## Set stereo pan, clamped by the host to -1 through 1.
 		set_pan! : Sound, F32 => {}
-		set_pan! = |sound, pan| AudioHost.set_sound_pan!(sound_handle(sound), pan)
+		set_pan! = |sound, pan| AudioHost.set_sound_pan!(sound.resource, pan)
 	}
 
 	## Host-owned streamed music. The platform updates active streams each frame.
-	Music :: { resource : Box(U64) }.{
+	Music :: { resource : AudioHost.Music }.{
 
 		## Start or restart playback.
 		play! : Music => {}
-		play! = |music| AudioHost.play_music!(music_handle(music))
+		play! = |music| AudioHost.play_music!(music.resource)
 
 		## Stop playback and rewind.
 		stop! : Music => {}
-		stop! = |music| AudioHost.stop_music!(music_handle(music))
+		stop! = |music| AudioHost.stop_music!(music.resource)
 
 		## Pause at the current position.
 		pause! : Music => {}
-		pause! = |music| AudioHost.pause_music!(music_handle(music))
+		pause! = |music| AudioHost.pause_music!(music.resource)
 
 		## Resume paused playback.
 		resume! : Music => {}
-		resume! = |music| AudioHost.resume_music!(music_handle(music))
+		resume! = |music| AudioHost.resume_music!(music.resource)
 
 		## Set stream volume, clamped to 0 through 1.
 		set_volume! : Music, F32 => {}
-		set_volume! = |music, volume| AudioHost.set_music_volume!(music_handle(music), volume)
+		set_volume! = |music, volume| AudioHost.set_music_volume!(music.resource, volume)
 
 		## Set stream pitch multiplier.
 		set_pitch! : Music, F32 => {}
-		set_pitch! = |music, pitch| AudioHost.set_music_pitch!(music_handle(music), pitch)
+		set_pitch! = |music, pitch| AudioHost.set_music_pitch!(music.resource, pitch)
 
 		## Set stereo pan, clamped to -1 through 1.
 		set_pan! : Music, F32 => {}
-		set_pan! = |music, pan| AudioHost.set_music_pan!(music_handle(music), pan)
+		set_pan! = |music, pan| AudioHost.set_music_pan!(music.resource, pan)
 
 		## Enable or disable automatic looping.
 		set_looping! : Music, Bool => {}
-		set_looping! = |music, looping| AudioHost.set_music_looping!(music_handle(music), looping)
+		set_looping! = |music, looping| AudioHost.set_music_looping!(music.resource, looping)
 
 		## Whether this stream is currently playing.
 		is_playing! : Music => Bool
-		is_playing! = |music| AudioHost.is_music_playing!(music_handle(music))
+		is_playing! = |music| AudioHost.is_music_playing!(music.resource)
 
 		## Seek to seconds from the start. Negative values are clamped to zero.
 		seek! : Music, F32 => {}
-		seek! = |music, seconds| AudioHost.seek_music!(music_handle(music), seconds)
+		seek! = |music, seconds| AudioHost.seek_music!(music.resource, seconds)
 
 		## Total stream length in seconds, or zero for an invalid resource.
 		length! : Music => F32
-		length! = |music| AudioHost.music_length!(music_handle(music))
+		length! = |music| AudioHost.music_length!(music.resource)
 
 		## Current playback position in seconds.
 		time_played! : Music => F32
-		time_played! = |music| AudioHost.music_time_played!(music_handle(music))
+		time_played! = |music| AudioHost.music_time_played!(music.resource)
 	}
 
 	## Procedural waveform used by `gen_sound!`.
@@ -112,21 +112,21 @@ Audio := [].{
 	}
 
 	## Load a short sound effect from disk.
-	load_sound! : Str => Try(Sound, [SoundLoadFailed, ..])
+	load_sound! : Str => Try(Sound, [SoundLoadFailed, ResourceLimit, ..])
 	load_sound! = |path| loaded_sound_from_resource(AudioHost.load_sound!(path))
 
 	## Load a streamed music file. Keep the returned value in the app model.
-	load_music! : Str => Try(Music, [MusicLoadFailed, ..])
+	load_music! : Str => Try(Music, [MusicLoadFailed, ResourceLimit, ..])
 	load_music! = |path| music_from_resource(AudioHost.load_music!(path))
 
 	## Generate a reusable procedural sound. Generation can fail if the fixed
 	## host resource heap is exhausted, so initialization should propagate the
 	## returned error.
-	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ..])
+	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
 	gen_sound! = |cfg| generated_sound_from_resource(AudioHost.gen_sound!(raw_config(cfg)))
 
 	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds.
-	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ..])
+	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
 	gen_tone! = |cfg|
 		Audio.gen_sound!({
 			waveform: Sine,
@@ -148,23 +148,17 @@ Audio := [].{
 	expect waveform_code(Noise) == 4
 }
 
-loaded_sound_from_resource : Box(U64) -> Try(Audio.Sound, [SoundLoadFailed, ..])
-loaded_sound_from_resource = |resource|
-	if Box.unbox(resource) == 0 Err(SoundLoadFailed) else Ok({ resource: resource })
+loaded_sound_from_resource : AudioHost.SoundResult -> Try(Audio.Sound, [SoundLoadFailed, ResourceLimit, ..])
+loaded_sound_from_resource = |result|
+	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundLoadFailed) else Ok({ resource: result.sound })
 
-generated_sound_from_resource : Box(U64) -> Try(Audio.Sound, [SoundGenerationFailed, ..])
-generated_sound_from_resource = |resource|
-	if Box.unbox(resource) == 0 Err(SoundGenerationFailed) else Ok({ resource: resource })
+generated_sound_from_resource : AudioHost.SoundResult -> Try(Audio.Sound, [SoundGenerationFailed, ResourceLimit, ..])
+generated_sound_from_resource = |result|
+	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(SoundGenerationFailed) else Ok({ resource: result.sound })
 
-music_from_resource : Box(U64) -> Try(Audio.Music, [MusicLoadFailed, ..])
-music_from_resource = |resource|
-	if Box.unbox(resource) == 0 Err(MusicLoadFailed) else Ok({ resource: resource })
-
-sound_handle : Audio.Sound -> U64
-sound_handle = |sound| Box.unbox(sound.resource)
-
-music_handle : Audio.Music -> U64
-music_handle = |music| Box.unbox(music.resource)
+music_from_resource : AudioHost.MusicResult -> Try(Audio.Music, [MusicLoadFailed, ResourceLimit, ..])
+music_from_resource = |result|
+	if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(MusicLoadFailed) else Ok({ resource: result.music })
 
 waveform_code : Audio.Waveform -> U8
 waveform_code = |waveform|

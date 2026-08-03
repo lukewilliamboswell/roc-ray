@@ -426,7 +426,7 @@ init! = App.init(
 	},
 )
 
-make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [SoundGenerationFailed, ..])
+make_sound! : Audio.Waveform, F32, F32, I32, F32 => Try(Audio.Sound, [ResourceLimit, SoundGenerationFailed, ..])
 make_sound! = |waveform, from, to, ms, volume|
 	Audio.gen_sound!({
 		waveform,
@@ -447,7 +447,7 @@ load_sound_or! = |path, fallback|
 		Err(_) => fallback
 	}
 
-make_sounds! : () => Try(Sounds, [SoundGenerationFailed, MusicLoadFailed, ..])
+make_sounds! : () => Try(Sounds, [MusicLoadFailed, ResourceLimit, SoundGenerationFailed, ..])
 make_sounds! = || {
 	collect = load_sound_or!(collect_path, make_sound!(Sine, 880, 1160, 110, 0.55)?)
 	hurt = load_sound_or!(hurt_path, make_sound!(Noise, 180, 70, 220, 0.7)?)

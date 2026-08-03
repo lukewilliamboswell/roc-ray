@@ -24,7 +24,7 @@ screen_h = 600
 asset_path : Str
 asset_path = "examples/assets/checker.bmp"
 
-init! : App.Init(Model, [TextureLoadFailed])
+init! : App.Init(Model, [ResourceLimit, TextureLoadFailed])
 init! = App.init(
 	{
 		..App.default,

@@ -1,7 +1,17 @@
 ## Internal audio transport and hosted effects.
 ##
-## This module is intentionally not exposed by the platform package.
+## This module is intentionally not exposed by the platform package. Every
+## resource operation transfers an owning nominal Box to the host so ARC keeps
+## the native resource live through the complete call.
 AudioHost := [].{
+	Sound :: Box(U64)
+
+	Music :: Box(U64)
+
+	SoundResult : { sound : Sound, err : U8 }
+
+	MusicResult : { music : Music, err : U8 }
+
 	GenSound : {
 		waveform : U8,
 		freq_start : F32,
@@ -14,29 +24,29 @@ AudioHost := [].{
 		volume : F32,
 	}
 
-	gen_tone! : { freq : F32, ms : I32 } => Box(U64)
-	gen_sound! : GenSound => Box(U64)
-	load_sound! : Str => Box(U64)
-	load_music! : Str => Box(U64)
-	play_sound! : U64 => {}
-	stop_sound! : U64 => {}
-	pause_sound! : U64 => {}
-	resume_sound! : U64 => {}
-	is_sound_playing! : U64 => Bool
-	set_sound_volume! : U64, F32 => {}
-	set_sound_pitch! : U64, F32 => {}
-	set_sound_pan! : U64, F32 => {}
-	play_music! : U64 => {}
-	stop_music! : U64 => {}
-	pause_music! : U64 => {}
-	resume_music! : U64 => {}
-	set_music_volume! : U64, F32 => {}
-	set_music_pitch! : U64, F32 => {}
-	set_music_pan! : U64, F32 => {}
-	set_music_looping! : U64, Bool => {}
-	is_music_playing! : U64 => Bool
-	seek_music! : U64, F32 => {}
-	music_length! : U64 => F32
-	music_time_played! : U64 => F32
+	gen_tone! : { freq : F32, ms : I32 } => SoundResult
+	gen_sound! : GenSound => SoundResult
+	load_sound! : Str => SoundResult
+	load_music! : Str => MusicResult
+	play_sound! : Sound => {}
+	stop_sound! : Sound => {}
+	pause_sound! : Sound => {}
+	resume_sound! : Sound => {}
+	is_sound_playing! : Sound => Bool
+	set_sound_volume! : Sound, F32 => {}
+	set_sound_pitch! : Sound, F32 => {}
+	set_sound_pan! : Sound, F32 => {}
+	play_music! : Music => {}
+	stop_music! : Music => {}
+	pause_music! : Music => {}
+	resume_music! : Music => {}
+	set_music_volume! : Music, F32 => {}
+	set_music_pitch! : Music, F32 => {}
+	set_music_pan! : Music, F32 => {}
+	set_music_looping! : Music, Bool => {}
+	is_music_playing! : Music => Bool
+	seek_music! : Music, F32 => {}
+	music_length! : Music => F32
+	music_time_played! : Music => F32
 	set_master_volume! : F32 => {}
 }

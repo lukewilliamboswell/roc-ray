@@ -7,28 +7,26 @@ import Color
 import Math
 
 DrawHost := [].{
-	Font :: { resource : Box(U64) }.{
-		from_resource : Box(U64) -> Font
-		from_resource = |resource| { resource: resource }
+	FontResource :: Box(U64)
 
-		handle : Font -> U64
-		handle = |font| Box.unbox(font.resource)
-	}
+	Font : [DefaultFont, LoadedFont(FontResource)]
 
-	RenderTexture :: { texture : AssetsHost.Texture }.{
+	RenderTexture :: AssetsHost.Texture.{
 		from_texture : AssetsHost.Texture -> RenderTexture
-		from_texture = |texture| { texture: texture }
+		from_texture = |texture| RenderTexture.(texture)
 
 		texture : RenderTexture -> AssetsHost.Texture
-		texture = |target| target.texture
+		texture = |RenderTexture.(texture)| texture
 	}
 
-	Shader :: { resource : Box(U64) }.{
+	Shader :: Box(U64).{
 		from_resource : Box(U64) -> Shader
-		from_resource = |resource| { resource: resource }
+		from_resource = |resource| Shader.(resource)
+	}
 
-		handle : Shader -> U64
-		handle = |shader| Box.unbox(shader.resource)
+	Uniform :: { shader : Shader, location : I32 }.{
+		from_shader_location : Shader, I32 -> Uniform
+		from_shader_location = |shader, location| { shader, location }
 	}
 
 	Rectangle : { x : F32, y : F32, width : F32, height : F32, color : Color }
@@ -47,23 +45,26 @@ DrawHost := [].{
 	Polygon : { points : List(Math.Vec2), color : Color }
 	PolygonLines : { points : List(Math.Vec2), color : Color, thickness : F32 }
 	Fps : { pos : Math.Vec2, size : F32, color : Color }
-	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : U64 }
-	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : U64, align_x : F32, align_y : F32 }
-	MeasureText : { text : Str, size : F32, spacing : F32, font : U64 }
+	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : Font }
+	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : Font, align_x : F32, align_y : F32 }
+	MeasureText : { text : Str, size : F32, spacing : F32, font : Font }
 	TextSize : { width : F32, height : F32 }
 	LoadFont : { path : Str, size : I32 }
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
-	TextureDraw : { texture : U64, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
-	TextureQuad : { texture : U64, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, tint : Color }
-	ShaderLocation : { shader : U64, name : Str }
-	ShaderFloat : { shader : U64, location : I32, value : F32 }
-	ShaderInt : { shader : U64, location : I32, value : I32 }
-	ShaderVec2 : { shader : U64, location : I32, value : Math.Vec2 }
-	ShaderVec3 : { shader : U64, location : I32, value : { x : F32, y : F32, z : F32 } }
-	ShaderVec4 : { shader : U64, location : I32, value : { x : F32, y : F32, z : F32, w : F32 } }
-	ShaderTexture : { shader : U64, location : I32, texture : U64 }
+	TextureDraw : { texture : AssetsHost.Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
+	TextureQuad : { texture : AssetsHost.Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, tint : Color }
+	ShaderLocation : { shader : Shader, name : Str }
+	ShaderFloat : { uniform : Uniform, value : F32 }
+	ShaderInt : { uniform : Uniform, value : I32 }
+	ShaderVec2 : { uniform : Uniform, value : Math.Vec2 }
+	ShaderVec3 : { uniform : Uniform, value : { x : F32, y : F32, z : F32 } }
+	ShaderVec4 : { uniform : Uniform, value : { x : F32, y : F32, z : F32, w : F32 } }
+	ShaderTexture : { uniform : Uniform, texture : AssetsHost.Texture }
+	FontResult : { font : FontResource, err : U8 }
+	RenderTextureResult : { target : RenderTexture, err : U8 }
+	ShaderResult : { shader : Shader, err : U8 }
 
 	begin_camera! : Camera.Camera2D => {}
 	end_camera! : () => {}
@@ -71,11 +72,11 @@ DrawHost := [].{
 	end_blend! : () => {}
 	begin_frame! : () => {}
 	end_frame! : () => {}
-	begin_render_texture! : U64 => Bool
+	begin_render_texture! : RenderTexture => Bool
 	end_render_texture! : () => {}
 	begin_scissor! : Scissor => {}
 	end_scissor! : () => {}
-	begin_shader! : U64 => Bool
+	begin_shader! : Shader => Bool
 	end_shader! : () => {}
 	circle! : Circle => {}
 	circle_gradient! : CircleGradient => {}
@@ -83,10 +84,10 @@ DrawHost := [].{
 	clear! : Color => {}
 	fps! : Fps => {}
 	line! : Line => {}
-	load_font! : LoadFont => Box(U64)
-	load_render_texture! : RenderTextureSize => Box({ handle : U64, width : F32, height : F32 })
-	load_shader! : LoadShader => Box(U64)
-	load_shader_source! : LoadShaderSource => Box(U64)
+	load_font! : LoadFont => FontResult
+	load_render_texture! : RenderTextureSize => RenderTextureResult
+	load_shader! : LoadShader => ShaderResult
+	load_shader_source! : LoadShaderSource => ShaderResult
 	measure_text! : MeasureText => TextSize
 	polygon! : Polygon => {}
 	polygon_lines! : PolygonLines => {}

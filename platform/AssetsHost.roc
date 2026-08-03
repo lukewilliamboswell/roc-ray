@@ -10,18 +10,14 @@ AssetsHost := [].{
 		from_resource : Box({ handle : U64, width : F32, height : F32 }) -> Texture
 		from_resource = |resource| { resource: resource }
 
-		resource : Texture -> Box({ handle : U64, width : F32, height : F32 })
-		resource = |texture| texture.resource
-
-		handle : Texture -> U64
-		handle = |texture| (Box.unbox(texture.resource)).handle
-
 		width : Texture -> F32
 		width = |texture| (Box.unbox(texture.resource)).width
 
 		height : Texture -> F32
 		height = |texture| (Box.unbox(texture.resource)).height
 	}
+
+	TextureResult : { texture : Texture, err : U8 }
 
 	GenerateColorTexture : { width : I32, height : I32, color : Color }
 
@@ -34,12 +30,12 @@ AssetsHost := [].{
 		color_b : Color,
 	}
 
-	UpdateTexture : { texture : U64, pixels : List(Color) }
+	UpdateTexture : { texture : Texture, pixels : List(Color) }
 
-	load_texture! : Str => Box({ handle : U64, width : F32, height : F32 })
-	generate_color_texture! : GenerateColorTexture => Box({ handle : U64, width : F32, height : F32 })
-	generate_checked_texture! : GenerateCheckedTexture => Box({ handle : U64, width : F32, height : F32 })
-	update_texture! : UpdateTexture => Bool
-	set_texture_filter! : U64, U8 => {}
-	set_texture_wrap! : U64, U8 => {}
+	load_texture! : Str => TextureResult
+	generate_color_texture! : GenerateColorTexture => TextureResult
+	generate_checked_texture! : GenerateCheckedTexture => TextureResult
+	update_texture! : UpdateTexture => U8
+	set_texture_filter! : Texture, U8 => {}
+	set_texture_wrap! : Texture, U8 => {}
 }

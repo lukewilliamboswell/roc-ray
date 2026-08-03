@@ -145,7 +145,7 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
-init! : App.Init(Model, [SoundGenerationFailed])
+init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	{
 		..App.default,

@@ -36,7 +36,7 @@ pixels = [
 	Color.green,
 ]
 
-init! : App.Init(Model, [PixelCountMismatch, SoundGenerationFailed, TextureGenerationFailed])
+init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init(
 	{ ..App.default, title: "Generated Assets", target_fps: 120 },
 	|_host| {

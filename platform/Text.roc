@@ -4,6 +4,7 @@
 ## then draw the prepared value without measuring again.
 import Color
 import Draw
+import DrawHost
 import Math
 
 Text := [].{
@@ -104,7 +105,7 @@ Text := [].{
 		font: Text.default_font,
 	}
 
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
+	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	load_font! = |cfg| Draw.load_font!(cfg)
 
 	measure_builder! : Builder => Size
@@ -179,13 +180,13 @@ Text := [].{
 	draw_prepared! : { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
 	draw_prepared! = |cfg| {
 		pos = Text.origin_for(cfg.pos, cfg.text.measured, cfg.align)
-		Draw.text_raw!({
+		DrawHost.text!({
 			pos,
 			text: cfg.text.content,
 			size: cfg.text.size,
 			spacing: cfg.text.spacing,
 			color: cfg.color,
-			font: Draw.font_handle(cfg.text.font),
+			font: cfg.text.font,
 		})
 	}
 

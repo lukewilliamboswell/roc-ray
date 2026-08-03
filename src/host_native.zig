@@ -673,6 +673,11 @@ fn hostedDrawTextureRaw(args: abi.DrawDraw_texture_rawArgs) callconv(.c) void {
     raylib.drawTexture(args);
 }
 
+fn hostedDrawTextureQuadRaw(args: abi.DrawDraw_texture_quad_rawArgs) callconv(.c) void {
+    if (active_headless) return;
+    raylib.drawTextureQuad(args);
+}
+
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
 
@@ -937,6 +942,7 @@ comptime {
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
         @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
+        @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });

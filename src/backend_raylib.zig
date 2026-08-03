@@ -165,21 +165,19 @@ pub fn unloadTextures() void {
 /// Convert an ABI RGBA color record to raylib Color.
 pub fn colorToRl(color: anytype) rl.Color {
     return .{
-        // TODO: remove this channel remap once Roc glue emits opaque record
-        // fields in the same order Roc passes them across the host boundary.
-        .r = color.a,
-        .g = color.b,
-        .b = color.g,
-        .a = color.r,
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = color.a,
     };
 }
 
-test "colorToRl maps Roc Color declaration order to raylib" {
+test "colorToRl preserves Roc RGBA channel order" {
     const black = colorToRl(abi.Color{
-        .a = 0,
-        .b = 0,
+        .r = 0,
         .g = 0,
-        .r = 255,
+        .b = 0,
+        .a = 255,
     });
     try std.testing.expectEqual(@as(u8, 0), black.r);
     try std.testing.expectEqual(@as(u8, 0), black.g);
@@ -187,10 +185,10 @@ test "colorToRl maps Roc Color declaration order to raylib" {
     try std.testing.expectEqual(@as(u8, 255), black.a);
 
     const red = colorToRl(abi.Color{
-        .a = 230,
-        .b = 41,
-        .g = 55,
-        .r = 255,
+        .r = 230,
+        .g = 41,
+        .b = 55,
+        .a = 255,
     });
     try std.testing.expectEqual(@as(u8, 230), red.r);
     try std.testing.expectEqual(@as(u8, 41), red.g);
@@ -375,6 +373,26 @@ pub fn drawTexture(args: anytype) void {
         args.rotation,
         colorToRl(args.tint),
     );
+}
+
+/// Draw a full texture across an arbitrary screen-space quadrilateral.
+pub fn drawTextureQuad(args: anytype) void {
+    const texture = textureFromHandle(args.texture) orelse return;
+    const tint = colorToRl(args.tint);
+
+    rl.rlSetTexture(texture.id);
+    rl.rlBegin(rl.RL_QUADS);
+    rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+    rl.rlTexCoord2f(0, 0);
+    rl.rlVertex2f(args.top_left.x, args.top_left.y);
+    rl.rlTexCoord2f(0, 1);
+    rl.rlVertex2f(args.bottom_left.x, args.bottom_left.y);
+    rl.rlTexCoord2f(1, 1);
+    rl.rlVertex2f(args.bottom_right.x, args.bottom_right.y);
+    rl.rlTexCoord2f(1, 0);
+    rl.rlVertex2f(args.top_right.x, args.top_right.y);
+    rl.rlEnd();
+    rl.rlSetTexture(0);
 }
 
 /// Measure text with a null-terminated string.

@@ -50,6 +50,7 @@ platform ""
 		"roc_draw_circle_raw": Draw.circle_raw!,
 		"roc_draw_clear": Draw.clear!,
 		"roc_draw_draw_texture_raw": Draw.draw_texture_raw!,
+		"roc_draw_draw_texture_quad_raw": Draw.draw_texture_quad_raw!,
 		"roc_draw_end_frame": Draw.end_frame!,
 		"roc_draw_end_scissor_raw": Draw.end_scissor_raw!,
 		"roc_draw_fps": Draw.fps!,

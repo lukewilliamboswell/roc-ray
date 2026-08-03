@@ -400,6 +400,15 @@ Draw := [].{
 		tint : Color,
 	}
 
+	TextureQuadRaw : {
+		texture : U64,
+		top_left : Math.Vec2,
+		bottom_left : Math.Vec2,
+		bottom_right : Math.Vec2,
+		top_right : Math.Vec2,
+		tint : Color,
+	}
+
 	## Hosted effects - implemented by the host
 	begin_camera! : CameraMode => {}
 	begin_frame! : () => {}
@@ -424,6 +433,7 @@ Draw := [].{
 	rounded_rectangle_lines_raw! : RoundedRectangleLinesRaw => {}
 	text_raw! : TextRaw => {}
 	draw_texture_raw! : TextureDrawRaw => {}
+	draw_texture_quad_raw! : TextureQuadRaw => {}
 	end_camera! : () => {}
 	triangle_raw! : TriangleRaw => {}
 	triangle_lines_raw! : TriangleLinesRaw => {}

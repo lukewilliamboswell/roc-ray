@@ -14,6 +14,8 @@ examples/breakout
 examples/camera
 examples/top_down
 examples/cave_climb
+examples/generated_assets
+examples/post_process
 
 # Built executables at root
 hello_world

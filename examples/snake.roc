@@ -260,8 +260,10 @@ render! = |model, host| {
 			}
 		}
 
-	Draw.clear!(Color.ray_white)
-	draw_game!(next)
+	Draw.draw!(
+		Color.ray_white,
+		|| draw_game!(next),
+	)
 
 	Ok(next)
 }

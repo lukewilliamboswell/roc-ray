@@ -45,19 +45,23 @@ render! = |model, host| {
 	# Use the per-frame logical screen dimensions.
 	is_wide = host.screen.width > 600
 
-	Draw.clear!(Color.ray_white)
-	Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 10, y: 50 }, text: target_fps_message, size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 10, y: 80 }, text: screen_sample_message, size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 10, y: 110 }, text: screen_size_message, size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 10, y: 140 }, text: exit_message, size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.fps!({ pos: { x: 700, y: 10 }, size: 18, color: Color.gray })
+	Draw.draw!(
+		Color.ray_white,
+		|| {
+			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 50 }, text: target_fps_message, size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 80 }, text: screen_sample_message, size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 110 }, text: screen_size_message, size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.text!({ pos: { x: 10, y: 140 }, text: exit_message, size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
+			Draw.fps!({ pos: { x: 700, y: 10 }, size: 18, color: Color.gray })
 
-	# Show current size
-	size_indicator = if is_wide "Wide screen" else "Small screen"
-	Draw.text!({ pos: { x: 10, y: 180 }, text: size_indicator, size: 16, spacing: Draw.default_spacing, color: Color.green, font: Draw.default_font, align: Draw.align_top_left })
+			# Show current size
+			size_indicator = if is_wide "Wide screen" else "Small screen"
+			Draw.text!({ pos: { x: 10, y: 180 }, text: size_indicator, size: 16, spacing: Draw.default_spacing, color: Color.green, font: Draw.default_font, align: Draw.align_top_left })
 
-	Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 20, style: Draw.filled_and_outlined(circle_color, Color.black, 2) })
+			Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 20, style: Draw.filled_and_outlined(circle_color, Color.black, 2) })
+		},
+	)
 
 	# Test exit! with right click
 	if host.mouse.right {

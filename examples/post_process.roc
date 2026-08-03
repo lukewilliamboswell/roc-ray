@@ -60,8 +60,10 @@ render! = |model, host| {
 		tint: Color.white,
 	}
 
-	Draw.clear!(Color.black)
-	Draw.with_shader!(model.shader, || Draw.texture!(target_draw))
+	Draw.draw!(
+		Color.black,
+		|| Draw.with_shader!(model.shader, || Draw.texture!(target_draw)),
+	)
 
 	Ok(model)
 }

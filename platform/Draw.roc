@@ -848,14 +848,14 @@ Draw := [].{
 			align: Draw.align_center,
 		})
 
-	## Compatibility callback for grouping a frame after clearing its background.
-	## The platform itself opens and closes every render frame, so hot render paths
-	## can call `Draw.clear!` and draw directly to avoid allocating a captured
-	## callback environment.
+	## High-level draw function with callback pattern
+	## Ensures begin/end frame are properly paired
 	draw! : Color, (() => {}) => {}
 	draw! = |bg_color, callback| {
+		DrawHost.begin_frame!()
 		Draw.clear!(bg_color)
 		callback()
+		DrawHost.end_frame!()
 	}
 }
 

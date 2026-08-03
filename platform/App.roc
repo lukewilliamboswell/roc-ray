@@ -70,6 +70,8 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 	}
 
 	target_fps : I32 -> App(I32)
+	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
+	## uncapped. This neither selects a software renderer nor controls VSync.
 	target_fps = |value| {
 		apply: |cfg| { ..cfg, target_fps: value },
 	}
@@ -85,6 +87,8 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 	}
 
 	vsync : Bool -> App(Bool)
+	## Request synchronized buffer presentation from the graphics driver.
+	## Actual pacing depends on the driver, window system, and compositor.
 	vsync = |value| {
 		apply: |cfg| { ..cfg, vsync: value },
 	}

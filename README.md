@@ -12,6 +12,17 @@ The goal isn't to build or support a large game engine. We're happy to help wher
 
 > **Performance:** For the best performance, run your app with `roc build` (e.g. `roc build examples/breakout.roc`) rather than `roc <file>`. `roc build` uses the optimised LLVM backend, while running directly uses the in-development backends. This is expected to be a temporary limitation while the dev backends mature.
 
+### Frame pacing
+
+`target_fps` and `vsync` control different parts of frame pacing:
+
+- `target_fps` asks raylib to limit the frame loop on the CPU. Set it to `0` (or a negative value) to render uncapped. This does not select a software renderer; native drawing remains GPU accelerated.
+- `vsync` asks the graphics driver to synchronize buffer presentation with the display. The driver, window system, and desktop compositor ultimately decide how that request behaves.
+
+RocRay defaults to `vsync: Bool.False` with a 240 FPS CPU-side cap. This gives predictable behavior across platforms while keeping CPU and GPU usage bounded. Enable VSync when tear-free presentation is more important and it behaves well on the target system.
+
+Some Linux configurations—particularly X11 applications presented through a Wayland compositor—can run substantially below the monitor refresh rate when VSync is enabled. Increasing `target_fps` cannot correct presentation stalls inside the driver. If this occurs, use `vsync: Bool.False` with a suitable software cap such as 60 or 120 FPS. Use an uncapped target for measurement rather than normal application operation, since it needlessly consumes CPU and GPU resources.
+
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, polygons, gradients, text)

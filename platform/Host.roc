@@ -109,7 +109,8 @@ Host := {
 			Err(NotSupported) => Err(NotSupported)
 		}
 
-	## Set the target frames per second for the render loop.
+	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
+	## uncapped. This neither selects a software renderer nor controls VSync.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.
 	set_target_fps! : I32 => {}
 }

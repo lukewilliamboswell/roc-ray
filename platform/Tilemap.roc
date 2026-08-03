@@ -1,6 +1,5 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
 import Assets
-import AssetsHost
 import Camera
 import Color
 import DrawHost
@@ -723,7 +722,7 @@ draw_gid! = |map, raw_gid, cell| {
 			dest = Tilemap.world_rect_for_cell(map, cell)
 			flip = Tilemap.flip_for_gid(raw_gid)
 			DrawHost.draw_texture_quad!({
-				texture: AssetsHost.Texture.handle(tileset.texture),
+				texture: tileset.texture,
 				source,
 				top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),
 				bottom_left: transformed_corner(dest, { x: 0, y: 1 }, flip),

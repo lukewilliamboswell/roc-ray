@@ -1,4 +1,5 @@
 ## Host module - provides platform state and system effects
+import Keys
 
 Host := {
 	frame_count : U64,
@@ -37,6 +38,23 @@ Host := {
 		y : F32,
 	},
 }.{
+
+	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
+	key_down : Host, Keys.KeyboardKey -> Bool
+	key_down = |host, key| Keys.key_down(host, key)
+
+	## Check whether a key is currently up. Receiver form: `host.key_up(KeyW)`.
+	key_up : Host, Keys.KeyboardKey -> Bool
+	key_up = |host, key| Keys.key_up(host, key)
+
+	## Check whether a key was pressed this frame.
+	key_pressed : Host, Keys.KeyboardKey -> Bool
+	key_pressed = |host, key| Keys.key_pressed(host, key)
+
+	## Check whether a key was released this frame.
+	key_released : Host, Keys.KeyboardKey -> Bool
+	key_released = |host, key| Keys.key_released(host, key)
+
 	ReadFileRawResult : {
 		ok : Bool,
 		err : U8,

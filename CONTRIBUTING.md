@@ -120,14 +120,43 @@ scripts/profile-example-allocations.py --build
 The profiler runs each example headlessly for one frame and for 120 frames,
 then subtracts the one-frame result to keep startup and resource loading out of
 the per-frame totals. Pass example names to profile a subset, increase the run
-length with `--frames`, or use `--json` for machine-readable output:
+length with `--frames`, show allocation-size histograms with `--sizes`, or use
+`--json` for machine-readable output:
 
 ```bash
-scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --json
+scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
 ```
 
 This measures calls through Roc's allocation ABI. It does not include internal
 raylib or Zig allocator traffic.
+
+Most non-empty example models currently show exactly one allocation whose size
+is stable for every frame. That is the `Box(Model)` returned by
+`render_for_host!`, not app-level list or string construction. Roc's box-reuse
+optimization does not yet reuse it for these effectful render procedures. Treat
+additional allocation sizes or reallocations as actionable app/platform work;
+track the single model box as a compiler optimization opportunity. A zero-sized
+model can avoid even that allocation.
+
+### Host boundary performance
+
+Shared read-only frame information should normally be sampled once by the host
+and passed through `Host`, rather than exposed as several hosted queries. Keep
+the Roc-facing API ergonomic and independent of its transport representation.
+For example, callers can use `host.key_pressed(KeySpace)` while the host packs
+held/pressed/released bits into one persistent key-state list; the equivalent
+module-style call is `Keys.key_pressed(host, KeySpace)`.
+
+The host allocates the keyboard and mouse state lists once, updates their bytes
+in place, and retains them only while Roc owns the frame snapshot. Do not rebuild
+these lists per frame. Likewise, host-owned resources that live until shutdown
+should cross as scalar handles where possible; adding a Roc `Box` solely around
+a numeric host handle introduces avoidable ARC and can allocate in render code.
+
+App-specific state still belongs in the Roc model. Initialization-only effects
+such as loading resources, reading files, and reading environment variables
+should populate that model once; event-driven effects such as audio playback or
+random spawning should remain at the event site.
 
 ## Glue Bindings
 

@@ -18,7 +18,7 @@ init! = App.init(
 )
 
 title : Str
-title = "Keyboard and mouse input"
+title = "Keyboard + mouse input"
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {

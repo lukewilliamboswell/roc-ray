@@ -942,11 +942,6 @@ pub fn enableCursor() void {
     rl.EnableCursor();
 }
 
-/// Set the native OS cursor shape.
-pub fn setMouseCursor(cursor: u8) void {
-    rl.SetMouseCursor(@intCast(@min(cursor, @as(u8, 10))));
-}
-
 /// Set window size.
 pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);

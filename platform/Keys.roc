@@ -1,9 +1,9 @@
 ## Keys module - keyboard state and key constants.
 ##
-## Key state encoding:
-## - 0 = Up (not pressed)
-## - 1 = Down (currently held, pressed this frame, or released this frame,
-##   depending on which Host key-state list is passed)
+## Key state encoding uses one byte per key:
+## - bit 0 = currently held
+## - bit 1 = pressed this frame
+## - bit 2 = released this frame
 ##
 ## The host stores fixed-size state lists with one byte per raylib key code
 ## 0-348. Named keys cover the full raylib KeyboardKey enum. Use Raw(code)
@@ -251,33 +251,34 @@ Keys := [].{
 			Raw(code) => code
 		}
 
-	key_state : List(U8), KeyboardKey -> Bool
-	key_state = |states, key|
+	key_state : List(U8), KeyboardKey, U8 -> Bool
+	key_state = |states, key, mask|
 		match List.get(states, key_code(key)) {
-			Ok(state) => state == 1
+			Ok(state) => U8.bitwise_and(state, mask) != 0
 			Err(_) => False
 		}
 
-	## Check if a specific key is currently held down. Pass `host.keys`.
-	key_down : List(U8), KeyboardKey -> Bool
-	key_down = |keys, key| key_state(keys, key)
+	## Check if a specific key is currently held down. Pass `host` directly.
+	key_down : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_down = |host, key| key_state(host.keys, key, 1)
 
-	## Check if a specific key is currently not pressed (up). Pass `host.keys`.
-	key_up : List(U8), KeyboardKey -> Bool
-	key_up = |keys, key| !(key_down(keys, key))
+	## Check if a specific key is currently not pressed (up). Pass `host` directly.
+	key_up : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_up = |host, key| !(key_down(host, key))
 
-	## Check if a key was first pressed this frame. Pass `host.keys_pressed`.
-	key_pressed : List(U8), KeyboardKey -> Bool
-	key_pressed = |keys_pressed, key| key_state(keys_pressed, key)
+	## Check if a key was first pressed this frame. Pass `host` directly.
+	key_pressed : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_pressed = |host, key| key_state(host.keys, key, 2)
 
-	## Check if a key was released this frame. Pass `host.keys_released`.
-	key_released : List(U8), KeyboardKey -> Bool
-	key_released = |keys_released, key| key_state(keys_released, key)
+	## Check if a key was released this frame. Pass `host` directly.
+	key_released : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_released = |host, key| key_state(host.keys, key, 4)
 
 	expect key_code(KeyA) == 65
 	expect key_code(KeyEscape) == 256
 	expect key_code(KeyLeftShift) == 340
 	expect from_code(262) == Ok(Raw(262))
 	expect from_code(key_count) == Err(InvalidKeyCode)
+	expect key_down({ keys: [7] }, Raw(0)) and key_pressed({ keys: [7] }, Raw(0)) and key_released({ keys: [7] }, Raw(0))
 
 }

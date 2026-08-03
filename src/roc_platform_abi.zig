@@ -2110,17 +2110,13 @@ pub const Host = if (@sizeOf(usize) == 4) extern struct {
     @"frame_count": u64,
     @"timestamp_nanos": u64,
     @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"keys_released": RocListWith(u8, false),
-    @"mouse": __AnonStruct_9fe6fe68830a3f35,
+    @"mouse": __AnonStruct_53a053dfbe9f570c,
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"keys".decref(roc_host);
-        value.@"keys_pressed".decref(roc_host);
-        value.@"keys_released".decref(roc_host);
         value.@"mouse".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
@@ -2129,8 +2125,6 @@ pub const Host = if (@sizeOf(usize) == 4) extern struct {
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"keys".incref(amount);
-        value.@"keys_pressed".incref(amount);
-        value.@"keys_released".incref(amount);
         value.@"mouse".incref(amount);
         value.@"screen".incref(amount);
     }
@@ -2138,17 +2132,13 @@ pub const Host = if (@sizeOf(usize) == 4) extern struct {
     @"frame_count": u64,
     @"timestamp_nanos": u64,
     @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"keys_released": RocListWith(u8, false),
-    @"mouse": __AnonStruct_9fe6fe68830a3f35,
+    @"mouse": __AnonStruct_53a053dfbe9f570c,
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"keys".decref(roc_host);
-        value.@"keys_pressed".decref(roc_host);
-        value.@"keys_released".decref(roc_host);
         value.@"mouse".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
@@ -2157,8 +2147,6 @@ pub const Host = if (@sizeOf(usize) == 4) extern struct {
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"keys".incref(amount);
-        value.@"keys_pressed".incref(amount);
-        value.@"keys_released".incref(amount);
         value.@"mouse".incref(amount);
         value.@"screen".incref(amount);
     }
@@ -2166,20 +2154,18 @@ pub const Host = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Host) != 192) @compileError("Host size mismatch");
+        if (@sizeOf(Host) != 96) @compileError("Host size mismatch");
         if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(Host) != 120) @compileError("Host size mismatch");
+        if (@sizeOf(Host) != 72) @compileError("Host size mismatch");
         if (@alignOf(Host) != 8) @compileError("Host alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_9fe6fe68830a3f35
-pub const __AnonStruct_9fe6fe68830a3f35 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_53a053dfbe9f570c
+pub const __AnonStruct_53a053dfbe9f570c = if (@sizeOf(usize) == 4) extern struct {
     @"buttons": RocListWith(u8, false),
-    @"buttons_pressed": RocListWith(u8, false),
-    @"buttons_released": RocListWith(u8, false),
     @"wheel": f32,
     @"x": f32,
     @"y": f32,
@@ -2190,21 +2176,15 @@ pub const __AnonStruct_9fe6fe68830a3f35 = if (@sizeOf(usize) == 4) extern struct
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"buttons".decref(roc_host);
-        value.@"buttons_pressed".decref(roc_host);
-        value.@"buttons_released".decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"buttons".incref(amount);
-        value.@"buttons_pressed".incref(amount);
-        value.@"buttons_released".incref(amount);
     }
 } else extern struct {
     @"buttons": RocListWith(u8, false),
-    @"buttons_pressed": RocListWith(u8, false),
-    @"buttons_released": RocListWith(u8, false),
     @"wheel": f32,
     @"x": f32,
     @"y": f32,
@@ -2215,27 +2195,23 @@ pub const __AnonStruct_9fe6fe68830a3f35 = if (@sizeOf(usize) == 4) extern struct
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"buttons".decref(roc_host);
-        value.@"buttons_pressed".decref(roc_host);
-        value.@"buttons_released".decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"buttons".incref(amount);
-        value.@"buttons_pressed".incref(amount);
-        value.@"buttons_released".incref(amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_9fe6fe68830a3f35) != 88) @compileError("__AnonStruct_9fe6fe68830a3f35 size mismatch");
-        if (@alignOf(__AnonStruct_9fe6fe68830a3f35) != 8) @compileError("__AnonStruct_9fe6fe68830a3f35 alignment mismatch");
+        if (@sizeOf(__AnonStruct_53a053dfbe9f570c) != 40) @compileError("__AnonStruct_53a053dfbe9f570c size mismatch");
+        if (@alignOf(__AnonStruct_53a053dfbe9f570c) != 8) @compileError("__AnonStruct_53a053dfbe9f570c alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_9fe6fe68830a3f35) != 52) @compileError("__AnonStruct_9fe6fe68830a3f35 size mismatch");
-        if (@alignOf(__AnonStruct_9fe6fe68830a3f35) != 4) @compileError("__AnonStruct_9fe6fe68830a3f35 alignment mismatch");
+        if (@sizeOf(__AnonStruct_53a053dfbe9f570c) != 28) @compileError("__AnonStruct_53a053dfbe9f570c size mismatch");
+        if (@alignOf(__AnonStruct_53a053dfbe9f570c) != 4) @compileError("__AnonStruct_53a053dfbe9f570c alignment mismatch");
     }
 }
 
@@ -2953,22 +2929,18 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_e6b936c90574352b
-pub const __AnonStruct_e6b936c90574352b = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_dca1e0392daec1fe
+pub const __AnonStruct_dca1e0392daec1fe = if (@sizeOf(usize) == 4) extern struct {
     @"frame_count": u64,
     @"timestamp_nanos": u64,
     @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"keys_released": RocListWith(u8, false),
-    @"mouse": __AnonStruct_9fe6fe68830a3f35,
+    @"mouse": __AnonStruct_53a053dfbe9f570c,
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"keys".decref(roc_host);
-        value.@"keys_pressed".decref(roc_host);
-        value.@"keys_released".decref(roc_host);
         value.@"mouse".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
@@ -2977,8 +2949,6 @@ pub const __AnonStruct_e6b936c90574352b = if (@sizeOf(usize) == 4) extern struct
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"keys".incref(amount);
-        value.@"keys_pressed".incref(amount);
-        value.@"keys_released".incref(amount);
         value.@"mouse".incref(amount);
         value.@"screen".incref(amount);
     }
@@ -2986,17 +2956,13 @@ pub const __AnonStruct_e6b936c90574352b = if (@sizeOf(usize) == 4) extern struct
     @"frame_count": u64,
     @"timestamp_nanos": u64,
     @"keys": RocListWith(u8, false),
-    @"keys_pressed": RocListWith(u8, false),
-    @"keys_released": RocListWith(u8, false),
-    @"mouse": __AnonStruct_9fe6fe68830a3f35,
+    @"mouse": __AnonStruct_53a053dfbe9f570c,
     @"frame_time": f32,
     @"screen": __AnonStruct_bc8fa73ca49a5ac0,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.@"keys".decref(roc_host);
-        value.@"keys_pressed".decref(roc_host);
-        value.@"keys_released".decref(roc_host);
         value.@"mouse".decref(roc_host);
         value.@"screen".decref(roc_host);
     }
@@ -3005,8 +2971,6 @@ pub const __AnonStruct_e6b936c90574352b = if (@sizeOf(usize) == 4) extern struct
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
         value.@"keys".incref(amount);
-        value.@"keys_pressed".incref(amount);
-        value.@"keys_released".incref(amount);
         value.@"mouse".incref(amount);
         value.@"screen".incref(amount);
     }
@@ -3014,12 +2978,12 @@ pub const __AnonStruct_e6b936c90574352b = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_e6b936c90574352b) != 192) @compileError("__AnonStruct_e6b936c90574352b size mismatch");
-        if (@alignOf(__AnonStruct_e6b936c90574352b) != 8) @compileError("__AnonStruct_e6b936c90574352b alignment mismatch");
+        if (@sizeOf(__AnonStruct_dca1e0392daec1fe) != 96) @compileError("__AnonStruct_dca1e0392daec1fe size mismatch");
+        if (@alignOf(__AnonStruct_dca1e0392daec1fe) != 8) @compileError("__AnonStruct_dca1e0392daec1fe alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_e6b936c90574352b) != 120) @compileError("__AnonStruct_e6b936c90574352b size mismatch");
-        if (@alignOf(__AnonStruct_e6b936c90574352b) != 8) @compileError("__AnonStruct_e6b936c90574352b alignment mismatch");
+        if (@sizeOf(__AnonStruct_dca1e0392daec1fe) != 72) @compileError("__AnonStruct_dca1e0392daec1fe size mismatch");
+        if (@alignOf(__AnonStruct_dca1e0392daec1fe) != 8) @compileError("__AnonStruct_dca1e0392daec1fe alignment mismatch");
     }
 }
 
@@ -4282,7 +4246,7 @@ pub const DrawTriangle_rawArg0 = __AnonStruct_c393ffaacb1be2f8;
 pub const DrawTriangle_rawArg0A = __AnonStruct_2818a50bdccefb1e;
 pub const DrawTriangle_rawArg0B = __AnonStruct_2818a50bdccefb1e;
 pub const DrawTriangle_rawArg0C = __AnonStruct_2818a50bdccefb1e;
-pub const HostMouse = __AnonStruct_9fe6fe68830a3f35;
+pub const HostMouse = __AnonStruct_53a053dfbe9f570c;
 pub const HostScreen = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostRead_file_raw = __AnonStruct_1504326a3d41a158;
 pub const HostSet_screen_size_rawArg0 = __AnonStruct_473ae8de77ee164b;
@@ -4295,11 +4259,11 @@ pub const TilemapLoad_tmx_rawMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapLoad_tmx_rawMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapLoad_tmx_rawMapTilesets = __AnonStruct_756aabd194c61573;
 pub const App_config_for_host = __AnonStruct_eba854e503b8b9e2;
-pub const Init_for_hostArg0 = __AnonStruct_e6b936c90574352b;
-pub const Init_for_hostArg0Mouse = __AnonStruct_9fe6fe68830a3f35;
+pub const Init_for_hostArg0 = __AnonStruct_dca1e0392daec1fe;
+pub const Init_for_hostArg0Mouse = __AnonStruct_53a053dfbe9f570c;
 pub const Init_for_hostArg0Screen = __AnonStruct_bc8fa73ca49a5ac0;
-pub const Render_for_hostArg1 = __AnonStruct_e6b936c90574352b;
-pub const Render_for_hostArg1Mouse = __AnonStruct_9fe6fe68830a3f35;
+pub const Render_for_hostArg1 = __AnonStruct_dca1e0392daec1fe;
+pub const Render_for_hostArg1Mouse = __AnonStruct_53a053dfbe9f570c;
 pub const Render_for_hostArg1Screen = __AnonStruct_bc8fa73ca49a5ac0;
 
 // Generated Refcount Helpers
@@ -4743,10 +4707,10 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 pub extern fn app_config_for_host() callconv(.c) __AnonStruct_eba854e503b8b9e2;
 
 /// Entrypoint: init_for_host!
-pub extern fn init_for_host(arg0: __AnonStruct_e6b936c90574352b) callconv(.c) Init_for_hostResult;
+pub extern fn init_for_host(arg0: __AnonStruct_dca1e0392daec1fe) callconv(.c) Init_for_hostResult;
 
 /// Entrypoint: render_for_host!
-pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct_e6b936c90574352b) callconv(.c) Render_for_hostResult;
+pub extern fn render_for_host(arg0: RocBox, arg1: __AnonStruct_dca1e0392daec1fe) callconv(.c) Render_for_hostResult;
 
 /// Entrypoint: drop_model_for_host!
 pub extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;

@@ -19,30 +19,16 @@ Host := {
 	## pixel dimensions.
 	screen : { width : I32, height : I32 },
 
-	## Per-key held state: 1 while the key is down, 0 otherwise.
-	## Use with `Keys.key_down` / `Keys.key_up`.
+	## Packed per-key state, updated in place by the host. Each byte stores held,
+	## pressed-this-frame, and released-this-frame bits. Use the `Keys` helpers.
 	keys : List(U8),
-
-	## Per-key edge state: 1 only on the frame the key was first pressed
-	## (respecting key-repeat), 0 otherwise. Use with `Keys.key_pressed` for
-	## one-shot actions like menu/restart where holding shouldn't re-trigger.
-	keys_pressed : List(U8),
-
-	## Per-key release edge state: 1 only on the frame the key was released,
-	## 0 otherwise. Use with `Keys.key_released`.
-	keys_released : List(U8),
 	mouse : {
 
-		## Per-button held state for raylib mouse button codes 0-6.
-		## Prefer the `Mouse` module helpers for new code.
+		## Packed per-button state, updated in place by the host. Each byte stores
+		## held, pressed-this-frame, and released-this-frame bits.
 		buttons : List(U8),
 
-		## Per-button press edge state. Use with `Mouse.button_pressed`.
-		buttons_pressed : List(U8),
-
-		## Per-button release edge state. Use with `Mouse.button_released`.
-		buttons_released : List(U8),
-
+		## Convenient held-state aliases for the three primary buttons.
 		left : Bool,
 		middle : Bool,
 		right : Bool,

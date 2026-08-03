@@ -705,11 +705,7 @@ var exit_requested: ?i64 = null;
 
 fn decrefHostArg(roc_host: *RocHost, host: *const abi.Host) void {
     host.keys.decref(roc_host);
-    host.keys_pressed.decref(roc_host);
-    host.keys_released.decref(roc_host);
     host.mouse.buttons.decref(roc_host);
-    host.mouse.buttons_pressed.decref(roc_host);
-    host.mouse.buttons_released.decref(roc_host);
 }
 
 fn hostedReadEnvWindows(roc_host: *RocHost, host: abi.Host, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
@@ -1003,39 +999,23 @@ const RuntimeOptions = struct {
 
 const InputState = struct {
     keys: ffi.Keys,
-    keys_pressed: ffi.Keys,
-    keys_released: ffi.Keys,
     mouse_buttons: ffi.MouseButtons,
-    mouse_buttons_pressed: ffi.MouseButtons,
-    mouse_buttons_released: ffi.MouseButtons,
 
     fn init(roc_host: *RocHost) InputState {
         return .{
             .keys = ffi.Keys.init(roc_host),
-            .keys_pressed = ffi.Keys.init(roc_host),
-            .keys_released = ffi.Keys.init(roc_host),
             .mouse_buttons = ffi.MouseButtons.init(roc_host),
-            .mouse_buttons_pressed = ffi.MouseButtons.init(roc_host),
-            .mouse_buttons_released = ffi.MouseButtons.init(roc_host),
         };
     }
 
     fn deinit(self: *InputState) void {
-        self.mouse_buttons_released.decref();
-        self.mouse_buttons_pressed.decref();
         self.mouse_buttons.decref();
-        self.keys_released.decref();
-        self.keys_pressed.decref();
         self.keys.decref();
     }
 
     fn retainForRoc(self: *InputState) void {
         self.keys.incref();
-        self.keys_pressed.incref();
-        self.keys_released.incref();
         self.mouse_buttons.incref();
-        self.mouse_buttons_pressed.incref();
-        self.mouse_buttons_released.incref();
     }
 
     fn hostState(
@@ -1046,9 +1026,6 @@ const InputState = struct {
         mouse_x: f32,
         mouse_y: f32,
         mouse_wheel: f32,
-        mouse_left: bool,
-        mouse_middle: bool,
-        mouse_right: bool,
     ) HostState {
         self.retainForRoc();
         return .{
@@ -1060,18 +1037,14 @@ const InputState = struct {
                 .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
             },
             .keys = self.keys.list,
-            .keys_pressed = self.keys_pressed.list,
-            .keys_released = self.keys_released.list,
             .mouse = .{
                 .buttons = self.mouse_buttons.list,
-                .buttons_pressed = self.mouse_buttons_pressed.list,
-                .buttons_released = self.mouse_buttons_released.list,
+                .left = self.mouse_buttons.hasFlag(0, ffi.INPUT_HELD),
+                .middle = self.mouse_buttons.hasFlag(2, ffi.INPUT_HELD),
+                .right = self.mouse_buttons.hasFlag(1, ffi.INPUT_HELD),
                 .wheel = mouse_wheel,
                 .x = mouse_x,
                 .y = mouse_y,
-                .left = mouse_left,
-                .middle = mouse_middle,
-                .right = mouse_right,
             },
         };
     }
@@ -1079,13 +1052,9 @@ const InputState = struct {
     fn updateFromRaylib(self: *InputState) void {
         raylib.updateKeyboardState();
         self.keys.update(raylib.getKeyState());
-        self.keys_pressed.update(raylib.getKeyPressedState());
-        self.keys_released.update(raylib.getKeyReleasedState());
 
         raylib.updateMouseButtonState();
         self.mouse_buttons.update(raylib.getMouseButtonState());
-        self.mouse_buttons_pressed.update(raylib.getMouseButtonPressedState());
-        self.mouse_buttons_released.update(raylib.getMouseButtonReleasedState());
     }
 };
 
@@ -1143,7 +1112,7 @@ fn dropFinalModel(boxed_model: RocBox) void {
 
 fn initModel(input: *InputState) RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
-    const init_state = input.hostState(0, 0, 0, 0, 0, 0, false, false, false);
+    const init_state = input.hostState(0, 0, 0, 0, 0, 0);
     const init_result = init_for_host(init_state);
     if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
     return init_result;
@@ -1211,9 +1180,6 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             mouse_pos.x,
             mouse_pos.y,
             raylib.getMouseWheelMove(),
-            raylib.isMouseButtonDown(.left),
-            raylib.isMouseButtonDown(.middle),
-            raylib.isMouseButtonDown(.right),
         );
 
         const render_result = render_for_host(boxed_model, platform_state);
@@ -1262,9 +1228,6 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             0,
             0,
             0,
-            false,
-            false,
-            false,
         );
 
         const render_result = render_for_host(boxed_model, platform_state);

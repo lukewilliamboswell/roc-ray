@@ -690,10 +690,10 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 input_axis : Host -> Math.Vec2
 input_axis = |host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
-	up = Keys.key_down(host.keys, KeyUp) or Keys.key_down(host.keys, KeyW)
-	down = Keys.key_down(host.keys, KeyDown) or Keys.key_down(host.keys, KeyS)
+	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
+	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	up = Keys.key_down(host, KeyUp) or Keys.key_down(host, KeyW)
+	down = Keys.key_down(host, KeyDown) or Keys.key_down(host, KeyS)
 
 	{ x: axis(left, right), y: axis(up, down) }
 }
@@ -1006,7 +1006,7 @@ advance_playing! = |model, host| {
 		model.world,
 		{
 			raw_dir: input_axis(host),
-			dash_pressed: Keys.key_pressed(host.keys_pressed, KeySpace),
+			dash_pressed: Keys.key_pressed(host, KeySpace),
 			dt: host.frame_time,
 		},
 	)
@@ -1016,21 +1016,21 @@ advance_playing! = |model, host| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 
 	next = match model.world.state {
 		Playing => advance_playing!(model, host)
 		Won =>
-			if Keys.key_pressed(host.keys_pressed, KeySpace) {
+			if Keys.key_pressed(host, KeySpace) {
 				Audio.set_music_volume!(model.sounds.music, 0.13)
 				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {
 				model
 			}
 		GameOver =>
-			if Keys.key_pressed(host.keys_pressed, KeySpace) {
+			if Keys.key_pressed(host, KeySpace) {
 				Audio.set_music_volume!(model.sounds.music, 0.13)
 				new_game(model.characters, model.tiles, model.level, model.sounds)
 			} else {

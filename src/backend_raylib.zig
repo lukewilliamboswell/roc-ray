@@ -14,66 +14,57 @@ pub const rl = @cImport({
     @cInclude("rlgl.h");
 });
 
-/// Persistent keyboard state - updated each frame.
-/// `key_state` is the held (down) state; `key_pressed_state` is the edge
-/// (pressed-this-frame) state; `key_released_state` is the release edge state.
+/// Persistent packed keyboard state - updated each frame.
+/// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
-var key_pressed_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
-var key_released_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 
-/// Persistent mouse button state - updated each frame.
+/// Persistent packed mouse button state - updated each frame, with the same bits.
 var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
-var mouse_button_pressed_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
-var mouse_button_released_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+
+fn inputStateBits(down: bool, pressed: bool, released: bool) u8 {
+    return (if (down) ffi.INPUT_HELD else 0) |
+        (if (pressed) ffi.INPUT_PRESSED else 0) |
+        (if (released) ffi.INPUT_RELEASED else 0);
+}
+
+test "input state packs held and edge flags" {
+    try std.testing.expectEqual(@as(u8, 0), inputStateBits(false, false, false));
+    try std.testing.expectEqual(@as(u8, 7), inputStateBits(true, true, true));
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, inputStateBits(false, false, true));
+}
 
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = if (rl.IsKeyDown(key)) 1 else 0;
-        key_pressed_state[i] = if (rl.IsKeyPressed(key)) 1 else 0;
-        key_released_state[i] = if (rl.IsKeyReleased(key)) 1 else 0;
+        key_state[i] = inputStateBits(
+            rl.IsKeyDown(key),
+            rl.IsKeyPressed(key),
+            rl.IsKeyReleased(key),
+        );
     }
 }
 
-/// Get the current keyboard down-state array
+/// Get the current packed keyboard state array.
 pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
-}
-
-/// Get the keyboard pressed-this-frame (edge) state array
-pub fn getKeyPressedState() *const [ffi.KEY_COUNT]u8 {
-    return &key_pressed_state;
-}
-
-/// Get the keyboard released-this-frame (edge) state array
-pub fn getKeyReleasedState() *const [ffi.KEY_COUNT]u8 {
-    return &key_released_state;
 }
 
 /// Update mouse button state from raylib (call once per frame)
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = if (rl.IsMouseButtonDown(button)) 1 else 0;
-        mouse_button_pressed_state[i] = if (rl.IsMouseButtonPressed(button)) 1 else 0;
-        mouse_button_released_state[i] = if (rl.IsMouseButtonReleased(button)) 1 else 0;
+        mouse_button_state[i] = inputStateBits(
+            rl.IsMouseButtonDown(button),
+            rl.IsMouseButtonPressed(button),
+            rl.IsMouseButtonReleased(button),
+        );
     }
 }
 
-/// Get the current mouse button down-state array
+/// Get the current packed mouse button state array.
 pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
-}
-
-/// Get the mouse button pressed-this-frame (edge) state array
-pub fn getMouseButtonPressedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
-    return &mouse_button_pressed_state;
-}
-
-/// Get the mouse button released-this-frame (edge) state array
-pub fn getMouseButtonReleasedState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
-    return &mouse_button_released_state;
 }
 
 const MAX_FONTS: usize = 32;

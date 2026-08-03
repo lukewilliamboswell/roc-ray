@@ -440,8 +440,8 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 input_axis : Host -> F32
 input_axis = |host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
+	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
+	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
 	axis(left, right)
 }
 
@@ -945,11 +945,11 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 
-	restart = Keys.key_pressed(host.keys_pressed, KeySpace)
+	restart = Keys.key_pressed(host, KeySpace)
 	input_camera = camera_for(model.level, model.world.player.pos)
 	input = tool_input(host, input_camera)
 	next_world = match model.world.state {
@@ -957,7 +957,7 @@ render! = |model, host| {
 			model.level,
 			model.world,
 			input_axis(host),
-			Keys.key_pressed(host.keys_pressed, KeySpace) or Keys.key_pressed(host.keys_pressed, KeyUp) or Keys.key_pressed(host.keys_pressed, KeyW),
+			Keys.key_pressed(host, KeySpace) or Keys.key_pressed(host, KeyUp) or Keys.key_pressed(host, KeyW),
 			input,
 			host.frame_time,
 		)

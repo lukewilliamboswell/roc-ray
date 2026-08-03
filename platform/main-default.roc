@@ -110,19 +110,15 @@ HostStateFromHost : {
 	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
 	frame_time : F32, ## seconds since previous frame (0 on first frame)
 	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
-	keys : List(U8), ## 349 bytes, held state, one per raylib key code 0-348
-	keys_pressed : List(U8), ## 349 bytes, pressed-this-frame (edge) state
-	keys_released : List(U8), ## 349 bytes, released-this-frame (edge) state
+	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	mouse : {
-		buttons : List(U8), ## 7 bytes, held state, one per raylib mouse button code 0-6
-		buttons_pressed : List(U8), ## 7 bytes, pressed-this-frame (edge) state
-		buttons_released : List(U8), ## 7 bytes, released-this-frame (edge) state
-		wheel : F32,
-		x : F32,
-		y : F32,
+		buttons : List(U8), ## 7 packed state bytes, one per raylib mouse button code 0-6
 		left : Bool,
 		middle : Bool,
 		right : Bool,
+		wheel : F32,
+		x : F32,
+		y : F32,
 	},
 }
 
@@ -137,8 +133,6 @@ init_for_host! = |host_state| {
 		frame_time: host_state.frame_time,
 		screen: host_state.screen,
 		keys: host_state.keys,
-		keys_pressed: host_state.keys_pressed,
-		keys_released: host_state.keys_released,
 		mouse: host_state.mouse,
 	}
 	match (program.init!.run!)(host) {
@@ -156,8 +150,6 @@ render_for_host! = |boxed_model, host_state| {
 		frame_time: host_state.frame_time,
 		screen: host_state.screen,
 		keys: host_state.keys,
-		keys_pressed: host_state.keys_pressed,
-		keys_released: host_state.keys_released,
 		mouse: host_state.mouse,
 	}
 	match (program.render!)(Box.unbox(boxed_model), host) {

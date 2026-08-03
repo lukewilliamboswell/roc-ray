@@ -258,8 +258,8 @@ fresh_bricks = List.concat(
 
 paddle_move_from_host : Host -> PaddleMove
 paddle_move_from_host = |host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
+	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
+	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
 
 	if left PaddleLeft else if right PaddleRight else PaddleStill
 }
@@ -275,7 +275,7 @@ paddle_move_dir = |move|
 frame_input : Host -> FrameInput
 frame_input = |host| {
 	paddle_move: paddle_move_from_host(host),
-	action_pressed: Keys.key_pressed(host.keys_pressed, KeySpace),
+	action_pressed: Keys.key_pressed(host, KeySpace),
 	dt: host.frame_time,
 }
 
@@ -437,7 +437,7 @@ play_step_events! = |sounds, events| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 

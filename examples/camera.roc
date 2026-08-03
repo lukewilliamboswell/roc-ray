@@ -55,10 +55,10 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 move_player : Math.Vec2, Host -> Math.Vec2
 move_player = |player, host| {
-	left = Keys.key_down(host.keys, KeyLeft) or Keys.key_down(host.keys, KeyA)
-	right = Keys.key_down(host.keys, KeyRight) or Keys.key_down(host.keys, KeyD)
-	up = Keys.key_down(host.keys, KeyUp) or Keys.key_down(host.keys, KeyW)
-	down = Keys.key_down(host.keys, KeyDown) or Keys.key_down(host.keys, KeyS)
+	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
+	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	up = Keys.key_down(host, KeyUp) or Keys.key_down(host, KeyW)
+	down = Keys.key_down(host, KeyDown) or Keys.key_down(host, KeyS)
 
 	speed = 360
 	dt = host.frame_time
@@ -70,14 +70,14 @@ move_player = |player, host| {
 
 render! : Model, Host => Try(Model, [Exit(I64), ..])
 render! = |model, host| {
-	if Keys.key_pressed(host.keys_pressed, KeyEscape) {
+	if Keys.key_pressed(host, KeyEscape) {
 		Host.exit!(0)
 	}
 
 	player = move_player(model.player, host)
 	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(Keys.key_down(host.keys, KeyQ), Keys.key_down(host.keys, KeyE))
-	rotation = if Keys.key_pressed(host.keys_pressed, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+	rotation_dir = axis(Keys.key_down(host, KeyQ), Keys.key_down(host, KeyE))
+	rotation = if Keys.key_pressed(host, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
 
 	camera = Camera.with_rotation(
 		Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom }),

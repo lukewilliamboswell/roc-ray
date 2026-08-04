@@ -31,7 +31,7 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, host, frame| {
 	seconds = U64.to_f32(host.timestamp_nanos) / 1_000_000_000
 	model.time.set!(seconds)
@@ -46,10 +46,12 @@ render! = |model, host, frame| {
 				|blend_frame| {
 					blend_frame.circle!({ center: { x: 330, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.blue, 180)) })
 					blend_frame.circle!({ center: { x: 470, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.red, 180)) })
+					Ok({})
 				},
-			)
+			)?
+			Ok({})
 		},
-	)
+	)?
 
 	target_draw = {
 		texture: model.target.texture(),
@@ -61,7 +63,13 @@ render! = |model, host, frame| {
 	}
 
 	frame.clear!(Color.black)
-	frame.with_shader!(model.shader, |shader_frame| shader_frame.texture!(target_draw))
+	frame.with_shader!(
+		model.shader,
+		|shader_frame| {
+			shader_frame.texture!(target_draw)
+			Ok({})
+		},
+	)?
 
 	Ok(model)
 }

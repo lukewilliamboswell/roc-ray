@@ -5237,14 +5237,14 @@ pub const AudioHostStop_soundArgs = extern struct {
 };
 
 /// Arguments for DrawHost.begin_blend!
-/// Roc signature: U8 => Bool
+/// Roc signature: U8 => U8
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostBegin_blendArgs = extern struct {
     arg0: u8,
 };
 
 /// Arguments for DrawHost.begin_camera!
-/// Roc signature: Camera.Camera2D => {}
+/// Roc signature: Camera.Camera2D => U8
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostBegin_cameraArgs = if (@sizeOf(usize) == 4) extern struct {
     @"target": MathVec2,
@@ -5270,7 +5270,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.begin_render_texture!
-/// Roc signature: DrawHost.RenderTexture => Bool
+/// Roc signature: DrawHost.RenderTexture => U8
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostBegin_render_textureArgs = if (@sizeOf(usize) == 4) extern struct {
     @"resource": *__AnonStruct_8b7fc2d8f8794eb4,
@@ -5290,7 +5290,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.begin_scissor!
-/// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => {}
+/// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => U8
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostBegin_scissorArgs = if (@sizeOf(usize) == 4) extern struct {
     @"height": f32,
@@ -5316,7 +5316,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.begin_shader!
-/// Roc signature: DrawHost.Shader => Bool
+/// Roc signature: DrawHost.Shader => U8
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostBegin_shaderArgs = extern struct {
     arg0: *u64,
@@ -6558,24 +6558,24 @@ pub extern fn roc_audio_stop_music_raw(arg0: *u64) callconv(.c) void;
 pub extern fn roc_audio_stop_raw(arg0: *u64) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.begin_blend!
-/// Roc signature: U8 => Bool
-pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) bool;
+/// Roc signature: U8 => U8
+pub extern fn roc_draw_begin_blend_raw(arg0: u8) callconv(.c) u8;
 
 /// Hosted symbol for DrawHost.begin_camera!
-/// Roc signature: Camera.Camera2D => {}
-pub extern fn roc_draw_begin_camera(arg0: CameraCamera2D) callconv(.c) void;
+/// Roc signature: Camera.Camera2D => U8
+pub extern fn roc_draw_begin_camera(arg0: CameraCamera2D) callconv(.c) u8;
 
 /// Hosted symbol for DrawHost.begin_render_texture!
-/// Roc signature: DrawHost.RenderTexture => Bool
-pub extern fn roc_draw_begin_render_texture_raw(arg0: DrawHostRenderTexture) callconv(.c) bool;
+/// Roc signature: DrawHost.RenderTexture => U8
+pub extern fn roc_draw_begin_render_texture_raw(arg0: DrawHostRenderTexture) callconv(.c) u8;
 
 /// Hosted symbol for DrawHost.begin_scissor!
-/// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => {}
-pub extern fn roc_draw_begin_scissor_raw(arg0: DrawHostBegin_scissorArgs) callconv(.c) void;
+/// Roc signature: { height : F32, width : F32, x : F32, y : F32 } => U8
+pub extern fn roc_draw_begin_scissor_raw(arg0: DrawHostBegin_scissorArgs) callconv(.c) u8;
 
 /// Hosted symbol for DrawHost.begin_shader!
-/// Roc signature: DrawHost.Shader => Bool
-pub extern fn roc_draw_begin_shader_raw(arg0: *u64) callconv(.c) bool;
+/// Roc signature: DrawHost.Shader => U8
+pub extern fn roc_draw_begin_shader_raw(arg0: *u64) callconv(.c) u8;
 
 /// Hosted symbol for DrawHost.circle!
 /// Roc signature: { center : Math.Vec2, color : Color, radius : F32 } => {}

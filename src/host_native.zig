@@ -41,6 +41,9 @@ const TILEMAP_ERR_UNSUPPORTED: u8 = 4;
 const RESOURCE_ERR_NONE: u8 = 0;
 const RESOURCE_ERR_FAILED: u8 = 1;
 const RESOURCE_ERR_LIMIT: u8 = 2;
+const SCOPE_OK: u8 = 0;
+const SCOPE_UNAVAILABLE: u8 = 1;
+const SCOPE_LIMIT: u8 = 2;
 const TEXTURE_UPDATE_OK: u8 = 0;
 const TEXTURE_UPDATE_PIXEL_COUNT: u8 = 1;
 const TEXTURE_UPDATE_NOT_MUTABLE: u8 = 2;
@@ -77,12 +80,17 @@ var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
 var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
-var headless_blend_depth: u8 = 0;
-const RESOURCE_SCOPE_LIMIT: usize = 64;
-var render_texture_leases: [RESOURCE_SCOPE_LIMIT]?*abi.AssetsHostTextureResource = @splat(null);
+const SCOPE_STACK_LIMIT: usize = 64;
+var render_texture_leases: [SCOPE_STACK_LIMIT]?*abi.AssetsHostTextureResource = @splat(null);
 var render_texture_lease_count: usize = 0;
-var shader_leases: [RESOURCE_SCOPE_LIMIT]?*u64 = @splat(null);
+var shader_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 var shader_lease_count: usize = 0;
+var blend_scopes: [SCOPE_STACK_LIMIT]u8 = undefined;
+var blend_scope_count: usize = 0;
+var camera_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_cameraArgs = undefined;
+var camera_scope_count: usize = 0;
+var scissor_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_scissorArgs = undefined;
+var scissor_scope_count: usize = 0;
 
 const InvalidResourceBox = extern struct {
     refcount: isize = 0,
@@ -557,9 +565,11 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_random_state = 0x4d595df4;
     headless_render_texture_depth = 0;
     headless_shader_depth = 0;
-    headless_blend_depth = 0;
     render_texture_lease_count = 0;
     shader_lease_count = 0;
+    blend_scope_count = 0;
+    camera_scope_count = 0;
+    scissor_scope_count = 0;
 }
 
 fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawHostMeasure_textRetRecord {
@@ -625,8 +635,8 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_target = storeRenderTexture(.headless, 160, 90).?;
     const inner_target = storeRenderTexture(.headless, 80, 45).?;
-    try std.testing.expect(hostedDrawBeginRenderTextureRaw(.{ .resource = outer_target }));
-    try std.testing.expect(hostedDrawBeginRenderTextureRaw(.{ .resource = inner_target }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = outer_target }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = inner_target }));
     try std.testing.expectEqual(@as(usize, 2), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_render_texture_depth);
     hostedDrawEndRenderTextureRaw();
@@ -637,8 +647,8 @@ test "nested render and shader scopes lease last references until matching end" 
 
     const outer_shader = storeShader(.headless).?;
     const inner_shader = storeShader(.headless).?;
-    try std.testing.expect(hostedDrawBeginShaderRaw(.{ .arg0 = outer_shader }));
-    try std.testing.expect(hostedDrawBeginShaderRaw(.{ .arg0 = inner_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = outer_shader }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = inner_shader }));
     try std.testing.expectEqual(@as(usize, 2), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_shader_depth);
     hostedDrawEndShaderRaw();
@@ -647,13 +657,93 @@ test "nested render and shader scopes lease last references until matching end" 
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
 
-    try std.testing.expect(hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
-    try std.testing.expectEqual(@as(u8, 1), headless_blend_depth);
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    try std.testing.expectEqual(@as(usize, 1), blend_scope_count);
     hostedDrawEndBlendRaw();
-    try std.testing.expectEqual(@as(u8, 0), headless_blend_depth);
+    try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
 
-    try std.testing.expect(!hostedDrawBeginBlendRaw(.{ .arg0 = 6 }));
-    try std.testing.expectEqual(@as(u8, 0), headless_blend_depth);
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginBlendRaw(.{ .arg0 = 6 }));
+    try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
+}
+
+test "nested value scopes restore outer state and report bounded saturation" {
+    const outer_camera = abi.DrawHostBegin_cameraArgs{
+        .target = .{ .x = 10, .y = 20 },
+        .offset = .{ .x = 30, .y = 40 },
+        .rotation = 5,
+        .zoom = 2,
+    };
+    const inner_camera = abi.DrawHostBegin_cameraArgs{
+        .target = .{ .x = 1, .y = 2 },
+        .offset = .{ .x = 3, .y = 4 },
+        .rotation = 15,
+        .zoom = 0.5,
+    };
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(outer_camera));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(inner_camera));
+    hostedDrawEndCamera();
+    try std.testing.expectEqual(@as(usize, 1), camera_scope_count);
+    try std.testing.expectEqual(outer_camera.zoom, camera_scopes[0].zoom);
+    hostedDrawEndCamera();
+
+    const outer_scissor = abi.DrawHostBegin_scissorArgs{ .x = 10, .y = 20, .width = 300, .height = 200 };
+    const inner_scissor = abi.DrawHostBegin_scissorArgs{ .x = 30, .y = 40, .width = 50, .height = 60 };
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(outer_scissor));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(inner_scissor));
+    hostedDrawEndScissorRaw();
+    try std.testing.expectEqual(@as(usize, 1), scissor_scope_count);
+    try std.testing.expectEqual(outer_scissor.width, scissor_scopes[0].width);
+    hostedDrawEndScissorRaw();
+
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 2 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    hostedDrawEndBlendRaw();
+    try std.testing.expectEqual(@as(usize, 1), blend_scope_count);
+    try std.testing.expectEqual(@as(u8, 2), blend_scopes[0]);
+    hostedDrawEndBlendRaw();
+
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 0 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginBlendRaw(.{ .arg0 = 0 }));
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndBlendRaw();
+    try std.testing.expectEqual(@as(usize, 0), blend_scope_count);
+
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginCamera(outer_camera));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginCamera(inner_camera));
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndCamera();
+    try std.testing.expectEqual(@as(usize, 0), camera_scope_count);
+
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginScissorRaw(outer_scissor));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginScissorRaw(inner_scissor));
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndScissorRaw();
+    try std.testing.expectEqual(@as(usize, 0), scissor_scope_count);
+}
+
+test "resource scopes report bounded saturation without leaking transferred owners" {
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const target = storeRenderTexture(.headless, 16, 16).?;
+    abi.increfBox(@ptrCast(target), SCOPE_STACK_LIMIT);
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndRenderTextureRaw();
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+
+    const shader = storeShader(.headless).?;
+    abi.increfBox(@ptrCast(shader), SCOPE_STACK_LIMIT);
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndShaderRaw();
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 }
 
 test "scope kind confusion fails and releases transferred owners" {
@@ -668,10 +758,10 @@ test "scope kind confusion fails and releases transferred owners" {
     }
 
     const shader = storeShader(.headless).?;
-    try std.testing.expect(!hostedDrawBeginRenderTextureRaw(.{ .resource = @ptrCast(shader) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{ .resource = @ptrCast(shader) }));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     const target = storeRenderTexture(.headless, 16, 16).?;
-    try std.testing.expect(!hostedDrawBeginShaderRaw(.{ .arg0 = @ptrCast(target) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = @ptrCast(target) }));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
 
@@ -1050,16 +1140,16 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
     return null;
 }
 
-fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) bool {
+fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) u8 {
     const host = activeHost();
     const owner = args.resource;
-    if (render_texture_lease_count == RESOURCE_SCOPE_LIMIT) {
+    if (render_texture_lease_count == SCOPE_STACK_LIMIT) {
         releaseResourceBox(host, owner);
-        return false;
+        return SCOPE_LIMIT;
     }
     const resource = render_texture_heap.get(owner.handle) orelse {
         releaseResourceBox(host, owner);
-        return false;
+        return SCOPE_UNAVAILABLE;
     };
     switch (resource.*) {
         .headless => headless_render_texture_depth +|= 1,
@@ -1067,7 +1157,7 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
     }
     render_texture_leases[render_texture_lease_count] = owner;
     render_texture_lease_count += 1;
-    return true;
+    return SCOPE_OK;
 }
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
@@ -1083,16 +1173,16 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     releaseResourceBox(activeHost(), owner);
 }
 
-fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) bool {
+fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 {
     const host = activeHost();
     const owner = args.arg0;
-    if (shader_lease_count == RESOURCE_SCOPE_LIMIT) {
+    if (shader_lease_count == SCOPE_STACK_LIMIT) {
         releaseResourceBox(host, owner);
-        return false;
+        return SCOPE_LIMIT;
     }
     const resource = shader_heap.get(owner.*) orelse {
         releaseResourceBox(host, owner);
-        return false;
+        return SCOPE_UNAVAILABLE;
     };
     switch (resource.*) {
         .headless => headless_shader_depth +|= 1,
@@ -1100,7 +1190,7 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) boo
     }
     shader_leases[shader_lease_count] = owner;
     shader_lease_count += 1;
-    return true;
+    return SCOPE_OK;
 }
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
@@ -1116,22 +1206,20 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
     releaseResourceBox(activeHost(), owner);
 }
 
-fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) bool {
-    if (args.arg0 > 5) return false;
-    if (headlessMode()) {
-        headless_blend_depth +|= 1;
-        return true;
-    }
-    raylib.beginBlendMode(args.arg0);
-    return true;
+fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
+    if (blend_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
+    if (args.arg0 > 5) return SCOPE_UNAVAILABLE;
+    if (!headlessMode()) raylib.beginBlendMode(args.arg0);
+    blend_scopes[blend_scope_count] = args.arg0;
+    blend_scope_count += 1;
+    return SCOPE_OK;
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
-    if (headlessMode()) {
-        headless_blend_depth -|= 1;
-        return;
-    }
-    raylib.endBlendMode();
+    if (blend_scope_count == 0) return;
+    if (!headlessMode()) raylib.endBlendMode();
+    blend_scope_count -= 1;
+    if (!headlessMode() and blend_scope_count > 0) raylib.beginBlendMode(blend_scopes[blend_scope_count - 1]);
 }
 
 fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
@@ -1206,20 +1294,31 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
 }
 
 /// Forward Roc scissor bounds to the raylib backend.
-fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) void {
-    if (active_headless) return;
-    raylib.beginScissor(args.x, args.y, args.width, args.height);
+fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u8 {
+    if (scissor_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
+    if (!headlessMode()) raylib.beginScissor(args.x, args.y, args.width, args.height);
+    scissor_scopes[scissor_scope_count] = args;
+    scissor_scope_count += 1;
+    return SCOPE_OK;
 }
 
 /// End the scissor region opened by the Roc renderer.
 fn hostedDrawEndScissorRaw() callconv(.c) void {
-    if (active_headless) return;
-    raylib.endScissor();
+    if (scissor_scope_count == 0) return;
+    if (!headlessMode()) raylib.endScissor();
+    scissor_scope_count -= 1;
+    if (!headlessMode() and scissor_scope_count > 0) {
+        const outer = scissor_scopes[scissor_scope_count - 1];
+        raylib.beginScissor(outer.x, outer.y, outer.width, outer.height);
+    }
 }
 
-fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) void {
-    if (active_headless) return;
-    raylib.beginMode2D(args);
+fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
+    if (camera_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
+    if (!headlessMode()) raylib.beginMode2D(args);
+    camera_scopes[camera_scope_count] = args;
+    camera_scope_count += 1;
+    return SCOPE_OK;
 }
 
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
@@ -1243,8 +1342,10 @@ fn hostedDrawClear(color: abi.Color) callconv(.c) void {
 }
 
 fn hostedDrawEndCamera() callconv(.c) void {
-    if (active_headless) return;
-    raylib.endMode2D();
+    if (camera_scope_count == 0) return;
+    if (!headlessMode()) raylib.endMode2D();
+    camera_scope_count -= 1;
+    if (!headlessMode() and camera_scope_count > 0) raylib.beginMode2D(camera_scopes[camera_scope_count - 1]);
 }
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
@@ -1879,6 +1980,9 @@ fn deinitResources() void {
     // regressions in the debug host used by the test suite.
     std.debug.assert(render_texture_lease_count == 0);
     std.debug.assert(shader_lease_count == 0);
+    std.debug.assert(blend_scope_count == 0);
+    std.debug.assert(camera_scope_count == 0);
+    std.debug.assert(scissor_scope_count == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
     std.debug.assert(shader_heap.active() == 0);

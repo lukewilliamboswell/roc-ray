@@ -514,6 +514,10 @@ Draw := [].{
 		AlphaPremultiply,
 	]
 
+	## A scoped renderer could not be opened because its bounded native stack is
+	## full or a transferred host resource no longer resolves.
+	ScopeError : [ScopeLimit, ScopeUnavailable]
+
 	## Conventional source-alpha compositing.
 	alpha_blend : BlendMode
 	alpha_blend = Alpha
@@ -854,54 +858,86 @@ Draw := [].{
 	load_shader_source! = |cfg| Shader.from_source!(cfg)
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
-	with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
+	## Callback errors are returned only after the native target has been restored.
+	with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_render_texture! = |frame, RenderTexture.(target), callback| {
-		if DrawHost.begin_render_texture!(target) {
-			callback(frame)
+		status = DrawHost.begin_render_texture!(target)
+		if status == scope_ok {
+			result = callback(frame)
 			DrawHost.end_render_texture!()
+			result
+		} else if status == scope_limit {
+			Err(ScopeLimit)
+		} else {
+			Err(ScopeUnavailable)
 		}
 	}
 
 	## Scope shader application so the default shader is always restored.
-	with_shader! : Frame, Shader, (Frame => {}) => {}
+	## Callback errors are returned only after the previous shader has been restored.
+	with_shader! : Frame, Shader, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_shader! = |frame, Shader.(shader), callback| {
-		if DrawHost.begin_shader!(shader) {
-			callback(frame)
+		status = DrawHost.begin_shader!(shader)
+		if status == scope_ok {
+			result = callback(frame)
 			DrawHost.end_shader!()
+			result
+		} else if status == scope_limit {
+			Err(ScopeLimit)
+		} else {
+			Err(ScopeUnavailable)
 		}
 	}
 
 	## Scope one of raylib's built-in blend equations. Custom blend factors are
 	## deliberately excluded until they can be represented without global state.
-	with_blend_mode! : Frame, BlendMode, (Frame => result) => result
+	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_blend_mode! = |frame, mode, callback| {
-		started = DrawHost.begin_blend!(blend_mode_code(mode))
-		result = callback(frame)
-		if started DrawHost.end_blend!()
-		result
+		status = DrawHost.begin_blend!(blend_mode_code(mode))
+		if status == scope_ok {
+			result = callback(frame)
+			DrawHost.end_blend!()
+			result
+		} else if status == scope_limit {
+			Err(ScopeLimit)
+		} else {
+			Err(ScopeUnavailable)
+		}
 	}
 
 	## Draw the callback in world space using this camera.
-	with_camera! : Frame, CameraMode, (Frame => result) => result
+	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_camera! = |frame, camera, callback| {
-		DrawHost.begin_camera!(camera)
-		result = callback(frame)
-		DrawHost.end_camera!()
-		result
+		status = DrawHost.begin_camera!(camera)
+		if status == scope_ok {
+			result = callback(frame)
+			DrawHost.end_camera!()
+			result
+		} else if status == scope_limit {
+			Err(ScopeLimit)
+		} else {
+			Err(ScopeUnavailable)
+		}
 	}
 
 	## Compatibility alias for `with_camera!`.
-	with_mode_2d! : Frame, CameraMode, (Frame => result) => result
+	with_mode_2d! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_mode_2d! = |frame, camera, callback| frame.with_camera!(camera, callback)
 
 	## Restrict callback drawing to screen-space `bounds`, then always close the
 	## scissor before returning. Use this instead of manually pairing the raw effects.
-	with_scissor! : Frame, Math.Rect, (Frame => result) => result
+	with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_scissor! = |frame, bounds, callback| {
-		DrawHost.begin_scissor!(bounds)
-		result = callback(frame)
-		DrawHost.end_scissor!()
-		result
+		status = DrawHost.begin_scissor!(bounds)
+		if status == scope_ok {
+			result = callback(frame)
+			DrawHost.end_scissor!()
+			result
+		} else if status == scope_limit {
+			Err(ScopeLimit)
+		} else {
+			Err(ScopeUnavailable)
+		}
 	}
 
 	## Draw text using explicit font, spacing, color, and anchor alignment.
@@ -971,6 +1007,12 @@ blend_mode_code = |mode|
 		SubtractColors => 4
 		AlphaPremultiply => 5
 	}
+
+scope_ok : U8
+scope_ok = 0
+
+scope_limit : U8
+scope_limit = 2
 
 uniform_host! : DrawHost.Shader, Str => Try(DrawHost.Uniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {

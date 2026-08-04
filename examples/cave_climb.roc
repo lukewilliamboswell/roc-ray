@@ -936,7 +936,7 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, NonFiniteZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ZeroZoom, NonFiniteZoom, ..])
 render! = |model, host, frame| {
 	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
@@ -963,7 +963,13 @@ render! = |model, host, frame| {
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x101820))
-	frame.with_camera!(camera, |world_frame| draw_world!(world_frame, next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport))
+	frame.with_camera!(
+		camera,
+		|world_frame| {
+			draw_world!(world_frame, next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport)
+			Ok({})
+		},
+	)?
 	draw_hud!(frame, next.level, next.world)
 
 	Ok(next)

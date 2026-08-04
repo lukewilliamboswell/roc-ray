@@ -70,15 +70,15 @@ DrawHost := [].{
 	RenderTextureResult : { target : RenderTexture, err : U8 }
 	ShaderResult : { shader : Shader, err : U8 }
 
-	begin_camera! : Camera.Camera2D => {}
+	begin_camera! : Camera.Camera2D => U8
 	end_camera! : () => {}
-	begin_blend! : U8 => Bool
+	begin_blend! : U8 => U8
 	end_blend! : () => {}
-	begin_render_texture! : RenderTexture => Bool
+	begin_render_texture! : RenderTexture => U8
 	end_render_texture! : () => {}
-	begin_scissor! : Scissor => {}
+	begin_scissor! : Scissor => U8
 	end_scissor! : () => {}
-	begin_shader! : Shader => Bool
+	begin_shader! : Shader => U8
 	end_shader! : () => {}
 	circle! : Circle => {}
 	circle_gradient! : CircleGradient => {}

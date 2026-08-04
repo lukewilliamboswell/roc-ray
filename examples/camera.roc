@@ -67,7 +67,7 @@ move_player = |player, host| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, NonFiniteZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ZeroZoom, NonFiniteZoom, ..])
 render! = |model, host, frame| {
 	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
@@ -85,7 +85,13 @@ render! = |model, host, frame| {
 	next = { ..model, player, zoom, rotation }
 
 	frame.clear!(Color.ray_white)
-	frame.with_camera!(camera, |world_frame| draw_world!(world_frame, player, mouse_world))
+	frame.with_camera!(
+		camera,
+		|world_frame| {
+			draw_world!(world_frame, player, mouse_world)
+			Ok({})
+		},
+	)?
 	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
 	draw_hud!(frame, next)
 

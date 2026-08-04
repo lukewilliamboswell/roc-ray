@@ -182,13 +182,13 @@ Attached constructors such as `Assets.Texture.load!`,
 result type. A module function remains appropriate when there is no natural
 receiver or for a deliberate compatibility bridge.
 
-Camera, scissor, and blend scopes preserve the callback result and issue their
-matching end operation after it is computed. Render-target and shader scopes
-currently accept callbacks returning `{}` and invoke them only after their
-host-owned resource resolves; every successful begin has a matching end. Shader
-and render-target scopes may nest and restore the outer resource. Blend mode is
-non-nesting. Pass the callback's `Frame` onward rather than reintroducing an
-unscoped draw helper.
+Camera, scissor, blend, shader, and render-target callbacks return `Try`. Each
+successful begin runs its matching end after the callback result is computed,
+including callback `Err` values. All five scope families use bounded native
+stacks, may nest, and restore the outer state without allocating. A full stack
+returns `ScopeLimit`; an unresolved transferred resource returns
+`ScopeUnavailable`; neither failure runs the callback. Pass the callback's
+`Frame` onward rather than reintroducing an unscoped draw helper.
 
 ### Snapshot reuse and queries
 
@@ -268,7 +268,8 @@ without allocating.
 The headless host allocates typed lifecycle slots without creating GPU objects,
 allowing ownership and effect composition to run in ordinary example tests.
 Successful render-target and shader begins lease the transferred owner until the
-matching end; failed lookups release it immediately.
+matching end; failed lookups release it immediately and return
+`ScopeUnavailable`.
 
 ### Validation and culling
 

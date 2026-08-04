@@ -120,18 +120,21 @@ mouse_world = camera.screen_to_world(host.mouse.position())
 
 frame.with_camera!(camera, |world_frame| {
 	world_frame.circle!({ center: player, radius: 20, style: Draw.filled(Color.red) })
-})
+	Ok({})
+})?
 
 frame.with_scissor!(hud_bounds, |clipped_frame| {
 	clipped_frame.text_at!({ pos: hud_pos, text: "status", size: 18, color: Color.white })
-})
+	Ok({})
+})?
 ```
 
-Camera, scissor, and blend scopes return their callback's result and always run
-their matching end operation. Shader and render-target callbacks currently
-return `{}`; when their host-owned resource resolves, the matching end is
-paired with the successful begin. Render-target and shader scopes can nest and
-restore the outer resource. Blend scopes are intentionally non-nesting.
+Camera, scissor, blend, shader, and render-target callbacks return `Try`. Their
+matching end operation runs before either `Ok` or callback `Err` is returned.
+All five scope families can nest and restore the outer state. Handle
+`ScopeLimit` when the fixed native scope stack is full and `ScopeUnavailable`
+when a transferred host resource cannot be resolved; a failed begin never runs
+its callback.
 
 ### Host-owned textures, render targets, and shaders
 
@@ -167,7 +170,10 @@ time = shader.uniform_f32!("time")?
 
 # In render!:
 time.set!(seconds)
-frame.with_shader!(shader, |shader_frame| shader_frame.texture!(target_draw))
+frame.with_shader!(shader, |shader_frame| {
+	shader_frame.texture!(target_draw)
+	Ok({})
+})?
 ```
 
 Typed handles are available for `F32`, `I32`, `Vec2`, `Vec3`, `Vec4`, color,
@@ -268,13 +274,14 @@ offscreen tiles do not cross the host boundary:
 ```roc
 frame.with_camera!(camera, |world_frame| {
 	level.tilemap.draw_all_for_camera!(world_frame, camera, screen_size)
-})
+	Ok({})
+})?
 ```
 
 If bounds are already available, use `map.draw_all_in!(world_frame, world_view)`;
 both forms visit only the intersecting cell range.
 
-Use `frame.with_scissor!(screen_rect, |clipped_frame| { ... })` for paired
+Use `frame.with_scissor!(screen_rect, |clipped_frame| { ...; Ok({}) })?` for paired
 screen-space clipping. Filled polygon points must describe a simple convex
 boundary; use `frame.convex_polygon!` to make that requirement explicit.
 
@@ -290,7 +297,8 @@ boundary; use `frame.convex_polygon!` to make that requirement explicit.
   `host.key_pressed(key)`, and `camera.screen_to_world(point)` where the
   receiver is clearer.
 - Pass the callback frame through camera, scissor, blend, shader, and
-  render-target scopes instead of closing over an unscoped drawing API.
+  render-target scopes instead of closing over an unscoped drawing API. Return
+  `Try` from each callback and propagate `ScopeLimit`/`ScopeUnavailable`.
 - Replace `Assets.load_texture!`/`Assets.update_texture!` with
   `Assets.Texture.load!`/`texture.update!`; use `texture.view()` or
   `target.texture()` wherever only sampling is required.

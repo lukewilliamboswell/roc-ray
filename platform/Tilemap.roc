@@ -183,6 +183,17 @@ Tilemap :: {
 		properties: [],
 	}
 
+	## Empty configured tilemap, useful when an optional map fails to load.
+	## Unlike building `empty_raw_map`, this value cannot fail validation.
+	empty : Tilemap
+	empty = {
+		raw: empty_raw_map,
+		layer_roles: [],
+		object_roles: [],
+		origin: Math.zero,
+		resolved_tilesets: [],
+	}
+
 	## Parse a Tiled TMX map. The returned data is an allocation-efficient set of
 	## flat lists with index ranges for nested properties, objects, and tile data.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])

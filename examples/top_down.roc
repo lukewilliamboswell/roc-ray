@@ -527,12 +527,7 @@ fallback_decorations = [
 
 fallback_level : Level
 fallback_level = {
-	tilemap: match Tilemap.from_raw(Tilemap.empty_raw_map).build() {
-		Ok(tilemap) => tilemap
-		Err(_) => {
-			crash "empty fallback tilemap must build"
-		}
-	},
+	tilemap: Tilemap.empty,
 	spawn: fallback_spawn,
 	exit_center: fallback_exit_center,
 	exit_radius: fallback_exit_radius,

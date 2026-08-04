@@ -6,6 +6,7 @@
 const std = @import("std");
 const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
+const tilemap_batch = @import("tilemap_batch.zig");
 const rl = backend.rl;
 
 const Point = struct { x: f32, y: f32 };
@@ -18,6 +19,24 @@ const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
 const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
+
+const TilemapSmokeContext = struct { texture: backend.Texture };
+
+fn tilemapSmokeTextureToken(tileset: anytype) u64 {
+    return tileset.texture_token;
+}
+
+fn submitTilemapSmokeQuad(context: TilemapSmokeContext, quad: tilemap_batch.Quad) bool {
+    backend.drawTextureQuad(context.texture, .{
+        .source = quad.source,
+        .top_left = quad.top_left,
+        .bottom_left = quad.bottom_left,
+        .bottom_right = quad.bottom_right,
+        .top_right = quad.top_right,
+        .tint = white,
+    });
+    return true;
+}
 
 fn expectPixel(image: rl.Image, x: c_int, y: c_int, expected: Color) !void {
     const actual = rl.GetImageColor(image, x, y);
@@ -106,16 +125,30 @@ pub fn main() !void {
         .tint = Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
 
-    // Map source corners to horizontally mirrored destination corners, as the
-    // pure Tilemap flip transform does for Tiled's horizontal GID flag.
-    backend.drawTextureQuad(atlas, .{
-        .source = .{ .x = 0, .y = 0, .width = 16, .height = 8 },
-        .top_left = Point{ .x = 60, .y = 28 },
-        .bottom_left = Point{ .x = 60, .y = 44 },
-        .bottom_right = Point{ .x = 44, .y = 44 },
-        .top_right = Point{ .x = 44, .y = 28 },
-        .tint = Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
-    });
+    const tilemap_gids = [_]u64{tilemap_batch.flip_horizontal | 1};
+    const tilemap_layers = [_]struct { gid_count: u64, gid_start: u64, height: u64, width: u64, role: u8, visible: bool }{
+        .{ .gid_count = 1, .gid_start = 0, .height = 1, .width = 1, .role = 0, .visible = true },
+    };
+    const tilemap_tilesets = [_]struct { columns: u64, first_gid: u64, texture_token: u64, tile_height: f32, tile_width: f32 }{
+        .{ .columns = 1, .first_gid = 1, .texture_token = 1, .tile_height = 8, .tile_width = 16 },
+    };
+    const tilemap_submitted = tilemap_batch.draw(.{
+        .culled = false,
+        .gids = &tilemap_gids,
+        .layers = &tilemap_layers,
+        .tilesets = &tilemap_tilesets,
+        .map_tile_height = 16,
+        .map_tile_width = 16,
+        .max_col = 0,
+        .max_row = 0,
+        .min_col = 0,
+        .min_row = 0,
+        .origin_x = 44,
+        .origin_y = 28,
+        .selector_kind = tilemap_batch.selector_all,
+        .selector_value = 0,
+    }, TilemapSmokeContext{ .texture = atlas }, submitTilemapSmokeQuad, tilemapSmokeTextureToken);
+    if (tilemap_submitted != 1) return error.TilemapBatchCount;
     rl.EndDrawing();
 
     const screen = rl.LoadImageFromScreen();

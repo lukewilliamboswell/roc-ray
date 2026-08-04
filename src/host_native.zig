@@ -8,6 +8,7 @@ const abi = @import("roc_platform_abi.zig");
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
 const host_resource = @import("host_resource.zig");
+const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 
 // Import backend
@@ -82,6 +83,9 @@ var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
 var render_texture_leases: [SCOPE_STACK_LIMIT]?*abi.AssetsHostTextureResource = @splat(null);
+var headless_tilemap_draw_calls: usize = 0;
+var headless_tilemap_tiles: usize = 0;
+var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
 var render_texture_lease_count: usize = 0;
 var shader_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 var shader_lease_count: usize = 0;
@@ -145,6 +149,8 @@ const ShaderResource = union(enum) {
     headless,
     native: raylib.Shader,
 };
+
+const TilemapQuadProbe = tilemap_batch.Quad;
 
 fn destroySound(resource: *SoundResource) void {
     switch (resource.*) {
@@ -937,6 +943,109 @@ test "last resource references remain live through owning host operations" {
         .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+}
+
+fn headlessTilemapRequest(
+    host: *RocHost,
+    texture: *abi.AssetsHostTextureResource,
+    selector_kind: u8,
+    selector_value: u64,
+    culled: bool,
+) abi.TilemapHostDrawArgs {
+    const gids = [_]u64{
+        1,
+        TILED_FLIP_HORIZONTAL | 1,
+        0,
+        2,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+    };
+    const layers = [_]abi.TilemapHostDrawArg0Layers{
+        .{ .gid_count = 6, .gid_start = 0, .height = 2, .width = 3, .role = 0, .visible = true },
+        .{ .gid_count = 6, .gid_start = 6, .height = 2, .width = 3, .role = TILEMAP_ROLE_HIDDEN, .visible = true },
+    };
+    const tilesets = [_]abi.TilemapHostDrawArg0Tilesets{
+        .{
+            .columns = 2,
+            .first_gid = 1,
+            .texture = .{ .resource = texture },
+            .tile_height = 8,
+            .tile_width = 8,
+        },
+    };
+    return .{
+        .culled = culled,
+        .gids = abi.RocListWith(u64, false).fromSlice(&gids, host),
+        .layers = abi.RocListWith(abi.TilemapHostDrawArg0Layers, false).fromSlice(&layers, host),
+        .tilesets = abi.RocList(abi.TilemapHostDrawArg0Tilesets).fromSlice(&tilesets, host),
+        .map_tile_height = 16,
+        .map_tile_width = 16,
+        .max_col = 1,
+        .max_row = 0,
+        .min_col = 0,
+        .min_row = 0,
+        .origin_x = 10,
+        .origin_y = 20,
+        .selector_kind = selector_kind,
+        .selector_value = selector_value,
+    };
+}
+
+test "one tilemap host call draws a culled batch and releases texture owners" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    headless_tilemap_draw_calls = 0;
+    headless_tilemap_tiles = 0;
+    headless_tilemap_last_quad = null;
+    defer {
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, texture, TILEMAP_SELECTOR_ALL, 0, true));
+
+    try std.testing.expectEqual(@as(usize, 1), headless_tilemap_draw_calls);
+    try std.testing.expectEqual(@as(usize, 2), headless_tilemap_tiles);
+    const quad = headless_tilemap_last_quad.?;
+    try std.testing.expectEqual(TILED_FLIP_HORIZONTAL | 1, quad.raw_gid);
+    try std.testing.expectEqual(@as(f32, 42), quad.top_left.x);
+    try std.testing.expectEqual(@as(f32, 26), quad.top_right.x);
+    try std.testing.expectEqual(@as(f32, 20), quad.top_left.y);
+    try std.testing.expectEqual(@as(f32, 36), quad.bottom_left.y);
+    try std.testing.expectEqual(@as(f32, 0), quad.source.x);
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+}
+
+test "role batching cannot select hidden layers but named selection can" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    headless_tilemap_tiles = 0;
+    const rejected_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, rejected_texture, TILEMAP_SELECTOR_ROLE, TILEMAP_ROLE_HIDDEN, false));
+    try std.testing.expectEqual(@as(usize, 0), headless_tilemap_tiles);
+
+    const named_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, named_texture, TILEMAP_SELECTOR_LAYER, 1, false));
+    try std.testing.expectEqual(@as(usize, 6), headless_tilemap_tiles);
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 }
 
 test "render target texture views report not mutable and release ownership" {
@@ -1827,6 +1936,69 @@ fn exportedTilemapLoadTmxRaw(path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRa
     return hostedTilemapLoadTmxRaw(activeHost(), path_arg);
 }
 
+const TILEMAP_SELECTOR_LAYER = tilemap_batch.selector_layer;
+const TILEMAP_SELECTOR_ROLE = tilemap_batch.selector_role;
+const TILEMAP_SELECTOR_ALL = tilemap_batch.selector_all;
+const TILEMAP_ROLE_HIDDEN = tilemap_batch.role_hidden;
+const TILED_FLIP_HORIZONTAL = tilemap_batch.flip_horizontal;
+
+fn releaseTilemapDrawArgs(host: *RocHost, args: abi.TilemapHostDrawArgs) void {
+    args.gids.decref(host);
+    args.layers.decref(host);
+    if (args.tilesets.hasOneRef()) {
+        for (args.tilesets.allocationItems()) |tileset| tileset.decref(host);
+    }
+    args.tilesets.decref(host);
+}
+
+fn tilemapTextureToken(tileset: abi.TilemapHostDrawArg0Tilesets) u64 {
+    return tileset.texture.resource.handle;
+}
+
+fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
+    if (headlessMode()) {
+        if (texture_heap.get(quad.texture_token) == null) return false;
+        headless_tilemap_last_quad = quad;
+        return true;
+    }
+    const texture = nativeTextureForToken(quad.texture_token) orelse return false;
+    raylib.drawTextureQuad(texture, .{
+        .source = quad.source,
+        .top_left = quad.top_left,
+        .bottom_left = quad.bottom_left,
+        .bottom_right = quad.bottom_right,
+        .top_right = quad.top_right,
+        .tint = abi.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+    });
+    return true;
+}
+
+fn hostedTilemapDrawRaw(host: *RocHost, args: abi.TilemapHostDrawArgs) callconv(.c) void {
+    defer releaseTilemapDrawArgs(host, args);
+    if (headlessMode()) headless_tilemap_draw_calls += 1;
+    const submitted = tilemap_batch.draw(.{
+        .culled = args.culled,
+        .gids = args.gids.items(),
+        .layers = args.layers.items(),
+        .tilesets = args.tilesets.items(),
+        .map_tile_height = args.map_tile_height,
+        .map_tile_width = args.map_tile_width,
+        .max_col = args.max_col,
+        .max_row = args.max_row,
+        .min_col = args.min_col,
+        .min_row = args.min_row,
+        .origin_x = args.origin_x,
+        .origin_y = args.origin_y,
+        .selector_kind = args.selector_kind,
+        .selector_value = args.selector_value,
+    }, {}, submitTilemapQuad, tilemapTextureToken);
+    if (headlessMode()) headless_tilemap_tiles += submitted;
+}
+
+fn exportedTilemapDrawRaw(args: abi.TilemapHostDrawArgs) callconv(.c) void {
+    hostedTilemapDrawRaw(activeHost(), args);
+}
+
 fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
@@ -2300,6 +2472,7 @@ comptime {
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
+        @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
     }
 }

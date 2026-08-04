@@ -288,11 +288,14 @@ which return `ZeroZoom`. Its receiver transforms and viewport calculation are
 then total and stay in Roc.
 
 `TilemapBuilder.build()` validates that every parsed tileset has exactly one
-texture binding. Propagate or handle `MissingTilesetBinding(first_gid)` and
-`DuplicateTilesetBinding(first_gid)` during initialization. A built tilemap owns
-its texture bindings and routes every tile draw through the supplied `Frame`.
-The culled `draw_all_in!`/`draw_layer_in!` APIs keep lookup in pure Roc so each
-visible tile crosses the boundary once and offscreen tiles do not cross it.
+texture binding, that no binding is unused, and that layer/object role targets
+exist and are unique. Propagate its open error row during initialization. A
+built tilemap retains primitive layer metadata and a flat tileset list whose
+elements own their texture Boxes. Each public draw operation borrows those
+existing lists in one host call; final-owner cleanup recursively releases the
+texture elements. Culling remains an allocation-free Roc calculation whose
+inclusive cell range is sent with that single call. Do not rebuild a quad List
+per frame: the host iterates the borrowed GIDs directly.
 
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables

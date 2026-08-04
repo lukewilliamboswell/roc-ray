@@ -83,6 +83,7 @@ platform ""
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
+		"roc_tilemap_draw_raw": TilemapHost.draw!,
 		"roc_draw_begin_camera": DrawHost.begin_camera!,
 		"roc_draw_begin_blend_raw": DrawHost.begin_blend!,
 		"roc_draw_begin_render_texture_raw": DrawHost.begin_render_texture!,

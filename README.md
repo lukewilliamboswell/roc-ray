@@ -246,9 +246,11 @@ boundary. Cameras are opaque and always invertible: `Camera.new`,
 constructing an invalid camera.
 
 Tilemap builders validate that each parsed tileset has exactly one bound
-texture. Handle `MissingTilesetBinding(first_gid)` and
-`DuplicateTilesetBinding(first_gid)` from `.build()`. Tile drawing requires the
-current frame capability and keeps viewport culling in Roc.
+texture, reject unused bindings, and reject unknown or duplicate layer/object
+role targets. Handle the composable errors from `.build()` during initialization.
+Tile drawing requires the current frame capability. The built value retains
+flat render metadata and texture owners, so each public draw operation borrows
+those existing lists in one host call without constructing a per-frame batch.
 
 ## Examples
 
@@ -294,7 +296,7 @@ The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Ken
 The cave climber demonstrates TMX tile layers, object roles, sprite sheets, camera following, and Physics distance checks with selected CC0 assets from Kenney's New Platformer Pack.
 
 For large maps, pass the visible world rectangle to the culled drawing API so
-offscreen tiles do not cross the host boundary:
+the host visits only the intersecting range:
 
 ```roc
 frame.with_camera!(camera, |world_frame| {
@@ -304,7 +306,9 @@ frame.with_camera!(camera, |world_frame| {
 ```
 
 If bounds are already available, use `map.draw_all_in!(world_frame, world_view)`;
-both forms visit only the intersecting cell range.
+both forms make one boundary call for the complete selected range. Role-based
+drawing accepts only `Tilemap.DrawRole` (`Drawn` or `Solid`); draw a hidden layer
+deliberately by naming it with `draw_layer!` or `draw_layer_in!`.
 
 Use `frame.with_scissor!(screen_rect, |clipped_frame| { ...; Ok({}) })?` for paired
 screen-space clipping. Filled polygon points must describe a simple convex

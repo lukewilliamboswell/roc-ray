@@ -1,7 +1,7 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
 import Assets
+import AssetsHost
 import Camera
-import Color
 import Draw
 import Math
 import TilemapHost
@@ -28,6 +28,10 @@ TilemapTextureBinding : {
 TilemapLayerRole := [Drawn, Solid, Hidden].{
 	is_eq : _
 }
+
+## Roles accepted by ordinary role-based drawing. Hidden layers can only be
+## drawn through the explicit named-layer APIs.
+TilemapDrawRole : [Drawn, Solid]
 
 TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown].{
 	is_eq : _
@@ -70,8 +74,19 @@ TilemapResolvedTileset : {
 	texture : Assets.Texture,
 }
 
-## Configuration errors found while binding parsed tilesets to host textures.
-TilemapBuildError := [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64)]
+## Configuration errors found while preparing a tilemap. These are reported
+## once during `build`; draw operations never repeat builder validation.
+TilemapBuildError : [
+	MissingTilesetBinding(U64),
+	DuplicateTilesetBinding(U64),
+	UnusedTilesetBinding(U64),
+	UnknownLayerRole(Str),
+	DuplicateLayerRole(Str),
+	UnknownObjectRole(Str),
+	DuplicateObjectRole(Str),
+]
+
+TilemapBindingError : [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64)]
 
 TilemapBuilder :: {
 	raw : TilemapRawMap,
@@ -103,20 +118,31 @@ TilemapBuilder :: {
 		object_roles: List.append(builder.object_roles, { key, role }),
 	}
 
-	## Validate every parsed tileset has exactly one texture binding, then resolve
-	## those bindings once. Per-frame tile queries remain unchanged and allocation-free.
-	build : TilemapBuilder -> Try(Tilemap, [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64), ..])
+	## Validate bindings and semantic-role targets once, then prepare the flat
+	## render metadata borrowed by each batched host draw.
+	build : TilemapBuilder -> Try(Tilemap, [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64), UnusedTilesetBinding(U64), UnknownLayerRole(Str), DuplicateLayerRole(Str), UnknownObjectRole(Str), DuplicateObjectRole(Str), ..])
 	build = |builder|
-		match resolve_tilesets(builder.raw.tilesets, builder.textures) {
-			Ok(resolved_tilesets) => Ok({
-				raw: builder.raw,
-				layer_roles: builder.layer_roles,
-				object_roles: builder.object_roles,
-				origin: builder.origin,
-				resolved_tilesets,
-			})
+		match validate_builder(builder) {
+			Ok(_) =>
+				match resolve_tilesets(builder.raw.tilesets, builder.textures) {
+					Ok(resolved_tilesets) => Ok({
+						raw: builder.raw,
+						layer_roles: builder.layer_roles,
+						object_roles: builder.object_roles,
+						origin: builder.origin,
+						render_layers: make_render_layers(builder.raw.layers, builder.layer_roles),
+						render_tilesets: make_render_tilesets(resolved_tilesets),
+					})
+					Err(MissingTilesetBinding(first_gid)) => Err(MissingTilesetBinding(first_gid))
+					Err(DuplicateTilesetBinding(first_gid)) => Err(DuplicateTilesetBinding(first_gid))
+				}
 			Err(MissingTilesetBinding(first_gid)) => Err(MissingTilesetBinding(first_gid))
 			Err(DuplicateTilesetBinding(first_gid)) => Err(DuplicateTilesetBinding(first_gid))
+			Err(UnusedTilesetBinding(first_gid)) => Err(UnusedTilesetBinding(first_gid))
+			Err(UnknownLayerRole(name)) => Err(UnknownLayerRole(name))
+			Err(DuplicateLayerRole(name)) => Err(DuplicateLayerRole(name))
+			Err(UnknownObjectRole(key)) => Err(UnknownObjectRole(key))
+			Err(DuplicateObjectRole(key)) => Err(DuplicateObjectRole(key))
 		}
 }
 
@@ -125,7 +151,8 @@ Tilemap :: {
 	layer_roles : List(TilemapLayerRoleRule),
 	object_roles : List(TilemapObjectRoleRule),
 	origin : Math.Vec2,
-	resolved_tilesets : List(TilemapResolvedTileset),
+	render_layers : List(TilemapHost.RenderLayer),
+	render_tilesets : List(TilemapHost.RenderTileset),
 }.{
 
 	## Parsed TMX data stored in flat lists to avoid a heap allocation per nested item.
@@ -158,6 +185,7 @@ Tilemap :: {
 
 	## Application-level behavior assigned to a named layer.
 	LayerRole : TilemapLayerRole
+	DrawRole : TilemapDrawRole
 
 	## Application-level behavior assigned to an object name or type.
 	ObjectRole : TilemapObjectRole
@@ -191,7 +219,8 @@ Tilemap :: {
 		layer_roles: [],
 		object_roles: [],
 		origin: Math.zero,
-		resolved_tilesets: [],
+		render_layers: [],
+		render_tilesets: [],
 	}
 
 	## Parse a Tiled TMX map. The returned data is an allocation-efficient set of
@@ -467,61 +496,50 @@ Tilemap :: {
 	## Draw one named visible layer without camera culling.
 	draw_layer! : Tilemap, Draw.Frame, Str => {}
 	draw_layer! = |map, frame, layer_name| {
-		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_cells!(map, frame, layer, 0)
+		match find_layer_index(map.raw.layers, layer_name) {
+			Ok(layer_index) => draw_selection!(map, frame, selector_layer, layer_index)
 			Err(_) => {}
 		}
 	}
 
 	## Draw only cells intersecting `world_view`. This is the preferred hot path
-	## for maps larger than the viewport: culled cells perform no hosted effects.
+	## for maps larger than the viewport. One hosted effect draws the complete
+	## selected range; no per-tile effect or temporary List is created.
 	draw_layer_in! : Tilemap, Draw.Frame, Str, Math.Rect => {}
 	draw_layer_in! = |map, frame, layer_name, world_view| {
-		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_view!(map, frame, layer, world_view)
+		match find_layer_index(map.raw.layers, layer_name) {
+			Ok(layer_index) =>
+				match Tilemap.cell_range_for_world_rect(map, world_view) {
+					Ok(range) => draw_selection_in!(map, frame, selector_layer, layer_index, range)
+					Err(_) => {}
+				}
 			Err(_) => {}
 		}
 	}
 
 	## Draw every visible layer configured with the `Drawn` role.
-	draw_layers! : Tilemap, Draw.Frame, TilemapLayerRole => {}
-	draw_layers! = |map, frame, role| {
-		for layer in map.raw.layers {
-			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_cells!(map, frame, layer, 0)
-			}
-		}
-	}
+	draw_layers! : Tilemap, Draw.Frame, TilemapDrawRole => {}
+	draw_layers! = |map, frame, role| draw_selection!(map, frame, selector_role, draw_role_code(role))
 
 	## Draw visible configured layers culled to a world-space viewport.
-	draw_layers_in! : Tilemap, Draw.Frame, TilemapLayerRole, Math.Rect => {}
+	draw_layers_in! : Tilemap, Draw.Frame, TilemapDrawRole, Math.Rect => {}
 	draw_layers_in! = |map, frame, role, world_view| {
-		for layer in map.raw.layers {
-			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_view!(map, frame, layer, world_view)
-			}
+		match Tilemap.cell_range_for_world_rect(map, world_view) {
+			Ok(range) => draw_selection_in!(map, frame, selector_role, draw_role_code(role), range)
+			Err(_) => {}
 		}
 	}
 
 	## Draw every visible tile layer, regardless of configured role.
 	draw_all! : Tilemap, Draw.Frame => {}
-	draw_all! = |map, frame| {
-		for layer in map.raw.layers {
-			role = Tilemap.layer_role_for(map, layer)
-			if role == Drawn or role == Solid {
-				draw_layer_cells!(map, frame, layer, 0)
-			}
-		}
-	}
+	draw_all! = |map, frame| draw_selection!(map, frame, selector_all, 0)
 
 	## Draw every visible tile layer culled to a world-space viewport.
 	draw_all_in! : Tilemap, Draw.Frame, Math.Rect => {}
 	draw_all_in! = |map, frame, world_view| {
-		for layer in map.raw.layers {
-			role = Tilemap.layer_role_for(map, layer)
-			if role == Drawn or role == Solid {
-				draw_layer_view!(map, frame, layer, world_view)
-			}
+		match Tilemap.cell_range_for_world_rect(map, world_view) {
+			Ok(range) => draw_selection_in!(map, frame, selector_all, 0, range)
+			Err(_) => {}
 		}
 	}
 
@@ -573,7 +591,158 @@ layer_role_for_rules = |rules, layer_name| {
 	$role
 }
 
-resolve_tilesets : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try(List(TilemapResolvedTileset), TilemapBuildError)
+layer_role_code : TilemapLayerRole -> U8
+layer_role_code = |role| if role == Solid 1 else if role == Hidden 2 else 0
+
+draw_role_code : TilemapDrawRole -> U64
+draw_role_code = |role|
+	match role {
+		Drawn => 0
+		Solid => 1
+	}
+
+make_render_layers : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> List(TilemapHost.RenderLayer)
+make_render_layers = |layers, rules|
+	List.map(
+		layers,
+		|layer| {
+			width: layer.width,
+			height: layer.height,
+			gid_start: layer.gid_start,
+			gid_count: layer.gid_count,
+			visible: layer.visible,
+			role: layer_role_code(layer_role_for_rules(rules, layer.name)),
+		},
+	)
+
+make_render_tilesets : List(TilemapResolvedTileset) -> List(TilemapHost.RenderTileset)
+make_render_tilesets = |tilesets|
+	List.map(
+		tilesets,
+		|tileset| {
+			first_gid: tileset.first_gid,
+			tile_width: tileset.tile_width,
+			tile_height: tileset.tile_height,
+			columns: tileset.columns,
+			texture: tileset.texture.host_value(),
+		},
+	)
+
+validate_builder : TilemapBuilder -> Try({}, TilemapBuildError)
+validate_builder = |builder|
+	match validate_unused_texture_bindings(builder.raw.tilesets, builder.textures) {
+		Ok(_) =>
+			match validate_layer_role_rules(builder.raw.layers, builder.layer_roles) {
+				Ok(_) => validate_object_role_rules(builder.raw.objects, builder.object_roles)
+				Err(error) => Err(error)
+			}
+		Err(error) => Err(error)
+	}
+
+validate_unused_texture_bindings : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try({}, TilemapBuildError)
+validate_unused_texture_bindings = |tilesets, bindings| {
+	var $result = Ok({})
+	for binding in bindings {
+		match $result {
+			Ok(_) => if !tileset_gid_exists(tilesets, binding.first_gid) {
+				$result = Err(UnusedTilesetBinding(binding.first_gid))
+			}
+			Err(_) => {}
+		}
+	}
+	$result
+}
+
+tileset_gid_exists : List(TilemapRawTileset), U64 -> Bool
+tileset_gid_exists = |tilesets, first_gid| {
+	var $found = Bool.False
+	for tileset in tilesets {
+		if tileset.first_gid == first_gid {
+			$found = Bool.True
+		}
+	}
+	$found
+}
+
+validate_layer_role_rules : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> Try({}, TilemapBuildError)
+validate_layer_role_rules = |layers, rules| {
+	var $result = Ok({})
+	for rule in rules {
+		match $result {
+			Ok(_) =>
+				if count_layer_role_rules(rules, rule.name) > 1 {
+					$result = Err(DuplicateLayerRole(rule.name))
+				} else if !layer_name_exists(layers, rule.name) {
+					$result = Err(UnknownLayerRole(rule.name))
+				}
+			Err(_) => {}
+		}
+	}
+	$result
+}
+
+count_layer_role_rules : List(TilemapLayerRoleRule), Str -> U64
+count_layer_role_rules = |rules, name| {
+	var $count = 0
+	for rule in rules {
+		if rule.name == name {
+			$count = $count + 1
+		}
+	}
+	$count
+}
+
+layer_name_exists : List(TilemapRawLayer), Str -> Bool
+layer_name_exists = |layers, name| {
+	var $found = Bool.False
+	for layer in layers {
+		if layer.name == name {
+			$found = Bool.True
+		}
+	}
+	$found
+}
+
+validate_object_role_rules : List(TilemapRawObject), List(TilemapObjectRoleRule) -> Try({}, TilemapBuildError)
+validate_object_role_rules = |objects, rules| {
+	var $result = Ok({})
+	for rule in rules {
+		match $result {
+			Ok(_) =>
+				if count_object_role_rules(rules, rule.key) > 1 {
+					$result = Err(DuplicateObjectRole(rule.key))
+				} else if !object_role_target_exists(objects, rule.key) {
+					$result = Err(UnknownObjectRole(rule.key))
+				}
+			Err(_) => {}
+		}
+	}
+	$result
+}
+
+count_object_role_rules : List(TilemapObjectRoleRule), Str -> U64
+count_object_role_rules = |rules, key| {
+	var $count = 0
+	for rule in rules {
+		if rule.key == key {
+			$count = $count + 1
+		}
+	}
+	$count
+}
+
+object_role_target_exists : List(TilemapRawObject), Str -> Bool
+object_role_target_exists = |objects, key| {
+	var $found = Bool.False
+	for object in objects {
+		if object.name == key or object.type_name == key {
+			$found = Bool.True
+		}
+	}
+	$found
+}
+
+resolve_tilesets : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try(List(TilemapResolvedTileset), TilemapBindingError)
 resolve_tilesets = |tilesets, textures| {
 	var $result = Ok([])
 	for tileset in tilesets {
@@ -632,6 +801,16 @@ find_layer = |layers, name| {
 	$found
 }
 
+find_layer_index : List(TilemapRawLayer), Str -> Try(U64, [NotFound])
+find_layer_index = |layers, name| find_layer_index_at(layers, name, 0)
+
+find_layer_index_at : List(TilemapRawLayer), Str, U64 -> Try(U64, [NotFound])
+find_layer_index_at = |layers, name, index|
+	match List.get(layers, index) {
+		Ok(layer) => if layer.name == name Ok(index) else find_layer_index_at(layers, name, index + 1)
+		Err(_) => Err(NotFound)
+	}
+
 gid_at_layer : TilemapRawMap, TilemapRawLayer, TilemapCell -> Try(U64, [NotFound, OutOfBounds, ..])
 gid_at_layer = |raw, layer, cell| {
 	if cell.col >= layer.width or cell.row >= layer.height {
@@ -674,84 +853,52 @@ circle_touches_solid_col = |map, layer, circle, range, row, col| {
 	}
 }
 
-draw_layer_cells! : Tilemap, Draw.Frame, TilemapRawLayer, U64 => {}
-draw_layer_cells! = |map, frame, layer, index| {
-	if index >= layer.gid_count or !(layer.visible) {
-		{}
-	} else {
-		match List.get(map.raw.gids, layer.gid_start + index) {
-			Ok(raw_gid) => {
-				gid = Tilemap.clean_gid(raw_gid)
-				if gid != 0 {
-					cell = { col: index % layer.width, row: index // layer.width }
-					draw_gid!(map, frame, raw_gid, cell)
-				}
-			}
-			Err(_) => {}
-		}
-		draw_layer_cells!(map, frame, layer, index + 1)
-	}
-}
+selector_layer : U8
+selector_layer = 0
 
-draw_layer_view! : Tilemap, Draw.Frame, TilemapRawLayer, Math.Rect => {}
-draw_layer_view! = |map, frame, layer, world_view| {
-	if layer.visible {
-		match Tilemap.cell_range_for_world_rect(map, world_view) {
-			Ok(range) => draw_layer_range_rows!(map, frame, layer, range, range.min_row)
-			Err(_) => {}
-		}
-	}
-}
+selector_role : U8
+selector_role = 1
 
-draw_layer_range_rows! : Tilemap, Draw.Frame, TilemapRawLayer, TilemapCellRange, U64 => {}
-draw_layer_range_rows! = |map, frame, layer, range, row| {
-	if row <= range.max_row and row < layer.height {
-		draw_layer_range_cols!(map, frame, layer, range, row, range.min_col)
-		draw_layer_range_rows!(map, frame, layer, range, row + 1)
-	}
-}
+selector_all : U8
+selector_all = 2
 
-draw_layer_range_cols! : Tilemap, Draw.Frame, TilemapRawLayer, TilemapCellRange, U64, U64 => {}
-draw_layer_range_cols! = |map, frame, layer, range, row, col| {
-	if col <= range.max_col and col < layer.width {
-		index = row * layer.width + col
-		if index < layer.gid_count {
-			match List.get(map.raw.gids, layer.gid_start + index) {
-				Ok(raw_gid) => if Tilemap.clean_gid(raw_gid) != 0 draw_gid!(map, frame, raw_gid, { col, row })
-				Err(_) => {}
-			}
-		}
-		draw_layer_range_cols!(map, frame, layer, range, row, col + 1)
-	}
-}
+draw_selection! : Tilemap, Draw.Frame, U8, U64 => {}
+draw_selection! = |map, _frame, selector_kind, selector_value|
+	TilemapHost.draw!({
+		gids: map.raw.gids,
+		layers: map.render_layers,
+		tilesets: map.render_tilesets,
+		origin_x: map.origin.x,
+		origin_y: map.origin.y,
+		map_tile_width: map.raw.tile_width,
+		map_tile_height: map.raw.tile_height,
+		selector_kind,
+		selector_value,
+		culled: Bool.False,
+		min_col: 0,
+		min_row: 0,
+		max_col: 0,
+		max_row: 0,
+	})
 
-draw_gid! : Tilemap, Draw.Frame, U64, TilemapCell => {}
-draw_gid! = |map, frame, raw_gid, cell| {
-	gid = Tilemap.clean_gid(raw_gid)
-	match find_resolved_tileset(map.resolved_tilesets, gid) {
-		Ok(tileset) => {
-			local = gid - tileset.first_gid
-			source = {
-				x: U64.to_f32(local % tileset.columns) * tileset.tile_width,
-				y: U64.to_f32(local // tileset.columns) * tileset.tile_height,
-				width: tileset.tile_width,
-				height: tileset.tile_height,
-			}
-			dest = Tilemap.world_rect_for_cell(map, cell)
-			flip = Tilemap.flip_for_gid(raw_gid)
-			frame.texture_quad!({
-				texture: tileset.texture,
-				source,
-				top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),
-				bottom_left: transformed_corner(dest, { x: 0, y: 1 }, flip),
-				bottom_right: transformed_corner(dest, { x: 1, y: 1 }, flip),
-				top_right: transformed_corner(dest, { x: 1, y: 0 }, flip),
-				tint: Color.white,
-			})
-		}
-		Err(_) => {}
-	}
-}
+draw_selection_in! : Tilemap, Draw.Frame, U8, U64, TilemapCellRange => {}
+draw_selection_in! = |map, _frame, selector_kind, selector_value, range|
+	TilemapHost.draw!({
+		gids: map.raw.gids,
+		layers: map.render_layers,
+		tilesets: map.render_tilesets,
+		origin_x: map.origin.x,
+		origin_y: map.origin.y,
+		map_tile_width: map.raw.tile_width,
+		map_tile_height: map.raw.tile_height,
+		selector_kind,
+		selector_value,
+		culled: Bool.True,
+		min_col: range.min_col,
+		min_row: range.min_row,
+		max_col: range.max_col,
+		max_row: range.max_row,
+	})
 
 transformed_corner : Math.Rect, Math.Vec2, TilemapFlip -> Math.Vec2
 transformed_corner = |dest, corner, flip| {
@@ -763,18 +910,7 @@ transformed_corner = |dest, corner, flip| {
 	{ x: dest.x + x * dest.width, y: dest.y + y * dest.height }
 }
 
-find_resolved_tileset : List(TilemapResolvedTileset), U64 -> Try(TilemapResolvedTileset, [NotFound])
-find_resolved_tileset = |tilesets, gid| {
-	var $found = Err(NotFound)
-	for tileset in tilesets {
-		if gid >= tileset.first_gid {
-			$found = Ok(tileset)
-		}
-	}
-	$found
-}
-
-find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, TilemapBuildError)
+find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, TilemapBindingError)
 find_unique_texture = |textures, first_gid| {
 	var $found = Err(MissingTilesetBinding(first_gid))
 	var $count = 0
@@ -819,6 +955,9 @@ test_spawn_object = { id: 1, name: "spawn-a", type_name: "spawn", x: 8, y: 8, wi
 
 test_speed_property : TilemapRawProperty
 test_speed_property = { name: "speed", kind: 2, text: "12.5", number: 12.5, integer: 12, bool_value: Bool.True }
+
+test_texture : Assets.Texture
+test_texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 32, height: 32 })))
 
 test_raw : TilemapRawMap
 test_raw = {
@@ -885,6 +1024,30 @@ expect Tilemap.flip_for_gid(2_147_483_648 + 1) == { horizontal: Bool.True, verti
 expect transformed_corner(Math.rect(10, 20, 30, 40), { x: 0, y: 0 }, { horizontal: Bool.False, vertical: Bool.False, diagonal: Bool.True }) == { x: 40, y: 60 }
 expect match Tilemap.from_raw({ ..test_raw, tilesets: [test_tileset] }).build() {
 	Err(MissingTilesetBinding(1)) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).with_tileset_texture(99, test_texture).build() {
+	Err(UnusedTilesetBinding(99)) => True
+	_ => False
+}
+expect match Tilemap.from_raw({ ..test_raw, tilesets: [test_tileset] }).with_tileset_texture(1, test_texture).with_tileset_texture(1, test_texture).build() {
+	Err(DuplicateTilesetBinding(1)) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).layer_role("Missing", Solid).build() {
+	Err(UnknownLayerRole("Missing")) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).layer_role("Walls", Solid).layer_role("Walls", Hidden).build() {
+	Err(DuplicateLayerRole("Walls")) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).object_role("missing", Hazard).build() {
+	Err(UnknownObjectRole("missing")) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).object_role("spawn", Spawn).object_role("spawn", Checkpoint).build() {
+	Err(DuplicateObjectRole("spawn")) => True
 	_ => False
 }
 expect {

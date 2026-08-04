@@ -6587,14 +6587,14 @@ pub const HostHostRead_fileArgs = extern struct {
 };
 
 /// Arguments for HostHost.set_screen_size!
-/// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
+/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
 pub const HostHostSet_screen_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
-    height: f32,
-    width: f32,
+    height: i32,
+    width: i32,
 } else extern struct {
-    height: f32,
-    width: f32,
+    height: i32,
+    width: i32,
 };
 
 comptime {
@@ -6745,7 +6745,7 @@ pub const DrawHostText_alignedArg0 = __AnonStruct_3254a3a7c05c34ce;
 pub const DrawHostTriangleArg0 = __AnonStruct_1c9ce87f41bdd392;
 pub const DrawHostTriangle_linesArg0 = __AnonStruct_dba5c127500247a0;
 pub const HostHostRead_file = __AnonStruct_1504326a3d41a158;
-pub const HostHostSet_screen_sizeArg0 = __AnonStruct_473ae8de77ee164b;
+pub const HostHostSet_screen_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const TilemapHostDrawArg0 = __AnonStruct_ef7f989c787a75a5;
 pub const TilemapHostDrawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
 pub const TilemapHostDrawArg0Tilesets = __AnonStruct_feee45760081ee45;
@@ -7207,7 +7207,7 @@ pub extern fn roc_host_read_env(arg0: RocStr) callconv(.c) HostHostRead_envResul
 pub extern fn roc_host_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct_1504326a3d41a158;
 
 /// Hosted symbol for HostHost.set_screen_size!
-/// Roc signature: { height : F32, width : F32 } => Try({}, [NotSupported])
+/// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
 pub extern fn roc_host_set_screen_size(arg0: HostHostSet_screen_sizeArgs) callconv(.c) HostHostSet_screen_sizeResult;
 
 /// Hosted symbol for HostHost.set_target_fps!

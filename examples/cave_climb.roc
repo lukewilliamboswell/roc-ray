@@ -936,7 +936,7 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ZeroZoom, NonFiniteZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 render! = |model, host, frame| {
 	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
@@ -975,7 +975,7 @@ render! = |model, host, frame| {
 	Ok(next)
 }
 
-camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, ..])
+camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 camera_for = |level, target| {
 	map_target = world_to_map(target)
 	zoom = 0.96

@@ -15,8 +15,8 @@ Camera := [].{
 	}
 
 	## Immutable camera value accepted by drawing and coordinate transforms.
-	## Its representation is opaque so a non-invertible zero zoom cannot be
-	## constructed without going through a validating operation.
+	## Its representation is opaque so non-finite transform fields or a
+	## non-invertible zero zoom cannot bypass validation.
 	Camera2D :: {
 		target : Math.Vec2,
 		offset : Math.Vec2,
@@ -40,17 +40,20 @@ Camera := [].{
 		zoom : Camera2D -> F32
 		zoom = |camera| camera.zoom
 
-		## Return a copy focused on a new world-space target.
-		with_target : Camera2D, Math.Vec2 -> Camera2D
-		with_target = |camera, new_target| { ..camera, target: new_target }
+		## Return a copy focused on a finite world-space target.
+		with_target : Camera2D, Math.Vec2 -> Try(Camera2D, [NonFiniteTarget, ..])
+		with_target = |camera, new_target|
+			if vec_is_finite(new_target) Ok({ ..camera, target: new_target }) else Err(NonFiniteTarget)
 
-		## Return a copy with a new logical screen-space offset.
-		with_offset : Camera2D, Math.Vec2 -> Camera2D
-		with_offset = |camera, new_offset| { ..camera, offset: new_offset }
+		## Return a copy with a finite logical screen-space offset.
+		with_offset : Camera2D, Math.Vec2 -> Try(Camera2D, [NonFiniteOffset, ..])
+		with_offset = |camera, new_offset|
+			if vec_is_finite(new_offset) Ok({ ..camera, offset: new_offset }) else Err(NonFiniteOffset)
 
-		## Return a copy with a new clockwise rotation in degrees.
-		with_rotation : Camera2D, F32 -> Camera2D
-		with_rotation = |camera, new_rotation| { ..camera, rotation: new_rotation }
+		## Return a copy with a finite clockwise rotation in degrees.
+		with_rotation : Camera2D, F32 -> Try(Camera2D, [NonFiniteRotation, ..])
+		with_rotation = |camera, new_rotation|
+			if F32.is_finite(new_rotation) Ok({ ..camera, rotation: new_rotation }) else Err(NonFiniteRotation)
 
 		## Return a copy with a validated finite, non-zero zoom factor.
 		with_zoom : Camera2D, F32 -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
@@ -115,37 +118,68 @@ Camera := [].{
 	default : Camera2D
 	default = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: 1 }
 
-	## Construct a camera from explicit settings, rejecting zero or non-finite zoom.
-	new : Settings -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
+	## Construct a camera from explicit settings, rejecting every non-finite
+	## transform field and zero zoom.
+	new : Settings -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
 	new = |settings|
 		if settings.zoom == 0 {
 			Err(ZeroZoom)
 		} else if !(F32.is_finite(settings.zoom)) {
 			Err(NonFiniteZoom)
+		} else if !(vec_is_finite(settings.target)) {
+			Err(NonFiniteTarget)
+		} else if !(vec_is_finite(settings.offset)) {
+			Err(NonFiniteOffset)
+		} else if !(F32.is_finite(settings.rotation)) {
+			Err(NonFiniteRotation)
 		} else {
 			Ok(settings)
 		}
 
 	## Place `target` at the center of a screen with unit zoom.
-	centered : Math.Vec2, Math.Vec2 -> Camera2D
-	centered = |target_value, screen_size| {
-		target: target_value,
-		offset: screen_size.scale(0.5),
-		rotation: 0,
-		zoom: 1,
-	}
+	centered : Math.Vec2, Math.Vec2 -> Try(Camera2D, [NonFiniteTarget, NonFiniteOffset, ..])
+	centered = |target_value, screen_size|
+		if !(vec_is_finite(target_value)) {
+			Err(NonFiniteTarget)
+		} else if !(vec_is_finite(screen_size)) {
+			Err(NonFiniteOffset)
+		} else {
+			Ok({
+				target: target_value,
+				offset: screen_size.scale(0.5),
+				rotation: 0,
+				zoom: 1,
+			})
+		}
 
 	## A common player-follow camera with a validated configurable zoom.
-	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
-	follow = |target_value, cfg| Camera.new({
-		target: target_value,
-		offset: cfg.screen.scale(0.5),
-		rotation: 0,
-		zoom: cfg.zoom,
-	})
+	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+	follow = |target_value, cfg|
+		if cfg.zoom == 0 {
+			Err(ZeroZoom)
+		} else if !(F32.is_finite(cfg.zoom)) {
+			Err(NonFiniteZoom)
+		} else if !(vec_is_finite(target_value)) {
+			Err(NonFiniteTarget)
+		} else if !(vec_is_finite(cfg.screen)) {
+			Err(NonFiniteOffset)
+		} else {
+			Ok({
+				target: target_value,
+				offset: cfg.screen.scale(0.5),
+				rotation: 0,
+				zoom: cfg.zoom,
+			})
+		}
 }
 
-expect Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }).offset() == { x: 400, y: 300 }
+vec_is_finite : Math.Vec2 -> Bool
+vec_is_finite = |vec| F32.is_finite(vec.x) and F32.is_finite(vec.y)
+
+expect match Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }) {
+	Ok(camera) => camera.offset() == { x: 400, y: 300 }
+	Err(_) => False
+}
 expect match Camera.default.with_zoom(0) {
 	Err(ZeroZoom) => True
 	_ => False
@@ -162,8 +196,23 @@ expect match Camera.default.with_zoom(0 - F32.infinity) {
 	Err(NonFiniteZoom) => True
 	_ => False
 }
+expect match Camera.default.with_target({ x: F32.nan, y: 0 }) {
+	Err(NonFiniteTarget) => True
+	_ => False
+}
+expect match Camera.default.with_offset({ x: 0, y: F32.infinity }) {
+	Err(NonFiniteOffset) => True
+	_ => False
+}
+expect match Camera.default.with_rotation(F32.nan) {
+	Err(NonFiniteRotation) => True
+	_ => False
+}
 expect Camera.default.world_to_screen({ x: 12, y: 34 }) == { x: 12, y: 34 }
-expect Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }).world_to_screen({ x: 10, y: 20 }) == { x: 400, y: 300 }
+expect match Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }) {
+	Ok(camera) => camera.world_to_screen({ x: 10, y: 20 }) == { x: 400, y: 300 }
+	Err(_) => False
+}
 expect {
 	result = Camera.new({ target: { x: 10, y: -5 }, offset: { x: 320, y: 240 }, rotation: 37, zoom: 2.5 })
 	match result {

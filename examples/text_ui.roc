@@ -32,7 +32,7 @@ title_font_path = "examples/assets/RocRayDemo.ttf"
 long_message : Str
 long_message = "This is intentionally longer than the old fixed text buffer: text rendering and measurement now allocate a temporary C string when needed, so score screens, settings menus, HUD labels, and debug overlays can render longer copy without silently disappearing after 255 bytes."
 
-init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default,
 	|_host| {

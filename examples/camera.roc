@@ -35,7 +35,7 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
-init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
 	|_host|
@@ -69,7 +69,7 @@ move_player = |player, host| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ZeroZoom, NonFiniteZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
 render! = |model, host, frame| {
 	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
@@ -80,7 +80,7 @@ render! = |model, host, frame| {
 	rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
 	rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
 
-	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)
+	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)?
 	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })
 	mouse_screen = camera.world_to_screen(mouse_world)
 

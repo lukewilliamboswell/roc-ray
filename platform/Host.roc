@@ -107,14 +107,18 @@ Host := {
 	random_i32! : Host, I32, I32 => I32
 	random_i32! = |_host, min, max| HostHost.random_i32!(min, max)
 
-	## Set the window/screen size.
+	## Set the window/screen size to positive integer dimensions.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
 	## Receiver form: `host.set_screen_size!(size)`.
-	set_screen_size! : Host, { width : F32, height : F32 } => Try({}, [NotSupported, ..])
+	set_screen_size! : Host, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 	set_screen_size! = |_host, size|
-		match HostHost.set_screen_size!(size) {
-			Ok({}) => Ok({})
-			Err(NotSupported) => Err(NotSupported)
+		if size.width <= 0 or size.height <= 0 {
+			Err(InvalidSize)
+		} else {
+			match HostHost.set_screen_size!(size) {
+				Ok({}) => Ok({})
+				Err(NotSupported) => Err(NotSupported)
+			}
 		}
 
 	## Set raylib's CPU-side frame-rate cap. Values at or below zero render

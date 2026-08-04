@@ -82,6 +82,7 @@ python
 import json
 
 stats = {{
+	"render_calls": 0,
     "alloc_calls": 0,
     "alloc_bytes": 0,
     "alloc_sizes": {{}},
@@ -126,6 +127,7 @@ def record_exit(event):
 CountBreakpoint("roc_alloc", "alloc_calls", "{size_expression}")
 CountBreakpoint("roc_realloc", "realloc_calls")
 CountBreakpoint("roc_dealloc", "dealloc_calls")
+CountBreakpoint("render_for_host", "render_calls")
 for symbol in {encoded_boundary_symbols}:
     CountHostBreakpoint(symbol)
 gdb.events.exited.connect(record_exit)
@@ -163,9 +165,11 @@ def profile_run(root: Path, binary: Path, frames: int) -> dict[str, int | None]:
 
 
 def subtract_startup(
-    one_frame: dict[str, int | None], many_frames: dict[str, int | None], frames: int
+    one_frame: dict[str, int | None], many_frames: dict[str, int | None]
 ) -> dict[str, float | int]:
-    measured_frames = frames - 1
+    measured_frames = int(many_frames["render_calls"]) - int(one_frame["render_calls"])
+    if measured_frames <= 0:
+        raise RuntimeError("profiler did not observe a positive render-frame delta")
     result: dict[str, float | int] = {"measured_frames": measured_frames}
     for key in (
         "alloc_calls",
@@ -258,7 +262,7 @@ def main() -> int:
                 raise RuntimeError(f"missing {binary}; rerun with --build")
             one_frame = profile_run(root, binary, 1)
             many_frames = profile_run(root, binary, args.frames)
-            steady = subtract_startup(one_frame, many_frames, args.frames)
+            steady = subtract_startup(one_frame, many_frames)
             rows.append(
                 {
                     "example": example.stem,
@@ -277,7 +281,7 @@ def main() -> int:
 
     print(
         f"Steady-state Roc allocation and hosted-call traffic "
-        f"(startup subtracted; {args.frames - 1} measured frames)"
+        f"(startup subtracted; normalized by observed render calls)"
     )
     print(
         f"{'example':<16} {'allocs/frame':>12} {'bytes/frame':>12} "

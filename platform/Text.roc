@@ -38,16 +38,6 @@ Text := [].{
 		align : Align,
 	}
 
-	Measured : {
-		pos : Math.Vec2,
-		text : Str,
-		size : F32,
-		spacing : F32,
-		color : Color,
-		font : Font,
-		align : Align,
-	}
-
 	Builder :: {
 		content : Str,
 		size : F32,
@@ -67,7 +57,7 @@ Text := [].{
 		measure! = |builder| Text.measure_builder!(builder)
 
 		## Cache immutable UTF-8 text, font/style, and measurement in the host.
-		prepare! : Builder => Try(Prepared, [TextPrepareFailed, ResourceLimit, ..])
+		prepare! : Builder => Try(Prepared, [ResourceLimit, ..])
 		prepare! = |builder| Text.prepare_builder!(builder)
 	}
 
@@ -120,7 +110,7 @@ Text := [].{
 		})
 	}
 
-	prepare_builder! : Builder => Try(Prepared, [TextPrepareFailed, ResourceLimit, ..])
+	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
 	prepare_builder! = |builder| {
 		result = DrawHost.prepare_text!({
 			text: builder.content,
@@ -131,7 +121,7 @@ Text := [].{
 		if result.err == 2 {
 			Err(ResourceLimit)
 		} else if result.err != 0 {
-			Err(TextPrepareFailed)
+			crash "prepared text host invariant failed"
 		} else {
 			Ok(
 				Prepared.(
@@ -200,20 +190,6 @@ Text := [].{
 		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
 		DrawHost.draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
 	}
-
-	## Draw changing text directly. This retains the one-call dynamic Str API and
-	## deliberately does not create a short-lived prepared resource.
-	draw_measured! : Draw.Frame, Measured => {}
-	draw_measured! = |frame, cfg|
-		frame.text!({
-			pos: cfg.pos,
-			text: cfg.text,
-			size: cfg.size,
-			spacing: cfg.spacing,
-			color: cfg.color,
-			font: cfg.font,
-			align: cfg.align,
-		})
 }
 
 expect {

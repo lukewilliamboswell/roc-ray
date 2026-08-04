@@ -892,7 +892,7 @@ Draw := [].{
 
 	## Scope one of raylib's built-in blend equations. Custom blend factors are
 	## deliberately excluded until they can be represented without global state.
-	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_blend_mode! = |frame, mode, callback| {
 		status = DrawHost.begin_blend!(blend_mode_code(mode))
 		if status == scope_ok {
@@ -902,12 +902,12 @@ Draw := [].{
 		} else if status == scope_limit {
 			Err(ScopeLimit)
 		} else {
-			Err(ScopeUnavailable)
+			crash "blend scope host invariant failed"
 		}
 	}
 
 	## Draw the callback in world space using this camera.
-	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_camera! = |frame, camera, callback| {
 		status = DrawHost.begin_camera!(camera)
 		if status == scope_ok {
@@ -917,17 +917,17 @@ Draw := [].{
 		} else if status == scope_limit {
 			Err(ScopeLimit)
 		} else {
-			Err(ScopeUnavailable)
+			crash "camera scope host invariant failed"
 		}
 	}
 
 	## Compatibility alias for `with_camera!`.
-	with_mode_2d! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_mode_2d! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_mode_2d! = |frame, camera, callback| frame.with_camera!(camera, callback)
 
 	## Restrict callback drawing to screen-space `bounds`, then always close the
 	## scissor before returning. Use this instead of manually pairing the raw effects.
-	with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
+	with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_scissor! = |frame, bounds, callback| {
 		status = DrawHost.begin_scissor!(bounds)
 		if status == scope_ok {
@@ -937,7 +937,7 @@ Draw := [].{
 		} else if status == scope_limit {
 			Err(ScopeLimit)
 		} else {
-			Err(ScopeUnavailable)
+			crash "scissor scope host invariant failed"
 		}
 	}
 

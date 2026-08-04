@@ -83,6 +83,7 @@ TilemapBuildError : [
 	DuplicateLayerRole(Str),
 	UnknownObjectRole(Str),
 	DuplicateObjectRole(Str),
+	AmbiguousObjectRole(Str),
 ]
 
 TilemapBindingError : [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64)]
@@ -119,7 +120,7 @@ TilemapBuilder :: {
 
 	## Validate bindings and semantic-role targets once, then prepare the flat
 	## render metadata borrowed by each batched host draw.
-	build : TilemapBuilder -> Try(Tilemap, [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64), UnusedTilesetBinding(U64), UnknownLayerRole(Str), DuplicateLayerRole(Str), UnknownObjectRole(Str), DuplicateObjectRole(Str), ..])
+	build : TilemapBuilder -> Try(Tilemap, [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64), UnusedTilesetBinding(U64), UnknownLayerRole(Str), DuplicateLayerRole(Str), UnknownObjectRole(Str), DuplicateObjectRole(Str), AmbiguousObjectRole(Str), ..])
 	build = |builder|
 		match validate_builder(builder) {
 			Ok(_) =>
@@ -141,6 +142,7 @@ TilemapBuilder :: {
 			Err(DuplicateLayerRole(name)) => Err(DuplicateLayerRole(name))
 			Err(UnknownObjectRole(key)) => Err(UnknownObjectRole(key))
 			Err(DuplicateObjectRole(key)) => Err(DuplicateObjectRole(key))
+			Err(AmbiguousObjectRole(key)) => Err(AmbiguousObjectRole(key))
 		}
 }
 
@@ -293,11 +295,7 @@ Tilemap :: {
 
 	## Return the first object matching a configured semantic role.
 	first_object : Tilemap, TilemapObjectRole -> Try(TilemapRawObject, [NotFound, ..])
-	first_object = |map, role|
-		match List.first(Tilemap.objects_with_role(map, role)) {
-			Ok(object) => Ok(object)
-			Err(_) => Err(NotFound)
-		}
+	first_object = |map, role| first_object_at(map, role, 0)
 
 	## Return an object's center in map-local coordinates.
 	object_center : TilemapRawObject -> Math.Vec2
@@ -452,20 +450,7 @@ Tilemap :: {
 
 	## Whether any layer configured as solid contains a tile in this cell.
 	solid_cell : Tilemap, TilemapCell -> Bool
-	solid_cell = |map, cell| {
-		var $solid = Bool.False
-		for layer in map.raw.layers {
-			if Tilemap.layer_role_for(map, layer) == Solid {
-				match gid_at_layer(map.raw, layer, cell) {
-					Ok(gid) => if Tilemap.clean_gid(gid) != 0 {
-						$solid = Bool.True
-					}
-					Err(_) => {}
-				}
-			}
-		}
-		$solid
-	}
+	solid_cell = |map, cell| solid_cell_at_layer(map, cell, 0)
 
 	## Whether a world-space point falls in a solid cell.
 	solid_at_world : Tilemap, Math.Vec2 -> Bool
@@ -484,15 +469,7 @@ Tilemap :: {
 		extent = circle.radius + 0.0001
 		bounds = Math.rect(circle.center.x - extent, circle.center.y - extent, extent * 2, extent * 2)
 		match Tilemap.cell_range_for_world_rect(map, bounds) {
-			Ok(range) => {
-				var $touches = Bool.False
-				for layer in map.raw.layers {
-					if !$touches and Tilemap.layer_role_for(map, layer) == Solid {
-						$touches = circle_touches_solid_row(map, layer, circle, range, range.min_row)
-					}
-				}
-				$touches
-			}
+			Ok(range) => circle_touches_solid_at_layer(map, circle, range, 0)
 			Err(_) => Bool.False
 		}
 	}
@@ -744,7 +721,36 @@ validate_object_role_rules = |objects, rules| {
 			Err(_) => {}
 		}
 	}
+	match $result {
+		Ok(_) => validate_object_role_ambiguity(objects, rules)
+		Err(error) => Err(error)
+	}
+}
+
+validate_object_role_ambiguity : List(TilemapRawObject), List(TilemapObjectRoleRule) -> Try({}, TilemapBuildError)
+validate_object_role_ambiguity = |objects, rules| {
+	var $result = Ok({})
+	for object in objects {
+		match $result {
+			Ok(_) => if count_object_role_matches(rules, object) > 1 {
+				identifier = if Str.is_empty(object.name) object.type_name else object.name
+				$result = Err(AmbiguousObjectRole(identifier))
+			}
+			Err(_) => {}
+		}
+	}
 	$result
+}
+
+count_object_role_matches : List(TilemapObjectRoleRule), TilemapRawObject -> U64
+count_object_role_matches = |rules, object| {
+	var $count = 0
+	for rule in rules {
+		if rule.key == object.name or rule.key == object.type_name {
+			$count = $count + 1
+		}
+	}
+	$count
 }
 
 count_object_role_rules : List(TilemapObjectRoleRule), Str -> U64
@@ -768,6 +774,13 @@ object_role_target_exists = |objects, key| {
 	}
 	$found
 }
+
+first_object_at : Tilemap, TilemapObjectRole, U64 -> Try(TilemapRawObject, [NotFound, ..])
+first_object_at = |map, role, index|
+	match List.get(map.raw.objects, index) {
+		Ok(object) => if Tilemap.object_role_for(map, object) == role Ok(object) else first_object_at(map, role, index + 1)
+		Err(_) => Err(NotFound)
+	}
 
 resolve_tilesets : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try(List(TilemapResolvedTileset), TilemapBindingError)
 resolve_tilesets = |tilesets, textures| {
@@ -850,6 +863,45 @@ gid_at_layer = |raw, layer, cell| {
 		}
 	}
 }
+
+solid_cell_at_layer : Tilemap, TilemapCell, U64 -> Bool
+solid_cell_at_layer = |map, cell, layer_index|
+	match List.get(map.render_layers, layer_index) {
+		Ok(render_layer) =>
+			if render_layer.role == layer_role_code(Solid) {
+				match List.get(map.raw.layers, layer_index) {
+					Ok(layer) =>
+						match gid_at_layer(map.raw, layer, cell) {
+							Ok(gid) => if Tilemap.clean_gid(gid) != 0 Bool.True else solid_cell_at_layer(map, cell, layer_index + 1)
+							Err(_) => solid_cell_at_layer(map, cell, layer_index + 1)
+						}
+					Err(_) => Bool.False
+				}
+			} else {
+				solid_cell_at_layer(map, cell, layer_index + 1)
+			}
+		Err(_) => Bool.False
+	}
+
+circle_touches_solid_at_layer : Tilemap, Math.Circle, TilemapCellRange, U64 -> Bool
+circle_touches_solid_at_layer = |map, circle, range, layer_index|
+	match List.get(map.render_layers, layer_index) {
+		Ok(render_layer) =>
+			if render_layer.role == layer_role_code(Solid) {
+				match List.get(map.raw.layers, layer_index) {
+					Ok(layer) =>
+						if circle_touches_solid_row(map, layer, circle, range, range.min_row) {
+							Bool.True
+						} else {
+							circle_touches_solid_at_layer(map, circle, range, layer_index + 1)
+						}
+					Err(_) => Bool.False
+				}
+			} else {
+				circle_touches_solid_at_layer(map, circle, range, layer_index + 1)
+			}
+		Err(_) => Bool.False
+	}
 
 circle_touches_solid_row : Tilemap, TilemapRawLayer, Math.Circle, TilemapCellRange, U64 -> Bool
 circle_touches_solid_row = |map, layer, circle, range, row| {
@@ -1072,6 +1124,10 @@ expect match Tilemap.from_raw(test_raw).object_role("missing", Hazard).build() {
 }
 expect match Tilemap.from_raw(test_raw).object_role("spawn", Spawn).object_role("spawn", Checkpoint).build() {
 	Err(DuplicateObjectRole("spawn")) => True
+	_ => False
+}
+expect match Tilemap.from_raw(test_raw).object_role("spawn", Spawn).object_role("spawn-a", Hazard).build() {
+	Err(AmbiguousObjectRole("spawn-a")) => True
 	_ => False
 }
 expect {

@@ -196,9 +196,11 @@ Camera, scissor, blend, shader, and render-target callbacks return `Try`. Each
 successful begin runs its matching end after the callback result is computed,
 including callback `Err` values. All five scope families use bounded native
 stacks, may nest, and restore the outer state without allocating. A full stack
-returns `ScopeLimit`; an unresolved transferred resource returns
-`ScopeUnavailable`; neither failure runs the callback. Pass the callback's
-`Frame` onward rather than reintroducing an unscoped draw helper.
+returns `ScopeLimit`; shader and render-target scopes also return
+`ScopeUnavailable` when a transferred resource cannot resolve. Value-only
+camera, scissor, and blend scopes cannot enter that state. Neither failure runs
+the callback. Pass the callback's `Frame` onward rather than reintroducing an
+unscoped draw helper.
 
 ### Snapshot reuse and queries
 
@@ -292,14 +294,15 @@ matching end; failed lookups release it immediately and return
 
 ### Validation and culling
 
-Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque and rejects
-zero or non-finite zoom through `Camera.new`, `Camera.follow`, `.with_zoom`, and
-`.clamp_zoom`, which return `ZeroZoom` or `NonFiniteZoom`. Its receiver
-transforms and viewport calculation are then total and stay in Roc.
+Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque: its
+constructors and receiver updates reject zero zoom and non-finite target,
+offset, rotation, or zoom values with dedicated errors. Its receiver transforms
+and viewport calculation are then total and stay in Roc.
 
 `TilemapBuilder.build()` validates that every parsed tileset has exactly one
 texture binding, that no binding is unused, and that layer/object role targets
-exist and are unique. Propagate its open error row during initialization. A
+exist and are unique. Distinct name/type keys that select the same object are
+also rejected as duplicate targets. Propagate its open error row during initialization. A
 built tilemap retains primitive layer metadata and a flat tileset list whose
 elements own their texture Boxes. Each public draw operation borrows those
 existing lists in one host call; final-owner cleanup recursively releases the

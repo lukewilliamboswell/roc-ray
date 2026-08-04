@@ -132,7 +132,6 @@ const PreparedTextResource = struct {
     font_owner: ?*u64,
     size: f32,
     spacing: f32,
-    measured: abi.DrawHostMeasure_textRetRecord,
 };
 
 const TextureResource = union(enum) {
@@ -1759,7 +1758,6 @@ fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) 
         .font_owner = font_owner,
         .size = args.size,
         .spacing = args.spacing,
-        .measured = measured,
     }) orelse return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
 
     return .{ .prepared = prepared, .height = measured.height, .width = measured.width, .err = RESOURCE_ERR_NONE };
@@ -2005,10 +2003,10 @@ fn hostedExit(code: i32) callconv(.c) void {
 
 fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
     if (active_headless) {
-        headless_screen_width = positiveI32(@intFromFloat(args.width), headless_screen_width);
-        headless_screen_height = positiveI32(@intFromFloat(args.height), headless_screen_height);
+        headless_screen_width = positiveI32(args.width, headless_screen_width);
+        headless_screen_height = positiveI32(args.height, headless_screen_height);
     } else {
-        raylib.setWindowSize(@intFromFloat(args.width), @intFromFloat(args.height));
+        raylib.setWindowSize(args.width, args.height);
     }
     return TRY_TAG_OK;
 }

@@ -134,9 +134,10 @@ frame.with_scissor!(hud_bounds, |clipped_frame| {
 Camera, scissor, blend, shader, and render-target callbacks return `Try`. Their
 matching end operation runs before either `Ok` or callback `Err` is returned.
 All five scope families can nest and restore the outer state. Handle
-`ScopeLimit` when the fixed native scope stack is full and `ScopeUnavailable`
-when a transferred host resource cannot be resolved; a failed begin never runs
-its callback.
+`ScopeLimit` when the fixed native scope stack is full. Shader and render-target
+scopes additionally report `ScopeUnavailable` when a transferred host resource
+cannot be resolved; value-only camera, scissor, and blend scopes do not expose
+that impossible state. A failed begin never runs its callback.
 
 ### Prepared and dynamic text
 
@@ -159,9 +160,9 @@ label.draw!(frame, {
 with only its typed handle, position, and color; it does not transfer the source
 `Str`, remeasure, convert to a C string, or allocate. The prepared value retains
 its loaded font, so the original font binding may leave scope safely. Handle
-`ResourceLimit` or `TextPrepareFailed` when preparing. For scores, chat, and
-other changing content, keep using the direct `frame.text!` API rather than
-creating a short-lived prepared value each frame.
+`ResourceLimit` when the bounded heap or native text storage is exhausted. For
+scores, chat, and other changing content, keep using the direct `frame.text!`
+API rather than creating a short-lived prepared value each frame.
 
 ### Host-owned textures, render targets, and shaders
 
@@ -243,13 +244,14 @@ and capture atomically with `host.set_cursor_mode!(Visible)` (or `Hidden` or
 
 `camera.world_to_screen(point)` and `camera.screen_to_world(point)` perform the
 same 2D transform used by `frame.with_camera!` without crossing the host
-boundary. Cameras are opaque and always invertible: `Camera.new`,
-`Camera.follow`, `.with_zoom`, and `.clamp_zoom` report `ZeroZoom` or
-`NonFiniteZoom` instead of constructing an invalid camera.
+boundary. Cameras are opaque and always invertible: constructors and receiver
+updates reject zero zoom and every non-finite target, offset, rotation, or zoom
+with a dedicated validation error instead of constructing an invalid camera.
 
 Tilemap builders validate that each parsed tileset has exactly one bound
-texture, reject unused bindings, and reject unknown or duplicate layer/object
-role targets. Handle the composable errors from `.build()` during initialization.
+texture, reject unused bindings, and reject unknown, duplicate, or overlapping
+layer/object role targets, including distinct name/type rules matching one
+object. Handle the composable errors from `.build()` during initialization.
 Tile drawing requires the current frame capability. The built value retains
 flat render metadata and texture owners, so each public draw operation borrows
 those existing lists in one host call without constructing a per-frame batch.
@@ -329,7 +331,8 @@ boundary; use `frame.convex_polygon!` to make that requirement explicit.
   receiver is clearer.
 - Pass the callback frame through camera, scissor, blend, shader, and
   render-target scopes instead of closing over an unscoped drawing API. Return
-  `Try` from each callback and propagate `ScopeLimit`/`ScopeUnavailable`.
+  `Try` from each callback and propagate `ScopeLimit`; shader/render-target
+  scopes can additionally return `ScopeUnavailable`.
 - Replace `Assets.load_texture!`/`Assets.update_texture!` with
   `Assets.Texture.load!`/`texture.update!`; use `texture.view()` or
   `target.texture()` wherever only sampling is required.

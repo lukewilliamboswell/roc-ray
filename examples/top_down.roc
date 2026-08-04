@@ -1003,7 +1003,7 @@ advance_playing! = |model, host| {
 	{ ..model, world: result.world }
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ZeroZoom, NonFiniteZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 render! = |model, host, frame| {
 	if host.key_pressed(KeyEscape) {
 		host.exit!(0)

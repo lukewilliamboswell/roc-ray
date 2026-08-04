@@ -13,7 +13,7 @@ Model : {
 
 program = { init!, render! }
 
-init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
+init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default,
 	|host| {

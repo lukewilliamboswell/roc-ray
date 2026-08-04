@@ -1,7 +1,7 @@
 ## Internal drawing transport, opaque GPU resources, and hosted effects.
 ##
 ## This module is intentionally not exposed by the platform package.
-import AssetsHost
+import Assets
 import Camera
 import Color
 import Math
@@ -18,11 +18,8 @@ DrawHost := [].{
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
-	RenderTexture :: AssetsHost.Texture.{
-		from_texture : AssetsHost.Texture -> RenderTexture
-		from_texture = |texture| RenderTexture.(texture)
-
-		texture : RenderTexture -> AssetsHost.Texture
+	RenderTexture :: Assets.TextureView.{
+		texture : RenderTexture -> Assets.TextureView
 		texture = |RenderTexture.(texture)| texture
 	}
 
@@ -60,15 +57,15 @@ DrawHost := [].{
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
-	TextureDraw : { texture : AssetsHost.Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
-	TextureQuad : { texture : AssetsHost.Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, tint : Color }
+	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
+	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, tint : Color }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
 	ShaderInt : { uniform : Uniform, value : I32 }
 	ShaderVec2 : { uniform : Uniform, value : Math.Vec2 }
 	ShaderVec3 : { uniform : Uniform, value : { x : F32, y : F32, z : F32 } }
 	ShaderVec4 : { uniform : Uniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-	ShaderTexture : { uniform : Uniform, texture : AssetsHost.Texture }
+	ShaderTexture : { uniform : Uniform, texture : Assets.TextureView }
 	FontResult : { font : FontResource, err : U8 }
 	RenderTextureResult : { target : RenderTexture, err : U8 }
 	ShaderResult : { shader : Shader, err : U8 }

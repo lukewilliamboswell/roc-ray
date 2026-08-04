@@ -7,7 +7,6 @@
 ## during initialization and keep them in the model; per-frame drawing and
 ## uniform updates do not allocate.
 import Assets
-import AssetsHost
 import Camera
 import Color
 import DrawHost
@@ -374,7 +373,7 @@ Draw := [].{
 
 		## Read-only view of this render target's color attachment.
 		texture : RenderTexture -> Assets.TextureView
-		texture = |RenderTexture.(target)| Assets.TextureView.from_host(DrawHost.RenderTexture.texture(target))
+		texture = |RenderTexture.(target)| DrawHost.RenderTexture.texture(target)
 
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
@@ -491,7 +490,7 @@ Draw := [].{
 		set! : TextureUniform, Assets.TextureView => {}
 		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
 			uniform,
-			texture: texture.host_value(),
+			texture,
 		})
 
 		## Convenience setter for an ordinary mutable texture.
@@ -792,7 +791,7 @@ Draw := [].{
 	texture! : Frame, TextureDraw => {}
 	texture! = |_frame, cfg| {
 		DrawHost.draw_texture!({
-			texture: cfg.texture.host_value(),
+			texture: cfg.texture,
 			source: cfg.source,
 			dest: cfg.dest,
 			origin: cfg.origin,
@@ -808,7 +807,7 @@ Draw := [].{
 	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
 	texture_quad! : Frame, TextureQuad => {}
 	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
-		texture: cfg.texture.host_value(),
+		texture: cfg.texture.view(),
 		source: cfg.source,
 		top_left: cfg.top_left,
 		bottom_left: cfg.bottom_left,
@@ -820,7 +819,7 @@ Draw := [].{
 	## Draw a sampled texture view across an arbitrary screen-space quadrilateral.
 	texture_view_quad! : Frame, TextureViewQuad => {}
 	texture_view_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
-		texture: cfg.texture.host_value(),
+		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.top_left,
 		bottom_left: cfg.bottom_left,
@@ -991,14 +990,8 @@ normalized_color = |color| {
 	w: U8.to_f32(color.a) / 255,
 }
 
-test_texture = Assets.TextureView.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 })))
-
-expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, test_texture)).source == Math.rect(0, 0, 8, 4)
-expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), test_texture)).dest == Math.rect(0, 0, 16, 8)
-expect (TextureDrawBuilder.run(TextureDrawBuilder.origin_center, test_texture)).origin == { x: 4, y: 2 }
 expect Draw.align_factor(Draw.align_top_left) == { x: 0, y: 0 }
 expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
 expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
-expect Draw.render_texture_source(Draw.RenderTexture.(DrawHost.RenderTexture.from_texture(AssetsHost.Texture.from_resource(Box.box({ handle: 7, width: 320, height: 180 }))))) == Math.rect(0, 0, 320, -180)

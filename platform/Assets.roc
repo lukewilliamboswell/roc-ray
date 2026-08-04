@@ -13,10 +13,6 @@ Assets := [].{
 	## Opaque, host-owned mutable GPU texture with immutable dimensions.
 	Texture :: AssetsHost.Texture.{
 
-		## Internal constructor used by platform modules and tests.
-		from_host : AssetsHost.Texture -> Texture
-		from_host = |texture| Texture.(texture)
-
 		## Load an image file into GPU texture memory.
 		load! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 		load! = |path| {
@@ -71,18 +67,11 @@ Assets := [].{
 		set_wrap! : Texture, TextureWrap => {}
 		set_wrap! = |Texture.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
-		## Internal owning transport used by other platform modules.
-		host_value : Texture -> AssetsHost.Texture
-		host_value = |Texture.(texture)| texture
 	}
 
 	## Read-only sampled texture view. It owns the same ARC reference as its
 	## source but deliberately has no pixel-update capability.
 	TextureView :: AssetsHost.Texture.{
-
-		## Internal constructor used for host-owned read-only attachments.
-		from_host : AssetsHost.Texture -> TextureView
-		from_host = |texture| TextureView.(texture)
 
 		## Width in pixels.
 		width : TextureView -> F32
@@ -108,9 +97,6 @@ Assets := [].{
 		set_wrap! : TextureView, TextureWrap => {}
 		set_wrap! = |TextureView.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
-		## Internal owning transport used by other platform modules.
-		host_value : TextureView -> AssetsHost.Texture
-		host_value = |TextureView.(texture)| texture
 	}
 
 	## Texture sampling filter used when an image is scaled.

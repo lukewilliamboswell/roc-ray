@@ -107,7 +107,7 @@ program = { init!, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.title("RocRay Pong").config(),
+	App.default.with_title("RocRay Pong"),
 	|host| {
 		# Generate the sound effects once; new_round! carries the handles forward.
 		seed = {

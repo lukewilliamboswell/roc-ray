@@ -57,6 +57,22 @@ App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 		cursor : AppCursorMode,
 	}.{
 
+		## Return a config with a different window title.
+		with_title : Config, Str -> Config
+		with_title = |cfg, value| { ..cfg, title: value }
+
+		## Return a config with different initial logical dimensions.
+		with_size : Config, { width : I32, height : I32 } -> Config
+		with_size = |cfg, dims| { ..cfg, width: dims.width, height: dims.height }
+
+		## Return a config with a validated frame-pacing strategy.
+		with_frame_pacing : Config, FramePacing -> Config
+		with_frame_pacing = |cfg, value| { ..cfg, frame_pacing: normalize_pacing(value) }
+
+		## Return a config with a different initial cursor mode.
+		with_cursor : Config, CursorMode -> Config
+		with_cursor = |cfg, value| { ..cfg, cursor: value }
+
 		## Inspect the selected frame-pacing strategy.
 		frame_pacing : Config -> FramePacing
 		frame_pacing = |cfg| cfg.frame_pacing

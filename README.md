@@ -14,19 +14,33 @@ The goal isn't to build or support a large game engine. We're happy to help wher
 
 ### Frame pacing
 
-`target_fps` and `vsync` control different parts of frame pacing:
+`App.Config` is opaque, so contradictory startup states cannot be created with a
+record update. Choose exactly one tagged `App.FramePacing` strategy:
 
-- `target_fps` asks raylib to limit the frame loop on the CPU. Set it to `0` (or a negative value) to render uncapped. This does not select a software renderer; native drawing remains GPU accelerated.
-- `vsync` asks the graphics driver to synchronize buffer presentation with the display. The driver, window system, and desktop compositor ultimately decide how that request behaves.
+- `VSync` asks the graphics driver to synchronize presentation with the display.
+- `Capped(fps)` asks raylib to limit the frame loop on the CPU. A cap at or below
+  zero is normalized to `Uncapped`.
+- `Uncapped` applies neither VSync nor a CPU-side cap. Native drawing remains GPU
+  accelerated.
 
-RocRay defaults to `vsync: Bool.False` with a 240 FPS CPU-side cap. This gives predictable behavior across platforms while keeping CPU and GPU usage bounded. Enable VSync when tear-free presentation is more important and it behaves well on the target system.
+RocRay defaults to an 800×600 window, `Capped(240)`, and `CursorVisible`.
+Update the validated config through receivers:
 
-Some Linux configurations—particularly X11 applications presented through a Wayland compositor—can run substantially below the monitor refresh rate when VSync is enabled. Increasing `target_fps` cannot correct presentation stalls inside the driver. If this occurs, use `vsync: Bool.False` with a suitable software cap such as 60 or 120 FPS. Use an uncapped target for measurement rather than normal application operation, since it needlessly consumes CPU and GPU resources.
+```roc
+config = App.default
+	.with_title("My game")
+	.with_size({ width: 1280, height: 720 })
+	.with_frame_pacing(Capped(120))
+	.with_cursor(CursorHidden)
+```
 
-Startup configuration is being moved to an opaque, validated configuration with
-mutually exclusive VSync, capped, and uncapped pacing choices. Its migration
-syntax will be documented after that API passes the nightly compiler; the
-current examples remain the source of truth in the meantime.
+The startup cursor choice is independently tagged as `CursorVisible` or
+`CursorHidden`; runtime visibility and capture still use
+`host.set_cursor_mode!` with `Visible`, `Hidden`, or `Locked`. Some Linux
+configurations—particularly X11 applications presented through a Wayland
+compositor—can run substantially below the monitor refresh rate under VSync. In
+that case prefer `Capped(60)` or `Capped(120)`. Use `Uncapped` for measurement,
+not normal operation, because it needlessly consumes CPU and GPU resources.
 
 ## Features
 
@@ -277,9 +291,10 @@ boundary; use `frame.convex_polygon!` to make that requirement explicit.
   rendering. Choose the matching typed uniform constructor.
 - Replace direct `Draw.RenderTexture` helpers with
   `Draw.RenderTexture.load!`, `target.texture()`, and `target.source()`.
-- Startup configuration is moving away from `{ ..App.default, ... }` record
-  updates to validated builders and tagged frame pacing. A follow-up will
-  document the final compiler-tested syntax.
+- Replace `{ ..App.default, title: ..., target_fps: ..., cursor_visible: ... }`
+  with opaque config receivers such as `.with_title(...)`,
+  `.with_frame_pacing(Capped(...))`, and `.with_cursor(CursorHidden)`. Choose one
+  of `VSync`, `Capped(fps)`, or `Uncapped` rather than combining pacing fields.
 
 ## Supported Targets
 

@@ -287,10 +287,27 @@ such as loading resources, reading files, and reading environment variables
 should populate that model once; event-driven effects such as audio playback or
 random spawning should remain at the event site.
 
-The startup configuration API is being finalized as an opaque validated value
-with mutually exclusive frame-pacing choices. Do not document or depend on its
-provisional `.then(...)` syntax until it passes the target nightly; add its
-migration example in a follow-up.
+### Startup configuration invariants
+
+`App.Config` is opaque. Applications start from `App.default` and use receiver
+updates such as `.with_title(...)`, `.with_size(...)`,
+`.with_frame_pacing(...)`, and `.with_cursor(...)`; direct record updates cannot
+bypass validation. The default is an 800×600 window using `Capped(240)` and
+`CursorVisible`.
+
+Frame pacing is one tagged choice: `VSync`, `Capped(I32)`, or `Uncapped`.
+`Capped(fps)` values at or below zero normalize to `Uncapped`, so Config cannot
+contain a contradictory VSync-plus-cap state or an invalid non-positive cap.
+The initial cursor is independently `CursorVisible` or `CursorHidden`. Runtime
+cursor capture remains a `Host.CursorMode`, which additionally supports
+`Locked`.
+
+Keep `Config.to_host()` in the platform adapter. It flattens the validated
+choices to the existing ABI record. VSync maps to a zero target FPS with VSync
+enabled; a cap maps to that FPS with VSync disabled; Uncapped maps to a zero
+target FPS with VSync disabled. The cursor tag similarly becomes the
+`cursor_visible` boolean. Application code should not depend on that transport
+shape.
 
 ## Glue Bindings
 

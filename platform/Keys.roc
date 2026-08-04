@@ -125,7 +125,7 @@ Keys := [].{
 	]
 
 	## Validate and wrap a raw raylib key code.
-	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode])
+	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])
 	from_code = |code|
 		if code < key_count {
 			Ok(Raw(code))

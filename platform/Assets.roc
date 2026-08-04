@@ -59,7 +59,7 @@ Assets := [].{
 		rect = |texture| { x: 0, y: 0, width: texture.width(), height: texture.height() }
 
 		## Replace every pixel in row-major RGBA order.
-		update! : Texture, List(Color) => Try({}, [PixelCountMismatch])
+		update! : Texture, List(Color) => Try({}, [PixelCountMismatch, ..])
 		update! = |Texture.(texture), pixels|
 			if AssetsHost.update_texture!({ texture, pixels }) == 0 Ok({}) else Err(PixelCountMismatch)
 
@@ -148,7 +148,7 @@ Assets := [].{
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch])
+	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels| texture.update!(pixels)
 
 	expect filter_code(Bilinear) == 1

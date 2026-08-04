@@ -73,7 +73,7 @@ Host := {
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env! : Host, Str => Try(Str, [NotFound])
+	read_env! : Host, Str => Try(Str, [NotFound, ..])
 	read_env! = |_host, key|
 		match HostHost.read_env!(key) {
 			Ok(value) => Ok(value)
@@ -82,7 +82,7 @@ Host := {
 
 	## Read a UTF-8 text file from disk.
 	## Receiver form: `host.read_file!(path)`.
-	read_file! : Host, Str => Try(Str, [NotFound, ReadFailed])
+	read_file! : Host, Str => Try(Str, [NotFound, ReadFailed, ..])
 	read_file! = |_host, path| {
 		result = HostHost.read_file!(path)
 		if result.ok {
@@ -104,7 +104,7 @@ Host := {
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
 	## Receiver form: `host.set_screen_size!(size)`.
-	set_screen_size! : Host, { width : F32, height : F32 } => Try({}, [NotSupported])
+	set_screen_size! : Host, { width : F32, height : F32 } => Try({}, [NotSupported, ..])
 	set_screen_size! = |_host, size|
 		match HostHost.set_screen_size!(size) {
 			Ok({}) => Ok({})
@@ -150,3 +150,20 @@ cursor_mode_code = |mode|
 		Hidden => 1
 		Locked => 2
 	}
+
+compose_public_validations : U64, U64 -> Try({}, [InvalidGamepadIndex, InvalidKeyCode, ..])
+compose_public_validations = |gamepad_index, key_code| {
+	_ = Gamepad.from_index(gamepad_index)?
+	_ = Keys.from_code(key_code)?
+	Ok({})
+}
+
+expect compose_public_validations(0, 0) == Ok({})
+expect match compose_public_validations(4, 0) {
+	Err(InvalidGamepadIndex) => Bool.True
+	_ => Bool.False
+}
+expect match compose_public_validations(0, 999) {
+	Err(InvalidKeyCode) => Bool.True
+	_ => Bool.False
+}

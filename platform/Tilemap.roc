@@ -259,7 +259,7 @@ Tilemap :: {
 	objects_with_role = |map, role| List.keep_if(map.raw.objects, |object| Tilemap.object_role_for(map, object) == role)
 
 	## Return the first object matching a configured semantic role.
-	first_object : Tilemap, TilemapObjectRole -> Try(TilemapRawObject, [NotFound])
+	first_object : Tilemap, TilemapObjectRole -> Try(TilemapRawObject, [NotFound, ..])
 	first_object = |map, role|
 		match List.first(Tilemap.objects_with_role(map, role)) {
 			Ok(object) => Ok(object)
@@ -297,17 +297,17 @@ Tilemap :: {
 	object_world_circle = |map, object| Math.circle(Tilemap.object_world_center(map, object), F32.max(object.width, object.height) * 0.5)
 
 	## Look up a property within an explicit flat-list range.
-	property_named : TilemapRawMap, U64, U64, Str -> Try(TilemapRawProperty, [NotFound])
+	property_named : TilemapRawMap, U64, U64, Str -> Try(TilemapRawProperty, [NotFound, ..])
 	property_named = |raw, start, count, name| {
 		property_named_at(raw, start, count, name, 0)
 	}
 
 	## Look up a property attached to an object.
-	object_property : TilemapRawMap, TilemapRawObject, Str -> Try(TilemapRawProperty, [NotFound])
+	object_property : TilemapRawMap, TilemapRawObject, Str -> Try(TilemapRawProperty, [NotFound, ..])
 	object_property = |raw, object, name| Tilemap.property_named(raw, object.property_start, object.property_count, name)
 
 	## Look up a property attached to a layer.
-	layer_property : TilemapRawMap, TilemapRawLayer, Str -> Try(TilemapRawProperty, [NotFound])
+	layer_property : TilemapRawMap, TilemapRawLayer, Str -> Try(TilemapRawProperty, [NotFound, ..])
 	layer_property = |raw, layer, name| Tilemap.property_named(raw, layer.property_start, layer.property_count, name)
 
 	## Read an object's string property, or return the supplied default.
@@ -343,7 +343,7 @@ Tilemap :: {
 		}
 
 	## Convert a world-space position to a map cell, accounting for map origin.
-	cell_at_world : Tilemap, Math.Vec2 -> Try(TilemapCell, [OutOfBounds])
+	cell_at_world : Tilemap, Math.Vec2 -> Try(TilemapCell, [OutOfBounds, ..])
 	cell_at_world = |map, pos| {
 		rel_x = pos.x - map.origin.x
 		rel_y = pos.y - map.origin.y
@@ -369,7 +369,7 @@ Tilemap :: {
 	## Return the inclusive cell range overlapping a world-space rectangle's
 	## half-open area. The arithmetic is O(1), allocation-free, and clamps the
 	## range to map bounds.
-	cell_range_for_world_rect : Tilemap, Math.Rect -> Try(TilemapCellRange, [OutOfBounds])
+	cell_range_for_world_rect : Tilemap, Math.Rect -> Try(TilemapCellRange, [OutOfBounds, ..])
 	cell_range_for_world_rect = |map, bounds| {
 		map_right = map.origin.x + U64.to_f32(map.raw.width) * map.raw.tile_width
 		map_bottom = map.origin.y + U64.to_f32(map.raw.height) * map.raw.tile_height
@@ -410,7 +410,7 @@ Tilemap :: {
 	}
 
 	## Read the cleaned tile GID at a named layer and cell.
-	gid_at : Tilemap, Str, TilemapCell -> Try(U64, [NotFound, OutOfBounds])
+	gid_at : Tilemap, Str, TilemapCell -> Try(U64, [NotFound, OutOfBounds, ..])
 	gid_at = |map, layer_name, cell|
 		match find_layer(map.raw.layers, layer_name) {
 			Ok(layer) => gid_at_layer(map.raw, layer, cell)
@@ -604,7 +604,7 @@ resolve_tilesets = |tilesets, textures| {
 	$result
 }
 
-property_named_at : TilemapRawMap, U64, U64, Str, U64 -> Try(TilemapRawProperty, [NotFound])
+property_named_at : TilemapRawMap, U64, U64, Str, U64 -> Try(TilemapRawProperty, [NotFound, ..])
 property_named_at = |raw, start, count, name, offset| {
 	if offset >= count {
 		Err(NotFound)
@@ -632,7 +632,7 @@ find_layer = |layers, name| {
 	$found
 }
 
-gid_at_layer : TilemapRawMap, TilemapRawLayer, TilemapCell -> Try(U64, [NotFound, OutOfBounds])
+gid_at_layer : TilemapRawMap, TilemapRawLayer, TilemapCell -> Try(U64, [NotFound, OutOfBounds, ..])
 gid_at_layer = |raw, layer, cell| {
 	if cell.col >= layer.width or cell.row >= layer.height {
 		Err(OutOfBounds)

@@ -17,7 +17,7 @@ Gamepad := [].{
 	GamepadId := [One, Two, Three, Four]
 
 	## Validate and wrap a zero-based gamepad index.
-	from_index : U64 -> Try(GamepadId, [InvalidGamepadIndex])
+	from_index : U64 -> Try(GamepadId, [InvalidGamepadIndex, ..])
 	from_index = |value|
 		match value {
 			0 => Ok(One)

@@ -103,10 +103,12 @@ render! = |model, host, frame| {
 ```
 
 The host opens and closes raylib's outer drawing scope around `render!`, even
-when it returns `Err`. `Draw.Frame` is an opaque, zero-sized proof that drawing
-is currently allowed; applications do not construct it. This also removes the
-two hosted BeginDrawing/EndDrawing boundary calls that `Draw.draw!` previously
-made every frame.
+when it returns `Err`. `Draw.Frame` is opaque, zero-sized drawing authority that
+applications cannot construct, so initialization code cannot draw. Roc does not
+yet enforce affine use or encode a frame epoch, so pass the callback's frame
+through drawing helpers instead of retaining it in the model. This also removes
+the two hosted BeginDrawing/EndDrawing boundary calls that `Draw.draw!`
+previously made every frame.
 
 ### Receiver and scoped drawing APIs
 
@@ -242,8 +244,8 @@ and capture atomically with `host.set_cursor_mode!(Visible)` (or `Hidden` or
 `camera.world_to_screen(point)` and `camera.screen_to_world(point)` perform the
 same 2D transform used by `frame.with_camera!` without crossing the host
 boundary. Cameras are opaque and always invertible: `Camera.new`,
-`Camera.follow`, `.with_zoom`, and `.clamp_zoom` report `ZeroZoom` instead of
-constructing an invalid camera.
+`Camera.follow`, `.with_zoom`, and `.clamp_zoom` report `ZeroZoom` or
+`NonFiniteZoom` instead of constructing an invalid camera.
 
 Tilemap builders validate that each parsed tileset has exactly one bound
 texture, reject unused bindings, and reject unknown or duplicate layer/object

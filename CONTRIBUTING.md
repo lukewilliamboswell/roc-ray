@@ -141,8 +141,10 @@ length with `--frames`, show allocation-size histograms with `--sizes`, or use
 scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
 ```
 
-This measures calls through Roc's allocation ABI. It does not include internal
-raylib or Zig allocator traffic.
+This measures calls through Roc's allocation ABI and counts exported hosted
+effects by subsystem. It does not include internal raylib or Zig allocator
+traffic, so use the native lifecycle/allocation tests when optimizing storage
+inside a hosted effect.
 
 Most non-empty example models currently show exactly one allocation whose size
 is stable for every frame. That is the `Box(Model)` returned by
@@ -152,18 +154,24 @@ additional allocation sizes or reallocations as actionable app/platform work;
 track the single model box as a compiler optimization opportunity. A zero-sized
 model can avoid even that allocation.
 
-The resource receiver examples were measured over 119 startup-subtracted frames
-after this API migration:
+Representative examples were measured over 119 startup-subtracted frames after
+this API migration:
 
-| Example | Allocations/frame | Bytes/frame | Deallocations/frame | Reallocations/frame |
-|---------|------------------:|------------:|--------------------:|--------------------:|
-| `generated_assets` | 1.000 | 32.0 | 1.000 | 0.000 |
-| `sprites` | 1.000 | 56.0 | 1.000 | 0.000 |
-| `post_process` | 1.000 | 48.0 | 1.000 | 0.000 |
+| Example | Allocations/frame | Bytes/frame | Reallocations/frame | Hosted calls/frame |
+|---------|------------------:|------------:|--------------------:|-------------------:|
+| `keyboard` | 0.000 | 0.0 | 0.000 | 46 |
+| `generated_assets` | 1.000 | 32.0 | 0.000 | 4 |
+| `camera` | 1.000 | 40.0 | 0.000 | 73 |
+| `text_ui` | 1.000 | 24.0 | 0.000 | 10 |
+| `post_process` | 1.000 | 48.0 | 0.000 | 13 |
+| `cave_climb` | 1.000 | 728.0 | 0.000 | 70 |
+| `top_down` | 1.000 | 648.0 | 0.000 | 107 |
 
-Each allocation is exactly the current model box (32 B, 56 B, and 48 B,
-respectively). Texture views, receiver dispatch, scoped callbacks, and typed
-uniform updates add no steady-state Roc allocation.
+Each non-zero row is exactly the current model box. Texture views, receiver
+dispatch, scoped callbacks, prepared text draws, typed uniforms, and batched
+tilemap draws add no steady-state Roc allocation. Tilemap batching replaces 41
+texture-quad crossings with one call in `cave_climb` and 30 with one in
+`top_down`, reducing total calls from 110 to 70 and 136 to 107 respectively.
 
 ### Host boundary and frame ownership
 
@@ -172,7 +180,9 @@ The native host owns BeginDrawing/EndDrawing and invokes Roc's
 either `Ok` or `Err`. `Draw.Frame` is an opaque, zero-sized capability constructed
 only by the platform adapter; every public drawing effect takes it. This
 prevents initialization code from drawing and removes the two hosted outer-frame
-calls that `Draw.draw!` previously made each frame.
+calls that `Draw.draw!` previously made each frame. It is authority, not an
+affine or epoch-encoded proof: pass the callback's value through drawing helpers
+and do not retain it in the model.
 
 Keep the Roc API shaped around application values even when its transport is
 flatter. Prefer `frame.circle!(cfg)`, `host.key_pressed(KeySpace)`,
@@ -283,9 +293,9 @@ matching end; failed lookups release it immediately and return
 ### Validation and culling
 
 Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque and rejects
-zero zoom through `Camera.new`, `Camera.follow`, `.with_zoom`, and `.clamp_zoom`,
-which return `ZeroZoom`. Its receiver transforms and viewport calculation are
-then total and stay in Roc.
+zero or non-finite zoom through `Camera.new`, `Camera.follow`, `.with_zoom`, and
+`.clamp_zoom`, which return `ZeroZoom` or `NonFiniteZoom`. Its receiver
+transforms and viewport calculation are then total and stay in Roc.
 
 `TilemapBuilder.build()` validates that every parsed tileset has exactly one
 texture binding, that no binding is unused, and that layer/object role targets

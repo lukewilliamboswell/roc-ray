@@ -151,8 +151,9 @@ Draw := [].{
 	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
 
-	## Opaque, zero-sized proof that the host has opened the current render frame.
-	## The platform supplies one to `render!`; applications cannot construct one.
+	## Opaque, zero-sized authority supplied only while the host is running
+	## `render!`. It prevents drawing during initialization, but Roc does not yet
+	## enforce affine use or encode a frame epoch; do not retain it in the model.
 	Frame :: DrawHost.Frame.{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)

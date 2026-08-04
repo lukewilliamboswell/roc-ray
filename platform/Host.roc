@@ -29,10 +29,11 @@ Host := {
 	keys : List(U8),
 
 	## Unicode codepoints entered this frame, in input order. This is distinct
-	## from physical key state and respects the active keyboard layout. Empty
-	## frames are allocation-free; a non-empty list requires one variable-size
-	## allocation because raylib's text queue length varies from frame to frame.
-	## At most 32 codepoints are delivered; excess queued input is drained.
+	## from physical key state and respects the active keyboard layout. The host
+	## reuses capacity for empty and non-empty frames while this snapshot is
+	## uniquely owned. Retaining an older snapshot triggers copy-on-write; growth
+	## is needed only if the existing capacity is insufficient. At most 32
+	## codepoints are delivered; excess queued input is drained.
 	text_input : List(U32),
 
 	## Gamepad input sampled once per frame. Use the `Gamepad` helpers rather

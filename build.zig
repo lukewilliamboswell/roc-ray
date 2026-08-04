@@ -183,6 +183,14 @@ pub fn build(b: *std.Build) void {
     const run_lints = b.addRunArtifact(zig_lints);
     run_lints.setCwd(b.path(".")); // Run from project root
     lint_step.dependOn(&run_lints.step);
+
+    const glue_helper_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_roc_platform_abi.py",
+    });
+    glue_helper_tests.setCwd(b.path("."));
+    test_step.dependOn(&glue_helper_tests.step);
+
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {

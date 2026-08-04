@@ -152,34 +152,73 @@ additional allocation sizes or reallocations as actionable app/platform work;
 track the single model box as a compiler optimization opportunity. A zero-sized
 model can avoid even that allocation.
 
-### Host boundary performance
+The resource receiver examples were measured over 119 startup-subtracted frames
+after this API migration:
 
-Shared read-only frame information should normally be sampled once by the host
-and passed through `Host`, rather than exposed as several hosted queries. Keep
-the Roc-facing API ergonomic and independent of its transport representation.
-For example, callers can use `host.key_pressed(KeySpace)` while the host packs
-held/pressed/released bits into one persistent key-state list; the equivalent
-module-style call is `Keys.key_pressed(host, KeySpace)`.
+| Example | Allocations/frame | Bytes/frame | Deallocations/frame | Reallocations/frame |
+|---------|------------------:|------------:|--------------------:|--------------------:|
+| `generated_assets` | 1.000 | 32.0 | 1.000 | 0.000 |
+| `sprites` | 1.000 | 56.0 | 1.000 | 0.000 |
+| `post_process` | 1.000 | 48.0 | 1.000 | 0.000 |
 
-Keep per-frame culling and coordinate lookup in pure Roc. Tilemap's
-`draw_all_in!`/`draw_layer_in!` APIs bound work before drawing so each visible
-tile crosses the host boundary exactly once and offscreen tiles do not cross it
-at all. Do not create per-tile host resources or temporary Roc lists in a draw
-loop.
+Each allocation is exactly the current model box (32 B, 56 B, and 48 B,
+respectively). Texture views, receiver dispatch, scoped callbacks, and typed
+uniform updates add no steady-state Roc allocation.
 
-Gamepad availability, buttons, and axes follow the same rule: the host samples
-four fixed slots into flat persistent lists, and `Gamepad` helpers perform all
-indexing on the Roc side. Mouse position, delta, and two-axis wheel movement are
-sampled into scalar fields. Unicode text input uses a variable-length persistent
-list with initial capacity for raylib's 32-value drain; changing its logical
-length and contents is allocation-free while that capacity remains sufficient.
+### Host boundary and frame ownership
+
+The native host owns BeginDrawing/EndDrawing and invokes Roc's
+`render!(model, host, frame)` between them. Native cleanup closes the frame after
+either `Ok` or `Err`. `Draw.Frame` is an opaque, zero-sized capability constructed
+only by the platform adapter; every public drawing effect takes it. This
+prevents initialization code from drawing and removes the two hosted outer-frame
+calls that `Draw.draw!` previously made each frame.
+
+Keep the Roc API shaped around application values even when its transport is
+flatter. Prefer `frame.circle!(cfg)`, `host.key_pressed(KeySpace)`,
+`camera.screen_to_world(point)`, `texture.rect()`, and `uniform.set!(value)`.
+Attached constructors such as `Assets.Texture.load!`,
+`Draw.RenderTexture.load!`, and `Draw.Shader.load!` group creation with the
+result type. A module function remains appropriate when there is no natural
+receiver or for a deliberate compatibility bridge.
+
+Camera, scissor, and blend scopes preserve the callback result and issue their
+matching end operation after it is computed. Render-target and shader scopes
+currently accept callbacks returning `{}` and invoke them only after their
+host-owned resource resolves; every successful begin has a matching end. Shader
+and render-target scopes may nest and restore the outer resource. Blend mode is
+non-nesting. Pass the callback's `Frame` onward rather than reintroducing an
+unscoped draw helper.
+
+### Snapshot reuse and queries
+
+Shared read-only frame information should be sampled once by the host and passed
+through `Host`, rather than exposed as several hosted queries. The host packs
+held/pressed/released bits into persistent key and mouse lists, and keeps
+gamepad connectivity, buttons, and axes in three persistent flat lists. Their
+receiver and module query forms are pure Roc, so multiple queries do not make
+multiple host calls.
+
+Use `host.gamepads.lookup(id)` to get either `Connected(pad)` or `Disconnected`.
+The connected receiver carries the selected ID and references to the same
+snapshot lists, so button, axis, and stick queries require neither repeated
+connectivity checks nor allocation.
+
+Mouse position, delta, and two-axis wheel movement are scalar snapshot fields.
+Cursor visibility and capture are one tagged operation through
+`host.set_cursor_mode!` with `Visible`, `Hidden`, or `Locked`. Native cursor
+shape is separate through `host.set_cursor!(cursor)`.
 
 The host allocates keyboard, mouse, gamepad, and text-input state lists once,
-updates them in place, and retains them only while Roc owns the frame snapshot.
-If an app keeps a snapshot list in its model, the next update uses copy-on-write
-so the retained value stays immutable; that unusual case necessarily allocates
-a new backing list. Text input also grows when its current capacity is too small.
-Do not rebuild these lists in the normal per-frame path.
+then reuses their memory in place while uniquely owned. Unicode text input uses
+a variable-length persistent list with initial capacity for raylib's 32-value
+drain; changing its logical length and contents is allocation-free while that
+capacity is sufficient. If an app retains an older snapshot in its model, the
+next update uses copy-on-write so the retained value stays immutable. Text input
+also grows when its current capacity is too small. These are intentional unusual
+allocations; do not rebuild snapshot lists in the normal per-frame path.
+
+### Resource ownership and capabilities
 
 Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
 heaps. Their handle allocation is ABI-compatible with Roc's `Box`: releasing the
@@ -198,34 +237,60 @@ token in the host slot, keeping the Roc model representation to one pointer.
 
 Generated textures follow the same host-owned lifetime path as loaded textures.
 CPU images used during generation are released before the hosted effect returns.
-`Assets.update_texture!` borrows the contiguous Roc color list for one call and
-does not copy or retain it in the host; build reusable pixel buffers outside the
+`texture.update!` borrows the contiguous Roc color list for one call and does
+not copy or retain it in the host; build reusable pixel buffers outside the
 render loop when possible.
 
-Render textures and shaders follow the same ownership contract, but use distinct
-resource kinds so a stale or cross-typed resource cannot resolve. A render
-texture box stores its dimensions beside the token and owns its framebuffer,
-color texture, and depth attachment as one unit. `Draw.render_texture` is an
-allocation-free view: the returned host-managed reference still owns the complete
-render target. Shader uniforms retain their shader and cache the native location
-once; per-frame setters transfer the opaque uniform with its scalar or small
-vector value. Avoid resolving uniform names, creating render
-targets, or compiling shaders in the render loop.
+Keep the public texture capabilities distinct:
 
-Use `Draw.with_render_texture!`, `Draw.with_shader!`, and
-`Draw.with_blend_mode!` for paired begin/end state changes. Render-texture color
-attachments are vertically inverted when sampled, so use
-`Draw.render_texture_source` when drawing them to the screen. The headless host
-allocates typed lifecycle slots without creating GPU objects, allowing ownership
-and effect composition to run in normal example tests. Successful render-target
-and shader begins lease the transferred owner until the matching end; failed
-begins release it immediately. These two scopes may nest and restore the outer
-resource on unwind. Blend modes remain non-nesting.
+- `Assets.Texture` owns an ordinary mutable texture and provides `.update!`,
+  `.width()`, `.height()`, `.size()`, `.rect()`, `.set_filter!`, `.set_wrap!`,
+  and `.view()`.
+- `Assets.TextureView` owns the same ARC reference but exposes sampling rather
+  than pixel mutation. This nominal distinction adds no image copy or Roc heap
+  wrapper.
+- `Draw.RenderTexture.texture()` returns a `TextureView` that keeps the complete
+  framebuffer resource alive. `.source()` returns its full vertically inverted
+  sampling rectangle.
+
+Render textures and shaders use distinct resource kinds so a stale or
+cross-typed resource cannot resolve. A render texture box stores its dimensions
+beside the token and owns its framebuffer, color texture, and depth attachment
+as one unit. Resolve shader locations during initialization with typed receiver
+constructors such as `shader.uniform_f32!("time")`. `F32Uniform`, `I32Uniform`,
+vector, color, and texture handles prevent setter mismatches without runtime
+tags. Each handle retains its shader and caches the location once; per-frame
+`.set!` calls transfer the existing owner plus scalar or small-vector value
+without allocating.
+
+The headless host allocates typed lifecycle slots without creating GPU objects,
+allowing ownership and effect composition to run in ordinary example tests.
+Successful render-target and shader begins lease the transferred owner until the
+matching end; failed lookups release it immediately.
+
+### Validation and culling
+
+Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque and rejects
+zero zoom through `Camera.new`, `Camera.follow`, `.with_zoom`, and `.clamp_zoom`,
+which return `ZeroZoom`. Its receiver transforms and viewport calculation are
+then total and stay in Roc.
+
+`TilemapBuilder.build()` validates that every parsed tileset has exactly one
+texture binding. Propagate or handle `MissingTilesetBinding(first_gid)` and
+`DuplicateTilesetBinding(first_gid)` during initialization. A built tilemap owns
+its texture bindings and routes every tile draw through the supplied `Frame`.
+The culled `draw_all_in!`/`draw_layer_in!` APIs keep lookup in pure Roc so each
+visible tile crosses the boundary once and offscreen tiles do not cross it.
 
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables
 should populate that model once; event-driven effects such as audio playback or
 random spawning should remain at the event site.
+
+The startup configuration API is being finalized as an opaque validated value
+with mutually exclusive frame-pacing choices. Do not document or depend on its
+provisional `.then(...)` syntax until it passes the target nightly; add its
+migration example in a follow-up.
 
 ## Glue Bindings
 

@@ -23,6 +23,11 @@ RocRay defaults to `vsync: Bool.False` with a 240 FPS CPU-side cap. This gives p
 
 Some Linux configurations—particularly X11 applications presented through a Wayland compositor—can run substantially below the monitor refresh rate when VSync is enabled. Increasing `target_fps` cannot correct presentation stalls inside the driver. If this occurs, use `vsync: Bool.False` with a suitable software cap such as 60 or 120 FPS. Use an uncapped target for measurement rather than normal application operation, since it needlessly consumes CPU and GPU resources.
 
+Startup configuration is being moved to an opaque, validated configuration with
+mutually exclusive VSync, capped, and uncapped pacing choices. Its migration
+syntax will be documented after that API passes the nightly compiler; the
+current examples remain the source of truth in the meantime.
+
 ## Features
 
 - 2D drawing primitives (styled rectangles, rounded rectangles, circles, lines, triangles, convex polygons, gradients, text) and callback-scoped camera/scissor modes
@@ -36,7 +41,7 @@ Some Linux configurations—particularly X11 applications presented through a Wa
 - RGBA colors with named constants, RGB/RGBA constructors, and hex helpers
 - Explicit FPS/debug text drawing
 - Text measurement, alignment helpers, long-string rendering, and custom font loading
-- Mouse, keyboard, Unicode text-entry, and gamepad input snapshots
+- Mouse, keyboard, Unicode text-entry, and allocation-free connected-gamepad input snapshots
 - Mouse delta/two-axis wheel input and runtime cursor visibility, locking, and shapes
 - Per-frame logical screen dimensions for resize-aware rendering and UI layout
 - Loaded sound effects and generated procedural sounds with playback state, pause/resume/stop, volume, pitch, and pan
@@ -65,13 +70,110 @@ roc build examples/hello_world.roc
 
 > Use `roc build` (rather than `roc examples/hello_world.roc`) for the best performance — see the note above.
 
+Every render callback receives the current input snapshot and an opaque drawing
+capability:
+
+```roc
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
+	frame.clear!(Color.ray_white)
+	if host.key_pressed(KeyEscape) host.exit!(0)
+	frame.circle!({ center: host.mouse.position(), radius: 24, style: Draw.filled(Color.blue) })
+	Ok(model)
+}
+```
+
+The host opens and closes raylib's outer drawing scope around `render!`, even
+when it returns `Err`. `Draw.Frame` is an opaque, zero-sized proof that drawing
+is currently allowed; applications do not construct it. This also removes the
+two hosted BeginDrawing/EndDrawing boundary calls that `Draw.draw!` previously
+made every frame.
+
+### Receiver and scoped drawing APIs
+
+Use receivers for values you already have and attached constructors for new
+resources. Module functions remain useful for constructors and pure helpers
+that do not have a natural receiver.
+
+```roc
+camera = Camera.follow(player, { screen: screen_size, zoom: 1.5 })?
+mouse_world = camera.screen_to_world(host.mouse.position())
+
+frame.with_camera!(camera, |world_frame| {
+	world_frame.circle!({ center: player, radius: 20, style: Draw.filled(Color.red) })
+})
+
+frame.with_scissor!(hud_bounds, |clipped_frame| {
+	clipped_frame.text_at!({ pos: hud_pos, text: "status", size: 18, color: Color.white })
+})
+```
+
+Camera, scissor, and blend scopes return their callback's result and always run
+their matching end operation. Shader and render-target callbacks currently
+return `{}`; when their host-owned resource resolves, the matching end is
+paired with the successful begin. Render-target and shader scopes can nest and
+restore the outer resource. Blend scopes are intentionally non-nesting.
+
+### Host-owned textures, render targets, and shaders
+
+`Assets.Texture` owns a mutable ordinary texture. Its dimensions, pixel update,
+filter, wrap, and sampling-view operations are receivers:
+
+```roc
+texture = Assets.Texture.load!("examples/assets/checker.bmp")?
+texture.set_filter!(Bilinear)
+texture.set_wrap!(Clamp)
+bounds = texture.rect()
+sampled = texture.view()
+```
+
+`Assets.TextureView` is a distinct sampled/read-only capability with no pixel
+update method. It is a zero-cost nominal view sharing the same host-owned ARC
+resource, not a copied image or a newly allocated wrapper. Render targets expose
+only this sampled view:
+
+```roc
+target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
+sampled = target.texture()
+source = target.source() # full, vertically inverted source rectangle
+```
+
+Resolve typed shader uniforms during initialization and retain them in the
+model. Each uniform caches its native location and keeps its shader alive;
+per-frame `.set!` calls do not repeat a name lookup or allocate.
+
+```roc
+shader = Draw.Shader.load!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?
+time = shader.uniform_f32!("time")?
+
+# In render!:
+time.set!(seconds)
+frame.with_shader!(shader, |shader_frame| shader_frame.texture!(target_draw))
+```
+
+Typed handles are available for `F32`, `I32`, `Vec2`, `Vec3`, `Vec4`, color,
+and sampled-texture uniforms, so the wrong setter is rejected by Roc.
+
 ## Interaction snapshots
 
 `Host` carries one input snapshot per frame. Keyboard, mouse-button, and up to
 four gamepad states use persistent flat lists that are updated by the host and
-queried through `Keys`, `Mouse`, and `Gamepad`; checking several controls does
-not make several host calls. Gamepad buttons expose held/pressed/released edges,
-and axes can be read individually or as left/right stick vectors.
+queried in pure Roc; checking several controls does not make several host calls.
+Receiver and module dispatch are equivalent, for example
+`host.key_pressed(KeySpace)` and `Keys.key_pressed(host, KeySpace)`.
+
+Resolve gamepad connectivity once, then use the proven connected receiver for
+all button and axis queries:
+
+```roc
+match host.gamepads.lookup(One) {
+	Connected(pad) => if pad.button_pressed(FaceDown) { jump() }
+	Disconnected => {}
+}
+```
+
+`ConnectedPad` only references the existing snapshot lists. Lookup and its
+button, axis, and stick methods neither allocate nor resample the device.
 
 `host.text_input` contains the Unicode codepoints entered during the frame. It
 tracks text entry and the active keyboard layout, unlike physical key state.
@@ -79,11 +181,21 @@ The host reuses a variable-length list with copy-on-write when an older snapshot
 is retained, so ordinary empty and non-empty frames allocate nothing. Up to 32
 codepoints are delivered per frame; additional queued input is drained.
 `host.mouse.delta()` and `host.mouse.wheel_delta()` return the sampled movement
-vectors; the equivalent `Mouse.*` helpers remain available. Cursor visibility,
-locking, and native shape are controlled with the `Mouse` effects.
+vectors; the equivalent `Mouse.*` helpers remain available. Apply visibility
+and capture atomically with `host.set_cursor_mode!(Visible)` (or `Hidden` or
+`Locked`), and select an operating-system shape with
+`host.set_cursor!(PointingHand)`.
 
-`Camera.world_to_screen` and `Camera.screen_to_world` perform the same 2D
-transform used by `Draw.with_camera!` without crossing the host boundary.
+`camera.world_to_screen(point)` and `camera.screen_to_world(point)` perform the
+same 2D transform used by `frame.with_camera!` without crossing the host
+boundary. Cameras are opaque and always invertible: `Camera.new`,
+`Camera.follow`, `.with_zoom`, and `.clamp_zoom` report `ZeroZoom` instead of
+constructing an invalid camera.
+
+Tilemap builders validate that each parsed tileset has exactly one bound
+texture. Handle `MissingTilesetBinding(first_gid)` and
+`DuplicateTilesetBinding(first_gid)` from `.build()`. Tile drawing requires the
+current frame capability and keeps viewport culling in Roc.
 
 ## Examples
 
@@ -132,17 +244,42 @@ For large maps, pass the visible world rectangle to the culled drawing API so
 offscreen tiles do not cross the host boundary:
 
 ```roc
-Draw.with_camera!(camera, || {
-	Tilemap.draw_all_for_camera!(level.tilemap, camera, screen_size)
+frame.with_camera!(camera, |world_frame| {
+	level.tilemap.draw_all_for_camera!(world_frame, camera, screen_size)
 })
 ```
 
-If bounds are already available, use `Tilemap.draw_all_in!(map, world_view)`;
+If bounds are already available, use `map.draw_all_in!(world_frame, world_view)`;
 both forms visit only the intersecting cell range.
 
-Use `Draw.with_scissor!(screen_rect, || { ... })` for paired screen-space
-clipping. Filled polygon points must describe a simple convex boundary; use
-`Draw.convex_polygon!` to make that requirement explicit.
+Use `frame.with_scissor!(screen_rect, |clipped_frame| { ... })` for paired
+screen-space clipping. Filled polygon points must describe a simple convex
+boundary; use `frame.convex_polygon!` to make that requirement explicit.
+
+## Migrating to the receiver API
+
+- Change `render! : Model, Host => ...` to
+  `render! : Model, Host, Draw.Frame => ...`.
+- Remove `Draw.draw!(background, || ...)`; call `frame.clear!(background)` and
+  draw through `frame`.
+- Change static calls such as `Draw.circle!(cfg)`,
+  `Keys.key_pressed(host, key)`, and
+  `Camera.screen_to_world(camera, point)` to `frame.circle!(cfg)`,
+  `host.key_pressed(key)`, and `camera.screen_to_world(point)` where the
+  receiver is clearer.
+- Pass the callback frame through camera, scissor, blend, shader, and
+  render-target scopes instead of closing over an unscoped drawing API.
+- Replace `Assets.load_texture!`/`Assets.update_texture!` with
+  `Assets.Texture.load!`/`texture.update!`; use `texture.view()` or
+  `target.texture()` wherever only sampling is required.
+- Replace `Draw.uniform!` plus `Draw.set_uniform_f32!` with
+  `shader.uniform_f32!` during initialization and `uniform.set!` during
+  rendering. Choose the matching typed uniform constructor.
+- Replace direct `Draw.RenderTexture` helpers with
+  `Draw.RenderTexture.load!`, `target.texture()`, and `target.source()`.
+- Startup configuration is moving away from `{ ..App.default, ... }` record
+  updates to validated builders and tagged frame pacing. A follow-up will
+  document the final compiler-tested syntax.
 
 ## Supported Targets
 

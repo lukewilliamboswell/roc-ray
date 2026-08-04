@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PIN_FILE = ROOT / ".roc-version"
-PLATFORM_FILE = ROOT / "platform" / "main-default.roc"
+PLATFORM_FILE = ROOT / "platform" / "main.roc"
 ABI_FILE = ROOT / "src" / "roc_platform_abi.zig"
 PIN_PATTERN = re.compile(
     r"nightly-[0-9]{4}-[A-Za-z]+-[0-9]{2}-(?P<commit>[0-9a-f]{7,40})"

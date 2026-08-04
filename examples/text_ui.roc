@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../platform/main-default.roc" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.Draw
 import rr.Text

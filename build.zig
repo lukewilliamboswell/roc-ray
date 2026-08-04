@@ -191,6 +191,13 @@ pub fn build(b: *std.Build) void {
     glue_helper_tests.setCwd(b.path("."));
     test_step.dependOn(&glue_helper_tests.step);
 
+    const app_transport_privacy_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_app_transport_privacy.py",
+    });
+    app_transport_privacy_tests.setCwd(b.path("."));
+    test_step.dependOn(&app_transport_privacy_tests.step);
+
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {

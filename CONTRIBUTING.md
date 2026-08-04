@@ -301,8 +301,8 @@ window using `Capped(240)` and `CursorVisible`.
 
 Non-positive dimensions passed to `.with_size(...)` independently normalize to
 the default width or height. Keep these 800×600 fallbacks synchronized with the
-native host's defensive ABI normalization so `Config.to_host()` describes the
-window that will actually be created.
+native host's defensive ABI normalization so the internal flattened config
+describes the window that will actually be created.
 
 Frame pacing is one tagged choice: `VSync`, `Capped(I32)`, or `Uncapped`.
 `Capped(fps)` values at or below zero normalize to `Uncapped`, so Config cannot
@@ -311,12 +311,22 @@ The initial cursor is independently `CursorVisible` or `CursorHidden`. Runtime
 cursor capture remains a `Host.CursorMode`, which additionally supports
 `Locked`.
 
-Keep `Config.to_host()` in the platform adapter. It flattens the validated
-choices to the existing ABI record. VSync maps to a zero target FPS with VSync
-enabled; a cap maps to that FPS with VSync disabled; Uncapped maps to a zero
-target FPS with VSync disabled. The cursor tag similarly becomes the
-`cursor_visible` boolean. Application code should not depend on that transport
-shape.
+`AppConfig` owns the opaque Config representation and its legacy flattened host
+record, but is deliberately absent from each platform package's `exposes` list.
+Public `App.Config` is an alias that preserves the nominal type and its receiver
+API without exposing the owner module. Only `main-default.roc` and
+`main-wayland.roc` import `AppConfig` and flatten the validated choices. VSync
+maps to a zero target FPS with VSync enabled; a cap maps to that FPS with VSync
+disabled; Uncapped maps to a zero target FPS with VSync disabled. The cursor tag
+similarly becomes the `cursor_visible` boolean.
+
+The internal `AppConfig.to_host({}, config)` function intentionally takes a
+zero-sized marker before Config. On this Roc nightly, any function whose first
+argument is an opaque type participates in receiver dispatch through public
+aliases; the marker keeps `config.to_host()` out of the application API and is
+zero-sized and allocation-free. `scripts/test_app_transport_privacy.py` checks
+that apps cannot call `.to_host()`, name `App.HostConfig`, or import
+`rr.AppConfig`.
 
 ## Glue Bindings
 

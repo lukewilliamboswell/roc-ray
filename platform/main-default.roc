@@ -122,6 +122,7 @@ import Time
 import Audio
 import AudioHost
 import App
+import AppConfig
 import Assets
 import AssetsHost
 import Math
@@ -161,8 +162,8 @@ HostStateFromHost : {
 	},
 }
 
-app_config_for_host! : () => App.HostConfig
-app_config_for_host! = || program.init!.config.to_host()
+app_config_for_host! : () => AppConfig.HostConfig
+app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {

@@ -2,7 +2,7 @@
 import Assets
 import Camera
 import Color
-import DrawHost
+import Draw
 import Math
 import TilemapHost
 
@@ -22,7 +22,7 @@ TilemapRawMap : TilemapHost.Map
 
 TilemapTextureBinding : {
 	first_gid : U64,
-	texture : Assets.Texture,
+	texture : Assets.TextureView,
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
@@ -67,7 +67,7 @@ TilemapResolvedTileset : {
 	tile_width : F32,
 	tile_height : F32,
 	columns : U64,
-	texture : Assets.Texture,
+	texture : Assets.TextureView,
 }
 
 ## Configuration errors found while binding parsed tilesets to host textures.
@@ -87,6 +87,13 @@ TilemapBuilder :: {
 
 	with_tileset_texture : TilemapBuilder, U64, Assets.Texture -> TilemapBuilder
 	with_tileset_texture = |builder, first_gid, texture| {
+		..builder,
+		textures: List.append(builder.textures, { first_gid, texture: texture.view() }),
+	}
+
+	## Bind an existing read-only texture view without granting mutation access.
+	with_tileset_view : TilemapBuilder, U64, Assets.TextureView -> TilemapBuilder
+	with_tileset_view = |builder, first_gid, texture| {
 		..builder,
 		textures: List.append(builder.textures, { first_gid, texture }),
 	}
@@ -453,62 +460,62 @@ Tilemap :: {
 	}
 
 	## Draw one named visible layer without camera culling.
-	draw_layer! : Tilemap, Str => {}
-	draw_layer! = |map, layer_name| {
+	draw_layer! : Tilemap, Draw.Frame, Str => {}
+	draw_layer! = |map, frame, layer_name| {
 		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_cells!(map, layer, 0)
+			Ok(layer) => draw_layer_cells!(map, frame, layer, 0)
 			Err(_) => {}
 		}
 	}
 
 	## Draw only cells intersecting `world_view`. This is the preferred hot path
 	## for maps larger than the viewport: culled cells perform no hosted effects.
-	draw_layer_in! : Tilemap, Str, Math.Rect => {}
-	draw_layer_in! = |map, layer_name, world_view| {
+	draw_layer_in! : Tilemap, Draw.Frame, Str, Math.Rect => {}
+	draw_layer_in! = |map, frame, layer_name, world_view| {
 		match find_layer(map.raw.layers, layer_name) {
-			Ok(layer) => draw_layer_view!(map, layer, world_view)
+			Ok(layer) => draw_layer_view!(map, frame, layer, world_view)
 			Err(_) => {}
 		}
 	}
 
 	## Draw every visible layer configured with the `Drawn` role.
-	draw_layers! : Tilemap, TilemapLayerRole => {}
-	draw_layers! = |map, role| {
+	draw_layers! : Tilemap, Draw.Frame, TilemapLayerRole => {}
+	draw_layers! = |map, frame, role| {
 		for layer in map.raw.layers {
 			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_cells!(map, layer, 0)
+				draw_layer_cells!(map, frame, layer, 0)
 			}
 		}
 	}
 
 	## Draw visible configured layers culled to a world-space viewport.
-	draw_layers_in! : Tilemap, TilemapLayerRole, Math.Rect => {}
-	draw_layers_in! = |map, role, world_view| {
+	draw_layers_in! : Tilemap, Draw.Frame, TilemapLayerRole, Math.Rect => {}
+	draw_layers_in! = |map, frame, role, world_view| {
 		for layer in map.raw.layers {
 			if Tilemap.layer_role_for(map, layer) == role {
-				draw_layer_view!(map, layer, world_view)
+				draw_layer_view!(map, frame, layer, world_view)
 			}
 		}
 	}
 
 	## Draw every visible tile layer, regardless of configured role.
-	draw_all! : Tilemap => {}
-	draw_all! = |map| {
+	draw_all! : Tilemap, Draw.Frame => {}
+	draw_all! = |map, frame| {
 		for layer in map.raw.layers {
 			role = Tilemap.layer_role_for(map, layer)
 			if role == Drawn or role == Solid {
-				draw_layer_cells!(map, layer, 0)
+				draw_layer_cells!(map, frame, layer, 0)
 			}
 		}
 	}
 
 	## Draw every visible tile layer culled to a world-space viewport.
-	draw_all_in! : Tilemap, Math.Rect => {}
-	draw_all_in! = |map, world_view| {
+	draw_all_in! : Tilemap, Draw.Frame, Math.Rect => {}
+	draw_all_in! = |map, frame, world_view| {
 		for layer in map.raw.layers {
 			role = Tilemap.layer_role_for(map, layer)
 			if role == Drawn or role == Solid {
-				draw_layer_view!(map, layer, world_view)
+				draw_layer_view!(map, frame, layer, world_view)
 			}
 		}
 	}
@@ -520,8 +527,8 @@ Tilemap :: {
 	viewport_for_camera = |camera, screen_size| camera.viewport(screen_size)
 
 	## Convenience form of `draw_all_in!` for camera-driven scenes.
-	draw_all_for_camera! : Tilemap, Camera.Camera2D, Math.Vec2 => {}
-	draw_all_for_camera! = |map, camera, screen_size| Tilemap.draw_all_in!(map, Tilemap.viewport_for_camera(camera, screen_size))
+	draw_all_for_camera! : Tilemap, Draw.Frame, Camera.Camera2D, Math.Vec2 => {}
+	draw_all_for_camera! = |map, frame, camera, screen_size| map.draw_all_in!(frame, camera.viewport(screen_size))
 
 	## Decode Tiled horizontal, vertical, and diagonal flip flags.
 	flip_for_gid : U64 -> TilemapFlip
@@ -662,8 +669,8 @@ circle_touches_solid_col = |map, layer, circle, range, row, col| {
 	}
 }
 
-draw_layer_cells! : Tilemap, TilemapRawLayer, U64 => {}
-draw_layer_cells! = |map, layer, index| {
+draw_layer_cells! : Tilemap, Draw.Frame, TilemapRawLayer, U64 => {}
+draw_layer_cells! = |map, frame, layer, index| {
 	if index >= layer.gid_count or !(layer.visible) {
 		{}
 	} else {
@@ -672,49 +679,49 @@ draw_layer_cells! = |map, layer, index| {
 				gid = Tilemap.clean_gid(raw_gid)
 				if gid != 0 {
 					cell = { col: index % layer.width, row: index // layer.width }
-					draw_gid!(map, raw_gid, cell)
+					draw_gid!(map, frame, raw_gid, cell)
 				}
 			}
 			Err(_) => {}
 		}
-		draw_layer_cells!(map, layer, index + 1)
+		draw_layer_cells!(map, frame, layer, index + 1)
 	}
 }
 
-draw_layer_view! : Tilemap, TilemapRawLayer, Math.Rect => {}
-draw_layer_view! = |map, layer, world_view| {
+draw_layer_view! : Tilemap, Draw.Frame, TilemapRawLayer, Math.Rect => {}
+draw_layer_view! = |map, frame, layer, world_view| {
 	if layer.visible {
 		match Tilemap.cell_range_for_world_rect(map, world_view) {
-			Ok(range) => draw_layer_range_rows!(map, layer, range, range.min_row)
+			Ok(range) => draw_layer_range_rows!(map, frame, layer, range, range.min_row)
 			Err(_) => {}
 		}
 	}
 }
 
-draw_layer_range_rows! : Tilemap, TilemapRawLayer, TilemapCellRange, U64 => {}
-draw_layer_range_rows! = |map, layer, range, row| {
+draw_layer_range_rows! : Tilemap, Draw.Frame, TilemapRawLayer, TilemapCellRange, U64 => {}
+draw_layer_range_rows! = |map, frame, layer, range, row| {
 	if row <= range.max_row and row < layer.height {
-		draw_layer_range_cols!(map, layer, range, row, range.min_col)
-		draw_layer_range_rows!(map, layer, range, row + 1)
+		draw_layer_range_cols!(map, frame, layer, range, row, range.min_col)
+		draw_layer_range_rows!(map, frame, layer, range, row + 1)
 	}
 }
 
-draw_layer_range_cols! : Tilemap, TilemapRawLayer, TilemapCellRange, U64, U64 => {}
-draw_layer_range_cols! = |map, layer, range, row, col| {
+draw_layer_range_cols! : Tilemap, Draw.Frame, TilemapRawLayer, TilemapCellRange, U64, U64 => {}
+draw_layer_range_cols! = |map, frame, layer, range, row, col| {
 	if col <= range.max_col and col < layer.width {
 		index = row * layer.width + col
 		if index < layer.gid_count {
 			match List.get(map.raw.gids, layer.gid_start + index) {
-				Ok(raw_gid) => if Tilemap.clean_gid(raw_gid) != 0 draw_gid!(map, raw_gid, { col, row })
+				Ok(raw_gid) => if Tilemap.clean_gid(raw_gid) != 0 draw_gid!(map, frame, raw_gid, { col, row })
 				Err(_) => {}
 			}
 		}
-		draw_layer_range_cols!(map, layer, range, row, col + 1)
+		draw_layer_range_cols!(map, frame, layer, range, row, col + 1)
 	}
 }
 
-draw_gid! : Tilemap, U64, TilemapCell => {}
-draw_gid! = |map, raw_gid, cell| {
+draw_gid! : Tilemap, Draw.Frame, U64, TilemapCell => {}
+draw_gid! = |map, frame, raw_gid, cell| {
 	gid = Tilemap.clean_gid(raw_gid)
 	match find_resolved_tileset(map.resolved_tilesets, gid) {
 		Ok(tileset) => {
@@ -727,7 +734,7 @@ draw_gid! = |map, raw_gid, cell| {
 			}
 			dest = Tilemap.world_rect_for_cell(map, cell)
 			flip = Tilemap.flip_for_gid(raw_gid)
-			DrawHost.draw_texture_quad!({
+			frame.texture_view_quad!({
 				texture: tileset.texture,
 				source,
 				top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),

@@ -3963,8 +3963,8 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_cb7cb2bff0a7c96
-pub const __AnonStruct_cb7cb2bff0a7c96 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_ef7f989c787a75a5
+pub const __AnonStruct_ef7f989c787a75a5 = if (@sizeOf(usize) == 4) extern struct {
     max_col: u64,
     max_row: u64,
     min_col: u64,
@@ -3972,7 +3972,7 @@ pub const __AnonStruct_cb7cb2bff0a7c96 = if (@sizeOf(usize) == 4) extern struct 
     selector_value: u64,
     gids: RocListWith(u64, false),
     layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_787b94495b0f7ba1),
+    tilesets: RocList(__AnonStruct_feee45760081ee45),
     map_tile_height: f32,
     map_tile_width: f32,
     origin_x: f32,
@@ -4010,7 +4010,7 @@ pub const __AnonStruct_cb7cb2bff0a7c96 = if (@sizeOf(usize) == 4) extern struct 
     selector_value: u64,
     gids: RocListWith(u64, false),
     layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_787b94495b0f7ba1),
+    tilesets: RocList(__AnonStruct_feee45760081ee45),
     map_tile_height: f32,
     map_tile_width: f32,
     origin_x: f32,
@@ -4044,12 +4044,12 @@ pub const __AnonStruct_cb7cb2bff0a7c96 = if (@sizeOf(usize) == 4) extern struct 
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_cb7cb2bff0a7c96) != 136) @compileError("__AnonStruct_cb7cb2bff0a7c96 size mismatch");
-        if (@alignOf(__AnonStruct_cb7cb2bff0a7c96) != 8) @compileError("__AnonStruct_cb7cb2bff0a7c96 alignment mismatch");
+        if (@sizeOf(__AnonStruct_ef7f989c787a75a5) != 136) @compileError("__AnonStruct_ef7f989c787a75a5 size mismatch");
+        if (@alignOf(__AnonStruct_ef7f989c787a75a5) != 8) @compileError("__AnonStruct_ef7f989c787a75a5 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_cb7cb2bff0a7c96) != 96) @compileError("__AnonStruct_cb7cb2bff0a7c96 size mismatch");
-        if (@alignOf(__AnonStruct_cb7cb2bff0a7c96) != 8) @compileError("__AnonStruct_cb7cb2bff0a7c96 alignment mismatch");
+        if (@sizeOf(__AnonStruct_ef7f989c787a75a5) != 96) @compileError("__AnonStruct_ef7f989c787a75a5 size mismatch");
+        if (@alignOf(__AnonStruct_ef7f989c787a75a5) != 8) @compileError("__AnonStruct_ef7f989c787a75a5 alignment mismatch");
     }
 }
 
@@ -4107,11 +4107,11 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_787b94495b0f7ba1
-pub const __AnonStruct_787b94495b0f7ba1 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_feee45760081ee45
+pub const __AnonStruct_feee45760081ee45 = if (@sizeOf(usize) == 4) extern struct {
     columns: u64,
     first_gid: u64,
-    texture: AssetsHostTexture,
+    texture: AssetsTexture,
     tile_height: f32,
     tile_width: f32,
     /// Recursively decrement Roc-owned fields.
@@ -4128,7 +4128,7 @@ pub const __AnonStruct_787b94495b0f7ba1 = if (@sizeOf(usize) == 4) extern struct
 } else extern struct {
     columns: u64,
     first_gid: u64,
-    texture: AssetsHostTexture,
+    texture: AssetsTexture,
     tile_height: f32,
     tile_width: f32,
     /// Recursively decrement Roc-owned fields.
@@ -4146,12 +4146,52 @@ pub const __AnonStruct_787b94495b0f7ba1 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_787b94495b0f7ba1) != 32) @compileError("__AnonStruct_787b94495b0f7ba1 size mismatch");
-        if (@alignOf(__AnonStruct_787b94495b0f7ba1) != 8) @compileError("__AnonStruct_787b94495b0f7ba1 alignment mismatch");
+        if (@sizeOf(__AnonStruct_feee45760081ee45) != 32) @compileError("__AnonStruct_feee45760081ee45 size mismatch");
+        if (@alignOf(__AnonStruct_feee45760081ee45) != 8) @compileError("__AnonStruct_feee45760081ee45 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_787b94495b0f7ba1) != 32) @compileError("__AnonStruct_787b94495b0f7ba1 size mismatch");
-        if (@alignOf(__AnonStruct_787b94495b0f7ba1) != 8) @compileError("__AnonStruct_787b94495b0f7ba1 alignment mismatch");
+        if (@sizeOf(__AnonStruct_feee45760081ee45) != 32) @compileError("__AnonStruct_feee45760081ee45 size mismatch");
+        if (@alignOf(__AnonStruct_feee45760081ee45) != 8) @compileError("__AnonStruct_feee45760081ee45 alignment mismatch");
+    }
+}
+
+/// Element type for Assets.Texture
+pub const AssetsTexture = if (@sizeOf(usize) == 4) extern struct {
+    resource: *__AnonStruct_8b7fc2d8f8794eb4,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.resource), @alignOf(__AnonStruct_8b7fc2d8f8794eb4), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.resource), amount);
+    }
+} else extern struct {
+    resource: *__AnonStruct_8b7fc2d8f8794eb4,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.resource), @alignOf(__AnonStruct_8b7fc2d8f8794eb4), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.resource), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AssetsTexture) != 8) @compileError("AssetsTexture size mismatch");
+        if (@alignOf(AssetsTexture) != 8) @compileError("AssetsTexture alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AssetsTexture) != 4) @compileError("AssetsTexture size mismatch");
+        if (@alignOf(AssetsTexture) != 4) @compileError("AssetsTexture alignment mismatch");
     }
 }
 
@@ -6590,7 +6630,7 @@ pub const MouseHostSet_cursor_modeArgs = extern struct {
 };
 
 /// Arguments for TilemapHost.draw!
-/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : AssetsHost.Texture, tile_height : F32, tile_width : F32 }) } => {}
+/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Assets.Texture, tile_height : F32, tile_width : F32 }) } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const TilemapHostDrawArgs = if (@sizeOf(usize) == 4) extern struct {
     max_col: u64,
@@ -6600,7 +6640,7 @@ pub const TilemapHostDrawArgs = if (@sizeOf(usize) == 4) extern struct {
     selector_value: u64,
     gids: RocListWith(u64, false),
     layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_787b94495b0f7ba1),
+    tilesets: RocList(__AnonStruct_feee45760081ee45),
     map_tile_height: f32,
     map_tile_width: f32,
     origin_x: f32,
@@ -6615,7 +6655,7 @@ pub const TilemapHostDrawArgs = if (@sizeOf(usize) == 4) extern struct {
     selector_value: u64,
     gids: RocListWith(u64, false),
     layers: RocListWith(__AnonStruct_66e2af4e09d9cfd8, false),
-    tilesets: RocList(__AnonStruct_787b94495b0f7ba1),
+    tilesets: RocList(__AnonStruct_feee45760081ee45),
     map_tile_height: f32,
     map_tile_width: f32,
     origin_x: f32,
@@ -6706,9 +6746,10 @@ pub const DrawHostTriangleArg0 = __AnonStruct_1c9ce87f41bdd392;
 pub const DrawHostTriangle_linesArg0 = __AnonStruct_dba5c127500247a0;
 pub const HostHostRead_file = __AnonStruct_1504326a3d41a158;
 pub const HostHostSet_screen_sizeArg0 = __AnonStruct_473ae8de77ee164b;
-pub const TilemapHostDrawArg0 = __AnonStruct_cb7cb2bff0a7c96;
+pub const TilemapHostDrawArg0 = __AnonStruct_ef7f989c787a75a5;
 pub const TilemapHostDrawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
-pub const TilemapHostDrawArg0Tilesets = __AnonStruct_787b94495b0f7ba1;
+pub const TilemapHostDrawArg0Tilesets = __AnonStruct_feee45760081ee45;
+pub const AssetsTextureResource = __AnonStruct_8b7fc2d8f8794eb4;
 pub const TilemapHostLoad_tmx = __AnonStruct_69c51f74695a8340;
 pub const TilemapHostLoad_tmxMap = __AnonStruct_831cf812524287ed;
 pub const TilemapHostLoad_tmxMapLayers = __AnonStruct_1299823ae1663c65;
@@ -7182,7 +7223,7 @@ pub extern fn roc_mouse_set_cursor_raw(arg0: u8) callconv(.c) void;
 pub extern fn roc_mouse_set_cursor_mode_raw(arg0: u8) callconv(.c) void;
 
 /// Hosted symbol for TilemapHost.draw!
-/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : AssetsHost.Texture, tile_height : F32, tile_width : F32 }) } => {}
+/// Roc signature: { culled : Bool, gids : List(U64), layers : List({ gid_count : U64, gid_start : U64, height : U64, role : U8, visible : Bool, width : U64 }), map_tile_height : F32, map_tile_width : F32, max_col : U64, max_row : U64, min_col : U64, min_row : U64, origin_x : F32, origin_y : F32, selector_kind : U8, selector_value : U64, tilesets : List({ columns : U64, first_gid : U64, texture : Assets.Texture, tile_height : F32, tile_width : F32 }) } => {}
 pub extern fn roc_tilemap_draw_raw(arg0: TilemapHostDrawArgs) callconv(.c) void;
 
 /// Hosted symbol for TilemapHost.load_tmx!

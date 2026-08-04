@@ -1,7 +1,7 @@
 ## Internal TMX parser transport.
 ##
 ## This module is intentionally not exposed by the platform package.
-import AssetsHost
+import Assets
 
 TilemapHost := [].{
 	Property : {
@@ -95,7 +95,7 @@ TilemapHost := [].{
 		tile_width : F32,
 		tile_height : F32,
 		columns : U64,
-		texture : AssetsHost.Texture,
+		texture : Assets.Texture,
 	}
 
 	## Borrowed flat render plan. Lists are built once with the Tilemap value and

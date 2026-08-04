@@ -1,6 +1,5 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
 import Assets
-import AssetsHost
 import Camera
 import Draw
 import Math
@@ -628,13 +627,13 @@ make_render_tilesets = |tilesets|
 			tile_width: tileset.tile_width,
 			tile_height: tileset.tile_height,
 			columns: tileset.columns,
-			texture: tileset.texture.host_value(),
+			texture: tileset.texture,
 		},
 	)
 
 validate_builder : TilemapBuilder -> Try({}, TilemapBuildError)
 validate_builder = |builder|
-	match validate_unused_texture_bindings(builder.raw.tilesets, builder.textures) {
+	match validate_texture_binding_gids(builder.raw.tilesets, List.map(builder.textures, |binding| binding.first_gid)) {
 		Ok(_) =>
 			match validate_layer_role_rules(builder.raw.layers, builder.layer_roles) {
 				Ok(_) => validate_object_role_rules(builder.raw.objects, builder.object_roles)
@@ -643,18 +642,42 @@ validate_builder = |builder|
 		Err(error) => Err(error)
 	}
 
-validate_unused_texture_bindings : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try({}, TilemapBuildError)
-validate_unused_texture_bindings = |tilesets, bindings| {
+validate_texture_binding_gids : List(TilemapRawTileset), List(U64) -> Try({}, TilemapBuildError)
+validate_texture_binding_gids = |tilesets, binding_gids| {
 	var $result = Ok({})
-	for binding in bindings {
+	for tileset in tilesets {
 		match $result {
-			Ok(_) => if !tileset_gid_exists(tilesets, binding.first_gid) {
-				$result = Err(UnusedTilesetBinding(binding.first_gid))
+			Ok(_) => {
+				count = count_gid(binding_gids, tileset.first_gid)
+				if count == 0 {
+					$result = Err(MissingTilesetBinding(tileset.first_gid))
+				} else if count > 1 {
+					$result = Err(DuplicateTilesetBinding(tileset.first_gid))
+				}
+			}
+			Err(_) => {}
+		}
+	}
+	for first_gid in binding_gids {
+		match $result {
+			Ok(_) => if !tileset_gid_exists(tilesets, first_gid) {
+				$result = Err(UnusedTilesetBinding(first_gid))
 			}
 			Err(_) => {}
 		}
 	}
 	$result
+}
+
+count_gid : List(U64), U64 -> U64
+count_gid = |gids, target| {
+	var $count = 0
+	for gid in gids {
+		if gid == target {
+			$count = $count + 1
+		}
+	}
+	$count
 }
 
 tileset_gid_exists : List(TilemapRawTileset), U64 -> Bool
@@ -960,9 +983,6 @@ test_spawn_object = { id: 1, name: "spawn-a", type_name: "spawn", x: 8, y: 8, wi
 test_speed_property : TilemapRawProperty
 test_speed_property = { name: "speed", kind: 2, text: "12.5", number: 12.5, integer: 12, bool_value: Bool.True }
 
-test_texture : Assets.Texture
-test_texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 32, height: 32 })))
-
 test_raw : TilemapRawMap
 test_raw = {
 	width: 3,
@@ -1030,11 +1050,11 @@ expect match Tilemap.from_raw({ ..test_raw, tilesets: [test_tileset] }).build() 
 	Err(MissingTilesetBinding(1)) => True
 	_ => False
 }
-expect match Tilemap.from_raw(test_raw).with_tileset_texture(99, test_texture).build() {
+expect match validate_texture_binding_gids(test_raw.tilesets, [99]) {
 	Err(UnusedTilesetBinding(99)) => True
 	_ => False
 }
-expect match Tilemap.from_raw({ ..test_raw, tilesets: [test_tileset] }).with_tileset_texture(1, test_texture).with_tileset_texture(1, test_texture).build() {
+expect match validate_texture_binding_gids([test_tileset], [1, 1]) {
 	Err(DuplicateTilesetBinding(1)) => True
 	_ => False
 }

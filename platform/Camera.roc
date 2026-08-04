@@ -53,7 +53,7 @@ Camera := [].{
 		with_rotation = |camera, new_rotation| { ..camera, rotation: new_rotation }
 
 		## Return a copy with a validated non-zero zoom factor.
-		with_zoom : Camera2D, F32 -> Try(Camera2D, [ZeroZoom])
+		with_zoom : Camera2D, F32 -> Try(Camera2D, [ZeroZoom, ..])
 		with_zoom = |camera, new_zoom|
 			if new_zoom == 0 {
 				Err(ZeroZoom)
@@ -62,7 +62,7 @@ Camera := [].{
 			}
 
 		## Clamp zoom to inclusive limits, reporting a range that produces zero.
-		clamp_zoom : Camera2D, { min : F32, max : F32 } -> Try(Camera2D, [ZeroZoom])
+		clamp_zoom : Camera2D, { min : F32, max : F32 } -> Try(Camera2D, [ZeroZoom, ..])
 		clamp_zoom = |camera, limits| camera.with_zoom(Math.clamp(camera.zoom, limits.min, limits.max))
 
 		## Convert a world-space point to logical screen coordinates.
@@ -114,7 +114,7 @@ Camera := [].{
 	default = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: 1 }
 
 	## Construct a camera from explicit settings, rejecting zero zoom.
-	new : Settings -> Try(Camera2D, [ZeroZoom])
+	new : Settings -> Try(Camera2D, [ZeroZoom, ..])
 	new = |settings|
 		if settings.zoom == 0 {
 			Err(ZeroZoom)
@@ -132,7 +132,7 @@ Camera := [].{
 	}
 
 	## A common player-follow camera with a validated configurable zoom.
-	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom])
+	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom, ..])
 	follow = |target_value, cfg| Camera.new({
 		target: target_value,
 		offset: cfg.screen.scale(0.5),

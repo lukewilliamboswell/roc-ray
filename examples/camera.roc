@@ -68,10 +68,10 @@ move_player = |player, host| {
 	}
 }
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, ..])
+render! = |model, host, frame| {
 	if Keys.key_pressed(host, KeyEscape) {
-		Host.exit!(0)
+		host.exit!(0)
 	}
 
 	player = move_player(model.player, host)
@@ -79,76 +79,63 @@ render! = |model, host| {
 	rotation_dir = axis(Keys.key_down(host, KeyQ), Keys.key_down(host, KeyE))
 	rotation = if Keys.key_pressed(host, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
 
-	camera = Camera.with_rotation(
-		Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom }),
-		rotation,
-	)
-	mouse_world = Camera.screen_to_world(camera, { x: host.mouse.x, y: host.mouse.y })
-	mouse_screen = Camera.world_to_screen(camera, mouse_world)
+	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)
+	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })
+	mouse_screen = camera.world_to_screen(mouse_world)
 
 	next = { player, zoom, rotation }
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			Draw.with_camera!(
-				camera,
-				|| {
-					draw_world!(player, mouse_world)
-				},
-			)
-			Draw.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
-
-			draw_hud!(next)
-		},
-	)
+	frame.clear!(Color.ray_white)
+	frame.with_camera!(camera, |world_frame| draw_world!(world_frame, player, mouse_world))
+	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
+	draw_hud!(frame, next)
 
 	Ok(next)
 }
 
-draw_world! : Math.Vec2, Math.Vec2 => {}
-draw_world! = |player, mouse_world| {
-	Draw.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled(Color.from_hex_rgb(0x23323a)) })
-	draw_grid_x!(world_left)
-	draw_grid_y!(world_top)
+draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}
+draw_world! = |frame, player, mouse_world| {
+	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled(Color.from_hex_rgb(0x23323a)) })
+	draw_grid_x!(frame, world_left)
+	draw_grid_y!(frame, world_top)
 
-	Draw.rectangle!({ x: -320, y: -160, width: 360, height: 260, style: Draw.filled(Color.from_hex_rgb(0x3b5f6f)) })
-	Draw.rectangle!({ x: 280, y: 120, width: 520, height: 340, style: Draw.filled(Color.from_hex_rgb(0x4c6f4f)) })
-	Draw.rectangle!({ x: 860, y: -280, width: 420, height: 460, style: Draw.filled(Color.from_hex_rgb(0x6f5540)) })
+	frame.rectangle!({ x: -320, y: -160, width: 360, height: 260, style: Draw.filled(Color.from_hex_rgb(0x3b5f6f)) })
+	frame.rectangle!({ x: 280, y: 120, width: 520, height: 340, style: Draw.filled(Color.from_hex_rgb(0x4c6f4f)) })
+	frame.rectangle!({ x: 860, y: -280, width: 420, height: 460, style: Draw.filled(Color.from_hex_rgb(0x6f5540)) })
 
-	Draw.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(Color.yellow, 3) })
-	Draw.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(Color.yellow, 3) })
+	frame.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(Color.yellow, 3) })
+	frame.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(Color.yellow, 3) })
 
-	Draw.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.red, Color.white, 4) })
-	Draw.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
-	Draw.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
-	Draw.circle!({ center: mouse_world, radius: 8, style: Draw.outlined(Color.yellow, 2) })
+	frame.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.red, Color.white, 4) })
+	frame.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
+	frame.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
+	frame.circle!({ center: mouse_world, radius: 8, style: Draw.outlined(Color.yellow, 2) })
 }
 
-draw_grid_x! : F32 => {}
-draw_grid_x! = |x| {
+draw_grid_x! : Draw.Frame, F32 => {}
+draw_grid_x! = |frame, x| {
 	if x > world_right {
 		{}
 	} else {
-		Draw.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
-		draw_grid_x!(x + 80)
+		frame.line!({ start: { x, y: world_top }, end: { x, y: world_bottom }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+		draw_grid_x!(frame, x + 80)
 	}
 }
 
-draw_grid_y! : F32 => {}
-draw_grid_y! = |y| {
+draw_grid_y! : Draw.Frame, F32 => {}
+draw_grid_y! = |frame, y| {
 	if y > world_bottom {
 		{}
 	} else {
-		Draw.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
-		draw_grid_y!(y + 80)
+		frame.line!({ start: { x: world_left, y }, end: { x: world_right, y }, stroke: Draw.stroke(Color.with_alpha(Color.white, 55), 1) })
+		draw_grid_y!(frame, y + 80)
 	}
 }
 
-draw_hud! : Model => {}
-draw_hud! = |_model| {
-	Draw.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
-	Draw.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 62 }, text: hud_subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 30, y: 84 }, text: hud_help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+draw_hud! : Draw.Frame, Model => {}
+draw_hud! = |frame, _model| {
+	frame.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
+	frame.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 62 }, text: hud_subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 84 }, text: hud_help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 }

@@ -68,7 +68,7 @@ init! = App.init(
 		title: "RocRay Snake",
 		target_fps: 120,
 	},
-	|_host| {
+	|host| {
 		seed = {
 			snake: start_snake,
 			direction: DirRight,
@@ -82,13 +82,13 @@ init! = App.init(
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 		}
 
-		Ok(new_game!(seed))
+		Ok(new_game!(seed, host))
 	},
 )
 
-new_game! : Model => Model
-new_game! = |model| {
-	food = spawn_food!(start_snake)
+new_game! : Model, Host => Model
+new_game! = |model, host| {
+	food = spawn_food!(host, start_snake)
 	{
 		..model,
 		snake: start_snake,
@@ -132,11 +132,11 @@ next_food_candidate = |cell, dx, dy| {
 	y: (cell.y + dy) % grid_rows,
 }
 
-spawn_food! : List(Cell) => Cell
-spawn_food! = |snake| {
+spawn_food! : Host, List(Cell) => Cell
+spawn_food! = |host, snake| {
 	seed = {
-		x: Host.random_i32!(0, grid_cols - 1),
-		y: Host.random_i32!(0, grid_rows - 1),
+		x: host.random_i32!(0, grid_cols - 1),
+		y: host.random_i32!(0, grid_rows - 1),
 	}
 
 	if !(List.contains(snake, seed)) {
@@ -188,8 +188,8 @@ apply_input = |model, host| {
 	{ ..model, pending_direction: pending }
 }
 
-step_snake! : Model => Model
-step_snake! = |model| {
+step_snake! : Model, Host => Model
+step_snake! = |model, host| {
 	move = delta(model.pending_direction)
 	head = head_of(model.snake)
 	next_head = { x: head.x + move.x, y: head.y + move.y }
@@ -212,7 +212,7 @@ step_snake! = |model| {
 				snake: next_snake,
 				direction: model.pending_direction,
 				pending_direction: model.pending_direction,
-				food: spawn_food!(next_snake),
+				food: spawn_food!(host, next_snake),
 				score: model.score + 1,
 				accumulator: 0,
 				state: Playing,
@@ -237,16 +237,16 @@ advance_playing! = |model, host| {
 	with_accumulator = { ..input_model, accumulator }
 
 	if accumulator >= step_time {
-		step_snake!({ ..with_accumulator, accumulator: accumulator - step_time })
+		step_snake!({ ..with_accumulator, accumulator: accumulator - step_time }, host)
 	} else {
 		with_accumulator
 	}
 }
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 	if Keys.key_pressed(host, KeyEscape) {
-		Host.exit!(0)
+		host.exit!(0)
 	}
 
 	next = match model.state {
@@ -254,16 +254,14 @@ render! = |model, host| {
 		GameOver =>
 			if Keys.key_pressed(host, KeySpace) {
 				model.start_sound.play!()
-				new_game!(model)
+				new_game!(model, host)
 			} else {
 				model
 			}
 		}
 
-	Draw.draw!(
-		Color.ray_white,
-		|| draw_game!(next),
-	)
+	frame.clear!(Color.ray_white)
+	draw_game!(frame, next)
 
 	Ok(next)
 }
@@ -276,47 +274,47 @@ cell_rect = |cell| {
 	height: cell_size,
 }
 
-draw_cell! : Cell, Color, Color => {}
-draw_cell! = |cell, fill, outline| {
+draw_cell! : Draw.Frame, Cell, Color, Color => {}
+draw_cell! = |frame, cell, fill, outline| {
 	rect = cell_rect(cell)
-	Draw.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, outline, 2) })
+	frame.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, outline, 2) })
 }
 
-draw_food! : Cell => {}
-draw_food! = |food| {
+draw_food! : Draw.Frame, Cell => {}
+draw_food! = |frame, food| {
 	rect = cell_rect(food)
-	Draw.circle!({ center: { x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.5 }, radius: cell_size * 0.36, style: Draw.filled_and_outlined(Color.red, Color.dark_gray, 2) })
+	frame.circle!({ center: { x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.5 }, radius: cell_size * 0.36, style: Draw.filled_and_outlined(Color.red, Color.dark_gray, 2) })
 }
 
-draw_snake_cells! : List(Cell) => {}
-draw_snake_cells! = |snake| {
+draw_snake_cells! : Draw.Frame, List(Cell) => {}
+draw_snake_cells! = |frame, snake| {
 	for cell in snake {
-		draw_cell!(cell, Color.from_hex_rgb(0x23c552), Color.from_hex_rgb(0x0d5f2a))
+		draw_cell!(frame, cell, Color.from_hex_rgb(0x23c552), Color.from_hex_rgb(0x0d5f2a))
 	}
 }
 
-draw_board! : {} => {}
-draw_board! = |_| {
+draw_board! : Draw.Frame => {}
+draw_board! = |frame| {
 	board_w = I32.to_f32(grid_cols) * cell_size
 	board_h = I32.to_f32(grid_rows) * cell_size
-	Draw.rectangle!({ x: board_x - 4, y: board_y - 4, width: board_w + 8, height: board_h + 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x17202a), Color.dark_gray, 2) })
+	frame.rectangle!({ x: board_x - 4, y: board_y - 4, width: board_w + 8, height: board_h + 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x17202a), Color.dark_gray, 2) })
 }
 
-draw_game! : Model => {}
-draw_game! = |model| {
-	Draw.text_at!({ pos: { x: board_x, y: 24 }, text: "Snake", size: 32, color: Color.dark_gray })
-	Draw.text_at!({ pos: { x: screen_w - 190, y: 32 }, text: Str.concat("Score ", U64.to_str(model.score)), size: 22, color: Color.gray })
-	draw_board!({})
-	draw_food!(model.food)
-	draw_snake_cells!(model.snake)
-	draw_cell!(head_of(model.snake), Color.yellow, Color.from_hex_rgb(0x0d5f2a))
+draw_game! : Draw.Frame, Model => {}
+draw_game! = |frame, model| {
+	frame.text_at!({ pos: { x: board_x, y: 24 }, text: "Snake", size: 32, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: screen_w - 190, y: 32 }, text: Str.concat("Score ", U64.to_str(model.score)), size: 22, color: Color.gray })
+	draw_board!(frame)
+	draw_food!(frame, model.food)
+	draw_snake_cells!(frame, model.snake)
+	draw_cell!(frame, head_of(model.snake), Color.yellow, Color.from_hex_rgb(0x0d5f2a))
 
 	match model.state {
 		Playing => {}
 		GameOver => {
-			Draw.rectangle!({ x: board_x, y: 250, width: I32.to_f32(grid_cols) * cell_size, height: 120, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 286 }, text: "Game Over", size: 36, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 330 }, text: "Press SPACE to restart", size: 22, color: Color.light_gray })
+			frame.rectangle!({ x: board_x, y: 250, width: I32.to_f32(grid_cols) * cell_size, height: 120, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 286 }, text: "Game Over", size: 36, color: Color.white })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 330 }, text: "Press SPACE to restart", size: 22, color: Color.light_gray })
 		}
 	}
 }

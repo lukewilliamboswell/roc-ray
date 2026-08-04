@@ -435,10 +435,10 @@ play_step_events! = |sounds, events| {
 	}
 }
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 	if Keys.key_pressed(host, KeyEscape) {
-		Host.exit!(0)
+		host.exit!(0)
 	}
 
 	result = advance_game(model.game, frame_input(host))
@@ -448,54 +448,52 @@ render! = |model, host| {
 	play_step_events!(model.sounds, result.events)
 	next = { ..model, game: result.game }
 
-	Draw.draw!(
-		Color.ray_white,
-		|| draw_game!(next.game),
-	)
+	frame.clear!(Color.ray_white)
+	draw_game!(frame, next.game)
 
 	Ok(next)
 }
 
-draw_brick! : Brick => {}
-draw_brick! = |brick|
-	Draw.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
+draw_brick! : Draw.Frame, Brick => {}
+draw_brick! = |frame, brick|
+	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
 
-draw_bricks! : List(Brick) => {}
-draw_bricks! = |bricks| {
+draw_bricks! : Draw.Frame, List(Brick) => {}
+draw_bricks! = |frame, bricks| {
 	for brick in bricks {
-		draw_brick!(brick)
+		draw_brick!(frame, brick)
 	}
 }
 
-draw_game! : Game => {}
-draw_game! = |game| {
-	Draw.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
-	Draw.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
-	Draw.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
-	Draw.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
-	Draw.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
+draw_game! : Draw.Frame, Game => {}
+draw_game! = |frame, game| {
+	frame.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
+	frame.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
+	frame.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
+	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
 
-	draw_bricks!(game.bricks)
+	draw_bricks!(frame, game.bricks)
 
 	paddle = paddle_rect(game.paddle_x)
-	Draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
-	Draw.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
+	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
+	frame.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
 
 	match game.state {
 		Ready => {
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
 		}
 		Playing => {}
 		Won => {
-			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
+			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
 		}
 		GameOver => {
-			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
+			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
 		}
 	}
 }

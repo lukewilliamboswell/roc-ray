@@ -28,19 +28,15 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 
 	circle_color = if host.mouse.left Color.red else Color.green
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 40, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: 10, y: 60 }, text: "Set GREETING and USER", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 30, style: Draw.filled(circle_color) })
-		},
-	)
+	frame.clear!(Color.ray_white)
+	frame.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 40, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 60 }, text: "Set GREETING and USER", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 30, style: Draw.filled(circle_color) })
 
 	Ok(model)
 }

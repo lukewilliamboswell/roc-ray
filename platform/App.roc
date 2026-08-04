@@ -222,12 +222,11 @@ host_pacing = |value|
 	}
 
 expect {
-	cfg = App.map2(App.title("Test"), App.size({ width: 320, height: 240 }), |_, _| {}).config()
+	cfg = App.default.with_title("Test").with_size({ width: 320, height: 240 })
 	host = cfg.to_host()
 	host.title == "Test" and host.width == 320 and host.height == 240 and host.target_fps == 240 and !(host.vsync) and host.cursor_visible
 }
-expect App.map2(App.target_fps(120), App.vsync(Bool.True), |_, _| {}).config().frame_pacing() == VSync
-expect App.map2(App.vsync(Bool.True), App.target_fps(120), |_, _| {}).config().frame_pacing() == Capped(120)
-expect App.title("Chained").then(App.frame_pacing(Capped(60))).config().to_host().target_fps == 60
-expect App.frame_pacing(Capped(-5)).config().frame_pacing() == Uncapped
-expect App.cursor_visible(Bool.False).config().cursor() == CursorHidden
+expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
+expect App.default.with_frame_pacing(Capped(120)).to_host() == { ..App.default.to_host(), target_fps: 120 }
+expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
+expect App.default.with_cursor(CursorHidden).cursor() == CursorHidden

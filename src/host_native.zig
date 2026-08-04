@@ -1966,6 +1966,10 @@ fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
         .bottom_left = quad.bottom_left,
         .bottom_right = quad.bottom_right,
         .top_right = quad.top_right,
+        .q_top_left = 1,
+        .q_bottom_left = 1,
+        .q_bottom_right = 1,
+        .q_top_right = 1,
         .tint = abi.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
     return true;

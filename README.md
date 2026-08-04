@@ -164,6 +164,37 @@ its loaded font, so the original font binding may leave scope safely. Handle
 scores, chat, and other changing content, keep using the direct `frame.text!`
 API rather than creating a short-lived prepared value each frame.
 
+### Exact projective textures
+
+Projected planar surfaces use a validated homography rather than two affine
+triangles. Build the opaque quad once when its corners are static, then draw it
+through the frame receiver:
+
+```roc
+wall = Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 130, y: 90 },
+	bottom_left: { x: 75, y: 525 },
+	bottom_right: { x: 725, y: 475 },
+	top_right: { x: 610, y: 155 },
+})?
+
+frame.projective_texture!({
+	texture,
+	source: texture.rect(),
+	quad: wall,
+	tint: Color.white,
+})
+```
+
+`ProjectiveQuad.from_corners` rejects non-finite, degenerate, concave,
+self-intersecting, and horizon-crossing geometry, so a value accepted by the
+draw API always has a finite single-plane projection. `quad.project(uv)` uses
+the same homography for positioning overlays. Rendering remains one hosted
+call and one quad; the affine parallelogram case keeps the normal batching fast
+path. Exact projective draws flush the native vertex batch around their matrix
+state, but do not allocate or tessellate and preserve an active fragment
+shader.
+
 ### Host-owned textures, render targets, and shaders
 
 `Assets.Texture` owns a mutable ordinary texture. Its dimensions, pixel update,
@@ -277,6 +308,13 @@ Generated and mutable textures plus sound transport controls:
 ```bash
 roc build examples/generated_assets.roc
 ./generated_assets
+```
+
+Exact projective mapping onto a non-parallelogram planar surface:
+
+```bash
+roc build examples/projective_texture.roc
+./projective_texture
 ```
 
 Offscreen rendering, additive blending, and fragment-shader post-processing:

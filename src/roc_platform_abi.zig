@@ -2739,11 +2739,15 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_af207b8740ec5db2
-pub const __AnonStruct_af207b8740ec5db2 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_ede65958466c46d5
+pub const __AnonStruct_ede65958466c46d5 = if (@sizeOf(usize) == 4) extern struct {
     texture: AssetsTextureView,
     bottom_left: MathVec2,
     bottom_right: MathVec2,
+    q_bottom_left: f32,
+    q_bottom_right: f32,
+    q_top_left: f32,
+    q_top_right: f32,
     source: MathRect,
     top_left: MathVec2,
     top_right: MathVec2,
@@ -2775,6 +2779,10 @@ pub const __AnonStruct_af207b8740ec5db2 = if (@sizeOf(usize) == 4) extern struct
     texture: AssetsTextureView,
     bottom_left: MathVec2,
     bottom_right: MathVec2,
+    q_bottom_left: f32,
+    q_bottom_right: f32,
+    q_top_left: f32,
+    q_top_right: f32,
     source: MathRect,
     top_left: MathVec2,
     top_right: MathVec2,
@@ -2806,12 +2814,12 @@ pub const __AnonStruct_af207b8740ec5db2 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_af207b8740ec5db2) != 64) @compileError("__AnonStruct_af207b8740ec5db2 size mismatch");
-        if (@alignOf(__AnonStruct_af207b8740ec5db2) != 8) @compileError("__AnonStruct_af207b8740ec5db2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_ede65958466c46d5) != 80) @compileError("__AnonStruct_ede65958466c46d5 size mismatch");
+        if (@alignOf(__AnonStruct_ede65958466c46d5) != 8) @compileError("__AnonStruct_ede65958466c46d5 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_af207b8740ec5db2) != 56) @compileError("__AnonStruct_af207b8740ec5db2 size mismatch");
-        if (@alignOf(__AnonStruct_af207b8740ec5db2) != 4) @compileError("__AnonStruct_af207b8740ec5db2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_ede65958466c46d5) != 72) @compileError("__AnonStruct_ede65958466c46d5 size mismatch");
+        if (@alignOf(__AnonStruct_ede65958466c46d5) != 4) @compileError("__AnonStruct_ede65958466c46d5 alignment mismatch");
     }
 }
 
@@ -5834,12 +5842,16 @@ comptime {
 }
 
 /// Arguments for DrawHost.draw_texture_quad!
-/// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, source : Math.Rect, texture : Assets.TextureView, tint : Color, top_left : Math.Vec2, top_right : Math.Vec2 } => {}
+/// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, q_bottom_left : F32, q_bottom_right : F32, q_top_left : F32, q_top_right : F32, source : Math.Rect, texture : Assets.TextureView, tint : Color, top_left : Math.Vec2, top_right : Math.Vec2 } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostDraw_texture_quadArgs = if (@sizeOf(usize) == 4) extern struct {
     texture: AssetsTextureView,
     bottom_left: MathVec2,
     bottom_right: MathVec2,
+    q_bottom_left: f32,
+    q_bottom_right: f32,
+    q_top_left: f32,
+    q_top_right: f32,
     source: MathRect,
     top_left: MathVec2,
     top_right: MathVec2,
@@ -5848,6 +5860,10 @@ pub const DrawHostDraw_texture_quadArgs = if (@sizeOf(usize) == 4) extern struct
     texture: AssetsTextureView,
     bottom_left: MathVec2,
     bottom_right: MathVec2,
+    q_bottom_left: f32,
+    q_bottom_right: f32,
+    q_top_left: f32,
+    q_top_right: f32,
     source: MathRect,
     top_left: MathVec2,
     top_right: MathVec2,
@@ -5856,11 +5872,11 @@ pub const DrawHostDraw_texture_quadArgs = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(DrawHostDraw_texture_quadArgs) != 64) @compileError("DrawHostDraw_texture_quadArgs size mismatch");
+        if (@sizeOf(DrawHostDraw_texture_quadArgs) != 80) @compileError("DrawHostDraw_texture_quadArgs size mismatch");
         if (@alignOf(DrawHostDraw_texture_quadArgs) != 8) @compileError("DrawHostDraw_texture_quadArgs alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawHostDraw_texture_quadArgs) != 56) @compileError("DrawHostDraw_texture_quadArgs size mismatch");
+        if (@sizeOf(DrawHostDraw_texture_quadArgs) != 72) @compileError("DrawHostDraw_texture_quadArgs size mismatch");
         if (@alignOf(DrawHostDraw_texture_quadArgs) != 4) @compileError("DrawHostDraw_texture_quadArgs alignment mismatch");
     }
 }
@@ -6706,7 +6722,7 @@ pub const DrawHostCircle_linesArg0 = __AnonStruct_e0bd1e208669c12;
 pub const DrawHostDraw_prepared_textArg0 = __AnonStruct_94985988143fb976;
 pub const DrawHostDraw_textureArg0 = __AnonStruct_77dc636ee4c17bb8;
 pub const AssetsTextureViewResource = __AnonStruct_8b7fc2d8f8794eb4;
-pub const DrawHostDraw_texture_quadArg0 = __AnonStruct_af207b8740ec5db2;
+pub const DrawHostDraw_texture_quadArg0 = __AnonStruct_ede65958466c46d5;
 pub const DrawHostFpsArg0 = __AnonStruct_e362c2a9787340e6;
 pub const DrawHostLineArg0 = __AnonStruct_807a3ee7fa61e42b;
 pub const DrawHostLoad_fontArg0 = __AnonStruct_385bc5fa938bef51;
@@ -7059,7 +7075,7 @@ pub extern fn roc_draw_draw_prepared_text_raw(arg0: DrawHostDraw_prepared_textAr
 pub extern fn roc_draw_draw_texture_raw(arg0: DrawHostDraw_textureArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.draw_texture_quad!
-/// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, source : Math.Rect, texture : Assets.TextureView, tint : Color, top_left : Math.Vec2, top_right : Math.Vec2 } => {}
+/// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, q_bottom_left : F32, q_bottom_right : F32, q_top_left : F32, q_top_right : F32, source : Math.Rect, texture : Assets.TextureView, tint : Color, top_left : Math.Vec2, top_right : Math.Vec2 } => {}
 pub extern fn roc_draw_draw_texture_quad_raw(arg0: DrawHostDraw_texture_quadArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.end_blend!

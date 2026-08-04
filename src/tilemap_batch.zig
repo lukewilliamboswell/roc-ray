@@ -97,10 +97,10 @@ fn drawGid(args: anytype, context: anytype, submit: anytype, textureToken: anyty
 
 fn drawLayer(args: anytype, context: anytype, submit: anytype, textureToken: anytype, layer: anytype) usize {
     if (layer.width == 0 or layer.height == 0 or layer.gid_count == 0) return 0;
-    const min_col = if (args.culled) args.min_col else 0;
-    const min_row = if (args.culled) args.min_row else 0;
-    const max_col = @min(if (args.culled) args.max_col else layer.width - 1, layer.width - 1);
-    const max_row = @min(if (args.culled) args.max_row else layer.height - 1, layer.height - 1);
+    const min_col: u64 = if (args.culled) args.min_col else 0;
+    const min_row: u64 = if (args.culled) args.min_row else 0;
+    const max_col: u64 = @min(if (args.culled) args.max_col else layer.width - 1, layer.width - 1);
+    const max_row: u64 = @min(if (args.culled) args.max_row else layer.height - 1, layer.height - 1);
     if (min_col > max_col or min_row > max_row) return 0;
 
     var submitted: usize = 0;

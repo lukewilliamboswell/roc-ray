@@ -87,7 +87,8 @@ zig build test
 
 Rendering code also has an opt-in pixel-level smoke test. It opens a hidden
 raylib window and validates scissoring, convex polygon rasterization, texture
-source regions, and flipped quads against framebuffer pixels:
+source regions, flipped quads, exact projective interpolation, and shader-state
+preservation against framebuffer pixels:
 
 ```bash
 zig build graphical-smoke

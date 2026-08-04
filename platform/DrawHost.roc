@@ -62,7 +62,7 @@ DrawHost := [].{
 	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
 	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
-	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, tint : Color }
+	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
 	ShaderInt : { uniform : Uniform, value : I32 }

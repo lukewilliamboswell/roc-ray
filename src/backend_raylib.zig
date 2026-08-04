@@ -715,7 +715,70 @@ test "textureRegionUv normalizes source pixels" {
     try std.testing.expectEqual(@as(f32, 0.75), uv.y);
 }
 
-/// Draw a texture source region across an arbitrary screen-space quadrilateral.
+fn projectiveModelview(modelview: rl.Matrix) rl.Matrix {
+    return .{
+        .m0 = modelview.m0,
+        .m1 = modelview.m1,
+        .m2 = modelview.m2,
+        .m3 = modelview.m3,
+        .m4 = modelview.m4,
+        .m5 = modelview.m5,
+        .m6 = modelview.m6,
+        .m7 = modelview.m7,
+        .m8 = modelview.m12,
+        .m9 = modelview.m13,
+        .m10 = modelview.m14,
+        .m11 = modelview.m15,
+        .m12 = 0,
+        .m13 = 0,
+        .m14 = 0,
+        .m15 = 0,
+    };
+}
+
+fn textureQuadIsProjective(weights: [4]f32) bool {
+    return weights[0] != weights[1] or weights[0] != weights[2] or weights[0] != weights[3];
+}
+
+test "projective modelview scales the complete transformed position by q" {
+    const modelview = rl.Matrix{
+        .m0 = 2,
+        .m1 = 0,
+        .m2 = 0,
+        .m3 = 0,
+        .m4 = 0,
+        .m5 = 3,
+        .m6 = 0,
+        .m7 = 0,
+        .m8 = 0,
+        .m9 = 0,
+        .m10 = 1,
+        .m11 = 0,
+        .m12 = 5,
+        .m13 = -7,
+        .m14 = 0,
+        .m15 = 1,
+    };
+    const projective = projectiveModelview(modelview);
+    const x: f32 = 11;
+    const y: f32 = 13;
+    const q: f32 = 0.4;
+
+    const transformed_x = projective.m0 * (x * q) + projective.m4 * (y * q) + projective.m8 * q + projective.m12;
+    const transformed_y = projective.m1 * (x * q) + projective.m5 * (y * q) + projective.m9 * q + projective.m13;
+    const transformed_w = projective.m3 * (x * q) + projective.m7 * (y * q) + projective.m11 * q + projective.m15;
+
+    try std.testing.expectApproxEqAbs(q * (2 * x + 5), transformed_x, 0.0001);
+    try std.testing.expectApproxEqAbs(q * (3 * y - 7), transformed_y, 0.0001);
+    try std.testing.expectApproxEqAbs(q, transformed_w, 0.0001);
+}
+
+test "equal quad weights retain the batched affine fast path" {
+    try std.testing.expect(!textureQuadIsProjective(.{ 1, 1, 1, 1 }));
+    try std.testing.expect(textureQuadIsProjective(.{ 1, 0.75, 0.5, 0.8 }));
+}
+
+/// Draw a texture source region across a validated planar projection.
 pub fn drawTextureQuad(texture: Texture, args: anytype) void {
     const tint = colorToRl(args.tint);
     if (texture.width <= 0 or texture.height <= 0) return;
@@ -731,6 +794,12 @@ pub fn drawTextureQuad(texture: Texture, args: anytype) void {
         toVector2(args.bottom_right),
         toVector2(args.top_right),
     };
+    const weights = [_]f32{
+        args.q_top_left,
+        args.q_bottom_left,
+        args.q_bottom_right,
+        args.q_top_right,
+    };
     // Horizontal/vertical Tiled flips can reverse the destination winding.
     // Reverse vertex/UV pairs together so raylib's back-face culling still
     // accepts the quad without changing global rlgl state for every tile.
@@ -741,15 +810,34 @@ pub fn drawTextureQuad(texture: Texture, args: anytype) void {
     else
         [_]usize{ 0, 1, 2, 3 };
 
+    const projective = textureQuadIsProjective(weights);
+    const saved_modelview = if (projective) rl.rlGetMatrixModelview() else undefined;
+    if (projective) {
+        // Earlier batched vertices must use the matrix active when they were
+        // submitted. Flush this quad before restoring that matrix as well.
+        rl.rlDrawRenderBatchActive();
+        rl.rlSetMatrixModelview(projectiveModelview(saved_modelview));
+    }
+
     rl.rlSetTexture(texture.id);
     rl.rlBegin(rl.RL_QUADS);
     rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
     for (order) |i| {
         rl.rlTexCoord2f(uvs[i].x, uvs[i].y);
-        rl.rlVertex2f(vertices[i].x, vertices[i].y);
+        if (projective) {
+            const q = weights[i];
+            rl.rlVertex3f(vertices[i].x * q, vertices[i].y * q, q);
+        } else {
+            rl.rlVertex2f(vertices[i].x, vertices[i].y);
+        }
     }
     rl.rlEnd();
-    rl.rlSetTexture(0);
+    if (projective) {
+        rl.rlDrawRenderBatchActive();
+        rl.rlSetMatrixModelview(saved_modelview);
+    } else {
+        rl.rlSetTexture(0);
+    }
 }
 
 /// Measure text with a null-terminated string.

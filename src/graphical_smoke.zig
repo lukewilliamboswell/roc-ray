@@ -19,6 +19,7 @@ const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
 const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
+const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
 
 const TilemapSmokeContext = struct { texture: backend.Texture };
 
@@ -33,6 +34,10 @@ fn submitTilemapSmokeQuad(context: TilemapSmokeContext, quad: tilemap_batch.Quad
         .bottom_left = quad.bottom_left,
         .bottom_right = quad.bottom_right,
         .top_right = quad.top_right,
+        .q_top_left = 1,
+        .q_bottom_left = 1,
+        .q_bottom_right = 1,
+        .q_top_right = 1,
         .tint = white,
     });
     return true;
@@ -52,7 +57,7 @@ fn expectPixel(image: rl.Image, x: c_int, y: c_int, expected: Color) !void {
 /// Render representative primitives and assert exact framebuffer pixels.
 pub fn main() !void {
     rl.SetConfigFlags(rl.FLAG_WINDOW_HIDDEN | rl.FLAG_WINDOW_UNDECORATED);
-    rl.InitWindow(64, 64, "roc-ray graphical smoke");
+    rl.InitWindow(128, 96, "roc-ray graphical smoke");
     if (!rl.IsWindowReady()) return error.WindowUnavailable;
     defer rl.CloseWindow();
 
@@ -61,6 +66,12 @@ pub fn main() !void {
     rl.ImageDrawRectangle(&atlas_image, 8, 0, 8, 8, backend.colorToRl(blue));
     const atlas = rl.LoadTextureFromImage(atlas_image);
     defer rl.UnloadTexture(atlas);
+
+    var projective_image = rl.GenImageColor(16, 16, backend.colorToRl(red));
+    defer rl.UnloadImage(projective_image);
+    rl.ImageDrawRectangle(&projective_image, 0, 9, 16, 7, backend.colorToRl(blue));
+    const projective_texture = rl.LoadTextureFromImage(projective_image);
+    defer rl.UnloadTexture(projective_texture);
 
     const target = backend.loadRenderTexture(24, 8) orelse return error.RenderTextureUnavailable;
     defer backend.unloadRenderTexture(target);
@@ -74,6 +85,19 @@ pub fn main() !void {
     ;
     const shader = backend.loadShaderFromMemory(null, fragment_source) orelse return error.ShaderUnavailable;
     defer backend.unloadShader(shader);
+    const projective_fragment_source =
+        \\#version 330
+        \\in vec2 fragTexCoord;
+        \\in vec4 fragColor;
+        \\uniform sampler2D texture0;
+        \\out vec4 finalColor;
+        \\void main() {
+        \\    finalColor = texture(texture0, fragTexCoord)*fragColor;
+        \\    finalColor.g = 17.0/255.0;
+        \\}
+    ;
+    const projective_shader = backend.loadShaderFromMemory(null, projective_fragment_source) orelse return error.ShaderUnavailable;
+    defer backend.unloadShader(projective_shader);
 
     backend.beginTextureMode(target);
     backend.clearBackground(black);
@@ -122,6 +146,10 @@ pub fn main() !void {
         .bottom_left = Point{ .x = 44, .y = 20 },
         .bottom_right = Point{ .x = 60, .y = 20 },
         .top_right = Point{ .x = 60, .y = 4 },
+        .q_top_left = 1,
+        .q_bottom_left = 1,
+        .q_bottom_right = 1,
+        .q_top_right = 1,
         .tint = Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
 
@@ -139,16 +167,31 @@ pub fn main() !void {
         .tilesets = &tilemap_tilesets,
         .map_tile_height = 16,
         .map_tile_width = 16,
-        .max_col = 0,
-        .max_row = 0,
-        .min_col = 0,
-        .min_row = 0,
+        .max_col = @as(u64, 0),
+        .max_row = @as(u64, 0),
+        .min_col = @as(u64, 0),
+        .min_row = @as(u64, 0),
         .origin_x = 44,
         .origin_y = 28,
         .selector_kind = tilemap_batch.selector_all,
         .selector_value = 0,
     }, TilemapSmokeContext{ .texture = atlas }, submitTilemapSmokeQuad, tilemapSmokeTextureToken);
     if (tilemap_submitted != 1) return error.TilemapBatchCount;
+
+    backend.beginShaderMode(projective_shader);
+    backend.drawTextureQuad(projective_texture, .{
+        .source = .{ .x = 0, .y = 0, .width = 16, .height = 16 },
+        .top_left = Point{ .x = 68, .y = 4 },
+        .bottom_left = Point{ .x = 68, .y = 88 },
+        .bottom_right = Point{ .x = 124, .y = 88 },
+        .top_right = Point{ .x = 100, .y = 4 },
+        .q_top_left = 1,
+        .q_bottom_left = 4.0 / 7.0,
+        .q_bottom_right = 4.0 / 7.0,
+        .q_top_right = 1,
+        .tint = white,
+    });
+    backend.endShaderMode();
     rl.EndDrawing();
 
     const screen = rl.LoadImageFromScreen();
@@ -160,4 +203,8 @@ pub fn main() !void {
     try expectPixel(screen, 52, 10, blue);
     try expectPixel(screen, 48, 36, blue);
     try expectPixel(screen, 56, 36, red);
+    // This point is texture v=0.6 under the exact homography, but v<0.5
+    // under the old two-triangle affine mapping. The custom green channel also
+    // proves projective drawing preserved the caller's fragment shader.
+    try expectPixel(screen, 72, 43, projective_blue);
 }

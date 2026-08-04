@@ -146,7 +146,21 @@ TextureDrawBuilder(field) := {
 	}
 }
 
+vec_is_finite : Math.Vec2 -> Bool
+vec_is_finite = |vec| F32.is_finite(vec.x) and F32.is_finite(vec.y)
+
+corner_cross : Math.Vec2, Math.Vec2, Math.Vec2 -> F32
+corner_cross = |a, b, c| (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+
+crosses_have_one_sign : F32, F32, F32, F32 -> Bool
+crosses_have_one_sign = |a, b, c, d| {
+	all_positive = a > 0 and b > 0 and c > 0 and d > 0
+	all_negative = a < 0 and b < 0 and c < 0 and d < 0
+	all_positive or all_negative
+}
+
 Draw := [].{
+
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
 	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
@@ -335,25 +349,125 @@ Draw := [].{
 	## Resolved texture draw configuration.
 	TextureDraw : TextureDrawConfig
 
-	## A texture mapped onto an arbitrary screen-space quadrilateral.
-	TextureQuad : {
-		texture : Assets.Texture,
-		source : Math.Rect,
+	## Four ordered corners of a projected planar surface.
+	ProjectiveQuadCorners : {
 		top_left : Math.Vec2,
 		bottom_left : Math.Vec2,
 		bottom_right : Math.Vec2,
 		top_right : Math.Vec2,
+	}
+
+	## A finite, convex planar projection with a bounded homography. Construct it
+	## with `ProjectiveQuad.from_corners`; the opaque representation carries the
+	## homogeneous weights needed for exact perspective-correct interpolation.
+	ProjectiveQuad :: {
+		top_left : Math.Vec2,
+		bottom_left : Math.Vec2,
+		bottom_right : Math.Vec2,
+		top_right : Math.Vec2,
+		q_top_left : F32,
+		q_bottom_left : F32,
+		q_bottom_right : F32,
+		q_top_right : F32,
+	}.{
+
+		## Validate four boundary-ordered corners and solve their projective weights.
+		## A single homography cannot represent a concave, self-intersecting, or
+		## horizon-crossing destination, so those states are rejected here.
+		from_corners : ProjectiveQuadCorners -> Try(ProjectiveQuad, [NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon, ..])
+		from_corners = |corners| {
+			finite = vec_is_finite(corners.top_left)
+				and vec_is_finite(corners.bottom_left)
+					and vec_is_finite(corners.bottom_right)
+						and vec_is_finite(corners.top_right)
+			if !finite {
+				Err(NonFiniteQuad)
+			} else {
+				cross_0 = corner_cross(corners.top_left, corners.bottom_left, corners.bottom_right)
+				cross_1 = corner_cross(corners.bottom_left, corners.bottom_right, corners.top_right)
+				cross_2 = corner_cross(corners.bottom_right, corners.top_right, corners.top_left)
+				cross_3 = corner_cross(corners.top_right, corners.top_left, corners.bottom_left)
+				if cross_0 == 0 or cross_1 == 0 or cross_2 == 0 or cross_3 == 0 {
+					Err(DegenerateQuad)
+				} else if !crosses_have_one_sign(cross_0, cross_1, cross_2, cross_3) {
+					Err(NonConvexQuad)
+				} else {
+					dx_1 = corners.top_right.x - corners.bottom_right.x
+					dx_2 = corners.bottom_left.x - corners.bottom_right.x
+					dx_3 = corners.top_left.x - corners.top_right.x + corners.bottom_right.x - corners.bottom_left.x
+					dy_1 = corners.top_right.y - corners.bottom_right.y
+					dy_2 = corners.bottom_left.y - corners.bottom_right.y
+					dy_3 = corners.top_left.y - corners.top_right.y + corners.bottom_right.y - corners.bottom_left.y
+					denominator = dx_1 * dy_2 - dx_2 * dy_1
+					if denominator == 0 {
+						Err(DegenerateQuad)
+					} else {
+						projective_x = (dx_3 * dy_2 - dx_2 * dy_3) / denominator
+						projective_y = (dx_1 * dy_3 - dx_3 * dy_1) / denominator
+						q_top_left = 1
+						q_top_right = 1 + projective_x
+						q_bottom_left = 1 + projective_y
+						q_bottom_right = 1 + projective_x + projective_y
+						weights_finite = F32.is_finite(q_top_right) and F32.is_finite(q_bottom_left) and F32.is_finite(q_bottom_right)
+						q_max = F32.max(q_top_left, F32.max(F32.abs(q_top_right), F32.max(F32.abs(q_bottom_left), F32.abs(q_bottom_right))))
+						normalized_top_left = q_top_left / q_max
+						normalized_top_right = q_top_right / q_max
+						normalized_bottom_left = q_bottom_left / q_max
+						normalized_bottom_right = q_bottom_right / q_max
+						bounded = normalized_top_left > 0.000001
+							and normalized_top_right > 0.000001
+								and normalized_bottom_left > 0.000001
+									and normalized_bottom_right > 0.000001
+						if !weights_finite or !bounded {
+							Err(ProjectiveHorizon)
+						} else {
+							Ok({
+								top_left: corners.top_left,
+								bottom_left: corners.bottom_left,
+								bottom_right: corners.bottom_right,
+								top_right: corners.top_right,
+								q_top_left: normalized_top_left,
+								q_bottom_left: normalized_bottom_left,
+								q_bottom_right: normalized_bottom_right,
+								q_top_right: normalized_top_right,
+							})
+						}
+					}
+				}
+			}
+		}
+
+		## Project a unit-square coordinate onto the destination surface. This uses
+		## the same homography as rendering and is useful for aligned overlays.
+		project : ProjectiveQuad, Math.Vec2 -> Math.Vec2
+		project = |quad, uv| {
+			one_minus_u = 1 - uv.x
+			one_minus_v = 1 - uv.y
+			top_left_weight = one_minus_u * one_minus_v * quad.q_top_left
+			top_right_weight = uv.x * one_minus_v * quad.q_top_right
+			bottom_left_weight = one_minus_u * uv.y * quad.q_bottom_left
+			bottom_right_weight = uv.x * uv.y * quad.q_bottom_right
+			weight_sum = top_left_weight + top_right_weight + bottom_left_weight + bottom_right_weight
+			{
+				x: (quad.top_left.x * top_left_weight + quad.top_right.x * top_right_weight + quad.bottom_left.x * bottom_left_weight + quad.bottom_right.x * bottom_right_weight) / weight_sum,
+				y: (quad.top_left.y * top_left_weight + quad.top_right.y * top_right_weight + quad.bottom_left.y * bottom_left_weight + quad.bottom_right.y * bottom_right_weight) / weight_sum,
+			}
+		}
+	}
+
+	## Texture and source region projected exactly onto a validated planar quad.
+	ProjectiveTexture : {
+		texture : Assets.Texture,
+		source : Math.Rect,
+		quad : ProjectiveQuad,
 		tint : Color,
 	}
 
-	## A sampled texture view mapped onto an arbitrary screen-space quadrilateral.
-	TextureViewQuad : {
+	## Sampled texture view projected exactly onto a validated planar quad.
+	ProjectiveTextureView : {
 		texture : Assets.TextureView,
 		source : Math.Rect,
-		top_left : Math.Vec2,
-		bottom_left : Math.Vec2,
-		bottom_right : Math.Vec2,
-		top_right : Math.Vec2,
+		quad : ProjectiveQuad,
 		tint : Color,
 	}
 
@@ -809,27 +923,36 @@ Draw := [].{
 	draw_texture! : Frame, TextureDraw => {}
 	draw_texture! = |frame, cfg| frame.texture!(cfg)
 
-	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
-	texture_quad! : Frame, TextureQuad => {}
-	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
+	## Project a texture onto a validated planar quad with exact homogeneous UV
+	## interpolation. This remains one hosted call and preserves active shaders.
+	projective_texture! : Frame, ProjectiveTexture => {}
+	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
 		texture: cfg.texture.view(),
 		source: cfg.source,
-		top_left: cfg.top_left,
-		bottom_left: cfg.bottom_left,
-		bottom_right: cfg.bottom_right,
-		top_right: cfg.top_right,
+		top_left: cfg.quad.top_left,
+		bottom_left: cfg.quad.bottom_left,
+		bottom_right: cfg.quad.bottom_right,
+		top_right: cfg.quad.top_right,
+		q_top_left: cfg.quad.q_top_left,
+		q_bottom_left: cfg.quad.q_bottom_left,
+		q_bottom_right: cfg.quad.q_bottom_right,
+		q_top_right: cfg.quad.q_top_right,
 		tint: cfg.tint,
 	})
 
-	## Draw a sampled texture view across an arbitrary screen-space quadrilateral.
-	texture_view_quad! : Frame, TextureViewQuad => {}
-	texture_view_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
+	## Project a sampled texture view onto a validated planar quad.
+	projective_texture_view! : Frame, ProjectiveTextureView => {}
+	projective_texture_view! = |_frame, cfg| DrawHost.draw_texture_quad!({
 		texture: cfg.texture,
 		source: cfg.source,
-		top_left: cfg.top_left,
-		bottom_left: cfg.bottom_left,
-		bottom_right: cfg.bottom_right,
-		top_right: cfg.top_right,
+		top_left: cfg.quad.top_left,
+		bottom_left: cfg.quad.bottom_left,
+		bottom_right: cfg.quad.bottom_right,
+		top_right: cfg.quad.top_right,
+		q_top_left: cfg.quad.q_top_left,
+		q_bottom_left: cfg.quad.q_bottom_left,
+		q_bottom_right: cfg.quad.q_bottom_right,
+		q_top_right: cfg.quad.q_top_right,
 		tint: cfg.tint,
 	})
 
@@ -1038,3 +1161,60 @@ expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
 expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 0, y: 0 },
+	bottom_left: { x: 0, y: 10 },
+	bottom_right: { x: 20, y: 10 },
+	top_right: { x: 20, y: 0 },
+}) {
+	Ok(quad) => quad.project({ x: 0.5, y: 0.5 }) == { x: 10, y: 5 }
+	Err(_) => False
+}
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 130, y: 90 },
+	bottom_left: { x: 75, y: 525 },
+	bottom_right: { x: 725, y: 475 },
+	top_right: { x: 610, y: 155 },
+}) {
+	Ok(quad) => {
+		center = quad.project({ x: 0.5, y: 0.5 })
+		F32.abs(center.x - 426.54004) < 0.001 and F32.abs(center.y - 281.87885) < 0.001
+	}
+	Err(_) => False
+}
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: F32.nan, y: 0 },
+	bottom_left: { x: 0, y: 10 },
+	bottom_right: { x: 10, y: 10 },
+	top_right: { x: 10, y: 0 },
+}) {
+	Err(NonFiniteQuad) => True
+	_ => False
+}
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 0, y: 0 },
+	bottom_left: { x: 1, y: 1 },
+	bottom_right: { x: 2, y: 2 },
+	top_right: { x: 3, y: 3 },
+}) {
+	Err(DegenerateQuad) => True
+	_ => False
+}
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 0, y: 0 },
+	bottom_left: { x: 0, y: 10 },
+	bottom_right: { x: 3, y: 5 },
+	top_right: { x: 10, y: 0 },
+}) {
+	Err(NonConvexQuad) => True
+	_ => False
+}
+expect match Draw.ProjectiveQuad.from_corners({
+	top_left: { x: 0, y: 0 },
+	bottom_left: { x: 0, y: 10 },
+	bottom_right: { x: 10, y: 10 },
+	top_right: { x: 0.0000001, y: 0 },
+}) {
+	Err(ProjectiveHorizon) => True
+	_ => False
+}

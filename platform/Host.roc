@@ -66,6 +66,11 @@ Host := {
 	key_released : Host, Keys.KeyboardKey -> Bool
 	key_released = |host, key| Keys.key_released(host, key)
 
+	## Resolve a gamepad slot in this frame's sampled snapshot. The returned pad
+	## is snapshot-scoped; query it now rather than retaining it in the model.
+	gamepad : Host, Gamepad.GamepadId -> [Connected(Gamepad.ConnectedPad), Disconnected]
+	gamepad = |host, id| Gamepad.lookup(host.gamepads, id)
+
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
 	exit! : Host, I32 => {}

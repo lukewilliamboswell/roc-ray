@@ -185,14 +185,17 @@ Resolve gamepad connectivity once, then use the proven connected receiver for
 all button and axis queries:
 
 ```roc
-match host.gamepads.lookup(One) {
+match host.gamepad(One) {
 	Connected(pad) => if pad.button_pressed(FaceDown) { jump() }
 	Disconnected => {}
 }
 ```
 
 `ConnectedPad` only references the existing snapshot lists. Lookup and its
-button, axis, and stick methods neither allocate nor resample the device.
+button, axis, and stick methods neither allocate nor resample the device. It is
+a view of that frame's snapshot: query it immediately and do not retain it in
+the model, because retaining old snapshot lists triggers copy-on-write next
+frame.
 
 `host.text_input` contains the Unicode codepoints entered during the frame. It
 tracks text entry and the active keyboard layout, unlike physical key state.

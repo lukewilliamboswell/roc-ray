@@ -4,6 +4,8 @@
 ## button state, and axes are stored in three flat persistent lists so queries
 ## do not cross the host boundary or allocate. Button state uses the same bits
 ## as keyboard and mouse input: held = 1, pressed = 2, released = 4.
+## Resolve a pad from the current `Host` each frame; retaining either a snapshot
+## or `ConnectedPad` keeps old lists alive and makes the host copy on update.
 Gamepad := [].{
 
 	## Fixed-size input snapshot stored on `Host` and sampled once per frame.
@@ -55,6 +57,8 @@ Gamepad := [].{
 
 	## A gamepad proven connected in this snapshot. This is a small value holding
 	## references to the existing flat lists; lookup does not allocate or resample.
+	## It is valid as a view of this snapshot only. Do not retain it in app models;
+	## call `host.gamepad(id)` again when the next frame arrives.
 	ConnectedPad :: { snapshot : Snapshot, gamepad : GamepadId }.{
 
 		## Slot occupied by this connected pad.
@@ -90,8 +94,8 @@ Gamepad := [].{
 		right_stick = |pad| { x: pad.axis(RightX), y: pad.axis(RightY) }
 	}
 
-	## Resolve a slot into a connected receiver. Callers must handle disconnect
-	## once, after which all button and axis queries stay allocation-free.
+	## Resolve a slot into a snapshot-scoped connected receiver. Callers handle
+	## disconnect once, after which button and axis queries stay allocation-free.
 	lookup : Snapshot, GamepadId -> [Connected(ConnectedPad), Disconnected]
 	lookup = |snapshot, gamepad|
 		if available(snapshot, gamepad) {

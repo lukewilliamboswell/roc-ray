@@ -199,10 +199,12 @@ gamepad connectivity, buttons, and axes in three persistent flat lists. Their
 receiver and module query forms are pure Roc, so multiple queries do not make
 multiple host calls.
 
-Use `host.gamepads.lookup(id)` to get either `Connected(pad)` or `Disconnected`.
-The connected receiver carries the selected ID and references to the same
-snapshot lists, so button, axis, and stick queries require neither repeated
-connectivity checks nor allocation.
+Use `host.gamepad(id)` to get either `Connected(pad)` or `Disconnected`. The
+connected receiver carries the selected ID and references to the same snapshot
+lists, so button, axis, and stick queries require neither repeated connectivity
+checks nor allocation. It is scoped to that snapshot: query it immediately and
+do not retain it in the application model. Resolve the slot again from the next
+frame's `Host`.
 
 Mouse position, delta, and two-axis wheel movement are scalar snapshot fields.
 Cursor visibility and capture are one tagged operation through

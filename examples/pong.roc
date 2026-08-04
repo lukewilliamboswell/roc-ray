@@ -3,7 +3,6 @@ app [Model, program] { rr: platform "../platform/main-default.roc" }
 import rr.Draw
 import rr.Color
 import rr.Host
-import rr.Keys
 import rr.Audio
 import rr.App
 import rr.Math
@@ -137,7 +136,7 @@ render! = |model, host, frame| {
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
 render_game_over! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render_game_over! = |model, host, frame| {
-	restart = Keys.key_pressed(host, KeySpace)
+	restart = host.key_pressed(KeySpace)
 	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
 
 	frame.clear!(Color.black)
@@ -159,8 +158,8 @@ render_playing! = |model, host, frame| {
 	serve_vy = random_serve_vy!(host)
 
 	# --- Left paddle: player input (W up, S down) ---
-	w_down = Keys.key_down(host, KeyW)
-	s_down = Keys.key_down(host, KeyS)
+	w_down = host.key_down(KeyW)
+	s_down = host.key_down(KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
 	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 

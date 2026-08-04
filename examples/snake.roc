@@ -5,7 +5,6 @@ import rr.Audio
 import rr.Color
 import rr.Draw
 import rr.Host
-import rr.Keys
 import rr.Math
 
 Cell : {
@@ -159,10 +158,10 @@ spawn_food! = |host, snake| {
 
 requested_direction : Model, Host -> Direction
 requested_direction = |model, host| {
-	up = Keys.key_pressed(host, KeyUp) or Keys.key_pressed(host, KeyW)
-	down = Keys.key_pressed(host, KeyDown) or Keys.key_pressed(host, KeyS)
-	left = Keys.key_pressed(host, KeyLeft) or Keys.key_pressed(host, KeyA)
-	right = Keys.key_pressed(host, KeyRight) or Keys.key_pressed(host, KeyD)
+	up = host.key_pressed(KeyUp) or host.key_pressed(KeyW)
+	down = host.key_pressed(KeyDown) or host.key_pressed(KeyS)
+	left = host.key_pressed(KeyLeft) or host.key_pressed(KeyA)
+	right = host.key_pressed(KeyRight) or host.key_pressed(KeyD)
 
 	if up {
 		DirUp
@@ -241,14 +240,14 @@ advance_playing! = |model, host| {
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
-	if Keys.key_pressed(host, KeyEscape) {
+	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
 	}
 
 	next = match model.state {
 		Playing => advance_playing!(model, host)
 		GameOver =>
-			if Keys.key_pressed(host, KeySpace) {
+			if host.key_pressed(KeySpace) {
 				model.start_sound.play!()
 				new_game!(model, host)
 			} else {

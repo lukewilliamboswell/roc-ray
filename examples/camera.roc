@@ -5,7 +5,6 @@ import rr.Camera
 import rr.Color
 import rr.Draw
 import rr.Host
-import rr.Keys
 import rr.Math
 
 Model : {
@@ -55,10 +54,10 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 move_player : Math.Vec2, Host -> Math.Vec2
 move_player = |player, host| {
-	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
-	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
-	up = Keys.key_down(host, KeyUp) or Keys.key_down(host, KeyW)
-	down = Keys.key_down(host, KeyDown) or Keys.key_down(host, KeyS)
+	left = host.key_down(KeyLeft) or host.key_down(KeyA)
+	right = host.key_down(KeyRight) or host.key_down(KeyD)
+	up = host.key_down(KeyUp) or host.key_down(KeyW)
+	down = host.key_down(KeyDown) or host.key_down(KeyS)
 
 	speed = 360
 	dt = host.frame_time
@@ -70,14 +69,14 @@ move_player = |player, host| {
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, NonFiniteZoom, ..])
 render! = |model, host, frame| {
-	if Keys.key_pressed(host, KeyEscape) {
+	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
 	}
 
 	player = move_player(model.player, host)
 	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(Keys.key_down(host, KeyQ), Keys.key_down(host, KeyE))
-	rotation = if Keys.key_pressed(host, KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+	rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
+	rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
 
 	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)
 	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })

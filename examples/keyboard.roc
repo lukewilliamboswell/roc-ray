@@ -60,7 +60,7 @@ render! = |model, host, frame| {
 	_mouse_position = host.mouse.position()
 	mouse_delta = host.mouse.delta()
 	wheel_delta = host.mouse.wheel_delta()
-	gamepad_input = match host.gamepads.lookup(One) {
+	gamepad_input = match host.gamepad(One) {
 		Connected(pad) => { connected: Bool.True, left_stick: pad.left_stick(), action_pressed: pad.button_pressed(FaceDown) }
 		Disconnected => { connected: Bool.False, left_stick: { x: 0, y: 0 }, action_pressed: Bool.False }
 	}

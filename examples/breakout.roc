@@ -5,7 +5,6 @@ import rr.Audio
 import rr.Color
 import rr.Draw
 import rr.Host
-import rr.Keys
 import rr.Math
 
 Brick : {
@@ -254,8 +253,8 @@ fresh_bricks = List.concat(
 
 paddle_move_from_host : Host -> PaddleMove
 paddle_move_from_host = |host| {
-	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
-	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	left = host.key_down(KeyLeft) or host.key_down(KeyA)
+	right = host.key_down(KeyRight) or host.key_down(KeyD)
 
 	if left PaddleLeft else if right PaddleRight else PaddleStill
 }
@@ -271,7 +270,7 @@ paddle_move_dir = |move|
 frame_input : Host -> FrameInput
 frame_input = |host| {
 	paddle_move: paddle_move_from_host(host),
-	action_pressed: Keys.key_pressed(host, KeySpace),
+	action_pressed: host.key_pressed(KeySpace),
 	dt: host.frame_time,
 }
 
@@ -433,7 +432,7 @@ play_step_events! = |sounds, events| {
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
-	if Keys.key_pressed(host, KeyEscape) {
+	if host.key_pressed(KeyEscape) {
 		host.exit!(0)
 	}
 

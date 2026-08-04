@@ -1,10 +1,11 @@
 ## Immediate-mode 2D drawing, text, textures, cameras, and render effects.
 ##
-## `draw!` owns the frame scope. Nested helpers such as `with_camera!`,
-## `with_scissor!`, `with_render_texture!`, `with_shader!`, and
-## `with_blend_mode!` keep raylib's begin/end state transitions paired. Create
-## host-owned fonts, render textures, and shaders during initialization and keep
-## them in the model; per-frame drawing and uniform updates do not allocate.
+## The host owns the outer frame scope and passes an opaque `Frame` capability
+## to `render!`. Draw through that receiver so drawing cannot happen before
+## BeginDrawing or after EndDrawing. Nested helpers keep raylib's begin/end state
+## transitions paired. Create host-owned fonts, render textures, and shaders
+## during initialization and keep them in the model; per-frame drawing and
+## uniform updates do not allocate.
 import Assets
 import AssetsHost
 import Camera
@@ -150,6 +151,88 @@ Draw := [].{
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
 	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
+
+	## Opaque, zero-sized proof that the host has opened the current render frame.
+	## The platform supplies one to `render!`; applications cannot construct one.
+	Frame :: DrawHost.Frame.{
+		from_host : DrawHost.Frame -> Frame
+		from_host = |frame| Frame.(frame)
+
+		clear! : Frame, Color => {}
+		clear! = |frame, color| Draw.clear!(frame, color)
+
+		rectangle_gradient_v! : Frame, RectangleGradientV => {}
+		rectangle_gradient_v! = |frame, cfg| Draw.rectangle_gradient_v!(frame, cfg)
+
+		rectangle_gradient_h! : Frame, RectangleGradientH => {}
+		rectangle_gradient_h! = |frame, cfg| Draw.rectangle_gradient_h!(frame, cfg)
+
+		circle_gradient! : Frame, CircleGradient => {}
+		circle_gradient! = |frame, cfg| Draw.circle_gradient!(frame, cfg)
+
+		fps! : Frame, Fps => {}
+		fps! = |frame, cfg| Draw.fps!(frame, cfg)
+
+		rectangle! : Frame, Rectangle => {}
+		rectangle! = |frame, cfg| Draw.rectangle!(frame, cfg)
+
+		rounded_rectangle! : Frame, RoundedRectangle => {}
+		rounded_rectangle! = |frame, cfg| Draw.rounded_rectangle!(frame, cfg)
+
+		circle! : Frame, Circle => {}
+		circle! = |frame, cfg| Draw.circle!(frame, cfg)
+
+		line! : Frame, Line => {}
+		line! = |frame, cfg| Draw.line!(frame, cfg)
+
+		triangle! : Frame, Triangle => {}
+		triangle! = |frame, cfg| Draw.triangle!(frame, cfg)
+
+		polygon! : Frame, Polygon => {}
+		polygon! = |frame, cfg| Draw.polygon!(frame, cfg)
+
+		convex_polygon! : Frame, ConvexPolygon => {}
+		convex_polygon! = |frame, cfg| Draw.convex_polygon!(frame, cfg)
+
+		texture! : Frame, TextureDraw => {}
+		texture! = |frame, cfg| Draw.texture!(frame, cfg)
+
+		draw_texture! : Frame, TextureDraw => {}
+		draw_texture! = |frame, cfg| Draw.draw_texture!(frame, cfg)
+
+		texture_quad! : Frame, TextureQuad => {}
+		texture_quad! = |frame, cfg| Draw.texture_quad!(frame, cfg)
+
+		with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
+		with_render_texture! = |frame, target, callback| Draw.with_render_texture!(frame, target, callback)
+
+		with_shader! : Frame, Shader, (Frame => {}) => {}
+		with_shader! = |frame, shader, callback| Draw.with_shader!(frame, shader, callback)
+
+		with_blend_mode! : Frame, BlendMode, (Frame => result) => result
+		with_blend_mode! = |frame, mode, callback| Draw.with_blend_mode!(frame, mode, callback)
+
+		with_camera! : Frame, CameraMode, (Frame => result) => result
+		with_camera! = |frame, camera, callback| Draw.with_camera!(frame, camera, callback)
+
+		with_mode_2d! : Frame, CameraMode, (Frame => result) => result
+		with_mode_2d! = |frame, camera, callback| Draw.with_mode_2d!(frame, camera, callback)
+
+		with_scissor! : Frame, Math.Rect, (Frame => result) => result
+		with_scissor! = |frame, bounds, callback| Draw.with_scissor!(frame, bounds, callback)
+
+		text! : Frame, Text => {}
+		text! = |frame, cfg| Draw.text!(frame, cfg)
+
+		debug_text! : Frame, DebugText => {}
+		debug_text! = |frame, cfg| Draw.debug_text!(frame, cfg)
+
+		text_at! : Frame, SimpleText => {}
+		text_at! = |frame, cfg| Draw.text_at!(frame, cfg)
+
+		text_centered! : Frame, SimpleText => {}
+		text_centered! = |frame, cfg| Draw.text_centered!(frame, cfg)
+	}
 
 	## Two-dimensional vector used by drawing records.
 	Vector2 : Math.Vec2
@@ -525,28 +608,28 @@ Draw := [].{
 	}
 
 	## Clear the active drawing target to a solid color.
-	clear! : Color => {}
-	clear! = |color| DrawHost.clear!(color)
+	clear! : Frame, Color => {}
+	clear! = |_frame, color| DrawHost.clear!(color)
 
 	## Draw a vertical rectangle gradient.
-	rectangle_gradient_v! : RectangleGradientV => {}
-	rectangle_gradient_v! = |cfg| DrawHost.rectangle_gradient_v!(cfg)
+	rectangle_gradient_v! : Frame, RectangleGradientV => {}
+	rectangle_gradient_v! = |_frame, cfg| DrawHost.rectangle_gradient_v!(cfg)
 
 	## Draw a horizontal rectangle gradient.
-	rectangle_gradient_h! : RectangleGradientH => {}
-	rectangle_gradient_h! = |cfg| DrawHost.rectangle_gradient_h!(cfg)
+	rectangle_gradient_h! : Frame, RectangleGradientH => {}
+	rectangle_gradient_h! = |_frame, cfg| DrawHost.rectangle_gradient_h!(cfg)
 
 	## Draw a radial circle gradient.
-	circle_gradient! : CircleGradient => {}
-	circle_gradient! = |cfg| DrawHost.circle_gradient!(cfg)
+	circle_gradient! : Frame, CircleGradient => {}
+	circle_gradient! = |_frame, cfg| DrawHost.circle_gradient!(cfg)
 
 	## Draw raylib's current frames-per-second counter.
-	fps! : Fps => {}
-	fps! = |cfg| DrawHost.fps!(cfg)
+	fps! : Frame, Fps => {}
+	fps! = |_frame, cfg| DrawHost.fps!(cfg)
 
 	## Draw a filled and/or outlined axis-aligned rectangle.
-	rectangle! : Rectangle => {}
-	rectangle! = |cfg| {
+	rectangle! : Frame, Rectangle => {}
+	rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => DrawHost.rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, color })
@@ -559,8 +642,8 @@ Draw := [].{
 	}
 
 	## Draw a filled and/or outlined rounded rectangle.
-	rounded_rectangle! : RoundedRectangle => {}
-	rounded_rectangle! = |cfg| {
+	rounded_rectangle! : Frame, RoundedRectangle => {}
+	rounded_rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => DrawHost.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: cfg.radius, segments: cfg.segments, color })
@@ -573,8 +656,8 @@ Draw := [].{
 	}
 
 	## Draw a filled and/or outlined circle.
-	circle! : Circle => {}
-	circle! = |cfg| {
+	circle! : Frame, Circle => {}
+	circle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => DrawHost.circle!({ center: cfg.center, radius: cfg.radius, color })
@@ -587,16 +670,16 @@ Draw := [].{
 	}
 
 	## Draw a stroked line segment. `NoStroke` performs no drawing.
-	line! : Line => {}
-	line! = |cfg|
+	line! : Frame, Line => {}
+	line! = |_frame, cfg|
 		match cfg.stroke {
 			NoStroke => {}
 			Stroke(stroke_cfg) => DrawHost.line!({ start: cfg.start, end: cfg.end, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
 
 	## Draw a filled and/or outlined triangle.
-	triangle! : Triangle => {}
-	triangle! = |cfg| {
+	triangle! : Frame, Triangle => {}
+	triangle! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => DrawHost.triangle!({ a: cfg.a, b: cfg.b, c: cfg.c, color })
@@ -609,13 +692,13 @@ Draw := [].{
 	}
 
 	## Compatibility alias for `convex_polygon!`.
-	polygon! : Polygon => {}
-	polygon! = |cfg| Draw.convex_polygon!(cfg)
+	polygon! : Frame, Polygon => {}
+	polygon! = |frame, cfg| frame.convex_polygon!(cfg)
 
 	## Draw a convex filled polygon and/or an ordered polygon outline. The host
 	## triangulates the fill without allocating; fewer than three points do not fill.
-	convex_polygon! : ConvexPolygon => {}
-	convex_polygon! = |cfg| {
+	convex_polygon! : Frame, ConvexPolygon => {}
+	convex_polygon! = |_frame, cfg| {
 		match cfg.style.fill {
 			NoFill => {}
 			Fill(color) => DrawHost.polygon!({ points: cfg.points, color })
@@ -654,8 +737,8 @@ Draw := [].{
 	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and tint.
-	texture! : TextureDraw => {}
-	texture! = |cfg| {
+	texture! : Frame, TextureDraw => {}
+	texture! = |_frame, cfg| {
 		DrawHost.draw_texture!({
 			texture: cfg.texture,
 			source: cfg.source,
@@ -667,12 +750,12 @@ Draw := [].{
 	}
 
 	## Compatibility alias for `texture!`.
-	draw_texture! : TextureDraw => {}
-	draw_texture! = |cfg| Draw.texture!(cfg)
+	draw_texture! : Frame, TextureDraw => {}
+	draw_texture! = |frame, cfg| frame.texture!(cfg)
 
 	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
-	texture_quad! : TextureQuad => {}
-	texture_quad! = |cfg| DrawHost.draw_texture_quad!(cfg)
+	texture_quad! : Frame, TextureQuad => {}
+	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!(cfg)
 
 	## Allocate an offscreen framebuffer. Do this during initialization, not per
 	## frame; creation allocates GPU resources and one fixed host-heap slot.
@@ -763,57 +846,59 @@ Draw := [].{
 	})
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
-	with_render_texture! : RenderTexture, (() => {}) => {}
-	with_render_texture! = |target, callback| {
+	with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
+	with_render_texture! = |frame, target, callback| {
 		if DrawHost.begin_render_texture!(target) {
-			callback()
+			callback(frame)
 			DrawHost.end_render_texture!()
 		}
 	}
 
 	## Scope shader application so the default shader is always restored.
-	with_shader! : Shader, (() => {}) => {}
-	with_shader! = |shader, callback| {
+	with_shader! : Frame, Shader, (Frame => {}) => {}
+	with_shader! = |frame, shader, callback| {
 		if DrawHost.begin_shader!(shader) {
-			callback()
+			callback(frame)
 			DrawHost.end_shader!()
 		}
 	}
 
 	## Scope one of raylib's built-in blend equations. Custom blend factors are
 	## deliberately excluded until they can be represented without global state.
-	with_blend_mode! : BlendMode, (() => {}) => {}
-	with_blend_mode! = |mode, callback| {
-		if DrawHost.begin_blend!(blend_mode_code(mode)) {
-			callback()
-			DrawHost.end_blend!()
-		}
+	with_blend_mode! : Frame, BlendMode, (Frame => result) => result
+	with_blend_mode! = |frame, mode, callback| {
+		started = DrawHost.begin_blend!(blend_mode_code(mode))
+		result = callback(frame)
+		if started DrawHost.end_blend!()
+		result
 	}
 
 	## Draw the callback in world space using this camera.
-	with_camera! : CameraMode, (() => {}) => {}
-	with_camera! = |camera, callback| {
+	with_camera! : Frame, CameraMode, (Frame => result) => result
+	with_camera! = |frame, camera, callback| {
 		DrawHost.begin_camera!(camera)
-		callback()
+		result = callback(frame)
 		DrawHost.end_camera!()
+		result
 	}
 
 	## Compatibility alias for `with_camera!`.
-	with_mode_2d! : CameraMode, (() => {}) => {}
-	with_mode_2d! = |camera, callback| Draw.with_camera!(camera, callback)
+	with_mode_2d! : Frame, CameraMode, (Frame => result) => result
+	with_mode_2d! = |frame, camera, callback| frame.with_camera!(camera, callback)
 
 	## Restrict callback drawing to screen-space `bounds`, then always close the
 	## scissor before returning. Use this instead of manually pairing the raw effects.
-	with_scissor! : Math.Rect, (() => {}) => {}
-	with_scissor! = |bounds, callback| {
+	with_scissor! : Frame, Math.Rect, (Frame => result) => result
+	with_scissor! = |frame, bounds, callback| {
 		DrawHost.begin_scissor!(bounds)
-		callback()
+		result = callback(frame)
 		DrawHost.end_scissor!()
+		result
 	}
 
 	## Draw text using explicit font, spacing, color, and anchor alignment.
-	text! : Text => {}
-	text! = |cfg| {
+	text! : Frame, Text => {}
+	text! = |_frame, cfg| {
 		align = Draw.align_factor(cfg.align)
 		DrawHost.text_aligned!({
 			pos: cfg.pos,
@@ -828,9 +913,9 @@ Draw := [].{
 	}
 
 	## Draw top-left aligned text with the built-in font and default spacing.
-	debug_text! : DebugText => {}
-	debug_text! = |cfg|
-		Draw.text!({
+	debug_text! : Frame, DebugText => {}
+	debug_text! = |frame, cfg|
+		frame.text!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
@@ -841,9 +926,9 @@ Draw := [].{
 		})
 
 	## Draw simple top-left aligned text with the built-in font.
-	text_at! : SimpleText => {}
-	text_at! = |cfg|
-		Draw.text!({
+	text_at! : Frame, SimpleText => {}
+	text_at! = |frame, cfg|
+		frame.text!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
@@ -854,9 +939,9 @@ Draw := [].{
 		})
 
 	## Draw simple text centered on its position.
-	text_centered! : SimpleText => {}
-	text_centered! = |cfg|
-		Draw.text!({
+	text_centered! : Frame, SimpleText => {}
+	text_centered! = |frame, cfg|
+		frame.text!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
@@ -866,15 +951,6 @@ Draw := [].{
 			align: Draw.align_center,
 		})
 
-	## High-level draw function with callback pattern
-	## Ensures begin/end frame are properly paired
-	draw! : Color, (() => {}) => {}
-	draw! = |bg_color, callback| {
-		DrawHost.begin_frame!()
-		Draw.clear!(bg_color)
-		callback()
-		DrawHost.end_frame!()
-	}
 }
 
 blend_mode_code : Draw.BlendMode -> U8

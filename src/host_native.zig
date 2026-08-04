@@ -1205,11 +1205,6 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
     raylib.setShaderTexture(resource.native, args.uniform.location, texture);
 }
 
-fn hostedDrawBeginFrame() callconv(.c) void {
-    if (active_headless) return;
-    raylib.beginDrawing();
-}
-
 /// Forward Roc scissor bounds to the raylib backend.
 fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) void {
     if (active_headless) return;
@@ -1245,11 +1240,6 @@ fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) voi
 fn hostedDrawClear(color: abi.Color) callconv(.c) void {
     if (active_headless) return;
     raylib.clearBackground(color);
-}
-
-fn hostedDrawEndFrame() callconv(.c) void {
-    if (active_headless) return;
-    raylib.endDrawing();
 }
 
 fn hostedDrawEndCamera() callconv(.c) void {
@@ -1546,20 +1536,30 @@ fn hostedSetTargetFps(fps: i32) callconv(.c) void {
     raylib.setTargetFps(fps);
 }
 
-fn hostedMouseShowCursor() callconv(.c) void {
-    if (!active_headless) raylib.showCursor();
+const CursorMode = enum {
+    visible,
+    hidden,
+    locked,
+};
+
+fn cursorModeFromCode(code: u8) CursorMode {
+    return switch (code) {
+        1 => .hidden,
+        2 => .locked,
+        else => .visible,
+    };
 }
 
-fn hostedMouseHideCursor() callconv(.c) void {
-    if (!active_headless) raylib.hideCursor();
-}
-
-fn hostedMouseLockCursor() callconv(.c) void {
-    if (!active_headless) raylib.disableCursor();
-}
-
-fn hostedMouseUnlockCursor() callconv(.c) void {
-    if (!active_headless) raylib.enableCursor();
+fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
+    if (active_headless) return;
+    switch (cursorModeFromCode(mode_code)) {
+        .visible => raylib.enableCursor(),
+        .hidden => {
+            raylib.enableCursor();
+            raylib.hideCursor();
+        },
+        .locked => raylib.disableCursor(),
+    }
 }
 
 fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
@@ -1575,6 +1575,13 @@ fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
 test "mouse cursor codes map invalid values to default" {
     try std.testing.expectEqual(raylib.MouseCursor.pointing_hand, mouseCursorFromCode(4));
     try std.testing.expectEqual(raylib.MouseCursor.default, mouseCursorFromCode(255));
+}
+
+test "cursor mode codes map invalid values to visible" {
+    try std.testing.expectEqual(CursorMode.visible, cursorModeFromCode(0));
+    try std.testing.expectEqual(CursorMode.hidden, cursorModeFromCode(1));
+    try std.testing.expectEqual(CursorMode.locked, cursorModeFromCode(2));
+    try std.testing.expectEqual(CursorMode.visible, cursorModeFromCode(255));
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
@@ -1928,7 +1935,6 @@ comptime {
         @export(&hostedAudioStop, .{ .name = "roc_audio_stop_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
         @export(&hostedDrawBeginBlendRaw, .{ .name = "roc_draw_begin_blend_raw" });
-        @export(&hostedDrawBeginFrame, .{ .name = "roc_draw_begin_frame" });
         @export(&hostedDrawBeginRenderTextureRaw, .{ .name = "roc_draw_begin_render_texture_raw" });
         @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });
         @export(&hostedDrawBeginShaderRaw, .{ .name = "roc_draw_begin_shader_raw" });
@@ -1940,7 +1946,6 @@ comptime {
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });
-        @export(&hostedDrawEndFrame, .{ .name = "roc_draw_end_frame" });
         @export(&hostedDrawEndRenderTextureRaw, .{ .name = "roc_draw_end_render_texture_raw" });
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
@@ -1976,10 +1981,7 @@ comptime {
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
-        @export(&hostedMouseShowCursor, .{ .name = "roc_mouse_show_cursor" });
-        @export(&hostedMouseHideCursor, .{ .name = "roc_mouse_hide_cursor" });
-        @export(&hostedMouseLockCursor, .{ .name = "roc_mouse_lock_cursor" });
-        @export(&hostedMouseUnlockCursor, .{ .name = "roc_mouse_unlock_cursor" });
+        @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
     }
@@ -2150,6 +2152,74 @@ fn takeModelForRender(boxed_model: *RocBox) RocBox {
     return transferred;
 }
 
+/// Run one Roc render call inside the host-owned raylib frame scope.
+/// `defer` closes the frame for both `Ok` and `Err` results.
+fn renderFrame(boxed_model: RocBox, platform_state: HostState) RocResult {
+    if (active_headless) return render_for_host(boxed_model, platform_state);
+
+    const NativeRender = struct {
+        model: RocBox,
+        state: HostState,
+
+        fn begin(_: *@This()) void {
+            raylib.beginDrawing();
+        }
+
+        fn render(self: *@This()) RocResult {
+            return render_for_host(self.model, self.state);
+        }
+
+        fn end(_: *@This()) void {
+            raylib.endDrawing();
+        }
+    };
+
+    var call = NativeRender{ .model = boxed_model, .state = platform_state };
+    return withDrawingScope(&call, NativeRender.begin, NativeRender.render, NativeRender.end);
+}
+
+fn withDrawingScope(
+    context: anytype,
+    comptime begin_fn: anytype,
+    comptime render_fn: anytype,
+    comptime end_fn: anytype,
+) @typeInfo(@TypeOf(render_fn)).@"fn".return_type.? {
+    begin_fn(context);
+    defer end_fn(context);
+    return render_fn(context);
+}
+
+test "drawing scope ends after its render result is produced" {
+    const Probe = struct {
+        events: [3]u8 = undefined,
+        count: usize = 0,
+
+        fn record(self: *@This(), event: u8) void {
+            self.events[self.count] = event;
+            self.count += 1;
+        }
+
+        fn begin(self: *@This()) void {
+            self.record(1);
+        }
+
+        fn render(self: *@This()) u8 {
+            self.record(2);
+            return 42;
+        }
+
+        fn end(self: *@This()) void {
+            self.record(3);
+        }
+    };
+
+    var probe = Probe{};
+    const result = withDrawingScope(&probe, Probe.begin, Probe.render, Probe.end);
+
+    try std.testing.expectEqual(@as(u8, 42), result);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, probe.events[0..probe.count]);
+}
+
 test "taking a model for render clears the host-owned reference" {
     const model: *anyopaque = @ptrFromInt(@alignOf(usize));
     var boxed_model: RocBox = model;
@@ -2236,7 +2306,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             text_input,
         );
 
-        const render_result = render_for_host(takeModelForRender(&boxed_model), platform_state);
+        const render_result = renderFrame(takeModelForRender(&boxed_model), platform_state);
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});
@@ -2287,7 +2357,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             &.{},
         );
 
-        const render_result = render_for_host(takeModelForRender(&boxed_model), platform_state);
+        const render_result = renderFrame(takeModelForRender(&boxed_model), platform_state);
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});

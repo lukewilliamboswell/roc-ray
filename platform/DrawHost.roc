@@ -7,6 +7,13 @@ import Color
 import Math
 
 DrawHost := [].{
+
+	## Zero-sized frame capability constructed only by the platform adapter.
+	Frame :: {}.{
+		for_host : Frame
+		for_host = Frame.({})
+	}
+
 	FontResource :: Box(U64)
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
@@ -70,8 +77,6 @@ DrawHost := [].{
 	end_camera! : () => {}
 	begin_blend! : U8 => Bool
 	end_blend! : () => {}
-	begin_frame! : () => {}
-	end_frame! : () => {}
 	begin_render_texture! : RenderTexture => Bool
 	end_render_texture! : () => {}
 	begin_scissor! : Scissor => {}

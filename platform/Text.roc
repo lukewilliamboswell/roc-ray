@@ -80,14 +80,17 @@ Text := [].{
 		bounds : Prepared -> Size
 		bounds = |prepared| prepared.measured
 
-		draw! : Prepared, Placement => {}
-		draw! = |prepared, placement| {
-			Text.draw_prepared!({
-				text: prepared,
-				pos: placement.pos,
-				color: placement.color,
-				align: placement.align,
-			})
+		draw! : Prepared, Draw.Frame, Placement => {}
+		draw! = |prepared, frame, placement| {
+			Text.draw_prepared!(
+				frame,
+				{
+					text: prepared,
+					pos: placement.pos,
+					color: placement.color,
+					align: placement.align,
+				},
+			)
 		}
 	}
 
@@ -177,8 +180,8 @@ Text := [].{
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
-	draw_prepared! : { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
-	draw_prepared! = |cfg| {
+	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
+	draw_prepared! = |_frame, cfg| {
 		pos = Text.origin_for(cfg.pos, cfg.text.measured, cfg.align)
 		DrawHost.text!({
 			pos,
@@ -190,10 +193,10 @@ Text := [].{
 		})
 	}
 
-	draw_measured! : Measured => {}
-	draw_measured! = |cfg| {
+	draw_measured! : Draw.Frame, Measured => {}
+	draw_measured! = |frame, cfg| {
 		prepared = Text.from(cfg.text).size(cfg.size).spacing(cfg.spacing).font(cfg.font).prepare!()
-		Text.draw_prepared!({ text: prepared, pos: cfg.pos, color: cfg.color, align: cfg.align })
+		Text.draw_prepared!(frame, { text: prepared, pos: cfg.pos, color: cfg.color, align: cfg.align })
 	}
 }
 

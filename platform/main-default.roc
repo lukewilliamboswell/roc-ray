@@ -14,7 +14,7 @@ platform ""
 				},
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
-			render! : model, Host => Try(model, [Exit(I64), ..]),
+			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
 		}
 	}
 	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
@@ -57,7 +57,6 @@ platform ""
 		"roc_audio_music_length_raw": AudioHost.music_length!,
 		"roc_audio_music_time_played_raw": AudioHost.music_time_played!,
 		"roc_audio_set_master_volume_raw": AudioHost.set_master_volume!,
-		"roc_draw_begin_frame": DrawHost.begin_frame!,
 		"roc_draw_begin_scissor_raw": DrawHost.begin_scissor!,
 		"roc_draw_circle_gradient": DrawHost.circle_gradient!,
 		"roc_draw_circle_lines_raw": DrawHost.circle_lines!,
@@ -65,7 +64,6 @@ platform ""
 		"roc_draw_clear": DrawHost.clear!,
 		"roc_draw_draw_texture_raw": DrawHost.draw_texture!,
 		"roc_draw_draw_texture_quad_raw": DrawHost.draw_texture_quad!,
-		"roc_draw_end_frame": DrawHost.end_frame!,
 		"roc_draw_end_scissor_raw": DrawHost.end_scissor!,
 		"roc_draw_fps": DrawHost.fps!,
 		"roc_draw_line_raw": DrawHost.line!,
@@ -89,10 +87,7 @@ platform ""
 		"roc_host_read_file_raw": HostHost.read_file!,
 		"roc_host_set_screen_size": HostHost.set_screen_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
-		"roc_mouse_show_cursor": MouseHost.show_cursor!,
-		"roc_mouse_hide_cursor": MouseHost.hide_cursor!,
-		"roc_mouse_lock_cursor": MouseHost.lock_cursor!,
-		"roc_mouse_unlock_cursor": MouseHost.unlock_cursor!,
+		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
 		"roc_draw_begin_camera": DrawHost.begin_camera!,
@@ -217,7 +212,8 @@ render_for_host! = |boxed_model, host_state| {
 		},
 		mouse: host_state.mouse,
 	}
-	match (program.render!)(Box.unbox(boxed_model), host) {
+	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
+	match (program.render!)(Box.unbox(boxed_model), host, frame) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

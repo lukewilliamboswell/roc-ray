@@ -3,6 +3,7 @@ import Keys
 import Mouse
 import Gamepad
 import HostHost
+import MouseHost
 
 Host := {
 	frame_count : U64,
@@ -43,6 +44,9 @@ Host := {
 	mouse : Mouse.State,
 }.{
 
+	## Cursor visibility and capture policy applied with `host.set_cursor_mode!`.
+	CursorMode : [Visible, Hidden, Locked]
+
 	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
 	key_down : Host, Keys.KeyboardKey -> Bool
 	key_down = |host, key| Keys.key_down(host, key)
@@ -64,8 +68,8 @@ Host := {
 
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
-	exit! : I32 => {}
-	exit! = |code| HostHost.exit!(code)
+	exit! : Host, I32 => {}
+	exit! = |_host, code| HostHost.exit!(code)
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
@@ -77,8 +81,9 @@ Host := {
 		}
 
 	## Read a UTF-8 text file from disk.
-	read_file! : Str => Try(Str, [NotFound, ReadFailed])
-	read_file! = |path| {
+	## Receiver form: `host.read_file!(path)`.
+	read_file! : Host, Str => Try(Str, [NotFound, ReadFailed])
+	read_file! = |_host, path| {
 		result = HostHost.read_file!(path)
 		if result.ok {
 			Ok(result.contents)
@@ -92,14 +97,15 @@ Host := {
 	## Get a random integer in the range [min, max] (both endpoints included).
 	## The generator is seeded once at startup, so sequences differ between runs.
 	## Derive other ranges/floats from this, e.g. a random direction with
-	## `if Host.random_i32!(0, 1) == 0 -1 else 1`.
-	random_i32! : I32, I32 => I32
-	random_i32! = |min, max| HostHost.random_i32!(min, max)
+	## `if host.random_i32!(0, 1) == 0 -1 else 1`.
+	random_i32! : Host, I32, I32 => I32
+	random_i32! = |_host, min, max| HostHost.random_i32!(min, max)
 
 	## Set the window/screen size.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported])
-	set_screen_size! = |size|
+	## Receiver form: `host.set_screen_size!(size)`.
+	set_screen_size! : Host, { width : F32, height : F32 } => Try({}, [NotSupported])
+	set_screen_size! = |_host, size|
 		match HostHost.set_screen_size!(size) {
 			Ok({}) => Ok({})
 			Err(NotSupported) => Err(NotSupported)
@@ -108,6 +114,39 @@ Host := {
 	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
 	## uncapped. This neither selects a software renderer nor controls VSync.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.
-	set_target_fps! : I32 => {}
-	set_target_fps! = |fps| HostHost.set_target_fps!(fps)
+	## Receiver form: `host.set_target_fps!(fps)`.
+	set_target_fps! : Host, I32 => {}
+	set_target_fps! = |_host, fps| HostHost.set_target_fps!(fps)
+
+	## Apply cursor visibility/capture atomically through one tagged operation.
+	set_cursor_mode! : Host, CursorMode => {}
+	set_cursor_mode! = |_host, mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
+
+	## Set the native operating-system cursor shape.
+	set_cursor! : Host, Mouse.Cursor => {}
+	set_cursor! = |_host, cursor| MouseHost.set_cursor!(cursor_code(cursor))
 }
+
+cursor_code : Mouse.Cursor -> U8
+cursor_code = |cursor|
+	match cursor {
+		Default => 0
+		Arrow => 1
+		IBeam => 2
+		Crosshair => 3
+		PointingHand => 4
+		ResizeEastWest => 5
+		ResizeNorthSouth => 6
+		ResizeNorthwestSoutheast => 7
+		ResizeNortheastSouthwest => 8
+		ResizeAll => 9
+		NotAllowed => 10
+	}
+
+cursor_mode_code : Host.CursorMode -> U8
+cursor_mode_code = |mode|
+	match mode {
+		Visible => 0
+		Hidden => 1
+		Locked => 2
+	}

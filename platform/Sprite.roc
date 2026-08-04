@@ -86,8 +86,8 @@ Sprite := {
 	}
 
 	## Draw the sprite using its current transform and tint.
-	draw! : Sprite => {}
-	draw! = |sprite| Draw.texture!(sprite.to_texture_draw())
+	draw! : Sprite, Draw.Frame => {}
+	draw! = |sprite, frame| frame.texture!(sprite.to_texture_draw())
 
 	## Frame index and elapsed-time state for a regular spritesheet animation.
 	Animation : {

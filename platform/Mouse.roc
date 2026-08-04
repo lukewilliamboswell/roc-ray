@@ -3,8 +3,6 @@
 ## The host stores one packed state byte per raylib mouse button code 0-6:
 ## bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 ## Pass `host.mouse` directly to these helpers.
-import MouseHost
-
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.
@@ -75,26 +73,6 @@ Mouse := [].{
 	## Horizontal and vertical wheel movement sampled for this frame.
 	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
 	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
-
-	## Show the OS cursor. This does not unlock a cursor locked with `lock_cursor!`.
-	show_cursor! : () => {}
-	show_cursor! = || MouseHost.show_cursor!()
-
-	## Hide the OS cursor. This does not lock its position.
-	hide_cursor! : () => {}
-	hide_cursor! = || MouseHost.hide_cursor!()
-
-	## Lock and hide the cursor for relative-look controls.
-	lock_cursor! : () => {}
-	lock_cursor! = || MouseHost.lock_cursor!()
-
-	## Unlock a cursor locked with `lock_cursor!` and make it visible.
-	unlock_cursor! : () => {}
-	unlock_cursor! = || MouseHost.unlock_cursor!()
-
-	## Set the native cursor shape.
-	set_cursor! : Cursor => {}
-	set_cursor! = |cursor| MouseHost.set_cursor!(cursor_code(cursor))
 
 	## Standard mouse buttons sampled by the platform.
 	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]

@@ -2,9 +2,6 @@
 ##
 ## This module is intentionally not exposed by the platform package.
 MouseHost := [].{
-	show_cursor! : () => {}
-	hide_cursor! : () => {}
-	lock_cursor! : () => {}
-	unlock_cursor! : () => {}
+	set_cursor_mode! : U8 => {}
 	set_cursor! : U8 => {}
 }

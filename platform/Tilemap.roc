@@ -70,6 +70,9 @@ TilemapResolvedTileset : {
 	texture : Assets.Texture,
 }
 
+## Configuration errors found while binding parsed tilesets to host textures.
+TilemapBuildError := [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64)]
+
 TilemapBuilder :: {
 	raw : TilemapRawMap,
 	textures : List(TilemapTextureBinding),
@@ -77,6 +80,8 @@ TilemapBuilder :: {
 	object_roles : List(TilemapObjectRoleRule),
 	origin : Math.Vec2,
 }.{
+	BuildError : TilemapBuildError
+
 	with_origin : TilemapBuilder, Math.Vec2 -> TilemapBuilder
 	with_origin = |builder, origin| { ..builder, origin }
 
@@ -98,14 +103,20 @@ TilemapBuilder :: {
 		object_roles: List.append(builder.object_roles, { key, role }),
 	}
 
-	build : TilemapBuilder -> Tilemap
-	build = |builder| {
-		raw: builder.raw,
-		layer_roles: builder.layer_roles,
-		object_roles: builder.object_roles,
-		origin: builder.origin,
-		resolved_tilesets: resolve_tilesets(builder.raw.tilesets, builder.textures),
-	}
+	## Validate every parsed tileset has exactly one texture binding, then resolve
+	## those bindings once. Per-frame tile queries remain unchanged and allocation-free.
+	build : TilemapBuilder -> Try(Tilemap, TilemapBuildError)
+	build = |builder|
+		match resolve_tilesets(builder.raw.tilesets, builder.textures) {
+			Ok(resolved_tilesets) => Ok({
+				raw: builder.raw,
+				layer_roles: builder.layer_roles,
+				object_roles: builder.object_roles,
+				origin: builder.origin,
+				resolved_tilesets,
+			})
+			Err(error) => Err(error)
+		}
 }
 
 Tilemap :: {
@@ -506,17 +517,7 @@ Tilemap :: {
 	## including non-centered offsets and rotation. This is pure and allocates no
 	## temporary list.
 	viewport_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Rect
-	viewport_for_camera = |camera, screen_size| {
-		top_left = world_corner_for_camera(camera, { x: 0, y: 0 })
-		top_right = world_corner_for_camera(camera, { x: screen_size.x, y: 0 })
-		bottom_left = world_corner_for_camera(camera, { x: 0, y: screen_size.y })
-		bottom_right = world_corner_for_camera(camera, screen_size)
-		left = F32.min(F32.min(top_left.x, top_right.x), F32.min(bottom_left.x, bottom_right.x))
-		top = F32.min(F32.min(top_left.y, top_right.y), F32.min(bottom_left.y, bottom_right.y))
-		right = F32.max(F32.max(top_left.x, top_right.x), F32.max(bottom_left.x, bottom_right.x))
-		bottom = F32.max(F32.max(top_left.y, top_right.y), F32.max(bottom_left.y, bottom_right.y))
-		Math.rect(left, top, right - left, bottom - top)
-	}
+	viewport_for_camera = |camera, screen_size| camera.viewport(screen_size)
 
 	## Convenience form of `draw_all_in!` for camera-driven scenes.
 	draw_all_for_camera! : Tilemap, Camera.Camera2D, Math.Vec2 => {}
@@ -549,9 +550,6 @@ err_read_failed = 2
 err_unsupported : U8
 err_unsupported = 4
 
-world_corner_for_camera : Camera.Camera2D, Math.Vec2 -> Math.Vec2
-world_corner_for_camera = |camera, screen_point| Camera.screen_to_world(camera, screen_point)
-
 layer_role_for_rules : List(TilemapLayerRoleRule), Str -> TilemapLayerRole
 layer_role_for_rules = |rules, layer_name| {
 	var $role = Drawn
@@ -563,27 +561,35 @@ layer_role_for_rules = |rules, layer_name| {
 	$role
 }
 
-resolve_tilesets : List(TilemapRawTileset), List(TilemapTextureBinding) -> List(TilemapResolvedTileset)
+resolve_tilesets : List(TilemapRawTileset), List(TilemapTextureBinding) -> Try(List(TilemapResolvedTileset), TilemapBuildError)
 resolve_tilesets = |tilesets, textures| {
-	var $resolved = []
+	var $result = Ok([])
 	for tileset in tilesets {
-		match find_texture(textures, tileset.first_gid) {
-			Ok(texture) => {
-				$resolved = List.append(
-					$resolved,
-					{
-						first_gid: tileset.first_gid,
-						tile_width: tileset.tile_width,
-						tile_height: tileset.tile_height,
-						columns: if tileset.columns == 0 1 else tileset.columns,
-						texture,
-					},
-				)
-			}
+		match $result {
+			Ok(resolved) =>
+				match find_unique_texture(textures, tileset.first_gid) {
+					Ok(texture) => {
+						$result = Ok(
+							List.append(
+								resolved,
+								{
+									first_gid: tileset.first_gid,
+									tile_width: tileset.tile_width,
+									tile_height: tileset.tile_height,
+									columns: if tileset.columns == 0 1 else tileset.columns,
+									texture,
+								},
+							),
+						)
+					}
+					Err(error) => {
+						$result = Err(error)
+					}
+				}
 			Err(_) => {}
 		}
 	}
-	$resolved
+	$result
 }
 
 property_named_at : TilemapRawMap, U64, U64, Str, U64 -> Try(TilemapRawProperty, [NotFound])
@@ -756,15 +762,23 @@ find_resolved_tileset = |tilesets, gid| {
 	$found
 }
 
-find_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, [NotFound])
-find_texture = |textures, first_gid| {
-	var $found = Err(NotFound)
+find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, TilemapBuildError)
+find_unique_texture = |textures, first_gid| {
+	var $found = Err(MissingTilesetBinding(first_gid))
+	var $count = 0
 	for binding in textures {
 		if binding.first_gid == first_gid {
+			$count = $count + 1
 			$found = Ok(binding.texture)
 		}
 	}
-	$found
+	if $count == 0 {
+		Err(MissingTilesetBinding(first_gid))
+	} else if $count > 1 {
+		Err(DuplicateTilesetBinding(first_gid))
+	} else {
+		$found
+	}
 }
 
 test_tileset : TilemapRawTileset
@@ -802,7 +816,7 @@ test_raw = {
 	tile_height: 16,
 	map_property_start: 0,
 	map_property_count: 0,
-	tilesets: [test_tileset],
+	tilesets: [],
 	tile_properties: [],
 	layers: [test_ground_layer, test_walls_layer],
 	gids: [1, 1, 1, 1, 1, 1, 0, 2, 0, 0, 0, 0],
@@ -811,8 +825,8 @@ test_raw = {
 	properties: [test_speed_property],
 }
 
-test_map : Tilemap
-test_map = Tilemap.from_raw(test_raw)
+test_map_result : Try(Tilemap, TilemapBuildError)
+test_map_result = Tilemap.from_raw(test_raw)
 	.layer_role(
 		"Walls",
 		Solid,
@@ -823,8 +837,8 @@ test_map = Tilemap.from_raw(test_raw)
 	)
 	.build()
 
-offset_test_map : Tilemap
-offset_test_map = Tilemap.from_raw(test_raw)
+offset_test_map_result : Try(Tilemap, TilemapBuildError)
+offset_test_map_result = Tilemap.from_raw(test_raw)
 	.with_origin(
 		{ x: 100, y: 200 },
 	)
@@ -834,25 +848,55 @@ offset_test_map = Tilemap.from_raw(test_raw)
 	)
 	.build()
 
-expect Tilemap.layer_role_for(test_map, test_walls_layer) == Solid
-expect Tilemap.object_role_for(test_map, test_spawn_object) == Spawn
-expect Tilemap.world_rect_for_cell(test_map, { col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
-expect Tilemap.gid_at(test_map, "Walls", { col: 1, row: 0 }) == Ok(2)
-expect Tilemap.solid_cell(test_map, { col: 1, row: 0 })
-expect Tilemap.solid_at_world(test_map, { x: 20, y: 4 })
-expect Tilemap.circle_touches_solid(test_map, Math.circle({ x: 24, y: 8 }, 7))
-expect Tilemap.circle_touches_solid(test_map, Math.circle({ x: 8, y: 8 }, 8))
-expect Tilemap.cell_at_world(test_map, { x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
-expect Tilemap.cell_at_world(test_map, { x: -0.01, y: 0 }) == Err(OutOfBounds)
-expect Tilemap.cell_range_for_world_rect(test_map, Math.rect(15, 0, 18, 17)) == Ok({ min_col: 0, min_row: 0, max_col: 2, max_row: 1 })
+expect match test_map_result {
+	Ok(test_map) =>
+		test_map.layer_role_for(test_walls_layer) == Solid
+			and test_map.object_role_for(test_spawn_object) == Spawn
+				and test_map.world_rect_for_cell({ col: 2, row: 1 }) == Math.rect(32, 16, 16, 16)
+					and test_map.gid_at("Walls", { col: 1, row: 0 }) == Ok(2)
+						and test_map.solid_cell({ col: 1, row: 0 })
+							and test_map.solid_at_world({ x: 20, y: 4 })
+								and test_map.circle_touches_solid(Math.circle({ x: 24, y: 8 }, 7))
+									and test_map.circle_touches_solid(Math.circle({ x: 8, y: 8 }, 8))
+										and test_map.cell_at_world({ x: 34, y: 18 }) == Ok({ col: 2, row: 1 })
+											and test_map.cell_at_world({ x: -0.01, y: 0 }) == Err(OutOfBounds)
+												and test_map.cell_range_for_world_rect(Math.rect(15, 0, 18, 17)) == Ok({ min_col: 0, min_row: 0, max_col: 2, max_row: 1 })
+	Err(_) => False
+}
 expect Tilemap.property_f32(test_raw, test_spawn_object, "speed", 0) == 12.5
-expect Tilemap.object_world_center(offset_test_map, test_spawn_object) == { x: 108, y: 208 }
+expect match offset_test_map_result {
+	Ok(offset_test_map) => offset_test_map.object_world_center(test_spawn_object) == { x: 108, y: 208 }
+	Err(_) => False
+}
 expect Tilemap.clean_gid(2_147_483_648 + 17) == 17
 expect Tilemap.flip_for_gid(2_147_483_648 + 1) == { horizontal: Bool.True, vertical: Bool.False, diagonal: Bool.False }
 expect transformed_corner(Math.rect(10, 20, 30, 40), { x: 0, y: 0 }, { horizontal: Bool.False, vertical: Bool.False, diagonal: Bool.True }) == { x: 40, y: 60 }
-expect Tilemap.viewport_for_camera({ target: { x: 100, y: 50 }, offset: { x: 20, y: 10 }, rotation: 0, zoom: 2 }, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
-expect Tilemap.viewport_for_camera({ target: { x: 0, y: 0 }, offset: { x: 0, y: 0 }, rotation: 0, zoom: -2 }, { x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
-expect Tilemap.viewport_for_camera(
-	Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 }),
-	{ x: 800, y: 600 },
-) == Math.rect(-100, 50, 400, 300)
+expect match Tilemap.from_raw({ ..test_raw, tilesets: [test_tileset] }).build() {
+	Err(MissingTilesetBinding(1)) => True
+	_ => False
+}
+expect {
+	settings : Camera.Settings
+	settings = { target: Math.vec2(100, 50), offset: Math.vec2(20, 10), rotation: 0, zoom: 2 }
+	result = Camera.new(settings)
+	match result {
+		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
+		Err(_) => False
+	}
+}
+expect {
+	settings : Camera.Settings
+	settings = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: -2 }
+	result = Camera.new(settings)
+	match result {
+		Ok(camera) => camera.viewport({ x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
+		Err(_) => False
+	}
+}
+expect {
+	result = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
+	match result {
+		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
+		Err(_) => False
+	}
+}

@@ -5,23 +5,29 @@
 Math := [].{
 
 	## Two-dimensional floating-point vector.
-	Vec2 : {
+	Vec2 := {
 		x : F32,
 		y : F32,
+	}.{
+		is_eq : _
 	}
 
 	## Axis-aligned rectangle represented by top-left position and size.
-	Rect : {
+	Rect := {
 		x : F32,
 		y : F32,
 		width : F32,
 		height : F32,
+	}.{
+		is_eq : _
 	}
 
 	## Circle represented by center and radius.
-	Circle : {
+	Circle := {
 		center : Vec2,
 		radius : F32,
+	}.{
+		is_eq : _
 	}
 
 	## Construct a two-dimensional vector.
@@ -178,6 +184,17 @@ Math := [].{
 	circle_rect : Circle, Rect -> Bool
 	circle_rect = |c, r| Math.circle_contains(c, Math.closest_point(r, c.center))
 
+	## Receiver-friendly aliases for circle queries. The longer names avoid
+	## ambiguity with the corresponding rectangle methods.
+	contains_point : Circle, Vec2 -> Bool
+	contains_point = |circle_value, point| Math.circle_contains(circle_value, point)
+
+	overlaps_circle : Circle, Circle -> Bool
+	overlaps_circle = |circle_value, other| Math.circle_overlaps(circle_value, other)
+
+	overlaps_rect : Circle, Rect -> Bool
+	overlaps_rect = |circle_value, rectangle| Math.circle_rect(circle_value, rectangle)
+
 }
 
 expect Math.clamp(12, 0, 10) == 10
@@ -197,3 +214,6 @@ expect Math.circle_overlaps(Math.circle({ x: 0, y: 0 }, 5), Math.circle({ x: 8, 
 expect !(Math.circle_overlaps(Math.circle({ x: 0, y: 0 }, 5), Math.circle({ x: 9, y: 0 }, 3)))
 expect Math.circle_rect(Math.circle({ x: 15, y: 5 }, 5), Math.rect(20, 0, 10, 10))
 expect !(Math.circle_rect(Math.circle({ x: 14, y: 5 }, 5), Math.rect(20, 0, 10, 10)))
+expect Math.vec2(3, 4).length() == 5
+expect Math.rect(10, 20, 30, 40).contains(Math.vec2(10, 20))
+expect Math.circle(Math.zero, 5).contains_point(Math.vec2(3, 4))

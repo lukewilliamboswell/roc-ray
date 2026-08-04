@@ -13,6 +13,7 @@ Model : {
 			menu : Text.Prepared,
 			hud : Text.Prepared,
 			bottom : Text.Prepared,
+			long : Text.Prepared,
 		},
 	),
 }
@@ -46,6 +47,7 @@ init! = App.init(
 				menu: Text.from("Start Game").size(28).prepare!(),
 				hud: Text.from("SCORE 1200").size(24).prepare!(),
 				bottom: Text.from("bottom right").size(20).prepare!(),
+				long: Text.from(long_message).size(18).prepare!(),
 			}),
 		})
 	},
@@ -71,7 +73,7 @@ render! = |model, _host, frame| {
 	frame.rectangle!({ x: 20, y: 20, width: hud_size.width + 20, height: hud_size.height + 12, style: Draw.filled(Color.black) })
 	ui.hud.draw!(frame, { pos: { x: 30, y: 26 }, color: Color.yellow, align: Text.align_top_left })
 
-	frame.text!({ pos: { x: 40, y: 360 }, text: long_message, size: 18, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
+	ui.long.draw!(frame, { pos: { x: 40, y: 360 }, color: Color.gray, align: Text.align_top_left })
 	ui.bottom.draw!(frame, { pos: { x: screen_w - 24, y: screen_h - 24 }, color: Color.blue, align: Text.align_bottom_right })
 
 	Ok(model)

@@ -12,6 +12,7 @@ Model : {
 	player : Math.Vec2,
 	zoom : F32,
 	rotation : F32,
+	hud : Box({ subtitle : Str, help : Str }),
 }
 
 program = { init!, render! }
@@ -34,12 +35,6 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
-hud_subtitle : Str
-hud_subtitle = "world-space draw + screen-space HUD"
-
-hud_help : Str
-hud_help = "WASD move, wheel zoom, Q/E rotate, R reset"
-
 init! : App.Init(Model, [])
 init! = App.init(
 	{
@@ -47,7 +42,16 @@ init! = App.init(
 		title: "RocRay Camera",
 		target_fps: 120,
 	},
-	|_host| Ok({ player: { x: 400, y: 300 }, zoom: 1, rotation: 0 }),
+	|_host|
+		Ok({
+			player: { x: 400, y: 300 },
+			zoom: 1,
+			rotation: 0,
+			hud: Box.box({
+				subtitle: "world-space draw + screen-space HUD",
+				help: "WASD move, wheel zoom, Q/E rotate, R reset",
+			}),
+		}),
 )
 
 axis : Bool, Bool -> F32
@@ -83,7 +87,7 @@ render! = |model, host, frame| {
 	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })
 	mouse_screen = camera.world_to_screen(mouse_world)
 
-	next = { player, zoom, rotation }
+	next = { ..model, player, zoom, rotation }
 
 	frame.clear!(Color.ray_white)
 	frame.with_camera!(camera, |world_frame| draw_world!(world_frame, player, mouse_world))
@@ -133,9 +137,10 @@ draw_grid_y! = |frame, y| {
 }
 
 draw_hud! : Draw.Frame, Model => {}
-draw_hud! = |frame, _model| {
+draw_hud! = |frame, model| {
+	hud = Box.unbox(model.hud)
 	frame.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
 	frame.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 30, y: 62 }, text: hud_subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 30, y: 84 }, text: hud_help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 62 }, text: hud.subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 84 }, text: hud.help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
 }

@@ -8,21 +8,20 @@ import rr.Mouse
 import rr.Gamepad
 import rr.App
 
-Model : {}
+Model : {
+	cursor_help : Str,
+}
 
 program = { init!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
-	|_host| Ok({}),
+	|_host| Ok({ cursor_help: "Cursor: H hide, J show, K lock, L unlock" }),
 )
 
 title : Str
 title = "Keyboard + mouse input"
-
-cursor_help : Str
-cursor_help = "Cursor: H hide, J show, K lock, L unlock"
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
@@ -136,6 +135,6 @@ render! = |model, host, frame| {
 	frame.rectangle!({ x: 285, y: 368, width: 24, height: 24, style: Draw.filled(if stick_moved Color.green else Color.light_gray) })
 	frame.text_at!({ pos: { x: 330, y: 370 }, text: "Face down", size: 18, color: Color.dark_gray })
 	frame.rectangle!({ x: 440, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_action_pressed Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 30, y: 410 }, text: cursor_help, size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 410 }, text: model.cursor_help, size: 18, color: Color.dark_gray })
 	Ok(model)
 }

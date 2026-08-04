@@ -6,7 +6,15 @@ import rr.Host
 import rr.App
 
 Model : {
-	message : Str,
+	copy : Box(
+		{
+			message : Str,
+			target_fps : Str,
+			screen_sample : Str,
+			screen_size : Str,
+			exit : Str,
+		},
+	),
 	frame_count : U64,
 }
 
@@ -21,21 +29,18 @@ init! = App.init(
 
 		host.set_screen_size!({ width: 800, height: 600 }) ?? {}
 
-		Ok({ message: "Kitchen Sink - All Host Effects", frame_count: 0 })
+		Ok({
+			copy: Box.box({
+				message: "Kitchen Sink - All Host Effects",
+				target_fps: "set_target_fps!(60) - called in init",
+				screen_sample: "host.screen - sampled each frame",
+				screen_size: "set_screen_size!() - called in init",
+				exit: "exit!(0) - right-click to exit",
+			}),
+			frame_count: 0,
+		})
 	},
 )
-
-target_fps_message : Str
-target_fps_message = "set_target_fps!(60) - called in init"
-
-screen_sample_message : Str
-screen_sample_message = "host.screen - sampled each frame"
-
-screen_size_message : Str
-screen_size_message = "set_screen_size!() - called in init"
-
-exit_message : Str
-exit_message = "exit!(0) - right-click to exit"
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
@@ -44,13 +49,14 @@ render! = |model, host, frame| {
 
 	# Use the per-frame logical screen dimensions.
 	is_wide = host.screen.width > 600
+	copy = Box.unbox(model.copy)
 
 	frame.clear!(Color.ray_white)
-	frame.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 10, y: 50 }, text: target_fps_message, size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 10, y: 80 }, text: screen_sample_message, size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 10, y: 110 }, text: screen_size_message, size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 10, y: 140 }, text: exit_message, size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 10 }, text: copy.message, size: 24, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 50 }, text: copy.target_fps, size: 16, spacing: Draw.default_spacing, color: Color.blue, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 80 }, text: copy.screen_sample, size: 16, spacing: Draw.default_spacing, color: Color.purple, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 110 }, text: copy.screen_size, size: 16, spacing: Draw.default_spacing, color: Color.orange, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 140 }, text: copy.exit, size: 16, spacing: Draw.default_spacing, color: Color.red, font: Draw.default_font, align: Draw.align_top_left })
 	frame.fps!({ pos: { x: 700, y: 10 }, size: 18, color: Color.gray })
 
 	# Show current size

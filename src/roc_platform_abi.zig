@@ -59,13 +59,7 @@ pub const RocHost = extern struct {
 };
 
 /// Private erased-callable function pointer stored in `RocErasedCallablePayload`.
-///
-/// The final `reuse` pointer is nullable. Non-null must be the callable data
-/// pointer whose inline capture begins at `capture`; it transfers one owned
-/// reference to the callee. The caller must not use or decref that ownership
-/// unit after the call. The callee consumes it exactly once, whether or not the
-/// result can reuse the allocation.
-pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8, ?[*]u8) callconv(.c) void;
+pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8) callconv(.c) void;
 
 /// Final-drop callback for inline erased-callable captures.
 pub const RocErasedCallableOnDrop = *const fn (?[*]u8, *RocHost) callconv(.c) void;

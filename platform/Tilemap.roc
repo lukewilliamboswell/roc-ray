@@ -105,7 +105,7 @@ TilemapBuilder :: {
 
 	## Validate every parsed tileset has exactly one texture binding, then resolve
 	## those bindings once. Per-frame tile queries remain unchanged and allocation-free.
-	build : TilemapBuilder -> Try(Tilemap, TilemapBuildError)
+	build : TilemapBuilder -> Try(Tilemap, [MissingTilesetBinding(U64), DuplicateTilesetBinding(U64), ..])
 	build = |builder|
 		match resolve_tilesets(builder.raw.tilesets, builder.textures) {
 			Ok(resolved_tilesets) => Ok({
@@ -115,7 +115,8 @@ TilemapBuilder :: {
 				origin: builder.origin,
 				resolved_tilesets,
 			})
-			Err(error) => Err(error)
+			Err(MissingTilesetBinding(first_gid)) => Err(MissingTilesetBinding(first_gid))
+			Err(DuplicateTilesetBinding(first_gid)) => Err(DuplicateTilesetBinding(first_gid))
 		}
 }
 

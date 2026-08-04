@@ -2,16 +2,7 @@ platform ""
 	requires {
 		[Model : model] for program : {
 			init! : {
-				config : {
-					title : Str,
-					width : I32,
-					height : I32,
-					target_fps : I32,
-					resizable : Bool,
-					fullscreen : Bool,
-					vsync : Bool,
-					cursor_visible : Bool,
-				},
+				config : App.Config,
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
 			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
@@ -167,8 +158,8 @@ HostStateFromHost : {
 	},
 }
 
-app_config_for_host! : () => App.Config
-app_config_for_host! = || program.init!.config
+app_config_for_host! : () => App.HostConfig
+app_config_for_host! = || program.init!.config.to_host()
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state| {

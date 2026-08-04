@@ -4,37 +4,83 @@
 ## The callback runs after the window, renderer, and audio device are ready.
 import Host
 
-AppConfig : {
+AppFramePacing := [VSync, Capped(I32), Uncapped].{
+	is_eq : _
+}
 
-	## Set the window title.
+AppCursorMode := [CursorVisible, CursorHidden].{
+	is_eq : _
+}
+
+AppConfigData : {
 	title : Str,
-
-	## Set the initial logical window width.
 	width : I32,
-
-	## Set the initial logical window height.
 	height : I32,
-
-	## Set the requested render-loop frame rate.
-	target_fps : I32,
-
-	## Enable or disable native window resizing.
+	frame_pacing : AppFramePacing,
 	resizable : Bool,
-
-	## Start in fullscreen mode when true.
 	fullscreen : Bool,
+	cursor : AppCursorMode,
+}
 
-	## Enable or disable vertical synchronization.
+AppHostConfig : {
+	title : Str,
+	width : I32,
+	height : I32,
+	target_fps : I32,
+	resizable : Bool,
+	fullscreen : Bool,
 	vsync : Bool,
-
-	## Choose whether the native cursor starts visible.
 	cursor_visible : Bool,
 }
 
-App(_field) := { apply : AppConfig -> AppConfig }.{
+App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 
-	## Window, renderer, timing, and cursor settings applied at startup.
-	Config : AppConfig
+	## Mutually exclusive frame pacing strategy. Builder normalization maps a
+	## non-positive `Capped` value to `Uncapped` before a Config can be created.
+	FramePacing : AppFramePacing
+
+	## Initial native cursor mode.
+	CursorMode : AppCursorMode
+
+	## Stable flattened record consumed only by the native platform adapters.
+	HostConfig : AppHostConfig
+
+	## Validated startup configuration. Its fields cannot be updated directly;
+	## use App builders so pacing and cursor invariants are preserved.
+	Config :: {
+		title : Str,
+		width : I32,
+		height : I32,
+		frame_pacing : AppFramePacing,
+		resizable : Bool,
+		fullscreen : Bool,
+		cursor : AppCursorMode,
+	}.{
+
+		## Inspect the selected frame-pacing strategy.
+		frame_pacing : Config -> FramePacing
+		frame_pacing = |cfg| cfg.frame_pacing
+
+		## Inspect the selected initial cursor mode.
+		cursor : Config -> CursorMode
+		cursor = |cfg| cfg.cursor
+
+		## Flatten validated public choices to the existing native ABI record.
+		to_host : Config -> HostConfig
+		to_host = |cfg| {
+			pacing = host_pacing(cfg.frame_pacing)
+			{
+				title: cfg.title,
+				width: cfg.width,
+				height: cfg.height,
+				target_fps: pacing.target_fps,
+				resizable: cfg.resizable,
+				fullscreen: cfg.fullscreen,
+				vsync: pacing.vsync,
+				cursor_visible: cfg.cursor == CursorVisible,
+			}
+		}
+	}
 
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
@@ -47,28 +93,27 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 		run! : InitCallback(model, errors),
 	}
 
-	## Default 800x600 window configuration.
+	## Default 800x600 window configuration capped at 240 FPS.
 	default : Config
-	default = {
-		title: "Roc + Raylib",
-		width: 800,
-		height: 600,
-		target_fps: 240,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
-	}
+	default = app_default_data
 
-	## Combine two configuration builder fields.
+	## Combine two configuration builder fields. When builders select the same
+	## tagged choice, the right-hand builder wins deterministically.
 	map2 : App(a), App(b), (a, b -> c) -> App(c)
 	map2 = |left, right, _combine| {
 		apply: |cfg| (right.apply)((left.apply)(cfg)),
 	}
 
+	## Apply another builder after this one. This is the concise choice for
+	## ordinary configuration chains; use `map2` when composing record builders.
+	then : App(a), App(b) -> App(b)
+	then = |left, right| {
+		apply: |cfg| (right.apply)((left.apply)(cfg)),
+	}
+
 	## Resolve a configuration builder against `default`.
 	config : App(a) -> Config
-	config = |builder| (builder.apply)(App.default)
+	config = |builder| (builder.apply)(app_default_data)
 
 	## Build app initialization from pure startup config plus the effectful
 	## callback that creates the first model after raylib/audio are ready.
@@ -77,72 +122,96 @@ App(_field) := { apply : AppConfig -> AppConfig }.{
 
 	## Set the window title.
 	title : Str -> App(Str)
-	title = |value| {
-		apply: |cfg| { ..cfg, title: value },
-	}
+	title = |value| { apply: |cfg| { ..cfg, title: value } }
 
 	## Set the initial logical window width.
 	width : I32 -> App(I32)
-	width = |value| {
-		apply: |cfg| { ..cfg, width: value },
-	}
+	width = |value| { apply: |cfg| { ..cfg, width: value } }
 
 	## Set the initial logical window height.
 	height : I32 -> App(I32)
-	height = |value| {
-		apply: |cfg| { ..cfg, height: value },
-	}
+	height = |value| { apply: |cfg| { ..cfg, height: value } }
 
 	## Set the initial logical window dimensions.
 	size : { width : I32, height : I32 } -> App({ width : I32, height : I32 })
-	size = |dims| {
-		apply: |cfg| { ..cfg, width: dims.width, height: dims.height },
-	}
+	size = |dims| { apply: |cfg| { ..cfg, width: dims.width, height: dims.height } }
 
-	## Set the requested render-loop frame rate.
+	## Select one frame-pacing mode. A non-positive `Capped` value is normalized
+	## to `Uncapped`, so an invalid cap cannot enter Config.
+	frame_pacing : FramePacing -> App(FramePacing)
+	frame_pacing = |value| { apply: |cfg| { ..cfg, frame_pacing: normalize_pacing(value) } }
+
+	## Compatibility builder for raylib's CPU frame-rate cap.
 	target_fps : I32 -> App(I32)
-	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
-	## uncapped. This neither selects a software renderer nor controls VSync.
-	target_fps = |value| {
-		apply: |cfg| { ..cfg, target_fps: value },
-	}
+	target_fps = |value| { apply: |cfg| { ..cfg, frame_pacing: normalize_pacing(Capped(value)) } }
 
 	## Enable or disable native window resizing.
 	resizable : Bool -> App(Bool)
-	resizable = |value| {
-		apply: |cfg| { ..cfg, resizable: value },
-	}
+	resizable = |value| { apply: |cfg| { ..cfg, resizable: value } }
 
 	## Start in fullscreen mode when true.
 	fullscreen : Bool -> App(Bool)
-	fullscreen = |value| {
-		apply: |cfg| { ..cfg, fullscreen: value },
-	}
+	fullscreen = |value| { apply: |cfg| { ..cfg, fullscreen: value } }
 
-	## Enable or disable vertical synchronization.
+	## Compatibility builder. True selects VSync; false preserves an existing
+	## capped/uncapped mode or restores the default cap when disabling VSync.
 	vsync : Bool -> App(Bool)
-	## Request synchronized buffer presentation from the graphics driver.
-	## Actual pacing depends on the driver, window system, and compositor.
 	vsync = |value| {
-		apply: |cfg| { ..cfg, vsync: value },
+		apply: |cfg| {
+			..cfg,
+			frame_pacing: if value {
+				VSync
+			} else {
+				match cfg.frame_pacing {
+					VSync => Capped(240)
+					current => current
+				}
+			},
+		},
 	}
 
-	## Choose whether the native cursor starts visible.
+	## Choose the initial cursor mode directly.
+	cursor : CursorMode -> App(CursorMode)
+	cursor = |value| { apply: |cfg| { ..cfg, cursor: value } }
+
+	## Compatibility builder mapping a boolean to a tagged cursor mode.
 	cursor_visible : Bool -> App(Bool)
-	cursor_visible = |value| {
-		apply: |cfg| { ..cfg, cursor_visible: value },
-	}
+	cursor_visible = |value| { apply: |cfg| { ..cfg, cursor: if value CursorVisible else CursorHidden } }
 }
 
-## TODO(roc#9581): switch examples to imported record-builder syntax once
-## `{ ... }.App` can find App.map2 across platform module imports.
-expect App.map2(App.title("Test"), App.size({ width: 320, height: 240 }), |_, _| {}).config() == {
-	title: "Test",
-	width: 320,
-	height: 240,
-	target_fps: 240,
+app_default_data : AppConfigData
+app_default_data = {
+	title: "Roc + Raylib",
+	width: 800,
+	height: 600,
+	frame_pacing: Capped(240),
 	resizable: Bool.False,
 	fullscreen: Bool.False,
-	vsync: Bool.False,
-	cursor_visible: Bool.True,
+	cursor: CursorVisible,
 }
+
+normalize_pacing : AppFramePacing -> AppFramePacing
+normalize_pacing = |value|
+	match value {
+		Capped(fps) => if fps <= 0 Uncapped else value
+		_ => value
+	}
+
+host_pacing : AppFramePacing -> { target_fps : I32, vsync : Bool }
+host_pacing = |value|
+	match value {
+		VSync => { target_fps: 0, vsync: Bool.True }
+		Capped(fps) => { target_fps: fps, vsync: Bool.False }
+		Uncapped => { target_fps: 0, vsync: Bool.False }
+	}
+
+expect {
+	cfg = App.map2(App.title("Test"), App.size({ width: 320, height: 240 }), |_, _| {}).config()
+	host = cfg.to_host()
+	host.title == "Test" and host.width == 320 and host.height == 240 and host.target_fps == 240 and !(host.vsync) and host.cursor_visible
+}
+expect App.map2(App.target_fps(120), App.vsync(Bool.True), |_, _| {}).config().frame_pacing() == VSync
+expect App.map2(App.vsync(Bool.True), App.target_fps(120), |_, _| {}).config().frame_pacing() == Capped(120)
+expect App.title("Chained").then(App.frame_pacing(Capped(60))).config().to_host().target_fps == 60
+expect App.frame_pacing(Capped(-5)).config().frame_pacing() == Uncapped
+expect App.cursor_visible(Bool.False).config().cursor() == CursorHidden

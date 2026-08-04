@@ -237,11 +237,7 @@ air_drag = 0.35
 
 init! : App.Init(Model, _)
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Cave Climb",
-		target_fps: 120,
-	},
+	App.title("RocRay Cave Climb").then(App.frame_pacing(Capped(120))).config(),
 	|_host| {
 		tiles = Assets.load_texture!(tiles_path)?
 		characters = Assets.load_texture!(characters_path)?

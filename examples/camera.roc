@@ -37,11 +37,7 @@ world_bottom = 1200
 
 init! : App.Init(Model, [])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Camera",
-		target_fps: 120,
-	},
+	App.title("RocRay Camera").then(App.frame_pacing(Capped(120))).config(),
 	|_host|
 		Ok({
 			player: { x: 400, y: 300 },

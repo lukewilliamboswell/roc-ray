@@ -38,7 +38,7 @@ pixels = [
 
 init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init(
-	{ ..App.default, title: "Generated Assets", target_fps: 120 },
+	App.title("Generated Assets").then(App.frame_pacing(Capped(120))).config(),
 	|_host| {
 		match Assets.Texture.generate_color!({ width: 4, height: 4, color: Color.white }) {
 			Err(_) => Err(TextureGenerationFailed)

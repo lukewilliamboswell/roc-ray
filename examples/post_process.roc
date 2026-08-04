@@ -22,7 +22,7 @@ screen_h = 600
 
 init! : App.Init(Model, [RenderTextureLoadFailed, ResourceLimit, ShaderLoadFailed, UniformNotFound])
 init! = App.init(
-	{ ..App.default, title: "RocRay Offscreen Post-processing" },
+	App.title("RocRay Offscreen Post-processing").config(),
 	|_host| {
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.load!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?

@@ -63,11 +63,7 @@ start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Snake",
-		target_fps: 120,
-	},
+	App.title("RocRay Snake").then(App.frame_pacing(Capped(120))).config(),
 	|host| {
 		seed = {
 			snake: start_snake,

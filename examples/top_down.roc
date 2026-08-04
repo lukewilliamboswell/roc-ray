@@ -372,11 +372,7 @@ burst_duration = 0.36
 
 init! : App.Init(Model, _)
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Spark Run",
-		target_fps: 120,
-	},
+	App.title("RocRay Spark Run").then(App.frame_pacing(Capped(120))).config(),
 	|_host| {
 		characters = Assets.load_texture!(characters_path)?
 		tiles = Assets.load_texture!(tiles_path)?

@@ -147,11 +147,7 @@ initial_lives = 3
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Breakout",
-		target_fps: 120,
-	},
+	App.title("RocRay Breakout").then(App.frame_pacing(Capped(120))).config(),
 	|_host| {
 		Ok({
 			game: new_game_state(),

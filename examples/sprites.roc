@@ -26,11 +26,7 @@ asset_path = "examples/assets/checker.bmp"
 
 init! : App.Init(Model, [ResourceLimit, TextureLoadFailed])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Sprites",
-		target_fps: 120,
-	},
+	App.title("RocRay Sprites").then(App.frame_pacing(Capped(120))).config(),
 	|_host| {
 		texture = Assets.Texture.load!(asset_path)?
 		Ok({ texture, angle: 0, animation: Sprite.animation({ frame_count: 4, fps: 6 }) })

@@ -6,12 +6,13 @@ import rr.Color
 import rr.Draw
 import rr.Host
 import rr.Math
+import rr.Text
 
 Model : {
 	player : Math.Vec2,
 	zoom : F32,
 	rotation : F32,
-	hud : Box({ subtitle : Str, help : Str }),
+	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
 }
 
 program = { init!, render! }
@@ -34,7 +35,7 @@ world_top = -600
 world_bottom : F32
 world_bottom = 1200
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
 	|_host|
@@ -43,8 +44,9 @@ init! = App.init(
 			zoom: 1,
 			rotation: 0,
 			hud: Box.box({
-				subtitle: "world-space draw + screen-space HUD",
-				help: "WASD move, wheel zoom, Q/E rotate, R reset",
+				title: Text.from("Camera world").size(24).prepare!()?,
+				subtitle: Text.from("world-space draw + screen-space HUD").size(18).prepare!()?,
+				help: Text.from("WASD move, wheel zoom, Q/E rotate, R reset").size(14).prepare!()?,
 			}),
 		}),
 )
@@ -141,7 +143,7 @@ draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
 	hud = Box.unbox(model.hud)
 	frame.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
-	frame.text!({ pos: { x: 30, y: 28 }, text: "Camera world", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 30, y: 62 }, text: hud.subtitle, size: 18, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 30, y: 84 }, text: hud.help, size: 14, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	hud.title.draw!(frame, { pos: { x: 30, y: 28 }, color: Color.white, align: Text.align_top_left })
+	hud.subtitle.draw!(frame, { pos: { x: 30, y: 62 }, color: Color.light_gray, align: Text.align_top_left })
+	hud.help.draw!(frame, { pos: { x: 30, y: 84 }, color: Color.light_gray, align: Text.align_top_left })
 }

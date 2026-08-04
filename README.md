@@ -136,6 +136,31 @@ All five scope families can nest and restore the outer state. Handle
 when a transferred host resource cannot be resolved; a failed begin never runs
 its callback.
 
+### Prepared and dynamic text
+
+Prepare immutable labels during initialization so measurement, UTF-8 to native
+NUL-terminated storage, and loaded-font ownership are paid once:
+
+```roc
+label = Text.from("Start Game").size(28).font(font).prepare!()?
+size = label.bounds()
+
+# In render!:
+label.draw!(frame, {
+	pos: { x: 400, y: 240 },
+	color: Color.white,
+	align: Text.align_center,
+})
+```
+
+`Text.Prepared` is an ARC host resource. Every draw crosses the host boundary
+with only its typed handle, position, and color; it does not transfer the source
+`Str`, remeasure, convert to a C string, or allocate. The prepared value retains
+its loaded font, so the original font binding may leave scope safely. Handle
+`ResourceLimit` or `TextPrepareFailed` when preparing. For scores, chat, and
+other changing content, keep using the direct `frame.text!` API rather than
+creating a short-lived prepared value each frame.
+
 ### Host-owned textures, render targets, and shaders
 
 `Assets.Texture` owns a mutable ordinary texture. Its dimensions, pixel update,

@@ -32,7 +32,7 @@ title_font_path = "examples/assets/RocRayDemo.ttf"
 long_message : Str
 long_message = "This is intentionally longer than the old fixed text buffer: text rendering and measurement now allocate a temporary C string when needed, so score screens, settings menus, HUD labels, and debug overlays can render longer copy without silently disappearing after 255 bytes."
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
 init! = App.init(
 	App.default,
 	|_host| {
@@ -43,11 +43,11 @@ init! = App.init(
 
 		Ok({
 			ui: Box.box({
-				title: Text.from("Text UI").size(48).font(font).prepare!(),
-				menu: Text.from("Start Game").size(28).prepare!(),
-				hud: Text.from("SCORE 1200").size(24).prepare!(),
-				bottom: Text.from("bottom right").size(20).prepare!(),
-				long: Text.from(long_message).size(18).prepare!(),
+				title: Text.from("Text UI").size(48).font(font).prepare!()?,
+				menu: Text.from("Start Game").size(28).prepare!()?,
+				hud: Text.from("SCORE 1200").size(24).prepare!()?,
+				bottom: Text.from("bottom right").size(20).prepare!()?,
+				long: Text.from(long_message).size(18).prepare!()?,
 			}),
 		})
 	},

@@ -15,6 +15,7 @@ DrawHost := [].{
 	}
 
 	FontResource :: Box(U64)
+	PreparedText :: Box(U64)
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
@@ -53,6 +54,9 @@ DrawHost := [].{
 	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : Font, align_x : F32, align_y : F32 }
 	MeasureText : { text : Str, size : F32, spacing : F32, font : Font }
 	TextSize : { width : F32, height : F32 }
+	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
+	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
+	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color }
 	LoadFont : { path : Str, size : I32 }
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShader : { vertex_path : Str, fragment_path : Str }
@@ -91,6 +95,8 @@ DrawHost := [].{
 	load_shader! : LoadShader => ShaderResult
 	load_shader_source! : LoadShaderSource => ShaderResult
 	measure_text! : MeasureText => TextSize
+	prepare_text! : PrepareText => PrepareTextResult
+	draw_prepared_text! : PreparedTextDraw => {}
 	polygon! : Polygon => {}
 	polygon_lines! : PolygonLines => {}
 	rectangle! : Rectangle => {}

@@ -66,22 +66,22 @@ Text := [].{
 		measure! : Builder => Size
 		measure! = |builder| Text.measure_builder!(builder)
 
-		prepare! : Builder => Prepared
+		## Cache immutable UTF-8 text, font/style, and measurement in the host.
+		prepare! : Builder => Try(Prepared, [TextPrepareFailed, ResourceLimit, ..])
 		prepare! = |builder| Text.prepare_builder!(builder)
 	}
 
+	## Host-owned immutable text. Its ARC handle retains any loaded font and its
+	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		content : Str,
-		size : F32,
-		spacing : F32,
-		font : Font,
+		resource : DrawHost.PreparedText,
 		measured : Size,
 	}.{
 		bounds : Prepared -> Size
-		bounds = |prepared| prepared.measured
+		bounds = |Prepared.(prepared)| prepared.measured
 
 		draw! : Prepared, Draw.Frame, Placement => {}
-		draw! = |prepared, frame, placement| {
+		draw! = |prepared, frame, placement|
 			Text.draw_prepared!(
 				frame,
 				{
@@ -91,7 +91,6 @@ Text := [].{
 					align: placement.align,
 				},
 			)
-		}
 	}
 
 	default_font : Font
@@ -121,13 +120,28 @@ Text := [].{
 		})
 	}
 
-	prepare_builder! : Builder => Prepared
+	prepare_builder! : Builder => Try(Prepared, [TextPrepareFailed, ResourceLimit, ..])
 	prepare_builder! = |builder| {
-		content: builder.content,
-		size: builder.size,
-		spacing: builder.spacing,
-		font: builder.font,
-		measured: Text.measure_builder!(builder),
+		result = DrawHost.prepare_text!({
+			text: builder.content,
+			size: builder.size,
+			spacing: builder.spacing,
+			font: builder.font,
+		})
+		if result.err == 2 {
+			Err(ResourceLimit)
+		} else if result.err != 0 {
+			Err(TextPrepareFailed)
+		} else {
+			Ok(
+				Prepared.(
+					{
+						resource: result.prepared,
+						measured: { width: result.width, height: result.height },
+					},
+				),
+			)
+		}
 	}
 
 	align_top_left : Align
@@ -182,22 +196,24 @@ Text := [].{
 
 	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
 	draw_prepared! = |_frame, cfg| {
-		pos = Text.origin_for(cfg.pos, cfg.text.measured, cfg.align)
-		DrawHost.text!({
-			pos,
-			text: cfg.text.content,
-			size: cfg.text.size,
-			spacing: cfg.text.spacing,
-			color: cfg.color,
-			font: cfg.text.font,
-		})
+		Prepared.(prepared) = cfg.text
+		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
+		DrawHost.draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
 	}
 
+	## Draw changing text directly. This retains the one-call dynamic Str API and
+	## deliberately does not create a short-lived prepared resource.
 	draw_measured! : Draw.Frame, Measured => {}
-	draw_measured! = |frame, cfg| {
-		prepared = Text.from(cfg.text).size(cfg.size).spacing(cfg.spacing).font(cfg.font).prepare!()
-		Text.draw_prepared!(frame, { text: prepared, pos: cfg.pos, color: cfg.color, align: cfg.align })
-	}
+	draw_measured! = |frame, cfg|
+		frame.text!({
+			pos: cfg.pos,
+			text: cfg.text,
+			size: cfg.size,
+			spacing: cfg.spacing,
+			color: cfg.color,
+			font: cfg.font,
+			align: cfg.align,
+		})
 }
 
 expect {

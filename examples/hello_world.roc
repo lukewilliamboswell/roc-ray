@@ -4,21 +4,22 @@ import rr.Draw
 import rr.Color
 import rr.Host
 import rr.App
+import rr.Text
 
 Model : {
-	message : Str,
+	message : Text.Prepared,
 	pentagon_points : Box(List(Draw.Vector2)),
 }
 
 program = { init!, render! }
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [TextPrepareFailed, ResourceLimit])
 init! = App.init(
 	App.default,
 	|host| {
 		host.set_cursor_mode!(Visible)
 		Ok({
-			message: "Roc :heart: Raylib!",
+			message: Text.from("Roc :heart: Raylib!").size(30).prepare!()?,
 			pentagon_points: Box.box([{ x: 650, y: 120 }, { x: 720, y: 165 }, { x: 695, y: 235 }, { x: 605, y: 235 }, { x: 580, y: 165 }]),
 		})
 	},
@@ -33,7 +34,7 @@ render! = |model, host, frame| {
 	soft_accent = Color.with_alpha(accent, 120)
 
 	frame.clear!(Color.ray_white)
-	frame.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+	model.message.draw!(frame, { pos: { x: 10, y: 10 }, color: Color.dark_gray, align: Text.align_top_left })
 	frame.fps!({ pos: { x: 10, y: 46 }, size: 18, color: Color.gray })
 
 	frame.rectangle!({ x: 80, y: 120, width: 130, height: 90, style: Draw.filled_and_outlined(soft_accent, accent, 4) })

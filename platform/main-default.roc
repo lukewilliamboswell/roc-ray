@@ -60,6 +60,8 @@ platform ""
 		"roc_draw_line_raw": DrawHost.line!,
 		"roc_draw_load_font_raw": DrawHost.load_font!,
 		"roc_draw_measure_text_raw": DrawHost.measure_text!,
+		"roc_draw_prepare_text_raw": DrawHost.prepare_text!,
+		"roc_draw_draw_prepared_text_raw": DrawHost.draw_prepared_text!,
 		"roc_draw_polygon_lines_raw": DrawHost.polygon_lines!,
 		"roc_draw_polygon_raw": DrawHost.polygon!,
 		"roc_draw_rectangle_gradient_h": DrawHost.rectangle_gradient_h!,

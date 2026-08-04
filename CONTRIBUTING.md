@@ -232,6 +232,15 @@ resolves its internal token while that owner is live, performs the operation,
 then releases the transferred reference. It validates type, generation, and
 liveness on every lookup.
 
+Immutable UI copy should use `Text.from(content).prepare!()` outside the render
+loop. Prepared text has its own 256-slot typed heap. A slot owns one native
+NUL-terminated UTF-8 buffer, cached measurement/style, and the transferred ARC
+owner for a loaded font. Consequently `.bounds()` is pure and `.draw!` transfers
+only the prepared handle plus position/color; final prepared-handle release frees
+the bytes and releases the font owner. Keep `frame.text!` for content that changes
+per frame, because preparing dynamic text would replace one direct call with
+resource creation and teardown.
+
 Keep built-in resources allocation-free. For example, `Draw.default_font` is a
 plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
 also include immutable metadata: `Assets.Texture` stores dimensions beside its

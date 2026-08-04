@@ -121,6 +121,16 @@ const FontResource = union(enum) {
     native: raylib.Font,
 };
 
+const PreparedTextResource = struct {
+    allocator: std.mem.Allocator,
+    text: [:0]u8,
+    font: ?raylib.Font,
+    font_owner: ?*u64,
+    size: f32,
+    spacing: f32,
+    measured: abi.DrawHostMeasure_textRetRecord,
+};
+
 const TextureResource = union(enum) {
     headless: struct { width: i32, height: i32 },
     native: raylib.Texture,
@@ -155,6 +165,11 @@ fn destroyFont(resource: *FontResource) void {
         .headless => {},
         .native => |font| if (!builtin.is_test) raylib.unloadFont(font),
     }
+}
+
+fn destroyPreparedText(resource: *PreparedTextResource) void {
+    resource.allocator.free(resource.text.ptr[0 .. resource.text.len + 1]);
+    if (resource.font_owner) |owner| releaseResourceBox(activeHost(), owner);
 }
 
 fn destroyTexture(resource: *TextureResource) void {
@@ -200,6 +215,7 @@ const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU
 const TextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
 const RenderTextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
+const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
@@ -207,6 +223,11 @@ var font_heap: FontHeap = .{};
 var texture_heap: TextureHeap = .{};
 var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
+var prepared_text_heap: PreparedTextHeap = .{};
+
+var prepared_text_prepare_calls: usize = 0;
+var prepared_text_draw_calls: usize = 0;
+var prepared_text_storage_allocations: usize = 0;
 
 fn releaseResourceBox(host: *RocHost, handle: anytype) void {
     const Payload = @TypeOf(handle.*);
@@ -268,7 +289,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -570,6 +591,9 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     blend_scope_count = 0;
     camera_scope_count = 0;
     scissor_scope_count = 0;
+    prepared_text_prepare_calls = 0;
+    prepared_text_draw_calls = 0;
+    prepared_text_storage_allocations = 0;
 }
 
 fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawHostMeasure_textRetRecord {
@@ -618,6 +642,88 @@ test "makeTempCString stops at embedded nul" {
     defer c_string.deinit();
 
     try std.testing.expectEqualStrings("before", std.mem.span(c_string.ptr));
+}
+
+test "prepared text allocates long native bytes once and retains its loaded font" {
+    try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    prepared_text_prepare_calls = 0;
+    prepared_text_draw_calls = 0;
+    prepared_text_storage_allocations = 0;
+    var long_text: [CSTRING_STACK_CAPACITY + 128]u8 = undefined;
+    @memset(&long_text, 'x');
+    const font = storeFont(.headless).?;
+    const result = hostedDrawPrepareTextRaw(&roc_host, .{
+        .font = .{ .payload = .{ .loaded_font = font }, .tag = .LoadedFont },
+        .text = abi.RocStr.fromSlice(&long_text, &roc_host),
+        .size = 18,
+        .spacing = 1,
+    });
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, result.err);
+    try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), font_heap.active());
+    const resource = prepared_text_heap.get(result.prepared.*).?;
+    try std.testing.expectEqual(long_text.len, resource.text.len);
+    try std.testing.expectEqual(@as(u8, 0), resource.text.ptr[resource.text.len]);
+
+    for (0..10) |_| {
+        abi.increfBox(@ptrCast(result.prepared), 1);
+        hostedDrawPreparedTextRaw(&roc_host, .{
+            .prepared = result.prepared,
+            .pos = .{ .x = 20, .y = 30 },
+            .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+    }
+    try std.testing.expectEqual(@as(usize, 1), prepared_text_prepare_calls);
+    try std.testing.expectEqual(@as(usize, 1), prepared_text_storage_allocations);
+    try std.testing.expectEqual(@as(usize, 10), prepared_text_draw_calls);
+    try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), font_heap.active());
+
+    releaseResourceBox(&roc_host, result.prepared);
+    try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+}
+
+test "prepared text rejects resource kind confusion and releases transferred owners" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const draw_shader = storeShader(.headless).?;
+    hostedDrawPreparedTextRaw(&roc_host, .{
+        .prepared = draw_shader,
+        .pos = .{ .x = 0, .y = 0 },
+        .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 },
+    });
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+
+    const font_shader = storeShader(.headless).?;
+    const result = hostedDrawPrepareTextRaw(&roc_host, .{
+        .font = .{ .payload = .{ .loaded_font = font_shader }, .tag = .LoadedFont },
+        .text = abi.RocStr.empty(),
+        .size = 16,
+        .spacing = 1,
+    });
+    try std.testing.expectEqual(RESOURCE_ERR_FAILED, result.err);
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 }
 
 test "nested render and shader scopes lease last references until matching end" {
@@ -904,18 +1010,46 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     }).err);
     for (shaders) |shader| releaseResourceBox(&roc_host, shader);
 
+    var prepared_texts: [256]*u64 = undefined;
+    for (&prepared_texts) |*prepared| {
+        const result = hostedDrawPrepareTextRaw(&roc_host, .{
+            .font = .{ .payload = undefined, .tag = .DefaultFont },
+            .text = abi.RocStr.empty(),
+            .size = 16,
+            .spacing = 1,
+        });
+        try std.testing.expectEqual(RESOURCE_ERR_NONE, result.err);
+        prepared.* = result.prepared;
+    }
+    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawPrepareTextRaw(&roc_host, .{
+        .font = .{ .payload = undefined, .tag = .DefaultFont },
+        .text = abi.RocStr.empty(),
+        .size = 16,
+        .spacing = 1,
+    }).err);
+    for (prepared_texts) |prepared| releaseResourceBox(&roc_host, prepared);
+
     try std.testing.expectEqual(@as(usize, 0), sound_heap.active());
     try std.testing.expectEqual(@as(usize, 0), music_heap.active());
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 }
 
 fn storeFont(resource: FontResource) ?*u64 {
     return font_heap.insert(0, resource) orelse {
         var rejected = resource;
         destroyFont(&rejected);
+        return null;
+    };
+}
+
+fn storePreparedText(resource: PreparedTextResource) ?*u64 {
+    return prepared_text_heap.insert(0, resource) orelse {
+        var rejected = resource;
+        destroyPreparedText(&rejected);
         return null;
     };
 }
@@ -1471,6 +1605,81 @@ fn exportedDrawMeasureTextRaw(args: abi.DrawHostMeasure_textArgs) callconv(.c) a
     return hostedDrawMeasureTextRaw(activeHost(), args);
 }
 
+fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
+    defer args.text.decref(host);
+    prepared_text_prepare_calls += 1;
+
+    var font: ?raylib.Font = null;
+    if (args.font.tag == .DefaultFont) {
+        if (!headlessMode()) font = raylib.defaultFont();
+    } else {
+        const font_resource = font_heap.get(args.font.payload_loaded_font().*) orelse {
+            args.font.decref(host);
+            return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_FAILED };
+        };
+        font = switch (font_resource.*) {
+            .headless => null,
+            .native => |loaded| loaded,
+        };
+    }
+
+    const text_slice = args.text.asSlice();
+    const text_len = std.mem.indexOfScalar(u8, text_slice, 0) orelse text_slice.len;
+    const allocator = allocatorFromHost(host);
+    const allocation = allocator.alloc(u8, text_len + 1) catch {
+        args.font.decref(host);
+        return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
+    };
+    @memcpy(allocation[0..text_len], text_slice[0..text_len]);
+    allocation[text_len] = 0;
+    const text = allocation[0..text_len :0];
+    prepared_text_storage_allocations += 1;
+
+    const measured = if (headlessMode())
+        headlessMeasureText(text, args.size, args.spacing)
+    else blk: {
+        const size = raylib.measureTextZ(text.ptr, font.?, args.size, args.spacing);
+        break :blk abi.DrawHostMeasure_textRetRecord{ .height = size.y, .width = size.x };
+    };
+
+    const font_owner = if (args.font.tag == .LoadedFont) args.font.payload_loaded_font() else null;
+    const prepared = storePreparedText(.{
+        .allocator = allocator,
+        .text = text,
+        .font = font,
+        .font_owner = font_owner,
+        .size = args.size,
+        .spacing = args.spacing,
+        .measured = measured,
+    }) orelse return .{ .prepared = invalidResourceHandle(), .height = 0, .width = 0, .err = RESOURCE_ERR_LIMIT };
+
+    return .{ .prepared = prepared, .height = measured.height, .width = measured.width, .err = RESOURCE_ERR_NONE };
+}
+
+fn exportedDrawPrepareTextRaw(args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
+    return hostedDrawPrepareTextRaw(activeHost(), args);
+}
+
+fn hostedDrawPreparedTextRaw(host: *RocHost, args: abi.DrawHostDraw_prepared_textArgs) callconv(.c) void {
+    defer releaseResourceBox(host, args.prepared);
+    const resource = prepared_text_heap.get(args.prepared.*) orelse return;
+    prepared_text_draw_calls += 1;
+    if (headlessMode()) return;
+
+    raylib.drawTextZ(
+        resource.text.ptr,
+        resource.font.?,
+        .{ .x = args.pos.x, .y = args.pos.y },
+        resource.size,
+        resource.spacing,
+        args.color,
+    );
+}
+
+fn exportedDrawPreparedTextRaw(args: abi.DrawHostDraw_prepared_textArgs) callconv(.c) void {
+    hostedDrawPreparedTextRaw(activeHost(), args);
+}
+
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
     defer args.text.decref(host);
     defer args.font.decref(host);
@@ -1986,10 +2195,12 @@ fn deinitResources() void {
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
     std.debug.assert(shader_heap.active() == 0);
+    std.debug.assert(prepared_text_heap.active() == 0);
     std.debug.assert(font_heap.active() == 0);
     std.debug.assert(music_heap.active() == 0);
     std.debug.assert(sound_heap.active() == 0);
     shader_heap.deinitAll();
+    prepared_text_heap.deinitAll();
     render_texture_heap.deinitAll();
     texture_heap.deinitAll();
     font_heap.deinitAll();
@@ -2046,6 +2257,7 @@ comptime {
         @export(&hostedDrawCircleLinesRaw, .{ .name = "roc_draw_circle_lines_raw" });
         @export(&hostedDrawCircleRaw, .{ .name = "roc_draw_circle_raw" });
         @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
+        @export(&exportedDrawPreparedTextRaw, .{ .name = "roc_draw_draw_prepared_text_raw" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
@@ -2060,6 +2272,7 @@ comptime {
         @export(&exportedDrawLoadShaderRaw, .{ .name = "roc_draw_load_shader_raw" });
         @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
         @export(&exportedDrawMeasureTextRaw, .{ .name = "roc_draw_measure_text_raw" });
+        @export(&exportedDrawPrepareTextRaw, .{ .name = "roc_draw_prepare_text_raw" });
         @export(&exportedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
         @export(&exportedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });
         @export(&exportedDrawShaderLocationRaw, .{ .name = "roc_draw_shader_location_raw" });

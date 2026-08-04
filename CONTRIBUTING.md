@@ -291,9 +291,15 @@ random spawning should remain at the event site.
 
 `App.Config` is opaque. Applications start from `App.default` and use receiver
 updates such as `.with_title(...)`, `.with_size(...)`,
-`.with_frame_pacing(...)`, and `.with_cursor(...)`; direct record updates cannot
-bypass validation. The default is an 800×600 window using `Capped(240)` and
-`CursorVisible`.
+`.with_resizable(...)`, `.with_fullscreen(...)`, `.with_frame_pacing(...)`, and
+`.with_cursor(...)`; direct record updates cannot bypass validation. This is the
+only public configuration construction surface. The default is an 800×600
+window using `Capped(240)` and `CursorVisible`.
+
+Non-positive dimensions passed to `.with_size(...)` independently normalize to
+the default width or height. Keep these 800×600 fallbacks synchronized with the
+native host's defensive ABI normalization so `Config.to_host()` describes the
+window that will actually be created.
 
 Frame pacing is one tagged choice: `VSync`, `Capped(I32)`, or `Uncapped`.
 `Capped(fps)` values at or below zero normalize to `Uncapped`, so Config cannot

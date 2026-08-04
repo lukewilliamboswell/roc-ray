@@ -33,9 +33,9 @@ AppHostConfig : {
 	cursor_visible : Bool,
 }
 
-App(_field) :: { apply : AppConfigData -> AppConfigData }.{
+App := [].{
 
-	## Mutually exclusive frame pacing strategy. Builder normalization maps a
+	## Mutually exclusive frame pacing strategy. Config normalization maps a
 	## non-positive `Capped` value to `Uncapped` before a Config can be created.
 	FramePacing : AppFramePacing
 
@@ -46,7 +46,7 @@ App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 	HostConfig : AppHostConfig
 
 	## Validated startup configuration. Its fields cannot be updated directly;
-	## use App builders so pacing and cursor invariants are preserved.
+	## use its receiver updates so startup invariants are preserved.
 	Config :: {
 		title : Str,
 		width : I32,
@@ -61,9 +61,14 @@ App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 		with_title : Config, Str -> Config
 		with_title = |cfg, value| { ..cfg, title: value }
 
-		## Return a config with different initial logical dimensions.
+		## Return a config with different initial logical dimensions. Each
+		## non-positive dimension independently falls back to the 800x600 default.
 		with_size : Config, { width : I32, height : I32 } -> Config
-		with_size = |cfg, dims| { ..cfg, width: dims.width, height: dims.height }
+		with_size = |cfg, dims| {
+			..cfg,
+			width: normalize_dimension(dims.width, default_width),
+			height: normalize_dimension(dims.height, default_height),
+		}
 
 		## Return a config with a validated frame-pacing strategy.
 		with_frame_pacing : Config, FramePacing -> Config
@@ -72,6 +77,14 @@ App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 		## Return a config with a different initial cursor mode.
 		with_cursor : Config, CursorMode -> Config
 		with_cursor = |cfg, value| { ..cfg, cursor: value }
+
+		## Return a config that enables or disables native window resizing.
+		with_resizable : Config, Bool -> Config
+		with_resizable = |cfg, value| { ..cfg, resizable: value }
+
+		## Return a config that starts in or out of fullscreen mode.
+		with_fullscreen : Config, Bool -> Config
+		with_fullscreen = |cfg, value| { ..cfg, fullscreen: value }
 
 		## Inspect the selected frame-pacing strategy.
 		frame_pacing : Config -> FramePacing
@@ -113,93 +126,23 @@ App(_field) :: { apply : AppConfigData -> AppConfigData }.{
 	default : Config
 	default = app_default_data
 
-	## Combine two configuration builder fields. When builders select the same
-	## tagged choice, the right-hand builder wins deterministically.
-	map2 : App(a), App(b), (a, b -> c) -> App(c)
-	map2 = |left, right, _combine| {
-		apply: |cfg| (right.apply)((left.apply)(cfg)),
-	}
-
-	## Apply another builder after this one. This is the concise choice for
-	## ordinary configuration chains; use `map2` when composing record builders.
-	then : App(a), App(b) -> App(b)
-	then = |left, right| {
-		apply: |cfg| (right.apply)((left.apply)(cfg)),
-	}
-
-	## Resolve a configuration builder against `default`.
-	config : App(a) -> Config
-	config = |builder| (builder.apply)(app_default_data)
-
 	## Build app initialization from pure startup config plus the effectful
 	## callback that creates the first model after raylib/audio are ready.
 	init : Config, InitCallback(model, errors) -> Init(model, errors)
 	init = |cfg, callback!| { config: cfg, run!: callback! }
-
-	## Set the window title.
-	title : Str -> App(Str)
-	title = |value| { apply: |cfg| { ..cfg, title: value } }
-
-	## Set the initial logical window width.
-	width : I32 -> App(I32)
-	width = |value| { apply: |cfg| { ..cfg, width: value } }
-
-	## Set the initial logical window height.
-	height : I32 -> App(I32)
-	height = |value| { apply: |cfg| { ..cfg, height: value } }
-
-	## Set the initial logical window dimensions.
-	size : { width : I32, height : I32 } -> App({ width : I32, height : I32 })
-	size = |dims| { apply: |cfg| { ..cfg, width: dims.width, height: dims.height } }
-
-	## Select one frame-pacing mode. A non-positive `Capped` value is normalized
-	## to `Uncapped`, so an invalid cap cannot enter Config.
-	frame_pacing : FramePacing -> App(FramePacing)
-	frame_pacing = |value| { apply: |cfg| { ..cfg, frame_pacing: normalize_pacing(value) } }
-
-	## Compatibility builder for raylib's CPU frame-rate cap.
-	target_fps : I32 -> App(I32)
-	target_fps = |value| { apply: |cfg| { ..cfg, frame_pacing: normalize_pacing(Capped(value)) } }
-
-	## Enable or disable native window resizing.
-	resizable : Bool -> App(Bool)
-	resizable = |value| { apply: |cfg| { ..cfg, resizable: value } }
-
-	## Start in fullscreen mode when true.
-	fullscreen : Bool -> App(Bool)
-	fullscreen = |value| { apply: |cfg| { ..cfg, fullscreen: value } }
-
-	## Compatibility builder. True selects VSync; false preserves an existing
-	## capped/uncapped mode or restores the default cap when disabling VSync.
-	vsync : Bool -> App(Bool)
-	vsync = |value| {
-		apply: |cfg| {
-			..cfg,
-			frame_pacing: if value {
-				VSync
-			} else {
-				match cfg.frame_pacing {
-					VSync => Capped(240)
-					current => current
-				}
-			},
-		},
-	}
-
-	## Choose the initial cursor mode directly.
-	cursor : CursorMode -> App(CursorMode)
-	cursor = |value| { apply: |cfg| { ..cfg, cursor: value } }
-
-	## Compatibility builder mapping a boolean to a tagged cursor mode.
-	cursor_visible : Bool -> App(Bool)
-	cursor_visible = |value| { apply: |cfg| { ..cfg, cursor: if value CursorVisible else CursorHidden } }
 }
+
+default_width : I32
+default_width = 800
+
+default_height : I32
+default_height = 600
 
 app_default_data : AppConfigData
 app_default_data = {
 	title: "Roc + Raylib",
-	width: 800,
-	height: 600,
+	width: default_width,
+	height: default_height,
 	frame_pacing: Capped(240),
 	resizable: Bool.False,
 	fullscreen: Bool.False,
@@ -212,6 +155,9 @@ normalize_pacing = |value|
 		Capped(fps) => if fps <= 0 Uncapped else value
 		_ => value
 	}
+
+normalize_dimension : I32, I32 -> I32
+normalize_dimension = |value, fallback| if value > 0 value else fallback
 
 host_pacing : AppFramePacing -> { target_fps : I32, vsync : Bool }
 host_pacing = |value|
@@ -230,3 +176,16 @@ expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(120)).to_host() == { ..App.default.to_host(), target_fps: 120 }
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
 expect App.default.with_cursor(CursorHidden).cursor() == CursorHidden
+expect {
+	host = App.default.with_resizable(Bool.True).with_fullscreen(Bool.True).to_host()
+	host.resizable and host.fullscreen
+}
+expect App.default.with_size({ width: 0, height: -5 }).to_host() == App.default.to_host()
+expect {
+	host = App.default.with_size({ width: -1, height: 720 }).to_host()
+	host.width == 800 and host.height == 720
+}
+expect {
+	host = App.default.with_size({ width: 1280, height: 0 }).to_host()
+	host.width == 1280 and host.height == 600
+}

@@ -30,9 +30,14 @@ Update the validated config through receivers:
 config = App.default
 	.with_title("My game")
 	.with_size({ width: 1280, height: 720 })
+	.with_resizable(Bool.True)
+	.with_fullscreen(Bool.False)
 	.with_frame_pacing(Capped(120))
 	.with_cursor(CursorHidden)
 ```
+
+Non-positive width or height values independently normalize to the default 800
+or 600, so the opaque `Config` always agrees with the dimensions the host uses.
 
 The startup cursor choice is independently tagged as `CursorVisible` or
 `CursorHidden`; runtime visibility and capture still use

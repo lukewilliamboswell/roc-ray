@@ -14,7 +14,7 @@ import DrawHost
 import Math
 
 TextureDrawConfig : {
-	texture : Assets.Texture,
+	texture : Assets.TextureView,
 	source : Math.Rect,
 	dest : Math.Rect,
 	origin : Math.Vec2,
@@ -65,10 +65,10 @@ TextureDrawBuilder(field) := {
 	empty : TextureDrawBuilder({})
 	empty = { value: {}, apply: |options| options }
 
-	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
+	run : TextureDrawBuilder(a), Assets.TextureView -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else Assets.rect(texture)
+		source = if options.source_set options.source else texture.rect()
 
 		dest = if options.dest_set {
 			options.dest
@@ -202,6 +202,9 @@ Draw := [].{
 
 		texture_quad! : Frame, TextureQuad => {}
 		texture_quad! = |frame, cfg| Draw.texture_quad!(frame, cfg)
+
+		texture_view_quad! : Frame, TextureViewQuad => {}
+		texture_view_quad! = |frame, cfg| Draw.texture_view_quad!(frame, cfg)
 
 		with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
 		with_render_texture! = |frame, target, callback| Draw.with_render_texture!(frame, target, callback)
@@ -421,13 +424,43 @@ Draw := [].{
 		tint : Color,
 	}
 
+	## A sampled texture view mapped onto an arbitrary screen-space quadrilateral.
+	TextureViewQuad : {
+		texture : Assets.TextureView,
+		source : Math.Rect,
+		top_left : Math.Vec2,
+		bottom_left : Math.Vec2,
+		bottom_right : Math.Vec2,
+		top_right : Math.Vec2,
+		tint : Color,
+	}
+
 	## Camera accepted by scoped 2D drawing.
 	CameraMode : Camera2D
 
 	## Host-owned framebuffer. Its texture-shaped box has a distinct host kind;
 	## the host rejects ordinary textures before entering an offscreen scope.
 	## Releasing the final reference unloads the framebuffer and both attachments.
-	RenderTexture : DrawHost.RenderTexture
+	RenderTexture :: DrawHost.RenderTexture.{
+
+		## Allocate an offscreen framebuffer.
+		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
+		load! = |size| {
+			result = DrawHost.load_render_texture!(size)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(RenderTexture.(result.target))
+		}
+
+		## Read-only view of this render target's color attachment.
+		texture : RenderTexture -> Assets.TextureView
+		texture = |RenderTexture.(target)| Assets.TextureView.from_host(DrawHost.RenderTexture.texture(target))
+
+		## Vertically inverted full-source rectangle for drawing the color attachment.
+		source : RenderTexture -> Math.Rect
+		source = |target| {
+			texture = target.texture()
+			{ x: 0, y: 0, width: texture.width(), height: 0 - texture.height() }
+		}
+	}
 
 	## Pixel dimensions for a new offscreen render target.
 	RenderTextureSize : {
@@ -437,7 +470,50 @@ Draw := [].{
 
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
-	Shader : DrawHost.Shader
+	Shader :: DrawHost.Shader.{
+
+		## Load shader stages from files.
+		load! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
+		load! = |cfg| {
+			result = DrawHost.load_shader!(cfg)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
+		}
+
+		## Compile shader stages from source strings.
+		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
+		from_source! = |cfg| {
+			result = DrawHost.load_shader_source!(cfg)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
+		}
+
+		## Resolve a scalar floating-point uniform once.
+		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound, ..])
+		uniform_f32! = |Shader.(shader), name| F32Uniform.(uniform_host!(shader, name)?)
+
+		## Resolve a scalar integer uniform once.
+		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound, ..])
+		uniform_i32! = |Shader.(shader), name| I32Uniform.(uniform_host!(shader, name)?)
+
+		## Resolve a two-component vector uniform once.
+		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound, ..])
+		uniform_vec2! = |Shader.(shader), name| Vec2Uniform.(uniform_host!(shader, name)?)
+
+		## Resolve a three-component vector uniform once.
+		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound, ..])
+		uniform_vec3! = |Shader.(shader), name| Vec3Uniform.(uniform_host!(shader, name)?)
+
+		## Resolve a four-component vector uniform once.
+		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound, ..])
+		uniform_vec4! = |Shader.(shader), name| Vec4Uniform.(uniform_host!(shader, name)?)
+
+		## Resolve a color-valued vec4 uniform once.
+		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound, ..])
+		uniform_color! = |Shader.(shader), name| ColorUniform.(uniform_host!(shader, name)?)
+
+		## Resolve a sampled-texture uniform once.
+		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
+		uniform_texture! = |Shader.(shader), name| TextureUniform.(uniform_host!(shader, name)?)
+	}
 
 	## File paths for shader stages. An empty path selects the default stage.
 	LoadShader : {
@@ -451,9 +527,55 @@ Draw := [].{
 		fragment_source : Str,
 	}
 
-	## A cached location retains its shader. Resolve it once during initialization;
-	## setters transfer this owning value so the shader stays live for the call.
-	Uniform : DrawHost.Uniform
+	## Typed uniform handles are zero-cost nominal wrappers over the cached host
+	## location plus its owning shader. Their distinct types prevent using the
+	## wrong setter without adding a tag, allocation, or host lookup.
+	F32Uniform :: DrawHost.Uniform.{
+		set! : F32Uniform, F32 => {}
+		set! = |F32Uniform.(uniform), value| DrawHost.set_shader_float!({ uniform, value })
+	}
+
+	I32Uniform :: DrawHost.Uniform.{
+		set! : I32Uniform, I32 => {}
+		set! = |I32Uniform.(uniform), value| DrawHost.set_shader_int!({ uniform, value })
+	}
+
+	Vec2Uniform :: DrawHost.Uniform.{
+		set! : Vec2Uniform, Vector2 => {}
+		set! = |Vec2Uniform.(uniform), value| DrawHost.set_shader_vec2!({ uniform, value })
+	}
+
+	Vec3Uniform :: DrawHost.Uniform.{
+		set! : Vec3Uniform, Vec3 => {}
+		set! = |Vec3Uniform.(uniform), value| DrawHost.set_shader_vec3!({ uniform, value })
+	}
+
+	Vec4Uniform :: DrawHost.Uniform.{
+		set! : Vec4Uniform, Vec4 => {}
+		set! = |Vec4Uniform.(uniform), value| DrawHost.set_shader_vec4!({ uniform, value })
+	}
+
+	ColorUniform :: DrawHost.Uniform.{
+		set! : ColorUniform, Color => {}
+		set! = |ColorUniform.(uniform), color| DrawHost.set_shader_vec4!({
+			uniform,
+			value: normalized_color(color),
+		})
+	}
+
+	TextureUniform :: DrawHost.Uniform.{
+
+		## Bind any sampled texture view, including a render-target attachment.
+		set! : TextureUniform, Assets.TextureView => {}
+		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
+			uniform,
+			texture: texture.host_value(),
+		})
+
+		## Convenience setter for an ordinary mutable texture.
+		set_texture! : TextureUniform, Assets.Texture => {}
+		set_texture! = |uniform, texture| uniform.set!(texture.view())
+	}
 
 	## Three-component shader uniform value.
 	Vec3 : { x : F32, y : F32, z : F32 }
@@ -730,17 +852,25 @@ Draw := [].{
 
 	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Assets.Texture -> TextureDraw
-	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
+	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture.view())
 
 	## Create a draw configuration covering the whole texture at `pos`.
 	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
-	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
+	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture.view())
+
+	## Create a draw configuration covering a read-only sampled view.
+	texture_view_draw : Assets.TextureView -> TextureDraw
+	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
+
+	## Create a sampled-view draw configuration at `pos`.
+	texture_view_at : Assets.TextureView, Math.Vec2 -> TextureDraw
+	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and tint.
 	texture! : Frame, TextureDraw => {}
 	texture! = |_frame, cfg| {
 		DrawHost.draw_texture!({
-			texture: cfg.texture,
+			texture: cfg.texture.host_value(),
 			source: cfg.source,
 			dest: cfg.dest,
 			origin: cfg.origin,
@@ -755,99 +885,40 @@ Draw := [].{
 
 	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
 	texture_quad! : Frame, TextureQuad => {}
-	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!(cfg)
+	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({ ..cfg, texture: cfg.texture.host_value() })
+
+	## Draw a sampled texture view across an arbitrary screen-space quadrilateral.
+	texture_view_quad! : Frame, TextureViewQuad => {}
+	texture_view_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({ ..cfg, texture: cfg.texture.host_value() })
 
 	## Allocate an offscreen framebuffer. Do this during initialization, not per
 	## frame; creation allocates GPU resources and one fixed host-heap slot.
 	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
-	load_render_texture! = |size| {
-		result = DrawHost.load_render_texture!(size)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(RenderTextureLoadFailed) else Ok(result.target)
-	}
+	load_render_texture! = |size| RenderTexture.load!(size)
 
-	## View the color attachment as a normal Texture without allocating or copying.
+	## View the color attachment as a sampled texture without allocating or copying.
 	## The returned reference keeps the owning framebuffer alive.
-	render_texture : RenderTexture -> Assets.Texture
-	render_texture = |target| DrawHost.RenderTexture.texture(target)
+	render_texture : RenderTexture -> Assets.TextureView
+	render_texture = |target| target.texture()
 
 	## Render textures use OpenGL framebuffer coordinates, so their color
 	## attachment is vertically inverted when sampled on screen.
 	render_texture_source : RenderTexture -> Math.Rect
-	render_texture_source = |target| {
-		texture = Draw.render_texture(target)
-		{ x: 0, y: 0, width: Assets.width(texture), height: 0 - Assets.height(texture) }
-	}
+	render_texture_source = |target| target.source()
 
 	## Load shader stages from files. Pass an empty string to use raylib's default
 	## vertex or fragment stage.
 	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader! = |cfg| {
-		result = DrawHost.load_shader!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(result.shader)
-	}
+	load_shader! = |cfg| Shader.load!(cfg)
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.
 	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader_source! = |cfg| {
-		result = DrawHost.load_shader_source!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(result.shader)
-	}
-
-	## Resolve a uniform name once and retain the shader beside its location.
-	uniform! : Shader, Str => Try(Uniform, [UniformNotFound, ..])
-	uniform! = |shader, name| {
-		location = DrawHost.shader_location!({ shader, name })
-		if location < 0 {
-			Err(UniformNotFound)
-		} else {
-			Ok(DrawHost.Uniform.from_shader_location(shader, location))
-		}
-	}
-
-	## Update a cached scalar floating-point uniform.
-	set_uniform_f32! : Uniform, F32 => {}
-	set_uniform_f32! = |uniform, value| DrawHost.set_shader_float!({ uniform, value })
-
-	## Update a cached scalar integer uniform.
-	set_uniform_i32! : Uniform, I32 => {}
-	set_uniform_i32! = |uniform, value| DrawHost.set_shader_int!({ uniform, value })
-
-	## Update a cached two-component vector uniform.
-	set_uniform_vec2! : Uniform, Vector2 => {}
-	set_uniform_vec2! = |uniform, value| DrawHost.set_shader_vec2!({ uniform, value })
-
-	## Update a cached three-component vector uniform.
-	set_uniform_vec3! : Uniform, Vec3 => {}
-	set_uniform_vec3! = |uniform, value| DrawHost.set_shader_vec3!({ uniform, value })
-
-	## Update a cached four-component vector uniform.
-	set_uniform_vec4! : Uniform, Vec4 => {}
-	set_uniform_vec4! = |uniform, value| DrawHost.set_shader_vec4!({ uniform, value })
-
-	## Update a vec4 uniform from normalized RGBA color channels.
-	set_uniform_color! : Uniform, Color => {}
-	set_uniform_color! = |uniform, color|
-		Draw.set_uniform_vec4!(
-			uniform,
-			{
-				x: U8.to_f32(color.r) / 255,
-				y: U8.to_f32(color.g) / 255,
-				z: U8.to_f32(color.b) / 255,
-				w: U8.to_f32(color.a) / 255,
-			},
-		)
-
-	## Bind a host-owned texture to a cached sampler uniform.
-	set_uniform_texture! : Uniform, Assets.Texture => {}
-	set_uniform_texture! = |uniform, texture| DrawHost.set_shader_texture!({
-		uniform,
-		texture,
-	})
+	load_shader_source! = |cfg| Shader.from_source!(cfg)
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
 	with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
-	with_render_texture! = |frame, target, callback| {
+	with_render_texture! = |frame, RenderTexture.(target), callback| {
 		if DrawHost.begin_render_texture!(target) {
 			callback(frame)
 			DrawHost.end_render_texture!()
@@ -856,7 +927,7 @@ Draw := [].{
 
 	## Scope shader application so the default shader is always restored.
 	with_shader! : Frame, Shader, (Frame => {}) => {}
-	with_shader! = |frame, shader, callback| {
+	with_shader! = |frame, Shader.(shader), callback| {
 		if DrawHost.begin_shader!(shader) {
 			callback(frame)
 			DrawHost.end_shader!()
@@ -964,7 +1035,25 @@ blend_mode_code = |mode|
 		AlphaPremultiply => 5
 	}
 
-test_texture = AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 }))
+uniform_host! : DrawHost.Shader, Str => Try(DrawHost.Uniform, [Draw.UniformNotFound, ..])
+uniform_host! = |shader, name| {
+	location = DrawHost.shader_location!({ shader, name })
+	if location < 0 {
+		Err(Draw.UniformNotFound)
+	} else {
+		Ok(DrawHost.Uniform.from_shader_location(shader, location))
+	}
+}
+
+normalized_color : Color -> Draw.Vec4
+normalized_color = |color| {
+	x: U8.to_f32(color.r) / 255,
+	y: U8.to_f32(color.g) / 255,
+	z: U8.to_f32(color.b) / 255,
+	w: U8.to_f32(color.a) / 255,
+}
+
+test_texture = Assets.TextureView.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 })))
 
 expect (TextureDrawBuilder.run(TextureDrawBuilder.empty, test_texture)).source == Math.rect(0, 0, 8, 4)
 expect (TextureDrawBuilder.run(TextureDrawBuilder.scale(2), test_texture)).dest == Math.rect(0, 0, 16, 8)
@@ -974,4 +1063,4 @@ expect Draw.align_factor(Draw.align_center) == { x: 0.5, y: 0.5 }
 expect Draw.align_factor(Draw.align_bottom_right) == { x: 1, y: 1 }
 expect blend_mode_code(Draw.alpha_blend) == 0
 expect blend_mode_code(Draw.premultiplied_alpha_blend) == 5
-expect Draw.render_texture_source(DrawHost.RenderTexture.from_texture(AssetsHost.Texture.from_resource(Box.box({ handle: 7, width: 320, height: 180 })))) == Math.rect(0, 0, 320, -180)
+expect Draw.render_texture_source(Draw.RenderTexture.(DrawHost.RenderTexture.from_texture(AssetsHost.Texture.from_resource(Box.box({ handle: 7, width: 320, height: 180 }))))) == Math.rect(0, 0, 320, -180)

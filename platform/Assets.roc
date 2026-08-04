@@ -10,8 +10,104 @@ import AssetsHost
 
 Assets := [].{
 
-	## Opaque, host-owned GPU texture with immutable dimensions.
-	Texture : AssetsHost.Texture
+	## Opaque, host-owned mutable GPU texture with immutable dimensions.
+	Texture :: AssetsHost.Texture.{
+
+		## Load an image file into GPU texture memory.
+		load! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
+		load! = |path| {
+			result = AssetsHost.load_texture!(path)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(Texture.(result.texture))
+		}
+
+		## Generate a solid-color GPU texture.
+		generate_color! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
+		generate_color! = |cfg| {
+			result = AssetsHost.generate_color_texture!(cfg)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(Texture.(result.texture))
+		}
+
+		## Generate a checkerboard GPU texture.
+		generate_checked! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
+		generate_checked! = |cfg| {
+			result = AssetsHost.generate_checked_texture!(cfg)
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(Texture.(result.texture))
+		}
+
+		## Read-only sampling view sharing this texture's host-owned ARC resource.
+		view : Texture -> TextureView
+		view = |Texture.(texture)| TextureView.(texture)
+
+		## Width in pixels.
+		width : Texture -> F32
+		width = |Texture.(texture)| AssetsHost.Texture.width(texture)
+
+		## Height in pixels.
+		height : Texture -> F32
+		height = |Texture.(texture)| AssetsHost.Texture.height(texture)
+
+		## Texture dimensions in pixels.
+		size : Texture -> Math.Vec2
+		size = |texture| { x: texture.width(), y: texture.height() }
+
+		## Rectangle covering the complete texture in pixel coordinates.
+		rect : Texture -> Math.Rect
+		rect = |texture| { x: 0, y: 0, width: texture.width(), height: texture.height() }
+
+		## Replace every pixel in row-major RGBA order.
+		update! : Texture, List(Color) => Try({}, [PixelCountMismatch])
+		update! = |Texture.(texture), pixels|
+			if AssetsHost.update_texture!({ texture, pixels }) == 0 Ok({}) else Err(PixelCountMismatch)
+
+		## Change how this texture is sampled when scaled.
+		set_filter! : Texture, TextureFilter => {}
+		set_filter! = |Texture.(texture), filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
+
+		## Change how out-of-range texture coordinates are wrapped.
+		set_wrap! : Texture, TextureWrap => {}
+		set_wrap! = |Texture.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+
+		## Internal owning transport used by other platform modules.
+		host_value : Texture -> AssetsHost.Texture
+		host_value = |Texture.(texture)| texture
+	}
+
+	## Read-only sampled texture view. It owns the same ARC reference as its
+	## source but deliberately has no pixel-update capability.
+	TextureView :: AssetsHost.Texture.{
+
+		## Internal constructor used for host-owned read-only attachments.
+		from_host : AssetsHost.Texture -> TextureView
+		from_host = |texture| TextureView.(texture)
+
+		## Width in pixels.
+		width : TextureView -> F32
+		width = |TextureView.(texture)| AssetsHost.Texture.width(texture)
+
+		## Height in pixels.
+		height : TextureView -> F32
+		height = |TextureView.(texture)| AssetsHost.Texture.height(texture)
+
+		## Texture dimensions in pixels.
+		size : TextureView -> Math.Vec2
+		size = |texture| { x: texture.width(), y: texture.height() }
+
+		## Rectangle covering the complete texture in pixel coordinates.
+		rect : TextureView -> Math.Rect
+		rect = |texture| { x: 0, y: 0, width: texture.width(), height: texture.height() }
+
+		## Change how this view is sampled when scaled.
+		set_filter! : TextureView, TextureFilter => {}
+		set_filter! = |TextureView.(texture), filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
+
+		## Change how out-of-range texture coordinates are wrapped.
+		set_wrap! : TextureView, TextureWrap => {}
+		set_wrap! = |TextureView.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+
+		## Internal owning transport used by other platform modules.
+		host_value : TextureView -> AssetsHost.Texture
+		host_value = |TextureView.(texture)| texture
+	}
 
 	## Texture sampling filter used when an image is scaled.
 	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x]
@@ -35,57 +131,45 @@ Assets := [].{
 	## Load an image file into GPU texture memory. The returned value owns the
 	## resource and may be safely shared between sprites, uniforms, and models.
 	load_texture! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-	load_texture! = |path| {
-		result = AssetsHost.load_texture!(path)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(result.texture)
-	}
+	load_texture! = |path| Texture.load!(path)
 
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_color_texture! = |cfg| {
-		result = AssetsHost.generate_color_texture!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_color_texture! = |cfg| Texture.generate_color!(cfg)
 
 	## Generate a checkerboard GPU texture without retaining a CPU image.
 	generate_checked_texture! : GenerateCheckedTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
-	generate_checked_texture! = |cfg| {
-		result = AssetsHost.generate_checked_texture!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(result.texture)
-	}
+	generate_checked_texture! = |cfg| Texture.generate_checked!(cfg)
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch, TextureNotMutable])
-	update_texture! = |texture, pixels| {
-		err = AssetsHost.update_texture!({ texture, pixels })
-		if err == 0 Ok({}) else if err == 2 Err(TextureNotMutable) else Err(PixelCountMismatch)
-	}
+	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch])
+	update_texture! = |texture, pixels| texture.update!(pixels)
 
 	## Change how this texture is sampled when scaled.
 	set_filter! : Texture, TextureFilter => {}
-	set_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
+	set_filter! = |texture, filter| texture.set_filter!(filter)
 
 	## Change how texture coordinates outside the normal range are wrapped.
 	set_wrap! : Texture, TextureWrap => {}
-	set_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+	set_wrap! = |texture, wrap| texture.set_wrap!(wrap)
 
 	## Width in pixels.
 	width : Texture -> F32
-	width = |texture| AssetsHost.Texture.width(texture)
+	width = |texture| texture.width()
 
 	## Height in pixels.
 	height : Texture -> F32
-	height = |texture| AssetsHost.Texture.height(texture)
+	height = |texture| texture.height()
 
 	## Texture dimensions in pixels.
 	size : Texture -> Math.Vec2
-	size = |texture| { x: Assets.width(texture), y: Assets.height(texture) }
+	size = |texture| texture.size()
 
 	## Rectangle covering the complete texture in pixel coordinates.
 	rect : Texture -> Math.Rect
-	rect = |texture| { x: 0, y: 0, width: Assets.width(texture), height: Assets.height(texture) }
+	rect = |texture| texture.rect()
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

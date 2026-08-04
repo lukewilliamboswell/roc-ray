@@ -4,7 +4,6 @@
 ## game-facing shape for sprites, spritesheet frame rectangles, and animation
 ## state.
 import Assets
-import AssetsHost
 import Color
 import Draw
 import Math
@@ -72,7 +71,7 @@ Sprite := {
 	## Resolve the sprite to a `Draw.TextureDraw` configuration.
 	to_texture_draw : Sprite -> Draw.TextureDraw
 	to_texture_draw = |sprite| {
-		texture: sprite.texture,
+		texture: sprite.texture.view(),
 		source: sprite.source,
 		dest: {
 			x: sprite.pos.x,
@@ -101,7 +100,7 @@ Sprite := {
 	from_texture : Assets.Texture -> Sprite
 	from_texture = |texture| {
 		texture,
-		source: Assets.rect(texture),
+		source: texture.rect(),
 		pos: Math.zero,
 		origin: Math.zero,
 		rotation: 0,

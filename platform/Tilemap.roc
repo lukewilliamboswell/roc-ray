@@ -127,7 +127,6 @@ TilemapBuilder :: {
 				match resolve_tilesets(builder.raw.tilesets, builder.textures) {
 					Ok(resolved_tilesets) => Ok({
 						raw: builder.raw,
-						layer_roles: builder.layer_roles,
 						object_roles: builder.object_roles,
 						origin: builder.origin,
 						render_layers: make_render_layers(builder.raw.layers, builder.layer_roles),
@@ -148,7 +147,6 @@ TilemapBuilder :: {
 
 Tilemap :: {
 	raw : TilemapRawMap,
-	layer_roles : List(TilemapLayerRoleRule),
 	object_roles : List(TilemapObjectRoleRule),
 	origin : Math.Vec2,
 	render_layers : List(TilemapHost.RenderLayer),
@@ -216,7 +214,6 @@ Tilemap :: {
 	empty : Tilemap
 	empty = {
 		raw: empty_raw_map,
-		layer_roles: [],
 		object_roles: [],
 		origin: Math.zero,
 		render_layers: [],
@@ -257,7 +254,15 @@ Tilemap :: {
 
 	## Resolve a layer's configured semantic role; unmatched layers are drawn.
 	layer_role_for : Tilemap, TilemapRawLayer -> TilemapLayerRole
-	layer_role_for = |map, layer| layer_role_for_rules(map.layer_roles, layer.name)
+	layer_role_for = |map, layer|
+		match find_layer_index(map.raw.layers, layer.name) {
+			Ok(index) =>
+				match List.get(map.render_layers, index) {
+					Ok(render_layer) => layer_role_from_code(render_layer.role)
+					Err(_) => Drawn
+				}
+			Err(_) => Drawn
+		}
 
 	## Resolve an object's configured semantic role; unmatched objects are unknown.
 	object_role_for : Tilemap, TilemapRawObject -> TilemapObjectRole
@@ -594,12 +599,11 @@ layer_role_for_rules = |rules, layer_name| {
 layer_role_code : TilemapLayerRole -> U8
 layer_role_code = |role| if role == Solid 1 else if role == Hidden 2 else 0
 
+layer_role_from_code : U8 -> TilemapLayerRole
+layer_role_from_code = |code| if code == 1 Solid else if code == 2 Hidden else Drawn
+
 draw_role_code : TilemapDrawRole -> U64
-draw_role_code = |role|
-	match role {
-		Drawn => 0
-		Solid => 1
-	}
+draw_role_code = |role| if role == Solid 1 else 0
 
 make_render_layers : List(TilemapRawLayer), List(TilemapLayerRoleRule) -> List(TilemapHost.RenderLayer)
 make_render_layers = |layers, rules|

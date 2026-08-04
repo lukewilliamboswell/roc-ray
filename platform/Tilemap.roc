@@ -22,7 +22,7 @@ TilemapRawMap : TilemapHost.Map
 
 TilemapTextureBinding : {
 	first_gid : U64,
-	texture : Assets.TextureView,
+	texture : Assets.Texture,
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
@@ -67,7 +67,7 @@ TilemapResolvedTileset : {
 	tile_width : F32,
 	tile_height : F32,
 	columns : U64,
-	texture : Assets.TextureView,
+	texture : Assets.Texture,
 }
 
 ## Configuration errors found while binding parsed tilesets to host textures.
@@ -87,13 +87,6 @@ TilemapBuilder :: {
 
 	with_tileset_texture : TilemapBuilder, U64, Assets.Texture -> TilemapBuilder
 	with_tileset_texture = |builder, first_gid, texture| {
-		..builder,
-		textures: List.append(builder.textures, { first_gid, texture: texture.view() }),
-	}
-
-	## Bind an existing read-only texture view without granting mutation access.
-	with_tileset_view : TilemapBuilder, U64, Assets.TextureView -> TilemapBuilder
-	with_tileset_view = |builder, first_gid, texture| {
 		..builder,
 		textures: List.append(builder.textures, { first_gid, texture }),
 	}
@@ -734,7 +727,7 @@ draw_gid! = |map, frame, raw_gid, cell| {
 			}
 			dest = Tilemap.world_rect_for_cell(map, cell)
 			flip = Tilemap.flip_for_gid(raw_gid)
-			frame.texture_view_quad!({
+			frame.texture_quad!({
 				texture: tileset.texture,
 				source,
 				top_left: transformed_corner(dest, { x: 0, y: 0 }, flip),

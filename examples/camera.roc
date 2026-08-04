@@ -68,7 +68,7 @@ move_player = |player, host| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, ..])
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ZeroZoom, NonFiniteZoom, ..])
 render! = |model, host, frame| {
 	if Keys.key_pressed(host, KeyEscape) {
 		host.exit!(0)

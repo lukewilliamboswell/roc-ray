@@ -52,17 +52,19 @@ Camera := [].{
 		with_rotation : Camera2D, F32 -> Camera2D
 		with_rotation = |camera, new_rotation| { ..camera, rotation: new_rotation }
 
-		## Return a copy with a validated non-zero zoom factor.
-		with_zoom : Camera2D, F32 -> Try(Camera2D, [ZeroZoom, ..])
+		## Return a copy with a validated finite, non-zero zoom factor.
+		with_zoom : Camera2D, F32 -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
 		with_zoom = |camera, new_zoom|
 			if new_zoom == 0 {
 				Err(ZeroZoom)
+			} else if !(F32.is_finite(new_zoom)) {
+				Err(NonFiniteZoom)
 			} else {
 				Ok({ ..camera, zoom: new_zoom })
 			}
 
 		## Clamp zoom to inclusive limits, reporting a range that produces zero.
-		clamp_zoom : Camera2D, { min : F32, max : F32 } -> Try(Camera2D, [ZeroZoom, ..])
+		clamp_zoom : Camera2D, { min : F32, max : F32 } -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
 		clamp_zoom = |camera, limits| camera.with_zoom(Math.clamp(camera.zoom, limits.min, limits.max))
 
 		## Convert a world-space point to logical screen coordinates.
@@ -113,11 +115,13 @@ Camera := [].{
 	default : Camera2D
 	default = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: 1 }
 
-	## Construct a camera from explicit settings, rejecting zero zoom.
-	new : Settings -> Try(Camera2D, [ZeroZoom, ..])
+	## Construct a camera from explicit settings, rejecting zero or non-finite zoom.
+	new : Settings -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
 	new = |settings|
 		if settings.zoom == 0 {
 			Err(ZeroZoom)
+		} else if !(F32.is_finite(settings.zoom)) {
+			Err(NonFiniteZoom)
 		} else {
 			Ok(settings)
 		}
@@ -132,7 +136,7 @@ Camera := [].{
 	}
 
 	## A common player-follow camera with a validated configurable zoom.
-	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom, ..])
+	follow : Math.Vec2, { screen : Math.Vec2, zoom : F32 } -> Try(Camera2D, [ZeroZoom, NonFiniteZoom, ..])
 	follow = |target_value, cfg| Camera.new({
 		target: target_value,
 		offset: cfg.screen.scale(0.5),
@@ -144,6 +148,18 @@ Camera := [].{
 expect Camera.centered({ x: 10, y: 20 }, { x: 800, y: 600 }).offset() == { x: 400, y: 300 }
 expect match Camera.default.with_zoom(0) {
 	Err(ZeroZoom) => True
+	_ => False
+}
+expect match Camera.default.with_zoom(F32.nan) {
+	Err(NonFiniteZoom) => True
+	_ => False
+}
+expect match Camera.default.with_zoom(F32.infinity) {
+	Err(NonFiniteZoom) => True
+	_ => False
+}
+expect match Camera.default.with_zoom(0 - F32.infinity) {
+	Err(NonFiniteZoom) => True
 	_ => False
 }
 expect Camera.default.world_to_screen({ x: 12, y: 34 }) == { x: 12, y: 34 }

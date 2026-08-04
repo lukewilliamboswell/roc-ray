@@ -4,6 +4,7 @@
 ## game-facing shape for sprites, spritesheet frame rectangles, and animation
 ## state.
 import Assets
+import AssetsHost
 import Color
 import Draw
 import Math
@@ -190,7 +191,7 @@ Sprite := {
 expect Sprite.sheet_frame({ frame_size: { x: 16, y: 24 }, row: 2, col: 3 }) == Math.rect(48, 48, 16, 24)
 expect (Sprite.step(Sprite.animation({ frame_count: 4, fps: 10 }), 0.11)).frame == 1
 expect {
-	texture = AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 }))
+	texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 1, width: 8, height: 4 })))
 	sprite = Sprite.from_texture(texture)
 		.source(
 			Math.rect(1, 2, 3, 4),

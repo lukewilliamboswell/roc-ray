@@ -13,6 +13,10 @@ Assets := [].{
 	## Opaque, host-owned mutable GPU texture with immutable dimensions.
 	Texture :: AssetsHost.Texture.{
 
+		## Internal constructor used by platform modules and tests.
+		from_host : AssetsHost.Texture -> Texture
+		from_host = |texture| Texture.(texture)
+
 		## Load an image file into GPU texture memory.
 		load! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 		load! = |path| {
@@ -146,30 +150,6 @@ Assets := [].{
 	## texture dimensions and is borrowed only for this host call.
 	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch])
 	update_texture! = |texture, pixels| texture.update!(pixels)
-
-	## Change how this texture is sampled when scaled.
-	set_filter! : Texture, TextureFilter => {}
-	set_filter! = |texture, filter| texture.set_filter!(filter)
-
-	## Change how texture coordinates outside the normal range are wrapped.
-	set_wrap! : Texture, TextureWrap => {}
-	set_wrap! = |texture, wrap| texture.set_wrap!(wrap)
-
-	## Width in pixels.
-	width : Texture -> F32
-	width = |texture| texture.width()
-
-	## Height in pixels.
-	height : Texture -> F32
-	height = |texture| texture.height()
-
-	## Texture dimensions in pixels.
-	size : Texture -> Math.Vec2
-	size = |texture| texture.size()
-
-	## Rectangle covering the complete texture in pixel coordinates.
-	rect : Texture -> Math.Rect
-	rect = |texture| texture.rect()
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

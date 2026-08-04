@@ -157,84 +157,6 @@ Draw := [].{
 	Frame :: DrawHost.Frame.{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)
-
-		clear! : Frame, Color => {}
-		clear! = |frame, color| Draw.clear!(frame, color)
-
-		rectangle_gradient_v! : Frame, RectangleGradientV => {}
-		rectangle_gradient_v! = |frame, cfg| Draw.rectangle_gradient_v!(frame, cfg)
-
-		rectangle_gradient_h! : Frame, RectangleGradientH => {}
-		rectangle_gradient_h! = |frame, cfg| Draw.rectangle_gradient_h!(frame, cfg)
-
-		circle_gradient! : Frame, CircleGradient => {}
-		circle_gradient! = |frame, cfg| Draw.circle_gradient!(frame, cfg)
-
-		fps! : Frame, Fps => {}
-		fps! = |frame, cfg| Draw.fps!(frame, cfg)
-
-		rectangle! : Frame, Rectangle => {}
-		rectangle! = |frame, cfg| Draw.rectangle!(frame, cfg)
-
-		rounded_rectangle! : Frame, RoundedRectangle => {}
-		rounded_rectangle! = |frame, cfg| Draw.rounded_rectangle!(frame, cfg)
-
-		circle! : Frame, Circle => {}
-		circle! = |frame, cfg| Draw.circle!(frame, cfg)
-
-		line! : Frame, Line => {}
-		line! = |frame, cfg| Draw.line!(frame, cfg)
-
-		triangle! : Frame, Triangle => {}
-		triangle! = |frame, cfg| Draw.triangle!(frame, cfg)
-
-		polygon! : Frame, Polygon => {}
-		polygon! = |frame, cfg| Draw.polygon!(frame, cfg)
-
-		convex_polygon! : Frame, ConvexPolygon => {}
-		convex_polygon! = |frame, cfg| Draw.convex_polygon!(frame, cfg)
-
-		texture! : Frame, TextureDraw => {}
-		texture! = |frame, cfg| Draw.texture!(frame, cfg)
-
-		draw_texture! : Frame, TextureDraw => {}
-		draw_texture! = |frame, cfg| Draw.draw_texture!(frame, cfg)
-
-		texture_quad! : Frame, TextureQuad => {}
-		texture_quad! = |frame, cfg| Draw.texture_quad!(frame, cfg)
-
-		texture_view_quad! : Frame, TextureViewQuad => {}
-		texture_view_quad! = |frame, cfg| Draw.texture_view_quad!(frame, cfg)
-
-		with_render_texture! : Frame, RenderTexture, (Frame => {}) => {}
-		with_render_texture! = |frame, target, callback| Draw.with_render_texture!(frame, target, callback)
-
-		with_shader! : Frame, Shader, (Frame => {}) => {}
-		with_shader! = |frame, shader, callback| Draw.with_shader!(frame, shader, callback)
-
-		with_blend_mode! : Frame, BlendMode, (Frame => result) => result
-		with_blend_mode! = |frame, mode, callback| Draw.with_blend_mode!(frame, mode, callback)
-
-		with_camera! : Frame, CameraMode, (Frame => result) => result
-		with_camera! = |frame, camera, callback| Draw.with_camera!(frame, camera, callback)
-
-		with_mode_2d! : Frame, CameraMode, (Frame => result) => result
-		with_mode_2d! = |frame, camera, callback| Draw.with_mode_2d!(frame, camera, callback)
-
-		with_scissor! : Frame, Math.Rect, (Frame => result) => result
-		with_scissor! = |frame, bounds, callback| Draw.with_scissor!(frame, bounds, callback)
-
-		text! : Frame, Text => {}
-		text! = |frame, cfg| Draw.text!(frame, cfg)
-
-		debug_text! : Frame, DebugText => {}
-		debug_text! = |frame, cfg| Draw.debug_text!(frame, cfg)
-
-		text_at! : Frame, SimpleText => {}
-		text_at! = |frame, cfg| Draw.text_at!(frame, cfg)
-
-		text_centered! : Frame, SimpleText => {}
-		text_centered! = |frame, cfg| Draw.text_centered!(frame, cfg)
 	}
 
 	## Two-dimensional vector used by drawing records.
@@ -457,8 +379,8 @@ Draw := [].{
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
 		source = |target| {
-			texture = target.texture()
-			{ x: 0, y: 0, width: texture.width(), height: 0 - texture.height() }
+			view = target.texture()
+			{ x: 0, y: 0, width: view.width(), height: 0 - view.height() }
 		}
 	}
 
@@ -488,31 +410,31 @@ Draw := [].{
 
 		## Resolve a scalar floating-point uniform once.
 		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound, ..])
-		uniform_f32! = |Shader.(shader), name| F32Uniform.(uniform_host!(shader, name)?)
+		uniform_f32! = |Shader.(shader), name| Ok(F32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a scalar integer uniform once.
 		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound, ..])
-		uniform_i32! = |Shader.(shader), name| I32Uniform.(uniform_host!(shader, name)?)
+		uniform_i32! = |Shader.(shader), name| Ok(I32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a two-component vector uniform once.
 		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound, ..])
-		uniform_vec2! = |Shader.(shader), name| Vec2Uniform.(uniform_host!(shader, name)?)
+		uniform_vec2! = |Shader.(shader), name| Ok(Vec2Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a three-component vector uniform once.
 		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound, ..])
-		uniform_vec3! = |Shader.(shader), name| Vec3Uniform.(uniform_host!(shader, name)?)
+		uniform_vec3! = |Shader.(shader), name| Ok(Vec3Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a four-component vector uniform once.
 		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound, ..])
-		uniform_vec4! = |Shader.(shader), name| Vec4Uniform.(uniform_host!(shader, name)?)
+		uniform_vec4! = |Shader.(shader), name| Ok(Vec4Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a color-valued vec4 uniform once.
 		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound, ..])
-		uniform_color! = |Shader.(shader), name| ColorUniform.(uniform_host!(shader, name)?)
+		uniform_color! = |Shader.(shader), name| Ok(ColorUniform.(uniform_host!(shader, name)?))
 
 		## Resolve a sampled-texture uniform once.
 		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
-		uniform_texture! = |Shader.(shader), name| TextureUniform.(uniform_host!(shader, name)?)
+		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 	}
 
 	## File paths for shader stages. An empty path selects the default stage.
@@ -885,11 +807,27 @@ Draw := [].{
 
 	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
 	texture_quad! : Frame, TextureQuad => {}
-	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({ ..cfg, texture: cfg.texture.host_value() })
+	texture_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
+		texture: cfg.texture.host_value(),
+		source: cfg.source,
+		top_left: cfg.top_left,
+		bottom_left: cfg.bottom_left,
+		bottom_right: cfg.bottom_right,
+		top_right: cfg.top_right,
+		tint: cfg.tint,
+	})
 
 	## Draw a sampled texture view across an arbitrary screen-space quadrilateral.
 	texture_view_quad! : Frame, TextureViewQuad => {}
-	texture_view_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({ ..cfg, texture: cfg.texture.host_value() })
+	texture_view_quad! = |_frame, cfg| DrawHost.draw_texture_quad!({
+		texture: cfg.texture.host_value(),
+		source: cfg.source,
+		top_left: cfg.top_left,
+		bottom_left: cfg.bottom_left,
+		bottom_right: cfg.bottom_right,
+		top_right: cfg.top_right,
+		tint: cfg.tint,
+	})
 
 	## Allocate an offscreen framebuffer. Do this during initialization, not per
 	## frame; creation allocates GPU resources and one fixed host-heap slot.
@@ -1035,11 +973,11 @@ blend_mode_code = |mode|
 		AlphaPremultiply => 5
 	}
 
-uniform_host! : DrawHost.Shader, Str => Try(DrawHost.Uniform, [Draw.UniformNotFound, ..])
+uniform_host! : DrawHost.Shader, Str => Try(DrawHost.Uniform, [UniformNotFound, ..])
 uniform_host! = |shader, name| {
 	location = DrawHost.shader_location!({ shader, name })
 	if location < 0 {
-		Err(Draw.UniformNotFound)
+		Err(UniformNotFound)
 	} else {
 		Ok(DrawHost.Uniform.from_shader_location(shader, location))
 	}

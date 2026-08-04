@@ -242,6 +242,8 @@ def main() -> int:
         parser.error("allocation profiling currently requires Linux")
     if shutil.which("gdb") is None:
         parser.error("allocation profiling requires gdb on PATH")
+    if shutil.which("nm") is None:
+        parser.error("hosted-call profiling requires nm on PATH")
 
     root = Path(__file__).resolve().parent.parent
     try:

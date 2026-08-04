@@ -20,13 +20,18 @@ examples/post_process
 # Built executables at root
 hello_world
 keyboard
+kitchen_sink
+read_env
 pong
 sprites
+text_ui
 snake
 breakout
 camera
 top_down
 cave_climb
+generated_assets
+post_process
 
 all_roc_syntax
 

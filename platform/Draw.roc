@@ -147,6 +147,9 @@ TextureDrawBuilder(field) := {
 }
 
 Draw := [].{
+	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
+	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
+	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
 
 	## Two-dimensional vector used by drawing records.
 	Vector2 : Math.Vec2
@@ -323,6 +326,17 @@ Draw := [].{
 
 	## Resolved texture draw configuration.
 	TextureDraw : TextureDrawConfig
+
+	## A texture mapped onto an arbitrary screen-space quadrilateral.
+	TextureQuad : {
+		texture : Assets.Texture,
+		source : Math.Rect,
+		top_left : Math.Vec2,
+		bottom_left : Math.Vec2,
+		bottom_right : Math.Vec2,
+		top_right : Math.Vec2,
+		tint : Color,
+	}
 
 	## Camera accepted by scoped 2D drawing.
 	CameraMode : Camera2D
@@ -655,6 +669,10 @@ Draw := [].{
 	## Compatibility alias for `texture!`.
 	draw_texture! : TextureDraw => {}
 	draw_texture! = |cfg| Draw.texture!(cfg)
+
+	## Draw a texture mapped onto an arbitrary screen-space quadrilateral.
+	texture_quad! : TextureQuad => {}
+	texture_quad! = |cfg| DrawHost.draw_texture_quad!(cfg)
 
 	## Allocate an offscreen framebuffer. Do this during initialization, not per
 	## frame; creation allocates GPU resources and one fixed host-heap slot.

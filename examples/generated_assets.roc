@@ -40,14 +40,14 @@ init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFaile
 init! = App.init(
 	{ ..App.default, title: "Generated Assets", target_fps: 120 },
 	|_host| {
-		match Assets.generate_color_texture!({ width: 4, height: 4, color: Color.white }) {
+		match Assets.Texture.generate_color!({ width: 4, height: 4, color: Color.white }) {
 			Err(_) => Err(TextureGenerationFailed)
 			Ok(texture) =>
-				match Assets.update_texture!(texture, pixels) {
+				match texture.update!(pixels) {
 					Err(_) => Err(PixelCountMismatch)
 					Ok({}) => {
-						Assets.set_filter!(texture, Bilinear)
-						Assets.set_wrap!(texture, Clamp)
+						texture.set_filter!(Bilinear)
+						texture.set_wrap!(Clamp)
 
 						sound = Audio.gen_tone!({ freq: 440, ms: 180 })?
 						Audio.set_master_volume!(0.8)
@@ -58,8 +58,8 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 	if host.key_pressed(KeySpace) model.sound.play!()
 	if host.key_pressed(KeyS) model.sound.stop!()
 	if host.key_pressed(KeyP) model.sound.pause!()
@@ -70,16 +70,12 @@ render! = |model, host| {
 		.scale(64)
 		.centered()
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			sprite.draw!()
-			# Keep both labels within RocStr's inline representation so this
-			# example's steady-state render loop only allocates its model box.
-			Draw.text_centered!({ pos: { x: 400, y: 445 }, text: "SPACE play | S stop", size: 20, color: Color.dark_gray })
-			Draw.text_centered!({ pos: { x: 400, y: 475 }, text: "P pause | R resume", size: 20, color: Color.dark_gray })
-		},
-	)
+	frame.clear!(Color.ray_white)
+	sprite.draw!(frame)
+	# Keep both labels within RocStr's inline representation so this
+	# example's steady-state render loop only allocates its model box.
+	frame.text_centered!({ pos: { x: 400, y: 445 }, text: "SPACE play | S stop", size: 20, color: Color.dark_gray })
+	frame.text_centered!({ pos: { x: 400, y: 475 }, text: "P pause | R resume", size: 20, color: Color.dark_gray })
 
 	Ok(model)
 }

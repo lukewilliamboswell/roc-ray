@@ -32,13 +32,13 @@ init! = App.init(
 		target_fps: 120,
 	},
 	|_host| {
-		texture = Assets.load_texture!(asset_path)?
+		texture = Assets.Texture.load!(asset_path)?
 		Ok({ texture, angle: 0, animation: Sprite.animation({ frame_count: 4, fps: 6 }) })
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 	next_angle = model.angle + host.frame_time * 60
 	next_animation = Sprite.step(model.animation, host.frame_time)
 	frame_row = next_animation.frame // 2
@@ -89,17 +89,13 @@ render! = |model, host| {
 			Color.with_alpha(Color.purple, 210),
 		)
 
-	Draw.draw!(
-		Color.ray_white,
-		|| {
-			main_sprite.draw!()
-			top_left.draw!()
-			bottom_right.draw!()
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 52 }, text: "Sprites", size: 42, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_center })
-			Draw.text!({ pos: { x: 90, y: 504 }, text: "source rect", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
-			Draw.text!({ pos: { x: screen_w - 90, y: 504 }, text: "rotation + tint", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_right })
-		},
-	)
+	frame.clear!(Color.ray_white)
+	main_sprite.draw!(frame)
+	top_left.draw!(frame)
+	bottom_right.draw!(frame)
+	frame.text!({ pos: { x: screen_w * 0.5, y: 52 }, text: "Sprites", size: 42, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: 90, y: 504 }, text: "source rect", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: screen_w - 90, y: 504 }, text: "rotation + tint", size: 20, spacing: Draw.default_spacing, color: Color.gray, font: Draw.default_font, align: Draw.align_top_right })
 
 	Ok({ ..model, angle: next_angle, animation: next_animation })
 }

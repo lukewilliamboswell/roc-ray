@@ -9,7 +9,7 @@ import rr.Math
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
-	time : Draw.Uniform,
+	time : Draw.F32Uniform,
 }
 
 program = { init!, render! }
@@ -24,46 +24,44 @@ init! : App.Init(Model, [RenderTextureLoadFailed, ResourceLimit, ShaderLoadFaile
 init! = App.init(
 	{ ..App.default, title: "RocRay Offscreen Post-processing" },
 	|_host| {
-		target = Draw.load_render_texture!({ width: 800, height: 600 })?
-		shader = Draw.load_shader!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?
-		time = Draw.uniform!(shader, "time")?
+		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
+		shader = Draw.Shader.load!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?
+		time = shader.uniform_f32!("time")?
 		Ok({ target, shader, time })
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
 	seconds = U64.to_f32(host.timestamp_nanos) / 1_000_000_000
-	Draw.set_uniform_f32!(model.time, seconds)
+	model.time.set!(seconds)
 
-	Draw.with_render_texture!(
+	frame.with_render_texture!(
 		model.target,
-		|| {
-			Draw.clear!(Color.from_hex_rgb(0x10162f))
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 120 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
-			Draw.with_blend_mode!(
+		|target_frame| {
+			target_frame.clear!(Color.from_hex_rgb(0x10162f))
+			target_frame.text_centered!({ pos: { x: screen_w * 0.5, y: 120 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
+			target_frame.with_blend_mode!(
 				Draw.additive_blend,
-				|| {
-					Draw.circle!({ center: { x: 330, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.blue, 180)) })
-					Draw.circle!({ center: { x: 470, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.red, 180)) })
+				|blend_frame| {
+					blend_frame.circle!({ center: { x: 330, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.blue, 180)) })
+					blend_frame.circle!({ center: { x: 470, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.red, 180)) })
 				},
 			)
 		},
 	)
 
 	target_draw = {
-		texture: Draw.render_texture(model.target),
-		source: Draw.render_texture_source(model.target),
+		texture: model.target.texture(),
+		source: model.target.source(),
 		dest: Math.rect(0, 0, screen_w, screen_h),
 		origin: Math.zero,
 		rotation: 0,
 		tint: Color.white,
 	}
 
-	Draw.draw!(
-		Color.black,
-		|| Draw.with_shader!(model.shader, || Draw.texture!(target_draw)),
-	)
+	frame.clear!(Color.black)
+	frame.with_shader!(model.shader, |shader_frame| shader_frame.texture!(target_draw))
 
 	Ok(model)
 }

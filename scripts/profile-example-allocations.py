@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Measure steady-state Roc allocations in headless example applications.
+"""Measure steady-state Roc allocations and host calls in example applications.
 
 The profiler uses non-stopping GDB breakpoints on the Roc allocation ABI. It
 runs each example for one frame and again for N frames, then subtracts the
 one-frame result so startup allocations do not pollute the per-frame numbers.
 
-This measures calls made through roc_alloc/roc_realloc/roc_dealloc. It does not
-include allocations made internally by raylib or Zig's allocator.
+This measures calls made through roc_alloc/roc_realloc/roc_dealloc plus hosted
+boundary symbols in the roc_assets_/roc_audio_/roc_draw_/roc_host_/roc_mouse_/
+roc_tilemap_ namespaces. It does not include allocations made internally by
+raylib or Zig's allocator.
 """
 
 import argparse
@@ -46,8 +48,33 @@ def allocation_size_expression() -> str:
     raise RuntimeError(f"unsupported allocation-profiler architecture: {machine}")
 
 
-def gdb_commands(frames: int) -> str:
+def hosted_symbols(binary: Path) -> list[str]:
+    result = subprocess.run(
+        ["nm", "-g", "--defined-only", str(binary)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    prefixes = (
+        "roc_assets_",
+        "roc_audio_",
+        "roc_draw_",
+        "roc_host_",
+        "roc_mouse_",
+        "roc_tilemap_",
+    )
+    return sorted(
+        {
+            fields[-1]
+            for line in result.stdout.splitlines()
+            if (fields := line.split()) and fields[-1].startswith(prefixes)
+        }
+    )
+
+
+def gdb_commands(frames: int, boundary_symbols: list[str]) -> str:
     size_expression = allocation_size_expression()
+    encoded_boundary_symbols = json.dumps(boundary_symbols)
     return f"""\
 set pagination off
 set debuginfod enabled off
@@ -61,6 +88,8 @@ stats = {{
     "realloc_calls": 0,
     "dealloc_calls": 0,
     "unreadable_alloc_sizes": 0,
+    "host_calls": {{}},
+    "host_calls_total": 0,
     "exit_code": None,
 }}
 
@@ -81,12 +110,24 @@ class CountBreakpoint(gdb.Breakpoint):
                 stats["unreadable_alloc_sizes"] += 1
         return False
 
+class CountHostBreakpoint(gdb.Breakpoint):
+    def __init__(self, symbol):
+        super().__init__(symbol, internal=True)
+        self.symbol = symbol
+
+    def stop(self):
+        stats["host_calls_total"] += 1
+        stats["host_calls"][self.symbol] = stats["host_calls"].get(self.symbol, 0) + 1
+        return False
+
 def record_exit(event):
     stats["exit_code"] = getattr(event, "exit_code", None)
 
 CountBreakpoint("roc_alloc", "alloc_calls", "{size_expression}")
 CountBreakpoint("roc_realloc", "realloc_calls")
 CountBreakpoint("roc_dealloc", "dealloc_calls")
+for symbol in {encoded_boundary_symbols}:
+    CountHostBreakpoint(symbol)
 gdb.events.exited.connect(record_exit)
 end
 run --headless --headless-frames={frames}
@@ -96,7 +137,7 @@ python print("{MARKER}" + json.dumps(stats, sort_keys=True))
 
 def profile_run(root: Path, binary: Path, frames: int) -> dict[str, int | None]:
     with tempfile.NamedTemporaryFile("w", suffix=".gdb", encoding="utf-8") as command_file:
-        command_file.write(gdb_commands(frames))
+        command_file.write(gdb_commands(frames, hosted_symbols(binary)))
         command_file.flush()
         result = subprocess.run(
             ["gdb", "-q", "-batch", "-x", command_file.name, "--args", str(binary)],
@@ -126,7 +167,13 @@ def subtract_startup(
 ) -> dict[str, float | int]:
     measured_frames = frames - 1
     result: dict[str, float | int] = {"measured_frames": measured_frames}
-    for key in ("alloc_calls", "alloc_bytes", "realloc_calls", "dealloc_calls"):
+    for key in (
+        "alloc_calls",
+        "alloc_bytes",
+        "realloc_calls",
+        "dealloc_calls",
+        "host_calls_total",
+    ):
         delta = int(many_frames[key]) - int(one_frame[key])
         result[key] = delta
         result[f"{key}_per_frame"] = delta / measured_frames
@@ -137,6 +184,17 @@ def subtract_startup(
         for size in sorted(sizes, key=int)
         if int(many_frames["alloc_sizes"].get(size, 0))
         != int(one_frame["alloc_sizes"].get(size, 0))
+    }
+    host_symbols = set(one_frame["host_calls"]) | set(many_frames["host_calls"])
+    result["host_calls"] = {
+        symbol: int(many_frames["host_calls"].get(symbol, 0))
+        - int(one_frame["host_calls"].get(symbol, 0))
+        for symbol in sorted(host_symbols)
+        if int(many_frames["host_calls"].get(symbol, 0))
+        != int(one_frame["host_calls"].get(symbol, 0))
+    }
+    result["host_calls_per_frame"] = {
+        symbol: count / measured_frames for symbol, count in result["host_calls"].items()
     }
     return result
 
@@ -156,7 +214,7 @@ def build_examples(root: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Measure steady-state Roc allocation traffic in example render loops"
+        description="Measure steady-state Roc allocation and hosted-call traffic"
     )
     parser.add_argument("examples", nargs="*", help="Example names; defaults to all examples")
     parser.add_argument(
@@ -216,17 +274,21 @@ def main() -> int:
         return 0
 
     print(
-        f"Steady-state Roc allocation traffic "
+        f"Steady-state Roc allocation and hosted-call traffic "
         f"(startup subtracted; {args.frames - 1} measured frames)"
     )
-    print(f"{'example':<16} {'allocs/frame':>12} {'bytes/frame':>12} {'reallocs/frame':>15}")
+    print(
+        f"{'example':<16} {'allocs/frame':>12} {'bytes/frame':>12} "
+        f"{'reallocs/frame':>15} {'host calls/frame':>16}"
+    )
     for row in rows:
         steady = row["steady_state"]
         print(
             f"{row['example']:<16} "
             f"{steady['alloc_calls_per_frame']:>12.3f} "
             f"{steady['alloc_bytes_per_frame']:>12.1f} "
-            f"{steady['realloc_calls_per_frame']:>15.3f}"
+            f"{steady['realloc_calls_per_frame']:>15.3f} "
+            f"{steady['host_calls_total_per_frame']:>16.3f}"
         )
         if args.sizes:
             histogram = ", ".join(
@@ -234,6 +296,11 @@ def main() -> int:
                 for size, count in steady["alloc_sizes"].items()
             )
             print(f"  sizes: {histogram or 'none'}")
+            host_histogram = ", ".join(
+                f"{symbol} x {count / steady['measured_frames']:.3f}/frame"
+                for symbol, count in steady["host_calls"].items()
+            )
+            print(f"  hosted: {host_histogram or 'none'}")
     return 0
 
 

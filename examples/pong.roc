@@ -1,9 +1,8 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.Draw
 import rr.Color
 import rr.Host
-import rr.Keys
 import rr.Audio
 import rr.App
 import rr.Math
@@ -69,8 +68,8 @@ win_score = 5
 
 # A random vertical serve speed in px/second, so each serve leaves at a
 # different angle instead of the same predictable line.
-random_serve_vy! : () => F32
-random_serve_vy! = || I32.to_f32(Host.random_i32!(-160, 160))
+random_serve_vy! : Host => F32
+random_serve_vy! = |host| I32.to_f32(host.random_i32!(-160, 160))
 
 left_paddle : F32 -> Math.Rect
 left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
@@ -83,15 +82,15 @@ ball_circle = |x, y| Math.circle({ x, y }, ball_r)
 
 # A fresh round: ball centred, scores zeroed, served in a random direction.
 # Sound handles are carried over from the previous model (generated once).
-new_round! : Model => Model
-new_round! = |model| {
-	serve_dir = if Host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
+new_round! : Model, Host => Model
+new_round! = |model, host| {
+	serve_dir = if host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
 	{
 		..model,
 		ball_x: screen_w * 0.5,
 		ball_y: screen_h * 0.5,
 		ball_vx: serve_dir,
-		ball_vy: random_serve_vy!(),
+		ball_vy: random_serve_vy!(host),
 		left_y: 250,
 		right_y: 250,
 		left_score: 0,
@@ -101,17 +100,14 @@ new_round! = |model| {
 
 # Play a sound only when `cond` is true (a no-op otherwise).
 play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond Audio.play!(sound) else {}
+play_if! = |cond, sound| if cond sound.play!() else {}
 
 program = { init!, render! }
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Pong",
-	},
-	|_host| {
+	App.default.with_title("RocRay Pong"),
+	|host| {
 		# Generate the sound effects once; new_round! carries the handles forward.
 		seed = {
 			ball_x: 0,
@@ -122,52 +118,49 @@ init! = App.init(
 			right_y: 250,
 			left_score: 0,
 			right_score: 0,
-			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 }),
-			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 }),
-			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 }),
+			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
+			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
+			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 		}
 
-		Ok(new_round!(seed))
+		Ok(new_round!(seed, host))
 	},
 )
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
+
 	game_over = model.left_score >= win_score or model.right_score >= win_score
-	if game_over render_game_over!(model, host) else render_playing!(model, host)
+	if game_over render_game_over!(model, host, frame) else render_playing!(model, host, frame)
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-render_game_over! : Model, Host => Try(Model, [Exit(I64), ..])
-render_game_over! = |model, host| {
-	restart = Keys.key_pressed(host, KeySpace)
+render_game_over! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render_game_over! = |model, host, frame| {
+	restart = host.key_pressed(KeySpace)
 	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
 
-	Draw.draw!(
-		Color.black,
-		|| {
-			draw_field!(model)
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
-			Draw.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
-		},
-	)
+	frame.clear!(Color.black)
+	draw_field!(frame, model)
+	frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
 
-	Ok(if restart new_round!(model) else model)
+	Ok(if restart new_round!(model, host) else model)
 }
 
 # --- Active play ---
-render_playing! : Model, Host => Try(Model, [Exit(I64), ..])
-render_playing! = |model, host| {
+render_playing! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render_playing! = |model, host, frame| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
 
-	# Angle to use if the ball is served (scored) this frame.
-	serve_vy = random_serve_vy!()
-
 	# --- Left paddle: player input (W up, S down) ---
-	w_down = Keys.key_down(host, KeyW)
-	s_down = Keys.key_down(host, KeyS)
+	w_down = host.key_down(KeyW)
+	s_down = host.key_down(KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
 	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 
@@ -205,6 +198,8 @@ render_playing! = |model, host| {
 	# --- Scoring: ball left the field on the left or right edge ---
 	out_left = nx - ball_r < 0
 	out_right = nx + ball_r > screen_w
+	# Draw randomness only when a new serve is actually needed.
+	serve_vy = if out_left or out_right random_serve_vy!(host) else vy
 
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny
@@ -231,25 +226,23 @@ render_playing! = |model, host| {
 	play_if!(hit_top or hit_bottom, model.wall_sound)
 	play_if!(out_left or out_right, model.score_sound)
 
-	Draw.draw!(
-		Color.black,
-		|| draw_field!(next),
-	)
+	frame.clear!(Color.black)
+	draw_field!(frame, next)
 
 	Ok(next)
 }
 
 # Draw the static scene (center line, paddles, ball, scores) for a model.
-draw_field! : Model => {}
-draw_field! = |model| {
+draw_field! : Draw.Frame, Model => {}
+draw_field! = |frame, model| {
 	left_rect = left_paddle(model.left_y)
 	right_rect = right_paddle(model.right_y)
 	ball_shape = ball_circle(model.ball_x, model.ball_y)
 
-	Draw.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, stroke: Draw.stroke(Color.dark_gray, 2) })
-	Draw.rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, style: Draw.filled(Color.white) })
-	Draw.rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, style: Draw.filled(Color.white) })
-	Draw.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
-	Draw.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
-	Draw.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	frame.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, stroke: Draw.stroke(Color.dark_gray, 2) })
+	frame.rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, style: Draw.filled(Color.white) })
+	frame.rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, style: Draw.filled(Color.white) })
+	frame.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
+	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
 }

@@ -53,7 +53,7 @@ Physics := [].{
 	}
 
 	## A simple particle body with a PGA point position and vector velocity.
-	Body : {
+	Body := {
 		position : Point,
 		velocity : Vector,
 	}
@@ -363,4 +363,12 @@ expect {
 	body1 = Physics.apply_acceleration(body0, Physics.vector(0, -2, 0), 0.5)
 	body2 = Physics.integrate_body(body1, 2)
 	Physics.coords(body2.position) == { x: 20, y: -2, z: 0 }
+}
+expect Physics.point(3, 4, 5).coords() == { x: 3, y: 4, z: 5 }
+expect Physics.vector(3, 4, 0).length() == 5
+expect Physics.plane(Physics.vector(0, 1, 0), 0).signed_distance(Physics.point(2, 5, 3)) == 5
+expect Physics.translation(Physics.vector(2, 3, 4)).apply_motor_point(Physics.point(1, 1, 1)).coords() == { x: 3, y: 4, z: 5 }
+expect {
+	body = Physics.body(Physics.origin, Physics.vector(10, 0, 0))
+	body.apply_acceleration(Physics.vector(0, -2, 0), 0.5).integrate_body(2).position.coords() == { x: 20, y: -2, z: 0 }
 }

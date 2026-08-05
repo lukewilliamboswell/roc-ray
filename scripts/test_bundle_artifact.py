@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 IS_WINDOWS = platform.system() == "Windows"
-LOCAL_PLATFORM_REF = '"../platform/main-default.roc"'
+LOCAL_PLATFORM_REF = '"../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )

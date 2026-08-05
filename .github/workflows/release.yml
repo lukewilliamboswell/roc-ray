@@ -79,7 +79,7 @@ jobs:
         run: |
           scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
           rm -rf /tmp/roc-ray-release-docs
-          roc docs platform/main-default.roc --output=/tmp/roc-ray-release-docs
+          roc docs platform/main.roc --output=/tmp/roc-ray-release-docs
 
       - name: Verify release hosts
         run: scripts/check_release_hosts.py
@@ -103,7 +103,7 @@ jobs:
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
           # Keep this advisory until the Roc compiler reaches 0.1.0.
           bump_check: ${{ steps.previous.outputs.bump_check || 'warn' }}
-          bump_entrypoint: platform/main-default.roc
+          bump_entrypoint: platform/main.roc
           previous_url: ${{ steps.previous.outputs.previous_url }}
 
       - name: Ensure release metadata files exist
@@ -298,7 +298,7 @@ jobs:
       - name: Generate docs
         run: |
           rm -rf "www/${{ needs.build.outputs.docs_version }}"
-          roc docs platform/main-default.roc --output="www/${{ needs.build.outputs.docs_version }}"
+          roc docs platform/main.roc --output="www/${{ needs.build.outputs.docs_version }}"
 
       - name: Update docs index
         uses: roc-lang/release-package/actions/docs-index@d2560ead9f724bfaabfbc8134b8895e120171064

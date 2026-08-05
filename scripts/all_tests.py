@@ -2,7 +2,7 @@
 """
 Run all tests for the roc-ray platform.
 
-Source checks temporarily point checked-in examples at platform/main-default.roc,
+Source checks temporarily point checked-in examples at platform/main.roc,
 then restore their release URLs. Roc is always resolved from PATH.
 
 This script runs:
@@ -48,7 +48,7 @@ IS_LINUX = platform.system() == "Linux"
 
 # Platform references used by examples. Bundle tests temporarily rewrite one of
 # these to the localhost bundle URL.
-LOCAL_PLATFORM_REF = '"../platform/main-default.roc"'
+LOCAL_PLATFORM_REF = '"../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
@@ -56,7 +56,7 @@ RELEASE_PLATFORM_REF_RE = re.compile(
 # Examples to skip in the bundled-platform build test, mapping filename -> reason.
 # Use this when a specific example can't build against the bundled platform yet
 # (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
-#   e.g. "kitchen_sink.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
+#   e.g. "example.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
 BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 # Examples to skip in native `roc build` / headless runtime checks.

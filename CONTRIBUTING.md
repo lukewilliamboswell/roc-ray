@@ -51,7 +51,7 @@ scripts/run-example.py examples/cave_climb.roc
 ```
 
 The runner builds the host, temporarily points that example at
-`../platform/main-default.roc`, launches it, and restores its published URL on
+`../platform/main.roc`, launches it, and restores its published URL on
 exit. Pass `--skip-platform-build` to reuse host libraries from an earlier
 `zig build`.
 
@@ -84,6 +84,21 @@ Run the full test suite (lints, Zig unit tests, and `roc check`/`fmt`/`test`/`bu
 ```bash
 zig build test
 ```
+
+Rendering code also has an opt-in pixel-level smoke test. It opens a hidden
+raylib window and validates scissoring, convex polygon rasterization, texture
+source regions, flipped quads, exact projective interpolation, and shader-state
+preservation against framebuffer pixels:
+
+```bash
+zig build graphical-smoke
+# On a headless Linux CI worker with Xvfb installed:
+xvfb-run -a zig build graphical-smoke
+```
+
+The regular headless example runs intentionally do not assert pixels, so run
+this step whenever changing rendering primitives, texture coordinates, or
+paired drawing modes.
 
 Or run just the Roc example tests directly:
 
@@ -127,8 +142,10 @@ length with `--frames`, show allocation-size histograms with `--sizes`, or use
 scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
 ```
 
-This measures calls through Roc's allocation ABI. It does not include internal
-raylib or Zig allocator traffic.
+This measures calls through Roc's allocation ABI and counts exported hosted
+effects by subsystem. It does not include internal raylib or Zig allocator
+traffic, so use the native lifecycle/allocation tests when optimizing storage
+inside a hosted effect.
 
 Most non-empty example models currently show exactly one allocation whose size
 is stable for every frame. That is the `Box(Model)` returned by
@@ -138,44 +155,242 @@ additional allocation sizes or reallocations as actionable app/platform work;
 track the single model box as a compiler optimization opportunity. A zero-sized
 model can avoid even that allocation.
 
-### Host boundary performance
+Representative examples were measured over 119 startup-subtracted frames after
+this API migration:
 
-Shared read-only frame information should normally be sampled once by the host
-and passed through `Host`, rather than exposed as several hosted queries. Keep
-the Roc-facing API ergonomic and independent of its transport representation.
-For example, callers can use `host.key_pressed(KeySpace)` while the host packs
-held/pressed/released bits into one persistent key-state list; the equivalent
-module-style call is `Keys.key_pressed(host, KeySpace)`.
+| Example | Allocations/frame | Bytes/frame | Reallocations/frame | Hosted calls/frame |
+|---------|------------------:|------------:|--------------------:|-------------------:|
+| `keyboard` | 0.000 | 0.0 | 0.000 | 46 |
+| `generated_assets` | 1.000 | 32.0 | 0.000 | 4 |
+| `camera` | 1.000 | 40.0 | 0.000 | 73 |
+| `text_ui` | 1.000 | 24.0 | 0.000 | 10 |
+| `post_process` | 1.000 | 48.0 | 0.000 | 13 |
+| `cave_climb` | 1.000 | 728.0 | 0.000 | 70 |
+| `top_down` | 1.000 | 648.0 | 0.000 | 107 |
 
-The host allocates the keyboard and mouse state lists once, updates their bytes
-in place, and retains them only while Roc owns the frame snapshot. Do not rebuild
-these lists per frame.
+Each non-zero row is exactly the current model box. Texture views, receiver
+dispatch, scoped callbacks, prepared text draws, typed uniforms, and batched
+tilemap draws add no steady-state Roc allocation. Tilemap batching replaces 41
+texture-quad crossings with one call in `cave_climb` and 30 with one in
+`top_down`, reducing total calls from 110 to 70 and 136 to 107 respectively.
+
+### Host boundary and frame ownership
+
+The native host owns BeginDrawing/EndDrawing and invokes Roc's
+`render!(model, host, frame)` between them. Native cleanup closes the frame after
+either `Ok` or `Err`. `Draw.Frame` is an opaque, zero-sized capability constructed
+only by the platform adapter; every public drawing effect takes it. This
+prevents initialization code from drawing and removes the two hosted outer-frame
+calls that `Draw.draw!` previously made each frame. It is authority, not an
+affine or epoch-encoded proof: pass the callback's value through drawing helpers
+and do not retain it in the model.
+
+Keep the Roc API shaped around application values even when its transport is
+flatter. Prefer `frame.circle!(cfg)`, `host.key_pressed(KeySpace)`,
+`camera.screen_to_world(point)`, `texture.rect()`, and `uniform.set!(value)`.
+Attached constructors such as `Assets.Texture.load!`,
+`Draw.RenderTexture.load!`, and `Draw.Shader.load!` group creation with the
+result type. A module function remains appropriate when there is no natural
+receiver or for a deliberate compatibility bridge.
+
+Camera, scissor, blend, shader, and render-target callbacks return `Try`. Each
+successful begin runs its matching end after the callback result is computed,
+including callback `Err` values. All five scope families use bounded native
+stacks, may nest, and restore the outer state without allocating. A full stack
+returns `ScopeLimit`; shader and render-target scopes also return
+`ScopeUnavailable` when a transferred resource cannot resolve. Value-only
+camera, scissor, and blend scopes cannot enter that state. Neither failure runs
+the callback. Pass the callback's `Frame` onward rather than reintroducing an
+unscoped draw helper.
+
+### Snapshot reuse and queries
+
+Shared read-only frame information should be sampled once by the host and passed
+through `Host`, rather than exposed as several hosted queries. The host packs
+held/pressed/released bits into persistent key and mouse lists, and keeps
+gamepad connectivity, buttons, and axes in three persistent flat lists. Their
+receiver and module query forms are pure Roc, so multiple queries do not make
+multiple host calls.
+
+Use `host.gamepad(id)` to get either `Connected(pad)` or `Disconnected`. The
+connected receiver carries the selected ID and references to the same snapshot
+lists, so button, axis, and stick queries require neither repeated connectivity
+checks nor allocation. It is scoped to that snapshot: query it immediately and
+do not retain it in the application model. Resolve the slot again from the next
+frame's `Host`.
+
+Mouse position, delta, and two-axis wheel movement are scalar snapshot fields.
+Cursor visibility and capture are one tagged operation through
+`host.set_cursor_mode!` with `Visible`, `Hidden`, or `Locked`. Native cursor
+shape is separate through `host.set_cursor!(cursor)`.
+
+The host allocates keyboard, mouse, gamepad, and text-input state lists once,
+then reuses their memory in place while uniquely owned. Unicode text input uses
+a variable-length persistent list with initial capacity for raylib's 32-value
+drain; changing its logical length and contents is allocation-free while that
+capacity is sufficient. If an app retains an older snapshot in its model, the
+next update uses copy-on-write so the retained value stays immutable. Text input
+also grows when its current capacity is too small. These are intentional unusual
+allocations; do not rebuild snapshot lists in the normal per-frame path.
+
+### Resource ownership and capabilities
 
 Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
-heaps. Their handle allocation is ABI-compatible with Roc's `Box`: the final Roc
-ARC release routes through `roc_dealloc`, unloads the native value, and makes the
-slot reusable. Creation effects return these host-backed boxes directly; do not
-wrap a scalar handle with `Box.box` on the Roc side. Hot draw and audio effects
-unbox the lifecycle token before crossing the boundary, so they pass a scalar
-without per-call retain/release traffic. A live Roc reference pins the slot, and
-the host validates its type, generation, and liveness on every lookup.
+heaps. Their handle allocation is ABI-compatible with Roc's `Box`: releasing the
+final Roc reference routes through `roc_dealloc`, unloads the native value, and
+makes the slot reusable. Creation effects return these host-backed boxes
+directly; do not wrap a scalar handle with `Box.box` on the Roc side. Hot draw
+and audio effects transfer the typed owning value across the boundary. The host
+resolves its internal token while that owner is live, performs the operation,
+then releases the transferred reference. It validates type, generation, and
+liveness on every lookup.
+
+Immutable UI copy should use `Text.from(content).prepare!()` outside the render
+loop. Prepared text has its own 256-slot typed heap. A slot owns one native
+NUL-terminated UTF-8 buffer, cached measurement/style, and the transferred ARC
+owner for a loaded font. Consequently `.bounds()` is pure and `.draw!` transfers
+only the prepared handle plus position/color; final prepared-handle release frees
+the bytes and releases the font owner. Keep `frame.text!` for content that changes
+per frame, because preparing dynamic text would replace one direct call with
+resource creation and teardown.
 
 Keep built-in resources allocation-free. For example, `Draw.default_font` is a
 plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
 also include immutable metadata: `Assets.Texture` stores dimensions beside its
 token in the host slot, keeping the Roc model representation to one pointer.
 
+Generated textures follow the same host-owned lifetime path as loaded textures.
+CPU images used during generation are released before the hosted effect returns.
+`texture.update!` borrows the contiguous Roc color list for one call and does
+not copy or retain it in the host; build reusable pixel buffers outside the
+render loop when possible.
+
+Keep the public texture capabilities distinct:
+
+- `Assets.Texture` owns an ordinary mutable texture and provides `.update!`,
+  `.width()`, `.height()`, `.size()`, `.rect()`, `.set_filter!`, `.set_wrap!`,
+  and `.view()`.
+- `Assets.TextureView` owns the same ARC reference but exposes sampling rather
+  than pixel mutation. This nominal distinction adds no image copy or Roc heap
+  wrapper.
+- `Draw.RenderTexture.texture()` returns a `TextureView` that keeps the complete
+  framebuffer resource alive. `.source()` returns its full vertically inverted
+  sampling rectangle.
+
+Render textures and shaders use distinct resource kinds so a stale or
+cross-typed resource cannot resolve. A render texture box stores its dimensions
+beside the token and owns its framebuffer, color texture, and depth attachment
+as one unit. Resolve shader locations during initialization with typed receiver
+constructors such as `shader.uniform_f32!("time")`. `F32Uniform`, `I32Uniform`,
+vector, color, and texture handles prevent setter mismatches without runtime
+tags. Each handle retains its shader and caches the location once; per-frame
+`.set!` calls transfer the existing owner plus scalar or small-vector value
+without allocating.
+
+The headless host allocates typed lifecycle slots without creating GPU objects,
+allowing ownership and effect composition to run in ordinary example tests.
+Successful render-target and shader begins lease the transferred owner until the
+matching end; failed lookups release it immediately and return
+`ScopeUnavailable`.
+
+### Validation and culling
+
+Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque: its
+constructors and receiver updates reject zero zoom and non-finite target,
+offset, rotation, or zoom values with dedicated errors. Its receiver transforms
+and viewport calculation are then total and stay in Roc.
+
+`TilemapBuilder.build()` validates that every parsed tileset has exactly one
+texture binding, that no binding is unused, and that layer/object role targets
+exist and are unique. Distinct name/type keys that select the same object are
+also rejected as duplicate targets. Propagate its open error row during initialization. A
+built tilemap retains primitive layer metadata and a flat tileset list whose
+elements own their texture Boxes. Each public draw operation borrows those
+existing lists in one host call; final-owner cleanup recursively releases the
+texture elements. Culling remains an allocation-free Roc calculation whose
+inclusive cell range is sent with that single call. Do not rebuild a quad List
+per frame: the host iterates the borrowed GIDs directly.
+
 App-specific state still belongs in the Roc model. Initialization-only effects
 such as loading resources, reading files, and reading environment variables
 should populate that model once; event-driven effects such as audio playback or
 random spawning should remain at the event site.
 
+### Startup configuration invariants
+
+`App.Config` is opaque. Applications start from `App.default` and use receiver
+updates such as `.with_title(...)`, `.with_size(...)`,
+`.with_resizable(...)`, `.with_fullscreen(...)`, `.with_frame_pacing(...)`, and
+`.with_cursor(...)`; direct record updates cannot bypass validation. This is the
+only public configuration construction surface. The default is an 800×600
+window using `Capped(240)` and `CursorVisible`.
+
+Non-positive dimensions passed to `.with_size(...)` independently normalize to
+the default width or height. Keep these 800×600 fallbacks synchronized with the
+native host's defensive ABI normalization so the internal flattened config
+describes the window that will actually be created.
+
+Frame pacing is one tagged choice: `VSync`, `Capped(I32)`, or `Uncapped`.
+`Capped(fps)` values at or below zero normalize to `Uncapped`, so Config cannot
+contain a contradictory VSync-plus-cap state or an invalid non-positive cap.
+The initial cursor is independently `CursorVisible` or `CursorHidden`. Runtime
+cursor capture remains a `Host.CursorMode`, which additionally supports
+`Locked`.
+
+`AppConfig` owns the opaque Config representation and its legacy flattened host
+record, but is deliberately absent from each platform package's `exposes` list.
+Public `App.Config` is an alias that preserves the nominal type and its receiver
+API without exposing the owner module. Only `main.roc` and
+`main-wayland.roc` import `AppConfig` and flatten the validated choices. VSync
+maps to a zero target FPS with VSync enabled; a cap maps to that FPS with VSync
+disabled; Uncapped maps to a zero target FPS with VSync disabled. The cursor tag
+similarly becomes the `cursor_visible` boolean.
+
+The internal `AppConfig.to_host({}, config)` function intentionally takes a
+zero-sized marker before Config. On this Roc nightly, any function whose first
+argument is an opaque type participates in receiver dispatch through public
+aliases; the marker keeps `config.to_host()` out of the application API and is
+zero-sized and allocation-free. `scripts/test_app_transport_privacy.py` checks
+that apps cannot call `.to_host()`, name `App.HostConfig`, or import
+`rr.AppConfig`.
+
 ## Glue Bindings
 
-The Zig host's ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`. Regenerate them after changing the hosted functions in `platform/main-default.roc`:
+The Zig host's ABI types in `src/roc_platform_abi.zig` are generated by
+`roc glue`. Regenerate them after changing hosted functions in
+`platform/main.roc` with a local checkout of the Roc repository:
 
 ```bash
-roc glue <path-to-roc>/src/glue/src/ZigGlue.roc ./src/ ./platform/main-default.roc
+scripts/roc_platform_abi.py \
+    --roc-repo /path/to/roc \
+    --roc /path/to/pinned/roc \
+    --update
+```
+
+Verify the checked-in file without modifying it with:
+
+```bash
+scripts/roc_platform_abi.py \
+    --roc-repo /path/to/roc \
+    --roc /path/to/pinned/roc \
+    --check
+```
+
+`.roc-version` is the single source of provenance for both inputs. The helper
+requires `roc version` to exactly match that nightly, resolves the commit hash
+embedded at the end of the nightly name in the supplied Git repository, and
+uses `git archive` to extract `src/glue` from that commit into a temporary
+directory. It never reads glue from the repository's current checkout or
+changes that repository, so its branch and uncommitted files cannot affect the
+result. Generation and `zig fmt` also happen in temporary storage. `--check`
+only compares with `src/roc_platform_abi.zig`; `--update` atomically replaces it
+when necessary. Compiler or source revisions that disagree with `.roc-version`
+are rejected before generation.
+
+The helper's focused tests run under `zig build test`, or directly with:
+
+```bash
+python3 scripts/test_roc_platform_abi.py
 ```
 
 ## Bundling

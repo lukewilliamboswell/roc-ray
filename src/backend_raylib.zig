@@ -26,6 +26,12 @@ pub const Font = rl.Font;
 /// Native texture retained in the host resource heap.
 pub const Texture = rl.Texture2D;
 
+/// Native framebuffer-backed texture retained in the host resource heap.
+pub const RenderTexture = rl.RenderTexture2D;
+
+/// Native shader program retained in the host resource heap.
+pub const Shader = rl.Shader;
+
 /// Persistent packed keyboard state - updated each frame.
 /// Bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
 var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
@@ -33,10 +39,73 @@ var key_state: [ffi.KEY_COUNT]u8 = [_]u8{0} ** ffi.KEY_COUNT;
 /// Persistent packed mouse button state - updated each frame, with the same bits.
 var mouse_button_state: [ffi.MOUSE_BUTTON_COUNT]u8 = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 
+/// Persistent gamepad snapshot, flattened by gamepad then control index.
+var gamepad_available: [ffi.GAMEPAD_COUNT]u8 = [_]u8{0} ** ffi.GAMEPAD_COUNT;
+var gamepad_button_state: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+var gamepad_axes: [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 = [_]f32{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT);
+
+/// raylib's internal codepoint queue is bounded; this also leaves room if its
+/// default grows. Any excess is drained so it cannot leak into a later frame.
+pub const TEXT_INPUT_CAPACITY: usize = 32;
+var text_input: [TEXT_INPUT_CAPACITY]u32 = [_]u32{0} ** TEXT_INPUT_CAPACITY;
+
+fn gamepadButtonIndex(gamepad: usize, button: usize) usize {
+    return gamepad * ffi.GAMEPAD_BUTTON_COUNT + button;
+}
+
+fn gamepadAxisIndex(gamepad: usize, axis: usize) usize {
+    return gamepad * ffi.GAMEPAD_AXIS_COUNT + axis;
+}
+
+test "gamepad snapshot indexing is contiguous per device" {
+    try std.testing.expectEqual(@as(usize, 0), gamepadButtonIndex(0, 0));
+    try std.testing.expectEqual(@as(usize, 17), gamepadButtonIndex(0, 17));
+    try std.testing.expectEqual(@as(usize, 18), gamepadButtonIndex(1, 0));
+    try std.testing.expectEqual(@as(usize, 23), gamepadAxisIndex(3, 5));
+}
+
 fn inputStateBits(down: bool, pressed: bool, released: bool) u8 {
     return (if (down) ffi.INPUT_HELD else 0) |
         (if (pressed) ffi.INPUT_PRESSED else 0) |
         (if (released) ffi.INPUT_RELEASED else 0);
+}
+
+fn disconnectedInputState(previous: u8) u8 {
+    return if (previous & ffi.INPUT_HELD != 0) ffi.INPUT_RELEASED else 0;
+}
+
+/// Derive this frame's packed state from the previous state and one held query.
+/// Raylib's pressed/released queries are equivalent to these transitions for
+/// keys and mouse buttons, so the host only needs one boundary call per input.
+fn nextInputState(previous: u8, down: bool) u8 {
+    const was_down = previous & ffi.INPUT_HELD != 0;
+    return inputStateBits(down, down and !was_down, !down and was_down);
+}
+
+fn raylibGamepadButtonDown(_: void, gamepad: c_int, button: c_int) bool {
+    return rl.IsGamepadButtonDown(gamepad, button);
+}
+
+fn updateGamepadButtonStates(
+    states: *[ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8,
+    gamepad: usize,
+    available: bool,
+    context: anytype,
+    comptime is_button_down: anytype,
+) void {
+    const gamepad_id: c_int = @intCast(gamepad);
+
+    for (0..ffi.GAMEPAD_BUTTON_COUNT) |button| {
+        const flat_index = gamepadButtonIndex(gamepad, button);
+        if (available) {
+            states[flat_index] = nextInputState(
+                states[flat_index],
+                is_button_down(context, gamepad_id, @intCast(button)),
+            );
+        } else {
+            states[flat_index] = disconnectedInputState(states[flat_index]);
+        }
+    }
 }
 
 test "input state packs held and edge flags" {
@@ -45,15 +114,83 @@ test "input state packs held and edge flags" {
     try std.testing.expectEqual(ffi.INPUT_RELEASED, inputStateBits(false, false, true));
 }
 
+test "disconnecting a held input synthesizes one release edge" {
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, disconnectedInputState(ffi.INPUT_HELD));
+    try std.testing.expectEqual(@as(u8, 0), disconnectedInputState(ffi.INPUT_RELEASED));
+}
+
+test "input state derives press and release edges from held transitions" {
+    const up = nextInputState(0, false);
+    try std.testing.expectEqual(@as(u8, 0), up);
+
+    const pressed = nextInputState(up, true);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, pressed);
+
+    const held = nextInputState(pressed, true);
+    try std.testing.expectEqual(ffi.INPUT_HELD, held);
+
+    const released = nextInputState(held, false);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, released);
+    try std.testing.expectEqual(@as(u8, 0), nextInputState(released, false));
+}
+
+test "gamepad buttons use one held query per connected button" {
+    const Query = struct {
+        count: usize = 0,
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+
+        fn isDown(self: *@This(), _: c_int, button: c_int) bool {
+            self.count += 1;
+            return self.down[@intCast(button)];
+        }
+    };
+
+    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var query = Query{};
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.GAMEPAD_BUTTON_COUNT, query.count);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.GAMEPAD_BUTTON_COUNT, query.count);
+}
+
+test "gamepad button edges survive disconnect and reconnect" {
+    const Query = struct {
+        down: [ffi.GAMEPAD_BUTTON_COUNT]bool = [_]bool{false} ** ffi.GAMEPAD_BUTTON_COUNT,
+
+        fn isDown(self: *@This(), _: c_int, button: c_int) bool {
+            return self.down[@intCast(button)];
+        }
+    };
+
+    const button = 3;
+    const index = gamepadButtonIndex(0, button);
+    var states = [_]u8{0} ** (ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT);
+    var query = Query{};
+
+    query.down[button] = true;
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, states[index]);
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD, states[index]);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, states[index]);
+
+    updateGamepadButtonStates(&states, 0, false, &query, Query.isDown);
+    try std.testing.expectEqual(@as(u8, 0), states[index]);
+
+    updateGamepadButtonStates(&states, 0, true, &query, Query.isDown);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, states[index]);
+}
+
 /// Update keyboard state from raylib (call once per frame)
 pub fn updateKeyboardState() void {
     for (0..ffi.KEY_COUNT) |i| {
         const key: c_int = @intCast(i);
-        key_state[i] = inputStateBits(
-            rl.IsKeyDown(key),
-            rl.IsKeyPressed(key),
-            rl.IsKeyReleased(key),
-        );
+        key_state[i] = nextInputState(key_state[i], rl.IsKeyDown(key));
     }
 }
 
@@ -66,17 +203,70 @@ pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
 pub fn updateMouseButtonState() void {
     for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
         const button: c_int = @intCast(i);
-        mouse_button_state[i] = inputStateBits(
-            rl.IsMouseButtonDown(button),
-            rl.IsMouseButtonPressed(button),
-            rl.IsMouseButtonReleased(button),
-        );
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], rl.IsMouseButtonDown(button));
     }
 }
 
 /// Get the current packed mouse button state array.
 pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
+}
+
+/// Sample all supported gamepads once for this frame.
+pub fn updateGamepadState() void {
+    for (0..ffi.GAMEPAD_COUNT) |gamepad| {
+        const gamepad_id: c_int = @intCast(gamepad);
+        const available = rl.IsGamepadAvailable(gamepad_id);
+        gamepad_available[gamepad] = if (available) 1 else 0;
+        updateGamepadButtonStates(
+            &gamepad_button_state,
+            gamepad,
+            available,
+            {},
+            raylibGamepadButtonDown,
+        );
+
+        const native_axis_count: usize = if (available)
+            @intCast(@max(rl.GetGamepadAxisCount(gamepad_id), 0))
+        else
+            0;
+        for (0..ffi.GAMEPAD_AXIS_COUNT) |axis| {
+            const flat_index = gamepadAxisIndex(gamepad, axis);
+            gamepad_axes[flat_index] = if (axis < native_axis_count)
+                rl.GetGamepadAxisMovement(gamepad_id, @intCast(axis))
+            else
+                0;
+        }
+    }
+}
+
+/// Get the sampled gamepad availability array.
+pub fn getGamepadAvailability() *const [ffi.GAMEPAD_COUNT]u8 {
+    return &gamepad_available;
+}
+
+/// Get the sampled packed gamepad button-state array.
+pub fn getGamepadButtonState() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_COUNT]u8 {
+    return &gamepad_button_state;
+}
+
+/// Get the sampled gamepad axis array.
+pub fn getGamepadAxes() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 {
+    return &gamepad_axes;
+}
+
+/// Drain this frame's queued Unicode input and return a stable scratch slice.
+pub fn getTextInput() []const u32 {
+    var count: usize = 0;
+    while (true) {
+        const codepoint = rl.GetCharPressed();
+        if (codepoint <= 0) break;
+        if (count < text_input.len) {
+            text_input[count] = @intCast(codepoint);
+            count += 1;
+        }
+    }
+    return text_input[0..count];
 }
 
 /// Return raylib's built-in font, which is not owned by a resource heap.
@@ -109,6 +299,140 @@ pub fn loadTexture(path: [*:0]const u8) ?Texture {
 /// Unload a texture when its host resource slot is released.
 pub fn unloadTexture(texture: Texture) void {
     rl.UnloadTexture(texture);
+}
+
+/// Generate a solid-color texture, releasing the temporary CPU image before return.
+pub fn generateColorTexture(width: i32, height: i32, color: abi.Color) ?Texture {
+    if (width <= 0 or height <= 0) return null;
+    const image = rl.GenImageColor(width, height, colorToRl(color));
+    defer rl.UnloadImage(image);
+    if (!rl.IsImageValid(image)) return null;
+
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
+
+/// Generate a checkerboard texture, releasing the temporary CPU image before return.
+pub fn generateCheckedTexture(args: anytype) ?Texture {
+    if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return null;
+    const image = rl.GenImageChecked(
+        args.width,
+        args.height,
+        args.checks_x,
+        args.checks_y,
+        colorToRl(args.color_a),
+        colorToRl(args.color_b),
+    );
+    defer rl.UnloadImage(image);
+    if (!rl.IsImageValid(image)) return null;
+
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
+
+/// Replace all pixels in a texture from tightly packed RGBA colors.
+pub fn updateTexture(texture: Texture, pixels: []const abi.Color) void {
+    comptime std.debug.assert(@sizeOf(abi.Color) == @sizeOf(rl.Color));
+    rl.UpdateTexture(texture, pixels.ptr);
+}
+
+/// Set a texture's scaling filter from the Roc enum code.
+pub fn setTextureFilter(texture: Texture, code: u8) void {
+    const filter: c_int = switch (code) {
+        0 => rl.TEXTURE_FILTER_POINT,
+        1 => rl.TEXTURE_FILTER_BILINEAR,
+        2 => rl.TEXTURE_FILTER_TRILINEAR,
+        3 => rl.TEXTURE_FILTER_ANISOTROPIC_4X,
+        4 => rl.TEXTURE_FILTER_ANISOTROPIC_8X,
+        5 => rl.TEXTURE_FILTER_ANISOTROPIC_16X,
+        else => return,
+    };
+    rl.SetTextureFilter(texture, filter);
+}
+
+/// Set a texture's coordinate wrapping mode from the Roc enum code.
+pub fn setTextureWrap(texture: Texture, code: u8) void {
+    const wrap: c_int = switch (code) {
+        0 => rl.TEXTURE_WRAP_REPEAT,
+        1 => rl.TEXTURE_WRAP_CLAMP,
+        2 => rl.TEXTURE_WRAP_MIRROR_REPEAT,
+        3 => rl.TEXTURE_WRAP_MIRROR_CLAMP,
+        else => return,
+    };
+    rl.SetTextureWrap(texture, wrap);
+}
+
+/// Create a framebuffer-backed texture for offscreen 2D rendering.
+pub fn loadRenderTexture(width: c_int, height: c_int) ?RenderTexture {
+    const target = rl.LoadRenderTexture(width, height);
+    if (!rl.IsRenderTextureValid(target)) return null;
+    return target;
+}
+
+/// Release a framebuffer and its color/depth attachments.
+pub fn unloadRenderTexture(target: RenderTexture) void {
+    rl.UnloadRenderTexture(target);
+}
+
+/// Return the color attachment so normal texture drawing can sample it.
+pub fn renderTextureColor(target: RenderTexture) Texture {
+    return target.texture;
+}
+
+/// Load a shader, using raylib's default stage when a path pointer is null.
+pub fn loadShader(vertex_path: ?[*:0]const u8, fragment_path: ?[*:0]const u8) ?Shader {
+    const shader = rl.LoadShader(vertex_path, fragment_path);
+    if (!rl.IsShaderValid(shader)) return null;
+    return shader;
+}
+
+/// Load shader source code, using raylib's default stage when a pointer is null.
+pub fn loadShaderFromMemory(vertex_source: ?[*:0]const u8, fragment_source: ?[*:0]const u8) ?Shader {
+    const shader = rl.LoadShaderFromMemory(vertex_source, fragment_source);
+    if (!rl.IsShaderValid(shader)) return null;
+    return shader;
+}
+
+/// Release a GPU shader program.
+pub fn unloadShader(shader: Shader) void {
+    rl.UnloadShader(shader);
+}
+
+/// Resolve and cache a uniform location on the Roc side.
+pub fn shaderLocation(shader: Shader, name: [*:0]const u8) c_int {
+    return rl.GetShaderLocation(shader, name);
+}
+
+/// Update scalar/vector shader values without allocating.
+pub fn setShaderFloat(shader: Shader, location: c_int, value: f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_FLOAT);
+}
+
+/// Update a signed integer uniform.
+pub fn setShaderInt(shader: Shader, location: c_int, value: i32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_INT);
+}
+
+/// Update a two-component float vector uniform.
+pub fn setShaderVec2(shader: Shader, location: c_int, value: [2]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC2);
+}
+
+/// Update a three-component float vector uniform.
+pub fn setShaderVec3(shader: Shader, location: c_int, value: [3]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC3);
+}
+
+/// Update a four-component float vector uniform.
+pub fn setShaderVec4(shader: Shader, location: c_int, value: [4]f32) void {
+    rl.SetShaderValue(shader, location, &value, rl.SHADER_UNIFORM_VEC4);
+}
+
+/// Bind a texture to a sampler2D uniform.
+pub fn setShaderTexture(shader: Shader, location: c_int, texture: Texture) void {
+    rl.SetShaderValueTexture(shader, location, texture);
 }
 
 /// Return a native texture's width in pixels.
@@ -281,22 +605,40 @@ pub fn drawTriangleLines(args: anytype) void {
     drawSegment(args.c, args.a, args.thickness, args.color);
 }
 
-/// Draw a filled polygon by fanning triangles from the point centroid.
+fn polygonSignedArea(points: anytype) f32 {
+    var twice_area: f32 = 0;
+    for (points, 0..) |point, i| {
+        const next = points[(i + 1) % points.len];
+        twice_area += point.x * next.y - next.x * point.y;
+    }
+    return twice_area * 0.5;
+}
+
+test "polygonSignedArea detects either boundary order" {
+    const Point = struct { x: f32, y: f32 };
+    const clockwise = [_]Point{
+        .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 2 }, .{ .x = 2, .y = 2 }, .{ .x = 2, .y = 0 },
+    };
+    const counter_clockwise = [_]Point{
+        .{ .x = 0, .y = 0 }, .{ .x = 2, .y = 0 }, .{ .x = 2, .y = 2 }, .{ .x = 0, .y = 2 },
+    };
+    try std.testing.expect(polygonSignedArea(&clockwise) < 0);
+    try std.testing.expect(polygonSignedArea(&counter_clockwise) > 0);
+}
+
+/// Draw a filled convex polygon as an allocation-free triangle fan.
+/// Points must be ordered clockwise or counter-clockwise around the boundary.
 pub fn drawPolygon(points: anytype, color: abi.Color) void {
     if (points.len < 3) return;
 
-    var center = rl.Vector2{ .x = 0, .y = 0 };
-    for (points) |point| {
-        center.x += point.x;
-        center.y += point.y;
-    }
-    const len_f: f32 = @floatFromInt(points.len);
-    center.x /= len_f;
-    center.y /= len_f;
-
-    for (points, 0..) |point, i| {
-        const next = points[(i + 1) % points.len];
-        rl.DrawTriangle(center, toVector2(point), toVector2(next), colorToRl(color));
+    const reverse = polygonSignedArea(points) > 0;
+    var i: usize = 1;
+    while (i + 1 < points.len) : (i += 1) {
+        if (reverse) {
+            rl.DrawTriangle(toVector2(points[0]), toVector2(points[i + 1]), toVector2(points[i]), colorToRl(color));
+        } else {
+            rl.DrawTriangle(toVector2(points[0]), toVector2(points[i]), toVector2(points[i + 1]), colorToRl(color));
+        }
     }
 }
 
@@ -359,22 +701,143 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
     );
 }
 
-/// Draw a full texture across an arbitrary screen-space quadrilateral.
+fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {
+    return .{
+        .x = x / @as(f32, @floatFromInt(texture.width)),
+        .y = y / @as(f32, @floatFromInt(texture.height)),
+    };
+}
+
+test "textureRegionUv normalizes source pixels" {
+    const texture = Texture{ .id = 1, .width = 64, .height = 32, .mipmaps = 1, .format = 1 };
+    const uv = textureRegionUv(texture, 16, 24);
+    try std.testing.expectEqual(@as(f32, 0.25), uv.x);
+    try std.testing.expectEqual(@as(f32, 0.75), uv.y);
+}
+
+fn projectiveModelview(modelview: rl.Matrix) rl.Matrix {
+    return .{
+        .m0 = modelview.m0,
+        .m1 = modelview.m1,
+        .m2 = modelview.m2,
+        .m3 = modelview.m3,
+        .m4 = modelview.m4,
+        .m5 = modelview.m5,
+        .m6 = modelview.m6,
+        .m7 = modelview.m7,
+        .m8 = modelview.m12,
+        .m9 = modelview.m13,
+        .m10 = modelview.m14,
+        .m11 = modelview.m15,
+        .m12 = 0,
+        .m13 = 0,
+        .m14 = 0,
+        .m15 = 0,
+    };
+}
+
+fn textureQuadIsProjective(weights: [4]f32) bool {
+    return weights[0] != weights[1] or weights[0] != weights[2] or weights[0] != weights[3];
+}
+
+test "projective modelview scales the complete transformed position by q" {
+    const modelview = rl.Matrix{
+        .m0 = 2,
+        .m1 = 0,
+        .m2 = 0,
+        .m3 = 0,
+        .m4 = 0,
+        .m5 = 3,
+        .m6 = 0,
+        .m7 = 0,
+        .m8 = 0,
+        .m9 = 0,
+        .m10 = 1,
+        .m11 = 0,
+        .m12 = 5,
+        .m13 = -7,
+        .m14 = 0,
+        .m15 = 1,
+    };
+    const projective = projectiveModelview(modelview);
+    const x: f32 = 11;
+    const y: f32 = 13;
+    const q: f32 = 0.4;
+
+    const transformed_x = projective.m0 * (x * q) + projective.m4 * (y * q) + projective.m8 * q + projective.m12;
+    const transformed_y = projective.m1 * (x * q) + projective.m5 * (y * q) + projective.m9 * q + projective.m13;
+    const transformed_w = projective.m3 * (x * q) + projective.m7 * (y * q) + projective.m11 * q + projective.m15;
+
+    try std.testing.expectApproxEqAbs(q * (2 * x + 5), transformed_x, 0.0001);
+    try std.testing.expectApproxEqAbs(q * (3 * y - 7), transformed_y, 0.0001);
+    try std.testing.expectApproxEqAbs(q, transformed_w, 0.0001);
+}
+
+test "equal quad weights retain the batched affine fast path" {
+    try std.testing.expect(!textureQuadIsProjective(.{ 1, 1, 1, 1 }));
+    try std.testing.expect(textureQuadIsProjective(.{ 1, 0.75, 0.5, 0.8 }));
+}
+
+/// Draw a texture source region across a validated planar projection.
 pub fn drawTextureQuad(texture: Texture, args: anytype) void {
     const tint = colorToRl(args.tint);
+    if (texture.width <= 0 or texture.height <= 0) return;
+    const uv_top_left = textureRegionUv(texture, args.source.x, args.source.y);
+    const uv_bottom_left = textureRegionUv(texture, args.source.x, args.source.y + args.source.height);
+    const uv_bottom_right = textureRegionUv(texture, args.source.x + args.source.width, args.source.y + args.source.height);
+    const uv_top_right = textureRegionUv(texture, args.source.x + args.source.width, args.source.y);
+
+    const uvs = [_]rl.Vector2{ uv_top_left, uv_bottom_left, uv_bottom_right, uv_top_right };
+    const vertices = [_]rl.Vector2{
+        toVector2(args.top_left),
+        toVector2(args.bottom_left),
+        toVector2(args.bottom_right),
+        toVector2(args.top_right),
+    };
+    const weights = [_]f32{
+        args.q_top_left,
+        args.q_bottom_left,
+        args.q_bottom_right,
+        args.q_top_right,
+    };
+    // Horizontal/vertical Tiled flips can reverse the destination winding.
+    // Reverse vertex/UV pairs together so raylib's back-face culling still
+    // accepts the quad without changing global rlgl state for every tile.
+    const cross = (vertices[1].x - vertices[0].x) * (vertices[2].y - vertices[0].y) -
+        (vertices[1].y - vertices[0].y) * (vertices[2].x - vertices[0].x);
+    const order = if (cross > 0)
+        [_]usize{ 3, 2, 1, 0 }
+    else
+        [_]usize{ 0, 1, 2, 3 };
+
+    const projective = textureQuadIsProjective(weights);
+    const saved_modelview = if (projective) rl.rlGetMatrixModelview() else undefined;
+    if (projective) {
+        // Earlier batched vertices must use the matrix active when they were
+        // submitted. Flush this quad before restoring that matrix as well.
+        rl.rlDrawRenderBatchActive();
+        rl.rlSetMatrixModelview(projectiveModelview(saved_modelview));
+    }
 
     rl.rlSetTexture(texture.id);
     rl.rlBegin(rl.RL_QUADS);
     rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
-    rl.rlTexCoord2f(0, 0);
-    rl.rlVertex2f(args.top_left.x, args.top_left.y);
-    rl.rlTexCoord2f(0, 1);
-    rl.rlVertex2f(args.bottom_left.x, args.bottom_left.y);
-    rl.rlTexCoord2f(1, 1);
-    rl.rlVertex2f(args.bottom_right.x, args.bottom_right.y);
-    rl.rlTexCoord2f(1, 0);
-    rl.rlVertex2f(args.top_right.x, args.top_right.y);
+    for (order) |i| {
+        rl.rlTexCoord2f(uvs[i].x, uvs[i].y);
+        if (projective) {
+            const q = weights[i];
+            rl.rlVertex3f(vertices[i].x * q, vertices[i].y * q, q);
+        } else {
+            rl.rlVertex2f(vertices[i].x, vertices[i].y);
+        }
+    }
     rl.rlEnd();
+    if (projective) {
+        rl.rlDrawRenderBatchActive();
+        rl.rlSetMatrixModelview(saved_modelview);
+    } else {
+        rl.rlSetTexture(0);
+    }
 }
 
 /// Measure text with a null-terminated string.
@@ -453,6 +916,36 @@ pub fn endMode2D() void {
     rl.EndMode2D();
 }
 
+/// Redirect subsequent draws to an offscreen framebuffer.
+pub fn beginTextureMode(target: RenderTexture) void {
+    rl.BeginTextureMode(target);
+}
+
+/// Restore drawing to the previous framebuffer.
+pub fn endTextureMode() void {
+    rl.EndTextureMode();
+}
+
+/// Apply a custom shader to subsequent draw calls.
+pub fn beginShaderMode(shader: Shader) void {
+    rl.BeginShaderMode(shader);
+}
+
+/// Restore raylib's default shader.
+pub fn endShaderMode() void {
+    rl.EndShaderMode();
+}
+
+/// Apply one of raylib's built-in blend equations.
+pub fn beginBlendMode(mode: c_int) void {
+    rl.BeginBlendMode(mode);
+}
+
+/// Restore normal alpha blending.
+pub fn endBlendMode() void {
+    rl.EndBlendMode();
+}
+
 /// End drawing frame.
 pub fn endDrawing() void {
     rl.EndDrawing();
@@ -525,6 +1018,16 @@ pub fn showCursor() void {
 /// Hide the OS cursor.
 pub fn hideCursor() void {
     rl.HideCursor();
+}
+
+/// Lock and hide the OS cursor.
+pub fn disableCursor() void {
+    rl.DisableCursor();
+}
+
+/// Unlock the OS cursor and make it visible.
+pub fn enableCursor() void {
+    rl.EnableCursor();
 }
 
 /// Set window size.
@@ -700,6 +1203,26 @@ pub fn playSound(sound: Sound) void {
     rl.PlaySound(sound);
 }
 
+/// Stop a native sound and rewind it.
+pub fn stopSound(sound: Sound) void {
+    rl.StopSound(sound);
+}
+
+/// Pause a native sound.
+pub fn pauseSound(sound: Sound) void {
+    rl.PauseSound(sound);
+}
+
+/// Resume a paused native sound.
+pub fn resumeSound(sound: Sound) void {
+    rl.ResumeSound(sound);
+}
+
+/// Check whether a native sound is currently playing.
+pub fn isSoundPlaying(sound: Sound) bool {
+    return rl.IsSoundPlaying(sound);
+}
+
 /// Set a native sound's volume.
 pub fn setSoundVolume(sound: Sound, volume: f32) void {
     rl.SetSoundVolume(sound, clampF32(volume, 0.0, 1.0));
@@ -768,6 +1291,31 @@ pub fn setMusicLooping(stream: *Music, looping: bool) void {
     stream.looping = looping;
 }
 
+/// Check whether a native music stream is currently playing.
+pub fn isMusicPlaying(stream: Music) bool {
+    return rl.IsMusicStreamPlaying(stream);
+}
+
+/// Seek a native music stream to a position in seconds.
+pub fn seekMusic(stream: Music, seconds: f32) void {
+    rl.SeekMusicStream(stream, @max(0, seconds));
+}
+
+/// Return a native music stream's duration in seconds.
+pub fn musicLength(stream: Music) f32 {
+    return rl.GetMusicTimeLength(stream);
+}
+
+/// Return a native music stream's current playback position in seconds.
+pub fn musicTimePlayed(stream: Music) f32 {
+    return rl.GetMusicTimePlayed(stream);
+}
+
+/// Set global audio output volume.
+pub fn setMasterVolume(volume: f32) void {
+    rl.SetMasterVolume(clampF32(volume, 0, 1));
+}
+
 /// Keyboard key enum for type-safe key handling.
 pub const Key = enum(c_int) {
     space = rl.KEY_SPACE,
@@ -811,6 +1359,12 @@ pub fn getMousePosition() Vec2 {
     return .{ .x = pos.x, .y = pos.y };
 }
 
+/// Get mouse movement since the previous frame.
+pub fn getMouseDelta() Vec2 {
+    const delta = rl.GetMouseDelta();
+    return .{ .x = delta.x, .y = delta.y };
+}
+
 /// Check if a mouse button is down.
 pub fn isMouseButtonDown(button: MouseButton) bool {
     return rl.IsMouseButtonDown(@intFromEnum(button));
@@ -829,6 +1383,12 @@ pub fn isMouseButtonReleased(button: MouseButton) bool {
 /// Get mouse wheel movement.
 pub fn getMouseWheelMove() f32 {
     return rl.GetMouseWheelMove();
+}
+
+/// Get horizontal and vertical mouse wheel movement.
+pub fn getMouseWheelMoveV() Vec2 {
+    const movement = rl.GetMouseWheelMoveV();
+    return .{ .x = movement.x, .y = movement.y };
 }
 
 /// Get screen width.

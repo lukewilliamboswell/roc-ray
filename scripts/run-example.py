@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-LOCAL_PLATFORM_REF = '"../platform/main-default.roc"'
+LOCAL_PLATFORM_REF = '"../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
@@ -38,7 +38,7 @@ def local_platform_ref(example: Path):
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run a RocRay example against platform/main-default.roc"
+        description="Run a RocRay example against platform/main.roc"
     )
     parser.add_argument("example", type=Path, help="Example file, e.g. examples/cave_climb.roc")
     parser.add_argument(

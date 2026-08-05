@@ -17,7 +17,7 @@ BUNDLE_SUFFIX = ".tar.zst"
 DEFAULT_TEST_OS = ["ubuntu-latest", "macos-15-intel", "macos-latest", "windows-latest"]
 WAYLAND_TEST_OS = ["ubuntu-latest"]
 PLATFORM_REF_RE = re.compile(
-    r'"(?:\.\./platform/main-default\.roc|'
+    r'"(?:\.\./platform/main\.roc|'
     r'https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^\"]+\.tar\.zst)"'
 )
 

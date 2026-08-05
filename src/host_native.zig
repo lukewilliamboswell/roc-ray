@@ -69,6 +69,7 @@ var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init
 /// host context. Keep the active per-process helper context here for callbacks.
 var active_roc_host: ?*RocHost = null;
 var active_headless = false;
+var active_mouse_cursor_code: u8 = 255;
 
 /// Unit tests exercise host ownership in headless mode; native rendering has
 /// its own opt-in graphical smoke target and must not leak GUI link dependencies.
@@ -2053,7 +2054,11 @@ fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
 
 fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
     if (active_headless) return;
-    raylib.setMouseCursor(mouseCursorFromCode(cursor));
+    const next = mouseCursorFromCode(cursor);
+    const next_code: u8 = @intCast(@intFromEnum(next));
+    if (active_mouse_cursor_code == next_code) return;
+    raylib.setMouseCursor(next);
+    active_mouse_cursor_code = next_code;
 }
 
 test "mouse cursor codes map invalid values to default" {
@@ -2752,6 +2757,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     defer raylib.closeWindow();
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
     if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
+    active_mouse_cursor_code = 255;
 
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
     // (not uniformly available across our -nostdlib targets) and instead use

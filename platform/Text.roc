@@ -3,13 +3,15 @@
 ## Measurement is a hosted effect. Prepare text once when content/style changes,
 ## then draw the prepared value without measuring again.
 import Color
+import Draw
+import DrawHost
 import Math
 
 Text := [].{
 
-	## Host-owned font handle. The host unloads fonts at shutdown, so this does
-	## not need a refcounted Roc allocation.
-	Font : U64
+	## Draw owns the host resource lifecycle; prepared text retains loaded fonts
+	## through the same ARC value as all other drawing APIs.
+	Font : Draw.Font
 
 	HAlign : [Left, Center, Right]
 
@@ -30,35 +32,9 @@ Text := [].{
 		size : I32,
 	}
 
-	Raw : {
-		pos : Math.Vec2,
-		text : Str,
-		size : F32,
-		spacing : F32,
-		color : Color,
-		font : U64,
-	}
-
-	MeasureRaw : {
-		text : Str,
-		size : F32,
-		spacing : F32,
-		font : U64,
-	}
-
 	Placement : {
 		pos : Math.Vec2,
 		color : Color,
-		align : Align,
-	}
-
-	Measured : {
-		pos : Math.Vec2,
-		text : Str,
-		size : F32,
-		spacing : F32,
-		color : Color,
-		font : Font,
 		align : Align,
 	}
 
@@ -78,46 +54,40 @@ Text := [].{
 		font = |builder, value| { ..builder, font: value }
 
 		measure! : Builder => Size
-		measure! = |builder| Text.measure!(builder)
+		measure! = |builder| Text.measure_builder!(builder)
 
-		prepare! : Builder => Prepared
-		prepare! = |builder| Text.prepare!(builder)
+		## Cache immutable UTF-8 text, font/style, and measurement in the host.
+		prepare! : Builder => Try(Prepared, [ResourceLimit, ..])
+		prepare! = |builder| Text.prepare_builder!(builder)
 	}
 
+	## Host-owned immutable text. Its ARC handle retains any loaded font and its
+	## cached native NUL-terminated bytes are reused by every draw.
 	Prepared :: {
-		content : Str,
-		size : F32,
-		spacing : F32,
-		font : Font,
+		resource : DrawHost.PreparedText,
 		measured : Size,
 	}.{
 		bounds : Prepared -> Size
-		bounds = |prepared| prepared.measured
+		bounds = |Prepared.(prepared)| prepared.measured
 
-		draw! : Prepared, Placement => {}
-		draw! = |prepared, placement| {
-			Text.draw!({
-				text: prepared,
-				pos: placement.pos,
-				color: placement.color,
-				align: placement.align,
-			})
-		}
+		draw! : Prepared, Draw.Frame, Placement => {}
+		draw! = |prepared, frame, placement|
+			Text.draw_prepared!(
+				frame,
+				{
+					text: prepared,
+					pos: placement.pos,
+					color: placement.color,
+					align: placement.align,
+				},
+			)
 	}
 
-	## Hosted effects - implemented by the host.
-	load_font_raw! : LoadFont => U64
-	measure_raw! : MeasureRaw => Size
-	draw_raw! : Raw => {}
-
 	default_font : Font
-	default_font = 0
-
-	font_handle : Font -> U64
-	font_handle = |handle| handle
+	default_font = Draw.default_font
 
 	default_spacing : F32
-	default_spacing = 1
+	default_spacing = Draw.default_spacing
 
 	from : Str -> Builder
 	from = |content| {
@@ -127,33 +97,41 @@ Text := [].{
 		font: Text.default_font,
 	}
 
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ..])
-	load_font! = |cfg| {
-		handle = Text.load_font_raw!(cfg)
-		if handle == 0 {
-			Err(FontLoadFailed)
-		} else {
-			Ok(handle)
-		}
-	}
+	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
+	load_font! = |cfg| Draw.load_font!(cfg)
 
-	measure! : Builder => Size
-	measure! = |builder| {
-		Text.measure_raw!({
+	measure_builder! : Builder => Size
+	measure_builder! = |builder| {
+		Draw.measure_text!({
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
-			font: Text.font_handle(builder.font),
+			font: builder.font,
 		})
 	}
 
-	prepare! : Builder => Prepared
-	prepare! = |builder| {
-		content: builder.content,
-		size: builder.size,
-		spacing: builder.spacing,
-		font: builder.font,
-		measured: Text.measure!(builder),
+	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
+	prepare_builder! = |builder| {
+		result = DrawHost.prepare_text!({
+			text: builder.content,
+			size: builder.size,
+			spacing: builder.spacing,
+			font: builder.font,
+		})
+		if result.err == 2 {
+			Err(ResourceLimit)
+		} else if result.err != 0 {
+			crash "prepared text host invariant failed"
+		} else {
+			Ok(
+				Prepared.(
+					{
+						resource: result.prepared,
+						measured: { width: result.width, height: result.height },
+					},
+				),
+			)
+		}
 	}
 
 	align_top_left : Align
@@ -206,23 +184,11 @@ Text := [].{
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
-	draw! : { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
-	draw! = |cfg| {
-		pos = Text.origin_for(cfg.pos, cfg.text.measured, cfg.align)
-		Text.draw_raw!({
-			pos,
-			text: cfg.text.content,
-			size: cfg.text.size,
-			spacing: cfg.text.spacing,
-			color: cfg.color,
-			font: Text.font_handle(cfg.text.font),
-		})
-	}
-
-	draw_measured! : Measured => {}
-	draw_measured! = |cfg| {
-		prepared = Text.from(cfg.text).size(cfg.size).spacing(cfg.spacing).font(cfg.font).prepare!()
-		Text.draw!({ text: prepared, pos: cfg.pos, color: cfg.color, align: cfg.align })
+	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
+	draw_prepared! = |_frame, cfg| {
+		Prepared.(prepared) = cfg.text
+		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)
+		DrawHost.draw_prepared_text!({ prepared: prepared.resource, pos, color: cfg.color })
 	}
 }
 

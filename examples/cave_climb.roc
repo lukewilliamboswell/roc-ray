@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -237,11 +237,7 @@ air_drag = 0.35
 
 init! : App.Init(Model, _)
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Cave Climb",
-		target_fps: 120,
-	},
+	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
 	|_host| {
 		tiles = Assets.load_texture!(tiles_path)?
 		characters = Assets.load_texture!(characters_path)?
@@ -282,7 +278,7 @@ init! = App.init(
 				"goal",
 				Goal,
 			)
-			.build()
+			.build()?
 		level = level_from_tilemap(tilemap)
 		Ok({ tiles, characters, enemies_texture, background, level, world: new_world(level) })
 	},
@@ -327,7 +323,7 @@ new_world = |level| {
 
 level_from_tilemap : Tilemap -> Level
 level_from_tilemap = |tilemap| {
-	raw = Tilemap.raw_map(tilemap)
+	raw = tilemap.raw_map()
 	spawn = map_to_world(object_role_center_or(tilemap, Spawn, { x: 160, y: 2520 }))
 	goal = map_to_world(object_role_center_or(tilemap, Goal, { x: 832, y: 260 }))
 
@@ -346,16 +342,16 @@ level_from_tilemap = |tilemap| {
 
 object_role_center_or : Tilemap, Tilemap.ObjectRole, Math.Vec2 -> Math.Vec2
 object_role_center_or = |tilemap, role, fallback|
-	match Tilemap.first_object(tilemap, role) {
-		Ok(object) => Tilemap.object_world_center(tilemap, object)
+	match tilemap.first_object(role) {
+		Ok(object) => tilemap.object_world_center(object)
 		Err(_) => fallback
 	}
 
 gems_from_tilemap : Tilemap -> List(Gem)
 gems_from_tilemap = |tilemap| {
 	var $gems = []
-	for object in Tilemap.objects_with_role(tilemap, Collectible) {
-		$gems = List.append($gems, { id: object.id, pos: map_to_world(Tilemap.object_world_center(tilemap, object)), taken: Bool.False })
+	for object in tilemap.objects_with_role(Collectible) {
+		$gems = List.append($gems, { id: object.id, pos: map_to_world(tilemap.object_world_center(object)), taken: Bool.False })
 	}
 	$gems
 }
@@ -363,11 +359,11 @@ gems_from_tilemap = |tilemap| {
 hazards_from_tilemap : Tilemap.RawMap, Tilemap -> List(Danger)
 hazards_from_tilemap = |raw, tilemap| {
 	var $hazards = []
-	for object in Tilemap.objects_with_role(tilemap, Hazard) {
+	for object in tilemap.objects_with_role(Hazard) {
 		$hazards = List.append(
 			$hazards,
 			{
-				pos: map_to_world(Tilemap.object_world_center(tilemap, object)),
+				pos: map_to_world(tilemap.object_world_center(object)),
 				radius: Tilemap.property_f32(raw, object, "radius", 30),
 			},
 		)
@@ -378,8 +374,8 @@ hazards_from_tilemap = |raw, tilemap| {
 mirrors_from_tilemap : Tilemap.RawMap, Tilemap -> List(Mirror)
 mirrors_from_tilemap = |raw, tilemap| {
 	var $mirrors = []
-	for object in Tilemap.objects_typed(tilemap, "mirror") {
-		center = Tilemap.object_world_center(tilemap, object)
+	for object in tilemap.objects_typed("mirror") {
+		center = tilemap.object_world_center(object)
 		length = Tilemap.property_f32(raw, object, "length", F32.max(F32.max(object.width, object.height), 88))
 		$mirrors = List.append(
 			$mirrors,
@@ -398,12 +394,12 @@ mirrors_from_tilemap = |raw, tilemap| {
 enemies_from_tilemap : Tilemap.RawMap, Tilemap -> List(Enemy)
 enemies_from_tilemap = |raw, tilemap| {
 	var $enemies = []
-	for object in Tilemap.objects_typed(tilemap, "enemy") {
+	for object in tilemap.objects_typed("enemy") {
 		$enemies = List.append(
 			$enemies,
 			{
 				id: object.id,
-				pos: map_to_world(Tilemap.object_world_center(tilemap, object)),
+				pos: map_to_world(tilemap.object_world_center(object)),
 				radius: Tilemap.property_f32(raw, object, "radius", 28),
 				alive: Bool.True,
 			},
@@ -429,8 +425,8 @@ default_enemies = [
 checkpoints_from_tilemap : Tilemap -> List(Physics.Point)
 checkpoints_from_tilemap = |tilemap| {
 	var $checkpoints = []
-	for object in Tilemap.objects_with_role(tilemap, Checkpoint) {
-		$checkpoints = List.append($checkpoints, map_to_world(Tilemap.object_world_center(tilemap, object)))
+	for object in tilemap.objects_with_role(Checkpoint) {
+		$checkpoints = List.append($checkpoints, map_to_world(tilemap.object_world_center(object)))
 	}
 	$checkpoints
 }
@@ -440,8 +436,8 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 input_axis : Host -> F32
 input_axis = |host| {
-	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
-	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	left = host.key_down(KeyLeft) or host.key_down(KeyA)
+	right = host.key_down(KeyRight) or host.key_down(KeyD)
 	axis(left, right)
 }
 
@@ -487,19 +483,16 @@ unit_from_turn : F32 -> Physics.Vector
 unit_from_turn = |turn| Physics.normalize(Physics.vector(cos_turn(turn), sin_turn(turn), 0))
 
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
-screen_to_map = |camera, screen| {
-	x: camera.target.x + (screen.x - camera.offset.x) / camera.zoom,
-	y: camera.target.y + (screen.y - camera.offset.y) / camera.zoom,
-}
+screen_to_map = |camera, screen| camera.screen_to_world(screen)
 
 tool_input : Host, Camera.Camera2D -> ToolInput
 tool_input = |host, camera| {
 	aim = map_to_world(screen_to_map(camera, { x: host.mouse.x, y: host.mouse.y }))
 	{
 		aim,
-		laser_down: Mouse.button_down(host.mouse, Left),
-		hook_down: Mouse.button_down(host.mouse, Right),
-		hook_pressed: Mouse.button_pressed(host.mouse, Right),
+		laser_down: host.mouse.button_down(Left),
+		hook_down: host.mouse.button_down(Right),
+		hook_pressed: host.mouse.button_pressed(Right),
 	}
 }
 
@@ -510,7 +503,7 @@ player_rect_at = |pos| {
 }
 
 solid_probe : Level, Physics.Point -> Bool
-solid_probe = |level, point| Tilemap.solid_at_world(level.tilemap, world_to_map(point))
+solid_probe = |level, point| level.tilemap.solid_at_world(world_to_map(point))
 
 player_hits_solid : Level, Physics.Point, F32 -> Bool
 player_hits_solid = |level, pos, bottom_inset| {
@@ -943,21 +936,21 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
-	if Keys.key_pressed(host, KeyEscape) {
-		Host.exit!(0)
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! = |model, host, frame| {
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
 
-	restart = Keys.key_pressed(host, KeySpace)
-	input_camera = camera_for(model.level, model.world.player.pos)
+	restart = host.key_pressed(KeySpace)
+	input_camera = camera_for(model.level, model.world.player.pos)?
 	input = tool_input(host, input_camera)
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
 			model.world,
 			input_axis(host),
-			Keys.key_pressed(host, KeySpace) or Keys.key_pressed(host, KeyUp) or Keys.key_pressed(host, KeyW),
+			host.key_pressed(KeySpace) or host.key_pressed(KeyUp) or host.key_pressed(KeyW),
 			input,
 			host.frame_time,
 		)
@@ -966,23 +959,23 @@ render! = |model, host| {
 	}
 
 	next = { ..model, world: next_world }
-	camera = camera_for(model.level, next_world.player.pos)
+	camera = camera_for(model.level, next_world.player.pos)?
+	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
-	Draw.draw!(
-		Color.from_hex_rgb(0x101820),
-		|| {
-			Draw.with_camera!(
-				camera,
-				|| draw_world!(next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world),
-			)
-			draw_hud!(next.level, next.world)
+	frame.clear!(Color.from_hex_rgb(0x101820))
+	frame.with_camera!(
+		camera,
+		|world_frame| {
+			draw_world!(world_frame, next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport)
+			Ok({})
 		},
-	)
+	)?
+	draw_hud!(frame, next.level, next.world)
 
 	Ok(next)
 }
 
-camera_for : Level, Physics.Point -> Camera.Camera2D
+camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 camera_for = |level, target| {
 	map_target = world_to_map(target)
 	zoom = 0.96
@@ -995,19 +988,19 @@ camera_for = |level, target| {
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
 
-draw_world! : Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World => {}
-draw_world! = |level, background, tiles, characters, enemies_texture, world| {
-	Draw.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
-	Draw.texture!({ texture: background, source: Assets.rect(background), dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
-	Tilemap.draw_all!(level.tilemap)
-	draw_checkpoints!(tiles, level, world)
-	draw_goal!(tiles, level, world)
-	draw_gems!(tiles, world.gems, world.phase)
-	draw_hazard_marks!(tiles, level.hazards, world.phase)
-	draw_mirrors!(level.mirrors, world.phase)
-	draw_enemies!(enemies_texture, world.enemies, world.phase)
-	draw_tools!(world)
-	draw_player!(characters, world.player)
+draw_world! : Draw.Frame, Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World, Math.Rect => {}
+draw_world! = |frame, level, background, tiles, characters, enemies_texture, world, viewport| {
+	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
+	frame.texture!({ texture: background.view(), source: background.rect(), dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
+	level.tilemap.draw_all_in!(frame, viewport)
+	draw_checkpoints!(frame, tiles, level, world)
+	draw_goal!(frame, tiles, level, world)
+	draw_gems!(frame, tiles, world.gems, world.phase)
+	draw_hazard_marks!(frame, tiles, level.hazards, world.phase)
+	draw_mirrors!(frame, level.mirrors, world.phase)
+	draw_enemies!(frame, enemies_texture, world.enemies, world.phase)
+	draw_tools!(frame, world)
+	draw_player!(frame, characters, world.player)
 }
 
 gem_source : Math.Rect
@@ -1040,8 +1033,8 @@ player_walk_a_source = Math.rect(384, 512, 128, 128)
 player_walk_b_source : Math.Rect
 player_walk_b_source = Math.rect(384, 384, 128, 128)
 
-draw_tile_sprite! : Assets.Texture, Math.Rect, Math.Vec2, F32, F32 => {}
-draw_tile_sprite! = |texture, source, pos, scale, rotation|
+draw_tile_sprite! : Draw.Frame, Assets.Texture, Math.Rect, Math.Vec2, F32, F32 => {}
+draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 	Sprite.from_texture(texture)
 		.source(
 			source,
@@ -1056,31 +1049,31 @@ draw_tile_sprite! = |texture, source, pos, scale, rotation|
 		.rotation(
 			rotation,
 		)
-		.draw!()
+		.draw!(frame)
 
-draw_gems! : Assets.Texture, List(Gem), F32 => {}
-draw_gems! = |tiles, gems, phase| {
+draw_gems! : Draw.Frame, Assets.Texture, List(Gem), F32 => {}
+draw_gems! = |frame, tiles, gems, phase| {
 	for gem in gems {
 		if !(gem.taken) {
 			pos = world_to_map(gem.pos)
 			pulse = 0.86 + ping_pong(wrap_unit(phase + U64.to_f32(gem.id) * 0.07)) * 0.12
-			Draw.circle_gradient!({ center: pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
-			draw_tile_sprite!(tiles, gem_source, pos, 0.72 * pulse, phase * 60)
+			frame.circle_gradient!({ center: pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
+			draw_tile_sprite!(frame, tiles, gem_source, pos, 0.72 * pulse, phase * 60)
 		}
 	}
 }
 
-draw_hazard_marks! : Assets.Texture, List(Danger), F32 => {}
-draw_hazard_marks! = |tiles, hazards, phase| {
+draw_hazard_marks! : Draw.Frame, Assets.Texture, List(Danger), F32 => {}
+draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	for hazard in hazards {
 		pos = world_to_map(hazard.pos)
-		Draw.circle_gradient!({ center: pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
-		draw_tile_sprite!(tiles, saw_source, pos, 0.78, phase * 260)
+		frame.circle_gradient!({ center: pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
+		draw_tile_sprite!(frame, tiles, saw_source, pos, 0.78, phase * 260)
 	}
 }
 
-draw_checkpoints! : Assets.Texture, Level, World => {}
-draw_checkpoints! = |tiles, level, world| {
+draw_checkpoints! : Draw.Frame, Assets.Texture, Level, World => {}
+draw_checkpoints! = |frame, tiles, level, world| {
 	for checkpoint in level.checkpoints {
 		checkpoint_pos = world_to_map(checkpoint)
 		reached = checkpoint_pos.y >= (world_to_map(world.checkpoint)).y
@@ -1099,21 +1092,21 @@ draw_checkpoints! = |tiles, level, world| {
 			.tint(
 				tint,
 			)
-		sprite.draw!()
+		sprite.draw!(frame)
 	}
 }
 
-draw_goal! : Assets.Texture, Level, World => {}
-draw_goal! = |tiles, level, world| {
+draw_goal! : Draw.Frame, Assets.Texture, Level, World => {}
+draw_goal! = |frame, tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
 	pos = world_to_map(level.goal)
 	color = if ready Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
-	Draw.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
-	draw_tile_sprite!(tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
+	frame.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
+	draw_tile_sprite!(frame, tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
 }
 
-draw_mirrors! : List(Mirror), F32 => {}
-draw_mirrors! = |mirrors, phase| {
+draw_mirrors! : Draw.Frame, List(Mirror), F32 => {}
+draw_mirrors! = |frame, mirrors, phase| {
 	for mirror in mirrors {
 		segment = mirror_segment(mirror, phase)
 		start = world_to_map(segment.start)
@@ -1121,12 +1114,12 @@ draw_mirrors! = |mirrors, phase| {
 		center = world_to_map(mirror.pos)
 		glass = Color.from_hex_rgb(0xbaf2ff)
 		edge = Color.from_hex_rgb(0x3a506b)
-		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
-		Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
-		Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-		Draw.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
-		Draw.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
-		Draw.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
+		frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
+		frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(glass, 245), 8) })
+		frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+		frame.circle!({ center: start, radius: 6, style: Draw.filled(edge) })
+		frame.circle!({ center: end, radius: 6, style: Draw.filled(edge) })
+		frame.circle!({ center, radius: 5, style: Draw.filled(Color.with_alpha(Color.white, 230)) })
 	}
 }
 
@@ -1136,40 +1129,40 @@ enemy_source = |enemy, phase| {
 	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
 }
 
-draw_enemies! : Assets.Texture, List(Enemy), F32 => {}
-draw_enemies! = |texture, enemies, phase| {
+draw_enemies! : Draw.Frame, Assets.Texture, List(Enemy), F32 => {}
+draw_enemies! = |frame, texture, enemies, phase| {
 	for enemy in enemies {
 		if enemy.alive {
 			pos = world_to_map(enemy.pos)
 			pulse = 0.9 + ping_pong(wrap_unit(phase + U64.to_f32(enemy.id) * 0.09)) * 0.08
-			Draw.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
-			draw_tile_sprite!(texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
+			frame.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
+			draw_tile_sprite!(frame, texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
 		}
 	}
 }
 
-draw_tools! : World => {}
-draw_tools! = |world| {
-	draw_laser!(world.laser)
-	draw_hook!(world.player, world.hook)
+draw_tools! : Draw.Frame, World => {}
+draw_tools! = |frame, world| {
+	draw_laser!(frame, world.laser)
+	draw_hook!(frame, world.player, world.hook)
 }
 
-draw_laser! : LaserState => {}
-draw_laser! = |laser| {
+draw_laser! : Draw.Frame, LaserState => {}
+draw_laser! = |frame, laser| {
 	if laser.active {
 		laser_color = Color.from_hex_rgb(0x72f7ff)
 		for segment in laser.segments {
 			start = world_to_map(segment.start)
 			end = world_to_map(segment.end)
-			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
-			Draw.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
-			Draw.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
+			frame.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
 		}
 	}
 }
 
-draw_hook! : Player, HookState => {}
-draw_hook! = |player, hook| {
+draw_hook! : Draw.Frame, Player, HookState => {}
+draw_hook! = |frame, player, hook| {
 	start = world_to_map(player.pos)
 	match hook {
 		HookIdle => {}
@@ -1177,18 +1170,18 @@ draw_hook! = |player, hook| {
 			end = world_to_map(projectile.pos)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			hook_color = Color.from_hex_rgb(0xffc857)
-			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
-			Draw.circle!({ center: end, radius: 7, style: Draw.filled(hook_color) })
-			Draw.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
+			frame.circle!({ center: end, radius: 7, style: Draw.filled(hook_color) })
+			frame.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
 		}
 		HookLatched(latch) => {
 			end = world_to_map(latch.anchor)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			anchor_color = Color.from_hex_rgb(0xf9c74f)
-			Draw.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
-			Draw.line!({ start, end, stroke: Draw.stroke(cord, 3) })
-			Draw.circle_gradient!({ center: end, radius: 20, color_inner: Color.with_alpha(anchor_color, 150), color_outer: Color.with_alpha(anchor_color, 0) })
-			Draw.circle!({ center: end, radius: 6, style: Draw.filled(anchor_color) })
+			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
+			frame.line!({ start, end, stroke: Draw.stroke(cord, 3) })
+			frame.circle_gradient!({ center: end, radius: 20, color_inner: Color.with_alpha(anchor_color, 150), color_outer: Color.with_alpha(anchor_color, 0) })
+			frame.circle!({ center: end, radius: 6, style: Draw.filled(anchor_color) })
 		}
 	}
 }
@@ -1205,8 +1198,8 @@ player_source = |player| {
 	}
 }
 
-draw_player! : Assets.Texture, Player => {}
-draw_player! = |characters, player| {
+draw_player! : Draw.Frame, Assets.Texture, Player => {}
+draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
 	pos = world_to_map(player.pos)
 	Sprite.from_texture(characters)
@@ -1223,36 +1216,36 @@ draw_player! = |characters, player| {
 		.tint(
 			tint,
 		)
-		.draw!()
-	Draw.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
+		.draw!(frame)
+	frame.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
 }
 
-draw_hud! : Level, World => {}
-draw_hud! = |level, world| {
-	Draw.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
-	Draw.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	Draw.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
+draw_hud! : Draw.Frame, Level, World => {}
+draw_hud! = |frame, level, world| {
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
+	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 
 	if world.flash > 0 {
-		Draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, 80)) })
+		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, 80)) })
 	}
 
 	match world.state {
 		Playing => {}
-		Won => draw_modal!("Summit reached", "Press SPACE to climb again", Color.from_hex_rgb(0x90be6d))
-		GameOver => draw_modal!("Climb failed", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
+		Won => draw_modal!(frame, "Summit reached", "Press SPACE to climb again", Color.from_hex_rgb(0x90be6d))
+		GameOver => draw_modal!(frame, "Climb failed", "Press SPACE to restart", Color.from_hex_rgb(0xf94144))
 	}
 }
 
-draw_modal! : Str, Str, Color => {}
-draw_modal! = |title, subtitle, accent| {
-	Draw.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
-	Draw.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
-	Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 276 }, text: title, size: 30, color: Color.white })
-	Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
+draw_modal! : Draw.Frame, Str, Str, Color => {}
+draw_modal! = |frame, title, subtitle, accent| {
+	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
+	frame.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })
+	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 276 }, text: title, size: 30, color: Color.white })
+	frame.text_centered!({ pos: { x: screen_w * 0.5, y: 326 }, text: subtitle, size: 21, color: Color.light_gray })
 }
 
 expect physics_distance(Physics.point_xy(0, 0), Physics.point_xy(3, 4)) == 5
@@ -1260,7 +1253,12 @@ expect world_to_map(map_to_world({ x: 10, y: 20 })) == { x: 10, y: 20 }
 expect player_rect_at(map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, player_width, player_height)
 expect tick_timer(0.1, 0.2) == 0
 expect F32.abs(wrap_unit(1.2) - 0.2) < 0.0001
-expect screen_to_map(Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, y: screen_h }, zoom: 2 }), { x: screen_w * 0.5, y: screen_h * 0.5 }) == { x: 100, y: 200 }
+expect {
+	match Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, y: screen_h }, zoom: 2 }) {
+		Ok(camera) => screen_to_map(camera, { x: screen_w * 0.5, y: screen_h * 0.5 }) == { x: 100, y: 200 }
+		Err(_) => Bool.False
+	}
+}
 expect Physics.components(direction_to(Physics.point_xy(0, 0), Physics.point_xy(3, 4), 1)) == { x: 0.6, y: 0.8, z: 0 }
 expect steered_x_velocity(0, 1, Bool.True, 1) == move_speed
 expect steered_x_velocity(20, 0, Bool.True, 1) == 0

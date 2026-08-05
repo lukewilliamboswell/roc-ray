@@ -10,9 +10,7 @@
 ## through `from_code` when you need a backend-specific escape hatch.
 Keys := [].{
 
-	key_count : U64
-	key_count = 349
-
+	## Named raylib keyboard keys plus a validated backend-specific escape hatch.
 	KeyboardKey := [
 		KeyAndroidBack,
 		KeyAndroidMenu,
@@ -127,7 +125,7 @@ Keys := [].{
 	]
 
 	## Validate and wrap a raw raylib key code.
-	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode])
+	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])
 	from_code = |code|
 		if code < key_count {
 			Ok(Raw(code))
@@ -251,13 +249,6 @@ Keys := [].{
 			Raw(code) => code
 		}
 
-	key_state : List(U8), KeyboardKey, U8 -> Bool
-	key_state = |states, key, mask|
-		match List.get(states, key_code(key)) {
-			Ok(state) => U8.bitwise_and(state, mask) != 0
-			Err(_) => False
-		}
-
 	## Check if a specific key is currently held down. Pass `host` directly.
 	key_down : { keys : List(U8), ..state }, KeyboardKey -> Bool
 	key_down = |host, key| key_state(host.keys, key, 1)
@@ -282,3 +273,13 @@ Keys := [].{
 	expect key_down({ keys: [7] }, Raw(0)) and key_pressed({ keys: [7] }, Raw(0)) and key_released({ keys: [7] }, Raw(0))
 
 }
+
+key_count : U64
+key_count = 349
+
+key_state : List(U8), Keys.KeyboardKey, U8 -> Bool
+key_state = |states, key, mask|
+	match List.get(states, Keys.key_code(key)) {
+		Ok(state) => U8.bitwise_and(state, mask) != 0
+		Err(_) => False
+	}

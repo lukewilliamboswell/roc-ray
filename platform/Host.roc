@@ -1,6 +1,9 @@
 ## Host module - provides platform state and system effects
 import Keys
 import Mouse
+import Gamepad
+import HostHost
+import MouseHost
 
 Host := {
 	frame_count : U64,
@@ -24,21 +27,26 @@ Host := {
 	## Packed per-key state, updated in place by the host. Each byte stores held,
 	## pressed-this-frame, and released-this-frame bits. Use the `Keys` helpers.
 	keys : List(U8),
-	mouse : {
 
-		## Packed per-button state, updated in place by the host. Each byte stores
-		## held, pressed-this-frame, and released-this-frame bits.
-		buttons : List(U8),
+	## Unicode codepoints entered this frame, in input order. This is distinct
+	## from physical key state and respects the active keyboard layout. The host
+	## reuses capacity for empty and non-empty frames while this snapshot is
+	## uniquely owned. Retaining an older snapshot triggers copy-on-write; growth
+	## is needed only if the existing capacity is insufficient. At most 32
+	## codepoints are delivered; excess queued input is drained.
+	text_input : List(U32),
 
-		## Convenient held-state aliases for the three primary buttons.
-		left : Bool,
-		middle : Bool,
-		right : Bool,
-		wheel : F32,
-		x : F32,
-		y : F32,
-	},
+	## Gamepad input sampled once per frame. Use the `Gamepad` helpers rather
+	## than indexing these persistent flat lists directly.
+	gamepads : Gamepad.Snapshot,
+
+	## Mouse buttons, position, delta, and two-axis wheel movement sampled once
+	## for this frame. Receiver helpers are available on `Mouse.State`.
+	mouse : Mouse.State,
 }.{
+
+	## Cursor visibility and capture policy applied with `host.set_cursor_mode!`.
+	CursorMode : [Visible, Hidden, Locked]
 
 	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
 	key_down : Host, Keys.KeyboardKey -> Bool
@@ -48,51 +56,41 @@ Host := {
 	key_up : Host, Keys.KeyboardKey -> Bool
 	key_up = |host, key| Keys.key_up(host, key)
 
-	## Check whether a key was pressed this frame.
+	## Check whether a key was pressed this frame. Receiver form:
+	## `host.key_pressed(KeyW)`. Static `Keys.key_pressed(host, KeyW)` remains
+	## available; combine singular queries with `or` when checking alternatives.
 	key_pressed : Host, Keys.KeyboardKey -> Bool
 	key_pressed = |host, key| Keys.key_pressed(host, key)
 
-	## Check whether a key was released this frame.
+	## Check whether a key was released this frame. Receiver form:
+	## `host.key_released(KeyW)`. Static `Keys.key_released(host, KeyW)` remains.
 	key_released : Host, Keys.KeyboardKey -> Bool
 	key_released = |host, key| Keys.key_released(host, key)
 
-	ReadFileRawResult : {
-		ok : Bool,
-		err : U8,
-		contents : Str,
-	}
+	## Resolve a gamepad slot in this frame's sampled snapshot. The returned pad
+	## is snapshot-scoped; query it now rather than retaining it in the model.
+	gamepad : Host, Gamepad.GamepadId -> [Connected(Gamepad.ConnectedPad), Disconnected]
+	gamepad = |host, id| Gamepad.lookup(host.gamepads, id)
 
 	## Exit the application with the given exit code.
 	## The exit happens after the current frame completes to allow proper cleanup.
-	exit! : I32 => {}
-
-	## Hosted cursor setter. Prefer `set_cursor!` in application code.
-	set_cursor_raw! : U8 => {}
-
-	## Set the OS cursor shape.
-	set_cursor! : Mouse.Cursor => {}
-	set_cursor! = |cursor| Host.set_cursor_raw!(Mouse.cursor_code(cursor))
+	exit! : Host, I32 => {}
+	exit! = |_host, code| HostHost.exit!(code)
 
 	## Read an environment variable by key.
 	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env_raw! : Host, Str => Try(Str, [NotFound])
-
-	## Read an environment variable by key.
-	## Returns Ok with the value if found, or Err NotFound if not set.
-	read_env! : Host, Str => Try(Str, [NotFound])
-	read_env! = |host, key|
-		match Host.read_env_raw!(host, key) {
+	read_env! : Host, Str => Try(Str, [NotFound, ..])
+	read_env! = |_host, key|
+		match HostHost.read_env!(key) {
 			Ok(value) => Ok(value)
 			Err(NotFound) => Err(NotFound)
 		}
 
-	## Raw hosted file read. Prefer `read_file!`.
-	read_file_raw! : Str => ReadFileRawResult
-
 	## Read a UTF-8 text file from disk.
-	read_file! : Str => Try(Str, [NotFound, ReadFailed])
-	read_file! = |path| {
-		result = Host.read_file_raw!(path)
+	## Receiver form: `host.read_file!(path)`.
+	read_file! : Host, Str => Try(Str, [NotFound, ReadFailed, ..])
+	read_file! = |_host, path| {
+		result = HostHost.read_file!(path)
 		if result.ok {
 			Ok(result.contents)
 		} else if result.err == 1 {
@@ -105,24 +103,77 @@ Host := {
 	## Get a random integer in the range [min, max] (both endpoints included).
 	## The generator is seeded once at startup, so sequences differ between runs.
 	## Derive other ranges/floats from this, e.g. a random direction with
-	## `if Host.random_i32!(0, 1) == 0 -1 else 1`.
-	random_i32! : I32, I32 => I32
+	## `if host.random_i32!(0, 1) == 0 -1 else 1`.
+	random_i32! : Host, I32, I32 => I32
+	random_i32! = |_host, min, max| HostHost.random_i32!(min, max)
 
-	## Set the window/screen size.
+	## Set the window/screen size to positive integer dimensions.
 	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	set_screen_size_raw! : { width : F32, height : F32 } => Try({}, [NotSupported])
-
-	## Set the window/screen size.
-	## Returns Err NotSupported on platforms that don't support window resizing (e.g., web).
-	set_screen_size! : { width : F32, height : F32 } => Try({}, [NotSupported])
-	set_screen_size! = |size|
-		match Host.set_screen_size_raw!(size) {
-			Ok({}) => Ok({})
-			Err(NotSupported) => Err(NotSupported)
+	## Receiver form: `host.set_screen_size!(size)`.
+	set_screen_size! : Host, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+	set_screen_size! = |_host, size|
+		if size.width <= 0 or size.height <= 0 {
+			Err(InvalidSize)
+		} else {
+			match HostHost.set_screen_size!(size) {
+				Ok({}) => Ok({})
+				Err(NotSupported) => Err(NotSupported)
+			}
 		}
 
 	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
 	## uncapped. This neither selects a software renderer nor controls VSync.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.
-	set_target_fps! : I32 => {}
+	## Receiver form: `host.set_target_fps!(fps)`.
+	set_target_fps! : Host, I32 => {}
+	set_target_fps! = |_host, fps| HostHost.set_target_fps!(fps)
+
+	## Apply cursor visibility/capture atomically through one tagged operation.
+	set_cursor_mode! : Host, CursorMode => {}
+	set_cursor_mode! = |_host, mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
+
+	## Set the native operating-system cursor shape.
+	set_cursor! : Host, Mouse.Cursor => {}
+	set_cursor! = |_host, cursor| MouseHost.set_cursor!(cursor_code(cursor))
+}
+
+cursor_code : Mouse.Cursor -> U8
+cursor_code = |cursor|
+	match cursor {
+		Default => 0
+		Arrow => 1
+		IBeam => 2
+		Crosshair => 3
+		PointingHand => 4
+		ResizeEastWest => 5
+		ResizeNorthSouth => 6
+		ResizeNorthwestSoutheast => 7
+		ResizeNortheastSouthwest => 8
+		ResizeAll => 9
+		NotAllowed => 10
+	}
+
+cursor_mode_code : Host.CursorMode -> U8
+cursor_mode_code = |mode|
+	match mode {
+		Visible => 0
+		Hidden => 1
+		Locked => 2
+	}
+
+compose_public_validations : U64, U64 -> Try({}, [InvalidGamepadIndex, InvalidKeyCode, ..])
+compose_public_validations = |gamepad_index, key_code| {
+	_ = Gamepad.from_index(gamepad_index)?
+	_ = Keys.from_code(key_code)?
+	Ok({})
+}
+
+expect compose_public_validations(0, 0) == Ok({})
+expect match compose_public_validations(4, 0) {
+	Err(InvalidGamepadIndex) => Bool.True
+	_ => Bool.False
+}
+expect match compose_public_validations(0, 999) {
+	Err(InvalidKeyCode) => Bool.True
+	_ => Bool.False
 }

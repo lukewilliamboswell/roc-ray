@@ -126,8 +126,11 @@ copy_shared_roc_files() {
     fi
 
     for roc in "${files[@]}"; do
+        # A tracked module can be intentionally deleted in the worktree before
+        # the deletion is committed (for example while consolidating APIs).
+        [[ -f "$roc" ]] || continue
         case "$(basename "$roc")" in
-            main.roc|main-default.roc|main-wayland.roc)
+            main.roc|main-wayland.roc)
                 ;;
             *)
                 cp "$roc" "$stage_dir/"
@@ -155,7 +158,7 @@ copy_shared_roc_files
 
 case "$package" in
     default)
-        cp "$platform_dir/main-default.roc" "$stage_dir/main.roc"
+        cp "$platform_dir/main.roc" "$stage_dir/main.roc"
 
         copy_target_files x64mac libhost.a libraylib.a
         copy_target_files arm64mac libhost.a libraylib.a

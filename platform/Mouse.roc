@@ -5,61 +5,77 @@
 ## Pass `host.mouse` directly to these helpers.
 Mouse := [].{
 
-	button_count : U64
-	button_count = 7
+	## Mouse input sampled once at the start of the current frame.
+	State := {
+		buttons : List(U8),
+		left : Bool,
+		middle : Bool,
+		right : Bool,
+		wheel : F32,
+		wheel_x : F32,
+		wheel_y : F32,
+		delta_x : F32,
+		delta_y : F32,
+		x : F32,
+		y : F32,
+	}.{
+		button_down : State, MouseButton -> Bool
+		button_down = |mouse, button| Mouse.button_down(mouse, button)
 
-	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
+		## Whether a button is currently up.
+		button_up : State, MouseButton -> Bool
+		button_up = |mouse, button| Mouse.button_up(mouse, button)
 
-	## Cursor shapes supported by raylib. `Default` restores the platform's
-	## standard cursor.
+		## Whether a button was first pressed this frame.
+		button_pressed : State, MouseButton -> Bool
+		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
+
+		## Whether a button was released this frame.
+		button_released : State, MouseButton -> Bool
+		button_released = |mouse, button| Mouse.button_released(mouse, button)
+
+		## Current cursor position in logical drawing coordinates.
+		position : State -> { x : F32, y : F32 }
+		position = |mouse| Mouse.position(mouse)
+
+		## Cursor movement since the previous frame.
+		delta : State -> { x : F32, y : F32 }
+		delta = |mouse| Mouse.delta(mouse)
+
+		## Horizontal and vertical wheel movement for this frame.
+		wheel_delta : State -> { x : F32, y : F32 }
+		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
+	}
+
+	## Native operating-system cursor shapes.
 	Cursor := [
 		Default,
 		Arrow,
 		IBeam,
 		Crosshair,
 		PointingHand,
-		ResizeEw,
-		ResizeNs,
-		ResizeNwse,
-		ResizeNesw,
+		ResizeEastWest,
+		ResizeNorthSouth,
+		ResizeNorthwestSoutheast,
+		ResizeNortheastSouthwest,
 		ResizeAll,
 		NotAllowed,
 	]
 
-	cursor_code : Cursor -> U8
-	cursor_code = |cursor|
-		match cursor {
-			Default => 0
-			Arrow => 1
-			IBeam => 2
-			Crosshair => 3
-			PointingHand => 4
-			ResizeEw => 5
-			ResizeNs => 6
-			ResizeNwse => 7
-			ResizeNesw => 8
-			ResizeAll => 9
-			NotAllowed => 10
-		}
+	## Current cursor position in logical drawing coordinates.
+	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
+	position = |mouse| { x: mouse.x, y: mouse.y }
 
-	button_code : MouseButton -> U64
-	button_code = |button|
-		match button {
-			Left => 0
-			Right => 1
-			Middle => 2
-			Side => 3
-			Extra => 4
-			Forward => 5
-			Back => 6
-		}
+	## Cursor movement since the previous frame, sampled once by the host.
+	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
+	delta = |mouse| { x: mouse.delta_x, y: mouse.delta_y }
 
-	button_state : List(U8), MouseButton, U8 -> Bool
-	button_state = |states, button, mask|
-		match List.get(states, button_code(button)) {
-			Ok(state) => U8.bitwise_and(state, mask) != 0
-			Err(_) => False
-		}
+	## Horizontal and vertical wheel movement sampled for this frame.
+	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
+	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
+
+	## Standard mouse buttons sampled by the platform.
+	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
 
 	## Check if a mouse button is currently held down.
 	button_down : { buttons : List(U8), ..state }, MouseButton -> Bool
@@ -79,8 +95,50 @@ Mouse := [].{
 
 	expect button_code(Left) == 0
 	expect button_code(Back) == 6
+	expect cursor_code(PointingHand) == 4
 	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
-	expect cursor_code(Default) == 0
-	expect cursor_code(NotAllowed) == 10
+	expect {
+		mouse : State
+		mouse = { buttons: [7], left: True, middle: False, right: False, wheel: -2, wheel_x: 1, wheel_y: -2, delta_x: 3, delta_y: 4, x: 10, y: 20 }
+		mouse.position() == { x: 10, y: 20 }
+			and mouse.delta() == { x: 3, y: 4 }
+				and mouse.wheel_delta() == { x: 1, y: -2 }
+					and mouse.button_pressed(Left)
+	}
 
 }
+
+cursor_code : Mouse.Cursor -> U8
+cursor_code = |cursor|
+	match cursor {
+		Default => 0
+		Arrow => 1
+		IBeam => 2
+		Crosshair => 3
+		PointingHand => 4
+		ResizeEastWest => 5
+		ResizeNorthSouth => 6
+		ResizeNorthwestSoutheast => 7
+		ResizeNortheastSouthwest => 8
+		ResizeAll => 9
+		NotAllowed => 10
+	}
+
+button_code : Mouse.MouseButton -> U64
+button_code = |button|
+	match button {
+		Left => 0
+		Right => 1
+		Middle => 2
+		Side => 3
+		Extra => 4
+		Forward => 5
+		Back => 6
+	}
+
+button_state : List(U8), Mouse.MouseButton, U8 -> Bool
+button_state = |states, button, mask|
+	match List.get(states, button_code(button)) {
+		Ok(state) => U8.bitwise_and(state, mask) != 0
+		Err(_) => False
+	}

@@ -1,113 +1,42 @@
+## Application startup configuration and model initialization.
+##
+## Use `App.init` when startup needs effects such as loading host-owned assets.
+## The callback runs after the window, renderer, and audio device are ready.
 import Host
+import AppConfig
 
-AppConfig : {
-	title : Str,
-	width : I32,
-	height : I32,
-	target_fps : I32,
-	resizable : Bool,
-	fullscreen : Bool,
-	vsync : Bool,
-	cursor_visible : Bool,
-}
+App := [].{
 
-App(_field) := { apply : AppConfig -> AppConfig }.{
-	Config : AppConfig
+	## Mutually exclusive frame pacing strategy.
+	FramePacing : AppConfig.FramePacing
+
+	## Initial native cursor mode.
+	CursorMode : AppConfig.CursorMode
+
+	## Opaque validated startup configuration. Update it through receivers.
+	Config : AppConfig.Config
 
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
 	## before the first frame, or let other initialization errors propagate.
 	InitCallback(model, errors) : Host => Try(model, [Exit(I64), ..errors])
 
+	## Startup configuration paired with an effectful model initializer.
 	Init(model, errors) : {
 		config : Config,
 		run! : InitCallback(model, errors),
 	}
 
+	## Default 800x600 window configuration capped at 240 FPS.
 	default : Config
-	default = {
-		title: "Roc + Raylib",
-		width: 800,
-		height: 600,
-		target_fps: 240,
-		resizable: Bool.False,
-		fullscreen: Bool.False,
-		vsync: Bool.False,
-		cursor_visible: Bool.True,
-	}
-
-	map2 : App(a), App(b), (a, b -> c) -> App(c)
-	map2 = |left, right, _combine| {
-		apply: |cfg| (right.apply)((left.apply)(cfg)),
-	}
-
-	config : App(a) -> Config
-	config = |builder| (builder.apply)(App.default)
+	default = AppConfig.default
 
 	## Build app initialization from pure startup config plus the effectful
 	## callback that creates the first model after raylib/audio are ready.
 	init : Config, InitCallback(model, errors) -> Init(model, errors)
 	init = |cfg, callback!| { config: cfg, run!: callback! }
-
-	title : Str -> App(Str)
-	title = |value| {
-		apply: |cfg| { ..cfg, title: value },
-	}
-
-	width : I32 -> App(I32)
-	width = |value| {
-		apply: |cfg| { ..cfg, width: value },
-	}
-
-	height : I32 -> App(I32)
-	height = |value| {
-		apply: |cfg| { ..cfg, height: value },
-	}
-
-	size : { width : I32, height : I32 } -> App({ width : I32, height : I32 })
-	size = |dims| {
-		apply: |cfg| { ..cfg, width: dims.width, height: dims.height },
-	}
-
-	target_fps : I32 -> App(I32)
-	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
-	## uncapped. This neither selects a software renderer nor controls VSync.
-	target_fps = |value| {
-		apply: |cfg| { ..cfg, target_fps: value },
-	}
-
-	resizable : Bool -> App(Bool)
-	resizable = |value| {
-		apply: |cfg| { ..cfg, resizable: value },
-	}
-
-	fullscreen : Bool -> App(Bool)
-	fullscreen = |value| {
-		apply: |cfg| { ..cfg, fullscreen: value },
-	}
-
-	vsync : Bool -> App(Bool)
-	## Request synchronized buffer presentation from the graphics driver.
-	## Actual pacing depends on the driver, window system, and compositor.
-	vsync = |value| {
-		apply: |cfg| { ..cfg, vsync: value },
-	}
-
-	cursor_visible : Bool -> App(Bool)
-	cursor_visible = |value| {
-		apply: |cfg| { ..cfg, cursor_visible: value },
-	}
 }
 
-## TODO(roc#9581): switch examples to imported record-builder syntax once
-## `{ ... }.App` can find App.map2 across platform module imports.
-expect App.map2(App.title("Test"), App.size({ width: 320, height: 240 }), |_, _| {}).config() == {
-	title: "Test",
-	width: 320,
-	height: 240,
-	target_fps: 240,
-	resizable: Bool.False,
-	fullscreen: Bool.False,
-	vsync: Bool.False,
-	cursor_visible: Bool.True,
-}
+expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
+expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
+expect App.default.with_cursor(CursorHidden).cursor() == CursorHidden

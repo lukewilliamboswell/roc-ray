@@ -1,11 +1,10 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.8.3/E6ZmC6ZncTVFG875Xsf6jP2GuZCtLnncQ1YwVwKtT2J4.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Audio
 import rr.Color
 import rr.Draw
 import rr.Host
-import rr.Keys
 import rr.Math
 
 Brick : {
@@ -145,22 +144,18 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
-init! : App.Init(Model, [])
+init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	{
-		..App.default,
-		title: "RocRay Breakout",
-		target_fps: 120,
-	},
+	App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120)),
 	|_host| {
 		Ok({
 			game: new_game_state(),
 			sounds: {
-				paddle: Audio.gen_tone!({ freq: 440, ms: 50 }),
-				brick: Audio.gen_tone!({ freq: 760, ms: 45 }),
-				wall: Audio.gen_tone!({ freq: 260, ms: 40 }),
-				lose: Audio.gen_tone!({ freq: 140, ms: 180 }),
-				start: Audio.gen_tone!({ freq: 520, ms: 70 }),
+				paddle: Audio.gen_tone!({ freq: 440, ms: 50 })?,
+				brick: Audio.gen_tone!({ freq: 760, ms: 45 })?,
+				wall: Audio.gen_tone!({ freq: 260, ms: 40 })?,
+				lose: Audio.gen_tone!({ freq: 140, ms: 180 })?,
+				start: Audio.gen_tone!({ freq: 520, ms: 70 })?,
 			},
 		})
 	},
@@ -258,8 +253,8 @@ fresh_bricks = List.concat(
 
 paddle_move_from_host : Host -> PaddleMove
 paddle_move_from_host = |host| {
-	left = Keys.key_down(host, KeyLeft) or Keys.key_down(host, KeyA)
-	right = Keys.key_down(host, KeyRight) or Keys.key_down(host, KeyD)
+	left = host.key_down(KeyLeft) or host.key_down(KeyA)
+	right = host.key_down(KeyRight) or host.key_down(KeyD)
 
 	if left PaddleLeft else if right PaddleRight else PaddleStill
 }
@@ -275,7 +270,7 @@ paddle_move_dir = |move|
 frame_input : Host -> FrameInput
 frame_input = |host| {
 	paddle_move: paddle_move_from_host(host),
-	action_pressed: Keys.key_pressed(host, KeySpace),
+	action_pressed: host.key_pressed(KeySpace),
 	dt: host.frame_time,
 }
 
@@ -426,76 +421,74 @@ play_step_events! : Sounds, List(StepEvent) => {}
 play_step_events! = |sounds, events| {
 	for event in events {
 		match event {
-			GameStarted => Audio.play!(sounds.start)
-			WallHit => Audio.play!(sounds.wall)
-			BrickHit(_) => Audio.play!(sounds.brick)
-			LifeLost(_) => Audio.play!(sounds.lose)
-			WallCleared => Audio.play!(sounds.start)
+			GameStarted => sounds.start.play!()
+			WallHit => sounds.wall.play!()
+			BrickHit(_) => sounds.brick.play!()
+			LifeLost(_) => sounds.lose.play!()
+			WallCleared => sounds.start.play!()
 		}
 	}
 }
 
-render! : Model, Host => Try(Model, [Exit(I64), ..])
-render! = |model, host| {
-	if Keys.key_pressed(host, KeyEscape) {
-		Host.exit!(0)
+render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, host, frame| {
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
 
 	result = advance_game(model.game, frame_input(host))
 	if result.paddle_hit {
-		Audio.play!(model.sounds.paddle)
+		model.sounds.paddle.play!()
 	}
 	play_step_events!(model.sounds, result.events)
 	next = { ..model, game: result.game }
 
-	Draw.draw!(
-		Color.ray_white,
-		|| draw_game!(next.game),
-	)
+	frame.clear!(Color.ray_white)
+	draw_game!(frame, next.game)
 
 	Ok(next)
 }
 
-draw_brick! : Brick => {}
-draw_brick! = |brick|
-	Draw.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
+draw_brick! : Draw.Frame, Brick => {}
+draw_brick! = |frame, brick|
+	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
 
-draw_bricks! : List(Brick) => {}
-draw_bricks! = |bricks| {
+draw_bricks! : Draw.Frame, List(Brick) => {}
+draw_bricks! = |frame, bricks| {
 	for brick in bricks {
-		draw_brick!(brick)
+		draw_brick!(frame, brick)
 	}
 }
 
-draw_game! : Game => {}
-draw_game! = |game| {
-	Draw.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
-	Draw.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
-	Draw.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
-	Draw.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
-	Draw.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
+draw_game! : Draw.Frame, Game => {}
+draw_game! = |frame, game| {
+	frame.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
+	frame.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
+	frame.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
+	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
 
-	draw_bricks!(game.bricks)
+	draw_bricks!(frame, game.bricks)
 
 	paddle = paddle_rect(game.paddle_x)
-	Draw.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
-	Draw.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
+	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
+	frame.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
 
 	match game.state {
 		Ready => {
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
 		}
 		Playing => {}
 		Won => {
-			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
+			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
 		}
 		GameOver => {
-			Draw.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
-			Draw.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
+			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
+			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
 		}
 	}
 }

@@ -14,12 +14,12 @@ program = { init!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(
-	App.default,
+	App.default.with_title("RocRay Input Inspector").with_frame_pacing(Capped(120)),
 	|_host| Ok({}),
 )
 
 title : Str
-title = "Keyboard + mouse input"
+title = "Input Inspector"
 
 cursor_help_visibility : Str
 cursor_help_visibility = "Cursor: H hide, J show"
@@ -29,6 +29,10 @@ cursor_help_locking = "K lock, L unlock"
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
+	if host.key_pressed(KeyQ) {
+		host.exit!(0)
+	}
+
 	if host.key_pressed(KeyH) {
 		host.set_cursor_mode!(Hidden)
 	}
@@ -57,7 +61,7 @@ render! = |model, host, frame| {
 	space_released = host.key_released(KeySpace)
 	mouse_left_pressed = host.mouse.button_pressed(Left)
 	mouse_left_released = host.mouse.button_released(Left)
-	_mouse_position = host.mouse.position()
+	mouse_position = host.mouse.position()
 	mouse_delta = host.mouse.delta()
 	wheel_delta = host.mouse.wheel_delta()
 	gamepad_input = match host.gamepad(One) {
@@ -71,6 +75,7 @@ render! = |model, host, frame| {
 	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
+	host.set_cursor!(if host.mouse.button_down(Left) Crosshair else Arrow)
 
 	frame.clear!(Color.ray_white)
 	frame.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
@@ -141,5 +146,7 @@ render! = |model, host, frame| {
 	frame.rectangle!({ x: 440, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_action_pressed Color.green else Color.light_gray) })
 	frame.text_at!({ pos: { x: 30, y: 410 }, text: cursor_help_visibility, size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 238, y: 410 }, text: cursor_help_locking, size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 450 }, text: Str.concat("Mouse ", Str.concat(F32.to_str(mouse_position.x), Str.concat(", ", F32.to_str(mouse_position.y)))), size: 18, color: Color.gray })
+	frame.text_at!({ pos: { x: 30, y: 486 }, text: "Hold left mouse for crosshair | Q exits", size: 18, color: Color.gray })
 	Ok(model)
 }

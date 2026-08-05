@@ -289,49 +289,30 @@ those existing lists in one host call without constructing a per-frame batch.
 
 ## Examples
 
-Sprite and texture drawing:
+Start with the small complete games, then use the focused examples as patterns
+for a specific subsystem:
 
 ```bash
-roc build examples/sprites.roc
-./sprites
-```
-
-World-space camera drawing:
-
-```bash
-roc build examples/camera.roc
-./camera
-```
-
-Generated and mutable textures plus sound transport controls:
-
-```bash
-roc build examples/generated_assets.roc
-./generated_assets
-```
-
-Exact projective mapping onto a non-parallelogram planar surface:
-
-```bash
-roc build examples/projective_texture.roc
-./projective_texture
-```
-
-Offscreen rendering, additive blending, and fragment-shader post-processing:
-
-```bash
-roc build examples/post_process.roc
-./post_process
-```
-
-Beginner game examples:
-
-```bash
+roc build examples/pong.roc && ./pong
 roc build examples/snake.roc && ./snake
 roc build examples/breakout.roc && ./breakout
+roc build examples/responsive_ui.roc && ./responsive_ui
+roc build examples/camera.roc && ./camera
+roc build examples/generated_assets.roc && ./generated_assets
+roc build examples/projective_texture.roc && ./projective_texture
+roc build examples/post_process.roc && ./post_process
+```
+
+The larger showcase games combine those patterns with authored assets and
+data-driven levels:
+
+```bash
 roc build examples/top_down.roc && ./top_down
 roc build examples/cave_climb.roc && ./cave_climb
 ```
+
+See the [example guide](examples/README.md) for what each example teaches, the
+recommended reading order, and the practices the examples intentionally model.
 
 The top-down demo uses a Tiled-authored TMX map and selected CC0 assets from Kenney's Topdown Shooter, Impact Sounds, and Music Jingles packs; asset licenses are included under [`examples/assets/`](examples/assets/).
 

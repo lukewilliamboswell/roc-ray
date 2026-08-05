@@ -121,10 +121,19 @@ can_turn = |current, requested|
 		DirRight => requested != DirLeft
 	}
 
-next_food_candidate : Cell, I32, I32 -> Cell
-next_food_candidate = |cell, dx, dy| {
-	x: (cell.x + dx) % grid_cols,
-	y: (cell.y + dy) % grid_rows,
+find_open_cell : Cell, List(Cell), I32 -> Cell
+find_open_cell = |seed, snake, attempt| {
+	cell_count = grid_cols * grid_rows
+	if attempt >= cell_count {
+		seed
+	} else {
+		flat_index = (seed.y * grid_cols + seed.x + attempt) % cell_count
+		candidate = {
+			x: flat_index % grid_cols,
+			y: flat_index // grid_cols,
+		}
+		if List.contains(snake, candidate) find_open_cell(seed, snake, attempt + 1) else candidate
+	}
 }
 
 spawn_food! : Host, List(Cell) => Cell
@@ -134,26 +143,7 @@ spawn_food! = |host, snake| {
 		y: host.random_i32!(0, grid_rows - 1),
 	}
 
-	if !(List.contains(snake, seed)) {
-		seed
-	} else {
-		alt1 = next_food_candidate(seed, 7, 5)
-		if !(List.contains(snake, alt1)) {
-			alt1
-		} else {
-			alt2 = next_food_candidate(alt1, 7, 5)
-			if !(List.contains(snake, alt2)) {
-				alt2
-			} else {
-				alt3 = next_food_candidate(alt2, 7, 5)
-				if !(List.contains(snake, alt3)) {
-					alt3
-				} else {
-					next_food_candidate(alt3, 7, 5)
-				}
-			}
-		}
-	}
+	find_open_cell(seed, snake, 0)
 }
 
 requested_direction : Model, Host -> Direction
@@ -209,7 +199,7 @@ step_snake! = |model, host| {
 				pending_direction: model.pending_direction,
 				food: spawn_food!(host, next_snake),
 				score: model.score + 1,
-				accumulator: 0,
+				accumulator: model.accumulator,
 				state: Playing,
 			}
 		} else {
@@ -218,9 +208,22 @@ step_snake! = |model, host| {
 				snake: next_snake,
 				direction: model.pending_direction,
 				pending_direction: model.pending_direction,
-				accumulator: 0,
+				accumulator: model.accumulator,
 				state: Playing,
 			}
+		}
+	}
+}
+
+advance_fixed_steps! : Model, Host => Model
+advance_fixed_steps! = |model, host| {
+	if model.accumulator < step_time {
+		model
+	} else {
+		next = step_snake!({ ..model, accumulator: model.accumulator - step_time }, host)
+		match next.state {
+			Playing => advance_fixed_steps!(next, host)
+			GameOver => next
 		}
 	}
 }
@@ -228,14 +231,11 @@ step_snake! = |model, host| {
 advance_playing! : Model, Host => Model
 advance_playing! = |model, host| {
 	input_model = apply_input(model, host)
-	accumulator = input_model.accumulator + host.frame_time
+	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
+	# step remainder so normal frame-rate variation does not change game speed.
+	accumulator = input_model.accumulator + Math.clamp(host.frame_time, 0, 0.25)
 	with_accumulator = { ..input_model, accumulator }
-
-	if accumulator >= step_time {
-		step_snake!({ ..with_accumulator, accumulator: accumulator - step_time }, host)
-	} else {
-		with_accumulator
-	}
+	advance_fixed_steps!(with_accumulator, host)
 }
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])

@@ -1,55 +1,44 @@
 app [Model, program] { rr: platform "../platform/main.roc" }
 
-import rr.Draw
-import rr.Color
-import rr.Host
 import rr.App
+import rr.Color
+import rr.Draw
+import rr.Host
 import rr.Text
 
 Model : {
-	message : Text.Prepared,
-	pentagon_points : Box(List(Draw.Vector2)),
+	title : Text.Prepared,
+	help : Text.Prepared,
 }
 
 program = { init!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default,
-	|host| {
-		host.set_cursor_mode!(Visible)
+	App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120)),
+	|_host|
 		Ok({
-			message: Text.from("Roc :heart: Raylib!").size(30).prepare!()?,
-			pentagon_points: Box.box([{ x: 650, y: 120 }, { x: 720, y: 165 }, { x: 695, y: 235 }, { x: 605, y: 235 }, { x: 580, y: 165 }]),
-		})
-	},
+			title: Text.from("Roc :heart: Raylib").size(38).prepare!()?,
+			help: Text.from("Move the pointer, click for an accent, ESC exits").size(18).prepare!()?,
+		}),
 )
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
 
-	# Circle follows the mouse, changes color when clicked
-	circle_color = if host.mouse.left Color.red else Color.green
-	accent = Color.from_hex_rgb(0x1d9bf0)
-	soft_accent = Color.with_alpha(accent, 120)
+	accent = if host.mouse.button_down(Left) Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
+	panel = { x: 120, y: 150, width: 560, height: 300 }
 
-	frame.clear!(Color.ray_white)
-	model.message.draw!(frame, { pos: { x: 10, y: 10 }, color: Color.dark_gray, align: Text.align_top_left })
-	frame.fps!({ pos: { x: 10, y: 46 }, size: 18, color: Color.gray })
-
-	frame.rectangle!({ x: 80, y: 120, width: 130, height: 90, style: Draw.filled_and_outlined(soft_accent, accent, 4) })
-	frame.line!({ start: { x: 80, y: 250 }, end: { x: 260, y: 300 }, stroke: Draw.stroke(Color.blue, 8) })
-	frame.rounded_rectangle!({ x: 260, y: 120, width: 150, height: 90, radius: 18, segments: 12, style: Draw.filled_and_outlined(Color.orange, Color.dark_gray, 3) })
-	frame.triangle!({ a: { x: 500, y: 120 }, b: { x: 430, y: 220 }, c: { x: 570, y: 220 }, style: Draw.filled_and_outlined(Color.purple, Color.dark_gray, 3) })
-	frame.polygon!({ points: Box.unbox(model.pentagon_points), style: Draw.filled_and_outlined(Color.rgba(20, 190, 140, 180), Color.green, 4) })
-
-	# Gradient examples
-	frame.rectangle_gradient_v!({ x: 80, y: 350, width: 130, height: 90, color_top: Color.blue, color_bottom: Color.red })
-	frame.rectangle_gradient_h!({ x: 260, y: 350, width: 150, height: 90, color_left: Color.green, color_right: Color.yellow })
-	frame.circle_gradient!({ center: { x: 520, y: 395 }, radius: 60, color_inner: Color.white, color_outer: Color.purple })
-
-	# Draw circle last so it is drawn over the top of other shapes
-	frame.circle!({ center: { x: host.mouse.x, y: host.mouse.y }, radius: 42, style: Draw.filled_and_outlined(circle_color, Color.black, 2) })
+	frame.clear!(Color.from_hex_rgb(0x0d1425))
+	frame.circle_gradient!({ center: { x: 620, y: 90 }, radius: 260, color_inner: Color.with_alpha(accent, 100), color_outer: Color.with_alpha(accent, 0) })
+	frame.rounded_rectangle!({ x: panel.x, y: panel.y, width: panel.width, height: panel.height, radius: 22, segments: 12, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x18243b), Color.with_alpha(Color.white, 55), 2) })
+	model.title.draw!(frame, { pos: { x: 400, y: 230 }, color: Color.white, align: Text.align_top_center })
+	model.help.draw!(frame, { pos: { x: 400, y: 302 }, color: Color.from_hex_rgb(0xa8b4cc), align: Text.align_top_center })
+	frame.line!({ start: { x: 245, y: 370 }, end: { x: 555, y: 370 }, stroke: Draw.stroke(Color.with_alpha(accent, 170), 3) })
+	frame.circle!({ center: host.mouse.position(), radius: 18, style: Draw.filled_and_outlined(accent, Color.white, 3) })
 
 	Ok(model)
 }

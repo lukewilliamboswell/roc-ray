@@ -129,6 +129,10 @@ init! = App.init(
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
+
 	game_over = model.left_score >= win_score or model.right_score >= win_score
 	if game_over render_game_over!(model, host, frame) else render_playing!(model, host, frame)
 }
@@ -153,9 +157,6 @@ render_playing! = |model, host, frame| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
-
-	# Angle to use if the ball is served (scored) this frame.
-	serve_vy = random_serve_vy!(host)
 
 	# --- Left paddle: player input (W up, S down) ---
 	w_down = host.key_down(KeyW)
@@ -197,6 +198,8 @@ render_playing! = |model, host, frame| {
 	# --- Scoring: ball left the field on the left or right edge ---
 	out_left = nx - ball_r < 0
 	out_right = nx + ball_r > screen_w
+	# Draw randomness only when a new serve is actually needed.
+	serve_vy = if out_left or out_right random_serve_vy!(host) else vy
 
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny

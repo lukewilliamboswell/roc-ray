@@ -1052,7 +1052,12 @@ Draw := [].{
 	## scissor before returning. Use this instead of manually pairing the raw effects.
 	with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_scissor! = |frame, bounds, callback| {
-		status = DrawHost.begin_scissor!(bounds)
+		# Reconstruct the internal transport record at the hosted boundary. Keeping
+		# this annotation explicit prevents the compiler from specializing the
+		# extern with Math.Rect's public ability-bearing alias.
+		scissor : DrawHost.Scissor
+		scissor = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+		status = DrawHost.begin_scissor!(scissor)
 		if status == scope_ok {
 			result = callback(frame)
 			DrawHost.end_scissor!()

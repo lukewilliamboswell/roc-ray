@@ -56,7 +56,7 @@ RELEASE_PLATFORM_REF_RE = re.compile(
 # Examples to skip in the bundled-platform build test, mapping filename -> reason.
 # Use this when a specific example can't build against the bundled platform yet
 # (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
-#   e.g. "kitchen_sink.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
+#   e.g. "example.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
 BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 # Examples to skip in native `roc build` / headless runtime checks.

@@ -1,364 +1,211 @@
 # Contributing to RocRay
 
-Thanks for your interest in RocRay!
+RocRay is a usable, intentionally small Roc platform for native interactive
+apps. Contributions should help app authors make things with less friction
+while keeping the programming model understandable.
 
-RocRay is an **experimental platform** that supports research and development of the Roc compiler. Its aim is to make simple games that demonstrate the benefits of the Roc language and of platform development. The goal isn't to build or support a large game engine — but we expect the ideas here to be expanded in future, and we're happy to provide support where it helps progress those aims.
+Good contributions include bug fixes, documentation, realistic examples,
+compiler compatibility work, performance improvements, and focused raylib
+capabilities that compose with the existing API. RocRay is not aiming to grow
+the editor, scene graph, or subsystem sprawl of a large engine. Open an issue
+before a broad API change or a substantial new subsystem so its shape can be
+discussed first.
 
-Contributions that move that work forward are very welcome: new examples, bug fixes, additional platform primitives, documentation, and improvements that exercise the new Roc compiler. If you're unsure whether something fits, open an issue to discuss it first.
+## Development setup
 
-## Requirements
+Install:
 
 - [Zig](https://ziglang.org/download/) 0.16.0
-- [Roc](https://www.roc-lang.org/) nightly for the new compiler, available as `roc` on `PATH`
+- The exact Roc nightly named in [`.roc-version`](.roc-version), available as
+  `roc` on `PATH`
+- Python 3 and `zstd` for the full test and bundle checks
 
-## Building the Platform
-
-Build the platform and cross-compile the pre-built host libraries for all supported targets:
+Build the native hosts and platform inputs:
 
 ```bash
 zig build
 ```
 
-The checked-in examples intentionally reference the latest published RocRay
-bundle so that their source can be copied into another project and used as-is.
-You can normally build and run them directly, e.g.:
-
-```bash
-roc build examples/hello_world.roc
-./hello_world
-```
-
-For the best performance, prefer `roc build` over running a file directly with `roc examples/hello_world.roc`; the latter uses the in-development backends. See the performance note in the [README](README.md).
-
-### Developing against unreleased platform changes
-
-After a platform API change, the examples may temporarily require APIs that are
-not present in the published bundle they reference. This is expected between
-that change and the next release; a direct `roc check`, `roc build`, or
-`roc examples/example.roc` can consequently report errors from the older
-bundle.
-
-Use the repository test script while developing the platform:
-
-```bash
-scripts/all_tests.py
-```
-
-To run one example interactively against the local platform:
+Run an example against the local platform:
 
 ```bash
 scripts/run-example.py examples/cave_climb.roc
 ```
 
-The runner builds the host, temporarily points that example at
-`../platform/main.roc`, launches it, and restores its published URL on
-exit. Pass `--skip-platform-build` to reuse host libraries from an earlier
-`zig build`.
+The runner builds the host, uses `platform/main.roc` for the run, and restores
+the example's original platform reference when it exits. Pass
+`--skip-platform-build` to reuse native libraries from an earlier `zig build`.
 
-Debug host builds use the fast thread-safe allocator by default so
-allocation-heavy interactive examples remain responsive. To diagnose Roc-side
-leaks with Zig's stack-tracing allocator, opt in when launching an app:
+Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
+leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
 
 ```bash
-./example --debug-allocator
+scripts/run-example.py examples/cave_climb.roc -- --debug-allocator
 ```
 
-The flag only changes allocator selection in a Debug host build.
+## Repository map
 
-The test script applies the same temporary substitution across the example
-suite. CI follows the same policy using a freshly built bundle. Do not commit a
-local platform reference in an example merely to make an unreleased API change
-testable. Keep the published URLs in source, then update them to the new default
-bundle after the release is available.
+| Path | Purpose |
+| --- | --- |
+| `platform/` | Public Roc API, platform entry points, and hosted declarations |
+| `src/` | Zig host, raylib backend, ABI types, resources, and native tests |
+| `examples/` | Complete apps and focused, reusable patterns |
+| `scripts/` | Local development, profiling, ABI, bundle, and release helpers |
+| `test/compile_fail/` | Checks that internal platform details stay private |
+| `www/` | Versioned generated API documentation |
 
-## Testing
+## Everyday checks
 
-Run code-quality lints (tidiness + style):
+Run formatting and repository tidiness checks:
 
 ```bash
 zig build lint
 ```
 
-Run the full test suite (lints, Zig unit tests, and `roc check`/`fmt`/`test`/`build` over the examples):
+Run the main test suite:
 
 ```bash
 zig build test
 ```
 
-Rendering code also has an opt-in pixel-level smoke test. It opens a hidden
-raylib window and validates scissoring, convex polygon rasterization, texture
-source regions, flipped quads, exact projective interpolation, and shader-state
-preservation against framebuffer pixels:
+This covers lints, Zig tests, platform privacy checks, and Roc checks/tests over
+the examples. The lower-level example driver is also useful while iterating:
 
 ```bash
-zig build graphical-smoke
-# On a headless Linux CI worker with Xvfb installed:
-xvfb-run -a zig build graphical-smoke
+scripts/all_tests.py
+scripts/all_tests.py --skip-platform-build
+scripts/all_tests.py --skip-roc-build
 ```
 
-The regular headless example runs intentionally do not assert pixels, so run
-this step whenever changing rendering primitives, texture coordinates, or
-paired drawing modes.
+It checks formatting and types, runs Roc tests, builds the apps, exercises their
+headless paths, and verifies a locally served platform bundle. The scripts know
+how to handle both local and released platform references; avoid committing an
+incidental reference change made only for local testing.
 
-Or run just the Roc example tests directly:
-
-```bash
-scripts/all_tests.py            # check, fmt, test, build, headless runtime
-scripts/all_tests.py --skip-platform-build # reuse host libraries from zig build
-scripts/all_tests.py --skip-roc-build      # skip building and running Roc apps
-```
-
-Enable the pre-commit hook (run once after cloning):
+Enable the repository's pre-commit hook once after cloning:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-### Profiling the Roc compiler build
+### Graphical changes
 
-Profile Roc compiler build time on Linux with `perf`:
-
-```bash
-scripts/profile-roc-build.sh examples/cave_climb.roc 20
-```
-
-Set `ROC=/path/to/roc` to compare compiler builds. A Debug-built Roc compiler can spend substantial time in Zig's debug allocator; the cumulative call-stack report is usually more useful than self time for finding the compiler phase.
-
-### Profiling example allocations
-
-On Linux, measure steady-state Roc allocation traffic in every example with:
+Rendering changes have an opt-in pixel-level smoke test:
 
 ```bash
-scripts/profile-example-allocations.py --build
+zig build graphical-smoke
 ```
 
-The profiler runs each example headlessly for one frame and for 120 frames,
-then subtracts the one-frame result to keep startup and resource loading out of
-the per-frame totals. Pass example names to profile a subset, increase the run
-length with `--frames`, show allocation-size histograms with `--sizes`, or use
-`--json` for machine-readable output:
+On a headless Linux worker with Xvfb:
 
 ```bash
-scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
+xvfb-run -a zig build graphical-smoke
 ```
 
-This measures calls through Roc's allocation ABI and counts exported hosted
-effects by subsystem. It does not include internal raylib or Zig allocator
-traffic, so use the native lifecycle/allocation tests when optimizing storage
-inside a hosted effect.
+Run it when changing primitives, texture coordinates, shaders, blending,
+scissoring, render textures, or paired drawing modes. The ordinary headless app
+runs verify composition and lifecycle behavior, not framebuffer pixels.
 
-Most non-empty example models currently show exactly one allocation whose size
-is stable for every frame. That is the `Box(Model)` returned by
-`render_for_host!`, not app-level list or string construction. Roc's box-reuse
-optimization does not yet reuse it for these effectful render procedures. Treat
-additional allocation sizes or reallocations as actionable app/platform work;
-track the single model box as a compiler optimization opportunity. A zero-sized
-model can avoid even that allocation.
+## Design principles
 
-Representative examples were measured over 119 startup-subtracted frames after
-this API migration:
+These constraints are more important than mirroring raylib function for
+function.
 
-| Example | Allocations/frame | Bytes/frame | Reallocations/frame | Hosted calls/frame |
-|---------|------------------:|------------:|--------------------:|-------------------:|
-| `keyboard` | 0.000 | 0.0 | 0.000 | 46 |
-| `generated_assets` | 1.000 | 32.0 | 0.000 | 4 |
-| `camera` | 1.000 | 40.0 | 0.000 | 73 |
-| `text_ui` | 1.000 | 24.0 | 0.000 | 10 |
-| `post_process` | 1.000 | 48.0 | 0.000 | 13 |
-| `cave_climb` | 1.000 | 728.0 | 0.000 | 70 |
-| `top_down` | 1.000 | 648.0 | 0.000 | 107 |
+### Shape the API for app authors
 
-Each non-zero row is exactly the current model box. Texture views, receiver
-dispatch, scoped callbacks, prepared text draws, typed uniforms, and batched
-tilemap draws add no steady-state Roc allocation. Tilemap batching replaces 41
-texture-quad crossings with one call in `cave_climb` and 30 with one in
-`top_down`, reducing total calls from 110 to 70 and 136 to 107 respectively.
+Prefer operations on values an app already has:
 
-### Host boundary and frame ownership
+```roc
+frame.circle!(config)
+host.key_pressed(KeySpace)
+camera.screen_to_world(point)
+texture.rect()
+uniform.set!(value)
+```
 
-The native host owns BeginDrawing/EndDrawing and invokes Roc's
-`render!(model, host, frame)` between them. Native cleanup closes the frame after
-either `Ok` or `Err`. `Draw.Frame` is an opaque, zero-sized capability constructed
-only by the platform adapter; every public drawing effect takes it. This
-prevents initialization code from drawing and removes the two hosted outer-frame
-calls that `Draw.draw!` previously made each frame. It is authority, not an
-affine or epoch-encoded proof: pass the callback's value through drawing helpers
-and do not retain it in the model.
+Use attached constructors such as `Assets.Texture.load!`,
+`Draw.RenderTexture.load!`, and `Draw.Shader.load!` when creation naturally
+belongs to the result type. A module function is still appropriate for a pure
+helper or when there is no natural receiver.
 
-Keep the Roc API shaped around application values even when its transport is
-flatter. Prefer `frame.circle!(cfg)`, `host.key_pressed(KeySpace)`,
-`camera.screen_to_world(point)`, `texture.rect()`, and `uniform.set!(value)`.
-Attached constructors such as `Assets.Texture.load!`,
-`Draw.RenderTexture.load!`, and `Draw.Shader.load!` group creation with the
-result type. A module function remains appropriate when there is no natural
-receiver or for a deliberate compatibility bridge.
+Keep transport details inside the platform. Flattened ABI records, scalar
+handles, and hosted helpers should not leak into normal application code.
 
-Camera, scissor, blend, shader, and render-target callbacks return `Try`. Each
-successful begin runs its matching end after the callback result is computed,
-including callback `Err` values. All five scope families use bounded native
-stacks, may nest, and restore the outer state without allocating. A full stack
-returns `ScopeLimit`; shader and render-target scopes also return
-`ScopeUnavailable` when a transferred resource cannot resolve. Value-only
-camera, scissor, and blend scopes cannot enter that state. Neither failure runs
-the callback. Pass the callback's `Frame` onward rather than reintroducing an
-unscoped draw helper.
+### Keep drawing frame-scoped
 
-### Snapshot reuse and queries
+The native host opens and closes the outer raylib drawing scope. Roc receives an
+opaque `Draw.Frame` in `render!`, and every public drawing effect requires it.
+Pass the callback's frame through helpers; do not retain it in the model.
 
-Shared read-only frame information should be sampled once by the host and passed
-through `Host`, rather than exposed as several hosted queries. The host packs
-held/pressed/released bits into persistent key and mouse lists, and keeps
-gamepad connectivity, buttons, and axes in three persistent flat lists. Their
-receiver and module query forms are pure Roc, so multiple queries do not make
-multiple host calls.
+Camera, scissor, blend, shader, and render-target scopes return `Try`. A
+successful begin must always run its matching end, including when the callback
+returns `Err`. Scopes can nest and restore their outer state. Preserve
+`ScopeLimit`, and preserve `ScopeUnavailable` for scopes backed by transferred
+resources.
 
-Use `host.gamepad(id)` to get either `Connected(pad)` or `Disconnected`. The
-connected receiver carries the selected ID and references to the same snapshot
-lists, so button, axis, and stick queries require neither repeated connectivity
-checks nor allocation. It is scoped to that snapshot: query it immediately and
-do not retain it in the application model. Resolve the slot again from the next
-frame's `Host`.
+### Snapshot input once per frame
 
-Mouse position, delta, and two-axis wheel movement are scalar snapshot fields.
-Cursor visibility and capture are one tagged operation through
-`host.set_cursor_mode!` with `Visible`, `Hidden`, or `Locked`. Native cursor
-shape is separate through `host.set_cursor!(cursor)`.
+Keyboard, mouse, gamepad, text, timing, and screen information are sampled into
+`Host`. Prefer pure queries over repeated host calls. Views such as a connected
+gamepad belong to that snapshot and should be queried immediately rather than
+stored in the model.
 
-The host allocates keyboard, mouse, gamepad, and text-input state lists once,
-then reuses their memory in place while uniquely owned. Unicode text input uses
-a variable-length persistent list with initial capacity for raylib's 32-value
-drain; changing its logical length and contents is allocation-free while that
-capacity is sufficient. If an app retains an older snapshot in its model, the
-next update uses copy-on-write so the retained value stays immutable. Text input
-also grows when its current capacity is too small. These are intentional unusual
-allocations; do not rebuild snapshot lists in the normal per-frame path.
+Snapshot lists are designed for in-place reuse while uniquely owned. Retaining
+an old snapshot can trigger copy-on-write on the next frame, so derive ordinary
+app state from input instead of preserving host storage.
 
-### Resource ownership and capabilities
+### Make ownership explicit
 
-Loaded fonts, textures, sounds, and music use typed, fixed-capacity host resource
-heaps. Their handle allocation is ABI-compatible with Roc's `Box`: releasing the
-final Roc reference routes through `roc_dealloc`, unloads the native value, and
-makes the slot reusable. Creation effects return these host-backed boxes
-directly; do not wrap a scalar handle with `Box.box` on the Roc side. Hot draw
-and audio effects transfer the typed owning value across the boundary. The host
-resolves its internal token while that owner is live, performs the operation,
-then releases the transferred reference. It validates type, generation, and
-liveness on every lookup.
+Fonts, textures, prepared text, sounds, music, render textures, and shaders are
+typed host resources with lifetimes driven by Roc references. A final release
+unloads the native value and makes its bounded slot reusable.
 
-Immutable UI copy should use `Text.from(content).prepare!()` outside the render
-loop. Prepared text has its own 256-slot typed heap. A slot owns one native
-NUL-terminated UTF-8 buffer, cached measurement/style, and the transferred ARC
-owner for a loaded font. Consequently `.bounds()` is pure and `.draw!` transfers
-only the prepared handle plus position/color; final prepared-handle release frees
-the bytes and releases the font owner. Keep `frame.text!` for content that changes
-per frame, because preparing dynamic text would replace one direct call with
-resource creation and teardown.
+Keep capabilities narrow. For example, an `Assets.Texture` can be updated,
+while an `Assets.TextureView` can only be sampled; a render texture exposes the
+view. Keep typed shader-uniform handles so invalid setter combinations remain a
+compile-time error.
 
-Keep built-in resources allocation-free. For example, `Draw.default_font` is a
-plain tag, while only `LoadedFont` carries a host-backed box. Box payloads may
-also include immutable metadata: `Assets.Texture` stores dimensions beside its
-token in the host slot, keeping the Roc model representation to one pointer.
+Create long-lived resources during initialization and retain them in the app
+model. Do not introduce per-frame loading, preparing, name lookup, or allocation
+when the work can be paid once.
 
-Generated textures follow the same host-owned lifetime path as loaded textures.
-CPU images used during generation are released before the hosted effect returns.
-`texture.update!` borrows the contiguous Roc color list for one call and does
-not copy or retain it in the host; build reusable pixel buffers outside the
-render loop when possible.
+### Validate before the hot path
 
-Keep the public texture capabilities distinct:
+Opaque values such as cameras, projective quads, and `App.Config` prevent
+invalid states. Tilemap builders validate bindings and roles before rendering.
+Prefer boundary validation that makes pure per-frame operations total and
+cheap.
 
-- `Assets.Texture` owns an ordinary mutable texture and provides `.update!`,
-  `.width()`, `.height()`, `.size()`, `.rect()`, `.set_filter!`, `.set_wrap!`,
-  and `.view()`.
-- `Assets.TextureView` owns the same ARC reference but exposes sampling rather
-  than pixel mutation. This nominal distinction adds no image copy or Roc heap
-  wrapper.
-- `Draw.RenderTexture.texture()` returns a `TextureView` that keeps the complete
-  framebuffer resource alive. `.source()` returns its full vertically inverted
-  sampling rectangle.
+Startup configuration is one validated choice for frame pacing (`VSync`,
+`Capped(fps)`, or `Uncapped`) plus independent window and cursor settings. Keep
+the Roc representation and the native host's defensive normalization in sync.
 
-Render textures and shaders use distinct resource kinds so a stale or
-cross-typed resource cannot resolve. A render texture box stores its dimensions
-beside the token and owns its framebuffer, color texture, and depth attachment
-as one unit. Resolve shader locations during initialization with typed receiver
-constructors such as `shader.uniform_f32!("time")`. `F32Uniform`, `I32Uniform`,
-vector, color, and texture handles prevent setter mismatches without runtime
-tags. Each handle retains its shader and caches the location once; per-frame
-`.set!` calls transfer the existing owner plus scalar or small-vector value
-without allocating.
+## Examples and documentation
 
-The headless host allocates typed lifecycle slots without creating GPU objects,
-allowing ownership and effect composition to run in ordinary example tests.
-Successful render-target and shader begins lease the transferred owner until the
-matching end; failed lookups release it immediately and return
-`ScopeUnavailable`.
+Examples are applications first and API demonstrations second. Each should have
+a concrete interaction or game loop, retain long-lived resources in its model,
+update state before drawing, and remain understandable without knowing host
+internals. Exhaustive edge-case coverage belongs in tests.
 
-### Validation and culling
+When adding an example:
 
-Keep invalid states out of hot pure code. `Camera.Camera2D` is opaque: its
-constructors and receiver updates reject zero zoom and non-finite target,
-offset, rotation, or zoom values with dedicated errors. Its receiver transforms
-and viewport calculation are then total and stay in Roc.
+- Add it to [`examples/README.md`](examples/README.md) with its purpose and
+  reusable patterns.
+- Run it from the repository root so asset paths match how users invoke it.
+- Put third-party licenses and attribution beside the relevant assets.
+- Prefer generated or existing assets unless new binary files materially improve
+  the example.
+- Keep its platform reference compatible with the release workflow; local tools
+  temporarily rewrite recognized local or release references as needed.
 
-`TilemapBuilder.build()` validates that every parsed tileset has exactly one
-texture binding, that no binding is unused, and that layer/object role targets
-exist and are unique. Distinct name/type keys that select the same object are
-also rejected as duplicate targets. Propagate its open error row during initialization. A
-built tilemap retains primitive layer metadata and a flat tileset list whose
-elements own their texture Boxes. Each public draw operation borrows those
-existing lists in one host call; final-owner cleanup recursively releases the
-texture elements. Culling remains an allocation-free Roc calculation whose
-inclusive cell range is sent with that single call. Do not rebuild a quad List
-per frame: the host iterates the borrowed GIDs directly.
+Public API changes should update module documentation, relevant examples, and
+the user-facing README when they change how an app is started or structured.
 
-App-specific state still belongs in the Roc model. Initialization-only effects
-such as loading resources, reading files, and reading environment variables
-should populate that model once; event-driven effects such as audio playback or
-random spawning should remain at the event site.
+## ABI and host changes
 
-### Startup configuration invariants
-
-`App.Config` is opaque. Applications start from `App.default` and use receiver
-updates such as `.with_title(...)`, `.with_size(...)`,
-`.with_resizable(...)`, `.with_fullscreen(...)`, `.with_frame_pacing(...)`, and
-`.with_cursor(...)`; direct record updates cannot bypass validation. This is the
-only public configuration construction surface. The default is an 800×600
-window using `Capped(240)` and `CursorVisible`.
-
-Non-positive dimensions passed to `.with_size(...)` independently normalize to
-the default width or height. Keep these 800×600 fallbacks synchronized with the
-native host's defensive ABI normalization so the internal flattened config
-describes the window that will actually be created.
-
-Frame pacing is one tagged choice: `VSync`, `Capped(I32)`, or `Uncapped`.
-`Capped(fps)` values at or below zero normalize to `Uncapped`, so Config cannot
-contain a contradictory VSync-plus-cap state or an invalid non-positive cap.
-The initial cursor is independently `CursorVisible` or `CursorHidden`. Runtime
-cursor capture remains a `Host.CursorMode`, which additionally supports
-`Locked`.
-
-`AppConfig` owns the opaque Config representation and its legacy flattened host
-record, but is deliberately absent from each platform package's `exposes` list.
-Public `App.Config` is an alias that preserves the nominal type and its receiver
-API without exposing the owner module. Only `main.roc` and
-`main-wayland.roc` import `AppConfig` and flatten the validated choices. VSync
-maps to a zero target FPS with VSync enabled; a cap maps to that FPS with VSync
-disabled; Uncapped maps to a zero target FPS with VSync disabled. The cursor tag
-similarly becomes the `cursor_visible` boolean.
-
-The internal `AppConfig.to_host({}, config)` function intentionally takes a
-zero-sized marker before Config. On this Roc nightly, any function whose first
-argument is an opaque type participates in receiver dispatch through public
-aliases; the marker keeps `config.to_host()` out of the application API and is
-zero-sized and allocation-free. `scripts/test_app_transport_privacy.py` checks
-that apps cannot call `.to_host()`, name `App.HostConfig`, or import
-`rr.AppConfig`.
-
-## Glue Bindings
-
-The Zig host's ABI types in `src/roc_platform_abi.zig` are generated by
-`roc glue`. Regenerate them after changing hosted functions in
-`platform/main.roc` with a local checkout of the Roc repository:
+The Zig ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`.
+After changing hosted functions in `platform/main.roc`, regenerate them with a
+local checkout of the Roc repository:
 
 ```bash
 scripts/roc_platform_abi.py \
@@ -367,7 +214,7 @@ scripts/roc_platform_abi.py \
     --update
 ```
 
-Verify the checked-in file without modifying it with:
+Verify the checked-in file without modifying it:
 
 ```bash
 scripts/roc_platform_abi.py \
@@ -376,53 +223,79 @@ scripts/roc_platform_abi.py \
     --check
 ```
 
-`.roc-version` is the single source of provenance for both inputs. The helper
-requires `roc version` to exactly match that nightly, resolves the commit hash
-embedded at the end of the nightly name in the supplied Git repository, and
-uses `git archive` to extract `src/glue` from that commit into a temporary
-directory. It never reads glue from the repository's current checkout or
-changes that repository, so its branch and uncommitted files cannot affect the
-result. Generation and `zig fmt` also happen in temporary storage. `--check`
-only compares with `src/roc_platform_abi.zig`; `--update` atomically replaces it
-when necessary. Compiler or source revisions that disagree with `.roc-version`
-are rejected before generation.
-
-The helper's focused tests run under `zig build test`, or directly with:
+The helper requires the compiler and Roc source revision to agree with
+`.roc-version`. Its focused tests run under `zig build test` or directly with:
 
 ```bash
 python3 scripts/test_roc_platform_abi.py
 ```
 
-## Bundling
+Host-backed resources use typed, generation-checked slots. Successful hosted
+effects must release transferred references exactly once, including failure and
+scope-unwind paths. The headless backend should continue to exercise lifecycle
+behavior without requiring GPU objects.
+
+## Performance work
+
+Profile a Roc compiler build on Linux:
+
+```bash
+scripts/profile-roc-build.sh examples/cave_climb.roc 20
+```
+
+Set `ROC=/path/to/roc` to compare compiler builds.
+
+Measure steady-state Roc allocation traffic and hosted calls in examples:
+
+```bash
+scripts/profile-example-allocations.py --build
+scripts/profile-example-allocations.py cave_climb top_down --frames 1000 --sizes
+```
+
+The allocation profiler subtracts one-frame startup behavior from a longer run.
+It sees Roc allocation ABI calls, not internal allocations made by raylib or
+Zig. Use the native lifecycle and allocation tests when optimizing inside a
+hosted effect.
+
+## Bundles and targets
+
+Build the default release bundle:
 
 ```bash
 scripts/bundle.sh
 ```
 
-This creates a `.tar.zst` bundle containing the default platform package, all shared `.roc` files, and prebuilt host libraries for all supported native targets.
-
-The Wayland package is Linux x64 only and uses `platform/main-wayland.roc`:
+Build the Linux x64 native Wayland bundle:
 
 ```bash
 scripts/bundle.sh --platform wayland
 ```
 
-The Wayland bundle requires `vendor/raylib/linux-x64-wayland/libraylib.a`. Build it from a raylib 6.0 source checkout on Linux with:
+The Wayland bundle requires
+`vendor/raylib/linux-x64-wayland/libraylib.a`. Rebuild it from a raylib 6.0
+source checkout with:
 
 ```bash
 scripts/build-raylib-wayland.sh /path/to/raylib-6.0
 ```
 
-To use a Roc package bundle it should be hosted online with an `https:` url.
+Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
+Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
+ARM Linux is not currently included.
 
-## Supported Targets
+The release workflow builds and tests both bundles, publishes versioned API
+docs, and opens a follow-up PR that updates example bundle URLs and the docs
+index. Do not manually publish an untested local bundle as a release artifact.
 
-| Target | Description |
-|--------|-------------|
-| x64mac | macOS Intel |
-| arm64mac | macOS Apple Silicon |
-| x64glibc | Linux x64 |
-| x64win | Windows x64 |
+## Pull request checklist
 
-- We vendor the pre-compiled libraries from [raylib v6.0](https://github.com/raysan5/raylib/releases/tag/6.0)
-- ARM Linux is not available (raylib doesn't provide pre-built libraries)
+Before opening a PR:
+
+- Keep the change focused and explain the app-author problem it solves.
+- Add or update tests for behavior and failure paths.
+- Run `zig build lint` and `zig build test`.
+- Run the graphical smoke test when pixels or drawing state can change.
+- Update examples and docs when public behavior changes.
+- Check `git status --short`, `git diff`, and `git diff --cached` for untracked
+  files, generated output, platform-reference churn, binaries, or unrelated
+  local edits.

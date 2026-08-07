@@ -24,6 +24,10 @@ static vpx_codec_ctx_t rocray_vp8_codec;
 static vpx_image_t rocray_vp8_image;
 static int rocray_vp8_open = 0;
 
+int rocray_vp8_is_open(void) {
+    return rocray_vp8_open;
+}
+
 int rocray_vp8_begin(int width, int height, int fps, int bitrate_kbps) {
     vpx_codec_enc_cfg_t cfg;
 
@@ -58,8 +62,16 @@ int rocray_vp8_begin(int width, int height, int fps, int bitrate_kbps) {
         return 0;
     }
 
-    // Realtime is the fastest deadline; the readback already dominates.
-    vpx_codec_control_(&rocray_vp8_codec, VP8E_SET_CPUUSED, 4);
+    // Higher cpu_used trades encode quality for speed; realtime spans 4..16 and
+    // 4 is the *slow* end. This build has no SIMD -- every architecture-specific
+    // path is excluded so one source list serves all four targets -- so encoding
+    // is scalar C and speed is the binding constraint. Screen content is mostly
+    // flat colour and text, which survives the trade well.
+    if (vpx_codec_control_(&rocray_vp8_codec, VP8E_SET_CPUUSED, 12) != VPX_CODEC_OK) {
+        vpx_img_free(&rocray_vp8_image);
+        vpx_codec_destroy(&rocray_vp8_codec);
+        return 0;
+    }
 
     rocray_vp8_open = 1;
     return 1;

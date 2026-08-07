@@ -55,6 +55,9 @@ const track_number: u8 = 1;
 /// value, so a cluster cannot span more than this many milliseconds.
 const max_cluster_span_ms: u64 = 30_000;
 
+/// An eight-byte EBML vint holding the reserved "unknown size" pattern.
+const unknown_size_vint = [_]u8{ 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
 /// Errors the muxer can report.
 pub const Error = error{
     /// The output file could not be written.
@@ -137,6 +140,10 @@ const Builder = struct {
     len: usize = 0,
 
     fn raw(self: *Builder, data: []const u8) void {
+        // Only fixed, small headers go through a Builder -- frame payloads are
+        // written straight out -- but assert it rather than leaving a silent
+        // stack smash if that ever stops being true.
+        std.debug.assert(self.len + data.len <= self.bytes.len);
         @memcpy(self.bytes[self.len..][0..data.len], data);
         self.len += data.len;
     }
@@ -203,8 +210,11 @@ pub const Muxer = struct {
         header.id(id_cluster);
         self.segment_payload += header.len;
 
-        // Reserve eight bytes so the real size can be patched in on close.
-        const size_placeholder = [_]u8{ 0x01, 0, 0, 0, 0, 0, 0, 0 };
+        // Reserve eight bytes, holding EBML's "unknown size" pattern until the
+        // real size is patched in on close. A known size of zero would make a
+        // recording that never finished -- a crash, a kill -- decode as an
+        // empty cluster; unknown size makes a parser scan it instead.
+        const size_placeholder = unknown_size_vint;
         try self.write(header.slice());
         self.cluster_size_offset = self.bytes_written;
         try self.write(&size_placeholder);
@@ -274,19 +284,32 @@ pub const Muxer = struct {
 
     /// Close the final cluster and patch the sizes that needed the whole file.
     pub fn finish(self: *Muxer, duration_ms: u64) Error!void {
-        try self.closeCluster();
+        // The descriptor is released whichever way this goes; leaking it on an
+        // error path would exhaust the table for an app that retries.
+        defer self.file.close(self.io);
+
+        var failure: ?Error = null;
+        self.closeCluster() catch |err| {
+            failure = err;
+        };
 
         var segment_patch: [8]u8 = undefined;
         writeVintFixed(&segment_patch, self.segment_payload, 8);
-        self.patchAt(self.segment_size_offset, &segment_patch) catch return Error.WriteFailed;
+        self.patchAt(self.segment_size_offset, &segment_patch) catch {
+            if (failure == null) failure = Error.WriteFailed;
+        };
 
+        // Attempted even if the segment patch failed: a file with a duration
+        // and no segment size is no worse off, and the reverse may still play.
         // Duration is a float in timecode units, here milliseconds.
         const duration: f64 = @floatFromInt(duration_ms);
         var duration_patch: [8]u8 = undefined;
         std.mem.writeInt(u64, &duration_patch, @bitCast(duration), .big);
-        self.patchAt(self.duration_offset, &duration_patch) catch return Error.WriteFailed;
+        self.patchAt(self.duration_offset, &duration_patch) catch {
+            if (failure == null) failure = Error.WriteFailed;
+        };
 
-        self.file.close(self.io);
+        if (failure) |err| return err;
     }
 
     /// Abandon the file without patching its sizes.
@@ -304,6 +327,11 @@ pub fn open(
     height: u32,
 ) Error!void {
     const file = std.Io.Dir.cwd().createFile(io, path, .{}) catch return Error.WriteFailed;
+    // Every write below can fail (a full disk fails all of them), and the
+    // caller has no handle to close if it does. Release it here on the way out
+    // and let success cancel the cleanup.
+    var opened = false;
+    errdefer if (!opened) file.close(io);
 
     muxer.* = .{
         .file = file,
@@ -339,21 +367,20 @@ pub fn open(
     segment.id(id_segment);
     try muxer.write(segment.slice());
     muxer.segment_size_offset = muxer.bytes_written;
-    try muxer.write(&[_]u8{ 0x01, 0, 0, 0, 0, 0, 0, 0 });
+    try muxer.write(&unknown_size_vint);
 
     // Info, with Duration left as a patchable 8-byte float.
     var info_body = Builder{};
     info_body.unsigned(id_timecode_scale, timecode_scale_ns);
     info_body.string(id_muxing_app, "roc-ray");
     info_body.string(id_writing_app, "roc-ray");
-    const duration_prefix_len = blk: {
-        var prefix = Builder{};
-        prefix.id(id_duration);
-        prefix.size(8);
-        info_body.raw(prefix.slice());
-        break :blk prefix.len;
-    };
-    const duration_offset_in_info = info_body.len - duration_prefix_len + duration_prefix_len;
+    var duration_prefix = Builder{};
+    duration_prefix.id(id_duration);
+    duration_prefix.size(8);
+    info_body.raw(duration_prefix.slice());
+    // The placeholder goes in right after its own ID and size, so the current
+    // length is its offset within Info's body.
+    const duration_offset_in_info = info_body.len;
     info_body.raw(&[_]u8{0} ** 8);
 
     var info = Builder{};
@@ -389,6 +416,8 @@ pub fn open(
     tracks.raw(track_entry.slice());
     try muxer.write(tracks.slice());
     muxer.segment_payload += tracks.len;
+
+    opened = true;
 }
 
 test "writeVint encodes the documented single-byte range" {

@@ -33,6 +33,7 @@ extern fn rocray_vp8_encode(
 ) c_int;
 extern fn rocray_vp8_flush(callback: PacketFn, context: ?*anyopaque) c_int;
 extern fn rocray_vp8_end() void;
+extern fn rocray_vp8_is_open() c_int;
 
 /// Errors an encoder can report. Each maps onto a `capture.err_*` code.
 pub const Error = error{
@@ -42,6 +43,9 @@ pub const Error = error{
     OutOfMemory,
     /// libvpx rejected a frame, or the muxer refused one.
     EncodeFailed,
+    /// A previous encoder was never closed. libvpx's state here is a single
+    /// static instance, so this is a host bug rather than anything an app did.
+    AlreadyOpen,
 };
 
 /// Pick a target bitrate for a resolution and frame rate.
@@ -123,9 +127,11 @@ pub fn rgbaToI420(
                     b += rgba[src + 2];
                 }
             }
-            r = @divTrunc(r, 4);
-            g = @divTrunc(g, 4);
-            b = @divTrunc(b, 4);
+            // Rounded, not truncated: truncation biases every chroma sample
+            // down by up to three quarters of a level.
+            r = @divTrunc(r + 2, 4);
+            g = @divTrunc(g + 2, 4);
+            b = @divTrunc(b + 2, 4);
 
             u_plane[@as(usize, chroma_row) * u_stride + @as(usize, chroma_col)] = blueChromaFromRgb(r, g, b);
             v_plane[@as(usize, chroma_row) * v_stride + @as(usize, chroma_col)] = redChromaFromRgb(r, g, b);
@@ -160,10 +166,19 @@ pub const Encoder = struct {
         };
     }
 
-    /// Milliseconds a frame occupies at this recording's rate.
-    fn frameDurationMs(self: *const Encoder) u64 {
+    /// Presentation time of a frame index, in whole milliseconds.
+    ///
+    /// Computed as an exact rational rather than accumulating a per-frame
+    /// duration: `1000 / 60` truncates to 16ms, which would play a 60fps
+    /// recording back 4% fast and drift further the longer it runs.
+    fn timecodeMs(self: *const Encoder, index: u64) u64 {
         const rate: u64 = @intCast(@max(self.fps, 1));
-        return @max(1000 / rate, 1);
+        return index *| 1000 / rate;
+    }
+
+    /// Milliseconds between a frame and the next one.
+    fn frameDurationMs(self: *const Encoder, index: u64) u64 {
+        return @max(self.timecodeMs(index + 1) -| self.timecodeMs(index), 1);
     }
 
     /// Bytes written to the file so far.
@@ -196,8 +211,8 @@ pub const Encoder = struct {
             v_stride,
         );
 
-        const duration = self.frameDurationMs();
-        const timecode = self.frame_index * duration;
+        const timecode = self.timecodeMs(self.frame_index);
+        const duration = self.frameDurationMs(self.frame_index);
         self.frame_index += 1;
 
         const ok = rocray_vp8_encode(
@@ -217,7 +232,14 @@ pub const Encoder = struct {
         const ok = rocray_vp8_flush(Encoder.onPacket, self);
         rocray_vp8_end();
 
-        const duration = self.frame_index * self.frameDurationMs();
+        // A muxer that already failed cannot be finished cleanly; close it and
+        // report, rather than writing more into a broken file.
+        if (self.failed) {
+            self.muxer.abort();
+            return Error.WriteFailed;
+        }
+
+        const duration = self.timecodeMs(self.frame_index);
         self.muxer.finish(duration) catch {
             return Error.WriteFailed;
         };
@@ -243,24 +265,31 @@ pub fn open(
 ) Error!void {
     if (width == 0 or height == 0) return Error.EncodeFailed;
 
+    // Checked before anything is written, and before `encoder` is overwritten:
+    // libvpx's context here is a single static instance, so starting a second
+    // encoder while one is live would strand the first one's file handle and
+    // leave every later recording failing for the rest of the process.
+    if (rocray_vp8_is_open() != 0) return Error.AlreadyOpen;
+
+    var muxer: webm.Muxer = undefined;
+    webm.open(io, &muxer, path, width, height) catch |err| return switch (err) {
+        webm.Error.WriteFailed => Error.WriteFailed,
+        webm.Error.NonMonotonicTimecode => Error.EncodeFailed,
+    };
+
+    if (rocray_vp8_begin(@intCast(width), @intCast(height), fps, bitrateKbps(width, height, fps)) == 0) {
+        muxer.abort();
+        return Error.OutOfMemory;
+    }
+
     encoder.* = .{
-        .muxer = undefined,
+        .muxer = muxer,
         .width = width,
         .height = height,
         .fps = fps,
         .frame_index = 0,
         .failed = false,
     };
-
-    webm.open(io, &encoder.muxer, path, width, height) catch |err| return switch (err) {
-        webm.Error.WriteFailed => Error.WriteFailed,
-        webm.Error.NonMonotonicTimecode => Error.EncodeFailed,
-    };
-
-    if (rocray_vp8_begin(@intCast(width), @intCast(height), fps, bitrateKbps(width, height, fps)) == 0) {
-        encoder.muxer.abort();
-        return Error.OutOfMemory;
-    }
 }
 
 test "bitrateKbps scales with pixel throughput and stays in range" {

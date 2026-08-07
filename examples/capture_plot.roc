@@ -76,11 +76,13 @@ render! = |model, host, frame| {
 
 	draw_bars!(frame, elapsed)
 
-	# Once the recording has written every frame it was asked for there is
-	# nothing left to capture, so shut down and let the host finalize.
+	# The host finalizes the file itself once the recording reaches its frame
+	# cap, which leaves the session idle. That is the signal there is nothing
+	# left to capture, so shut down.
 	match Capture.status!() {
-		Active(progress) => if progress.frames >= recorded_frames host.exit!(0) else {}
-		_ => {}
+		Idle => host.exit!(0)
+		Failed(_) => host.exit!(1)
+		Active(_) => {}
 	}
 
 	Ok({ ..model, elapsed: elapsed })

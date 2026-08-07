@@ -5,9 +5,10 @@
 ## framebuffer at the end of each frame, so nothing here draws or needs a
 ## `Draw.Frame`.
 ##
-## Every path is relative to the output directory set with
-## `App.default.with_output_dir`. Absolute paths and paths containing `..` are
-## refused -- this is the only file-writing capability the platform grants.
+## Every path here is relative to the output directory set with
+## `App.default.with_output_dir`, and one that would escape it -- absolute, or
+## containing `..` -- is refused rather than rewritten. These effects are the
+## only file-writing capability the platform grants.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
@@ -44,7 +45,7 @@ Capture := [].{
 	]
 
 	## Why a running recording stopped early.
-	FailureReason : [OutOfMemory, WriteFailed, EncodeFailed, Unknown]
+	FailureReason : [UnsupportedFormat, OutOfMemory, WriteFailed, EncodeFailed, Unknown]
 
 	## Where pointer input comes from.
 	##
@@ -106,19 +107,20 @@ Capture := [].{
 					right: state.right,
 					wheel: state.wheel,
 				})
-		}
+			}
 
 	## Write a single still image of the current frame.
 	##
 	## The extension selects the encoder; `.png` is the portable choice. The
 	## file is written at the end of the frame in which this is called, so the
 	## image shows everything the app drew this frame.
-	screenshot! : Str => Try({}, [PathInvalid, PathEscapesOutputDir, WriteFailed, OutOfMemory, ..])
+	screenshot! : Str => Try({}, [PathInvalid, PathEscapesOutputDir, WriteFailed, OutOfMemory, AlreadyPending, ..])
 	screenshot! = |path|
 		match CaptureHost.screenshot!(path) {
 			0 => Ok({})
 			1 => Err(PathInvalid)
 			2 => Err(PathEscapesOutputDir)
+			3 => Err(AlreadyPending)
 			7 => Err(OutOfMemory)
 			_ => Err(WriteFailed)
 		}
@@ -126,7 +128,7 @@ Capture := [].{
 	## Begin recording. Frames accumulate until the recording hits its frame
 	## cap, `Capture.stop!` is called, or the app exits -- all three finalize
 	## the file.
-	start! : Recording => Try({}, [AlreadyRecording, PathInvalid, PathEscapesOutputDir, UnsupportedFormat, BudgetExceeded, ..])
+	start! : Recording => Try({}, [AlreadyRecording, PathInvalid, PathEscapesOutputDir, UnsupportedFormat, BudgetExceeded, OutOfMemory, WriteFailed, EncodeFailed, ..])
 	start! = |recording| {
 		ratio = RrtCapture.scale_ratio(recording.scale())
 		result = CaptureHost.start_recording!({
@@ -146,18 +148,22 @@ Capture := [].{
 			2 => Err(PathEscapesOutputDir)
 			3 => Err(AlreadyRecording)
 			5 => Err(UnsupportedFormat)
-			_ => Err(BudgetExceeded)
+			6 => Err(BudgetExceeded)
+			7 => Err(OutOfMemory)
+			8 => Err(WriteFailed)
+			_ => Err(EncodeFailed)
 		}
 	}
 
 	## Finish the current recording and write its file, reporting how many
 	## frames it holds and how large it is on disk.
-	stop! : () => Try({ frames : U64, bytes : U64 }, [NotRecording, OutOfMemory, WriteFailed, EncodeFailed, ..])
+	stop! : () => Try({ frames : U64, bytes : U64 }, [NotRecording, UnsupportedFormat, OutOfMemory, WriteFailed, EncodeFailed, ..])
 	stop! = || {
 		result = CaptureHost.stop_recording!()
 		match result.err {
 			0 => Ok({ frames: result.frames, bytes: result.bytes })
 			4 => Err(NotRecording)
+			5 => Err(UnsupportedFormat)
 			7 => Err(OutOfMemory)
 			8 => Err(WriteFailed)
 			_ => Err(EncodeFailed)
@@ -182,15 +188,21 @@ Capture := [].{
 	}
 }
 
+## Name every failure code the host can latch on a running recording.
+##
+## `Unknown` means the host reported a code this module has no name for, which
+## is a drift bug rather than a state an app should have to handle.
 failure_reason : U8 -> Capture.FailureReason
 failure_reason = |code|
 	match code {
+		5 => UnsupportedFormat
 		7 => OutOfMemory
 		8 => WriteFailed
 		9 => EncodeFailed
 		_ => Unknown
 	}
 
+expect failure_reason(5) == UnsupportedFormat
 expect failure_reason(7) == OutOfMemory
 expect failure_reason(8) == WriteFailed
 expect failure_reason(9) == EncodeFailed

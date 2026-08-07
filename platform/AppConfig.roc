@@ -81,17 +81,17 @@ AppConfig := [].{
 ## `NoRecording` still has to fill every field, so it supplies inert values the
 ## host ignores while `record_enabled` is false.
 host_recording : App.Recording -> {
-		enabled : Bool,
-		path : Str,
-		format : U8,
-		fps : I32,
-		max_frames : U64,
-		scale_numerator : U32,
-		scale_denominator : U32,
-		every_nth : U32,
-		timing : U8,
-		cursor : U8,
-	}
+	enabled : Bool,
+	path : Str,
+	format : U8,
+	fps : I32,
+	max_frames : U64,
+	scale_numerator : U32,
+	scale_denominator : U32,
+	every_nth : U32,
+	timing : U8,
+	cursor : U8,
+}
 host_recording = |value|
 	match value {
 		NoRecording => {
@@ -169,15 +169,16 @@ expect {
 expect {
 	custom =
 		RrtCapture.default
-		.with_path("demo.webm")
-		.with_format(WebM)
-		.with_scale(Quarter)
-		.with_timing(RealTime)
-		.with_cursor(DrawCursor)
-		.with_every_nth(4)
+			.with_path("demo.webm")
+			.with_format(WebM)
+			.with_scale(Quarter)
+			.with_timing(RealTime)
+			.with_cursor(DrawCursor)
+			.with_every_nth(4)
 	host = AppConfig.to_host({}, App.default.with_recording(Record(custom)))
 	host.record_path == "demo.webm" and host.record_format == 2 and host.record_scale_denominator == 4 and host.record_timing == 0 and host.record_cursor == 1 and host.record_every_nth == 4
 }
+
 ## A disabled recording still fills every ABI field with inert values.
 expect {
 	host = AppConfig.to_host({}, App.default)

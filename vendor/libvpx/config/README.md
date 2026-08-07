@@ -4,9 +4,12 @@ Source: libvpx v1.16.0, https://chromium.googlesource.com/webm/libvpx
 License: BSD-3-Clause (see `LICENSE`), with an additional patent grant in
 `PATENTS`. VP8 is royalty-free, which is why it is here rather than H.264.
 
-Only what a pure-C VP8 *encoder* needs is vendored. Every architecture-specific
+The vendored tree is the VP8 encoder's modules with every architecture-specific
 SIMD directory (`x86/`, `arm/`, `mips/`, `ppc/`, `loongarch/`) and every
-assembly source is excluded: those are NASM/GAS syntax that Zig cannot
+assembly source excluded. It is pruned by directory, not file by file, so it
+also carries some sources the encoder does not use -- what actually gets
+compiled is the explicit 74-file `libvpx_sources` list in `build.zig`. Dropping
+the SIMD paths is what matters: those are NASM/GAS syntax that Zig cannot
 assemble, and dropping them is what lets `zig build` compile this directly for
 all four targets with no configure step and no per-OS CI runner.
 

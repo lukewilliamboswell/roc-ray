@@ -198,7 +198,7 @@ Capture := [].{
 				} else {
 					{ numerator: r.numerator, denominator: r.denominator }
 				}
-		}
+			}
 }
 
 normalize_fps : I32 -> I32

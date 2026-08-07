@@ -117,10 +117,12 @@ App := [].{
 		## Return a config whose captures are written under a different
 		## directory, created on first use.
 		##
-		## This is the sandbox root for every `Capture` effect: a screenshot or
-		## recording path is resolved beneath it, and one that escapes -- an
-		## absolute path, or one containing `..` -- is refused rather than
-		## rewritten. An empty value means the working directory.
+		## Every `Capture` path resolves beneath this directory, and one that
+		## would escape it -- an absolute path, or one containing `..` -- is
+		## refused rather than rewritten. The directory itself is the app
+		## author's choice and is used as given, so it may be absolute; what it
+		## bounds is where the paths an app computes at runtime can reach. An
+		## empty value means the working directory.
 		with_output_dir : Config, Str -> Config
 		with_output_dir = |cfg, value| { ..cfg, output_dir: value }
 

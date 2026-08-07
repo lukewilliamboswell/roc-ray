@@ -52,6 +52,13 @@ pub const Encoder = struct {
     centiseconds_per_frame: c_int,
     bytes_written: u64,
     write_failed: bool,
+    /// Whether the finalizer actually emitted anything.
+    ///
+    /// If msf_gif runs out of memory it frees its state and then hands the
+    /// finalizer an empty result, which the callback accepts and msf_gif
+    /// reports as success -- leaving a GIF with no trailer and missing frames.
+    /// Tracking this is the only way to tell that apart from a real finish.
+    wrote_something: bool,
 
     /// msf_gif hands writes back through an `fwrite`-shaped callback.
     ///
@@ -69,6 +76,7 @@ pub const Encoder = struct {
         if (total == 0) return count;
         const bytes: [*]const u8 = @ptrCast(buffer orelse return 0);
 
+        self.wrote_something = true;
         self.file.writeStreamingAll(self.io, bytes[0..total]) catch {
             // Returning short tells msf_gif the write failed. Latch it too, so
             // a failure part-way through a long recording is still reportable
@@ -103,10 +111,14 @@ pub const Encoder = struct {
     /// Safe to call after a failed frame: msf_gif no-ops once it has errored,
     /// and its buffers still need freeing.
     pub fn finish(self: *Encoder) Error!void {
+        self.wrote_something = false;
         const ok = rocray_gif_end();
         self.file.close(self.io);
         if (self.write_failed) return Error.WriteFailed;
         if (ok == 0) return Error.EncodeFailed;
+        // msf_gif returns success for an empty result, so an encoder that gave
+        // up earlier would otherwise look like a clean finish.
+        if (!self.wrote_something) return Error.EncodeFailed;
     }
 
     /// Abandon the recording, closing the file without finalizing it.
@@ -152,6 +164,7 @@ pub fn open(
         .centiseconds_per_frame = centisecondsPerFrame(fps),
         .bytes_written = 0,
         .write_failed = false,
+        .wrote_something = false,
     };
 
     const ok = rocray_gif_begin(

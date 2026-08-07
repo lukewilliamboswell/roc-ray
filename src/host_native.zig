@@ -98,6 +98,13 @@ var capture_recording_path_len: usize = 0;
 var capture_screenshot_path: [capture.path_capacity]u8 = undefined;
 var capture_screenshot_path_len: usize = 0;
 var capture_screenshot_pending: bool = false;
+/// Outcome of the most recent serviced screenshot.
+///
+/// A screenshot is written at the end of the frame that asked for it, so the
+/// effect cannot return the write's result. Latching it here lets the next
+/// `Capture.screenshot!` report that the previous one failed rather than
+/// letting the failure vanish.
+var capture_screenshot_result: u8 = capture.err_none;
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -657,6 +664,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
+    capture_screenshot_result = capture.err_none;
     capture_screenshot_path_len = 0;
     capture_recording_path_len = 0;
     capture_output_dir_len = 0;
@@ -2136,7 +2144,11 @@ fn prepareCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
 }
 
 /// Write one captured image to a validated path, returning a capture error code.
-fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8) u8 {
+///
+/// `bytes_out`, when given, receives the size of the file that was written --
+/// the encoded size, not the pixel count, since that is what `Capture.stop!`
+/// reports as the recording's size on disk.
+fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8, bytes_out: ?*u64) u8 {
     var path_storage: [capture.path_capacity]u8 = undefined;
     const resolved = prepareCapturePath(&path_storage, path) orelse return capture.err_write_failed;
 
@@ -2146,6 +2158,14 @@ fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8) u8 {
     defer c_path.deinit();
 
     if (!image.exportPng(c_path.ptr)) return capture.err_write_failed;
+
+    if (bytes_out) |out| {
+        const stat = std.Io.Dir.cwd().statFile(defaultIo(), resolved, .{}) catch {
+            // The file is written; only its size is unknown.
+            return capture.err_none;
+        };
+        out.* = stat.size;
+    }
     return capture.err_none;
 }
 
@@ -2171,11 +2191,21 @@ fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     // and then dropped rather than writing a file that would be all zeroes.
     if (headlessMode()) return capture.err_none;
 
+    // A request already queued this frame has not been serviced yet, and there
+    // is only one slot. Refuse rather than silently discarding the first path.
+    if (capture_screenshot_pending) return capture.err_already_recording;
+
     if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
         return capture.err_path_invalid;
     }
     capture_screenshot_pending = true;
-    return capture.err_none;
+
+    // The write happens at the end of this frame, so the only failure this call
+    // can report is the previous screenshot's. Reporting it late beats losing
+    // it: the alternative is a write that fails with no signal anywhere.
+    const previous = capture_screenshot_result;
+    capture_screenshot_result = capture.err_none;
+    return previous;
 }
 
 fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
@@ -2206,6 +2236,17 @@ fn exportedCaptureStartRecording(args: abi.CaptureHostStart_recordingArgs) callc
 /// Shared by the runtime effect and the startup config so a recording declared
 /// in `App.Config` is checked exactly as strictly as one started from `render!`.
 fn startCaptureRecording(request: capture.Request) u8 {
+    // A recording that failed mid-run leaves its session latched and its sink
+    // open, and retrying after observing `Failed` is the natural thing for an
+    // app to do. Finalize the wreckage first: without this the old encoder's
+    // file handle leaks, its partial file never gets a trailer, and starting a
+    // different format would leave two sinks open with only the first ever
+    // closed. An *active* recording is still refused by `Session.start`.
+    if (capture_session.status == capture.status_failed) {
+        _ = capture_session.stop();
+        _ = closeCaptureSink(true);
+    }
+
     const width: u32 = @intCast(@max(currentRenderWidth(), 1));
     const height: u32 = @intCast(@max(currentRenderHeight(), 1));
 
@@ -2283,6 +2324,9 @@ fn vp8ErrorCode(err: capture_vp8.Error) u8 {
         capture_vp8.Error.WriteFailed => capture.err_write_failed,
         capture_vp8.Error.OutOfMemory => capture.err_out_of_memory,
         capture_vp8.Error.EncodeFailed => capture.err_encode_failed,
+        // The previous encoder was never closed, so from the app's side a
+        // recording is still in progress.
+        capture_vp8.Error.AlreadyOpen => capture.err_already_recording,
     };
 }
 
@@ -2299,30 +2343,39 @@ fn captureErrorCode(err: gif_encoder.Error) u8 {
 ///
 /// `finished` finalizes the file; otherwise it is abandoned mid-stream, which
 /// still leaves the frames written so far readable by most decoders.
+/// Close every open sink, reporting the first failure.
+///
+/// Both are checked rather than returning after the first: only one should ever
+/// be open, but if that invariant were ever broken the other would otherwise be
+/// left holding an unfinalized file and a live descriptor.
 fn closeCaptureSink(finished: bool) u8 {
+    var result = capture.err_none;
+
     if (capture_gif_open) {
         capture_gif_open = false;
-        if (!finished) {
+        if (finished) {
+            capture_gif.finish() catch |err| {
+                result = captureErrorCode(err);
+            };
+            capture_recording_bytes = capture_gif.bytesWritten();
+        } else {
             capture_gif.abort();
-            return capture.err_none;
         }
-        defer capture_recording_bytes = capture_gif.bytesWritten();
-        capture_gif.finish() catch |err| return captureErrorCode(err);
-        return capture.err_none;
     }
 
     if (capture_webm_open) {
         capture_webm_open = false;
-        if (!finished) {
+        if (finished) {
+            capture_webm.finish() catch |err| {
+                if (result == capture.err_none) result = vp8ErrorCode(err);
+            };
+            capture_recording_bytes = capture_webm.bytesWritten();
+        } else {
             capture_webm.abort();
-            return capture.err_none;
         }
-        defer capture_recording_bytes = capture_webm.bytesWritten();
-        capture_webm.finish() catch |err| return vp8ErrorCode(err);
-        return capture.err_none;
     }
 
-    return capture.err_none;
+    return result;
 }
 
 fn currentRenderWidth() i32 {
@@ -3225,20 +3278,26 @@ fn serviceCaptureRequests() void {
 
     capture_screenshot_pending = false;
 
-    // Drawn here rather than in the app's `render!` so it lands in the file
-    // without also being painted on screen next to the real cursor.
+    // The glyph goes into the frame that is about to be presented as well as
+    // into the file. That is invisible for the hidden-window case this exists
+    // for; a visible window shows it alongside the real cursor.
     if (wants_frame and capture_session.cursor == capture.cursor_draw) {
         drawCaptureCursorOverlay();
     }
 
     var image = raylib.captureFramebuffer() orelse {
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
+        if (wants_screenshot) capture_screenshot_result = capture.err_out_of_memory;
         return;
     };
     defer image.deinit();
 
     if (wants_screenshot) {
-        _ = writeCaptureImage(image, capture_screenshot_path[0..capture_screenshot_path_len]);
+        capture_screenshot_result = writeCaptureImage(
+            image,
+            capture_screenshot_path[0..capture_screenshot_path_len],
+            null,
+        );
     }
 
     if (!wants_frame) return;
@@ -3254,6 +3313,18 @@ fn serviceCaptureRequests() void {
         // `start!` already rejects unknown formats, so reaching here would mean
         // a known one had no sink.
         else => capture_session.fail(capture.err_unsupported_format),
+    }
+
+    // Reaching the frame cap finalizes the file, which is what `Capture.start!`
+    // and `App.with_recording` both promise. Without this a capped recording
+    // stays `Active` forever, counts every later frame as dropped, and only
+    // reaches disk when the process exits.
+    if (capture_session.isActive() and capture_session.reachedFrameCap()) {
+        _ = capture_session.stop();
+        const closed = closeCaptureSink(true);
+        if (closed != capture.err_none) {
+            std.log.err("could not finalize the recording at its frame cap (capture error {d})", .{closed});
+        }
     }
 }
 
@@ -3298,12 +3369,13 @@ fn writeRecordingFramePng(image: raylib.CaptureImage) void {
         return;
     };
 
-    const result = writeCaptureImage(image, path);
+    var written: u64 = 0;
+    const result = writeCaptureImage(image, path, &written);
     if (result != capture.err_none) {
         capture_session.fail(result);
         return;
     }
-    capture_recording_bytes +|= @as(u64, image.width()) * @as(u64, image.height()) * 4;
+    capture_recording_bytes +|= written;
 }
 
 /// Append one frame to the open GIF.
@@ -3554,7 +3626,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel }
         else
             raylib.getMouseWheelMoveV();
-        if (virtual_mouse_active) recordVirtualMousePosition();
+        if (virtual_mouse_active) {
+            recordVirtualMousePosition();
+            // A real wheel reports movement for one frame and then returns to
+            // zero, so consume the scripted value rather than reporting it
+            // again on every subsequent frame.
+            virtual_mouse_wheel = 0;
+        }
         const text_input = raylib.getTextInput();
         const platform_state = input.hostState(
             frame_count,

@@ -333,12 +333,12 @@ to re-vendor per platform, and no per-OS CI runner in the loop:
 
 - `vendor/msf_gif/` -- a single-header GIF encoder (MIT or public domain). Built
   freestanding like the host; the handful of libc declarations it needs come
-  from the two-file `shim/` directory beside it.
+  from the `shim/` directory beside it.
 - `vendor/libvpx/` -- the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
   Only the pure-C encoder is vendored: every SIMD directory and every assembly
   source is excluded, because those are NASM/GAS syntax Zig cannot assemble.
-  `vendor/libvpx/README.md` records the `configure` invocation that produced the
-  generated headers in `config/`, which is the one thing that has to be redone
+  `vendor/libvpx/config/README.md` records the `configure` invocation that
+  produced the generated headers beside it, which is the one thing that has to be redone
   when upgrading.
 
 Both expose only primitives and opaque pointers to Zig through a small C shim,

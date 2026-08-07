@@ -79,12 +79,13 @@ pub const Request = struct {
 /// Why a running recording stopped early, or `err_none` if it did not.
 pub const Failure = u8;
 
-/// Reject anything that could write outside the configured output directory.
+/// Reject a request path that could resolve outside the output directory.
 ///
-/// The platform has no general file-write effect, so this is the only path an
-/// app can name for a host write. Absolute paths, parent traversal, NUL bytes,
-/// and `~` expansion are all refused rather than normalized: silently rewriting
-/// a path an app asked for is worse than failing it.
+/// This guards the path an app names at runtime, not the output directory
+/// itself -- that is chosen by the app author in `App.Config` and is used as
+/// given. Absolute paths, parent traversal, NUL bytes, and `~` are refused
+/// rather than normalized: silently rewriting a path an app asked for is worse
+/// than failing it.
 pub fn validateRelativePath(path: []const u8) u8 {
     if (path.len == 0) return err_path_invalid;
     if (path.len > path_capacity) return err_path_invalid;
@@ -276,7 +277,12 @@ pub const Session = struct {
         if (self.status != status_active) return null;
         if (self.timing != timing_fixed_step) return null;
         if (self.fps <= 0) return null;
-        return 1.0 / @as(f32, @floatFromInt(self.fps));
+        // Divided by the stride: `fps` is the rate the finished file plays at,
+        // while this step applies to every rendered frame. Keeping one frame in
+        // four for a 25fps recording means those four rendered frames together
+        // have to represent 1/25s, or the result plays back at 4x speed.
+        const stride: f32 = @floatFromInt(@max(self.every_nth, 1));
+        return 1.0 / (@as(f32, @floatFromInt(self.fps)) * stride);
     }
 
     /// Latch a failure, stop accepting frames, and keep the app running.
@@ -502,6 +508,14 @@ test "fixedStepSeconds only applies to an active fixed-step recording" {
     request.fps = 50;
     try std.testing.expectEqual(err_none, session.start(request, 64, 64));
     try std.testing.expectEqual(@as(f32, 0.02), session.fixedStepSeconds().?);
+    _ = session.stop();
+
+    // A stride slows the simulated step so playback stays at the stated rate:
+    // four rendered frames at 1/100s make up one 1/25s frame of output.
+    request.fps = 25;
+    request.every_nth = 4;
+    try std.testing.expectEqual(err_none, session.start(request, 64, 64));
+    try std.testing.expectEqual(@as(f32, 0.01), session.fixedStepSeconds().?);
 }
 
 test "a failure latches, halts capture, and surfaces on stop" {

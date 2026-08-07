@@ -366,11 +366,29 @@ const BuildResult = struct {
     x11_stub: ?std.Build.LazyPath,
 };
 
+/// Compiler flags for the vendored libvpx.
+///
+/// gnu99, not c99: vpx_ports/vpx_timer.h uses clock_gettime and struct
+/// timespec, which strict-ANSI mode hides behind __STRICT_ANSI__.
+///
+/// The stack protector and stack probes are disabled because the Windows
+/// archive is compiled against mingw headers but linked into an MSVC-target
+/// binary: those options emit calls to libgcc-only helpers (__stack_chk_fail,
+/// __stack_chk_guard, ___chkstk_ms) that no MSVC CRT provides, and the link
+/// fails. They cost nothing here -- this is a self-contained encoder fed
+/// fixed-size frames, not a parser handling untrusted input.
+const libvpx_flags = [_][]const u8{
+    "-std=gnu99",
+    "-Wno-unused-function",
+    "-fno-stack-protector",
+    "-mno-stack-arg-probe",
+};
+
 /// Pure-C VP8 encoder sources from the vendored libvpx.
 ///
-/// This is exactly the set libvpx's own configure selects for a
+/// This is the set libvpx's own configure selects for a
 /// `--target=generic-gnu --disable-runtime-cpu-detect` VP8-encoder build; see
-/// vendor/libvpx/README.md for the invocation. Every SIMD path is excluded, so
+/// vendor/libvpx/config/README.md for the invocation. Every SIMD path is excluded, so
 /// there is no assembly for Zig to choke on and one file list serves all four
 /// targets.
 const libvpx_sources = [_][]const u8{
@@ -689,17 +707,23 @@ fn buildHostLib(
     });
     libvpx.root_module.addIncludePath(b.path("vendor/libvpx"));
     libvpx.root_module.addIncludePath(b.path("vendor/libvpx/config"));
+    if (roc_target == .x64win) {
+        // Replaces mingw's <setjmp.h>, whose x64 mapping needs a helper only
+        // mingw's CRT defines. Windows-only: every other target links a real
+        // libc and must use its own header.
+        libvpx.root_module.addIncludePath(b.path("vendor/libvpx/shim/win"));
+    }
     // The narrow C shim the host actually calls; see src/capture_vp8.zig.
     libvpx.root_module.addCSourceFile(.{
         .file = b.path("vendor/libvpx/shim/rocray_vp8.c"),
-        .flags = &.{"-std=gnu99"},
+        .flags = &libvpx_flags,
     });
     libvpx.root_module.addCSourceFiles(.{
         .root = b.path("vendor/libvpx"),
         // gnu99, not c99: vpx_ports/vpx_timer.h uses clock_gettime and
         // struct timespec, which strict-ANSI mode hides behind __STRICT_ANSI__.
         .files = &libvpx_sources,
-        .flags = &.{ "-std=gnu99", "-Wno-unused-function" },
+        .flags = &libvpx_flags,
     });
 
     msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif"));

@@ -19,18 +19,18 @@ AssetsHost := [].{
 
 	TextureResult : { texture : Texture, err : U8 }
 
-	GenerateColorTexture : { width : I32, height : I32, color : Color }
+	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
 
 	GenerateCheckedTexture : {
 		width : I32,
 		height : I32,
 		checks_x : I32,
 		checks_y : I32,
-		color_a : Color,
-		color_b : Color,
+		color_a : Color.Rgba,
+		color_b : Color.Rgba,
 	}
 
-	UpdateTexture : { texture : Texture, pixels : List(Color) }
+	UpdateTexture : { texture : Texture, pixels : List(Color.Rgba) }
 
 	load_texture! : Str => TextureResult
 	generate_color_texture! : GenerateColorTexture => TextureResult

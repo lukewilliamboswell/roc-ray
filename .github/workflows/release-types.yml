@@ -1,0 +1,139 @@
+name: Release roc-ray-types
+
+# The types package releases independently of the platform, so either can be
+# bumped on its own. The platform pins a published package in .types-version,
+# and `scripts/bundle.sh` refuses to build a platform bundle whose pin no longer
+# matches `types/` -- so run this first whenever `types/` changes.
+#
+# Deliberately much simpler than the platform release: a package is pure Roc
+# source, so there are no host libraries, no per-target bundles, and no bundle
+# test matrix.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Types package version, e.g. 0.1.0"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - "types/**"
+      - ".github/workflows/release-types.yml"
+      - "scripts/bundle.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-types-${{ github.event_name == 'workflow_dispatch' && github.repository || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  release:
+    name: Bundle and publish roc-ray-types
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
+      - name: Install Roc
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+
+      - name: Check and test the package
+        run: |
+          roc check types/main.roc
+          roc fmt --check types/
+          roc test types/main.roc
+
+      - name: Bundle the package
+        id: bundle
+        run: |
+          mkdir -p dist-types
+          # Bundle from inside types/ so the archive is rooted at main.roc.
+          # Bundling types/main.roc from the repo root nests it a level deeper
+          # than roc resolves on extraction.
+          output="$(cd types && roc bundle main.roc --output-dir ../dist-types)"
+          echo "$output"
+          bundle="$(printf '%s\n' "$output" | sed -n 's|^Created: ||p' | tail -1 | sed 's|.*[/\\]||')"
+          if [[ -z "$bundle" || ! -f "dist-types/$bundle" ]]; then
+            echo "Error: could not determine the roc-ray-types bundle filename"
+            exit 1
+          fi
+          echo "bundle=$bundle" >> "$GITHUB_OUTPUT"
+          echo "path=dist-types/$bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the bundle resolves
+        run: |
+          # Serve it locally and build the interop app against it, so a broken
+          # archive is caught here rather than by the first consumer.
+          python3 -m http.server --bind 127.0.0.1 8123 --directory dist-types &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          url="http://127.0.0.1:8123/${{ steps.bundle.outputs.bundle }}"
+          for _ in $(seq 1 30); do
+            curl -sf "$url" -o /dev/null && break
+            sleep 1
+          done
+          curl -sf "$url" -o /dev/null || { echo "Error: bundle not served at $url"; exit 1; }
+
+          python3 - "$url" <<'PY'
+          import pathlib, sys
+          url = sys.argv[1]
+          shim = pathlib.Path("test/package_interop/input_adapter/main.roc")
+          shim.write_text(shim.read_text().replace('"../../../types/main.roc"', f'"{url}"'))
+          PY
+          roc check test/package_interop/app.roc
+          git checkout test/package_interop/input_adapter/main.roc
+
+      - name: Publish release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.release_version }}
+          BUNDLE: ${{ steps.bundle.outputs.bundle }}
+          BUNDLE_PATH: ${{ steps.bundle.outputs.path }}
+        run: |
+          tag="types-$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Error: release $tag already exists"
+            exit 1
+          fi
+
+          url="https://github.com/${{ github.repository }}/releases/download/$tag/$BUNDLE"
+          cat > notes.md <<EOF
+          roc-ray-types $VERSION.
+
+          Shared data types and pure helpers for RocRay. The platform depends on
+          this package and re-exports it, so an app only needs it directly when a
+          reusable package of its own also uses these types -- both must resolve
+          the same URL for the types to be interchangeable.
+
+          \`\`\`roc
+          "$url"
+          \`\`\`
+          EOF
+
+          # --latest=false: the repo's latest release should stay the platform,
+          # which is what users are looking for when they land on /releases.
+          gh release create "$tag" "$BUNDLE_PATH" \
+            --title "roc-ray-types $VERSION" \
+            --notes-file notes.md \
+            --latest=false
+
+          echo "Published $url"
+          echo "Update .types-version to this URL, then release the platform."

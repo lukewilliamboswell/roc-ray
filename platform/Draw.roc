@@ -18,7 +18,7 @@ TextureDrawConfig : {
 	dest : Math.Rect,
 	origin : Math.Vec2,
 	rotation : F32,
-	tint : Color,
+	tint : Color.Rgba,
 }
 
 TextureDrawOptions : {
@@ -32,7 +32,7 @@ TextureDrawOptions : {
 	origin_center : Bool,
 	rotation : F32,
 	scale : Math.Vec2,
-	tint : Color,
+	tint : Color.Rgba,
 }
 
 TextureDrawBuilder(field) := {
@@ -139,7 +139,7 @@ TextureDrawBuilder(field) := {
 		apply: |options| { ..options, scale: value },
 	}
 
-	tint : Color -> TextureDrawBuilder(Color)
+	tint : Color.Rgba -> TextureDrawBuilder(Color.Rgba)
 	tint = |value| {
 		value,
 		apply: |options| { ..options, tint: value },
@@ -162,7 +162,7 @@ crosses_have_one_sign = |a, b, c, d| {
 Draw := [].{
 
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
-	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
+	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color.Rgba
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
 
 	## Opaque, zero-sized authority supplied only while the host is running
@@ -183,10 +183,10 @@ Draw := [].{
 	Camera2D : Camera.Camera2D
 
 	## Optional shape fill.
-	Fill : [NoFill, Fill(Color)]
+	Fill : [NoFill, Fill(Color.Rgba)]
 
 	## Optional shape outline with color and thickness.
-	Stroke : [NoStroke, Stroke({ color : Color, thickness : F32 })]
+	Stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })]
 
 	## Combined fill and outline applied by shape helpers.
 	ShapeStyle : {
@@ -220,8 +220,8 @@ Draw := [].{
 		y : F32,
 		width : F32,
 		height : F32,
-		color_top : Color,
-		color_bottom : Color,
+		color_top : Color.Rgba,
+		color_bottom : Color.Rgba,
 	}
 
 	## Horizontal rectangle gradient from left to right.
@@ -230,8 +230,8 @@ Draw := [].{
 		y : F32,
 		width : F32,
 		height : F32,
-		color_left : Color,
-		color_right : Color,
+		color_left : Color.Rgba,
+		color_right : Color.Rgba,
 	}
 
 	## Circle and its style.
@@ -245,8 +245,8 @@ Draw := [].{
 	CircleGradient : {
 		center : Vector2,
 		radius : F32,
-		color_inner : Color,
-		color_outer : Color,
+		color_inner : Color.Rgba,
+		color_outer : Color.Rgba,
 	}
 
 	## Line segment and stroke.
@@ -280,7 +280,7 @@ Draw := [].{
 	Fps : {
 		pos : Vector2,
 		size : F32,
-		color : Color,
+		color : Color.Rgba,
 	}
 
 	## The built-in font is allocation-free. A loaded font is an opaque host-owned
@@ -311,7 +311,7 @@ Draw := [].{
 		text : Str,
 		size : F32,
 		spacing : F32,
-		color : Color,
+		color : Color.Rgba,
 		font : Font,
 		align : TextAlign,
 	}
@@ -321,7 +321,7 @@ Draw := [].{
 		pos : Vector2,
 		text : Str,
 		size : F32,
-		color : Color,
+		color : Color.Rgba,
 	}
 
 	## Built-in-font text with default spacing.
@@ -329,7 +329,7 @@ Draw := [].{
 		pos : Vector2,
 		text : Str,
 		size : F32,
-		color : Color,
+		color : Color.Rgba,
 	}
 
 	## Text measurement configuration.
@@ -460,7 +460,7 @@ Draw := [].{
 		texture : Assets.Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
-		tint : Color,
+		tint : Color.Rgba,
 	}
 
 	## Sampled texture view projected exactly onto a validated planar quad.
@@ -468,7 +468,7 @@ Draw := [].{
 		texture : Assets.TextureView,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
-		tint : Color,
+		tint : Color.Rgba,
 	}
 
 	## Camera accepted by scoped 2D drawing.
@@ -592,7 +592,7 @@ Draw := [].{
 	}
 
 	ColorUniform :: DrawHost.Uniform.{
-		set! : ColorUniform, Color => {}
+		set! : ColorUniform, Color.Rgba => {}
 		set! = |ColorUniform.(uniform), color| DrawHost.set_shader_vec4!({
 			uniform,
 			value: normalized_color(color),
@@ -658,19 +658,19 @@ Draw := [].{
 	premultiplied_alpha_blend = AlphaPremultiply
 
 	## Create a fill-only shape style.
-	filled : Color -> ShapeStyle
+	filled : Color.Rgba -> ShapeStyle
 	filled = |color| { fill: Fill(color), stroke: NoStroke }
 
 	## Create a stroke with color and thickness in logical pixels.
-	stroke : Color, F32 -> Stroke
+	stroke : Color.Rgba, F32 -> Stroke
 	stroke = |color, thickness| Stroke({ color, thickness })
 
 	## Create a stroke-only shape style.
-	outlined : Color, F32 -> ShapeStyle
+	outlined : Color.Rgba, F32 -> ShapeStyle
 	outlined = |color, thickness| { fill: NoFill, stroke: Draw.stroke(color, thickness) }
 
 	## Create a shape style with both fill and outline.
-	filled_and_outlined : Color, Color, F32 -> ShapeStyle
+	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
 	## The built-in font, which requires no loading or host-owned resource.
@@ -770,7 +770,7 @@ Draw := [].{
 	}
 
 	## Clear the active drawing target to a solid color.
-	clear! : Frame, Color => {}
+	clear! : Frame, Color.Rgba => {}
 	clear! = |_frame, color| DrawHost.clear!(color)
 
 	## Draw a vertical rectangle gradient.
@@ -1153,7 +1153,7 @@ uniform_host! = |shader, name| {
 	}
 }
 
-normalized_color : Color -> Draw.Vec4
+normalized_color : Color.Rgba -> Draw.Vec4
 normalized_color = |color| {
 	x: U8.to_f32(color.r) / 255,
 	y: U8.to_f32(color.g) / 255,

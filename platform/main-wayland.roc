@@ -9,7 +9,9 @@ platform ""
 		}
 	}
 	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
-	packages {}
+	packages {
+		rrt: "../types/main.roc",
+	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
 		"init_for_host": init_for_host!,
@@ -75,11 +77,15 @@ platform ""
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,
 		"roc_host_exit": HostHost.exit!,
+		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_random_i32": HostHost.random_i32!,
 		"roc_host_read_env": HostHost.read_env!,
 		"roc_host_read_file_raw": HostHost.read_file!,
+		"roc_host_set_clipboard_text": HostHost.set_clipboard_text!,
+		"roc_host_set_exit_key": HostHost.set_exit_key!,
 		"roc_host_set_screen_size": HostHost.set_screen_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
+		"roc_host_set_window_min_size": HostHost.set_window_min_size!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,

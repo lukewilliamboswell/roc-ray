@@ -11,11 +11,14 @@ transport = {
 	title: "private",
 	width: 800,
 	height: 600,
+	min_width: 0,
+	min_height: 0,
 	target_fps: 240,
 	resizable: Bool.False,
 	fullscreen: Bool.False,
 	vsync: Bool.False,
 	cursor_visible: Bool.True,
+	exit_key_code: 256,
 }
 
 program = { init!, render! }

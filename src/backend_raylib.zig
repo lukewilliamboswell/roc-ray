@@ -8,6 +8,9 @@ const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
 
+/// Roc's `Color.Rgba`, the RGBA record that crosses the host boundary.
+pub const Color = abi.ColorRgba;
+
 /// Raw raylib C bindings.
 pub const rl = @cImport({
     @cInclude("raylib.h");
@@ -302,7 +305,7 @@ pub fn unloadTexture(texture: Texture) void {
 }
 
 /// Generate a solid-color texture, releasing the temporary CPU image before return.
-pub fn generateColorTexture(width: i32, height: i32, color: abi.Color) ?Texture {
+pub fn generateColorTexture(width: i32, height: i32, color: Color) ?Texture {
     if (width <= 0 or height <= 0) return null;
     const image = rl.GenImageColor(width, height, colorToRl(color));
     defer rl.UnloadImage(image);
@@ -333,8 +336,8 @@ pub fn generateCheckedTexture(args: anytype) ?Texture {
 }
 
 /// Replace all pixels in a texture from tightly packed RGBA colors.
-pub fn updateTexture(texture: Texture, pixels: []const abi.Color) void {
-    comptime std.debug.assert(@sizeOf(abi.Color) == @sizeOf(rl.Color));
+pub fn updateTexture(texture: Texture, pixels: []const Color) void {
+    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
     rl.UpdateTexture(texture, pixels.ptr);
 }
 
@@ -456,7 +459,7 @@ pub fn colorToRl(color: anytype) rl.Color {
 }
 
 test "colorToRl preserves Roc RGBA channel order" {
-    const black = colorToRl(abi.Color{
+    const black = colorToRl(Color{
         .r = 0,
         .g = 0,
         .b = 0,
@@ -467,7 +470,7 @@ test "colorToRl preserves Roc RGBA channel order" {
     try std.testing.expectEqual(@as(u8, 0), black.b);
     try std.testing.expectEqual(@as(u8, 255), black.a);
 
-    const red = colorToRl(abi.Color{
+    const red = colorToRl(Color{
         .r = 230,
         .g = 41,
         .b = 55,
@@ -516,7 +519,7 @@ fn roundedness(width: f32, height: f32, radius: f32) f32 {
     return @min(1, radius / min_dim);
 }
 
-fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) void {
+fn drawSegment(start: anytype, end: anytype, thickness: f32, color: Color) void {
     const thick = positiveThickness(thickness) orelse return;
     rl.DrawLineEx(toVector2(start), toVector2(end), thick, colorToRl(color));
 }
@@ -628,7 +631,7 @@ test "polygonSignedArea detects either boundary order" {
 
 /// Draw a filled convex polygon as an allocation-free triangle fan.
 /// Points must be ordered clockwise or counter-clockwise around the boundary.
-pub fn drawPolygon(points: anytype, color: abi.Color) void {
+pub fn drawPolygon(points: anytype, color: Color) void {
     if (points.len < 3) return;
 
     const reverse = polygonSignedArea(points) > 0;
@@ -643,7 +646,7 @@ pub fn drawPolygon(points: anytype, color: abi.Color) void {
 }
 
 /// Draw a polygon outline from abi args.
-pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void {
+pub fn drawPolygonLines(points: anytype, thickness: f32, color: Color) void {
     if (points.len < 2) return;
     const thick = positiveThickness(thickness) orelse return;
 
@@ -659,13 +662,13 @@ pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void 
 }
 
 /// Draw text with a null-terminated string.
-pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: Color) void {
     rl.DrawTextEx(font, text, pos, size, spacing, colorToRl(color));
 }
 
 /// Draw text anchored at a fractional point within its measured bounds.
 /// Top-left alignment ({ 0, 0 }) skips measurement entirely.
-pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color, alignment: rl.Vector2) void {
+pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: Color, alignment: rl.Vector2) void {
     const origin = if (alignment.x == 0 and alignment.y == 0) pos else blk: {
         const measured = rl.MeasureTextEx(font, text, size, spacing);
         break :blk textOrigin(pos, measured, alignment);
@@ -1033,6 +1036,36 @@ pub fn enableCursor() void {
 /// Set window size.
 pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
+}
+
+/// Set the smallest size the window may be resized to. raylib maps 0 to
+/// GLFW_DONT_CARE, leaving that axis unconstrained. Requires a live window, so
+/// this must be called after initWindow, and only binds on a resizable window.
+pub fn setWindowMinSize(width: c_int, height: c_int) void {
+    rl.SetWindowMinSize(width, height);
+}
+
+/// Set the key that closes the window, or raylib's KEY_NULL (0) to disable it.
+/// InitWindow resets this to KEY_ESCAPE, so this must be called after it.
+pub fn setExitKey(key: c_int) void {
+    rl.SetExitKey(key);
+}
+
+/// Read UTF-8 text from the system clipboard.
+///
+/// The returned pointer is owned by the windowing backend: never free it, and
+/// copy it before the next clipboard call invalidates it. Returns null when the
+/// clipboard is empty or holds non-text content. Requires a live window.
+pub fn getClipboardText() ?[*:0]const u8 {
+    const text = rl.GetClipboardText();
+    if (text == null) return null;
+    return @ptrCast(text);
+}
+
+/// Replace the system clipboard contents. raylib copies the string, so the
+/// caller keeps ownership. Requires a live window.
+pub fn setClipboardText(text: [*:0]const u8) void {
+    rl.SetClipboardText(text);
 }
 
 /// Get frame time (delta time) in seconds since the previous frame.

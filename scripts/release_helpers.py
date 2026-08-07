@@ -106,6 +106,18 @@ def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
     return 0
 
 
+def read_types_pin() -> str:
+    """The published roc-ray-types bundle the platform bundles were built against."""
+    pin = Path(__file__).resolve().parent.parent / ".types-version"
+    if not pin.is_file():
+        return ""
+    for line in pin.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return ""
+
+
 def cmd_make_release_notes(args: argparse.Namespace) -> int:
     release_version = args.release_version or os.environ.get("RELEASE_VERSION", "")
     if not release_version:
@@ -142,6 +154,21 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         f'platform "{wayland_url}"',
         "```",
     ]
+    types_url = read_types_pin()
+    if types_url:
+        lines.extend([
+            "",
+            "### roc-ray-types package",
+            "",
+            "Shared data types and pure helpers, released independently of the platform. The",
+            "bundles above already depend on this version; add it to your app only if a reusable",
+            "package of your own also uses these types, so both resolve the same URL.",
+            "",
+            "```roc",
+            f'"{types_url}"',
+            "```",
+        ])
+
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
         lines.extend(["", "## Docs", "", f"- [View docs for {release_version}]({docs_url})"])

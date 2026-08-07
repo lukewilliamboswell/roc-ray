@@ -1,0 +1,10 @@
+# The published roc-ray-types bundle the platform depends on.
+#
+# The platform and the types package release independently: bump either, or
+# both, in a PR. `scripts/bundle.sh` rewrites the platform header to this URL
+# and refuses to build if `types/` no longer bundles to this filename, so a
+# platform release can never reference a package build that was never published.
+#
+# Produced by .github/workflows/release-types.yml. Empty until the first
+# roc-ray-types release is cut.
+https://github.com/lukewilliamboswell/roc-ray/releases/download/types-0.1.0/BLqH8dcQg7q6vkrneBQrXhcRdo85ugx5fYP9ommzPGPb.tar.zst

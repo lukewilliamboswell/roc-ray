@@ -269,7 +269,7 @@ cell_rect = |cell| {
 	height: cell_size,
 }
 
-draw_cell! : Draw.Frame, Cell, Color, Color => {}
+draw_cell! : Draw.Frame, Cell, Color.Rgba, Color.Rgba => {}
 draw_cell! = |frame, cell, fill, outline| {
 	rect = cell_rect(cell)
 	frame.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, outline, 2) })

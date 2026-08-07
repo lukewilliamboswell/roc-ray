@@ -87,6 +87,8 @@ pub fn main(init: std.process.Init) !void {
 
     dead_files_detector.finish(&errors);
 
+    try checkPlatformHeadersInSync(gpa, io, &errors);
+
     if (errors.count > 0) {
         std.debug.print("\n{s}[FAIL]{s} Found {d} tidy violations\n", .{ TermColor.red, TermColor.reset, errors.count });
         std.process.exit(1);
@@ -164,6 +166,25 @@ const Errors = struct {
     pub fn addFileDead(errors: *Errors, file: []const u8) void {
         errors.emit(
             "{s}: error: src/ file never imported in src/\n",
+            .{file},
+        );
+    }
+
+    pub fn addPlatformHeaderDrift(
+        errors: *Errors,
+        region: []const u8,
+        line_number: usize,
+    ) void {
+        errors.emit(
+            "{s}:{d}: error: {s} differs from {s}; the two platform headers must" ++
+                " match outside their `targets:` blocks\n",
+            .{ platform_main_path, line_number, region, platform_wayland_path },
+        );
+    }
+
+    pub fn addPlatformHeaderShape(errors: *Errors, file: []const u8) void {
+        errors.emit(
+            "{s}: error: could not find a `targets: {{` block to compare around\n",
             .{file},
         );
     }
@@ -627,6 +648,82 @@ const DeadFilesDetector = struct {
         return false;
     }
 };
+
+const platform_main_path = "platform/main.roc";
+const platform_wayland_path = "platform/main-wayland.roc";
+
+const TargetsSplit = struct {
+    /// Everything before the `targets:` block, i.e. the platform header:
+    /// requires/exposes/packages/provides/hosted.
+    before: []const u8,
+    /// Everything after it: the imports and the host adapter functions.
+    after: []const u8,
+    /// Offset of `after` within the file, so drift can be reported by line.
+    after_offset: usize,
+};
+
+/// Split a platform header around its `targets: {` block. Entries inside the
+/// block are indented two tabs, so the first single-tab `}` closes it.
+fn splitTargetsBlock(text: []const u8) ?TargetsSplit {
+    const open = "\ttargets: {\n";
+    const close = "\n\t}\n";
+    const start = mem.indexOf(u8, text, open) orelse return null;
+    const close_at = mem.indexOfPos(u8, text, start + open.len, close) orelse return null;
+    const after_offset = close_at + close.len;
+    return .{
+        .before = text[0..start],
+        .after = text[after_offset..],
+        .after_offset = after_offset,
+    };
+}
+
+/// Line number in `text` of the first byte where `a` and `b` diverge, where
+/// `a` begins at `offset` within `text`.
+fn firstDivergenceLine(text: []const u8, offset: usize, a: []const u8, b: []const u8) usize {
+    const limit = @min(a.len, b.len);
+    var i: usize = 0;
+    while (i < limit and a[i] == b[i]) : (i += 1) {}
+    return mem.count(u8, text[0 .. offset + i], "\n") + 1;
+}
+
+/// `platform/main.roc` and `platform/main-wayland.roc` are the same platform
+/// built for two link configurations, and differ only in their `targets:`
+/// blocks. Nothing else keeps them in step, so a hosted effect added to one and
+/// forgotten in the other silently ships a broken Wayland bundle -- the failure
+/// only surfaces when someone links against that bundle.
+fn checkPlatformHeadersInSync(gpa: Allocator, io: std.Io, errors: *Errors) !void {
+    const main_text = try std.Io.Dir.cwd().readFileAlloc(io, platform_main_path, gpa, .limited(MiB));
+    defer gpa.free(main_text);
+    const wayland_text = try std.Io.Dir.cwd().readFileAlloc(io, platform_wayland_path, gpa, .limited(MiB));
+    defer gpa.free(wayland_text);
+
+    const main_split = splitTargetsBlock(main_text) orelse {
+        errors.addPlatformHeaderShape(platform_main_path);
+        return;
+    };
+    const wayland_split = splitTargetsBlock(wayland_text) orelse {
+        errors.addPlatformHeaderShape(platform_wayland_path);
+        return;
+    };
+
+    if (!mem.eql(u8, main_split.before, wayland_split.before)) {
+        errors.addPlatformHeaderDrift(
+            "platform header",
+            firstDivergenceLine(main_text, 0, main_split.before, wayland_split.before),
+        );
+    }
+    if (!mem.eql(u8, main_split.after, wayland_split.after)) {
+        errors.addPlatformHeaderDrift(
+            "host adapter body",
+            firstDivergenceLine(
+                main_text,
+                main_split.after_offset,
+                main_split.after,
+                wayland_split.after,
+            ),
+        );
+    }
+}
 
 /// Lists all files in the repository using git ls-files.
 fn listFilePaths(allocator: Allocator, io: std.Io) ![][]const u8 {

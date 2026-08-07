@@ -37,6 +37,12 @@ init! = App.init(
 		.with_title("RocRay Responsive UI")
 		.with_size({ width: 960, height: 640 })
 		.with_resizable(Bool.True)
+	# The layout stops being usable below this, so keep the window manager
+	# out of that range. A minimum only binds on a resizable window.
+		.with_min_size({ width: 480, height: 400 })
+	# Escape is an ordinary key on a settings screen, so take it back from
+	# raylib and own shutdown ourselves.
+		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
 	|_host|
 		Ok({
@@ -49,7 +55,7 @@ init! = App.init(
 				display_body: Text.from("Live layout preview").size(24).prepare!()?,
 				audio_body: Text.from("Mix groups").size(24).prepare!()?,
 				controls_body: Text.from("Keyboard bindings").size(24).prepare!()?,
-				help: Text.from("Arrow keys or click to select | ESC exits").size(16).prepare!()?,
+				help: Text.from("Arrow keys or click to select | ESC does nothing | Q quits").size(16).prepare!()?,
 			}),
 			selection: Display,
 		}),
@@ -140,7 +146,9 @@ draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, time
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ..])
 render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
+	# With `with_exit_key(NoExitKey)` no key closes the window on its own, so
+	# the app decides. Escape is left free for the UI to use.
+	if host.key_pressed(KeyQ) {
 		host.exit!(0)
 	}
 

@@ -184,6 +184,14 @@ def _bundle_name_from_output(output: str) -> str | None:
     return None
 
 
+def _types_bundle_name_from_output(output: str) -> str | None:
+    """Extract the roc-ray-types bundle filename from bundle.sh output."""
+    for line in output.splitlines():
+        if line.startswith("Types package bundle:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
 def _rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
     """Rewrite an example's recognized local or release platform reference."""
     if LOCAL_PLATFORM_REF in source:
@@ -240,30 +248,44 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
 
     print("\nRunning bundle test (build platform package, host locally, build apps from URL)...")
 
-    # bundle.sh is a bash script; on Windows (without bash) skip the whole step.
-    bundle_proc = subprocess.run(
-        ["bash", "scripts/bundle.sh"], capture_output=True, text=True, cwd=root
-    )
-    if bundle_proc.returncode != 0:
-        print(bundle_proc.stdout)
-        print(bundle_proc.stderr, file=sys.stderr)
-        print("  bundle.sh FAILED")
-        return ["bundle.sh"]
-
-    # bundle.sh prints "Created: /abs/path/<hash>.tar.zst"
-    bundle_name = _bundle_name_from_output(bundle_proc.stdout)
-    if not bundle_name:
-        print(bundle_proc.stdout)
-        print("  Could not determine bundle filename from bundle.sh output")
-        return ["bundle.sh (no Created: line)"]
-
-    bundle_path = root / bundle_name
-    print(f"  Bundled platform: {bundle_name}")
-
+    # The platform depends on the roc-ray-types package by relative path, which
+    # cannot survive bundling, so bundle.sh needs the URL the package bundle
+    # will be served from. Start the server first so that URL is known, then
+    # bundle both into the directory it is already serving.
     httpd, port = _serve_dir(root, verbose)
-    bundle_url = f"http://127.0.0.1:{port}/{bundle_name}"
-    url = f'"{bundle_url}"'
+    base_url = f"http://127.0.0.1:{port}"
+    bundle_path: Path | None = None
+    types_path: Path | None = None
     try:
+        # bundle.sh is a bash script; on Windows (without bash) skip the whole step.
+        bundle_proc = subprocess.run(
+            ["bash", "scripts/bundle.sh", "--types-url-base", base_url],
+            capture_output=True,
+            text=True,
+            cwd=root,
+        )
+        if bundle_proc.returncode != 0:
+            print(bundle_proc.stdout)
+            print(bundle_proc.stderr, file=sys.stderr)
+            print("  bundle.sh FAILED")
+            return ["bundle.sh"]
+
+        # bundle.sh prints "Created: /abs/path/<hash>.tar.zst"
+        bundle_name = _bundle_name_from_output(bundle_proc.stdout)
+        if not bundle_name:
+            print(bundle_proc.stdout)
+            print("  Could not determine bundle filename from bundle.sh output")
+            return ["bundle.sh (no Created: line)"]
+
+        bundle_path = root / bundle_name
+        types_name = _types_bundle_name_from_output(bundle_proc.stdout)
+        if types_name:
+            types_path = root / types_name
+            print(f"  Bundled roc-ray-types: {types_name}")
+        print(f"  Bundled platform: {bundle_name}")
+
+        bundle_url = f"{base_url}/{bundle_name}"
+        url = f'"{bundle_url}"'
         if not _wait_for_url(bundle_url):
             return ["bundle URL unavailable"]
 
@@ -297,7 +319,10 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
                 failed.append(f"bundle build {example.name}")
     finally:
         httpd.shutdown()
-        bundle_path.unlink(missing_ok=True)
+        if bundle_path is not None:
+            bundle_path.unlink(missing_ok=True)
+        if types_path is not None:
+            types_path.unlink(missing_ok=True)
 
     return failed
 
@@ -328,9 +353,13 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
         created_archive = True
 
     bundle_path: Path | None = None
+    types_path: Path | None = None
+    wayland_httpd, wayland_port = _serve_dir(root, verbose)
+    wayland_base_url = f"http://127.0.0.1:{wayland_port}"
     try:
         bundle_proc = subprocess.run(
-            ["bash", "scripts/bundle.sh", "--platform", "wayland"],
+            ["bash", "scripts/bundle.sh", "--platform", "wayland",
+             "--types-url-base", wayland_base_url],
             capture_output=True,
             text=True,
             cwd=root,
@@ -348,6 +377,9 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
             return ["bundle.sh --platform wayland (no Created: line)"]
 
         bundle_path = root / bundle_name
+        types_name = _types_bundle_name_from_output(bundle_proc.stdout)
+        if types_name:
+            types_path = root / types_name
         print(f"  Bundled Wayland platform: {bundle_name}")
 
         with _read_tar_zst(bundle_path) as bundle:
@@ -404,8 +436,8 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
         if failed:
             return failed
 
-        httpd, port = _serve_dir(root, verbose)
-        bundle_url = f"http://127.0.0.1:{port}/{bundle_name}"
+        httpd, port = wayland_httpd, wayland_port
+        bundle_url = f"{wayland_base_url}/{bundle_name}"
         url = f'"{bundle_url}"'
         original = example.read_text()
         try:
@@ -441,8 +473,11 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
 
         return failed
     finally:
+        wayland_httpd.shutdown()
         if bundle_path is not None:
             bundle_path.unlink(missing_ok=True)
+        if types_path is not None:
+            types_path.unlink(missing_ok=True)
         if created_archive:
             wayland_archive.unlink(missing_ok=True)
         for created_dir in created_archive_dirs:

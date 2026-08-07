@@ -48,6 +48,11 @@ Host := {
 	## Cursor visibility and capture policy applied with `host.set_cursor_mode!`.
 	CursorMode : [Visible, Hidden, Locked]
 
+	## Which key, if any, closes the window. Shared with the startup config, so
+	## `App.default.with_exit_key(k)` and `host.set_exit_key!(k)` take the same
+	## values.
+	ExitKey : Keys.ExitKey
+
 	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
 	key_down : Host, Keys.KeyboardKey -> Bool
 	key_down = |host, key| Keys.key_down(host, key)
@@ -121,12 +126,49 @@ Host := {
 			}
 		}
 
+	## Set the smallest window size the user can drag the window down to. Each
+	## negative dimension is clamped to `0`, which leaves that axis
+	## unconstrained. The minimum only applies to a resizable window, so pair it
+	## with `App.default.with_resizable(Bool.True)`.
+	## Receiver form: `host.set_window_min_size!(size)`.
+	set_window_min_size! : Host, { width : I32, height : I32 } => {}
+	set_window_min_size! = |_host, size|
+		HostHost.set_window_min_size!({
+			width: if size.width > 0 size.width else 0,
+			height: if size.height > 0 size.height else 0,
+		})
+
 	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
 	## uncapped. This neither selects a software renderer nor controls VSync.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.
 	## Receiver form: `host.set_target_fps!(fps)`.
 	set_target_fps! : Host, I32 => {}
 	set_target_fps! = |_host, fps| HostHost.set_target_fps!(fps)
+
+	## Set which key closes the window, or `NoExitKey` to stop any key from
+	## closing it. raylib defaults to `ExitKey(KeyEscape)`. The window close
+	## button is unaffected either way, so an app that disables the exit key
+	## should still handle shutdown through `host.exit!`.
+	## Receiver form: `host.set_exit_key!(NoExitKey)`.
+	set_exit_key! : Host, ExitKey => {}
+	set_exit_key! = |_host, key| HostHost.set_exit_key!(Keys.exit_key_code(key))
+
+	## Read UTF-8 text from the system clipboard.
+	## Returns `Err(Unavailable)` when the clipboard is empty, holds non-text
+	## content, or the windowing backend refuses the request -- the underlying
+	## platform does not distinguish these cases.
+	## Receiver form: `host.get_clipboard_text!()`.
+	get_clipboard_text! : Host => Try(Str, [Unavailable, ..])
+	get_clipboard_text! = |_host|
+		match HostHost.get_clipboard_text!() {
+			Ok(text) => Ok(text)
+			Err(Unavailable) => Err(Unavailable)
+		}
+
+	## Replace the system clipboard contents with UTF-8 text.
+	## Receiver form: `host.set_clipboard_text!(text)`.
+	set_clipboard_text! : Host, Str => {}
+	set_clipboard_text! = |_host, text| HostHost.set_clipboard_text!(text)
 
 	## Apply cursor visibility/capture atomically through one tagged operation.
 	set_cursor_mode! : Host, CursorMode => {}

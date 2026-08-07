@@ -10,7 +10,7 @@ const tilemap_batch = @import("tilemap_batch.zig");
 const rl = backend.rl;
 
 const Point = struct { x: f32, y: f32 };
-const Color = abi.Color;
+const Color = abi.ColorRgba;
 const red = Color{ .r = 230, .g = 41, .b = 55, .a = 255 };
 const green = Color{ .r = 0, .g = 228, .b = 48, .a = 255 };
 const blue = Color{ .r = 0, .g = 121, .b = 241, .a = 255 };

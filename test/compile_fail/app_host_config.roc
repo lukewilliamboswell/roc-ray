@@ -31,6 +31,7 @@ transport = {
 	record_every_nth: 1,
 	record_timing: 0,
 	record_cursor: 0,
+	record_quality: 1,
 }
 
 program = { init!, render! }

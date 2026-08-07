@@ -24,6 +24,22 @@ pub const cursor_none: u8 = 0;
 /// Composite a pointer glyph at the mouse position before each readback.
 pub const cursor_draw: u8 = 1;
 
+// Encoder effort, as chosen by `Capture.Quality` on the Roc side. These numbers
+// are the contract between `types/Capture.roc`'s `quality_code` and this host,
+// so they must not be renumbered without changing both. Only the palette-
+// quantized formats have anything to spend the extra effort on, so today this
+// binds GIF and is ignored by PNG and WebM.
+
+/// Coarse palette search: smaller files everywhere and a materially faster
+/// encode on colourful frames, at the cost of visible banding.
+pub const quality_fast: u8 = 0;
+/// The default: indistinguishable from `quality_best` on frames colourful
+/// enough that the encoder reduces the palette anyway, and a little smaller and
+/// faster on flat ones.
+pub const quality_balanced: u8 = 1;
+/// Full palette search, matching what msf_gif's own examples use.
+pub const quality_best: u8 = 2;
+
 /// The request succeeded.
 pub const err_none: u8 = 0;
 /// The path was empty, absolute, contained `..`, or held a NUL byte.
@@ -74,6 +90,7 @@ pub const Request = struct {
     every_nth: u32,
     timing: u8,
     cursor: u8,
+    quality: u8,
 };
 
 /// Why a running recording stopped early, or `err_none` if it did not.
@@ -157,6 +174,18 @@ pub fn formatBuffers(format: u8) bool {
     return false;
 }
 
+/// Fold an unrecognized quality code onto the default.
+///
+/// Roc only ever sends 0-2, so this binds only if the two sides drift or if a
+/// future Roc release adds a level this host predates. Falling back to the
+/// default beats failing a recording over a knob nobody asked to be strict.
+pub fn normalizeQuality(value: u8) u8 {
+    return switch (value) {
+        quality_fast, quality_balanced, quality_best => value,
+        else => quality_balanced,
+    };
+}
+
 /// How many source frames a recording will actually keep.
 pub fn plannedFrameCount(max_frames: u64, every_nth: u32) u64 {
     const stride = @max(every_nth, 1);
@@ -175,6 +204,7 @@ pub const Session = struct {
     format: u8 = format_png,
     timing: u8 = timing_real_time,
     cursor: u8 = cursor_none,
+    quality: u8 = quality_balanced,
     fps: i32 = 25,
     max_frames: u64 = 0,
     every_nth: u32 = 1,
@@ -232,6 +262,7 @@ pub const Session = struct {
         self.format = request.format;
         self.timing = request.timing;
         self.cursor = request.cursor;
+        self.quality = normalizeQuality(request.quality);
         self.fps = if (request.fps > 0) request.fps else 25;
         self.max_frames = request.max_frames;
         self.every_nth = @max(request.every_nth, 1);
@@ -386,7 +417,39 @@ fn testRequest(format: u8) Request {
         .every_nth = 1,
         .timing = timing_fixed_step,
         .cursor = cursor_none,
+        .quality = quality_balanced,
     };
+}
+
+test "a session carries the requested quality" {
+    var session = Session{};
+    var request = testRequest(format_gif);
+    request.quality = quality_fast;
+    try std.testing.expectEqual(err_none, session.start(request, 64, 64));
+    try std.testing.expectEqual(quality_fast, session.quality);
+}
+
+test "an unrecognized quality code falls back to the default" {
+    try std.testing.expectEqual(quality_fast, normalizeQuality(quality_fast));
+    try std.testing.expectEqual(quality_balanced, normalizeQuality(quality_balanced));
+    try std.testing.expectEqual(quality_best, normalizeQuality(quality_best));
+    try std.testing.expectEqual(quality_balanced, normalizeQuality(3));
+    try std.testing.expectEqual(quality_balanced, normalizeQuality(255));
+
+    var session = Session{};
+    var request = testRequest(format_gif);
+    request.quality = 200;
+    try std.testing.expectEqual(err_none, session.start(request, 64, 64));
+    try std.testing.expectEqual(quality_balanced, session.quality);
+}
+
+test "reset clears a session back to the default quality" {
+    var session = Session{};
+    var request = testRequest(format_gif);
+    request.quality = quality_best;
+    try std.testing.expectEqual(err_none, session.start(request, 64, 64));
+    session.reset();
+    try std.testing.expectEqual(quality_balanced, session.quality);
 }
 
 test "a session starts idle and refuses to stop" {

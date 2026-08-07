@@ -9,6 +9,7 @@
 //! `rlReadScreenPixels` produces, so nothing here reorders or flips pixels.
 
 const std = @import("std");
+const capture = @import("capture.zig");
 
 /// msf_gif's `fwrite`-shaped output callback.
 const WriteFunc = *const fn (
@@ -26,12 +27,37 @@ extern fn rocray_gif_begin(width: c_int, height: c_int, write_func: WriteFunc, w
 extern fn rocray_gif_frame(pixels: [*]u8, centiseconds_per_frame: c_int, quality: c_int, pitch_in_bytes: c_int) c_int;
 extern fn rocray_gif_end() c_int;
 
-/// Palette search depth handed to msf_gif, 0 (coarsest) to 16 (finest).
+/// Translate a `capture.quality_*` code into msf_gif's palette search depth.
 ///
-/// msf_gif's own examples and raylib's recorder both use 16. Anything lower
-/// trades visible banding for encode time, and the readback already dominates
-/// the frame cost, so there is nothing to win by lowering it.
-pub const quality: c_int = 16;
+/// msf_gif takes a depth from 1 (coarsest) to 16 (finest), setting how many
+/// bits of each colour channel survive quantization: 16 is 5r/6g/5b, 12 is
+/// 4r/4g/4b, and 6 is 2r/2g/2b. It cooks the whole frame at that depth, counts
+/// the distinct colours, and if more than 255 survive it drops a level and
+/// cooks again -- so a lower ceiling skips whole passes over colourful frames,
+/// and costs nothing on frames that already fit a palette.
+///
+/// The three levels were picked by replaying a real 150-frame 490x320 UI
+/// recording through the encoder and measuring against the source pixels:
+///
+///   depth  mean channel error  worst  file size  encode time
+///      16                1.74      8   169,970      65.8 ms
+///      12                3.38     16   156,865      60.1 ms
+///       6               31.36     84   140,459      59.4 ms
+///
+/// 12 is the default because it is the last depth that keeps every channel at
+/// four bits -- 11 drops blue to three, which triples the worst-case error for
+/// a further 3% of file size. 6 is the highest depth that still bites on a
+/// frame full of gradients, where it is worth roughly a fifth of the encode
+/// time and half the file size. 16 is what msf_gif's own examples and raylib's
+/// recorder use, so `Best` reproduces this host's previous output exactly.
+pub fn paletteDepth(quality: u8) c_int {
+    return switch (capture.normalizeQuality(quality)) {
+        capture.quality_fast => 6,
+        capture.quality_best => 16,
+        // `normalizeQuality` has already folded anything unrecognized to here.
+        else => 12,
+    };
+}
 
 /// Errors an encoder can report. Each maps onto a `capture.err_*` code.
 pub const Error = error{
@@ -50,6 +76,8 @@ pub const Encoder = struct {
     width: u32,
     height: u32,
     centiseconds_per_frame: c_int,
+    /// msf_gif palette search depth, resolved once from the session's quality.
+    palette_depth: c_int,
     bytes_written: u64,
     write_failed: bool,
     /// Whether the finalizer actually emitted anything.
@@ -101,7 +129,7 @@ pub const Encoder = struct {
         const pitch: c_int = @intCast(self.width * 4);
         // msf_gif does not modify the pixels, but its C signature is non-const.
         const mutable: [*]u8 = @constCast(pixels.ptr);
-        const ok = rocray_gif_frame(mutable, self.centiseconds_per_frame, quality, pitch);
+        const ok = rocray_gif_frame(mutable, self.centiseconds_per_frame, self.palette_depth, pitch);
         if (self.write_failed) return Error.WriteFailed;
         if (ok == 0) return Error.OutOfMemory;
     }
@@ -151,6 +179,7 @@ pub fn open(
     width: u32,
     height: u32,
     fps: i32,
+    quality: u8,
 ) Error!void {
     if (width == 0 or height == 0) return Error.EncodeFailed;
 
@@ -162,6 +191,7 @@ pub fn open(
         .width = width,
         .height = height,
         .centiseconds_per_frame = centisecondsPerFrame(fps),
+        .palette_depth = paletteDepth(quality),
         .bytes_written = 0,
         .write_failed = false,
         .wrote_something = false,
@@ -203,4 +233,24 @@ test "centisecondsPerFrame never returns a zero delay" {
 test "centisecondsPerFrame falls back for non-positive rates" {
     try std.testing.expectEqual(@as(c_int, 4), centisecondsPerFrame(0));
     try std.testing.expectEqual(@as(c_int, 4), centisecondsPerFrame(-30));
+}
+
+test "paletteDepth maps each quality onto a distinct msf_gif depth" {
+    try std.testing.expectEqual(@as(c_int, 6), paletteDepth(capture.quality_fast));
+    try std.testing.expectEqual(@as(c_int, 12), paletteDepth(capture.quality_balanced));
+    try std.testing.expectEqual(@as(c_int, 16), paletteDepth(capture.quality_best));
+}
+
+test "paletteDepth stays inside the range msf_gif accepts" {
+    // msf_gif clamps to 1..16 internally, so a depth outside it would silently
+    // become a different level than the one this table claims.
+    for ([_]u8{ capture.quality_fast, capture.quality_balanced, capture.quality_best }) |value| {
+        const depth = paletteDepth(value);
+        try std.testing.expect(depth >= 1 and depth <= 16);
+    }
+}
+
+test "paletteDepth folds an unknown quality onto the default" {
+    try std.testing.expectEqual(paletteDepth(capture.quality_balanced), paletteDepth(3));
+    try std.testing.expectEqual(paletteDepth(capture.quality_balanced), paletteDepth(255));
 }

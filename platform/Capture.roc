@@ -34,6 +34,9 @@ Capture := [].{
 	## Whether the host composites a pointer glyph into captured frames.
 	Cursor : RrtCapture.Cursor
 
+	## How hard the encoder works to choose colours for each frame.
+	Quality : RrtCapture.Quality
+
 	## A validated recording request. Update it through its receivers.
 	Recording : RrtCapture.Recording
 
@@ -65,7 +68,8 @@ Capture := [].{
 	clicking_at : { x : F32, y : F32 } -> Pointer
 	clicking_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
 
-	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing.
+	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
+	## and balanced encoder quality.
 	default : Recording
 	default = RrtCapture.default
 
@@ -141,6 +145,7 @@ Capture := [].{
 			every_nth: recording.every_nth(),
 			timing: RrtCapture.timing_code(recording.timing()),
 			cursor: RrtCapture.cursor_code(recording.cursor()),
+			quality: RrtCapture.quality_code(recording.quality()),
 		})
 		match result {
 			0 => Ok({})

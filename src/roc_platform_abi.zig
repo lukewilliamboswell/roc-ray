@@ -1171,8 +1171,8 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_5610f3437ee4051d
-pub const __AnonStruct_5610f3437ee4051d = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_96bd4e483c462501
+pub const __AnonStruct_96bd4e483c462501 = if (@sizeOf(usize) == 4) extern struct {
     max_frames: u64,
     path: RocStr,
     every_nth: u32,
@@ -1181,6 +1181,7 @@ pub const __AnonStruct_5610f3437ee4051d = if (@sizeOf(usize) == 4) extern struct
     scale_numerator: u32,
     cursor: u8,
     format: u8,
+    quality: u8,
     timing: u8,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -1202,6 +1203,7 @@ pub const __AnonStruct_5610f3437ee4051d = if (@sizeOf(usize) == 4) extern struct
     scale_numerator: u32,
     cursor: u8,
     format: u8,
+    quality: u8,
     timing: u8,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -1218,12 +1220,12 @@ pub const __AnonStruct_5610f3437ee4051d = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_5610f3437ee4051d) != 56) @compileError("__AnonStruct_5610f3437ee4051d size mismatch");
-        if (@alignOf(__AnonStruct_5610f3437ee4051d) != 8) @compileError("__AnonStruct_5610f3437ee4051d alignment mismatch");
+        if (@sizeOf(__AnonStruct_96bd4e483c462501) != 56) @compileError("__AnonStruct_96bd4e483c462501 size mismatch");
+        if (@alignOf(__AnonStruct_96bd4e483c462501) != 8) @compileError("__AnonStruct_96bd4e483c462501 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_5610f3437ee4051d) != 40) @compileError("__AnonStruct_5610f3437ee4051d size mismatch");
-        if (@alignOf(__AnonStruct_5610f3437ee4051d) != 8) @compileError("__AnonStruct_5610f3437ee4051d alignment mismatch");
+        if (@sizeOf(__AnonStruct_96bd4e483c462501) != 40) @compileError("__AnonStruct_96bd4e483c462501 size mismatch");
+        if (@alignOf(__AnonStruct_96bd4e483c462501) != 8) @compileError("__AnonStruct_96bd4e483c462501 alignment mismatch");
     }
 }
 
@@ -4597,6 +4599,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
     format: CaptureFormat,
     timing: CaptureTiming,
     cursor: CaptureCursor,
+    quality: CaptureQuality,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -4605,6 +4608,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
         value.format.decref(roc_host);
         value.timing.decref(roc_host);
         value.cursor.decref(roc_host);
+        value.quality.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
@@ -4615,6 +4619,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
         value.format.incref(amount);
         value.timing.incref(amount);
         value.cursor.incref(amount);
+        value.quality.incref(amount);
     }
 } else extern struct {
     max_frames: u64,
@@ -4625,6 +4630,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
     format: CaptureFormat,
     timing: CaptureTiming,
     cursor: CaptureCursor,
+    quality: CaptureQuality,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -4633,6 +4639,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
         value.format.decref(roc_host);
         value.timing.decref(roc_host);
         value.cursor.decref(roc_host);
+        value.quality.decref(roc_host);
     }
 
     /// Increment Roc-owned fields.
@@ -4643,6 +4650,7 @@ pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
         value.format.incref(amount);
         value.timing.incref(amount);
         value.cursor.incref(amount);
+        value.quality.incref(amount);
     }
 };
 
@@ -4703,8 +4711,8 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_4736d099691c8679
-pub const __AnonStruct_4736d099691c8679 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_1fdbe5c9dee1b2d2
+pub const __AnonStruct_1fdbe5c9dee1b2d2 = if (@sizeOf(usize) == 4) extern struct {
     record_max_frames: u64,
     output_dir: RocStr,
     record_path: RocStr,
@@ -4724,6 +4732,7 @@ pub const __AnonStruct_4736d099691c8679 = if (@sizeOf(usize) == 4) extern struct
     record_cursor: u8,
     record_enabled: bool,
     record_format: u8,
+    record_quality: u8,
     record_timing: u8,
     resizable: bool,
     visible: bool,
@@ -4763,6 +4772,7 @@ pub const __AnonStruct_4736d099691c8679 = if (@sizeOf(usize) == 4) extern struct
     record_cursor: u8,
     record_enabled: bool,
     record_format: u8,
+    record_quality: u8,
     record_timing: u8,
     resizable: bool,
     visible: bool,
@@ -4786,12 +4796,12 @@ pub const __AnonStruct_4736d099691c8679 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_4736d099691c8679) != 136) @compileError("__AnonStruct_4736d099691c8679 size mismatch");
-        if (@alignOf(__AnonStruct_4736d099691c8679) != 8) @compileError("__AnonStruct_4736d099691c8679 alignment mismatch");
+        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 136) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
+        if (@alignOf(__AnonStruct_1fdbe5c9dee1b2d2) != 8) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_4736d099691c8679) != 96) @compileError("__AnonStruct_4736d099691c8679 size mismatch");
-        if (@alignOf(__AnonStruct_4736d099691c8679) != 8) @compileError("__AnonStruct_4736d099691c8679 alignment mismatch");
+        if (@sizeOf(__AnonStruct_1fdbe5c9dee1b2d2) != 96) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 size mismatch");
+        if (@alignOf(__AnonStruct_1fdbe5c9dee1b2d2) != 8) @compileError("__AnonStruct_1fdbe5c9dee1b2d2 alignment mismatch");
     }
 }
 
@@ -5718,6 +5728,35 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(CaptureFormat) != 1) @compileError("CaptureFormat size mismatch");
         if (@alignOf(CaptureFormat) != 1) @compileError("CaptureFormat alignment mismatch");
+    }
+}
+
+/// Tag union: CaptureQuality
+pub const CaptureQuality = enum(u8) {
+    balanced = 0,
+    best = 1,
+    fast = 2,
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        _ = self;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        _ = self;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(CaptureQuality) != 1) @compileError("CaptureQuality size mismatch");
+        if (@alignOf(CaptureQuality) != 1) @compileError("CaptureQuality alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(CaptureQuality) != 1) @compileError("CaptureQuality size mismatch");
+        if (@alignOf(CaptureQuality) != 1) @compileError("CaptureQuality alignment mismatch");
     }
 }
 
@@ -6681,7 +6720,7 @@ comptime {
 }
 
 /// Arguments for CaptureHost.start_recording!
-/// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8
+/// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8
 /// Refcounted fields are owned by the hosted function.
 pub const CaptureHostStart_recordingArgs = if (@sizeOf(usize) == 4) extern struct {
     max_frames: u64,
@@ -6692,6 +6731,7 @@ pub const CaptureHostStart_recordingArgs = if (@sizeOf(usize) == 4) extern struc
     scale_numerator: u32,
     cursor: u8,
     format: u8,
+    quality: u8,
     timing: u8,
 } else extern struct {
     max_frames: u64,
@@ -6702,6 +6742,7 @@ pub const CaptureHostStart_recordingArgs = if (@sizeOf(usize) == 4) extern struc
     scale_numerator: u32,
     cursor: u8,
     format: u8,
+    quality: u8,
     timing: u8,
 };
 
@@ -7869,7 +7910,7 @@ pub const AudioHostLoad_music = __AnonStruct_71f03d460dd53e7d;
 pub const AudioHostLoad_sound = __AnonStruct_82ca12cef4f5714b;
 pub const CaptureHostRecording_status = __AnonStruct_725e46d8f9e562ab;
 pub const CaptureHostSet_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
-pub const CaptureHostStart_recordingArg0 = __AnonStruct_5610f3437ee4051d;
+pub const CaptureHostStart_recordingArg0 = __AnonStruct_96bd4e483c462501;
 pub const CaptureHostStop_recording = __AnonStruct_7c66fb01c50d182a;
 pub const DrawHostRenderTextureResource = __AnonStruct_8b7fc2d8f8794eb4;
 pub const DrawHostBegin_scissorArg0 = __AnonStruct_5d393593a1f032cb;
@@ -7932,7 +7973,7 @@ pub const TilemapHostLoad_tmxMapPoints = __AnonStruct_2818a50bdccefb1e;
 pub const TilemapHostLoad_tmxMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapHostLoad_tmxMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapHostLoad_tmxMapTilesets = __AnonStruct_756aabd194c61573;
-pub const App_config_for_host = __AnonStruct_4736d099691c8679;
+pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
 pub const Init_for_hostArg0 = __AnonStruct_e43e1f68febb5517;
 pub const Init_for_hostArg0Gamepads = __AnonStruct_1c8617e96852f779;
 pub const Init_for_hostArg0Screen = __AnonStruct_bc8fa73ca49a5ac0;
@@ -8509,7 +8550,7 @@ pub extern fn roc_capture_screenshot(arg0: RocStr) callconv(.c) u8;
 pub extern fn roc_capture_set_virtual_mouse(arg0: CaptureHostSet_virtual_mouseArgs) callconv(.c) void;
 
 /// Hosted symbol for CaptureHost.start_recording!
-/// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8
+/// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8
 pub extern fn roc_capture_start_recording(arg0: CaptureHostStart_recordingArgs) callconv(.c) u8;
 
 /// Hosted symbol for CaptureHost.stop_recording!
@@ -8888,7 +8929,7 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // Roc exports these symbols from the app with their natural C ABI signatures.
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct_4736d099691c8679;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct_1fdbe5c9dee1b2d2;
 
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host(arg0: __AnonStruct_e43e1f68febb5517) callconv(.c) Init_for_hostResult;

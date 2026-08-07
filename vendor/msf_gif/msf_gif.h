@@ -88,6 +88,10 @@ typedef struct { //internal use
 typedef struct MsfGifBuffer { //internal use
     struct MsfGifBuffer * next;
     size_t size;
+    //ROCRAY LOCAL MODIFICATION: bytes actually allocated for this node, which is
+    //no longer implied by `size` now that recycled nodes skip the shrink-realloc.
+    //Freeing uses this so a custom MSF_GIF_FREE still gets the true old size.
+    size_t allocSize;
     uint8_t data[1];
 } MsfGifBuffer;
 
@@ -102,6 +106,10 @@ typedef struct { //internal use
     uint8_t * usedMem;
     MsfGifBuffer * listHead;
     MsfGifBuffer * listTail;
+    //ROCRAY LOCAL MODIFICATION: one recycled compression buffer for the to-file
+    //API, so a long recording does not malloc and free ~1.5x its pixel count
+    //every single frame. Only ever set by msf_gif_frame_to_file.
+    MsfGifBuffer * recycled;
     int width, height;
     void * customAllocatorContext;
     int framesSubmitted; //needed for transparency to work correctly (because we reach into the previous frame)
@@ -406,8 +414,26 @@ static MsfGifBuffer * msf_compress_frame(void * allocContext, int width, int hei
     //NOTE: headers + color table + 12 bits per pixel (since 12 bits is the maximum code size)
     //      + space for at least one full Image Data block (needed for small images since we zero a whole block at a time)
     int maxBufSize = offsetof(MsfGifBuffer, data) + 32 + 256 * 3 + width * height * 3 / 2 + (256 + 4);
-    MsfGifBuffer * buffer = (MsfGifBuffer *) MSF_GIF_MALLOC(allocContext, maxBufSize);
-    if (!buffer) { return NULL; }
+    //ROCRAY LOCAL MODIFICATION: take the recycled buffer when it is big enough,
+    //rather than allocating a fresh worst-case buffer every frame. A recycled
+    //buffer that is too small (the 32-byte file header is the only one that can
+    //be) is released here so it cannot block recycling for the rest of the run.
+    MsfGifBuffer * buffer = NULL;
+    int recycled = 0;
+    if (handle->recycled) {
+        if (handle->recycled->allocSize >= (size_t) maxBufSize) {
+            buffer = handle->recycled;
+            recycled = 1;
+        } else {
+            MSF_GIF_FREE(allocContext, handle->recycled, handle->recycled->allocSize);
+        }
+        handle->recycled = NULL;
+    }
+    if (!buffer) {
+        buffer = (MsfGifBuffer *) MSF_GIF_MALLOC(allocContext, maxBufSize);
+        if (!buffer) { return NULL; }
+        buffer->allocSize = maxBufSize;
+    }
     uint8_t * writeHead = buffer->data;
     MsfStridedList lzw = { lzwMem };
 
@@ -525,9 +551,18 @@ static MsfGifBuffer * msf_compress_frame(void * allocContext, int width, int hei
     //fill in buffer header and shrink buffer to fit data
     buffer->next = NULL;
     buffer->size = writeHead - buffer->data;
+    //ROCRAY LOCAL MODIFICATION: in file mode this buffer is written out and
+    //released one frame from now, so shrinking it only means regrowing it on
+    //the next frame -- and a shrunk buffer can never be recycled, which is what
+    //made the first version of this recycle nothing at all. The to-memory API
+    //holds every buffer until the end, so it still shrinks exactly as upstream
+    //does. The cost is that file mode's peak is two full-size buffers rather
+    //than one full plus one shrunk.
+    if (recycled || handle->fileWriteFunc) { return buffer; }
     MsfGifBuffer * moved =
         (MsfGifBuffer *) MSF_GIF_REALLOC(allocContext, buffer, maxBufSize, offsetof(MsfGifBuffer, data) + buffer->size);
     if (!moved) { MSF_GIF_FREE(allocContext, buffer, maxBufSize); return NULL; }
+    moved->allocSize = offsetof(MsfGifBuffer, data) + moved->size;
     return moved;
 }
 
@@ -549,15 +584,28 @@ static void msf_free_gif_state(MsfGifState * handle) {
     if (handle->lzwMem) MSF_GIF_FREE(handle->customAllocatorContext, handle->lzwMem, lzwAllocSize);
     if (handle->tlbMem) MSF_GIF_FREE(handle->customAllocatorContext, handle->tlbMem, tlbAllocSize);
     if (handle->usedMem) MSF_GIF_FREE(handle->customAllocatorContext, handle->usedMem, usedAllocSize);
+    //ROCRAY LOCAL MODIFICATION: release the recycled compression buffer too, and
+    //free list nodes by their recorded allocSize rather than by their data size,
+    //which no longer matches for a node that skipped the shrink-realloc.
+    if (handle->recycled) {
+        MSF_GIF_FREE(handle->customAllocatorContext, handle->recycled, handle->recycled->allocSize);
+        handle->recycled = NULL;
+    }
     for (MsfGifBuffer * node = handle->listHead; node;) {
         MsfGifBuffer * next = node->next; //NOTE: we have to copy the `next` pointer BEFORE freeing the node holding it
-        MSF_GIF_FREE(handle->customAllocatorContext, node, offsetof(MsfGifBuffer, data) + node->size);
+        MSF_GIF_FREE(handle->customAllocatorContext, node, node->allocSize);
         node = next;
     }
     handle->listHead = NULL; //this implicitly marks the handle as invalid until the next msf_gif_begin() call
 }
 
 int msf_gif_begin(MsfGifState * handle, int width, int height) { MsfTimeFunc
+    //ROCRAY LOCAL MODIFICATION: clear the recycled-buffer slot before anything
+    //can return, so a handle that has never been begun (or one whose begin is
+    //about to be rejected below) never carries a garbage pointer. Stomped
+    //rather than freed, matching what this function already does to the frame
+    //pixel buffers: a caller that re-begins without ending leaks either way.
+    handle->recycled = NULL;
     //To help avoid potential overflow errors, let's just not even try to support images larger than 1GB in size.
     //And let's also reject images with width or height more or less than what the gif format itself supports.
     const int MAX_PIXELS = 268435456; //2^30 / 4 = 1GB / bytesPerPixel
@@ -588,13 +636,22 @@ int msf_gif_begin(MsfGifState * handle, int width, int height) { MsfTimeFunc
 
     //setup header buffer header (lol)
     handle->listHead = (MsfGifBuffer *) MSF_GIF_MALLOC(handle->customAllocatorContext, offsetof(MsfGifBuffer, data) + 32);
-    if (!handle->listHead || !handle->lzwMem || !handle->previousFrame.pixels || !handle->currentFrame.pixels) {
+    //ROCRAY LOCAL MODIFICATION: fill in the node header *before* the failure
+    //check below. If any other allocation here failed, `msf_free_gif_state`
+    //walks this node, and upstream had not yet written `next` or `size` -- so
+    //it followed an uninitialized `next` pointer and freed with an
+    //uninitialized size. Recording `allocSize` here keeps that path honest too.
+    if (handle->listHead) {
+        handle->listTail = handle->listHead;
+        handle->listHead->next = NULL;
+        handle->listHead->size = 32;
+        handle->listHead->allocSize = offsetof(MsfGifBuffer, data) + 32;
+    }
+    if (!handle->listHead || !handle->lzwMem || !handle->tlbMem || !handle->usedMem ||
+        !handle->previousFrame.pixels || !handle->currentFrame.pixels) {
         msf_free_gif_state(handle);
         return 0;
     }
-    handle->listTail = handle->listHead;
-    handle->listHead->next = NULL;
-    handle->listHead->size = 32;
 
     //NOTE: because __attribute__((__packed__)) is annoyingly compiler-specific, we do this unreadable weirdness
     char headerBytes[33] = "GIF89a\0\0\0\0\x70\0\0" "\x21\xFF\x0BNETSCAPE2.0\x03\x01\0\0\0";
@@ -677,7 +734,16 @@ int msf_gif_frame_to_file(MsfGifState * handle, uint8_t * pixelData, int centiSe
     MsfGifBuffer * head = handle->listHead;
     if (!handle->fileWriteFunc(head->data, head->size, 1, handle->fileWriteData)) { msf_free_gif_state(handle); return 0; }
     handle->listHead = head->next;
-    MSF_GIF_FREE(handle->customAllocatorContext, head, offsetof(MsfGifBuffer, data) + head->size);
+    //ROCRAY LOCAL MODIFICATION: hand this buffer to the recycled slot instead of
+    //freeing it. This path holds at most two buffers at once -- the one just
+    //compressed is still queued as listTail while this one is written out -- so
+    //a single slot is enough to make every frame after the second allocation
+    //free. The slot is empty here because the frame above just took it.
+    if (!handle->recycled) {
+        handle->recycled = head;
+    } else {
+        MSF_GIF_FREE(handle->customAllocatorContext, head, head->allocSize);
+    }
     return 1;
 }
 

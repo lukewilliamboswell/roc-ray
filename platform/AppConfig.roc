@@ -34,6 +34,7 @@ AppHostConfig : {
 	record_every_nth : U32,
 	record_timing : U8,
 	record_cursor : U8,
+	record_quality : U8,
 }
 
 AppConfig := [].{
@@ -72,6 +73,7 @@ AppConfig := [].{
 			record_every_nth: record.every_nth,
 			record_timing: record.timing,
 			record_cursor: record.cursor,
+			record_quality: record.quality,
 		}
 	}
 }
@@ -91,6 +93,7 @@ host_recording : App.Recording -> {
 	every_nth : U32,
 	timing : U8,
 	cursor : U8,
+	quality : U8,
 }
 host_recording = |value|
 	match value {
@@ -105,6 +108,7 @@ host_recording = |value|
 			every_nth: 1,
 			timing: 0,
 			cursor: 0,
+			quality: RrtCapture.quality_code(Balanced),
 		}
 		Record(recording) => {
 			ratio = RrtCapture.scale_ratio(recording.scale())
@@ -119,6 +123,7 @@ host_recording = |value|
 				every_nth: recording.every_nth(),
 				timing: RrtCapture.timing_code(recording.timing()),
 				cursor: RrtCapture.cursor_code(recording.cursor()),
+				quality: RrtCapture.quality_code(recording.quality()),
 			}
 		}
 	}
@@ -166,6 +171,12 @@ expect {
 	host = AppConfig.to_host({}, App.default.with_recording(Record(RrtCapture.default)))
 	host.record_every_nth == 1 and host.record_timing == 1 and host.record_cursor == 0
 }
+expect AppConfig.to_host({}, App.default.with_recording(Record(RrtCapture.default))).record_quality == 1
+expect {
+	fast = RrtCapture.default.with_quality(Fast)
+	best = RrtCapture.default.with_quality(Best)
+	AppConfig.to_host({}, App.default.with_recording(Record(fast))).record_quality == 0 and AppConfig.to_host({}, App.default.with_recording(Record(best))).record_quality == 2
+}
 expect {
 	custom =
 		RrtCapture.default
@@ -182,5 +193,5 @@ expect {
 ## A disabled recording still fills every ABI field with inert values.
 expect {
 	host = AppConfig.to_host({}, App.default)
-	host.record_path == "" and host.record_scale_denominator == 1 and host.record_every_nth == 1
+	host.record_path == "" and host.record_scale_denominator == 1 and host.record_every_nth == 1 and host.record_quality == 1
 }

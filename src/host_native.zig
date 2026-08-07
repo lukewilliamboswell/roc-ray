@@ -2224,6 +2224,7 @@ fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_re
         .every_nth = args.every_nth,
         .timing = args.timing,
         .cursor = args.cursor,
+        .quality = args.quality,
     });
 }
 
@@ -2291,6 +2292,7 @@ fn openCaptureGif() u8 {
         capture_session.width,
         capture_session.height,
         capture_session.fps,
+        capture_session.quality,
     ) catch |err| return captureErrorCode(err);
 
     capture_gif_open = true;
@@ -3218,6 +3220,7 @@ fn configureCapture(app_config: AppConfig) void {
         .every_nth = app_config.record_every_nth,
         .timing = app_config.record_timing,
         .cursor = app_config.record_cursor,
+        .quality = app_config.record_quality,
     });
     if (result != capture.err_none) {
         std.log.err("could not start the recording declared in App.Config (capture error {d})", .{result});

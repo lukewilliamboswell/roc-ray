@@ -153,6 +153,88 @@ pub fn scaleAxis(value: u32, numerator: u32, denominator: u32) u32 {
     return std.math.cast(u32, scaled) orelse value;
 }
 
+/// A framebuffer or render-target size in pixels.
+pub const Extent = struct {
+    width: u32,
+    height: u32,
+};
+
+/// Most render targets a GPU downscale is allowed to walk through.
+///
+/// The first is the framebuffer size and the last is the recording size, so
+/// this caps the halving chain at six steps -- a 64x reduction, well past any
+/// ratio worth recording. A deeper request still works: the last step just
+/// shrinks by more than half, which costs quality, not correctness.
+pub const max_downscale_levels: usize = 8;
+
+/// The chain of render-target sizes a GPU downscale renders through.
+pub const DownscalePlan = struct {
+    levels: [max_downscale_levels]Extent,
+    count: usize,
+
+    /// The framebuffer size the chain starts from.
+    pub fn source(self: DownscalePlan) Extent {
+        return self.levels[0];
+    }
+
+    /// The recording size the chain ends at.
+    pub fn target(self: DownscalePlan) Extent {
+        return self.levels[self.count - 1];
+    }
+};
+
+/// Plan the render targets that shrink a framebuffer to the recording size.
+///
+/// Returns null when there is nothing to gain -- the recording is already the
+/// framebuffer size, or is larger than it, in which case a full-resolution
+/// readback moves no more data than a scaled one and the CPU path is simpler.
+///
+/// Every intermediate step halves both axes, because a bilinear sample of a
+/// texture drawn at exactly half size lands on a texel corner and averages the
+/// 2x2 block around it. Chaining halvings therefore box-filters the whole
+/// source, where a single bilinear step straight down to a quarter would read
+/// four of every sixteen pixels and alias badly. The chain stops halving once
+/// another halving would undershoot, and a final step covers the remainder.
+pub fn planDownscale(
+    source_width: u32,
+    source_height: u32,
+    target_width: u32,
+    target_height: u32,
+) ?DownscalePlan {
+    if (source_width == 0 or source_height == 0) return null;
+    if (target_width == 0 or target_height == 0) return null;
+    if (target_width > source_width or target_height > source_height) return null;
+    if (target_width == source_width and target_height == source_height) return null;
+
+    var plan = DownscalePlan{
+        .levels = [_]Extent{.{ .width = 0, .height = 0 }} ** max_downscale_levels,
+        .count = 1,
+    };
+    plan.levels[0] = .{ .width = source_width, .height = source_height };
+
+    // Leave room for the final exact-size step, which always runs unless a
+    // halving happens to land on the requested size.
+    while (plan.count < max_downscale_levels - 1) {
+        const current = plan.levels[plan.count - 1];
+        const halved_width = current.width / 2;
+        const halved_height = current.height / 2;
+        if (halved_width < target_width or halved_height < target_height) break;
+        plan.levels[plan.count] = .{ .width = halved_width, .height = halved_height };
+        plan.count += 1;
+    }
+
+    const last = plan.levels[plan.count - 1];
+    if (last.width != target_width or last.height != target_height) {
+        plan.levels[plan.count] = .{ .width = target_width, .height = target_height };
+        plan.count += 1;
+    }
+
+    // A plan of one level is the framebuffer itself, which the caller already
+    // has: only a real chain is worth building render targets for.
+    if (plan.count < 2) return null;
+    return plan;
+}
+
 /// Bytes a buffering encoder needs to hold an entire recording.
 ///
 /// Saturates rather than wrapping so an absurd request reports a huge number
@@ -386,6 +468,64 @@ test "scaleAxis halves and quarters without reaching zero" {
     // Degenerate ratios fall back to the source size rather than dividing by zero.
     try std.testing.expectEqual(@as(u32, 640), scaleAxis(640, 1, 0));
     try std.testing.expectEqual(@as(u32, 640), scaleAxis(640, 0, 2));
+}
+
+test "planDownscale halves down to a half-scale recording in one step" {
+    const plan = planDownscale(1920, 1080, 960, 540).?;
+    try std.testing.expectEqual(@as(usize, 2), plan.count);
+    try std.testing.expectEqual(Extent{ .width = 1920, .height = 1080 }, plan.source());
+    try std.testing.expectEqual(Extent{ .width = 960, .height = 540 }, plan.target());
+}
+
+test "planDownscale reaches a quarter through an intermediate halving" {
+    // The intermediate level is what makes this a box filter over all sixteen
+    // source pixels rather than a bilinear read of four of them.
+    const plan = planDownscale(1920, 1080, 480, 270).?;
+    try std.testing.expectEqual(@as(usize, 3), plan.count);
+    try std.testing.expectEqual(Extent{ .width = 960, .height = 540 }, plan.levels[1]);
+    try std.testing.expectEqual(Extent{ .width = 480, .height = 270 }, plan.target());
+}
+
+test "planDownscale adds a final step for a ratio that is not a power of two" {
+    const plan = planDownscale(1920, 1080, 640, 360).?;
+    try std.testing.expectEqual(@as(usize, 3), plan.count);
+    try std.testing.expectEqual(Extent{ .width = 960, .height = 540 }, plan.levels[1]);
+    try std.testing.expectEqual(Extent{ .width = 640, .height = 360 }, plan.target());
+}
+
+test "planDownscale declines anything that is not a downscale" {
+    try std.testing.expectEqual(null, planDownscale(1920, 1080, 1920, 1080));
+    try std.testing.expectEqual(null, planDownscale(640, 360, 1280, 720));
+    // A mixed request that grows one axis still moves more data than it saves.
+    try std.testing.expectEqual(null, planDownscale(640, 360, 320, 720));
+    try std.testing.expectEqual(null, planDownscale(0, 360, 320, 180));
+    try std.testing.expectEqual(null, planDownscale(640, 360, 320, 0));
+}
+
+test "planDownscale stays inside its level budget for an extreme ratio" {
+    // `Ratio` accepts anything, so the chain has to stop somewhere. It ends at
+    // the requested size whatever happens, which is what correctness needs.
+    const plan = planDownscale(4096, 4096, 1, 1).?;
+    try std.testing.expect(plan.count <= max_downscale_levels);
+    try std.testing.expectEqual(Extent{ .width = 1, .height = 1 }, plan.target());
+    // Every step shrinks, so no level ever hands the next one an upscale.
+    for (1..plan.count) |index| {
+        try std.testing.expect(plan.levels[index].width <= plan.levels[index - 1].width);
+        try std.testing.expect(plan.levels[index].height <= plan.levels[index - 1].height);
+        try std.testing.expect(plan.levels[index].width >= 1);
+        try std.testing.expect(plan.levels[index].height >= 1);
+    }
+}
+
+test "planDownscale matches the sizes scaleAxis produces" {
+    // The chain has to end exactly where `Session.start` said the recording
+    // is, or the encoder is handed frames of the wrong dimensions.
+    for ([_][2]u32{ .{ 1, 2 }, .{ 1, 4 }, .{ 1, 8 }, .{ 2, 3 } }) |ratio| {
+        const width = scaleAxis(1920, ratio[0], ratio[1]);
+        const height = scaleAxis(1080, ratio[0], ratio[1]);
+        const plan = planDownscale(1920, 1080, width, height).?;
+        try std.testing.expectEqual(Extent{ .width = width, .height = height }, plan.target());
+    }
 }
 
 test "estimateBufferedBytes saturates instead of wrapping" {

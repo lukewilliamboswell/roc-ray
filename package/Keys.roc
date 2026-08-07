@@ -126,6 +126,22 @@ Keys := [].{
 		is_eq : _
 	}
 
+	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	ExitKey := [NoExitKey, ExitKey(KeyboardKey)].{
+		is_eq : _
+	}
+
+	## Flatten an exit key to the raylib key code the host passes to
+	## `SetExitKey`. `0` is raylib's `KEY_NULL`, which disables the behaviour.
+	## Shared by the startup config and the runtime `Host.set_exit_key!` effect
+	## so the two cannot drift.
+	exit_key_code : ExitKey -> I32
+	exit_key_code = |value|
+		match value {
+			NoExitKey => 0
+			ExitKey(key) => U64.to_i32_wrap(Keys.key_code(key))
+		}
+
 	## Validate and wrap a raw raylib key code.
 	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])
 	from_code = |code|

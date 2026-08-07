@@ -198,6 +198,16 @@ pub fn build(b: *std.Build) void {
     app_transport_privacy_tests.setCwd(b.path("."));
     test_step.dependOn(&app_transport_privacy_tests.step);
 
+    // The platform's re-export shims for `roc-ray-types` modules are generated,
+    // so a hand-edit there would silently diverge from the package.
+    const reexport_shims_check = b.addSystemCommand(&.{
+        "python3",
+        "scripts/generate_reexports.py",
+        "--check",
+    });
+    reexport_shims_check.setCwd(b.path("."));
+    test_step.dependOn(&reexport_shims_check.step);
+
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {

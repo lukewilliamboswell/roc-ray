@@ -72,21 +72,22 @@ extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
 
 /// `kind` codes for `UpdateInput`. Mirrored in `platform/Program.roc`.
+const INPUT_TICK: u8 = 0;
 const INPUT_FRAME: u8 = 1;
 
 /// `value_kind` codes for an `EffectResult`. Mirrored in `platform/Program.roc`.
 const VALUE_UNIT: u8 = 0;
 
-/// Build the message that carries a per-frame input snapshot.
+/// A message carrying no Roc-owned payload, used as the base for every variant.
 ///
-/// The snapshot's six list buffers are host-owned and were increfed by
-/// `retainForRoc`, so this transfers those references to the message.
-fn frameInput(snapshot: HostState) UpdateInput {
+/// `snapshot` is the one field that cannot be left inert, because its list
+/// handles are non-nullable, so each builder supplies it.
+fn emptyInput(kind: u8, snapshot: HostState) UpdateInput {
     return .{
-        .kind = INPUT_FRAME,
-        .frame_count = snapshot.frame_count,
-        .timestamp_nanos = snapshot.timestamp_nanos,
-        .frame_time = snapshot.frame_time,
+        .kind = kind,
+        .frame_count = 0,
+        .timestamp_nanos = 0,
+        .frame_time = 0,
         .id = 0,
         .value_kind = VALUE_UNIT,
         .i32_value = 0,
@@ -95,6 +96,84 @@ fn frameInput(snapshot: HostState) UpdateInput {
         .snapshot = snapshot,
     };
 }
+
+/// Build the message that carries a per-frame input snapshot.
+///
+/// The snapshot's six list buffers are host-owned and were increfed by
+/// `retainForRoc`, so this transfers those references to the message. The queue
+/// owns them from here until the message is delivered or released.
+fn frameInput(snapshot: HostState) UpdateInput {
+    var msg = emptyInput(INPUT_FRAME, snapshot);
+    msg.frame_count = snapshot.frame_count;
+    msg.timestamp_nanos = snapshot.timestamp_nanos;
+    msg.frame_time = snapshot.frame_time;
+    return msg;
+}
+
+/// Build the message that advances simulation time.
+///
+/// Kept separate from the input snapshot on purpose: running the simulation `n`
+/// steps for one rendered frame is "deliver `n` ticks", and re-rendering without
+/// advancing time is "deliver none". Fused with input, neither is expressible.
+///
+/// Roc never reads the snapshot on a tick -- `kind` says not to -- but the
+/// generated `decref` walks it regardless, so the message must still own a
+/// reference of its own rather than borrowing the frame's.
+fn tickInput(snapshot: HostState, frame_count: u64, timestamp_nanos: u64, frame_time: f32) UpdateInput {
+    snapshot.incref(1);
+    var msg = emptyInput(INPUT_TICK, snapshot);
+    msg.frame_count = frame_count;
+    msg.timestamp_nanos = timestamp_nanos;
+    msg.frame_time = frame_time;
+    return msg;
+}
+
+/// Messages waiting to reach `update!`, oldest first.
+///
+/// Main-thread only, so it needs no locking: the worker thread posts plain-Zig
+/// payloads that the main thread converts into messages during the drain.
+///
+/// The queue owns the Roc payloads of every message it holds -- a `Frame`
+/// carries the six input list references `retainForRoc` increfed, and an
+/// `EffectResult` may carry a `RocStr`. Any exit path that leaves messages
+/// undelivered must therefore call `releaseAll`, or those references leak.
+const MsgQueue = struct {
+    /// One frame pushes a handful of messages and the loop drains fully before
+    /// rendering, so this only bounds a pathological burst of effect results.
+    const capacity = 256;
+
+    items: [capacity]UpdateInput = undefined,
+    head: usize = 0,
+    len: usize = 0,
+
+    /// Append a message, transferring ownership of its Roc payloads.
+    ///
+    /// A full queue drops the *incoming* message rather than evicting a queued
+    /// one, so the messages already accepted still arrive in order.
+    fn push(self: *MsgQueue, roc_host: *RocHost, msg: UpdateInput) void {
+        if (self.len == capacity) {
+            std.log.warn("roc-ray message queue full; dropping message kind {d}", .{msg.kind});
+            msg.decref(roc_host);
+            return;
+        }
+        self.items[(self.head + self.len) % capacity] = msg;
+        self.len += 1;
+    }
+
+    /// Remove the oldest message, transferring its Roc payloads to the caller.
+    fn pop(self: *MsgQueue) ?UpdateInput {
+        if (self.len == 0) return null;
+        const msg = self.items[self.head];
+        self.head = (self.head + 1) % capacity;
+        self.len -= 1;
+        return msg;
+    }
+
+    /// Release every message still queued. Safe to call more than once.
+    fn releaseAll(self: *MsgQueue, roc_host: *RocHost) void {
+        while (self.pop()) |msg| msg.decref(roc_host);
+    }
+};
 
 const TRACE_HOST = false;
 const DEFAULT_HEADLESS_FRAMES: u64 = 3;
@@ -3241,6 +3320,25 @@ fn takeModel(boxed_model: *RocBox) RocBox {
 /// Retained for the render call site, which reads more clearly with the old name.
 const takeModelForRender = takeModel;
 
+/// Deliver every queued message to `update!`, in order.
+///
+/// Returns an exit code if `update!` failed, having released whatever was still
+/// queued: the model box is already `null` at that point, so `dropFinalModel`
+/// is correctly a no-op, but the undelivered messages still hold Roc references
+/// and would otherwise leak.
+fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox) ?i32 {
+    while (queue.pop()) |msg| {
+        const result = updateOnce(boxed_model, msg);
+        if (result.tag == .Err) {
+            const code: i32 = @intCast(result.payload_err());
+            if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{code});
+            queue.releaseAll(roc_host);
+            return code;
+        }
+    }
+    return null;
+}
+
 /// Hand one message to `update!` and run whatever commands it asks for.
 ///
 /// Consumes `input`: the message's Roc-owned payloads are transferred into the
@@ -3712,6 +3810,94 @@ test "taking a model for render clears the host-owned reference" {
     try std.testing.expectEqual(null, boxed_model);
 }
 
+test "each update call takes the model afresh so one reference stays live" {
+    // `update!` runs once per message, and every call consumes its Box. Taking
+    // once per frame would hand the same reference to the second call.
+    var boxed_model: RocBox = @ptrFromInt(@alignOf(usize));
+
+    var call: usize = 0;
+    while (call < 4) : (call += 1) {
+        const taken = takeModel(&boxed_model);
+        try std.testing.expect(taken != null);
+        try std.testing.expectEqual(null, boxed_model);
+        boxed_model = taken;
+    }
+
+    try std.testing.expect(boxed_model != null);
+}
+
+/// A snapshot with no Roc-owned storage, for tests that exercise queue
+/// mechanics rather than input. Building one through `InputState.hostState`
+/// would pull raylib's screen-size symbols into the test binary.
+fn emptyTestSnapshot() HostState {
+    // A zeroed Roc list is an empty one: null elements, zero length, zero
+    // capacity. Building this through `InputState.hostState` instead would pull
+    // raylib's screen-size symbols into the test binary.
+    return std.mem.zeroes(HostState);
+}
+
+test "the message queue delivers in order and releases what it still holds" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var queue = MsgQueue{};
+    const snapshot = emptyTestSnapshot();
+
+    queue.push(&roc_host, frameInput(snapshot));
+    queue.push(&roc_host, tickInput(snapshot, 7, 99, 0.5));
+
+    const first = queue.pop().?;
+    try std.testing.expectEqual(INPUT_FRAME, first.kind);
+    first.decref(&roc_host);
+
+    try std.testing.expectEqual(@as(usize, 1), queue.len);
+    queue.releaseAll(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), queue.len);
+    try std.testing.expectEqual(@as(?UpdateInput, null), queue.pop());
+}
+
+test "releasing the queue frees the Roc payloads of undelivered messages" {
+    // The leak this guards is the one an `update!` failure mid-drain causes:
+    // the model box is already null, so `dropFinalModel` is a no-op, but every
+    // message still queued owns Roc storage. `std.testing.allocator` fails the
+    // test if `releaseAll` does not hand that storage back.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var queue = MsgQueue{};
+    var pushed: usize = 0;
+    while (pushed < 3) : (pushed += 1) {
+        var msg = emptyInput(INPUT_TICK, emptyTestSnapshot());
+        // Long enough to heap-allocate rather than pack into a small string.
+        msg.str_value = abi.RocStr.fromSlice("a payload the queue must release", &roc_host);
+        queue.push(&roc_host, msg);
+    }
+
+    queue.releaseAll(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), queue.len);
+}
+
+test "a full message queue drops the newest rather than evicting a queued one" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var queue = MsgQueue{};
+    const snapshot = emptyTestSnapshot();
+
+    var pushed: usize = 0;
+    while (pushed < MsgQueue.capacity) : (pushed += 1) {
+        queue.push(&roc_host, tickInput(snapshot, pushed, 0, 0));
+    }
+    try std.testing.expectEqual(@as(usize, MsgQueue.capacity), queue.len);
+
+    queue.push(&roc_host, tickInput(snapshot, 9999, 0, 0));
+    try std.testing.expectEqual(@as(usize, MsgQueue.capacity), queue.len);
+
+    // The oldest survived; the overflow message is the one that went away.
+    try std.testing.expectEqual(@as(u64, 0), queue.items[queue.head].frame_count);
+    queue.releaseAll(&roc_host);
+}
+
 fn initModel(input: *InputState) RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
     const init_state = input.hostState(0, 0, 0, 0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, &.{});
@@ -3781,6 +3967,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     var boxed_model = init_result.getOk();
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
+    var queue = MsgQueue{};
+    // Covers the paths that leave the loop with messages still queued: the
+    // window closing, and `render!` failing after a partial drain.
+    defer queue.releaseAll(roc_host);
 
     while (!raylib.windowShouldClose()) {
         // Sample raylib's monotonic clock (seconds since window init) at the
@@ -3823,12 +4013,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             text_input,
         );
 
+        queue.push(roc_host, frameInput(platform_state));
+        queue.push(roc_host, tickInput(platform_state, frame_count, now_ns, frame_time));
+
         // Every message is delivered before the drawing scope opens, so
         // `update!` structurally cannot draw -- it is never handed a Frame.
-        const update_result = updateOnce(&boxed_model, frameInput(platform_state));
-        if (update_result.tag == .Err) {
-            exit_code = @intCast(update_result.payload_err());
-            if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
+            exit_code = code;
             break;
         }
 
@@ -3869,12 +4060,15 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var boxed_model = init_result.getOk();
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
+    var queue = MsgQueue{};
+    defer queue.releaseAll(roc_host);
 
     while (frame_count < frames) : (frame_count += 1) {
         const frame_time: f32 = if (frame_count == 0) 0 else HEADLESS_FRAME_TIME;
+        const timestamp_nanos = frame_count * HEADLESS_FRAME_NANOS;
         const platform_state = input.hostState(
             frame_count,
-            frame_count * HEADLESS_FRAME_NANOS,
+            timestamp_nanos,
             frame_time,
             0,
             0,
@@ -3883,10 +4077,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             &.{},
         );
 
-        const update_result = updateOnce(&boxed_model, frameInput(platform_state));
-        if (update_result.tag == .Err) {
-            exit_code = @intCast(update_result.payload_err());
-            if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+        queue.push(roc_host, frameInput(platform_state));
+        queue.push(roc_host, tickInput(platform_state, frame_count, timestamp_nanos, frame_time));
+
+        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
+            exit_code = code;
             break;
         }
 

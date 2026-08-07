@@ -63,10 +63,11 @@ int rocray_vp8_begin(int width, int height, int fps, int bitrate_kbps) {
     }
 
     // Higher cpu_used trades encode quality for speed; realtime spans 4..16 and
-    // 4 is the *slow* end. This build has no SIMD -- every architecture-specific
-    // path is excluded so one source list serves all four targets -- so encoding
-    // is scalar C and speed is the binding constraint. Screen content is mostly
-    // flat colour and text, which survives the trade well.
+    // 4 is the *slow* end. Encoding runs on the capture thread's budget and
+    // this build only has the SIMD libvpx writes as intrinsics -- most of its
+    // x86 kernels are assembly we cannot assemble, so a good part of the
+    // encoder is still scalar C and speed is the binding constraint. Screen
+    // content is mostly flat colour and text, which survives the trade well.
     if (vpx_codec_control_(&rocray_vp8_codec, VP8E_SET_CPUUSED, 12) != VPX_CODEC_OK) {
         vpx_img_free(&rocray_vp8_image);
         vpx_codec_destroy(&rocray_vp8_codec);

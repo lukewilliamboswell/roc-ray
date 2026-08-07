@@ -16,6 +16,7 @@ CaptureHost := [].{
 		every_nth : U32,
 		timing : U8,
 		cursor : U8,
+		quality : U8,
 	}
 
 	## Outcome of finalizing a recording. `err` is `0` when the file was written.

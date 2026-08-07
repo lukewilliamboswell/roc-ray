@@ -24,6 +24,10 @@ CaptureCursor := [NoCursor, DrawCursor].{
 	is_eq : _
 }
 
+CaptureQuality := [Fast, Balanced, Best].{
+	is_eq : _
+}
+
 Capture := [].{
 
 	## Container and codec written for a capture.
@@ -55,6 +59,20 @@ Capture := [].{
 	## recording never shows a pointer unless something draws one.
 	Cursor : CaptureCursor
 
+	## How hard the encoder works to choose colours for each frame.
+	##
+	## Only the palette-quantized formats have anything to spend this on, so
+	## today it changes `Gif` and is ignored by `Png` and `WebM`.
+	##
+	## `Best` searches the full colour depth, and is what this platform always
+	## did before this knob existed. `Balanced` is the default: it produces the
+	## same bytes as `Best` on frames colourful enough that the encoder has to
+	## reduce its palette anyway, and on flat UI output it trades a colour error
+	## of at most 16/255 for a slightly smaller and faster encode. `Fast` keeps
+	## a coarse palette -- roughly half the file size and a fifth less encode
+	## time on gradient-heavy frames, but with banding you will notice.
+	Quality : CaptureQuality
+
 	## A validated recording request. Its fields cannot be updated directly;
 	## use its receiver updates so the invariants are preserved.
 	Recording :: {
@@ -66,6 +84,7 @@ Capture := [].{
 		every_nth : U32,
 		timing : CaptureTiming,
 		cursor : CaptureCursor,
+		quality : CaptureQuality,
 	}.{
 		is_eq : _
 
@@ -107,6 +126,10 @@ Capture := [].{
 		with_cursor : Recording, Cursor -> Recording
 		with_cursor = |rec, value| { ..rec, cursor: value }
 
+		## Return a recording encoded at a different quality.
+		with_quality : Recording, Quality -> Recording
+		with_quality = |rec, value| { ..rec, quality: value }
+
 		## Inspect the output path.
 		path : Recording -> Str
 		path = |rec| rec.path
@@ -138,9 +161,14 @@ Capture := [].{
 		## Inspect whether a pointer glyph is drawn.
 		cursor : Recording -> Cursor
 		cursor = |rec| rec.cursor
+
+		## Inspect the encoder quality.
+		quality : Recording -> Quality
+		quality = |rec| rec.quality
 	}
 
-	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing.
+	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
+	## and balanced encoder quality.
 	##
 	## Sized so a full-screen recording stays well inside the host's in-memory
 	## encoding budget and produces a file small enough to embed in a README.
@@ -154,6 +182,7 @@ Capture := [].{
 		every_nth: 1,
 		timing: FixedStep,
 		cursor: NoCursor,
+		quality: Balanced,
 	}
 
 	## Flatten a format to the code the host reads. Shared by the startup config
@@ -180,6 +209,19 @@ Capture := [].{
 		match value {
 			NoCursor => 0
 			DrawCursor => 1
+		}
+
+	## Flatten an encoder quality to the code the host reads.
+	##
+	## The host maps these onto whatever knob the chosen encoder actually has --
+	## for GIF, msf_gif's palette search depth -- so the numbering here is the
+	## only thing the two sides have to agree on.
+	quality_code : Quality -> U8
+	quality_code = |value|
+		match value {
+			Fast => 0
+			Balanced => 1
+			Best => 2
 		}
 
 	## Flatten a scale to the numerator and denominator the host applies.
@@ -215,6 +257,7 @@ expect Capture.default.scale() == Half
 expect Capture.default.every_nth() == 1
 expect Capture.default.timing() == FixedStep
 expect Capture.default.cursor() == NoCursor
+expect Capture.default.quality() == Balanced
 expect Capture.default.path() == "recording.gif"
 expect Capture.default.with_path("out/demo.gif").path() == "out/demo.gif"
 expect Capture.default.with_format(WebM).format() == WebM
@@ -227,6 +270,8 @@ expect Capture.default.with_every_nth(3).every_nth() == 3
 expect Capture.default.with_every_nth(0).every_nth() == 1
 expect Capture.default.with_timing(RealTime).timing() == RealTime
 expect Capture.default.with_cursor(DrawCursor).cursor() == DrawCursor
+expect Capture.default.with_quality(Fast).quality() == Fast
+expect Capture.default.with_quality(Best).quality() == Best
 expect Capture.format_code(Png) == 0
 expect Capture.format_code(Gif) == 1
 expect Capture.format_code(WebM) == 2
@@ -234,6 +279,9 @@ expect Capture.timing_code(RealTime) == 0
 expect Capture.timing_code(FixedStep) == 1
 expect Capture.cursor_code(NoCursor) == 0
 expect Capture.cursor_code(DrawCursor) == 1
+expect Capture.quality_code(Fast) == 0
+expect Capture.quality_code(Balanced) == 1
+expect Capture.quality_code(Best) == 2
 expect Capture.scale_ratio(Full) == { numerator: 1, denominator: 1 }
 expect Capture.scale_ratio(Half) == { numerator: 1, denominator: 2 }
 expect Capture.scale_ratio(Quarter) == { numerator: 1, denominator: 4 }

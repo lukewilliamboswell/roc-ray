@@ -77,6 +77,15 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
 
+      # Checks each vendored libvpx SIMD kernel against its C reference. It has
+      # to run on the target -- macos-15 is arm64, and NEON is where an arm64
+      # build replaces ~200 kernels that nothing else here would exercise.
+      # `zig build test` already depends on this; naming it separately makes a
+      # kernel mismatch obvious in the job list rather than buried in the tests.
+      - name: Check libvpx SIMD parity
+        if: runner.os != 'Windows'
+        run: zig build libvpx-parity
+
       - name: Bundle platform
         run: |
           # The platform depends on roc-ray-types by relative path, which cannot

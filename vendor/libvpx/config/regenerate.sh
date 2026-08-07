@@ -139,4 +139,16 @@ gen_arch arm64 arm64 aarch64-linux-gnu \
     -- \
     --disable-neon_dotprod --disable-neon_i8mm --disable-sve --disable-sve2
 
+# The parity test's kernel table is derived from the rtcd headers, so it has to
+# be regenerated with them -- otherwise it would check a stale dispatch list.
+python3 "$HERE/generate_simd_parity.py" \
+    --config-dir "$HERE/x86_64" --simd sse2 \
+    --output "$HERE/x86_64/simd_parity_table.c" \
+    --uncovered "$HERE/x86_64/simd_parity_uncovered.txt"
+
+python3 "$HERE/generate_simd_parity.py" \
+    --config-dir "$HERE/arm64" --simd neon \
+    --output "$HERE/arm64/simd_parity_table.c" \
+    --uncovered "$HERE/arm64/simd_parity_uncovered.txt"
+
 echo "regenerated $HERE/x86_64 and $HERE/arm64"

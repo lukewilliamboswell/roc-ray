@@ -276,6 +276,49 @@ pub fn build(b: *std.Build) void {
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
 
+        // SIMD/C parity for the vendored libvpx. This has to run *on* the
+        // target -- it is the only check that a NEON or SSE2 kernel actually
+        // computes what its C counterpart does, and an arm64 build swaps out
+        // ~200 of them. Native target on purpose: cross-compiling it would
+        // build the kernels without ever executing them.
+        const parity_target_arch: RocTarget = switch (native_target.result.cpu.arch) {
+            .aarch64 => .arm64mac,
+            else => .x64glibc,
+        };
+        const parity_config_dir = parity_target_arch.libvpxConfigDir();
+
+        const parity = b.addExecutable(.{
+            .name = "libvpx-parity",
+            .root_module = b.createModule(.{
+                .target = native_target,
+                .optimize = optimize,
+                .sanitize_c = .off,
+            }),
+        });
+        parity.root_module.addIncludePath(b.path("vendor/libvpx"));
+        parity.root_module.addIncludePath(b.path(parity_config_dir));
+        parity.root_module.addIncludePath(b.path("vendor/libvpx/test"));
+        parity.root_module.addCSourceFiles(.{
+            .root = b.path("vendor/libvpx"),
+            .files = &.{"test/simd_parity.c"},
+            .flags = &libvpx_flags,
+        });
+        parity.root_module.addCSourceFiles(.{
+            .root = b.path(parity_config_dir),
+            .files = &.{"simd_parity_table.c"},
+            .flags = &libvpx_flags,
+        });
+        parity.root_module.linkLibrary(buildLibvpx(b, native_target, optimize, parity_target_arch));
+        parity.root_module.link_libc = true;
+
+        const run_parity = b.addRunArtifact(parity);
+        const parity_step = b.step(
+            "libvpx-parity",
+            "Check the vendored libvpx SIMD kernels against their C references",
+        );
+        parity_step.dependOn(&run_parity.step);
+        test_step.dependOn(&run_parity.step);
+
         // Pixel-level rendering checks need a real graphics context, so keep
         // them opt-in for local/CI runs with a display (for example xvfb-run).
         const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
@@ -695,57 +738,17 @@ fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build
     return stub_lib;
 }
 
-fn buildHostLib(
+/// Build the vendored libvpx for one target.
+///
+/// Factored out so the SIMD/C parity test can build the same library for the
+/// native target: a parity check that ran against a differently-configured
+/// libvpx than the host links would prove nothing.
+fn buildLibvpx(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     roc_target: RocTarget,
-) BuildResult {
-    const raylib_include_path = b.path("vendor/raylib/include");
-    const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
-    const raylib_lib_path = b.path(raylib_lib_dir);
-
-    const host_lib = b.addLibrary(.{
-        .name = "host",
-        .linkage = .static,
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/host_native.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = optimize != .Debug,
-            .pic = true,
-        }),
-    });
-
-    host_lib.root_module.addIncludePath(raylib_include_path);
-    host_lib.root_module.addLibraryPath(raylib_lib_path);
-
-    // Vendored single-header GIF encoder (MIT or public domain), so recordings
-    // need no external encoder. It is its own archive rather than C added to
-    // the host module: a Zig module that compiles C reaches for the system libc
-    // headers, which a freestanding host does not have, while a standalone C
-    // library builds cleanly for all four targets.
-    //
-    // It builds freestanding like the host -- malloc and memcpy resolve at final
-    // link, as raylib's already do -- and the minimal libc headers msf_gif
-    // includes come from vendor/msf_gif/shim. The host calls it through the
-    // primitive-only shim in msf_gif_impl.c, so no C headers reach the Zig side.
-    //
-    // Roc links from an explicit input list, so the archive is copied next to
-    // libraylib.a below and named in the `targets:` block of platform/main.roc.
-    const msf_gif = b.addLibrary(.{
-        .name = "msf_gif",
-        .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .strip = optimize != .Debug,
-            .pic = true,
-            // Debug builds otherwise emit UBSan calls into the vendored C, and
-            // Roc's final link has no UBSan runtime to resolve them against.
-            .sanitize_c = .off,
-        }),
-    });
+) *std.Build.Step.Compile {
     // Vendored libvpx, built from source for every target rather than shipped
     // as a prebuilt archive: it is C all the way down -- portable C plus the
     // SIMD libvpx writes as compiler intrinsics, never its assembly -- so
@@ -809,6 +812,62 @@ fn buildHostLib(
         .files = roc_target.libvpxSimdSources(),
         .flags = &libvpx_flags,
     });
+
+    return libvpx;
+}
+
+fn buildHostLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    roc_target: RocTarget,
+) BuildResult {
+    const raylib_include_path = b.path("vendor/raylib/include");
+    const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
+    const raylib_lib_path = b.path(raylib_lib_dir);
+
+    const host_lib = b.addLibrary(.{
+        .name = "host",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/host_native.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+            .pic = true,
+        }),
+    });
+
+    host_lib.root_module.addIncludePath(raylib_include_path);
+    host_lib.root_module.addLibraryPath(raylib_lib_path);
+
+    // Vendored single-header GIF encoder (MIT or public domain), so recordings
+    // need no external encoder. It is its own archive rather than C added to
+    // the host module: a Zig module that compiles C reaches for the system libc
+    // headers, which a freestanding host does not have, while a standalone C
+    // library builds cleanly for all four targets.
+    //
+    // It builds freestanding like the host -- malloc and memcpy resolve at final
+    // link, as raylib's already do -- and the minimal libc headers msf_gif
+    // includes come from vendor/msf_gif/shim. The host calls it through the
+    // primitive-only shim in msf_gif_impl.c, so no C headers reach the Zig side.
+    //
+    // Roc links from an explicit input list, so the archive is copied next to
+    // libraylib.a below and named in the `targets:` block of platform/main.roc.
+    const msf_gif = b.addLibrary(.{
+        .name = "msf_gif",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+            .pic = true,
+            // Debug builds otherwise emit UBSan calls into the vendored C, and
+            // Roc's final link has no UBSan runtime to resolve them against.
+            .sanitize_c = .off,
+        }),
+    });
+    const libvpx = buildLibvpx(b, target, optimize, roc_target);
 
     msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif"));
     msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif/shim"));

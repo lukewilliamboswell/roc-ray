@@ -62,13 +62,19 @@ int rocray_vp8_begin(int width, int height, int fps, int bitrate_kbps) {
         return 0;
     }
 
-    // Higher cpu_used trades encode quality for speed; realtime spans 4..16 and
-    // 4 is the *slow* end. Encoding runs on the capture thread's budget and
-    // this build only has the SIMD libvpx writes as intrinsics -- most of its
-    // x86 kernels are assembly we cannot assemble, so a good part of the
-    // encoder is still scalar C and speed is the binding constraint. Screen
-    // content is mostly flat colour and text, which survives the trade well.
-    if (vpx_codec_control_(&rocray_vp8_codec, VP8E_SET_CPUUSED, 12) != VPX_CODEC_OK) {
+    // Pin the encoder's speed rather than letting it tune itself.
+    //
+    // Negative, not positive: libvpx reads a positive cpu_used as "auto-tune"
+    // and calls vp8_auto_select_speed(), which derives the speed from measured
+    // wall-clock encode times. That makes output depend on machine load, and
+    // recordings here are meant to be byte-for-byte reproducible.
+    //
+    // Speed 4 is the slow end of the realtime range, which sounds like the
+    // wrong default -- but measured on a 320x180 recording, speed 12 saves 7%
+    // of wall time and costs 29% more bytes, because the readback and the app's
+    // own rendering dominate rather than the encode. Smaller frames are worth
+    // more here than a marginally faster one.
+    if (vpx_codec_control_(&rocray_vp8_codec, VP8E_SET_CPUUSED, -4) != VPX_CODEC_OK) {
         vpx_img_free(&rocray_vp8_image);
         vpx_codec_destroy(&rocray_vp8_codec);
         return 0;

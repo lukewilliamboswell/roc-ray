@@ -93,3 +93,24 @@ from its source list shows up there as an unresolved `_sse2`/`_neon` symbol,
 which is otherwise easy to miss: Roc links these archives statically, so a
 dangling reference in a member nothing pulls in would stay quiet until it
 didn't.
+
+## SIMD/C parity
+
+`zig build libvpx-parity` runs every dispatched SIMD kernel and its plain-C
+counterpart over the same random input and compares the results. It builds for
+the *native* target on purpose: this is the only check that a kernel actually
+computes what its C reference does, and cross-compiling it would build the
+kernels without ever executing them. `zig build test` depends on it, and CI
+names it as its own step on both x86_64 and macos-15 (arm64) -- the latter is
+the point, since an arm64 build swaps in ~200 NEON kernels that nothing else
+would exercise.
+
+Whole-encode output cannot be compared between a scalar and a SIMD build,
+because `vp8_auto_select_speed` feeds wall-clock timing back into mode
+decisions. Parity has to be checked per kernel.
+
+`simd_parity_table.c` is generated from the rtcd headers by
+`generate_simd_parity.py`, which `regenerate.sh` runs, so the table cannot drift
+from what the build dispatches. Kernels whose signature has no comparator in
+`../test/simd_parity.c` are listed in `simd_parity_uncovered.txt`; adding a
+comparator for a shape moves every kernel of that shape into the table.

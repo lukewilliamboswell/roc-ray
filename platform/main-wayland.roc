@@ -5,16 +5,18 @@ platform ""
 				config : App.Config,
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
-			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
+			update! : model, Program.Input => Try({ model : model, cmds : List(Program.Cmd) }, [Exit(I64), ..]),
+			render! : model, Draw.Frame => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture]
+	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program]
 	packages {
 		rrt: "../types/main.roc",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
 		"init_for_host": init_for_host!,
+		"update_for_host": update_for_host!,
 		"render_for_host": render_for_host!,
 		"drop_model_for_host": drop_model_for_host!,
 	}
@@ -144,6 +146,7 @@ import Sprite
 import Tilemap
 import TilemapHost
 import Physics
+import Program
 
 ## Internal type for host boundary.
 ## Keep this layout-compatible with the public Host record; the compiler may
@@ -175,50 +178,95 @@ HostStateFromHost : {
 	},
 }
 
+## Internal type for the host boundary, carrying one message into `update!`.
+##
+## Unions do not cross this boundary; `kind` selects the variant and the fields
+## it does not use carry inert values. `Program.Input` is rebuilt from it below.
+InputFromHost : {
+	kind : U8, ## 0 Tick, 1 Frame, 2 EffectResult
+	frame_count : U64,
+	timestamp_nanos : U64,
+	frame_time : F32,
+	id : U64, ## correlation id echoed back from the Cmd that produced this
+	value_kind : U8, ## 0 Unit, 1 I32, 2 Str
+	i32_value : I32,
+	str_value : Str,
+	err : U8,
+	snapshot : HostStateFromHost,
+}
+
 app_config_for_host! : () => AppConfig.HostConfig
 app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
 
-init_for_host! : HostStateFromHost => Try(Box(Model), I64)
-init_for_host! = |host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
+## Reshape the flat host snapshot into the public nested `Host` record.
+##
+## Only `gamepads.available` is renamed; the compiler may optimize the rest of
+## this into a direct pass-through, which is why the two layouts are kept
+## deliberately compatible.
+host_from_raw : HostStateFromHost -> Host
+host_from_raw = |host_state| {
+	frame_count: host_state.frame_count,
+	timestamp_nanos: host_state.timestamp_nanos,
+	frame_time: host_state.frame_time,
+	screen: host_state.screen,
+	keys: host_state.keys,
+	text_input: host_state.text_input,
+	gamepads: {
+		connected: host_state.gamepads.available,
+		buttons: host_state.gamepads.buttons,
+		axes: host_state.gamepads.axes,
+	},
+	mouse: host_state.mouse,
+}
+
+## Rebuild a `Program.Input` from the host's flat message record.
+input_from_raw : InputFromHost -> Program.Input
+input_from_raw = |raw|
+	if raw.kind == 1 {
+		Frame(host_from_raw(raw.snapshot))
+	} else if raw.kind == 2 {
+		EffectResult({
+			id: raw.id,
+			value: Program.value_from_host({
+				value_kind: raw.value_kind,
+				i32_value: raw.i32_value,
+				str_value: raw.str_value,
+				err: raw.err,
+			}),
+		})
+	} else {
+		Tick({
+			frame_count: raw.frame_count,
+			timestamp_nanos: raw.timestamp_nanos,
+			frame_time: raw.frame_time,
+		})
 	}
-	match (program.init!.run!)(host) {
+
+init_for_host! : HostStateFromHost => Try(Box(Model), I64)
+init_for_host! = |host_state|
+	match (program.init!.run!)(host_from_raw(host_state)) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
-}
 
-render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
-render_for_host! = |boxed_model, host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
+## Deliver one message to the app and hand the host back any commands it wants
+## run. The host owns the returned box exactly as it does for `render!`.
+update_for_host! : Box(Model), InputFromHost => Try({ model : Box(Model), cmds : List(Program.CmdToHost) }, I64)
+update_for_host! = |boxed_model, raw|
+	match (program.update!)(Box.unbox(boxed_model), input_from_raw(raw)) {
+		Ok(next) => Ok({ model: Box.box(next.model), cmds: List.map(next.cmds, Program.to_host) })
+		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
 	}
+
+## Draw the current model. Takes no `Host`: every nondeterministic value now
+## reaches the app through `update!`, which is what makes the message stream a
+## complete recording of a session.
+render_for_host! : Box(Model) => Try(Box(Model), I64)
+render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
-	match (program.render!)(Box.unbox(boxed_model), host, frame) {
+	match (program.render!)(Box.unbox(boxed_model), frame) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

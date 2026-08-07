@@ -33,6 +33,11 @@ const ClipboardTextResultTag = abi.HostHostGet_clipboard_textResultTag;
 const HostReadFileRawResult = abi.HostHostRead_fileRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapHostLoad_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
+// One message into update!. `kind` selects the variant; unions do not cross
+// this boundary, so the fields a variant does not use carry inert values.
+const UpdateInput = abi.Update_for_hostArg1;
+const UpdateResult = abi.Update_for_hostResult;
+const CmdToHost = abi.Update_for_hostOkCmds;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -62,8 +67,34 @@ const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
-extern fn render_for_host(arg0: RocBox, arg1: HostState) callconv(.c) RocResult;
+extern fn update_for_host(arg0: RocBox, arg1: UpdateInput) callconv(.c) UpdateResult;
+extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
+
+/// `kind` codes for `UpdateInput`. Mirrored in `platform/Program.roc`.
+const INPUT_FRAME: u8 = 1;
+
+/// `value_kind` codes for an `EffectResult`. Mirrored in `platform/Program.roc`.
+const VALUE_UNIT: u8 = 0;
+
+/// Build the message that carries a per-frame input snapshot.
+///
+/// The snapshot's six list buffers are host-owned and were increfed by
+/// `retainForRoc`, so this transfers those references to the message.
+fn frameInput(snapshot: HostState) UpdateInput {
+    return .{
+        .kind = INPUT_FRAME,
+        .frame_count = snapshot.frame_count,
+        .timestamp_nanos = snapshot.timestamp_nanos,
+        .frame_time = snapshot.frame_time,
+        .id = 0,
+        .value_kind = VALUE_UNIT,
+        .i32_value = 0,
+        .str_value = abi.RocStr.empty(),
+        .err = 0,
+        .snapshot = snapshot,
+    };
+}
 
 const TRACE_HOST = false;
 const DEFAULT_HEADLESS_FRAMES: u64 = 3;
@@ -3197,13 +3228,51 @@ fn dropFinalModel(boxed_model: RocBox) void {
 
 /// Transfer the host's current model reference into a Roc entrypoint.
 ///
-/// `render_for_host` consumes its Box argument even when it returns `Err`, so
-/// clear the host slot before the call. Only an `Ok` result installs a new
-/// owned model reference.
-fn takeModelForRender(boxed_model: *RocBox) RocBox {
+/// `update_for_host` and `render_for_host` both consume their Box argument even
+/// when they return `Err`, so clear the host slot before the call. Only an `Ok`
+/// result installs a new owned model reference. `update!` may run several times
+/// per frame, so this applies once per call rather than once per frame.
+fn takeModel(boxed_model: *RocBox) RocBox {
     const transferred = boxed_model.*;
     boxed_model.* = null;
     return transferred;
+}
+
+/// Retained for the render call site, which reads more clearly with the old name.
+const takeModelForRender = takeModel;
+
+/// Hand one message to `update!` and run whatever commands it asks for.
+///
+/// Consumes `input`: the message's Roc-owned payloads are transferred into the
+/// call. Returns the raw result so the caller owns the exit-code decision.
+fn updateOnce(boxed_model: *RocBox, input: UpdateInput) UpdateResult {
+    const result = update_for_host(takeModel(boxed_model), input);
+    if (result.tag == .Ok) {
+        const ok = result.payload_ok();
+        boxed_model.* = ok.model;
+        dispatchCmds(ok.cmds);
+    }
+    return result;
+}
+
+/// Execute the commands returned by one `update!` call and release the list.
+///
+/// Commit 1 recognizes no command kinds yet; an unknown kind is ignored rather
+/// than fatal so a host older than the app degrades instead of crashing.
+fn dispatchCmds(cmds: abi.RocList(CmdToHost)) void {
+    const roc_host = activeHost();
+    defer {
+        if (cmds.hasOneRef()) {
+            for (cmds.allocationItems()) |item| item.decref(roc_host);
+        }
+        cmds.decref(roc_host);
+    }
+
+    for (cmds.items()) |cmd| {
+        switch (cmd.kind) {
+            else => if (TRACE_HOST) std.log.debug("[HOST] Ignoring cmd kind {d}", .{cmd.kind}),
+        }
+    }
 }
 
 /// Apply the startup capture configuration once the window exists.
@@ -3503,19 +3572,18 @@ fn writeRecordingFrameGif(image: raylib.CaptureImage) void {
 
 /// Run one Roc render call inside the host-owned raylib frame scope.
 /// `defer` closes the frame for both `Ok` and `Err` results.
-fn renderFrame(boxed_model: RocBox, platform_state: HostState) RocResult {
-    if (active_headless) return render_for_host(boxed_model, platform_state);
+fn renderFrame(boxed_model: RocBox) RocResult {
+    if (active_headless) return render_for_host(boxed_model);
 
     const NativeRender = struct {
         model: RocBox,
-        state: HostState,
 
         fn begin(_: *@This()) void {
             raylib.beginDrawing();
         }
 
         fn render(self: *@This()) RocResult {
-            return render_for_host(self.model, self.state);
+            return render_for_host(self.model);
         }
 
         fn end(_: *@This()) void {
@@ -3524,7 +3592,7 @@ fn renderFrame(boxed_model: RocBox, platform_state: HostState) RocResult {
         }
     };
 
-    var call = NativeRender{ .model = boxed_model, .state = platform_state };
+    var call = NativeRender{ .model = boxed_model };
     return withDrawingScope(&call, NativeRender.begin, NativeRender.render, NativeRender.end);
 }
 
@@ -3755,7 +3823,16 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             text_input,
         );
 
-        const render_result = renderFrame(takeModelForRender(&boxed_model), platform_state);
+        // Every message is delivered before the drawing scope opens, so
+        // `update!` structurally cannot draw -- it is never handed a Frame.
+        const update_result = updateOnce(&boxed_model, frameInput(platform_state));
+        if (update_result.tag == .Err) {
+            exit_code = @intCast(update_result.payload_err());
+            if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+            break;
+        }
+
+        const render_result = renderFrame(takeModelForRender(&boxed_model));
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});
@@ -3806,7 +3883,14 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             &.{},
         );
 
-        const render_result = renderFrame(takeModelForRender(&boxed_model), platform_state);
+        const update_result = updateOnce(&boxed_model, frameInput(platform_state));
+        if (update_result.tag == .Err) {
+            exit_code = @intCast(update_result.payload_err());
+            if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
+            break;
+        }
+
+        const render_result = renderFrame(takeModelForRender(&boxed_model));
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErr());
             if (TRACE_HOST) std.log.debug("[HOST] render returned Err({d})", .{exit_code});

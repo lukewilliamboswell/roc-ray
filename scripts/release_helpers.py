@@ -30,6 +30,7 @@ def main() -> int:
     manifest.add_argument("--default-bundle", required=True)
     manifest.add_argument("--wayland-bundle", required=True)
     manifest.add_argument("--output", required=True)
+    manifest.set_defaults(func=cmd_write_bundle_manifest)
 
     previous = subcommands.add_parser("resolve-previous-default-url")
     previous.add_argument("--provided-url", default="")

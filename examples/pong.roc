@@ -148,7 +148,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.black)
 	draw_field!(frame, model)
@@ -159,7 +159,7 @@ render! = |model, frame| {
 		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
 	}
 
-	Ok(model)
+	Ok({})
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---

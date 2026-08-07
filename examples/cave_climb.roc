@@ -969,7 +969,7 @@ update! = |model, input_msg|
 
 ## The camera follows the player, so it is a pure function of the model and is
 ## derived here rather than stored.
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 render! = |model, frame| {
 	camera = camera_for(model.level, model.world.player.pos)?
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
@@ -984,7 +984,7 @@ render! = |model, frame| {
 	)?
 	draw_hud!(frame, model.level, model.world)
 
-	Ok(model)
+	Ok({})
 }
 
 camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])

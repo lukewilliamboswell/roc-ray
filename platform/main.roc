@@ -6,7 +6,7 @@ platform ""
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
 			update! : model, Program.Input => Try({ model : model, cmds : List(Program.Cmd) }, [Exit(I64), ..]),
-			render! : model, Draw.Frame => Try(model, [Exit(I64), ..]),
+			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
 	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program]
@@ -266,11 +266,17 @@ update_for_host! = |boxed_model, raw|
 ## Draw the current model. Takes no `Host`: every nondeterministic value now
 ## reaches the app through `update!`, which is what makes the message stream a
 ## complete recording of a session.
+## Draw the current model, then hand the same box back.
+##
+## `render!` returns `{}` rather than a model: drawing is a view of state, not a
+## step of it, and having it return a model invited the two to be confused.
+## Unboxing borrows rather than consumes, so the box the host passed in is still
+## the live reference and is returned unchanged.
 render_for_host! : Box(Model) => Try(Box(Model), I64)
 render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
 	match (program.render!)(Box.unbox(boxed_model), frame) {
-		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}

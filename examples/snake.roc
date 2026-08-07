@@ -264,12 +264,12 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.ray_white)
 	draw_game!(frame, model)
 
-	Ok(model)
+	Ok({})
 }
 
 cell_rect : Cell -> Math.Rect

@@ -94,7 +94,7 @@ update! = |model, input|
 ## The camera and both mouse projections are derived rather than stored: they
 ## are a pure function of the model, so keeping them out of it means there is
 ## one less thing that can disagree with itself.
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
 render! = |model, frame| {
 	camera = (Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom })?).with_rotation(model.rotation)?
 	mouse_world = camera.screen_to_world(model.mouse)
@@ -111,7 +111,7 @@ render! = |model, frame| {
 	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
 	draw_hud!(frame, model)
 
-	Ok(model)
+	Ok({})
 }
 
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}

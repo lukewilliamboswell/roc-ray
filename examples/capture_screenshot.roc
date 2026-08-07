@@ -104,7 +104,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
@@ -117,5 +117,5 @@ render! = |model, frame| {
 		style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
 	})
 
-	Ok(model)
+	Ok({})
 }

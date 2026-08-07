@@ -50,7 +50,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	accent = if model.accent_on Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
 	panel = { x: 120, y: 150, width: 560, height: 300 }
@@ -63,5 +63,5 @@ render! = |model, frame| {
 	frame.line!({ start: { x: 245, y: 370 }, end: { x: 555, y: 370 }, stroke: Draw.stroke(Color.with_alpha(accent, 170), 3) })
 	frame.circle!({ center: model.pointer, radius: 18, style: Draw.filled_and_outlined(accent, Color.white, 3) })
 
-	Ok(model)
+	Ok({})
 }

@@ -76,7 +76,7 @@ update! = |model, input|
 			}
 		}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	status = match model.state {
 		Requested => "reading..."
@@ -95,5 +95,5 @@ render! = |model, frame| {
 		style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
 	})
 
-	Ok(model)
+	Ok({})
 }

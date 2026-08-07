@@ -45,7 +45,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
 	frame.with_render_texture!(
 		model.target,
@@ -82,5 +82,5 @@ render! = |model, frame| {
 		},
 	)?
 
-	Ok(model)
+	Ok({})
 }

@@ -120,7 +120,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	host = model.host
 
@@ -229,5 +229,5 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", model.typed), size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 30, y: 568 }, text: model.clipboard_status, size: 18, color: Color.gray })
 	frame.text_at!({ pos: { x: 30, y: 594 }, text: "Hold left mouse for crosshair | Q exits | Esc is a normal key", size: 18, color: Color.gray })
-	Ok(model)
+	Ok({})
 }

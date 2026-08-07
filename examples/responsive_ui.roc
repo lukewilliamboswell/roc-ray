@@ -226,7 +226,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
 	ui = Box.unbox(model.ui)
 	view = layout_for(model.screen)
@@ -250,5 +250,5 @@ render! = |model, frame| {
 	)?
 	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_bottom_left })
 
-	Ok(model)
+	Ok({})
 }

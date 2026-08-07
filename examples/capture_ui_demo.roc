@@ -158,7 +158,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	over_increment = inside(model.mouse, increment_button)
 	over_toggle = inside(model.mouse, toggle_button)
@@ -175,7 +175,7 @@ render! = |model, frame| {
 		Err(_) => {}
 	}
 
-	Ok(model)
+	Ok({})
 }
 
 ## Where the scripted pointer is on a given frame, and whether it is clicking.

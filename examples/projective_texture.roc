@@ -87,7 +87,7 @@ drag_corner! = |model, host| {
 	}
 }
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101827))
 	frame.projective_texture!({
@@ -107,5 +107,5 @@ render! = |model, frame| {
 	frame.circle!({ center: model.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
 	model.guide.draw!(frame, { pos: { x: 400, y: 565 }, color: Color.ray_white, align: Text.align_top_center })
 
-	Ok(model)
+	Ok({})
 }

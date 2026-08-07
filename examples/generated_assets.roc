@@ -178,7 +178,7 @@ update! = |model, input|
 		_ => Ok({ model: model, cmds: [] })
 	}
 
-render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	ui = Box.unbox(model.ui)
 
@@ -210,5 +210,5 @@ render! = |model, frame| {
 	draw_swatch!(frame, 3, model.palette)
 	ui.help.draw!(frame, { pos: { x: canvas_x, y: 558 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
 
-	Ok(model)
+	Ok({})
 }

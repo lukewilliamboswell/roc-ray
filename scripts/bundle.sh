@@ -5,6 +5,7 @@ root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 platform_dir="$root_dir/platform"
 output_dir="$root_dir"
 package="default"
+types_url_base=""
 roc_bundle_args=()
 roc_bin="${ROC:-roc}"
 
@@ -14,10 +15,18 @@ fi
 
 usage() {
     cat <<'EOF'
-Usage: scripts/bundle.sh [--platform default|wayland] [--output-dir DIR] [roc bundle args...]
+Usage: scripts/bundle.sh [--platform default|wayland] [--output-dir DIR]
+                         [--types-url-base URL] [roc bundle args...]
 
 The default package includes all supported native targets. The Wayland package
 is Linux x64 only and requires vendor/raylib/linux-x64-wayland/libraylib.a.
+
+The platform depends on the roc-ray-types package by relative path so local
+development works. A relative path cannot survive bundling, so --types-url-base
+is required: this script bundles the package, appends its content-addressed
+filename to that base, and rewrites the staged platform header to point at the
+resulting URL. Pass the release download URL when publishing, or a locally
+served directory when testing.
 EOF
 }
 
@@ -54,6 +63,19 @@ while [[ $# -gt 0 ]]; do
             fi
             output_dir="$2"
             shift 2
+            ;;
+        --types-url-base)
+            if [[ $# -lt 2 ]]; then
+                echo "error: --types-url-base requires a URL" >&2
+                exit 1
+            fi
+            types_url_base="${2%/}"
+            shift 2
+            ;;
+        --types-url-base=*)
+            types_url_base="${1#--types-url-base=}"
+            types_url_base="${types_url_base%/}"
+            shift
             ;;
         --output-dir=*)
             output_dir="${1#--output-dir=}"
@@ -92,6 +114,63 @@ esac
 
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
+
+# The platform header points at the roc-ray-types package by relative path so
+# local development works without a published artifact. `roc bundle` silently
+# drops such a dependency -- the archive builds and then fails at the consumer
+# with INVALID PACKAGE DEPENDENCY -- so refuse rather than emit a broken bundle.
+types_dep_line="$(grep -n 'rrt:' "$platform_dir/main.roc" || true)"
+if [[ "$types_dep_line" == *'"../package/'* && -z "$types_url_base" ]]; then
+    cat >&2 <<'EOF'
+error: --types-url-base is required.
+
+platform/main.roc depends on the roc-ray-types package by relative path, which
+cannot survive bundling. Pass the base URL the package bundle will be served
+from, for example:
+
+    scripts/bundle.sh --types-url-base https://github.com/OWNER/REPO/releases/download/VERSION
+    scripts/bundle.sh --types-url-base http://127.0.0.1:8000
+EOF
+    exit 1
+fi
+
+types_url=""
+if [[ -n "$types_url_base" ]]; then
+    # Bundle from inside the package directory. Bundling `package/main.roc` from
+    # the repo root roots the archive at `package/`, one level deeper than roc
+    # resolves on extraction.
+    if ! types_output="$(cd "$root_dir/package" && "$roc_bin" bundle main.roc --output-dir "$output_dir" 2>&1)"; then
+        echo "$types_output" >&2
+        echo "error: failed to bundle the roc-ray-types package" >&2
+        exit 1
+    fi
+    types_bundle="$(printf '%s\n' "$types_output" | sed -n 's|^Created: .*/||p' | tail -1)"
+    if [[ -z "$types_bundle" ]]; then
+        echo "$types_output" >&2
+        echo "error: could not determine the roc-ray-types bundle filename" >&2
+        exit 1
+    fi
+    types_url="$types_url_base/$types_bundle"
+    echo "Types package bundle: $types_bundle"
+    echo "Types package URL: $types_url"
+fi
+
+# Point the staged header at the bundled package instead of the relative path
+# used during local development.
+rewrite_types_dep() {
+    local staged="$1"
+    [[ -n "$types_url" ]] || return 0
+    if ! grep -q 'rrt: "\.\./package/main\.roc",' "$staged"; then
+        echo "error: expected a relative rrt: dependency in $staged to rewrite" >&2
+        exit 1
+    fi
+    python3 - "$staged" "$types_url" <<'PYEOF'
+import pathlib, sys
+staged, url = pathlib.Path(sys.argv[1]), sys.argv[2]
+text = staged.read_text(encoding="utf-8")
+staged.write_text(text.replace('rrt: "../package/main.roc",', f'rrt: "{url}",'), encoding="utf-8")
+PYEOF
+}
 
 stage_dir=""
 cleanup_stage() {
@@ -159,6 +238,7 @@ copy_shared_roc_files
 case "$package" in
     default)
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
+        rewrite_types_dep "$stage_dir/main.roc"
 
         copy_target_files x64mac libhost.a libraylib.a
         copy_target_files arm64mac libhost.a libraylib.a
@@ -171,6 +251,7 @@ case "$package" in
         ;;
     wayland)
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
+        rewrite_types_dep "$stage_dir/main.roc"
 
         copy_target_files x64glibc Scrt1.o crti.o libhost.a libm.so libc.so crtn.o
 

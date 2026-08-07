@@ -113,7 +113,15 @@ jobs:
         run: |
           mkdir -p dist
 
-          default_output="$(scripts/bundle.sh --platform default --output-dir dist)"
+          # The platform depends on roc-ray-types by relative path so local
+          # development needs no published artifact. That cannot survive
+          # bundling, so bundle.sh bundles the package too and rewrites the
+          # staged header to the URL it will live at. We know that URL ahead of
+          # time because it is this release's own download base -- the same one
+          # the release notes use.
+          types_url_base="https://github.com/${{ github.repository }}/releases/download/${{ steps.validate.outputs.release_version }}"
+
+          default_output="$(scripts/bundle.sh --platform default --output-dir dist --types-url-base "$types_url_base")"
           echo "$default_output"
           default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$default_bundle" || ! -f "$default_bundle" ]]; then
@@ -121,7 +129,14 @@ jobs:
             exit 1
           fi
 
-          wayland_output="$(scripts/bundle.sh --platform wayland --output-dir dist)"
+          types_bundle_name="$(printf '%s\n' "$default_output" | sed -n 's|^Types package bundle: ||p' | tail -1)"
+          types_bundle="dist/$types_bundle_name"
+          if [[ -z "$types_bundle_name" || ! -f "$types_bundle" ]]; then
+            echo "Error: could not determine roc-ray-types bundle filename"
+            exit 1
+          fi
+
+          wayland_output="$(scripts/bundle.sh --platform wayland --output-dir dist --types-url-base "$types_url_base")"
           echo "$wayland_output"
           wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$wayland_bundle" || ! -f "$wayland_bundle" ]]; then
@@ -131,6 +146,8 @@ jobs:
 
           echo "default_bundle=$default_bundle" >> "$GITHUB_OUTPUT"
           echo "wayland_bundle=$wayland_bundle" >> "$GITHUB_OUTPUT"
+          echo "types_bundle=$types_bundle" >> "$GITHUB_OUTPUT"
+          echo "types_url=$types_url_base/$types_bundle_name" >> "$GITHUB_OUTPUT"
 
       - name: Write bundle test manifest
         run: |

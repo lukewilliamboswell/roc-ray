@@ -45,7 +45,18 @@ jobs:
         run: zig build test -Droc-tests=false
 
       - name: Bundle platform
-        run: scripts/bundle.sh
+        run: |
+          # The platform depends on roc-ray-types by relative path, which cannot
+          # survive bundling, so pass the URL the package will be served from
+          # below. Port 8000 matches the HTTP server step.
+          output="$(scripts/bundle.sh --types-url-base http://127.0.0.1:8000)"
+          echo "$output"
+          platform_bundle="$(printf '%s\n' "$output" | sed -n 's|^Created: .*/||p' | tail -1)"
+          if [ -z "$platform_bundle" ]; then
+            echo "Error: could not determine the platform bundle filename"
+            exit 1
+          fi
+          echo "PLATFORM_BUNDLE=$platform_bundle" >> "$GITHUB_ENV"
 
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
@@ -65,9 +76,11 @@ jobs:
 
       - name: Start HTTP server for bundle
         run: |
-          BUNDLE_FILE=$(ls *.tar.zst 2>/dev/null | head -1)
-          if [ -z "$BUNDLE_FILE" ]; then
-            echo "Error: No bundle file found"
+          # Two archives are produced now (platform and roc-ray-types), so use
+          # the name captured at bundle time rather than picking one by glob.
+          BUNDLE_FILE="$PLATFORM_BUNDLE"
+          if [ -z "$BUNDLE_FILE" ] || [ ! -f "$BUNDLE_FILE" ]; then
+            echo "Error: platform bundle '$BUNDLE_FILE' not found"
             exit 1
           fi
 

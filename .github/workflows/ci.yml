@@ -4,6 +4,35 @@ on:
   pull_request:
 
 jobs:
+  # Pixel-level rendering and capture checks. They need a real GL context, so
+  # they run under a virtual display -- without this the target never runs
+  # anywhere, which is how it sat unrun for so long.
+  #
+  # Deliberately outside the build matrix. This is the only thing here that
+  # links the system libc directly (`-lc`), and the vendored raylib references
+  # glibc 2.38's `__isoc23_*` symbols, which ubuntu-22.04 does not provide. The
+  # platform and the examples are unaffected: they link through the generated
+  # libc stub instead.
+  graphical-smoke:
+    name: Graphical smoke tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.16.0
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Run graphical smoke tests
+        run: xvfb-run -a zig build graphical-smoke
+
   build-and-test:
     name: Build and Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -43,15 +72,6 @@ jobs:
         # Native tests require MSVC libraries on Windows which aren't available in CI
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
-
-      # Pixel-level rendering and capture checks. They need a GL context, so
-      # they run under a virtual display; without this the target never runs.
-      - name: Run graphical smoke tests
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          xvfb-run -a zig build graphical-smoke
 
       - name: Bundle platform
         run: |

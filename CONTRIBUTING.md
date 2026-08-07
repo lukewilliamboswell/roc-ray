@@ -341,6 +341,13 @@ to re-vendor per platform, and no per-OS CI runner in the loop:
   produced the generated headers beside it, which is the one thing that has to be redone
   when upgrading.
 
+`zig build graphical-smoke` runs the pixel-level rendering and capture checks
+under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
+newer runner than the build matrix: it is the only target that links the system
+libc directly, and the vendored raylib references glibc 2.38 symbols that
+ubuntu-22.04 lacks. The platform and examples link through the generated libc
+stub and are unaffected.
+
 Both expose only primitives and opaque pointers to Zig through a small C shim,
 so the freestanding host module never needs C headers. Each produces its own
 static archive, copied into `platform/targets/<target>/` and named in the

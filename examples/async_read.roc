@@ -100,6 +100,9 @@ apply_completion = |completion|
 				Err(ReadFailed) => Failed("read failed")
 				Err(Busy) => Failed("too many reads in flight")
 				Err(Unavailable) => Failed("reads unavailable")
+				# The frame thread will not copy an unbounded payload, so a
+				# large file is refused rather than stalling the frame.
+				Err(TooLarge) => Failed("file too large to deliver inline")
 			}
 
 		DelayElapsed(_) => Requested

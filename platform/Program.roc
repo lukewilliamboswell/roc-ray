@@ -64,6 +64,7 @@ Program := [].{
 		ReadFailed,
 		Busy,
 		Unavailable,
+		TooLarge,
 	]
 
 	## Work for the host to do. Returning one never blocks.
@@ -137,6 +138,8 @@ read_error = |code|
 		Busy
 	} else if code == 4 {
 		Unavailable
+	} else if code == 5 {
+		TooLarge
 	} else {
 		ReadFailed
 	}

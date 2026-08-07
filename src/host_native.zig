@@ -88,6 +88,20 @@ const READ_ERR_NOT_FOUND: u8 = 1;
 const READ_ERR_FAILED: u8 = 2;
 const READ_ERR_BUSY: u8 = 3;
 const READ_ERR_UNAVAILABLE: u8 = 4;
+const READ_ERR_TOO_LARGE: u8 = 5;
+
+/// How much of a finished read the frame thread will copy into a Roc string.
+///
+/// The worker does the reading off-thread, but turning the bytes into a `Str`
+/// happens here, on the frame thread -- so without a bound a 16 MiB "async"
+/// read still costs a 16 MiB allocation and copy mid-frame, which is most of
+/// what moving the read off-thread was supposed to buy.
+///
+/// Above this the read is reported as `TooLarge` rather than copied. Handing
+/// back a host-owned handle instead, so a large payload never crosses into Roc
+/// during a frame at all, is the next step; refusing is the honest interim,
+/// because it keeps the invariant the split exists for.
+const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 
 
 
@@ -3527,6 +3541,10 @@ fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: [
         return;
     };
     defer allocator.free(bytes);
+    if (bytes.len > MAX_INLINE_READ_BYTES) {
+        staging.fileRead(roc_host, id, READ_ERR_TOO_LARGE, "");
+        return;
+    }
     staging.fileRead(roc_host, id, 0, bytes);
 }
 
@@ -3567,7 +3585,11 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
         const result = effect_worker.takeResult() orelse return;
         if (result.bytes) |bytes| {
             defer effect_worker.allocator.free(bytes);
-            staging.fileRead(roc_host, result.id, 0, bytes);
+            if (bytes.len > MAX_INLINE_READ_BYTES) {
+                staging.fileRead(roc_host, result.id, READ_ERR_TOO_LARGE, "");
+            } else {
+                staging.fileRead(roc_host, result.id, 0, bytes);
+            }
         } else {
             staging.fileRead(roc_host, result.id, result.err, "");
         }
@@ -4111,6 +4133,30 @@ test "an absurd delay saturates its deadline instead of wrapping to the past" {
     armTimer(1, std.math.maxInt(u64));
     try std.testing.expectEqual(std.math.maxInt(u64), pending_timers[0].due_nanos);
     pending_timer_count = 0;
+}
+
+test "a read above the inline cap is refused rather than copied on the frame thread" {
+    // The worker reads off-thread, but turning bytes into a Str happens here.
+    // Without the cap a 16 MiB read still costs a 16 MiB copy mid-frame, which
+    // is most of what moving the read off-thread was supposed to buy.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const oversized = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES + 1);
+    defer std.testing.allocator.free(oversized);
+    @memset(oversized, 'x');
+
+    var staging = CompletionStaging{};
+    if (oversized.len > MAX_INLINE_READ_BYTES) {
+        staging.fileRead(&roc_host, 1, READ_ERR_TOO_LARGE, "");
+    } else {
+        staging.fileRead(&roc_host, 1, 0, oversized);
+    }
+
+    try std.testing.expectEqual(READ_ERR_TOO_LARGE, staging.items[0].err);
+    // Nothing was copied: the completion carries an empty string.
+    try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
+    staging.release(&roc_host);
 }
 
 test "a saturated worker refuses with Busy rather than running work inline" {

@@ -74,19 +74,22 @@ reference silently loses every `Camera2D`, `Mouse.State`, and `ConnectedPad`
 method. Note this is the same `roc docs` behaviour that hid the startup `Config`
 receivers entirely until they were moved into an exposed module.
 
-## The constraint
+## Local paths in source, URLs at bundle time
 
-The platform must depend on a **released** build of the package. A relative path
-does not survive `roc bundle`: the archive is written without the package and
-without any error, then fails at the consumer with `INVALID PACKAGE DEPENDENCY`.
+The committed headers depend on the package by relative path, so local
+development needs no published artifact. A relative path cannot survive
+`roc bundle` — the archive is written without the package and without any error,
+then fails at the consumer with `INVALID PACKAGE DEPENDENCY` — so the
+substitution happens in the tooling instead.
 
-Pointing both platform headers at a bundled package URL fixes it — verified
-locally over HTTP, with the platform bundle test passing and all examples
-building against it. Bundle the package from inside its own directory
-(`cd package && roc bundle main.roc`) or the archive paths are nested one level
-too deep for roc to resolve.
+`scripts/bundle.sh --types-url-base URL` bundles the package, appends its
+content-addressed filename to that base, and rewrites the staged platform header
+to the result. It refuses to run without a base rather than emit an archive
+that is broken in a way only the consumer discovers. Bundle the package from
+inside its own directory or the archive paths nest one level too deep for roc
+to resolve; the script does this.
 
-Release order is therefore: publish the types package, pin its URL in
-`platform/main.roc` and `platform/main-wayland.roc`, then release the platform.
-The committed source keeps relative paths so local development works before
-anything is published.
+The release workflow passes this release's own download base, which is known in
+advance because the release notes need it too, and ships the package bundle as a
+release asset. The local and CI bundle tests start their HTTP server first so
+the URL is known, then bundle both into the directory already being served.

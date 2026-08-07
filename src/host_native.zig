@@ -113,6 +113,16 @@ var capture_gif_open: bool = false;
 /// VP8/WebM encoder for the active recording, when its format is WebM.
 var capture_webm: capture_vp8.Encoder = undefined;
 var capture_webm_open: bool = false;
+/// Render targets that shrink each frame on the GPU before it is read back.
+///
+/// Built on the first downscaled frame of a recording and kept for the rest of
+/// it, so the per-frame cost is a blit and a readback rather than a
+/// full-resolution allocation and a CPU resize. Released whenever a recording
+/// ends -- see `closeCaptureSink` -- so an idle app holds no VRAM for it.
+var capture_downscaler: ?raylib.CaptureDownscaler = null;
+/// Latched when the GPU refuses the downscale chain, so the fallback is taken
+/// once instead of retrying -- and failing -- on every captured frame.
+var capture_downscale_unavailable: bool = false;
 /// Scripted pointer state, replacing the hardware mouse while active.
 ///
 /// Only what Roc is told changes; the real cursor is untouched, so a scripted
@@ -2253,6 +2263,10 @@ fn startCaptureRecording(request: capture.Request) u8 {
     const result = capture_session.start(request, width, height);
     if (result != capture.err_none) return result;
 
+    // A new recording gets a fresh attempt at the GPU path: the previous
+    // failure may have been about sizes this one does not ask for.
+    capture_downscale_unavailable = false;
+
     if (!storeCapturePath(&capture_recording_path, &capture_recording_path_len, request.path)) {
         _ = capture_session.stop();
         return capture.err_path_invalid;
@@ -2348,8 +2362,15 @@ fn captureErrorCode(err: gif_encoder.Error) u8 {
 /// Both are checked rather than returning after the first: only one should ever
 /// be open, but if that invariant were ever broken the other would otherwise be
 /// left holding an unfinalized file and a live descriptor.
+///
+/// This is also where the GPU downscale targets go. Every way a recording can
+/// end -- `Capture.stop!`, the frame cap, a failed session being restarted, and
+/// shutdown -- funnels through here, and shutdown reaches it while the window
+/// is still open, which releasing GPU memory requires.
 fn closeCaptureSink(finished: bool) u8 {
     var result = capture.err_none;
+
+    releaseCaptureDownscaler();
 
     if (capture_gif_open) {
         capture_gif_open = false;
@@ -3269,8 +3290,10 @@ fn captureAdjustedClock(real_ns: u64, fixed_step: ?f32) u64 {
 /// `EndDrawing` swaps the buffers, and reading the framebuffer after the swap
 /// returns driver-dependent contents rather than the frame just drawn.
 ///
-/// A single readback serves both a pending screenshot and the active
-/// recording, since they want the same pixels.
+/// A downscaled recording is read back through the GPU chain, at the size it
+/// keeps. Everything else -- a screenshot, an unscaled recording, or a frame
+/// that wants both, since a screenshot is always full resolution -- takes a
+/// single full-resolution readback and serves both from it.
 fn serviceCaptureRequests() void {
     const wants_screenshot = capture_screenshot_pending;
     const wants_frame = capture_session.isActive() and capture_session.shouldCaptureFrame();
@@ -3283,6 +3306,21 @@ fn serviceCaptureRequests() void {
     // for; a visible window shows it alongside the real cursor.
     if (wants_frame and capture_session.cursor == capture.cursor_draw) {
         drawCaptureCursorOverlay();
+    }
+
+    // A downscaled recording only ever keeps a fraction of the framebuffer, so
+    // shrink it on the GPU and read back the finished size. A screenshot wants
+    // full resolution, so a frame that has both falls through to the
+    // full-resolution readback and the CPU resize below rather than reading
+    // twice.
+    if (wants_frame and !wants_screenshot) {
+        if (captureScaledFrame()) |scaled| {
+            var frame = scaled;
+            defer frame.deinit();
+            writeRecordingFrame(frame);
+            finishRecordingAtFrameCap();
+            return;
+        }
     }
 
     var image = raylib.captureFramebuffer() orelse {
@@ -3306,6 +3344,12 @@ fn serviceCaptureRequests() void {
         image.resize(capture_session.width, capture_session.height);
     }
 
+    writeRecordingFrame(image);
+    finishRecordingAtFrameCap();
+}
+
+/// Hand one captured frame, already at the recording's size, to its sink.
+fn writeRecordingFrame(image: raylib.CaptureImage) void {
     switch (capture_session.format) {
         capture.format_png => writeRecordingFramePng(image),
         capture.format_gif => writeRecordingFrameGif(image),
@@ -3314,18 +3358,81 @@ fn serviceCaptureRequests() void {
         // a known one had no sink.
         else => capture_session.fail(capture.err_unsupported_format),
     }
+}
 
-    // Reaching the frame cap finalizes the file, which is what `Capture.start!`
-    // and `App.with_recording` both promise. Without this a capped recording
-    // stays `Active` forever, counts every later frame as dropped, and only
-    // reaches disk when the process exits.
-    if (capture_session.isActive() and capture_session.reachedFrameCap()) {
-        _ = capture_session.stop();
-        const closed = closeCaptureSink(true);
-        if (closed != capture.err_none) {
-            std.log.err("could not finalize the recording at its frame cap (capture error {d})", .{closed});
-        }
+/// Finalize a recording that has just written its last permitted frame.
+///
+/// Reaching the frame cap finalizes the file, which is what `Capture.start!`
+/// and `App.with_recording` both promise. Without this a capped recording stays
+/// `Active` forever, counts every later frame as dropped, and only reaches disk
+/// when the process exits.
+fn finishRecordingAtFrameCap() void {
+    if (!capture_session.isActive() or !capture_session.reachedFrameCap()) return;
+    _ = capture_session.stop();
+    const closed = closeCaptureSink(true);
+    if (closed != capture.err_none) {
+        std.log.err("could not finalize the recording at its frame cap (capture error {d})", .{closed});
     }
+}
+
+/// Read this frame through the GPU downscale chain, at the recording's size.
+///
+/// Returns null whenever the full-resolution readback has to run instead: an
+/// unscaled recording, a GPU that would not give us the render targets, a
+/// framebuffer smaller than the recording asked for, or a readback that failed.
+///
+/// The chain is not exposed to the caller. Encoding a frame can reach the frame
+/// cap, which finalizes the recording and releases the chain, so a borrowed
+/// pointer to it would not survive the write it was fetched for.
+fn captureScaledFrame() ?raylib.CaptureImage {
+    const downscaler = activeCaptureDownscaler() orelse return null;
+    if (downscaler.readFrame()) |scaled| return scaled;
+
+    // The chain built but could not be read. Drop it and take the
+    // full-resolution path for this frame and every later one, rather than
+    // losing frames to a GPU problem we cannot diagnose here.
+    releaseCaptureDownscaler();
+    capture_downscale_unavailable = true;
+    return null;
+}
+
+/// The GPU downscaler for the active recording, built or rebuilt on demand.
+///
+/// Returns null whenever the full-resolution readback is the right answer: an
+/// unscaled recording, a GPU that would not give us the render targets, or a
+/// framebuffer smaller than the recording asked for.
+fn activeCaptureDownscaler() ?*raylib.CaptureDownscaler {
+    if (capture_downscale_unavailable) return null;
+
+    const plan = capture.planDownscale(
+        @intCast(@max(currentRenderWidth(), 1)),
+        @intCast(@max(currentRenderHeight(), 1)),
+        capture_session.width,
+        capture_session.height,
+    ) orelse return null;
+
+    if (capture_downscaler) |*existing| {
+        if (existing.matches(plan)) return existing;
+        // The window resized, or this is a second recording at a different
+        // scale. Reusing the old targets would hand the encoder frames of the
+        // wrong size, so rebuild rather than adapt.
+        releaseCaptureDownscaler();
+    }
+
+    capture_downscaler = raylib.CaptureDownscaler.init(plan) orelse {
+        capture_downscale_unavailable = true;
+        return null;
+    };
+    return &capture_downscaler.?;
+}
+
+/// Release the downscale render targets, if any are held.
+///
+/// Requires a live GL context, so every caller has to run while the window is
+/// still open.
+fn releaseCaptureDownscaler() void {
+    if (capture_downscaler) |*existing| existing.deinit();
+    capture_downscaler = null;
 }
 
 /// Encode one frame into the open WebM file.

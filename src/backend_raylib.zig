@@ -7,6 +7,8 @@
 const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
+/// Capture policy, kept free of raylib so it can be unit tested without a GPU.
+const capture = @import("capture.zig");
 
 /// Roc's `Color.Rgba`, the RGBA record that crosses the host boundary.
 pub const Color = abi.ColorRgba;
@@ -1502,6 +1504,175 @@ pub const CaptureImage = struct {
         rl.UnloadImage(self.image);
     }
 };
+
+/// `GL_COLOR_BUFFER_BIT`, the only attachment a capture blit has to move.
+///
+/// `rlgl.h` exposes `RL_READ_FRAMEBUFFER` and `RL_DRAW_FRAMEBUFFER` but not the
+/// blit masks, and the GL headers are raylib's own -- so the value is spelled
+/// out here rather than reached for through a second OpenGL dependency.
+const gl_color_buffer_bit: c_int = 0x00004000;
+
+/// A reusable GPU pipeline that shrinks the framebuffer before it is read back.
+///
+/// `glReadPixels` cannot scale, so a `Half` or `Quarter` recording that reads
+/// the framebuffer and resizes afterwards transfers, allocates, and filters 4x
+/// or 16x more pixels than it keeps. This does the shrink on the GPU so the
+/// readback is already the size of the finished frame, and reuses its render
+/// targets for the whole recording instead of allocating per frame.
+///
+/// The frame is first blitted 1:1 into a render target, because the default
+/// framebuffer is not a texture and cannot be sampled. raylib's blit is
+/// hardcoded to `GL_NEAREST`, which at 1:1 is exact; the filtering all happens
+/// in the halving steps that follow, where bilinear sampling averages 2x2
+/// blocks. See `capture.planDownscale` for why the chain halves.
+pub const CaptureDownscaler = struct {
+    /// Render targets matching `capture.DownscalePlan.levels`, so `targets[0]`
+    /// is framebuffer-sized and the last is the recording size.
+    targets: [capture.max_downscale_levels]RenderTexture,
+    count: usize,
+
+    /// Build the render-target chain, or null if the GPU refused any of them.
+    ///
+    /// A partially built chain is torn down rather than returned, so a refusal
+    /// never leaks the targets that did load.
+    pub fn init(plan: capture.DownscalePlan) ?CaptureDownscaler {
+        var self = CaptureDownscaler{
+            .targets = undefined,
+            .count = 0,
+        };
+
+        while (self.count < plan.count) {
+            const extent = plan.levels[self.count];
+            const target = rl.LoadRenderTexture(
+                @intCast(extent.width),
+                @intCast(extent.height),
+            );
+            if (!rl.IsRenderTextureValid(target)) {
+                rl.UnloadRenderTexture(target);
+                self.deinit();
+                return null;
+            }
+            // Bilinear is what makes a halving step a 2x2 average instead of a
+            // point sample, and clamping keeps the edge taps from wrapping
+            // around to the opposite side of the frame.
+            rl.SetTextureFilter(target.texture, rl.TEXTURE_FILTER_BILINEAR);
+            rl.SetTextureWrap(target.texture, rl.TEXTURE_WRAP_CLAMP);
+            self.targets[self.count] = target;
+            self.count += 1;
+        }
+        return self;
+    }
+
+    /// Does this chain already produce exactly what `plan` asks for?
+    ///
+    /// Sizes are compared level by level rather than only end to end, so a
+    /// window resize or a second recording at a different scale rebuilds
+    /// instead of quietly encoding frames of the wrong dimensions.
+    pub fn matches(self: CaptureDownscaler, plan: capture.DownscalePlan) bool {
+        if (self.count != plan.count) return false;
+        for (self.targets[0..self.count], plan.levels[0..plan.count]) |target, extent| {
+            if (target.texture.width != @as(c_int, @intCast(extent.width))) return false;
+            if (target.texture.height != @as(c_int, @intCast(extent.height))) return false;
+        }
+        return true;
+    }
+
+    /// Release every render target. Requires a live GL context.
+    pub fn deinit(self: *CaptureDownscaler) void {
+        for (self.targets[0..self.count]) |target| rl.UnloadRenderTexture(target);
+        self.count = 0;
+    }
+
+    /// Shrink the current framebuffer through the chain and read the result.
+    ///
+    /// Carries the same ordering requirement as `captureFramebuffer`: the
+    /// pending draw batch is flushed first, and this must run before
+    /// `endDrawing` swaps the buffers away.
+    pub fn readFrame(self: *CaptureDownscaler) ?CaptureImage {
+        std.debug.assert(self.count >= 2);
+        flushRenderBatch();
+
+        // Restore whatever was bound rather than assuming the default
+        // framebuffer, so a capture cannot silently redirect the app's drawing.
+        const previous_framebuffer = rl.rlGetActiveFramebuffer();
+        const source = self.targets[0];
+
+        // Read from framebuffer 0 explicitly: the presented frame is the one
+        // being recorded, whatever else may be bound.
+        rl.rlBindFramebuffer(rl.RL_READ_FRAMEBUFFER, 0);
+        rl.rlBindFramebuffer(rl.RL_DRAW_FRAMEBUFFER, source.id);
+        rl.rlBlitFramebuffer(
+            0,
+            0,
+            source.texture.width,
+            source.texture.height,
+            0,
+            0,
+            source.texture.width,
+            source.texture.height,
+            gl_color_buffer_bit,
+        );
+        rl.rlEnableFramebuffer(previous_framebuffer);
+
+        // Copy the source colour through verbatim. The default framebuffer's
+        // alpha is whatever the app's clear colour left there, and blending
+        // against it would darken or erase the frame.
+        rl.rlDisableColorBlend();
+        var level: usize = 1;
+        while (level < self.count) : (level += 1) {
+            drawDownscaleLevel(self.targets[level - 1].texture, self.targets[level]);
+        }
+        rl.rlEnableColorBlend();
+
+        // `rlReadScreenPixels` reads whatever framebuffer is bound and flips the
+        // rows, exactly as it does for the default framebuffer -- which is why
+        // every step above preserves the framebuffer's own row order.
+        const last = self.targets[self.count - 1];
+        rl.rlEnableFramebuffer(last.id);
+        const data = rl.rlReadScreenPixels(last.texture.width, last.texture.height);
+        rl.rlEnableFramebuffer(previous_framebuffer);
+        if (data == null) return null;
+
+        return .{ .image = .{
+            .data = @ptrCast(data),
+            .width = last.texture.width,
+            .height = last.texture.height,
+            .mipmaps = 1,
+            .format = rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+        } };
+    }
+};
+
+/// Draw one downscale level into the next, filling it exactly.
+///
+/// The negative source height is raylib's render-target flip. It is not
+/// cosmetic here: drawing a render texture upright would invert the row order,
+/// so an odd-length chain would come out upside down and an even-length one
+/// would not.
+fn drawDownscaleLevel(from: Texture, to: RenderTexture) void {
+    rl.BeginTextureMode(to);
+    rl.DrawTexturePro(
+        from,
+        .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(from.width),
+            .height = -@as(f32, @floatFromInt(from.height)),
+        },
+        .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(to.texture.width),
+            .height = @floatFromInt(to.texture.height),
+        },
+        .{ .x = 0, .y = 0 },
+        0,
+        rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+    );
+    // `EndTextureMode` submits the batch, so the level is complete before
+    // the next step samples it.
+    rl.EndTextureMode();
+}
 
 /// Submit raylib's batched geometry so the framebuffer reflects it.
 ///

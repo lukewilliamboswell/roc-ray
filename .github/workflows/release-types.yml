@@ -128,9 +128,12 @@ jobs:
           \`\`\`
           EOF
 
+          # --latest=false: the repo's latest release should stay the platform,
+          # which is what users are looking for when they land on /releases.
           gh release create "$tag" "$BUNDLE_PATH" \
             --title "roc-ray-types $VERSION" \
-            --notes-file notes.md
+            --notes-file notes.md \
+            --latest=false
 
           echo "Published $url"
           echo "Update .types-version to this URL, then release the platform."

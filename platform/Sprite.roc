@@ -27,7 +27,7 @@ Sprite := {
 	scale : Math.Vec2,
 
 	## Return a copy with a multiplicative tint.
-	tint : Color,
+	tint : Color.Rgba,
 }.{
 
 	## Return a copy using a new texture source rectangle.
@@ -65,7 +65,7 @@ Sprite := {
 	scale = |sprite, amount| { ..sprite, scale: { x: amount, y: amount } }
 
 	## Return a copy with a multiplicative tint.
-	tint : Sprite, Color -> Sprite
+	tint : Sprite, Color.Rgba -> Sprite
 	tint = |sprite, new_tint| { ..sprite, tint: new_tint }
 
 	## Resolve the sprite to a `Draw.TextureDraw` configuration.
@@ -137,7 +137,7 @@ Sprite := {
 	with_scale = |sprite, amount| sprite.scale(amount)
 
 	## Compatibility function for the `tint` receiver method.
-	with_tint : Sprite, Color -> Sprite
+	with_tint : Sprite, Color.Rgba -> Sprite
 	with_tint = |sprite, new_tint| sprite.tint(new_tint)
 
 	## Return a source rectangle for a regular grid spritesheet.

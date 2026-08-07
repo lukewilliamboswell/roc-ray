@@ -21,6 +21,7 @@ const HostState = ffi.HostState;
 const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
+const Color = abi.ColorRgba;
 const ReadEnvResult = abi.HostHostRead_envResult;
 // get_clipboard_text! returns Try(Str, [Unavailable]) -- the same shape as
 // read_env!'s result, generated separately because the error tag differs.
@@ -1080,7 +1081,7 @@ test "render target texture views report not mutable and release ownership" {
 
     const target = storeRenderTexture(.headless, 4, 4).?;
     const err = hostedAssetsUpdateTextureRaw(&roc_host, .{
-        .pixels = abi.RocListWith(abi.Color, false).empty(),
+        .pixels = abi.RocListWith(Color, false).empty(),
         .texture = .{ .resource = target },
     });
     try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, err);
@@ -1598,7 +1599,7 @@ fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) voi
     raylib.drawCircleLines(args);
 }
 
-fn hostedDrawClear(color: abi.Color) callconv(.c) void {
+fn hostedDrawClear(color: Color) callconv(.c) void {
     if (active_headless) return;
     raylib.clearBackground(color);
 }
@@ -1990,7 +1991,7 @@ fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
         .q_bottom_left = 1,
         .q_bottom_right = 1,
         .q_top_right = 1,
-        .tint = abi.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        .tint = Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
     return true;
 }

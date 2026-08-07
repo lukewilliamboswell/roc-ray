@@ -10,7 +10,7 @@ import rr.Math
 Brick : {
 	id : U64,
 	rect : Math.Rect,
-	color : Color,
+	color : Color.Rgba,
 }
 
 Ball : {
@@ -193,7 +193,7 @@ brick_row_index = |row|
 		BlueRow => 4
 	}
 
-brick_row_color : BrickRow -> Color
+brick_row_color : BrickRow -> Color.Rgba
 brick_row_color = |row|
 	match row {
 		RedRow => Color.from_hex_rgb(0xf94144)
@@ -209,7 +209,7 @@ brick_row_y = |row| brick_top + U64.to_f32(brick_row_index(row)) * (brick_h + br
 brick_col_x : U64 -> F32
 brick_col_x = |col| brick_left + U64.to_f32(col) * (brick_w + brick_gap)
 
-brick_at : U64, F32, F32, Color -> Brick
+brick_at : U64, F32, F32, Color.Rgba -> Brick
 brick_at = |id, x, y, color| {
 	id,
 	rect: Math.rect(x, y, brick_w, brick_h),

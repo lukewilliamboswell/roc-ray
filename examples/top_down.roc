@@ -188,7 +188,7 @@ World := {
 		lane : Lane,
 		offset : F32,
 		radius : F32,
-		color : Color,
+		color : Color.Rgba,
 	}.{
 		pos : Hazard, F32 -> Math.Vec2
 		pos = |hazard, phase| {
@@ -665,7 +665,7 @@ tile_from_name = |name|
 lane_from_name : Str -> Lane
 lane_from_name = |name| if name == "Vertical" Vertical else Horizontal
 
-hazard_color : U64 -> Color
+hazard_color : U64 -> Color.Rgba
 hazard_color = |id|
 	match id % 4 {
 		0 => Color.from_hex_rgb(0xf94144)
@@ -1277,7 +1277,7 @@ draw_player! = |frame, characters, player| {
 	frame.circle!({ center: player.pos, radius: player_radius, style: Draw.outlined(Color.with_alpha(Color.white, 180), 2) })
 }
 
-draw_bar! : Draw.Frame, F32, F32, F32, F32, F32, Color => {}
+draw_bar! : Draw.Frame, F32, F32, F32, F32, F32, Color.Rgba => {}
 draw_bar! = |frame, x, y, width, height, amount, color| {
 	frame.rounded_rectangle!({ x, y, width, height, radius: 5, segments: 6, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
 	frame.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
@@ -1310,7 +1310,7 @@ draw_hud! = |frame, level, world| {
 	}
 }
 
-draw_modal! : Draw.Frame, Str, Str, Color => {}
+draw_modal! : Draw.Frame, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 120)) })
 	frame.rounded_rectangle!({ x: 185, y: 226, width: 430, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 230), accent, 4) })

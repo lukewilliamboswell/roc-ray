@@ -55,7 +55,7 @@ Assets := [].{
 		rect = |texture| { x: 0, y: 0, width: texture.width(), height: texture.height() }
 
 		## Replace every pixel in row-major RGBA order.
-		update! : Texture, List(Color) => Try({}, [PixelCountMismatch, ..])
+		update! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 		update! = |Texture.(texture), pixels|
 			if AssetsHost.update_texture!({ texture, pixels }) == 0 Ok({}) else Err(PixelCountMismatch)
 
@@ -106,7 +106,7 @@ Assets := [].{
 	TextureWrap := [Repeat, Clamp, MirrorRepeat, MirrorClamp]
 
 	## Configuration for a solid-color generated texture.
-	GenerateColorTexture : { width : I32, height : I32, color : Color }
+	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
 
 	## Configuration for a generated checkerboard texture.
 	GenerateCheckedTexture : {
@@ -114,8 +114,8 @@ Assets := [].{
 		height : I32,
 		checks_x : I32,
 		checks_y : I32,
-		color_a : Color,
-		color_b : Color,
+		color_a : Color.Rgba,
+		color_b : Color.Rgba,
 	}
 
 	## Load an image file into GPU texture memory. The returned value owns the
@@ -134,7 +134,7 @@ Assets := [].{
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color) => Try({}, [PixelCountMismatch, ..])
+	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels| texture.update!(pixels)
 
 	expect filter_code(Bilinear) == 1

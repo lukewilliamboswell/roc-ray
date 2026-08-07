@@ -29,7 +29,7 @@ PLATFORM_DIR = ROOT / "platform"
 # Modules that live in the package and are re-exported by a generated shim.
 # Keys/Mouse/Gamepad/Time have hand-written shims with curated prose and are
 # deliberately not listed here.
-GENERATED: tuple[str, ...] = ("Math", "Camera", "Physics")
+GENERATED: tuple[str, ...] = ("Math", "Camera", "Physics", "Color")
 
 # Module names a signature may refer to, so the shim can import them.
 SIBLINGS: tuple[str, ...] = (

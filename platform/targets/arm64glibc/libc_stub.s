@@ -2133,3 +2133,20 @@ __strncpy_chk:
 wcsrtombs:
     xor %rax, %rax
     ret
+
+# Referenced by the vendored libvpx, which uses setjmp/longjmp for encoder
+# error handling. As with every symbol here, this only satisfies the linker;
+# the real glibc supplies the implementation at runtime.
+.balign 8
+.globl _setjmp
+.type _setjmp, %function
+_setjmp:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl longjmp
+.type longjmp, %function
+longjmp:
+    xor %rax, %rax
+    ret

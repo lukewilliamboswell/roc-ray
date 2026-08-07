@@ -7,6 +7,9 @@ const abi = @import("roc_platform_abi.zig");
 
 // Import FFI conversion utilities
 const ffi = @import("roc_ffi.zig");
+const capture = @import("capture.zig");
+const capture_vp8 = @import("capture_vp8.zig");
+const gif_encoder = @import("gif_encoder.zig");
 const host_resource = @import("host_resource.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
@@ -82,6 +85,48 @@ var active_mouse_cursor_code: u8 = 255;
 inline fn headlessMode() bool {
     return builtin.is_test or active_headless;
 }
+
+/// Recording policy and state for this process. See `capture.zig`.
+var capture_session: capture.Session = .{};
+/// Sandbox root every capture path is resolved beneath.
+var capture_output_dir: [capture.path_capacity]u8 = undefined;
+var capture_output_dir_len: usize = 0;
+/// Output path of the active recording, copied out of the Roc-owned config.
+var capture_recording_path: [capture.path_capacity]u8 = undefined;
+var capture_recording_path_len: usize = 0;
+/// A screenshot requested by Roc during this frame, serviced at frame end.
+var capture_screenshot_path: [capture.path_capacity]u8 = undefined;
+var capture_screenshot_path_len: usize = 0;
+var capture_screenshot_pending: bool = false;
+/// Frames written by the active recording, and their total size on disk.
+var capture_recording_bytes: u64 = 0;
+/// GIF encoder for the active recording, when its format is GIF.
+var capture_gif: gif_encoder.Encoder = undefined;
+var capture_gif_open: bool = false;
+/// VP8/WebM encoder for the active recording, when its format is WebM.
+var capture_webm: capture_vp8.Encoder = undefined;
+var capture_webm_open: bool = false;
+/// Scripted pointer state, replacing the hardware mouse while active.
+///
+/// Only what Roc is told changes; the real cursor is untouched, so a scripted
+/// demo cannot run away with the user's pointer.
+var virtual_mouse_active: bool = false;
+var virtual_mouse_x: f32 = 0;
+var virtual_mouse_y: f32 = 0;
+var virtual_mouse_wheel: f32 = 0;
+var virtual_mouse_buttons: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
+/// Previous virtual position, so movement deltas match a real pointer's.
+var virtual_mouse_last_x: f32 = 0;
+var virtual_mouse_last_y: f32 = 0;
+var virtual_mouse_has_last: bool = false;
+/// Nanoseconds of divergence introduced by fixed-step recordings.
+///
+/// While a fixed-step recording runs we report exact `1/fps` deltas instead of
+/// raylib's measured ones, so our clock and raylib's drift apart. Carrying the
+/// difference keeps the clock Roc sees monotonic across the start and the end
+/// of a recording, rather than jumping at each boundary.
+var capture_clock_offset_ns: i128 = 0;
+var capture_clock_last_real_ns: u64 = 0;
 
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
@@ -605,6 +650,19 @@ fn pathExists(path: []const u8) bool {
 }
 
 fn resetHeadlessRuntime(app_config: AppConfig) void {
+    capture_session.reset();
+    virtual_mouse_active = false;
+    virtual_mouse_has_last = false;
+    virtual_mouse_buttons = @splat(false);
+    virtual_mouse_wheel = 0;
+
+    capture_screenshot_pending = false;
+    capture_screenshot_path_len = 0;
+    capture_recording_path_len = 0;
+    capture_output_dir_len = 0;
+    capture_recording_bytes = 0;
+    capture_clock_offset_ns = 0;
+    capture_clock_last_real_ns = 0;
     headless_screen_width = positiveI32(app_config.width, 800);
     headless_screen_height = positiveI32(app_config.height, 600);
     headless_random_state = 0x4d595df4;
@@ -2051,6 +2109,290 @@ fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     raylib.setExitKey(nonNegativeCInt(key_code));
 }
 
+/// Copy a path into fixed host storage, returning false if it does not fit.
+///
+/// Capture paths outlive the Roc string they arrive in, so they cannot be
+/// borrowed. `capture.validateRelativePath` has already bounded the length.
+fn storeCapturePath(destination: []u8, length: *usize, path: []const u8) bool {
+    if (path.len > destination.len) return false;
+    @memcpy(destination[0..path.len], path);
+    length.* = path.len;
+    return true;
+}
+
+fn captureOutputDir() []const u8 {
+    return capture_output_dir[0..capture_output_dir_len];
+}
+
+/// Resolve a validated request path under the output directory and create its
+/// parent directories, so an app can record into `frames/run/` without first
+/// having to make the directory itself.
+fn prepareCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
+    const joined = capture.joinOutputPath(buffer, captureOutputDir(), path) orelse return null;
+    if (std.fs.path.dirname(joined)) |parent| {
+        std.Io.Dir.cwd().createDirPath(defaultIo(), parent) catch return null;
+    }
+    return joined;
+}
+
+/// Write one captured image to a validated path, returning a capture error code.
+fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8) u8 {
+    var path_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = prepareCapturePath(&path_storage, path) orelse return capture.err_write_failed;
+
+    var c_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    const allocator = allocatorFromHost(activeHost());
+    var c_path = makeTempCString(allocator, &c_stack, resolved) catch return capture.err_out_of_memory;
+    defer c_path.deinit();
+
+    if (!image.exportPng(c_path.ptr)) return capture.err_write_failed;
+    return capture.err_none;
+}
+
+/// Build the numbered filename for one frame of a PNG-sequence recording.
+///
+/// `demo.png` yields `demo_00000.png`, keeping frames in lexicographic order
+/// so any external encoder picks them up in the right sequence.
+fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
+    const dot = std.mem.lastIndexOfScalar(u8, path, '.');
+    const stem = if (dot) |at| path[0..at] else path;
+    const extension = if (dot) |at| path[at..] else ".png";
+    return std.fmt.bufPrint(buffer, "{s}_{d:0>5}{s}", .{ stem, index, extension }) catch null;
+}
+
+fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
+    defer path_arg.decref(roc_host);
+    const path = path_arg.asSlice();
+
+    const validation = capture.validateRelativePath(path);
+    if (validation != capture.err_none) return validation;
+
+    // Headless runs have no framebuffer to read, so the request is validated
+    // and then dropped rather than writing a file that would be all zeroes.
+    if (headlessMode()) return capture.err_none;
+
+    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
+        return capture.err_path_invalid;
+    }
+    capture_screenshot_pending = true;
+    return capture.err_none;
+}
+
+fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedCaptureScreenshot(activeHost(), path_arg);
+}
+
+fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
+    defer args.path.decref(roc_host);
+    return startCaptureRecording(.{
+        .path = args.path.asSlice(),
+        .format = args.format,
+        .fps = args.fps,
+        .max_frames = args.max_frames,
+        .scale_numerator = args.scale_numerator,
+        .scale_denominator = args.scale_denominator,
+        .every_nth = args.every_nth,
+        .timing = args.timing,
+        .cursor = args.cursor,
+    });
+}
+
+fn exportedCaptureStartRecording(args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
+    return hostedCaptureStartRecording(activeHost(), args);
+}
+
+/// Validate a recording request and arm the session.
+///
+/// Shared by the runtime effect and the startup config so a recording declared
+/// in `App.Config` is checked exactly as strictly as one started from `render!`.
+fn startCaptureRecording(request: capture.Request) u8 {
+    const width: u32 = @intCast(@max(currentRenderWidth(), 1));
+    const height: u32 = @intCast(@max(currentRenderHeight(), 1));
+
+    const result = capture_session.start(request, width, height);
+    if (result != capture.err_none) return result;
+
+    if (!storeCapturePath(&capture_recording_path, &capture_recording_path_len, request.path)) {
+        _ = capture_session.stop();
+        return capture.err_path_invalid;
+    }
+    capture_recording_bytes = 0;
+
+    // A format that writes one container for the whole recording opens it now,
+    // so a bad path or an unwritable directory is reported by `start!` rather
+    // than surfacing frames later as a latched failure.
+    if (!headlessMode()) {
+        const opened = switch (capture_session.format) {
+            capture.format_gif => openCaptureGif(),
+            capture.format_webm => openCaptureWebm(),
+            else => capture.err_none,
+        };
+        if (opened != capture.err_none) {
+            _ = capture_session.stop();
+            return opened;
+        }
+    }
+    return capture.err_none;
+}
+
+/// Open the GIF container for the active recording.
+fn openCaptureGif() u8 {
+    var path_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = prepareCapturePath(
+        &path_storage,
+        capture_recording_path[0..capture_recording_path_len],
+    ) orelse return capture.err_write_failed;
+
+    gif_encoder.open(
+        defaultIo(),
+        &capture_gif,
+        resolved,
+        capture_session.width,
+        capture_session.height,
+        capture_session.fps,
+    ) catch |err| return captureErrorCode(err);
+
+    capture_gif_open = true;
+    return capture.err_none;
+}
+
+/// Open the WebM container and VP8 encoder for the active recording.
+fn openCaptureWebm() u8 {
+    var path_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = prepareCapturePath(
+        &path_storage,
+        capture_recording_path[0..capture_recording_path_len],
+    ) orelse return capture.err_write_failed;
+
+    capture_vp8.open(
+        defaultIo(),
+        &capture_webm,
+        resolved,
+        capture_session.width,
+        capture_session.height,
+        capture_session.fps,
+    ) catch |err| return vp8ErrorCode(err);
+
+    capture_webm_open = true;
+    return capture.err_none;
+}
+
+/// Map a VP8 encoder error onto the code Roc observes.
+fn vp8ErrorCode(err: capture_vp8.Error) u8 {
+    return switch (err) {
+        capture_vp8.Error.WriteFailed => capture.err_write_failed,
+        capture_vp8.Error.OutOfMemory => capture.err_out_of_memory,
+        capture_vp8.Error.EncodeFailed => capture.err_encode_failed,
+    };
+}
+
+/// Map an encoder error onto the code Roc observes.
+fn captureErrorCode(err: gif_encoder.Error) u8 {
+    return switch (err) {
+        gif_encoder.Error.WriteFailed => capture.err_write_failed,
+        gif_encoder.Error.OutOfMemory => capture.err_out_of_memory,
+        gif_encoder.Error.EncodeFailed => capture.err_encode_failed,
+    };
+}
+
+/// Close the active recording's container, if it has one.
+///
+/// `finished` finalizes the file; otherwise it is abandoned mid-stream, which
+/// still leaves the frames written so far readable by most decoders.
+fn closeCaptureSink(finished: bool) u8 {
+    if (capture_gif_open) {
+        capture_gif_open = false;
+        if (!finished) {
+            capture_gif.abort();
+            return capture.err_none;
+        }
+        defer capture_recording_bytes = capture_gif.bytesWritten();
+        capture_gif.finish() catch |err| return captureErrorCode(err);
+        return capture.err_none;
+    }
+
+    if (capture_webm_open) {
+        capture_webm_open = false;
+        if (!finished) {
+            capture_webm.abort();
+            return capture.err_none;
+        }
+        defer capture_recording_bytes = capture_webm.bytesWritten();
+        capture_webm.finish() catch |err| return vp8ErrorCode(err);
+        return capture.err_none;
+    }
+
+    return capture.err_none;
+}
+
+fn currentRenderWidth() i32 {
+    if (headlessMode()) return headless_screen_width;
+    return @intCast(raylib.getRenderWidth());
+}
+
+fn currentRenderHeight() i32 {
+    if (headlessMode()) return headless_screen_height;
+    return @intCast(raylib.getRenderHeight());
+}
+
+fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) callconv(.c) void {
+    if (!args.active) {
+        virtual_mouse_active = false;
+        virtual_mouse_has_last = false;
+        virtual_mouse_buttons = @splat(false);
+        virtual_mouse_wheel = 0;
+        return;
+    }
+
+    virtual_mouse_active = true;
+    virtual_mouse_x = args.x;
+    virtual_mouse_y = args.y;
+    virtual_mouse_wheel = args.wheel;
+    // Indices follow raylib's mouse button codes, which `Mouse` also uses.
+    virtual_mouse_buttons[0] = args.left;
+    virtual_mouse_buttons[1] = args.right;
+    virtual_mouse_buttons[2] = args.middle;
+}
+
+/// Movement since the previous virtual position, zero on the first frame.
+fn virtualMouseDelta() raylib.Vec2 {
+    if (!virtual_mouse_has_last) return .{ .x = 0, .y = 0 };
+    return .{
+        .x = virtual_mouse_x - virtual_mouse_last_x,
+        .y = virtual_mouse_y - virtual_mouse_last_y,
+    };
+}
+
+/// Remember this frame's virtual position for the next frame's delta.
+fn recordVirtualMousePosition() void {
+    virtual_mouse_last_x = virtual_mouse_x;
+    virtual_mouse_last_y = virtual_mouse_y;
+    virtual_mouse_has_last = true;
+}
+
+fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
+    const frames = capture_session.captured_frames;
+    const stop_result = capture_session.stop();
+    if (stop_result == capture.err_not_recording) {
+        return .{ .err = stop_result, .frames = frames, .bytes = capture_recording_bytes };
+    }
+
+    // Finalize even when the session already failed: the frames captured
+    // before the failure are still worth a readable file.
+    const close_result = closeCaptureSink(true);
+    const err = if (stop_result != capture.err_none) stop_result else close_result;
+    return .{ .err = err, .frames = frames, .bytes = capture_recording_bytes };
+}
+
+fn hostedCaptureRecordingStatus() callconv(.c) abi.CaptureHostRecording_statusRetRecord {
+    return .{
+        .status = capture_session.status,
+        .err = capture_session.failure,
+        .frames = capture_session.captured_frames,
+        .dropped = capture_session.dropped_frames,
+    };
+}
+
 fn hostedGetClipboardText(roc_host: *RocHost) callconv(.c) ClipboardTextResult {
     var result: ClipboardTextResult = undefined;
 
@@ -2602,6 +2944,11 @@ comptime {
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&exportedSetClipboardText, .{ .name = "roc_host_set_clipboard_text" });
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
+        @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
+        @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
+        @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
+        @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
+        @export(&hostedCaptureRecordingStatus, .{ .name = "roc_capture_recording_status" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSetWindowMinSize, .{ .name = "roc_host_set_window_min_size" });
@@ -2704,7 +3051,13 @@ const InputState = struct {
         raylib.updateKeyboardState();
         self.keys.update(raylib.getKeyState());
 
-        raylib.updateMouseButtonState();
+        // A scripted pointer goes through the same edge detection as hardware,
+        // so pressed/released this frame behave identically for the app.
+        if (virtual_mouse_active) {
+            raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
+        } else {
+            raylib.updateMouseButtonState();
+        }
         self.mouse_buttons.update(raylib.getMouseButtonState());
 
         raylib.updateGamepadState();
@@ -2777,6 +3130,195 @@ fn takeModelForRender(boxed_model: *RocBox) RocBox {
     return transferred;
 }
 
+/// Apply the startup capture configuration once the window exists.
+///
+/// A recording declared in `App.Config` goes through the same validation as
+/// `Capture.start!`, so a bad path or an over-budget request is reported the
+/// same way rather than being trusted because it came from config.
+fn configureCapture(app_config: AppConfig) void {
+    capture_session.reset();
+    virtual_mouse_active = false;
+    virtual_mouse_has_last = false;
+    virtual_mouse_buttons = @splat(false);
+    virtual_mouse_wheel = 0;
+
+    capture_screenshot_pending = false;
+    capture_recording_bytes = 0;
+    capture_clock_offset_ns = 0;
+    capture_clock_last_real_ns = 0;
+
+    const dir = app_config.output_dir.asSlice();
+    if (!storeCapturePath(&capture_output_dir, &capture_output_dir_len, dir)) {
+        std.log.warn("output directory path too long; capturing into the working directory", .{});
+        capture_output_dir_len = 0;
+    }
+
+    if (!app_config.record_enabled) return;
+
+    const result = startCaptureRecording(.{
+        .path = app_config.record_path.asSlice(),
+        .format = app_config.record_format,
+        .fps = app_config.record_fps,
+        .max_frames = app_config.record_max_frames,
+        .scale_numerator = app_config.record_scale_numerator,
+        .scale_denominator = app_config.record_scale_denominator,
+        .every_nth = app_config.record_every_nth,
+        .timing = app_config.record_timing,
+        .cursor = app_config.record_cursor,
+    });
+    if (result != capture.err_none) {
+        std.log.err("could not start the recording declared in App.Config (capture error {d})", .{result});
+    }
+}
+
+/// Finalize an unfinished recording at shutdown.
+///
+/// Reaching the frame cap, calling `Capture.stop!`, and simply exiting all have
+/// to produce a complete file, so every exit path funnels through here.
+fn finalizeCapture() void {
+    if (capture_session.status == capture.status_idle) {
+        // A recording stopped through `Capture.stop!` has already closed its
+        // container; this only guards against a sink left open some other way.
+        _ = closeCaptureSink(true);
+        return;
+    }
+    const frames = capture_session.captured_frames;
+    const result = capture_session.stop();
+    const close_result = closeCaptureSink(true);
+    if (result != capture.err_none) {
+        std.log.err("recording stopped early after {d} frame(s) (capture error {d})", .{ frames, result });
+    } else if (close_result != capture.err_none) {
+        std.log.err("could not finalize the recording after {d} frame(s) (capture error {d})", .{ frames, close_result });
+    }
+}
+
+/// Report a monotonic clock that accounts for fixed-step recording.
+///
+/// While fixed-stepping we advance by exactly one step per frame and accumulate
+/// how far that has taken us from raylib's clock, so `timestamp_nanos` stays
+/// consistent with the `frame_time` values Roc saw and never jumps backwards
+/// when a recording starts or stops.
+fn captureAdjustedClock(real_ns: u64, fixed_step: ?f32) u64 {
+    if (fixed_step) |dt| {
+        const step_ns: i128 = @intFromFloat(@as(f64, dt) * 1_000_000_000.0);
+        const real_delta: i128 = @as(i128, real_ns) - @as(i128, capture_clock_last_real_ns);
+        capture_clock_offset_ns += step_ns - real_delta;
+    }
+    capture_clock_last_real_ns = real_ns;
+    const adjusted = @as(i128, real_ns) + capture_clock_offset_ns;
+    if (adjusted < 0) return 0;
+    return @intCast(adjusted);
+}
+
+/// Read back and write anything this frame asked to capture.
+///
+/// Called from inside the drawing scope, immediately before `endDrawing`:
+/// `EndDrawing` swaps the buffers, and reading the framebuffer after the swap
+/// returns driver-dependent contents rather than the frame just drawn.
+///
+/// A single readback serves both a pending screenshot and the active
+/// recording, since they want the same pixels.
+fn serviceCaptureRequests() void {
+    const wants_screenshot = capture_screenshot_pending;
+    const wants_frame = capture_session.isActive() and capture_session.shouldCaptureFrame();
+    if (!wants_screenshot and !wants_frame) return;
+
+    capture_screenshot_pending = false;
+
+    // Drawn here rather than in the app's `render!` so it lands in the file
+    // without also being painted on screen next to the real cursor.
+    if (wants_frame and capture_session.cursor == capture.cursor_draw) {
+        drawCaptureCursorOverlay();
+    }
+
+    var image = raylib.captureFramebuffer() orelse {
+        if (wants_frame) capture_session.fail(capture.err_out_of_memory);
+        return;
+    };
+    defer image.deinit();
+
+    if (wants_screenshot) {
+        _ = writeCaptureImage(image, capture_screenshot_path[0..capture_screenshot_path_len]);
+    }
+
+    if (!wants_frame) return;
+
+    if (capture_session.width != image.width() or capture_session.height != image.height()) {
+        image.resize(capture_session.width, capture_session.height);
+    }
+
+    switch (capture_session.format) {
+        capture.format_png => writeRecordingFramePng(image),
+        capture.format_gif => writeRecordingFrameGif(image),
+        capture.format_webm => writeRecordingFrameWebm(image),
+        // `start!` already rejects unknown formats, so reaching here would mean
+        // a known one had no sink.
+        else => capture_session.fail(capture.err_unsupported_format),
+    }
+}
+
+/// Encode one frame into the open WebM file.
+fn writeRecordingFrameWebm(image: raylib.CaptureImage) void {
+    if (!capture_webm_open) {
+        capture_session.fail(capture.err_encode_failed);
+        return;
+    }
+    capture_webm.addFrame(image.pixels()) catch |err| {
+        capture_session.fail(vp8ErrorCode(err));
+        return;
+    };
+    capture_recording_bytes = capture_webm.bytesWritten();
+}
+
+/// Composite the pointer glyph for a recording that asked for one.
+///
+/// Uses the virtual pointer when one is active and the hardware pointer
+/// otherwise, so a recording of real interaction also shows a cursor.
+fn drawCaptureCursorOverlay() void {
+    const position = if (virtual_mouse_active)
+        raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
+    else
+        raylib.getMousePosition();
+    const pressed = if (virtual_mouse_active)
+        virtual_mouse_buttons[0]
+    else
+        raylib.getMouseButtonState()[0] & ffi.INPUT_HELD != 0;
+    raylib.drawCaptureCursor(position.x, position.y, pressed, 1);
+}
+
+/// Write one frame of a PNG-sequence recording.
+fn writeRecordingFramePng(image: raylib.CaptureImage) void {
+    var frame_path: [capture.path_capacity]u8 = undefined;
+    const path = framePathForIndex(
+        &frame_path,
+        capture_recording_path[0..capture_recording_path_len],
+        capture_session.captured_frames - 1,
+    ) orelse {
+        capture_session.fail(capture.err_write_failed);
+        return;
+    };
+
+    const result = writeCaptureImage(image, path);
+    if (result != capture.err_none) {
+        capture_session.fail(result);
+        return;
+    }
+    capture_recording_bytes +|= @as(u64, image.width()) * @as(u64, image.height()) * 4;
+}
+
+/// Append one frame to the open GIF.
+fn writeRecordingFrameGif(image: raylib.CaptureImage) void {
+    if (!capture_gif_open) {
+        capture_session.fail(capture.err_encode_failed);
+        return;
+    }
+    capture_gif.addFrame(image.pixels()) catch |err| {
+        capture_session.fail(captureErrorCode(err));
+        return;
+    };
+    capture_recording_bytes = capture_gif.bytesWritten();
+}
+
 /// Run one Roc render call inside the host-owned raylib frame scope.
 /// `defer` closes the frame for both `Ok` and `Err` results.
 fn renderFrame(boxed_model: RocBox, platform_state: HostState) RocResult {
@@ -2795,6 +3337,7 @@ fn renderFrame(boxed_model: RocBox, platform_state: HostState) RocResult {
         }
 
         fn end(_: *@This()) void {
+            serviceCaptureRequests();
             raylib.endDrawing();
         }
     };
@@ -2845,6 +3388,72 @@ test "drawing scope ends after its render result is produced" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, probe.events[0..probe.count]);
 }
 
+test "a virtual pointer derives movement deltas across frames" {
+    defer {
+        virtual_mouse_active = false;
+        virtual_mouse_has_last = false;
+    }
+
+    hostedCaptureSetVirtualMouse(.{
+        .active = true,
+        .x = 100,
+        .y = 50,
+        .left = false,
+        .middle = false,
+        .right = false,
+        .wheel = 0,
+    });
+    // The first virtual frame has nothing to measure against, so it must not
+    // report a jump from wherever the pointer happened to be before.
+    try std.testing.expectEqual(@as(f32, 0), virtualMouseDelta().x);
+    try std.testing.expectEqual(@as(f32, 0), virtualMouseDelta().y);
+    recordVirtualMousePosition();
+
+    hostedCaptureSetVirtualMouse(.{
+        .active = true,
+        .x = 130,
+        .y = 45,
+        .left = false,
+        .middle = false,
+        .right = false,
+        .wheel = 0,
+    });
+    try std.testing.expectEqual(@as(f32, 30), virtualMouseDelta().x);
+    try std.testing.expectEqual(@as(f32, -5), virtualMouseDelta().y);
+}
+
+test "releasing the virtual pointer clears its buttons and history" {
+    hostedCaptureSetVirtualMouse(.{
+        .active = true,
+        .x = 10,
+        .y = 10,
+        .left = true,
+        .middle = false,
+        .right = true,
+        .wheel = 2,
+    });
+    try std.testing.expect(virtual_mouse_active);
+    try std.testing.expect(virtual_mouse_buttons[0]);
+    // Index 1 is raylib's right button, 2 is middle.
+    try std.testing.expect(virtual_mouse_buttons[1]);
+    try std.testing.expect(!virtual_mouse_buttons[2]);
+    recordVirtualMousePosition();
+
+    hostedCaptureSetVirtualMouse(.{
+        .active = false,
+        .x = 0,
+        .y = 0,
+        .left = false,
+        .middle = false,
+        .right = false,
+        .wheel = 0,
+    });
+    try std.testing.expect(!virtual_mouse_active);
+    try std.testing.expect(!virtual_mouse_has_last);
+    try std.testing.expect(!virtual_mouse_buttons[0]);
+    try std.testing.expectEqual(@as(f32, 0), virtual_mouse_wheel);
+}
+
 test "taking a model for render clears the host-owned reference" {
     const model: *anyopaque = @ptrFromInt(@alignOf(usize));
     var boxed_model: RocBox = model;
@@ -2876,6 +3485,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         app_config.resizable,
         app_config.fullscreen,
         app_config.vsync,
+        app_config.visible,
     ));
     raylib.initWindow(
         positiveCInt(app_config.width, 800),
@@ -2905,6 +3515,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     defer raylib.closeAudioDevice();
     defer deinitResources();
 
+    // Capture setup must follow InitWindow, because arming a recording sizes
+    // its frames from the real framebuffer. Registered after closeWindow's
+    // defer so LIFO ordering finalizes the file while the window still lives.
+    configureCapture(app_config);
+    defer finalizeCapture();
+
     const init_result = initModel(&input);
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
@@ -2919,15 +3535,26 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     while (!raylib.windowShouldClose()) {
         // Sample raylib's monotonic clock (seconds since window init) at the
         // start of the frame and expose it as nanoseconds. frame_time is
-        // raylib's own delta, forced to 0 on the first frame.
-        const now_ns: u64 = @intFromFloat(raylib.getTime() * 1_000_000_000.0);
-        const frame_time: f32 = if (frame_count == 0) 0 else raylib.getFrameTime();
+        // raylib's own delta, forced to 0 on the first frame -- unless a
+        // fixed-step recording is running, which substitutes an exact delta so
+        // the captured animation is smooth and reproducible.
+        const real_ns: u64 = @intFromFloat(raylib.getTime() * 1_000_000_000.0);
+        const fixed_step = capture_session.fixedStepSeconds();
+        const frame_time: f32 = if (frame_count == 0) 0 else (fixed_step orelse raylib.getFrameTime());
+        const now_ns: u64 = captureAdjustedClock(real_ns, fixed_step);
         updateMusicStreams();
 
         input.updateFromRaylib();
-        const mouse_pos = raylib.getMousePosition();
-        const mouse_delta = raylib.getMouseDelta();
-        const mouse_wheel = raylib.getMouseWheelMoveV();
+        const mouse_pos = if (virtual_mouse_active)
+            raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
+        else
+            raylib.getMousePosition();
+        const mouse_delta = if (virtual_mouse_active) virtualMouseDelta() else raylib.getMouseDelta();
+        const mouse_wheel = if (virtual_mouse_active)
+            raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel }
+        else
+            raylib.getMouseWheelMoveV();
+        if (virtual_mouse_active) recordVirtualMousePosition();
         const text_input = raylib.getTextInput();
         const platform_state = input.hostState(
             frame_count,
@@ -3076,7 +3703,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     }
 
     var app_config = app_config_for_host();
-    defer app_config.title.decref(&roc_host);
+    // The config now carries three Roc strings; `decref` releases all of them.
+    defer app_config.decref(&roc_host);
 
     if (options.headless) {
         return runHeadlessApp(&roc_host, app_config, options.headless_frames);

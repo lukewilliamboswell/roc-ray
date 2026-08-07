@@ -54,6 +54,64 @@ fn expectPixel(image: rl.Image, x: c_int, y: c_int, expected: Color) !void {
     }
 }
 
+/// Draw a known frame, capture it the way the host does, and read the file back.
+///
+/// This runs in a frame of its own so the assertions in `main` keep testing the
+/// buffer they always did. It is the only check that the capture path survives
+/// the whole round trip, and it pins down three things that each fail silently:
+///
+///  - The readback happens *before* `EndDrawing` swaps the buffers; afterwards
+///    the back buffer's contents are undefined.
+///  - The pending draw batch is flushed first. raylib only submits batched 2D
+///    geometry on a texture/shader switch, when the batch fills, or from
+///    `EndDrawing` -- and a readback does no flushing of its own. The solid
+///    rectangles below have no state change after them, so they are still
+///    sitting in the batch when the capture runs.
+///  - `ExportImage` really encodes PNG in the vendored archive, and the decoded
+///    pixels match what was drawn.
+fn captureRoundTrip() !void {
+    rl.BeginDrawing();
+    backend.clearBackground(black);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 32, .height = 32, .color = red });
+    backend.drawRectangle(.{ .x = 32, .y = 0, .width = 32, .height = 32, .color = green });
+
+    var shot = backend.captureFramebuffer() orelse return error.CaptureUnavailable;
+    defer shot.deinit();
+
+    var scaled = backend.captureFramebuffer() orelse return error.CaptureUnavailable;
+    defer scaled.deinit();
+
+    rl.EndDrawing();
+
+    if (shot.width() == 0 or shot.height() == 0) return error.CaptureEmpty;
+    if (shot.pixels().len != shot.width() * shot.height() * 4) return error.CaptureStrideMismatch;
+
+    const path = "roc-ray-capture-smoke.png";
+    if (!shot.exportPng(path)) return error.CaptureExportFailed;
+    const io = std.Io.Threaded.global_single_threaded.io();
+    defer std.Io.Dir.cwd().deleteFile(io, path) catch {};
+
+    const decoded = rl.LoadImage(path);
+    defer rl.UnloadImage(decoded);
+    if (!rl.IsImageValid(decoded)) return error.CaptureDecodeFailed;
+    if (decoded.width != @as(c_int, @intCast(shot.width()))) return error.CaptureDecodeSizeMismatch;
+    if (decoded.height != @as(c_int, @intCast(shot.height()))) return error.CaptureDecodeSizeMismatch;
+
+    try expectPixel(decoded, 16, 16, red);
+    try expectPixel(decoded, 48, 16, green);
+    try expectPixel(decoded, 100, 60, black);
+
+    // Halving is the default recording scale, so exercise it too. Sample well
+    // inside each block so filtering at the seam cannot decide the result.
+    const half_width = shot.width() / 2;
+    const half_height = shot.height() / 2;
+    scaled.resize(half_width, half_height);
+    if (scaled.width() != half_width or scaled.height() != half_height) return error.CaptureResizeFailed;
+    if (scaled.pixels().len != half_width * half_height * 4) return error.CaptureResizeStrideMismatch;
+    try expectPixel(scaled.image, 6, 6, red);
+    try expectPixel(scaled.image, 26, 6, green);
+}
+
 /// Render representative primitives and assert exact framebuffer pixels.
 pub fn main() !void {
     rl.SetConfigFlags(rl.FLAG_WINDOW_HIDDEN | rl.FLAG_WINDOW_UNDECORATED);
@@ -207,4 +265,6 @@ pub fn main() !void {
     // under the old two-triangle affine mapping. The custom green channel also
     // proves projective drawing preserved the caller's fragment shader.
     try expectPixel(screen, 72, 43, projective_blue);
+
+    try captureRoundTrip();
 }

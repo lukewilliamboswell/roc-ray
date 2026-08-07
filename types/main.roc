@@ -1,1 +1,1 @@
-package [Keys, Mouse, Gamepad, Time, Math, Camera, Physics, Color] {}
+package [Keys, Mouse, Gamepad, Time, Math, Camera, Physics, Color, Capture] {}

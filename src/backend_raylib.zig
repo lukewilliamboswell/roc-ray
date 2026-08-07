@@ -215,6 +215,18 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
 }
 
+/// Advance the packed mouse button state from caller-supplied down flags.
+///
+/// Used by the virtual mouse in place of `updateMouseButtonState`. It runs the
+/// same `nextInputState` edge detection, so a scripted pointer produces real
+/// pressed-this-frame and released-this-frame bits and an app's ordinary click
+/// handling reacts to it exactly as it would to hardware.
+pub fn updateMouseButtonStateFrom(down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], down[i]);
+    }
+}
+
 /// Sample all supported gamepads once for this frame.
 pub fn updateGamepadState() void {
     for (0..ffi.GAMEPAD_COUNT) |gamepad| {
@@ -970,11 +982,16 @@ pub fn setConfigFlags(flags: c_uint) void {
 }
 
 /// Build raylib window config flags from Roc app config booleans.
-pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint {
+pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible: bool) c_uint {
     var flags: c_uint = @as(c_uint, @intCast(rl.FLAG_WINDOW_HIGHDPI));
     if (resizable) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_RESIZABLE));
     if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
     if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
+    // A hidden window still renders on the GPU, so captures work normally.
+    // This is not the same as the `--headless` stub backend, which draws
+    // nothing at all, and it still needs a display server (use xvfb-run on a
+    // machine without one).
+    if (!visible) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_HIDDEN));
     return flags;
 }
 
@@ -1432,4 +1449,121 @@ pub fn getScreenWidth() c_int {
 /// Get screen height.
 pub fn getScreenHeight() c_int {
     return rl.GetScreenHeight();
+}
+
+/// Get framebuffer width in pixels, which exceeds the screen width on HiDPI.
+pub fn getRenderWidth() c_int {
+    return rl.GetRenderWidth();
+}
+
+/// Get framebuffer height in pixels, which exceeds the screen height on HiDPI.
+pub fn getRenderHeight() c_int {
+    return rl.GetRenderHeight();
+}
+
+/// A CPU-side RGBA8 readback of the framebuffer, owned by raylib's allocator.
+///
+/// Every raylib allocation for a capture stays behind this type so the rest of
+/// the host never has to reason about `UnloadImage` pairing.
+pub const CaptureImage = struct {
+    image: rl.Image,
+
+    /// Tightly packed top-down RGBA8 pixels, four bytes each.
+    pub fn pixels(self: CaptureImage) []u8 {
+        const count = @as(usize, @intCast(self.image.width)) *
+            @as(usize, @intCast(self.image.height)) * 4;
+        const bytes: [*]u8 = @ptrCast(self.image.data);
+        return bytes[0..count];
+    }
+
+    /// Width in pixels.
+    pub fn width(self: CaptureImage) u32 {
+        return @intCast(self.image.width);
+    }
+
+    /// Height in pixels.
+    pub fn height(self: CaptureImage) u32 {
+        return @intCast(self.image.height);
+    }
+
+    /// Rescale in place with bicubic filtering, reallocating the pixel buffer.
+    pub fn resize(self: *CaptureImage, new_width: u32, new_height: u32) void {
+        if (new_width == self.width() and new_height == self.height()) return;
+        rl.ImageResize(&self.image, @intCast(new_width), @intCast(new_height));
+    }
+
+    /// Write this image as a PNG, returning false if the write failed.
+    pub fn exportPng(self: CaptureImage, path: [*:0]const u8) bool {
+        return rl.ExportImage(self.image, path);
+    }
+
+    /// Release the pixel buffer.
+    pub fn deinit(self: CaptureImage) void {
+        rl.UnloadImage(self.image);
+    }
+};
+
+/// Submit raylib's batched geometry so the framebuffer reflects it.
+///
+/// raylib accumulates 2D draw calls in a vertex batch and only submits them on
+/// a texture or shader switch, when the batch fills, or from `EndDrawing`. A
+/// readback is plain `glReadPixels` and does no flushing of its own, so
+/// without this a capture silently misses the tail of the frame.
+pub fn flushRenderBatch() void {
+    rl.rlDrawRenderBatchActive();
+}
+
+/// Read the current framebuffer into a CPU image.
+///
+/// This is raylib's thin wrapper over `rlReadScreenPixels`, not
+/// `TakeScreenshot`: it skips the `basePath` prefixing and 512-byte truncation
+/// that make `TakeScreenshot` unusable for a capture pipeline. The result is
+/// already upright, and alpha is forced opaque by the readback itself.
+///
+/// Must be called before `endDrawing` swaps the buffers -- afterwards the back
+/// buffer's contents are undefined. Flushes the pending batch first.
+pub fn captureFramebuffer() ?CaptureImage {
+    flushRenderBatch();
+    const image = rl.LoadImageFromScreen();
+    if (!rl.IsImageValid(image)) return null;
+    return .{ .image = image };
+}
+
+/// Draw a pointer glyph at a position, for compositing into a recording.
+///
+/// The operating system cursor is not part of the framebuffer, so a capture
+/// never shows a pointer unless something draws one. This runs in the capture
+/// hook rather than in the app's `render!`, so the glyph appears in the file
+/// without the app having to know about it -- and without it appearing twice
+/// alongside a real cursor on screen.
+///
+/// `pressed` draws a ring around the arrow so a click is visible in a silent
+/// recording, where there is otherwise no cue that anything happened.
+pub fn drawCaptureCursor(x: f32, y: f32, pressed: bool, scale: f32) void {
+    const size = @max(scale, 0.1) * 18;
+    const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+    const black = Color{ .r = 0, .g = 0, .b = 0, .a = 220 };
+
+    // A classic arrow: tip at the hotspot, notch on the trailing edge.
+    const points = [_]struct { x: f32, y: f32 }{
+        .{ .x = x, .y = y },
+        .{ .x = x, .y = y + size },
+        .{ .x = x + size * 0.26, .y = y + size * 0.74 },
+        .{ .x = x + size * 0.44, .y = y + size * 1.06 },
+        .{ .x = x + size * 0.60, .y = y + size * 0.98 },
+        .{ .x = x + size * 0.42, .y = y + size * 0.67 },
+        .{ .x = x + size * 0.70, .y = y + size * 0.64 },
+    };
+
+    if (pressed) {
+        drawCircleLines(.{
+            .center = .{ .x = x, .y = y },
+            .radius = size * 0.95,
+            .thickness = @max(size * 0.10, 1),
+            .color = white,
+        });
+    }
+
+    drawPolygon(&points, white);
+    drawPolygonLines(&points, @max(size * 0.09, 1), black);
 }

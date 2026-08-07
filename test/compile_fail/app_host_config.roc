@@ -18,6 +18,7 @@ transport = {
 	fullscreen: Bool.False,
 	vsync: Bool.False,
 	cursor_visible: Bool.True,
+	exit_key_code: 256,
 }
 
 program = { init!, render! }

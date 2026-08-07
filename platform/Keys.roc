@@ -122,7 +122,9 @@ Keys := [].{
 		KeyKpEnter,
 		KeyKpEqual,
 		Raw(U64),
-	]
+	].{
+		is_eq : _
+	}
 
 	## Validate and wrap a raw raylib key code.
 	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])

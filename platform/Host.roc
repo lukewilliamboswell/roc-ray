@@ -2,6 +2,7 @@
 import Keys
 import Mouse
 import Gamepad
+import AppConfig
 import HostHost
 import MouseHost
 
@@ -47,6 +48,11 @@ Host := {
 
 	## Cursor visibility and capture policy applied with `host.set_cursor_mode!`.
 	CursorMode : [Visible, Hidden, Locked]
+
+	## Which key, if any, closes the window. Shared with the startup config, so
+	## `App.default.with_exit_key(k)` and `host.set_exit_key!(k)` take the same
+	## values.
+	ExitKey : AppConfig.ExitKey
 
 	## Check whether a key is currently held. Receiver form: `host.key_down(KeyW)`.
 	key_down : Host, Keys.KeyboardKey -> Bool
@@ -139,6 +145,14 @@ Host := {
 	## Receiver form: `host.set_target_fps!(fps)`.
 	set_target_fps! : Host, I32 => {}
 	set_target_fps! = |_host, fps| HostHost.set_target_fps!(fps)
+
+	## Set which key closes the window, or `NoExitKey` to stop any key from
+	## closing it. raylib defaults to `ExitKey(KeyEscape)`. The window close
+	## button is unaffected either way, so an app that disables the exit key
+	## should still handle shutdown through `host.exit!`.
+	## Receiver form: `host.set_exit_key!(NoExitKey)`.
+	set_exit_key! : Host, ExitKey => {}
+	set_exit_key! = |_host, key| HostHost.set_exit_key!(AppConfig.host_exit_key_code(key))
 
 	## Apply cursor visibility/capture atomically through one tagged operation.
 	set_cursor_mode! : Host, CursorMode => {}

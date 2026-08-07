@@ -4242,12 +4242,12 @@ pub const __AnonStruct_b75e5c5116f849b3 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 72) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
+        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 96) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
         if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 8) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 48) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
-        if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 4) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
+        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 80) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
+        if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 8) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
     }
 }
 
@@ -4284,17 +4284,18 @@ pub const __AnonStruct_667033c60ca2d4bb = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 64) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
+        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 88) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
         if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 8) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 44) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
-        if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 4) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
+        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 72) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
+        if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 8) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
     }
 }
 
 /// Element type for AppConfig.Config
 pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
+    exit_key: AppExitKey,
     title: RocStr,
     width: i32,
     height: i32,
@@ -4307,6 +4308,7 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.exit_key.decref(roc_host);
         value.title.decref(roc_host);
         value.frame_pacing.decref(roc_host);
         value.cursor.decref(roc_host);
@@ -4315,11 +4317,13 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.exit_key.incref(amount);
         value.title.incref(amount);
         value.frame_pacing.incref(amount);
         value.cursor.incref(amount);
     }
 } else extern struct {
+    exit_key: AppExitKey,
     title: RocStr,
     width: i32,
     height: i32,
@@ -4332,6 +4336,7 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
+        value.exit_key.decref(roc_host);
         value.title.decref(roc_host);
         value.frame_pacing.decref(roc_host);
         value.cursor.decref(roc_host);
@@ -4340,6 +4345,7 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     /// Increment Roc-owned fields.
     pub fn incref(self: @This(), amount: isize) void {
         const value = self;
+        value.exit_key.incref(amount);
         value.title.incref(amount);
         value.frame_pacing.incref(amount);
         value.cursor.incref(amount);
@@ -4348,18 +4354,19 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppConfigConfig) != 56) @compileError("AppConfigConfig size mismatch");
+        if (@sizeOf(AppConfigConfig) != 80) @compileError("AppConfigConfig size mismatch");
         if (@alignOf(AppConfigConfig) != 8) @compileError("AppConfigConfig alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppConfigConfig) != 40) @compileError("AppConfigConfig size mismatch");
-        if (@alignOf(AppConfigConfig) != 4) @compileError("AppConfigConfig alignment mismatch");
+        if (@sizeOf(AppConfigConfig) != 64) @compileError("AppConfigConfig size mismatch");
+        if (@alignOf(AppConfigConfig) != 8) @compileError("AppConfigConfig alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_8f3c626b4b74bdbd
-pub const __AnonStruct_8f3c626b4b74bdbd = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_3c13a88ef1770cdd
+pub const __AnonStruct_3c13a88ef1770cdd = if (@sizeOf(usize) == 4) extern struct {
     title: RocStr,
+    exit_key_code: i32,
     height: i32,
     min_height: i32,
     min_width: i32,
@@ -4382,6 +4389,7 @@ pub const __AnonStruct_8f3c626b4b74bdbd = if (@sizeOf(usize) == 4) extern struct
     }
 } else extern struct {
     title: RocStr,
+    exit_key_code: i32,
     height: i32,
     min_height: i32,
     min_width: i32,
@@ -4406,12 +4414,12 @@ pub const __AnonStruct_8f3c626b4b74bdbd = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_8f3c626b4b74bdbd) != 48) @compileError("__AnonStruct_8f3c626b4b74bdbd size mismatch");
-        if (@alignOf(__AnonStruct_8f3c626b4b74bdbd) != 8) @compileError("__AnonStruct_8f3c626b4b74bdbd alignment mismatch");
+        if (@sizeOf(__AnonStruct_3c13a88ef1770cdd) != 56) @compileError("__AnonStruct_3c13a88ef1770cdd size mismatch");
+        if (@alignOf(__AnonStruct_3c13a88ef1770cdd) != 8) @compileError("__AnonStruct_3c13a88ef1770cdd alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_8f3c626b4b74bdbd) != 36) @compileError("__AnonStruct_8f3c626b4b74bdbd size mismatch");
-        if (@alignOf(__AnonStruct_8f3c626b4b74bdbd) != 4) @compileError("__AnonStruct_8f3c626b4b74bdbd alignment mismatch");
+        if (@sizeOf(__AnonStruct_3c13a88ef1770cdd) != 40) @compileError("__AnonStruct_3c13a88ef1770cdd size mismatch");
+        if (@alignOf(__AnonStruct_3c13a88ef1770cdd) != 4) @compileError("__AnonStruct_3c13a88ef1770cdd alignment mismatch");
     }
 }
 
@@ -4768,6 +4776,340 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(AppCursorMode) != 1) @compileError("AppCursorMode size mismatch");
         if (@alignOf(AppCursorMode) != 1) @compileError("AppCursorMode alignment mismatch");
+    }
+}
+
+/// Tag discriminant for AppExitKey.
+pub const AppExitKeyTag = enum(u8) {
+    ExitKey = 0,
+    NoExitKey = 1,
+};
+
+/// Payload union for AppExitKey.
+pub const AppExitKeyPayload = extern union {
+    exit_key: KeysKeyboardKey,
+    no_exit_key: [0]u8,
+};
+
+/// Tag union: AppExitKey
+pub const AppExitKey = if (@sizeOf(usize) == 4) extern struct {
+    payload: [16]u8 align(8),
+    tag: AppExitKeyTag,
+    pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
+        const ptr: *const KeysKeyboardKey = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefAppExitKey(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfAppExitKey(self, amount);
+    }
+} else extern struct {
+    payload: AppExitKeyPayload,
+    tag: AppExitKeyTag,
+    pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
+        return self.payload.exit_key;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefAppExitKey(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfAppExitKey(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AppExitKey) != 24) @compileError("AppExitKey size mismatch");
+        if (@alignOf(AppExitKey) != 8) @compileError("AppExitKey alignment mismatch");
+        if (@offsetOf(AppExitKey, "tag") != 16) @compileError("AppExitKey tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AppExitKey) != 24) @compileError("AppExitKey size mismatch");
+        if (@alignOf(AppExitKey) != 8) @compileError("AppExitKey alignment mismatch");
+        if (@offsetOf(AppExitKey, "tag") != 16) @compileError("AppExitKey tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Keys.KeyboardKey.
+pub const KeysKeyboardKeyTag = enum(u8) {
+    Key0 = 0,
+    Key1 = 1,
+    Key2 = 2,
+    Key3 = 3,
+    Key4 = 4,
+    Key5 = 5,
+    Key6 = 6,
+    Key7 = 7,
+    Key8 = 8,
+    Key9 = 9,
+    KeyA = 10,
+    KeyAndroidBack = 11,
+    KeyAndroidMenu = 12,
+    KeyApostrophe = 13,
+    KeyB = 14,
+    KeyBackslash = 15,
+    KeyBackspace = 16,
+    KeyC = 17,
+    KeyCapsLock = 18,
+    KeyComma = 19,
+    KeyD = 20,
+    KeyDelete = 21,
+    KeyDown = 22,
+    KeyE = 23,
+    KeyEnd = 24,
+    KeyEnter = 25,
+    KeyEqual = 26,
+    KeyEscape = 27,
+    KeyF = 28,
+    KeyF1 = 29,
+    KeyF10 = 30,
+    KeyF11 = 31,
+    KeyF12 = 32,
+    KeyF2 = 33,
+    KeyF3 = 34,
+    KeyF4 = 35,
+    KeyF5 = 36,
+    KeyF6 = 37,
+    KeyF7 = 38,
+    KeyF8 = 39,
+    KeyF9 = 40,
+    KeyG = 41,
+    KeyGrave = 42,
+    KeyH = 43,
+    KeyHome = 44,
+    KeyI = 45,
+    KeyInsert = 46,
+    KeyJ = 47,
+    KeyK = 48,
+    KeyKbMenu = 49,
+    KeyKp0 = 50,
+    KeyKp1 = 51,
+    KeyKp2 = 52,
+    KeyKp3 = 53,
+    KeyKp4 = 54,
+    KeyKp5 = 55,
+    KeyKp6 = 56,
+    KeyKp7 = 57,
+    KeyKp8 = 58,
+    KeyKp9 = 59,
+    KeyKpAdd = 60,
+    KeyKpDecimal = 61,
+    KeyKpDivide = 62,
+    KeyKpEnter = 63,
+    KeyKpEqual = 64,
+    KeyKpMultiply = 65,
+    KeyKpSubtract = 66,
+    KeyL = 67,
+    KeyLeft = 68,
+    KeyLeftAlt = 69,
+    KeyLeftBracket = 70,
+    KeyLeftControl = 71,
+    KeyLeftShift = 72,
+    KeyLeftSuper = 73,
+    KeyM = 74,
+    KeyMinus = 75,
+    KeyN = 76,
+    KeyNumLock = 77,
+    KeyO = 78,
+    KeyP = 79,
+    KeyPageDown = 80,
+    KeyPageUp = 81,
+    KeyPause = 82,
+    KeyPeriod = 83,
+    KeyPrintScreen = 84,
+    KeyQ = 85,
+    KeyR = 86,
+    KeyRight = 87,
+    KeyRightAlt = 88,
+    KeyRightBracket = 89,
+    KeyRightControl = 90,
+    KeyRightShift = 91,
+    KeyRightSuper = 92,
+    KeyS = 93,
+    KeyScrollLock = 94,
+    KeySemicolon = 95,
+    KeySlash = 96,
+    KeySpace = 97,
+    KeyT = 98,
+    KeyTab = 99,
+    KeyU = 100,
+    KeyUp = 101,
+    KeyV = 102,
+    KeyVolumeDown = 103,
+    KeyVolumeUp = 104,
+    KeyW = 105,
+    KeyX = 106,
+    KeyY = 107,
+    KeyZ = 108,
+    Raw = 109,
+};
+
+/// Payload union for Keys.KeyboardKey.
+pub const KeysKeyboardKeyPayload = extern union {
+    key0: [0]u8,
+    key1: [0]u8,
+    key2: [0]u8,
+    key3: [0]u8,
+    key4: [0]u8,
+    key5: [0]u8,
+    key6: [0]u8,
+    key7: [0]u8,
+    key8: [0]u8,
+    key9: [0]u8,
+    key_a: [0]u8,
+    key_android_back: [0]u8,
+    key_android_menu: [0]u8,
+    key_apostrophe: [0]u8,
+    key_b: [0]u8,
+    key_backslash: [0]u8,
+    key_backspace: [0]u8,
+    key_c: [0]u8,
+    key_caps_lock: [0]u8,
+    key_comma: [0]u8,
+    key_d: [0]u8,
+    key_delete: [0]u8,
+    key_down: [0]u8,
+    key_e: [0]u8,
+    key_end: [0]u8,
+    key_enter: [0]u8,
+    key_equal: [0]u8,
+    key_escape: [0]u8,
+    key_f: [0]u8,
+    key_f1: [0]u8,
+    key_f10: [0]u8,
+    key_f11: [0]u8,
+    key_f12: [0]u8,
+    key_f2: [0]u8,
+    key_f3: [0]u8,
+    key_f4: [0]u8,
+    key_f5: [0]u8,
+    key_f6: [0]u8,
+    key_f7: [0]u8,
+    key_f8: [0]u8,
+    key_f9: [0]u8,
+    key_g: [0]u8,
+    key_grave: [0]u8,
+    key_h: [0]u8,
+    key_home: [0]u8,
+    key_i: [0]u8,
+    key_insert: [0]u8,
+    key_j: [0]u8,
+    key_k: [0]u8,
+    key_kb_menu: [0]u8,
+    key_kp0: [0]u8,
+    key_kp1: [0]u8,
+    key_kp2: [0]u8,
+    key_kp3: [0]u8,
+    key_kp4: [0]u8,
+    key_kp5: [0]u8,
+    key_kp6: [0]u8,
+    key_kp7: [0]u8,
+    key_kp8: [0]u8,
+    key_kp9: [0]u8,
+    key_kp_add: [0]u8,
+    key_kp_decimal: [0]u8,
+    key_kp_divide: [0]u8,
+    key_kp_enter: [0]u8,
+    key_kp_equal: [0]u8,
+    key_kp_multiply: [0]u8,
+    key_kp_subtract: [0]u8,
+    key_l: [0]u8,
+    key_left: [0]u8,
+    key_left_alt: [0]u8,
+    key_left_bracket: [0]u8,
+    key_left_control: [0]u8,
+    key_left_shift: [0]u8,
+    key_left_super: [0]u8,
+    key_m: [0]u8,
+    key_minus: [0]u8,
+    key_n: [0]u8,
+    key_num_lock: [0]u8,
+    key_o: [0]u8,
+    key_p: [0]u8,
+    key_page_down: [0]u8,
+    key_page_up: [0]u8,
+    key_pause: [0]u8,
+    key_period: [0]u8,
+    key_print_screen: [0]u8,
+    key_q: [0]u8,
+    key_r: [0]u8,
+    key_right: [0]u8,
+    key_right_alt: [0]u8,
+    key_right_bracket: [0]u8,
+    key_right_control: [0]u8,
+    key_right_shift: [0]u8,
+    key_right_super: [0]u8,
+    key_s: [0]u8,
+    key_scroll_lock: [0]u8,
+    key_semicolon: [0]u8,
+    key_slash: [0]u8,
+    key_space: [0]u8,
+    key_t: [0]u8,
+    key_tab: [0]u8,
+    key_u: [0]u8,
+    key_up: [0]u8,
+    key_v: [0]u8,
+    key_volume_down: [0]u8,
+    key_volume_up: [0]u8,
+    key_w: [0]u8,
+    key_x: [0]u8,
+    key_y: [0]u8,
+    key_z: [0]u8,
+    raw: u64,
+};
+
+/// Tag union: Keys.KeyboardKey
+pub const KeysKeyboardKey = if (@sizeOf(usize) == 4) extern struct {
+    payload: [8]u8 align(8),
+    tag: KeysKeyboardKeyTag,
+    pub fn payload_raw(self: *const @This()) u64 {
+        const ptr: *const u64 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefKeysKeyboardKey(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfKeysKeyboardKey(self, amount);
+    }
+} else extern struct {
+    payload: KeysKeyboardKeyPayload,
+    tag: KeysKeyboardKeyTag,
+    pub fn payload_raw(self: *const @This()) u64 {
+        return self.payload.raw;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefKeysKeyboardKey(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfKeysKeyboardKey(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(KeysKeyboardKey) != 16) @compileError("KeysKeyboardKey size mismatch");
+        if (@alignOf(KeysKeyboardKey) != 8) @compileError("KeysKeyboardKey alignment mismatch");
+        if (@offsetOf(KeysKeyboardKey, "tag") != 8) @compileError("KeysKeyboardKey tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(KeysKeyboardKey) != 16) @compileError("KeysKeyboardKey size mismatch");
+        if (@alignOf(KeysKeyboardKey) != 8) @compileError("KeysKeyboardKey alignment mismatch");
+        if (@offsetOf(KeysKeyboardKey, "tag") != 8) @compileError("KeysKeyboardKey tag offset mismatch");
     }
 }
 
@@ -6616,6 +6958,13 @@ pub const HostHostRead_fileArgs = extern struct {
     arg0: RocStr,
 };
 
+/// Arguments for HostHost.set_exit_key!
+/// Roc signature: I32 => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostHostSet_exit_keyArgs = extern struct {
+    arg0: i32,
+};
+
 /// Arguments for HostHost.set_screen_size!
 /// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
 /// Refcounted fields are owned by the hosted function.
@@ -6811,7 +7160,7 @@ pub const TilemapHostLoad_tmxMapPoints = __AnonStruct_2818a50bdccefb1e;
 pub const TilemapHostLoad_tmxMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapHostLoad_tmxMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapHostLoad_tmxMapTilesets = __AnonStruct_756aabd194c61573;
-pub const App_config_for_host = __AnonStruct_8f3c626b4b74bdbd;
+pub const App_config_for_host = __AnonStruct_3c13a88ef1770cdd;
 pub const Init_for_hostArg0 = __AnonStruct_e43e1f68febb5517;
 pub const Init_for_hostArg0Gamepads = __AnonStruct_1c8617e96852f779;
 pub const Init_for_hostArg0Screen = __AnonStruct_bc8fa73ca49a5ac0;
@@ -6870,6 +7219,256 @@ fn increfHostHostSet_screen_sizeResult(value: HostHostSet_screen_sizeResult, amo
     switch (value.tag) {
         .Err => {},
         .Ok => {},
+    }
+}
+
+fn decrefAppExitKey(value: AppExitKey, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .ExitKey => {
+            value.payload_exit_key().decref(roc_host);
+        },
+        .NoExitKey => {},
+    }
+}
+
+fn increfAppExitKey(value: AppExitKey, amount: isize) void {
+    switch (value.tag) {
+        .ExitKey => {
+            value.payload_exit_key().incref(amount);
+        },
+        .NoExitKey => {},
+    }
+}
+
+fn decrefKeysKeyboardKey(value: KeysKeyboardKey, roc_host: *RocHost) void {
+    _ = roc_host;
+    switch (value.tag) {
+        .Key0 => {},
+        .Key1 => {},
+        .Key2 => {},
+        .Key3 => {},
+        .Key4 => {},
+        .Key5 => {},
+        .Key6 => {},
+        .Key7 => {},
+        .Key8 => {},
+        .Key9 => {},
+        .KeyA => {},
+        .KeyAndroidBack => {},
+        .KeyAndroidMenu => {},
+        .KeyApostrophe => {},
+        .KeyB => {},
+        .KeyBackslash => {},
+        .KeyBackspace => {},
+        .KeyC => {},
+        .KeyCapsLock => {},
+        .KeyComma => {},
+        .KeyD => {},
+        .KeyDelete => {},
+        .KeyDown => {},
+        .KeyE => {},
+        .KeyEnd => {},
+        .KeyEnter => {},
+        .KeyEqual => {},
+        .KeyEscape => {},
+        .KeyF => {},
+        .KeyF1 => {},
+        .KeyF10 => {},
+        .KeyF11 => {},
+        .KeyF12 => {},
+        .KeyF2 => {},
+        .KeyF3 => {},
+        .KeyF4 => {},
+        .KeyF5 => {},
+        .KeyF6 => {},
+        .KeyF7 => {},
+        .KeyF8 => {},
+        .KeyF9 => {},
+        .KeyG => {},
+        .KeyGrave => {},
+        .KeyH => {},
+        .KeyHome => {},
+        .KeyI => {},
+        .KeyInsert => {},
+        .KeyJ => {},
+        .KeyK => {},
+        .KeyKbMenu => {},
+        .KeyKp0 => {},
+        .KeyKp1 => {},
+        .KeyKp2 => {},
+        .KeyKp3 => {},
+        .KeyKp4 => {},
+        .KeyKp5 => {},
+        .KeyKp6 => {},
+        .KeyKp7 => {},
+        .KeyKp8 => {},
+        .KeyKp9 => {},
+        .KeyKpAdd => {},
+        .KeyKpDecimal => {},
+        .KeyKpDivide => {},
+        .KeyKpEnter => {},
+        .KeyKpEqual => {},
+        .KeyKpMultiply => {},
+        .KeyKpSubtract => {},
+        .KeyL => {},
+        .KeyLeft => {},
+        .KeyLeftAlt => {},
+        .KeyLeftBracket => {},
+        .KeyLeftControl => {},
+        .KeyLeftShift => {},
+        .KeyLeftSuper => {},
+        .KeyM => {},
+        .KeyMinus => {},
+        .KeyN => {},
+        .KeyNumLock => {},
+        .KeyO => {},
+        .KeyP => {},
+        .KeyPageDown => {},
+        .KeyPageUp => {},
+        .KeyPause => {},
+        .KeyPeriod => {},
+        .KeyPrintScreen => {},
+        .KeyQ => {},
+        .KeyR => {},
+        .KeyRight => {},
+        .KeyRightAlt => {},
+        .KeyRightBracket => {},
+        .KeyRightControl => {},
+        .KeyRightShift => {},
+        .KeyRightSuper => {},
+        .KeyS => {},
+        .KeyScrollLock => {},
+        .KeySemicolon => {},
+        .KeySlash => {},
+        .KeySpace => {},
+        .KeyT => {},
+        .KeyTab => {},
+        .KeyU => {},
+        .KeyUp => {},
+        .KeyV => {},
+        .KeyVolumeDown => {},
+        .KeyVolumeUp => {},
+        .KeyW => {},
+        .KeyX => {},
+        .KeyY => {},
+        .KeyZ => {},
+        .Raw => {},
+    }
+}
+
+fn increfKeysKeyboardKey(value: KeysKeyboardKey, amount: isize) void {
+    _ = amount;
+    switch (value.tag) {
+        .Key0 => {},
+        .Key1 => {},
+        .Key2 => {},
+        .Key3 => {},
+        .Key4 => {},
+        .Key5 => {},
+        .Key6 => {},
+        .Key7 => {},
+        .Key8 => {},
+        .Key9 => {},
+        .KeyA => {},
+        .KeyAndroidBack => {},
+        .KeyAndroidMenu => {},
+        .KeyApostrophe => {},
+        .KeyB => {},
+        .KeyBackslash => {},
+        .KeyBackspace => {},
+        .KeyC => {},
+        .KeyCapsLock => {},
+        .KeyComma => {},
+        .KeyD => {},
+        .KeyDelete => {},
+        .KeyDown => {},
+        .KeyE => {},
+        .KeyEnd => {},
+        .KeyEnter => {},
+        .KeyEqual => {},
+        .KeyEscape => {},
+        .KeyF => {},
+        .KeyF1 => {},
+        .KeyF10 => {},
+        .KeyF11 => {},
+        .KeyF12 => {},
+        .KeyF2 => {},
+        .KeyF3 => {},
+        .KeyF4 => {},
+        .KeyF5 => {},
+        .KeyF6 => {},
+        .KeyF7 => {},
+        .KeyF8 => {},
+        .KeyF9 => {},
+        .KeyG => {},
+        .KeyGrave => {},
+        .KeyH => {},
+        .KeyHome => {},
+        .KeyI => {},
+        .KeyInsert => {},
+        .KeyJ => {},
+        .KeyK => {},
+        .KeyKbMenu => {},
+        .KeyKp0 => {},
+        .KeyKp1 => {},
+        .KeyKp2 => {},
+        .KeyKp3 => {},
+        .KeyKp4 => {},
+        .KeyKp5 => {},
+        .KeyKp6 => {},
+        .KeyKp7 => {},
+        .KeyKp8 => {},
+        .KeyKp9 => {},
+        .KeyKpAdd => {},
+        .KeyKpDecimal => {},
+        .KeyKpDivide => {},
+        .KeyKpEnter => {},
+        .KeyKpEqual => {},
+        .KeyKpMultiply => {},
+        .KeyKpSubtract => {},
+        .KeyL => {},
+        .KeyLeft => {},
+        .KeyLeftAlt => {},
+        .KeyLeftBracket => {},
+        .KeyLeftControl => {},
+        .KeyLeftShift => {},
+        .KeyLeftSuper => {},
+        .KeyM => {},
+        .KeyMinus => {},
+        .KeyN => {},
+        .KeyNumLock => {},
+        .KeyO => {},
+        .KeyP => {},
+        .KeyPageDown => {},
+        .KeyPageUp => {},
+        .KeyPause => {},
+        .KeyPeriod => {},
+        .KeyPrintScreen => {},
+        .KeyQ => {},
+        .KeyR => {},
+        .KeyRight => {},
+        .KeyRightAlt => {},
+        .KeyRightBracket => {},
+        .KeyRightControl => {},
+        .KeyRightShift => {},
+        .KeyRightSuper => {},
+        .KeyS => {},
+        .KeyScrollLock => {},
+        .KeySemicolon => {},
+        .KeySlash => {},
+        .KeySpace => {},
+        .KeyT => {},
+        .KeyTab => {},
+        .KeyU => {},
+        .KeyUp => {},
+        .KeyV => {},
+        .KeyVolumeDown => {},
+        .KeyVolumeUp => {},
+        .KeyW => {},
+        .KeyX => {},
+        .KeyY => {},
+        .KeyZ => {},
+        .Raw => {},
     }
 }
 
@@ -7259,6 +7858,10 @@ pub extern fn roc_host_read_env(arg0: RocStr) callconv(.c) HostHostRead_envResul
 /// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
 pub extern fn roc_host_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct_1504326a3d41a158;
 
+/// Hosted symbol for HostHost.set_exit_key!
+/// Roc signature: I32 => {}
+pub extern fn roc_host_set_exit_key(arg0: i32) callconv(.c) void;
+
 /// Hosted symbol for HostHost.set_screen_size!
 /// Roc signature: { height : I32, width : I32 } => Try({}, [NotSupported])
 pub extern fn roc_host_set_screen_size(arg0: HostHostSet_screen_sizeArgs) callconv(.c) HostHostSet_screen_sizeResult;
@@ -7427,7 +8030,7 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // Roc exports these symbols from the app with their natural C ABI signatures.
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct_8f3c626b4b74bdbd;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct_3c13a88ef1770cdd;
 
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host(arg0: __AnonStruct_e43e1f68febb5517) callconv(.c) Init_for_hostResult;

@@ -3,11 +3,17 @@
 ## `App` exposes aliases for the application-facing types and values. This
 ## module is deliberately omitted from the platform's `exposes` list so only
 ## the platform adapters can flatten a Config to the legacy host ABI record.
+import Keys
+
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
 	is_eq : _
 }
 
 AppCursorMode := [CursorVisible, CursorHidden].{
+	is_eq : _
+}
+
+AppExitKey := [NoExitKey, ExitKey(Keys.KeyboardKey)].{
 	is_eq : _
 }
 
@@ -21,6 +27,7 @@ AppConfigData : {
 	resizable : Bool,
 	fullscreen : Bool,
 	cursor : AppCursorMode,
+	exit_key : AppExitKey,
 }
 
 AppHostConfig : {
@@ -34,6 +41,7 @@ AppHostConfig : {
 	fullscreen : Bool,
 	vsync : Bool,
 	cursor_visible : Bool,
+	exit_key_code : I32,
 }
 
 AppConfig := [].{
@@ -44,6 +52,9 @@ AppConfig := [].{
 
 	## Initial native cursor mode.
 	CursorMode : AppCursorMode
+
+	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	ExitKey : AppExitKey
 
 	## Validated startup configuration. Its fields cannot be updated directly;
 	## use its receiver updates so startup invariants are preserved.
@@ -57,6 +68,7 @@ AppConfig := [].{
 		resizable : Bool,
 		fullscreen : Bool,
 		cursor : AppCursorMode,
+		exit_key : AppExitKey,
 	}.{
 
 		## Return a config with a different window title.
@@ -87,6 +99,11 @@ AppConfig := [].{
 		with_frame_pacing : Config, FramePacing -> Config
 		with_frame_pacing = |cfg, value| { ..cfg, frame_pacing: normalize_pacing(value) }
 
+		## Return a config with a different exit key. `NoExitKey` stops any key
+		## from closing the window; the window close button still works.
+		with_exit_key : Config, ExitKey -> Config
+		with_exit_key = |cfg, value| { ..cfg, exit_key: value }
+
 		## Return a config with a different initial cursor mode.
 		with_cursor : Config, CursorMode -> Config
 		with_cursor = |cfg, value| { ..cfg, cursor: value }
@@ -111,6 +128,10 @@ AppConfig := [].{
 		## window is unconstrained in that direction.
 		min_size : Config -> { width : I32, height : I32 }
 		min_size = |cfg| { width: cfg.min_width, height: cfg.min_height }
+
+		## Inspect the selected exit key.
+		exit_key : Config -> ExitKey
+		exit_key = |cfg| cfg.exit_key
 	}
 
 	## Default 800x600 window configuration capped at 240 FPS.
@@ -135,8 +156,20 @@ AppConfig := [].{
 			fullscreen: cfg.fullscreen,
 			vsync: pacing.vsync,
 			cursor_visible: cfg.cursor == CursorVisible,
+			exit_key_code: AppConfig.host_exit_key_code(cfg.exit_key),
 		}
 	}
+
+	## Flatten an exit key to the raylib key code the host passes to
+	## `SetExitKey`. `0` is raylib's `KEY_NULL`, which disables the behaviour.
+	## Shared by the startup config and the runtime `Host.set_exit_key!` effect
+	## so the two cannot drift.
+	host_exit_key_code : ExitKey -> I32
+	host_exit_key_code = |value|
+		match value {
+			NoExitKey => 0
+			ExitKey(key) => U64.to_i32_wrap(Keys.key_code(key))
+		}
 }
 
 default_width : I32
@@ -156,6 +189,7 @@ app_default_data = {
 	resizable: Bool.False,
 	fullscreen: Bool.False,
 	cursor: CursorVisible,
+	exit_key: ExitKey(KeyEscape),
 }
 
 normalize_pacing : AppFramePacing -> AppFramePacing
@@ -209,3 +243,8 @@ expect {
 	host = AppConfig.to_host({}, AppConfig.default.with_min_size({ width: 640, height: -1 }))
 	host.min_width == 640 and host.min_height == 0
 }
+expect AppConfig.default.exit_key() == ExitKey(KeyEscape)
+expect AppConfig.to_host({}, AppConfig.default).exit_key_code == 256
+expect AppConfig.to_host({}, AppConfig.default.with_exit_key(NoExitKey)).exit_key_code == 0
+expect AppConfig.to_host({}, AppConfig.default.with_exit_key(ExitKey(KeyQ))).exit_key_code == 81
+expect AppConfig.default.with_exit_key(NoExitKey).exit_key() == NoExitKey

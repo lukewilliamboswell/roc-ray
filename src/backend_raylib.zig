@@ -1042,6 +1042,12 @@ pub fn setWindowMinSize(width: c_int, height: c_int) void {
     rl.SetWindowMinSize(width, height);
 }
 
+/// Set the key that closes the window, or raylib's KEY_NULL (0) to disable it.
+/// InitWindow resets this to KEY_ESCAPE, so this must be called after it.
+pub fn setExitKey(key: c_int) void {
+    rl.SetExitKey(key);
+}
+
 /// Get frame time (delta time) in seconds since the previous frame.
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();

@@ -78,6 +78,7 @@ platform ""
 		"roc_host_random_i32": HostHost.random_i32!,
 		"roc_host_read_env": HostHost.read_env!,
 		"roc_host_read_file_raw": HostHost.read_file!,
+		"roc_host_set_exit_key": HostHost.set_exit_key!,
 		"roc_host_set_screen_size": HostHost.set_screen_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
 		"roc_host_set_window_min_size": HostHost.set_window_min_size!,

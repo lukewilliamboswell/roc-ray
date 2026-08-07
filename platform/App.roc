@@ -13,6 +13,9 @@ App := [].{
 	## Initial native cursor mode.
 	CursorMode : AppConfig.CursorMode
 
+	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	ExitKey : AppConfig.ExitKey
+
 	## Opaque validated startup configuration. Update it through receivers.
 	Config : AppConfig.Config
 
@@ -41,3 +44,4 @@ expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
 expect App.default.with_cursor(CursorHidden).cursor() == CursorHidden
 expect App.default.with_min_size({ width: 400, height: 300 }).min_size() == { width: 400, height: 300 }
+expect App.default.with_exit_key(NoExitKey).exit_key() == NoExitKey

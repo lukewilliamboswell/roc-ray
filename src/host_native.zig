@@ -2030,6 +2030,11 @@ fn hostedSetWindowMinSize(args: abi.HostHostSet_window_min_sizeArgs) callconv(.c
     raylib.setWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
 
+fn hostedSetExitKey(key_code: i32) callconv(.c) void {
+    if (active_headless) return;
+    raylib.setExitKey(nonNegativeCInt(key_code));
+}
+
 const CursorMode = enum {
     visible,
     hidden,
@@ -2494,6 +2499,7 @@ comptime {
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
+        @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSetWindowMinSize, .{ .name = "roc_host_set_window_min_size" });
@@ -2775,11 +2781,14 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         window_title.ptr,
     );
     defer raylib.closeWindow();
-    // SetWindowMinSize needs a live window handle, so it must follow InitWindow.
+    // Both of these need a live window: InitWindow zeroes raylib's CORE state
+    // and writes exitKey = KEY_ESCAPE, so an earlier SetExitKey is discarded,
+    // and SetWindowMinSize needs the window handle.
     raylib.setWindowMinSize(
         nonNegativeCInt(app_config.min_width),
         nonNegativeCInt(app_config.min_height),
     );
+    raylib.setExitKey(nonNegativeCInt(app_config.exit_key_code));
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
     if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
     active_mouse_cursor_code = 255;

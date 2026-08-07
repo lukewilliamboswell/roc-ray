@@ -4209,9 +4209,9 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_b75e5c5116f849b3
-pub const __AnonStruct_b75e5c5116f849b3 = if (@sizeOf(usize) == 4) extern struct {
-    @"init!": __AnonStruct_667033c60ca2d4bb,
+/// Element type for __AnonStruct_2881d27b552c2359
+pub const __AnonStruct_2881d27b552c2359 = if (@sizeOf(usize) == 4) extern struct {
+    @"init!": __AnonStruct_35c485cfe15b01ff,
     @"render!": *anyopaque,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -4225,7 +4225,7 @@ pub const __AnonStruct_b75e5c5116f849b3 = if (@sizeOf(usize) == 4) extern struct
         value.@"init!".incref(amount);
     }
 } else extern struct {
-    @"init!": __AnonStruct_667033c60ca2d4bb,
+    @"init!": __AnonStruct_35c485cfe15b01ff,
     @"render!": *anyopaque,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -4242,18 +4242,18 @@ pub const __AnonStruct_b75e5c5116f849b3 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 96) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
-        if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 8) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
+        if (@sizeOf(__AnonStruct_2881d27b552c2359) != 96) @compileError("__AnonStruct_2881d27b552c2359 size mismatch");
+        if (@alignOf(__AnonStruct_2881d27b552c2359) != 8) @compileError("__AnonStruct_2881d27b552c2359 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 80) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
-        if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 8) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
+        if (@sizeOf(__AnonStruct_2881d27b552c2359) != 80) @compileError("__AnonStruct_2881d27b552c2359 size mismatch");
+        if (@alignOf(__AnonStruct_2881d27b552c2359) != 8) @compileError("__AnonStruct_2881d27b552c2359 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_667033c60ca2d4bb
-pub const __AnonStruct_667033c60ca2d4bb = if (@sizeOf(usize) == 4) extern struct {
-    config: AppConfigConfig,
+/// Element type for __AnonStruct_35c485cfe15b01ff
+pub const __AnonStruct_35c485cfe15b01ff = if (@sizeOf(usize) == 4) extern struct {
+    config: AppConfig,
     @"run!": *anyopaque,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -4267,7 +4267,7 @@ pub const __AnonStruct_667033c60ca2d4bb = if (@sizeOf(usize) == 4) extern struct
         value.config.incref(amount);
     }
 } else extern struct {
-    config: AppConfigConfig,
+    config: AppConfig,
     @"run!": *anyopaque,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -4284,18 +4284,18 @@ pub const __AnonStruct_667033c60ca2d4bb = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 88) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
-        if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 8) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
+        if (@sizeOf(__AnonStruct_35c485cfe15b01ff) != 88) @compileError("__AnonStruct_35c485cfe15b01ff size mismatch");
+        if (@alignOf(__AnonStruct_35c485cfe15b01ff) != 8) @compileError("__AnonStruct_35c485cfe15b01ff alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 72) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
-        if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 8) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
+        if (@sizeOf(__AnonStruct_35c485cfe15b01ff) != 72) @compileError("__AnonStruct_35c485cfe15b01ff size mismatch");
+        if (@alignOf(__AnonStruct_35c485cfe15b01ff) != 8) @compileError("__AnonStruct_35c485cfe15b01ff alignment mismatch");
     }
 }
 
-/// Element type for AppConfig.Config
-pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
-    exit_key: AppExitKey,
+/// Element type for App.Config
+pub const AppConfig = if (@sizeOf(usize) == 4) extern struct {
+    exit_key: KeysExitKey,
     title: RocStr,
     width: i32,
     height: i32,
@@ -4323,7 +4323,7 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
         value.cursor.incref(amount);
     }
 } else extern struct {
-    exit_key: AppExitKey,
+    exit_key: KeysExitKey,
     title: RocStr,
     width: i32,
     height: i32,
@@ -4354,12 +4354,12 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppConfigConfig) != 80) @compileError("AppConfigConfig size mismatch");
-        if (@alignOf(AppConfigConfig) != 8) @compileError("AppConfigConfig alignment mismatch");
+        if (@sizeOf(AppConfig) != 80) @compileError("AppConfig size mismatch");
+        if (@alignOf(AppConfig) != 8) @compileError("AppConfig alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppConfigConfig) != 64) @compileError("AppConfigConfig size mismatch");
-        if (@alignOf(AppConfigConfig) != 8) @compileError("AppConfigConfig alignment mismatch");
+        if (@sizeOf(AppConfig) != 64) @compileError("AppConfig size mismatch");
+        if (@alignOf(AppConfig) != 8) @compileError("AppConfig alignment mismatch");
     }
 }
 
@@ -4838,62 +4838,62 @@ comptime {
     }
 }
 
-/// Tag discriminant for AppExitKey.
-pub const AppExitKeyTag = enum(u8) {
+/// Tag discriminant for Keys.ExitKey.
+pub const KeysExitKeyTag = enum(u8) {
     ExitKey = 0,
     NoExitKey = 1,
 };
 
-/// Payload union for AppExitKey.
-pub const AppExitKeyPayload = extern union {
+/// Payload union for Keys.ExitKey.
+pub const KeysExitKeyPayload = extern union {
     exit_key: KeysKeyboardKey,
     no_exit_key: [0]u8,
 };
 
-/// Tag union: AppExitKey
-pub const AppExitKey = if (@sizeOf(usize) == 4) extern struct {
+/// Tag union: Keys.ExitKey
+pub const KeysExitKey = if (@sizeOf(usize) == 4) extern struct {
     payload: [16]u8 align(8),
-    tag: AppExitKeyTag,
+    tag: KeysExitKeyTag,
     pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
         const ptr: *const KeysKeyboardKey = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppExitKey(self, roc_host);
+        decrefKeysExitKey(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfAppExitKey(self, amount);
+        increfKeysExitKey(self, amount);
     }
 } else extern struct {
-    payload: AppExitKeyPayload,
-    tag: AppExitKeyTag,
+    payload: KeysExitKeyPayload,
+    tag: KeysExitKeyTag,
     pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
         return self.payload.exit_key;
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppExitKey(self, roc_host);
+        decrefKeysExitKey(self, roc_host);
     }
 
     /// Increment Roc-owned payloads.
     pub fn incref(self: @This(), amount: isize) void {
-        increfAppExitKey(self, amount);
+        increfKeysExitKey(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppExitKey) != 24) @compileError("AppExitKey size mismatch");
-        if (@alignOf(AppExitKey) != 8) @compileError("AppExitKey alignment mismatch");
-        if (@offsetOf(AppExitKey, "tag") != 16) @compileError("AppExitKey tag offset mismatch");
+        if (@sizeOf(KeysExitKey) != 24) @compileError("KeysExitKey size mismatch");
+        if (@alignOf(KeysExitKey) != 8) @compileError("KeysExitKey alignment mismatch");
+        if (@offsetOf(KeysExitKey, "tag") != 16) @compileError("KeysExitKey tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppExitKey) != 24) @compileError("AppExitKey size mismatch");
-        if (@alignOf(AppExitKey) != 8) @compileError("AppExitKey alignment mismatch");
-        if (@offsetOf(AppExitKey, "tag") != 16) @compileError("AppExitKey tag offset mismatch");
+        if (@sizeOf(KeysExitKey) != 24) @compileError("KeysExitKey size mismatch");
+        if (@alignOf(KeysExitKey) != 8) @compileError("KeysExitKey alignment mismatch");
+        if (@offsetOf(KeysExitKey, "tag") != 16) @compileError("KeysExitKey tag offset mismatch");
     }
 }
 
@@ -7306,7 +7306,7 @@ fn increfHostHostSet_screen_sizeResult(value: HostHostSet_screen_sizeResult, amo
     }
 }
 
-fn decrefAppExitKey(value: AppExitKey, roc_host: *RocHost) void {
+fn decrefKeysExitKey(value: KeysExitKey, roc_host: *RocHost) void {
     switch (value.tag) {
         .ExitKey => {
             value.payload_exit_key().decref(roc_host);
@@ -7315,7 +7315,7 @@ fn decrefAppExitKey(value: AppExitKey, roc_host: *RocHost) void {
     }
 }
 
-fn increfAppExitKey(value: AppExitKey, amount: isize) void {
+fn increfKeysExitKey(value: KeysExitKey, amount: isize) void {
     switch (value.tag) {
         .ExitKey => {
             value.payload_exit_key().incref(amount);

@@ -937,35 +937,31 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
-update! = |model, input_msg|
-	match input_msg {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-
-			restart = host.key_pressed(KeySpace)
-			input_camera = camera_for(model.level, model.world.player.pos)?
-			input = tool_input(host, input_camera)
-			next_world = match model.world.state {
-				Playing => advance_world(
-					model.level,
-					model.world,
-					input_axis(host),
-					host.key_pressed(KeySpace) or host.key_pressed(KeyUp) or host.key_pressed(KeyW),
-					input,
-					host.frame_time,
-				)
-				Won => if restart new_world(model.level) else model.world
-				GameOver => if restart new_world(model.level) else model.world
-			}
-
-			Ok({ model: { ..model, world: next_world }, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+
+	restart = host.key_pressed(KeySpace)
+	input_camera = camera_for(model.level, model.world.player.pos)?
+	input = tool_input(host, input_camera)
+	next_world = match model.world.state {
+		Playing => advance_world(
+			model.level,
+			model.world,
+			input_axis(host),
+			host.key_pressed(KeySpace) or host.key_pressed(KeyUp) or host.key_pressed(KeyW),
+			input,
+			step.time.elapsed_seconds,
+		)
+		Won => if restart new_world(model.level) else model.world
+		GameOver => if restart new_world(model.level) else model.world
+	}
+
+	Ok({ model: { ..model, world: next_world }, commands: [] })
+}
 
 ## The camera follows the player, so it is a pure function of the model and is
 ## derived here rather than stored.

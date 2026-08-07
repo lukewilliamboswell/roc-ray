@@ -133,20 +133,16 @@ init! = App.init(
 game_over : Model -> Bool
 game_over = |model| model.left_score >= win_score or model.right_score >= win_score
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-
-			next = if game_over(model) step_game_over!(model, host) else step_playing!(model, host)
-			Ok({ model: next, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+
+	next = if game_over(model) step_game_over!(model, host) else step_playing!(model, host)
+	Ok({ model: next, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

@@ -56,53 +56,49 @@ init! = App.init(
 
 ## Screenshots are host effects driven by input, so they belong here. Asking
 ## for one during drawing would put an effect outside the message stream.
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
+
+	# `..` cannot reach outside the output directory, so this reports
+	# PathEscapesOutputDir rather than writing beside the example source.
+	escaped =
+		if host.key_pressed(KeyE) {
+			match Capture.screenshot!("../escaped.png") {
+				Err(PathEscapesOutputDir) => Ok(model.refused)
+				# Any other outcome means the sandbox let something through.
+				_ => Ok(model.save_failed)
 			}
-
-			# `..` cannot reach outside the output directory, so this reports
-			# PathEscapesOutputDir rather than writing beside the example source.
-			escaped =
-				if host.key_pressed(KeyE) {
-					match Capture.screenshot!("../escaped.png") {
-						Err(PathEscapesOutputDir) => Ok(model.refused)
-						# Any other outcome means the sandbox let something through.
-						_ => Ok(model.save_failed)
-					}
-				} else {
-					Err(NotRequested)
-				}
-
-			saved =
-				if host.key_pressed(KeyS) or host.frame_count == 3 {
-					match Capture.screenshot!("scene.png") {
-						Ok({}) => Ok(model.saved)
-						Err(_) => Ok(model.save_failed)
-					}
-				} else {
-					Err(NotRequested)
-				}
-
-			# The screenshot is written at the end of this frame, so leave the
-			# host a frame to do it before asking to exit.
-			if host.frame_count > 3 {
-				host.exit!(0)
-			}
-
-			next = match (escaped, saved) {
-				(Ok(text), _) => { ..model, result: text }
-				(_, Ok(text)) => { ..model, result: text }
-				_ => model
-			}
-			Ok({ model: next, cmds: [] })
+		} else {
+			Err(NotRequested)
 		}
 
-		_ => Ok({ model: model, cmds: [] })
+	saved =
+		if host.key_pressed(KeyS) or host.frame_count == 3 {
+			match Capture.screenshot!("scene.png") {
+				Ok({}) => Ok(model.saved)
+				Err(_) => Ok(model.save_failed)
+			}
+		} else {
+			Err(NotRequested)
+		}
+
+	# The screenshot is written at the end of this frame, so leave the
+	# host a frame to do it before asking to exit.
+	if host.frame_count > 3 {
+		host.exit!(0)
 	}
+
+	next = match (escaped, saved) {
+		(Ok(text), _) => { ..model, result: text }
+		(_, Ok(text)) => { ..model, result: text }
+		_ => model
+	}
+	Ok({ model: next, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

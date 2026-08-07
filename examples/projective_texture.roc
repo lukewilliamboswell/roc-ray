@@ -49,12 +49,9 @@ init! = App.init(
 	},
 )
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => Ok({ model: drag_corner!(model, host), cmds: [] })
-		_ => Ok({ model: model, cmds: [] })
-	}
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step|
+	Ok({ model: drag_corner!(model, step.input), commands: [] })
 
 ## Fold one frame of pointer input into the quad.
 ##

@@ -69,25 +69,19 @@ init! = App.init(
 
 ## Elapsed time advances on the tick rather than inside the draw, so the plot
 ## is a pure function of the model when `render!` runs.
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Tick(tick) => Ok({ model: { ..model, elapsed: model.elapsed + tick.frame_time }, cmds: [] })
-
-		Frame(host) => {
-			# The host finalizes the file itself once the recording reaches its
-			# frame cap, which leaves the session idle. That is the signal there
-			# is nothing left to capture, so shut down.
-			match Capture.status!() {
-				Idle => host.exit!(0)
-				Failed(_) => host.exit!(1)
-				Active(_) => {}
-			}
-			Ok({ model: model, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	# The host finalizes the file itself once the recording reaches its frame
+	# cap, which leaves the session idle. That is the signal there is nothing
+	# left to capture, so shut down.
+	match Capture.status!() {
+		Idle => step.input.exit!(0)
+		Failed(_) => step.input.exit!(1)
+		Active(_) => {}
 	}
+
+	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

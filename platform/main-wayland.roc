@@ -5,7 +5,7 @@ platform ""
 				config : App.Config,
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
-			update! : model, Program.Input => Try({ model : model, cmds : List(Program.Cmd) }, [Exit(I64), ..]),
+			update! : model, Program.Step => Try(Program.Next(model), [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
@@ -178,21 +178,16 @@ HostStateFromHost : {
 	},
 }
 
-## Internal type for the host boundary, carrying one message into `update!`.
+## Internal type for the host boundary, carrying one cycle of observations.
 ##
-## Unions do not cross this boundary; `kind` selects the variant and the fields
-## it does not use carry inert values. `Program.Input` is rebuilt from it below.
-InputFromHost : {
-	kind : U8, ## 0 Tick, 1 Frame, 2 EffectResult
+## Unions do not cross this boundary, so completions arrive as a list of flat
+## records that `Program` decodes. The list is empty on an ordinary frame.
+StepFromHost : {
+	snapshot : HostStateFromHost,
 	frame_count : U64,
 	timestamp_nanos : U64,
-	frame_time : F32,
-	id : U64, ## correlation id echoed back from the Cmd that produced this
-	value_kind : U8, ## 0 Unit, 1 I32, 2 Str
-	i32_value : I32,
-	str_value : Str,
-	err : U8,
-	snapshot : HostStateFromHost,
+	elapsed_seconds : F32,
+	completed : List(Program.CompletionFromHost),
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
@@ -219,28 +214,17 @@ host_from_raw = |host_state| {
 	mouse: host_state.mouse,
 }
 
-## Rebuild a `Program.Input` from the host's flat message record.
-input_from_raw : InputFromHost -> Program.Input
-input_from_raw = |raw|
-	if raw.kind == 1 {
-		Frame(host_from_raw(raw.snapshot))
-	} else if raw.kind == 2 {
-		EffectResult({
-			id: raw.id,
-			value: Program.value_from_host({
-				value_kind: raw.value_kind,
-				i32_value: raw.i32_value,
-				str_value: raw.str_value,
-				err: raw.err,
-			}),
-		})
-	} else {
-		Tick({
-			frame_count: raw.frame_count,
-			timestamp_nanos: raw.timestamp_nanos,
-			frame_time: raw.frame_time,
-		})
-	}
+## Rebuild a `Program.Step` from the host's flat cycle record.
+step_from_raw : StepFromHost -> Program.Step
+step_from_raw = |raw| {
+	input: host_from_raw(raw.snapshot),
+	time: {
+		frame_count: raw.frame_count,
+		timestamp_nanos: raw.timestamp_nanos,
+		elapsed_seconds: raw.elapsed_seconds,
+	},
+	completed: List.map(raw.completed, Program.completion_from_host),
+}
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
 init_for_host! = |host_state|
@@ -250,12 +234,14 @@ init_for_host! = |host_state|
 		Err(_) => Err(-1)
 	}
 
-## Deliver one message to the app and hand the host back any commands it wants
-## run. The host owns the returned box exactly as it does for `render!`.
-update_for_host! : Box(Model), InputFromHost => Try({ model : Box(Model), cmds : List(Program.CmdToHost) }, I64)
+## Advance the model by one cycle and hand the host back any work it wants done.
+##
+## Called once per rendered frame rather than once per event, so the model is
+## boxed and unboxed once regardless of how much happened.
+update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), commands : List(Program.CommandToHost) }, I64)
 update_for_host! = |boxed_model, raw|
-	match (program.update!)(Box.unbox(boxed_model), input_from_raw(raw)) {
-		Ok(next) => Ok({ model: Box.box(next.model), cmds: List.map(next.cmds, Program.to_host) })
+	match (program.update!)(Box.unbox(boxed_model), step_from_raw(raw)) {
+		Ok(next) => Ok({ model: Box.box(next.model), commands: List.map(next.commands, Program.to_host) })
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}

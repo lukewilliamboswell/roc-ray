@@ -34,16 +34,11 @@ init! = App.init(
 ## The shader clock is the only state this example advances, and a Tick is
 ## precisely the message that carries it -- so the uniform is set here rather
 ## than mid-draw.
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Tick(tick) => {
-			model.time.set!(U64.to_f32(tick.timestamp_nanos) / 1_000_000_000)
-			Ok({ model: model, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
-	}
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	model.time.set!(U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000)
+	Ok({ model: model, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {

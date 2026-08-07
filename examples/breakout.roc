@@ -434,25 +434,21 @@ play_step_events! = |sounds, events| {
 ## `advance_game` was already a pure step returning events, and the events were
 ## already interpreted effectfully -- so this split is mostly a matter of moving
 ## the seam that was there all along.
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-
-			result = advance_game(model.game, frame_input(host))
-			if result.paddle_hit {
-				model.sounds.paddle.play!()
-			}
-			play_step_events!(model.sounds, result.events)
-
-			Ok({ model: { ..model, game: result.game }, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+
+	result = advance_game(model.game, frame_input(host))
+	if result.paddle_hit {
+		model.sounds.paddle.play!()
+	}
+	play_step_events!(model.sounds, result.events)
+
+	Ok({ model: { ..model, game: result.game }, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

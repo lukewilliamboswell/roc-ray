@@ -25,7 +25,7 @@ Model : {
 LoadState : [
 	Requested,
 	Loaded(U64),
-	Failed(U8),
+	Failed(Str),
 ]
 
 ## The id the host echoes back, so a result can be matched to its request. With
@@ -46,42 +46,71 @@ init! = App.init(
 		}),
 )
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		# Frame 0 issues the read. Returning it as a command rather than calling
-		# a blocking effect is what keeps this frame short.
-		Frame(host) =>
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-				Ok({ model: model, cmds: [] })
-			} else if host.frame_count == 0 {
-				Ok({ model: model, cmds: [ReadFile({ id: read_id, path: "README.md" })] })
-			} else {
-				Ok({ model: model, cmds: [] })
-			}
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	if step.input.key_pressed(KeyEscape) {
+		step.input.exit!(0)
+	}
 
-		Tick(tick) => Ok({ model: { ..model, elapsed: model.elapsed + tick.frame_time }, cmds: [] })
-
-		EffectResult(result) =>
-			if result.id != read_id {
-				Ok({ model: model, cmds: [] })
-			} else {
-				next = match result.value {
-					StrValue(contents) => Loaded(Str.count_utf8_bytes(contents))
-					Failed(code) => Failed(code)
-					_ => Failed(0)
-				}
-				Ok({ model: { ..model, state: next }, cmds: [] })
-			}
+	# Whatever finished since the last cycle arrives together. This app has one
+	# request outstanding, so it picks its own out; an app juggling several
+	# would fold over the list instead. On an ordinary frame it is empty.
+	next_state =
+		match List.first(List.keep_if(step.completed, is_our_read)) {
+			Ok(completion) => apply_completion(completion)
+			Err(_) => model.state
 		}
+
+	# Frame 0 issues the read. Returning it as a command rather than calling a
+	# blocking effect is what keeps this frame short.
+	commands =
+		if step.time.frame_count == 0 {
+			[ReadFile({ id: read_id, path: "README.md" })]
+		} else {
+			[]
+		}
+
+	Ok({
+		model: { ..model, state: next_state, elapsed: model.elapsed + step.time.elapsed_seconds },
+		commands: commands,
+	})
+}
+
+## Whether a completion answers the read this app issued.
+is_our_read : Program.Completion -> Bool
+is_our_read = |completion|
+	match completion {
+		FileRead(finished) => finished.id == read_id
+		DelayElapsed(_) => Bool.False
+	}
+
+## Turn a finished read into the state to display.
+##
+## The result is typed to the operation that produced it, so a read cannot
+## report something only a timer could have, and every way it can fail has a
+## name. `Busy` and `Unavailable` are refusals: the host declined to start the
+## work rather than running it on this thread.
+apply_completion : Program.Completion -> LoadState
+apply_completion = |completion|
+	match completion {
+		FileRead(finished) =>
+			match finished.result {
+				Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
+				Err(NotFound) => Failed("not found")
+				Err(ReadFailed) => Failed("read failed")
+				Err(Busy) => Failed("too many reads in flight")
+				Err(Unavailable) => Failed("reads unavailable")
+			}
+
+		DelayElapsed(_) => Requested
+	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	status = match model.state {
 		Requested => "reading..."
 		Loaded(bytes) => Str.concat("read ", Str.concat(U64.to_str(bytes), " bytes"))
-		Failed(_) => "read failed"
+		Failed(reason) => reason
 	}
 
 	frame.clear!(Color.from_hex_rgb(0x121420))

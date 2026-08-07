@@ -34,21 +34,17 @@ init! = App.init(
 ##
 ## Reading `host` here rather than in `render!` is the whole change: the frame
 ## snapshot arrives as a message, so the host can record and replay it.
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-			Ok({
-				model: { ..model, pointer: host.mouse.position(), accent_on: host.mouse.button_down(Left) },
-				cmds: [],
-			})
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+	Ok({
+		model: { ..model, pointer: host.mouse.position(), accent_on: host.mouse.button_down(Left) },
+		commands: [],
+	})
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

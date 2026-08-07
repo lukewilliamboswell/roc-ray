@@ -1004,37 +1004,33 @@ advance_playing! = |model, host| {
 	{ ..model, world: result.world }
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
+
+	next = match model.world.state {
+		Playing => advance_playing!(model, host)
+		Won =>
+			if host.key_pressed(KeySpace) {
+				model.sounds.music.set_volume!(0.13)
+				new_game(model.characters, model.tiles, model.level, model.sounds)
+			} else {
+				model
 			}
-
-			next = match model.world.state {
-				Playing => advance_playing!(model, host)
-				Won =>
-					if host.key_pressed(KeySpace) {
-						model.sounds.music.set_volume!(0.13)
-						new_game(model.characters, model.tiles, model.level, model.sounds)
-					} else {
-						model
-					}
-				GameOver =>
-					if host.key_pressed(KeySpace) {
-						model.sounds.music.set_volume!(0.13)
-						new_game(model.characters, model.tiles, model.level, model.sounds)
-					} else {
-						model
-					}
-				}
-
-			Ok({ model: next, cmds: [] })
+		GameOver =>
+			if host.key_pressed(KeySpace) {
+				model.sounds.music.set_volume!(0.13)
+				new_game(model.characters, model.tiles, model.level, model.sounds)
+			} else {
+				model
+			}
 		}
 
-		_ => Ok({ model: model, cmds: [] })
-	}
+	Ok({ model: next, commands: [] })
+}
 
 ## The camera follows the (shaken) player position, so it is a pure function of
 ## the model and is derived here rather than stored.

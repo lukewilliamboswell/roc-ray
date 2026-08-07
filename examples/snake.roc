@@ -239,30 +239,26 @@ advance_playing! = |model, host| {
 	advance_fixed_steps!(with_accumulator, host)
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
+	}
+
+	next = match model.state {
+		Playing => advance_playing!(model, host)
+		GameOver =>
+			if host.key_pressed(KeySpace) {
+				model.start_sound.play!()
+				new_game!(model, host)
+			} else {
+				model
 			}
-
-			next = match model.state {
-				Playing => advance_playing!(model, host)
-				GameOver =>
-					if host.key_pressed(KeySpace) {
-						model.start_sound.play!()
-						new_game!(model, host)
-					} else {
-						model
-					}
-				}
-
-			Ok({ model: next, cmds: [] })
 		}
 
-		_ => Ok({ model: model, cmds: [] })
-	}
+	Ok({ model: next, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

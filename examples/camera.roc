@@ -72,24 +72,20 @@ move_player = |player, host| {
 	}
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-
-			player = move_player(model.player, host)
-			zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-			rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
-			rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
-
-			Ok({ model: { ..model, player, zoom, rotation, mouse: host.mouse.position() }, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+
+	player = move_player(model.player, host)
+	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
+	rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
+	rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+
+	Ok({ model: { ..model, player, zoom, rotation, mouse: host.mouse.position() }, commands: [] })
+}
 
 ## The camera and both mouse projections are derived rather than stored: they
 ## are a pure function of the model, so keeping them out of it means there is

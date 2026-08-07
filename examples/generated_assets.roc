@@ -155,28 +155,24 @@ draw_swatch! = |frame, index, selected| {
 	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), PixelCountMismatch, ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			if host.key_pressed(KeyEscape) {
-				host.exit!(0)
-			}
-
-			next = update_editor!(model, host)?
-			mouse = host.mouse.position()
-			host.set_cursor!(
-				match cell_at(mouse) {
-					Ok(_) => Crosshair
-					Err(_) => Arrow
-				},
-			)
-
-			Ok({ model: { ..next, mouse }, cmds: [] })
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), PixelCountMismatch, ..])
+update! = |model, step| {
+	host = step.input
+	if host.key_pressed(KeyEscape) {
+		host.exit!(0)
 	}
+
+	next = update_editor!(model, host)?
+	mouse = host.mouse.position()
+	host.set_cursor!(
+		match cell_at(mouse) {
+			Ok(_) => Crosshair
+			Err(_) => Arrow
+		},
+	)
+
+	Ok({ model: { ..next, mouse }, commands: [] })
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

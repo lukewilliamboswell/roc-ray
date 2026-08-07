@@ -189,42 +189,38 @@ layout_for = |screen| {
 	}
 }
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			# With `with_exit_key(NoExitKey)` no key closes the window on its
-			# own, so the app decides. Escape is left free for the UI to use.
-			if host.key_pressed(KeyQ) {
-				host.exit!(0)
-			}
-
-			view = layout_for(host.screen)
-			mouse = host.mouse.position()
-			hover_display = view.display_bounds.contains(mouse)
-			hover_audio = view.audio_bounds.contains(mouse)
-			hover_controls = view.controls_bounds.contains(mouse)
-			host.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
-
-			from_keyboard = keyboard_selection(model.selection, host)
-			selection = if host.mouse.button_pressed(Left) and hover_display {
-				Display
-			} else if host.mouse.button_pressed(Left) and hover_audio {
-				AudioSettings
-			} else if host.mouse.button_pressed(Left) and hover_controls {
-				Controls
-			} else {
-				from_keyboard
-			}
-
-			Ok({
-				model: { ..model, selection, screen: host.screen, mouse, timestamp_nanos: host.timestamp_nanos },
-				cmds: [],
-			})
-		}
-
-		_ => Ok({ model: model, cmds: [] })
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	# With `with_exit_key(NoExitKey)` no key closes the window on its
+	# own, so the app decides. Escape is left free for the UI to use.
+	if host.key_pressed(KeyQ) {
+		host.exit!(0)
 	}
+
+	view = layout_for(host.screen)
+	mouse = host.mouse.position()
+	hover_display = view.display_bounds.contains(mouse)
+	hover_audio = view.audio_bounds.contains(mouse)
+	hover_controls = view.controls_bounds.contains(mouse)
+	host.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+
+	from_keyboard = keyboard_selection(model.selection, host)
+	selection = if host.mouse.button_pressed(Left) and hover_display {
+		Display
+	} else if host.mouse.button_pressed(Left) and hover_audio {
+		AudioSettings
+	} else if host.mouse.button_pressed(Left) and hover_controls {
+		Controls
+	} else {
+		from_keyboard
+	}
+
+	Ok({
+		model: { ..model, selection, screen: host.screen, mouse, timestamp_nanos: host.timestamp_nanos },
+		commands: [],
+	})
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {

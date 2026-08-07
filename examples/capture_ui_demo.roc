@@ -105,58 +105,54 @@ prepare_counter_labels! = |index, acc|
 		prepare_counter_labels!(index + 1, List.append(acc, label))
 	}
 
-update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
-update! = |model, input|
-	match input {
-		Frame(host) => {
-			# Drive the pointer for the *next* frame from the script, then read
-			# `host.mouse` exactly as any app would.
-			step = pointer_for_frame(model.frame)
-			Capture.set_virtual_mouse!(
-				if step.clicking Capture.clicking_at(step.pos) else Capture.at(step.pos),
-			)
+update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
+update! = |model, step| {
+	host = step.input
+	# Drive the pointer for the *next* frame from the script, then read
+	# `host.mouse` exactly as any app would.
+	pointer_step = pointer_for_frame(model.frame)
+	Capture.set_virtual_mouse!(
+		if pointer_step.clicking Capture.clicking_at(pointer_step.pos) else Capture.at(pointer_step.pos),
+	)
 
-			mouse = host.mouse.position()
-			over_increment = inside(mouse, increment_button)
-			over_toggle = inside(mouse, toggle_button)
+	mouse = host.mouse.position()
+	over_increment = inside(mouse, increment_button)
+	over_toggle = inside(mouse, toggle_button)
 
-			# Ordinary edge-triggered click handling. The virtual pointer
-			# produces real pressed-this-frame bits, so this needs no special
-			# casing.
-			pressed = host.mouse.button_pressed(Left)
-			clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
-			toggled = if pressed and over_toggle !(model.toggled) else model.toggled
+	# Ordinary edge-triggered click handling. The virtual pointer
+	# produces real pressed-this-frame bits, so this needs no special
+	# casing.
+	pressed = host.mouse.button_pressed(Left)
+	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
+	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
 
-			held = host.mouse.button_down(Left)
-			slider =
-				if held and inside_slider(mouse) {
-					clamp_unit((mouse.x - slider_track.x) / slider_track.width)
-				} else {
-					model.slider
-				}
-
-			if model.frame >= recorded_frames {
-				host.exit!(0)
-			}
-
-			Ok({
-				model: {
-					..model,
-					frame: model.frame + 1,
-					pointer: step.pos,
-					clicking: step.clicking,
-					mouse: mouse,
-					held: held,
-					clicks: clicks,
-					toggled: toggled,
-					slider: slider,
-				},
-				cmds: [],
-			})
+	held = host.mouse.button_down(Left)
+	slider =
+		if held and inside_slider(mouse) {
+			clamp_unit((mouse.x - slider_track.x) / slider_track.width)
+		} else {
+			model.slider
 		}
 
-		_ => Ok({ model: model, cmds: [] })
+	if model.frame >= recorded_frames {
+		host.exit!(0)
 	}
+
+	Ok({
+		model: {
+			..model,
+			frame: model.frame + 1,
+			pointer: pointer_step.pos,
+			clicking: pointer_step.clicking,
+			mouse: mouse,
+			held: held,
+			clicks: clicks,
+			toggled: toggled,
+			slider: slider,
+		},
+		commands: [],
+	})
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

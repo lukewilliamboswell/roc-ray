@@ -25,10 +25,14 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Install Xvfb
+      # Xvfb provides the display; the X11 dev packages are what raylib links
+      # against, and mesa's software rasteriser is what gives xvfb a GL context.
+      - name: Install X11 and GL dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
+            libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libgl1-mesa-dev libglx-mesa0 mesa-utils
 
       - name: Run graphical smoke tests
         run: xvfb-run -a zig build graphical-smoke

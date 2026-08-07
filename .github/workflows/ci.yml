@@ -175,6 +175,16 @@ jobs:
         if: runner.os != 'Windows'
         run: scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
 
+      # Link every example without running it. Linux runs them for real in the
+      # next step; macOS cannot, because generated executables hang there. But
+      # *linking* is what catches a host library that is missing a definition --
+      # a static archive does not complain about an unresolved reference, so a
+      # build can be clean on all four targets and still fail in every app.
+      # An arm64-only miss reached the release bundle test before this existed.
+      - name: Build examples
+        if: runner.os == 'macOS'
+        run: scripts/all_tests.py --skip-platform-build --skip-roc-test --skip-runtime --skip-bundle-test
+
       - name: Build and run examples headlessly
         # Linux covers headless runtime; macOS currently hangs in generated executables
         # and Windows has roc executable PATH issues plus MSVC requirements.

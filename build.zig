@@ -69,6 +69,25 @@ const RocTarget = enum {
             else => "libvpx.a",
         };
     }
+
+    /// libvpx is configured per CPU architecture, not per OS: the generated
+    /// headers only vary in which `VPX_ARCH_*`/`HAVE_<simd>` are set, and both
+    /// macOS targets share theirs with the Linux/Windows target of the same
+    /// architecture. See vendor/libvpx/config/README.md.
+    fn libvpxConfigDir(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64mac, .x64win, .x64glibc => "vendor/libvpx/config/x86_64",
+            .arm64mac => "vendor/libvpx/config/arm64",
+        };
+    }
+
+    /// The SIMD sources matching that config.
+    fn libvpxSimdSources(self: RocTarget) []const []const u8 {
+        return switch (self) {
+            .x64mac, .x64win, .x64glibc => &libvpx_x86_64_sources,
+            .arm64mac => &libvpx_arm64_sources,
+        };
+    }
 };
 
 /// All cross-compilation targets for `zig build`
@@ -384,15 +403,14 @@ const libvpx_flags = [_][]const u8{
     "-mno-stack-arg-probe",
 };
 
-/// Pure-C VP8 encoder sources from the vendored libvpx.
+/// Architecture-independent VP8 encoder sources from the vendored libvpx.
 ///
 /// This is the set libvpx's own configure selects for a
-/// `--target=generic-gnu --disable-runtime-cpu-detect` VP8-encoder build; see
-/// vendor/libvpx/config/README.md for the invocation. Every SIMD path is excluded, so
-/// there is no assembly for Zig to choke on and one file list serves all four
-/// targets.
+/// `--target=generic-gnu --disable-runtime-cpu-detect` VP8-encoder build, which
+/// is every C source it compiles that is not under an architecture directory;
+/// see vendor/libvpx/config/README.md. Each target adds the SIMD list for its
+/// architecture on top, and `vpx_config.c` comes from its config directory.
 const libvpx_sources = [_][]const u8{
-    "config/vpx_config.c",
     "vp8/common/alloccommon.c",
     "vp8/common/blockd.c",
     "vp8/common/dequantize.c",
@@ -466,6 +484,58 @@ const libvpx_sources = [_][]const u8{
     "vpx_scale/vpx_scale_rtcd.c",
     "vpx_util/vpx_thread.c",
     "vpx_util/vpx_write_yuv_frame.c",
+};
+
+/// SSE2 sources for the three x86-64 targets.
+///
+/// Short, because most of libvpx's x86 SIMD is NASM-syntax `.asm` that Zig
+/// cannot assemble; these are the encoder kernels it happens to write as
+/// compiler intrinsics. SSE2 is guaranteed by the x86-64 baseline, so no
+/// runtime CPU detection is needed. Everything above SSE2 -- including the AVX2
+/// files, which are also intrinsics -- is left out because nothing here checks
+/// what the CPU supports. `vendor/libvpx/config/prune_rtcd.py` points the
+/// dispatch entries these do *not* cover back at the C versions, so this list
+/// and `config/x86_64/` have to be regenerated together.
+const libvpx_x86_64_sources = [_][]const u8{
+    "vp8/common/x86/bilinear_filter_sse2.c",
+    "vp8/encoder/x86/vp8_quantize_sse2.c",
+    "vpx_dsp/x86/variance_sse2.c",
+};
+
+/// NEON sources for the arm64 target.
+///
+/// Long, because on AArch64 libvpx writes all of it as intrinsics: the `.asm`
+/// beside these files is 32-bit ARM only and `HAVE_NEON_ASM` is 0 for us. This
+/// is the complete set configure selects for an arm64 VP8-encoder build, so
+/// nothing is pruned out of `config/arm64/` and NEON covers the hot path.
+const libvpx_arm64_sources = [_][]const u8{
+    "vp8/common/arm/loopfilter_arm.c",
+    "vp8/common/arm/neon/bilinearpredict_neon.c",
+    "vp8/common/arm/neon/copymem_neon.c",
+    "vp8/common/arm/neon/dc_only_idct_add_neon.c",
+    "vp8/common/arm/neon/dequant_idct_neon.c",
+    "vp8/common/arm/neon/dequantizeb_neon.c",
+    "vp8/common/arm/neon/idct_blk_neon.c",
+    "vp8/common/arm/neon/iwalsh_neon.c",
+    "vp8/common/arm/neon/loopfiltersimplehorizontaledge_neon.c",
+    "vp8/common/arm/neon/loopfiltersimpleverticaledge_neon.c",
+    "vp8/common/arm/neon/mbloopfilter_neon.c",
+    "vp8/common/arm/neon/shortidct4x4llm_neon.c",
+    "vp8/common/arm/neon/sixtappredict_neon.c",
+    "vp8/common/arm/neon/vp8_loopfilter_neon.c",
+    "vp8/encoder/arm/neon/denoising_neon.c",
+    "vp8/encoder/arm/neon/fastquantizeb_neon.c",
+    "vp8/encoder/arm/neon/shortfdct_neon.c",
+    "vp8/encoder/arm/neon/vp8_shortwalsh4x4_neon.c",
+    "vpx_dsp/arm/avg_pred_neon.c",
+    "vpx_dsp/arm/intrapred_neon.c",
+    "vpx_dsp/arm/sad4d_neon.c",
+    "vpx_dsp/arm/sad_neon.c",
+    "vpx_dsp/arm/sse_neon.c",
+    "vpx_dsp/arm/subpel_variance_neon.c",
+    "vpx_dsp/arm/subtract_neon.c",
+    "vpx_dsp/arm/sum_squares_neon.c",
+    "vpx_dsp/arm/variance_neon.c",
 };
 
 /// X11 libraries that raylib depends on (need stubs for cross-compilation)
@@ -677,7 +747,8 @@ fn buildHostLib(
         }),
     });
     // Vendored libvpx, built from source for every target rather than shipped
-    // as a prebuilt archive: with the SIMD paths excluded it is plain C, so
+    // as a prebuilt archive: it is C all the way down -- portable C plus the
+    // SIMD libvpx writes as compiler intrinsics, never its assembly -- so
     // `zig build` compiles it directly and there is no configure step and no
     // per-OS CI runner in the loop. Produces WebM video via src/capture_vp8.zig.
     // MSVC has no libc headers available when cross-compiling from Linux, and
@@ -706,7 +777,11 @@ fn buildHostLib(
         }),
     });
     libvpx.root_module.addIncludePath(b.path("vendor/libvpx"));
-    libvpx.root_module.addIncludePath(b.path("vendor/libvpx/config"));
+    // Exactly one config directory is on the include path, so a source can only
+    // ever see the generated headers for the architecture it is being built
+    // for.
+    const libvpx_config_dir = roc_target.libvpxConfigDir();
+    libvpx.root_module.addIncludePath(b.path(libvpx_config_dir));
     if (roc_target == .x64win) {
         // Replaces mingw's <setjmp.h>, whose x64 mapping needs a helper only
         // mingw's CRT defines. Windows-only: every other target links a real
@@ -718,11 +793,20 @@ fn buildHostLib(
         .file = b.path("vendor/libvpx/shim/rocray_vp8.c"),
         .flags = &libvpx_flags,
     });
+    libvpx.root_module.addCSourceFile(.{
+        .file = b.path(b.pathJoin(&.{ libvpx_config_dir, "vpx_config.c" })),
+        .flags = &libvpx_flags,
+    });
     libvpx.root_module.addCSourceFiles(.{
         .root = b.path("vendor/libvpx"),
         // gnu99, not c99: vpx_ports/vpx_timer.h uses clock_gettime and
         // struct timespec, which strict-ANSI mode hides behind __STRICT_ANSI__.
         .files = &libvpx_sources,
+        .flags = &libvpx_flags,
+    });
+    libvpx.root_module.addCSourceFiles(.{
+        .root = b.path("vendor/libvpx"),
+        .files = roc_target.libvpxSimdSources(),
         .flags = &libvpx_flags,
     });
 

@@ -335,11 +335,15 @@ to re-vendor per platform, and no per-OS CI runner in the loop:
   freestanding like the host; the handful of libc declarations it needs come
   from the `shim/` directory beside it.
 - `vendor/libvpx/` -- the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
-  Only the pure-C encoder is vendored: every SIMD directory and every assembly
-  source is excluded, because those are NASM/GAS syntax Zig cannot assemble.
-  `vendor/libvpx/config/README.md` records the `configure` invocation that
-  produced the generated headers beside it, which is the one thing that has to be redone
-  when upgrading.
+  C only: libvpx writes some of its SIMD as compiler intrinsics, which `zig cc`
+  compiles, and the rest as NASM/GAS assembly, which Zig cannot assemble. The
+  intrinsics are vendored, the assembly is not, so no assembler is needed to
+  build or to re-vendor. Because the ISA is fixed at compile time (there is no
+  runtime CPU detection), the generated headers are per architecture:
+  `config/x86_64/` for the three x86-64 targets, `config/arm64/` for arm64mac.
+  `vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
+  `config/README.md` explains what it produces -- that is the one thing to run
+  when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
 
 `zig build graphical-smoke` runs the pixel-level rendering and capture checks
 under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a

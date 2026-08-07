@@ -9,6 +9,9 @@
  */
 
 // This file is generated. Do not edit.
+// Post-processed by vendor/libvpx/config/prune_rtcd.py: 0 dispatch
+// entries whose implementation lives in an assembly source we do not
+// vendor were pointed back at the C version. Do not edit; see README.md.
 #ifndef VPX_SCALE_RTCD_H_
 #define VPX_SCALE_RTCD_H_
 
@@ -59,8 +62,13 @@ void vpx_scale_rtcd(void);
 #include "vpx_config.h"
 
 #ifdef RTCD_C
+#include "vpx_ports/arm.h"
 static void setup_rtcd_internal(void)
 {
+    int flags = arm_cpu_caps();
+
+    (void)flags;
+
 }
 #endif
 

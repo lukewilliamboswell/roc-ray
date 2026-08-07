@@ -572,6 +572,20 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         else:
             print("  ok")
 
+    # The vendored libvpx's dispatch headers are pruned to match its
+    # per-architecture source lists; this catches the two falling out of step.
+    print("\nChecking libvpx archives...")
+    if run_cmd(
+        [sys.executable, str(root / "scripts" / "check_libvpx_archives.py")],
+        "check_libvpx_archives",
+        args.verbose,
+        cwd=root,
+    ):
+        print("  ok")
+    else:
+        print("  FAILED")
+        failed.append("libvpx archive check")
+
     if args.runtime_only:
         print("\nSkipping roc check/fmt/test (--runtime-only)")
     else:

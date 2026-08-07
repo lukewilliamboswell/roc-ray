@@ -15,6 +15,8 @@ AppConfigData : {
 	title : Str,
 	width : I32,
 	height : I32,
+	min_width : I32,
+	min_height : I32,
 	frame_pacing : AppFramePacing,
 	resizable : Bool,
 	fullscreen : Bool,
@@ -25,6 +27,8 @@ AppHostConfig : {
 	title : Str,
 	width : I32,
 	height : I32,
+	min_width : I32,
+	min_height : I32,
 	target_fps : I32,
 	resizable : Bool,
 	fullscreen : Bool,
@@ -47,6 +51,8 @@ AppConfig := [].{
 		title : Str,
 		width : I32,
 		height : I32,
+		min_width : I32,
+		min_height : I32,
 		frame_pacing : AppFramePacing,
 		resizable : Bool,
 		fullscreen : Bool,
@@ -64,6 +70,17 @@ AppConfig := [].{
 			..cfg,
 			width: normalize_dimension(dims.width, default_width),
 			height: normalize_dimension(dims.height, default_height),
+		}
+
+		## Return a config with a minimum window size the user cannot shrink
+		## past. Each negative dimension is clamped to `0`, which means "no
+		## limit" in that axis. A minimum only takes effect on a resizable
+		## window, so pair this with `with_resizable(Bool.True)`.
+		with_min_size : Config, { width : I32, height : I32 } -> Config
+		with_min_size = |cfg, dims| {
+			..cfg,
+			min_width: normalize_min_dimension(dims.width),
+			min_height: normalize_min_dimension(dims.height),
 		}
 
 		## Return a config with a validated frame-pacing strategy.
@@ -89,6 +106,11 @@ AppConfig := [].{
 		## Inspect the selected initial cursor mode.
 		cursor : Config -> CursorMode
 		cursor = |cfg| cfg.cursor
+
+		## Inspect the minimum window size. A `0` in either axis means the
+		## window is unconstrained in that direction.
+		min_size : Config -> { width : I32, height : I32 }
+		min_size = |cfg| { width: cfg.min_width, height: cfg.min_height }
 	}
 
 	## Default 800x600 window configuration capped at 240 FPS.
@@ -106,6 +128,8 @@ AppConfig := [].{
 			title: cfg.title,
 			width: cfg.width,
 			height: cfg.height,
+			min_width: cfg.min_width,
+			min_height: cfg.min_height,
 			target_fps: pacing.target_fps,
 			resizable: cfg.resizable,
 			fullscreen: cfg.fullscreen,
@@ -126,6 +150,8 @@ app_default_data = {
 	title: "Roc + Raylib",
 	width: default_width,
 	height: default_height,
+	min_width: 0,
+	min_height: 0,
 	frame_pacing: Capped(240),
 	resizable: Bool.False,
 	fullscreen: Bool.False,
@@ -141,6 +167,11 @@ normalize_pacing = |value|
 
 normalize_dimension : I32, I32 -> I32
 normalize_dimension = |value, fallback| if value > 0 value else fallback
+
+## Unlike `normalize_dimension`, `0` is a meaningful minimum: raylib maps it to
+## GLFW_DONT_CARE, leaving that axis unconstrained. Only negatives are clamped.
+normalize_min_dimension : I32 -> I32
+normalize_min_dimension = |value| if value > 0 value else 0
 
 host_pacing : AppFramePacing -> { target_fps : I32, vsync : Bool }
 host_pacing = |value|
@@ -170,4 +201,11 @@ expect {
 expect {
 	host = AppConfig.to_host({}, AppConfig.default.with_size({ width: 1280, height: 0 }))
 	host.width == 1280 and host.height == 600
+}
+expect AppConfig.default.min_size() == { width: 0, height: 0 }
+expect AppConfig.default.with_min_size({ width: 320, height: 240 }).min_size() == { width: 320, height: 240 }
+expect AppConfig.default.with_min_size({ width: -1, height: -20 }).min_size() == { width: 0, height: 0 }
+expect {
+	host = AppConfig.to_host({}, AppConfig.default.with_min_size({ width: 640, height: -1 }))
+	host.min_width == 640 and host.min_height == 0
 }

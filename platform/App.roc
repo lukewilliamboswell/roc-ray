@@ -40,3 +40,4 @@ App := [].{
 expect App.default.with_frame_pacing(VSync).frame_pacing() == VSync
 expect App.default.with_frame_pacing(Capped(-5)).frame_pacing() == Uncapped
 expect App.default.with_cursor(CursorHidden).cursor() == CursorHidden
+expect App.default.with_min_size({ width: 400, height: 300 }).min_size() == { width: 400, height: 300 }

@@ -4242,11 +4242,11 @@ pub const __AnonStruct_b75e5c5116f849b3 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 64) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
+        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 72) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
         if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 8) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 40) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
+        if (@sizeOf(__AnonStruct_b75e5c5116f849b3) != 48) @compileError("__AnonStruct_b75e5c5116f849b3 size mismatch");
         if (@alignOf(__AnonStruct_b75e5c5116f849b3) != 4) @compileError("__AnonStruct_b75e5c5116f849b3 alignment mismatch");
     }
 }
@@ -4284,11 +4284,11 @@ pub const __AnonStruct_667033c60ca2d4bb = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 56) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
+        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 64) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
         if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 8) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 36) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
+        if (@sizeOf(__AnonStruct_667033c60ca2d4bb) != 44) @compileError("__AnonStruct_667033c60ca2d4bb size mismatch");
         if (@alignOf(__AnonStruct_667033c60ca2d4bb) != 4) @compileError("__AnonStruct_667033c60ca2d4bb alignment mismatch");
     }
 }
@@ -4298,6 +4298,8 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     title: RocStr,
     width: i32,
     height: i32,
+    min_width: i32,
+    min_height: i32,
     frame_pacing: AppFramePacing,
     resizable: bool,
     fullscreen: bool,
@@ -4321,6 +4323,8 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
     title: RocStr,
     width: i32,
     height: i32,
+    min_width: i32,
+    min_height: i32,
     frame_pacing: AppFramePacing,
     resizable: bool,
     fullscreen: bool,
@@ -4344,19 +4348,21 @@ pub const AppConfigConfig = if (@sizeOf(usize) == 4) extern struct {
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppConfigConfig) != 48) @compileError("AppConfigConfig size mismatch");
+        if (@sizeOf(AppConfigConfig) != 56) @compileError("AppConfigConfig size mismatch");
         if (@alignOf(AppConfigConfig) != 8) @compileError("AppConfigConfig alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppConfigConfig) != 32) @compileError("AppConfigConfig size mismatch");
+        if (@sizeOf(AppConfigConfig) != 40) @compileError("AppConfigConfig size mismatch");
         if (@alignOf(AppConfigConfig) != 4) @compileError("AppConfigConfig alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_eba854e503b8b9e2
-pub const __AnonStruct_eba854e503b8b9e2 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_8f3c626b4b74bdbd
+pub const __AnonStruct_8f3c626b4b74bdbd = if (@sizeOf(usize) == 4) extern struct {
     title: RocStr,
     height: i32,
+    min_height: i32,
+    min_width: i32,
     target_fps: i32,
     width: i32,
     cursor_visible: bool,
@@ -4377,6 +4383,8 @@ pub const __AnonStruct_eba854e503b8b9e2 = if (@sizeOf(usize) == 4) extern struct
 } else extern struct {
     title: RocStr,
     height: i32,
+    min_height: i32,
+    min_width: i32,
     target_fps: i32,
     width: i32,
     cursor_visible: bool,
@@ -4398,12 +4406,12 @@ pub const __AnonStruct_eba854e503b8b9e2 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_eba854e503b8b9e2) != 40) @compileError("__AnonStruct_eba854e503b8b9e2 size mismatch");
-        if (@alignOf(__AnonStruct_eba854e503b8b9e2) != 8) @compileError("__AnonStruct_eba854e503b8b9e2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_8f3c626b4b74bdbd) != 48) @compileError("__AnonStruct_8f3c626b4b74bdbd size mismatch");
+        if (@alignOf(__AnonStruct_8f3c626b4b74bdbd) != 8) @compileError("__AnonStruct_8f3c626b4b74bdbd alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_eba854e503b8b9e2) != 28) @compileError("__AnonStruct_eba854e503b8b9e2 size mismatch");
-        if (@alignOf(__AnonStruct_eba854e503b8b9e2) != 4) @compileError("__AnonStruct_eba854e503b8b9e2 alignment mismatch");
+        if (@sizeOf(__AnonStruct_8f3c626b4b74bdbd) != 36) @compileError("__AnonStruct_8f3c626b4b74bdbd size mismatch");
+        if (@alignOf(__AnonStruct_8f3c626b4b74bdbd) != 4) @compileError("__AnonStruct_8f3c626b4b74bdbd alignment mismatch");
     }
 }
 
@@ -6637,6 +6645,28 @@ pub const HostHostSet_target_fpsArgs = extern struct {
     arg0: i32,
 };
 
+/// Arguments for HostHost.set_window_min_size!
+/// Roc signature: { height : I32, width : I32 } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostHostSet_window_min_sizeArgs = if (@sizeOf(usize) == 4) extern struct {
+    height: i32,
+    width: i32,
+} else extern struct {
+    height: i32,
+    width: i32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostHostSet_window_min_sizeArgs) != 8) @compileError("HostHostSet_window_min_sizeArgs size mismatch");
+        if (@alignOf(HostHostSet_window_min_sizeArgs) != 4) @compileError("HostHostSet_window_min_sizeArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostHostSet_window_min_sizeArgs) != 8) @compileError("HostHostSet_window_min_sizeArgs size mismatch");
+        if (@alignOf(HostHostSet_window_min_sizeArgs) != 4) @compileError("HostHostSet_window_min_sizeArgs alignment mismatch");
+    }
+}
+
 /// Arguments for MouseHost.set_cursor!
 /// Roc signature: U8 => {}
 /// Refcounted fields are owned by the hosted function.
@@ -6768,6 +6798,7 @@ pub const DrawHostTriangleArg0 = __AnonStruct_1c9ce87f41bdd392;
 pub const DrawHostTriangle_linesArg0 = __AnonStruct_dba5c127500247a0;
 pub const HostHostRead_file = __AnonStruct_1504326a3d41a158;
 pub const HostHostSet_screen_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
+pub const HostHostSet_window_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const TilemapHostDrawArg0 = __AnonStruct_ef7f989c787a75a5;
 pub const TilemapHostDrawArg0Layers = __AnonStruct_66e2af4e09d9cfd8;
 pub const TilemapHostDrawArg0Tilesets = __AnonStruct_feee45760081ee45;
@@ -6780,7 +6811,7 @@ pub const TilemapHostLoad_tmxMapPoints = __AnonStruct_2818a50bdccefb1e;
 pub const TilemapHostLoad_tmxMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapHostLoad_tmxMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapHostLoad_tmxMapTilesets = __AnonStruct_756aabd194c61573;
-pub const App_config_for_host = __AnonStruct_eba854e503b8b9e2;
+pub const App_config_for_host = __AnonStruct_8f3c626b4b74bdbd;
 pub const Init_for_hostArg0 = __AnonStruct_e43e1f68febb5517;
 pub const Init_for_hostArg0Gamepads = __AnonStruct_1c8617e96852f779;
 pub const Init_for_hostArg0Screen = __AnonStruct_bc8fa73ca49a5ac0;
@@ -7236,6 +7267,10 @@ pub extern fn roc_host_set_screen_size(arg0: HostHostSet_screen_sizeArgs) callco
 /// Roc signature: I32 => {}
 pub extern fn roc_host_set_target_fps(arg0: i32) callconv(.c) void;
 
+/// Hosted symbol for HostHost.set_window_min_size!
+/// Roc signature: { height : I32, width : I32 } => {}
+pub extern fn roc_host_set_window_min_size(arg0: HostHostSet_window_min_sizeArgs) callconv(.c) void;
+
 /// Hosted symbol for MouseHost.set_cursor!
 /// Roc signature: U8 => {}
 pub extern fn roc_mouse_set_cursor_raw(arg0: u8) callconv(.c) void;
@@ -7392,7 +7427,7 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
 // Roc exports these symbols from the app with their natural C ABI signatures.
 
 /// Entrypoint: app_config_for_host!
-pub extern fn app_config_for_host() callconv(.c) __AnonStruct_eba854e503b8b9e2;
+pub extern fn app_config_for_host() callconv(.c) __AnonStruct_8f3c626b4b74bdbd;
 
 /// Entrypoint: init_for_host!
 pub extern fn init_for_host(arg0: __AnonStruct_e43e1f68febb5517) callconv(.c) Init_for_hostResult;

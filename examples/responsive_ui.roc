@@ -37,6 +37,9 @@ init! = App.init(
 		.with_title("RocRay Responsive UI")
 		.with_size({ width: 960, height: 640 })
 		.with_resizable(Bool.True)
+	# The layout stops being usable below this, so keep the window manager
+	# out of that range. A minimum only binds on a resizable window.
+		.with_min_size({ width: 480, height: 400 })
 		.with_frame_pacing(Capped(120)),
 	|_host|
 		Ok({

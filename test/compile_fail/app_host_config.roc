@@ -11,6 +11,8 @@ transport = {
 	title: "private",
 	width: 800,
 	height: 600,
+	min_width: 0,
+	min_height: 0,
 	target_fps: 240,
 	resizable: Bool.False,
 	fullscreen: Bool.False,

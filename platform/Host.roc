@@ -121,6 +121,18 @@ Host := {
 			}
 		}
 
+	## Set the smallest window size the user can drag the window down to. Each
+	## negative dimension is clamped to `0`, which leaves that axis
+	## unconstrained. The minimum only applies to a resizable window, so pair it
+	## with `App.default.with_resizable(Bool.True)`.
+	## Receiver form: `host.set_window_min_size!(size)`.
+	set_window_min_size! : Host, { width : I32, height : I32 } => {}
+	set_window_min_size! = |_host, size|
+		HostHost.set_window_min_size!({
+			width: if size.width > 0 size.width else 0,
+			height: if size.height > 0 size.height else 0,
+		})
+
 	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
 	## uncapped. This neither selects a software renderer nor controls VSync.
 	## Note: On web/WASM, this has no effect as the browser controls frame timing.

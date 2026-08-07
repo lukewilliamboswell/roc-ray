@@ -1035,6 +1035,13 @@ pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
 }
 
+/// Set the smallest size the window may be resized to. raylib maps 0 to
+/// GLFW_DONT_CARE, leaving that axis unconstrained. Requires a live window, so
+/// this must be called after initWindow, and only binds on a resizable window.
+pub fn setWindowMinSize(width: c_int, height: c_int) void {
+    rl.SetWindowMinSize(width, height);
+}
+
 /// Get frame time (delta time) in seconds since the previous frame.
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();

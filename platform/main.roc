@@ -80,6 +80,7 @@ platform ""
 		"roc_host_read_file_raw": HostHost.read_file!,
 		"roc_host_set_screen_size": HostHost.set_screen_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
+		"roc_host_set_window_min_size": HostHost.set_window_min_size!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,

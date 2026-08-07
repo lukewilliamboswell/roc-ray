@@ -581,6 +581,10 @@ fn targetFpsCInt(value: i32) c_int {
     return if (value >= 0) @as(c_int, @intCast(value)) else 0;
 }
 
+fn nonNegativeCInt(value: i32) c_int {
+    return if (value > 0) @as(c_int, @intCast(value)) else 0;
+}
+
 fn pathExists(path: []const u8) bool {
     std.Io.Dir.cwd().access(defaultIo(), path, .{}) catch return false;
     return true;
@@ -2021,6 +2025,11 @@ fn hostedSetTargetFps(fps: i32) callconv(.c) void {
     raylib.setTargetFps(fps);
 }
 
+fn hostedSetWindowMinSize(args: abi.HostHostSet_window_min_sizeArgs) callconv(.c) void {
+    if (active_headless) return;
+    raylib.setWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
+}
+
 const CursorMode = enum {
     visible,
     hidden,
@@ -2071,6 +2080,16 @@ test "cursor mode codes map invalid values to visible" {
     try std.testing.expectEqual(CursorMode.hidden, cursorModeFromCode(1));
     try std.testing.expectEqual(CursorMode.locked, cursorModeFromCode(2));
     try std.testing.expectEqual(CursorMode.visible, cursorModeFromCode(255));
+}
+
+test "window minimums and exit keys clamp negatives to the no-op zero" {
+    // 0 is meaningful in both: GLFW_DONT_CARE for a minimum dimension, and
+    // KEY_NULL for the exit key. Negatives must land on it rather than wrap.
+    try std.testing.expectEqual(@as(c_int, 0), nonNegativeCInt(0));
+    try std.testing.expectEqual(@as(c_int, 0), nonNegativeCInt(-1));
+    try std.testing.expectEqual(@as(c_int, 0), nonNegativeCInt(std.math.minInt(i32)));
+    try std.testing.expectEqual(@as(c_int, 256), nonNegativeCInt(256));
+    try std.testing.expectEqual(@as(c_int, 640), nonNegativeCInt(640));
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
@@ -2477,6 +2496,7 @@ comptime {
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
+        @export(&hostedSetWindowMinSize, .{ .name = "roc_host_set_window_min_size" });
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
@@ -2755,6 +2775,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         window_title.ptr,
     );
     defer raylib.closeWindow();
+    // SetWindowMinSize needs a live window handle, so it must follow InitWindow.
+    raylib.setWindowMinSize(
+        nonNegativeCInt(app_config.min_width),
+        nonNegativeCInt(app_config.min_height),
+    );
     raylib.setTargetFps(targetFpsCInt(app_config.target_fps));
     if (app_config.cursor_visible) raylib.showCursor() else raylib.hideCursor();
     active_mouse_cursor_code = 255;

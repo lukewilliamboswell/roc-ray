@@ -74,9 +74,15 @@ extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
 /// `kind` codes for `UpdateInput`. Mirrored in `platform/Program.roc`.
 const INPUT_TICK: u8 = 0;
 const INPUT_FRAME: u8 = 1;
+const INPUT_EFFECT_RESULT: u8 = 2;
 
 /// `value_kind` codes for an `EffectResult`. Mirrored in `platform/Program.roc`.
 const VALUE_UNIT: u8 = 0;
+const VALUE_STR: u8 = 2;
+
+/// `kind` codes for a command returned by `update!`. Mirrored in `platform/Program.roc`.
+const CMD_READ_FILE: u8 = 0;
+const CMD_DELAY: u8 = 1;
 
 /// A message carrying no Roc-owned payload, used as the base for every variant.
 ///
@@ -127,6 +133,179 @@ fn tickInput(snapshot: HostState, frame_count: u64, timestamp_nanos: u64, frame_
     msg.frame_time = frame_time;
     return msg;
 }
+
+/// Build the message that reports a completed command.
+///
+/// Transfers `str_value` into the message; the caller must not decref it.
+fn effectResultInput(snapshot: HostState, id: u64, value_kind: u8, str_value: abi.RocStr, err: u8) UpdateInput {
+    var msg = emptyInput(INPUT_EFFECT_RESULT, snapshot);
+    msg.id = id;
+    msg.value_kind = value_kind;
+    msg.str_value = str_value;
+    msg.err = err;
+    return msg;
+}
+
+/// Blocking effects, run off the main thread.
+///
+/// The contract that makes this safe is narrow, and stating it plainly is the
+/// point of the whole design: **the worker never calls Roc, never allocates or
+/// frees Roc memory, never reads `active_roc_host`, and never touches a
+/// resource heap.** It takes plain-Zig requests and posts plain-Zig results;
+/// the main thread turns a result into a Roc value while draining the queue.
+///
+/// That is what buys non-blocking I/O without atomic refcounts. `roc_alloc`
+/// and the resource heaps stay exactly as single-threaded as they were.
+///
+/// Both rings are single-producer/single-consumer -- main writes requests and
+/// reads results, the worker does the reverse -- so acquire/release on the
+/// indices is sufficient and no lock is involved. Zig 0.16 moved `Mutex` into
+/// `std.Io` where locking is cancelable and takes an `Io`; sidestepping it
+/// keeps the boundary obviously just data.
+const EffectWorker = struct {
+    /// Power of two so the index wrap is a mask.
+    const capacity: usize = 64;
+    const mask: usize = capacity - 1;
+
+    const Request = struct {
+        id: u64,
+        path: [capture.path_capacity]u8,
+        path_len: usize,
+    };
+
+    /// `bytes` is owned by `allocator` until the main thread copies it into a
+    /// `RocStr` and frees it.
+    const Result = struct {
+        id: u64,
+        bytes: ?[]u8,
+        err: u8,
+    };
+
+    requests: [capacity]Request = undefined,
+    request_write: std.atomic.Value(usize) = .init(0),
+    request_read: std.atomic.Value(usize) = .init(0),
+
+    results: [capacity]Result = undefined,
+    result_write: std.atomic.Value(usize) = .init(0),
+    result_read: std.atomic.Value(usize) = .init(0),
+
+    should_stop: std.atomic.Value(bool) = .init(false),
+
+    /// Whether requests will be serviced. Separate from `thread` so the ring
+    /// can be tested without spawning one.
+    accepting: bool = false,
+    thread: ?std.Thread = null,
+    allocator: std.mem.Allocator = undefined,
+
+    fn start(self: *EffectWorker, allocator: std.mem.Allocator) void {
+        self.allocator = allocator;
+        self.should_stop.store(false, .release);
+        self.accepting = true;
+        self.thread = std.Thread.spawn(.{}, run, .{self}) catch |err| {
+            self.accepting = false;
+            // Running effects inline still works; results just arrive on the
+            // frame the command was issued rather than a later one.
+            std.log.warn("roc-ray could not start the effect worker ({s}); effects run inline", .{@errorName(err)});
+            return;
+        };
+    }
+
+    fn stop(self: *EffectWorker) void {
+        self.accepting = false;
+        if (self.thread) |thread| {
+            self.should_stop.store(true, .release);
+            thread.join();
+            self.thread = null;
+        }
+        // Results that completed after the final drain still own buffers.
+        while (self.takeResult()) |result| {
+            if (result.bytes) |bytes| self.allocator.free(bytes);
+        }
+    }
+
+    /// Queue a read. Returns false when the worker is absent or its ring is
+    /// full, which tells the caller to run the effect inline rather than drop
+    /// it -- a command must always produce exactly one result.
+    fn submitReadFile(self: *EffectWorker, id: u64, path: []const u8) bool {
+        if (!self.accepting or path.len > capture.path_capacity) return false;
+
+        const write = self.request_write.load(.monotonic);
+        if (write -% self.request_read.load(.acquire) >= capacity) return false;
+
+        const slot = &self.requests[write & mask];
+        // The worker cannot borrow the Roc string the path arrived in.
+        @memcpy(slot.path[0..path.len], path);
+        slot.path_len = path.len;
+        slot.id = id;
+        self.request_write.store(write +% 1, .release);
+        return true;
+    }
+
+    fn takeResult(self: *EffectWorker) ?Result {
+        const read = self.result_read.load(.monotonic);
+        if (read == self.result_write.load(.acquire)) return null;
+        const result = self.results[read & mask];
+        self.result_read.store(read +% 1, .release);
+        return result;
+    }
+
+    fn postResult(self: *EffectWorker, result: Result) void {
+        const write = self.result_write.load(.monotonic);
+        if (write -% self.result_read.load(.acquire) >= capacity) {
+            // The main thread has stopped draining; drop rather than block.
+            if (result.bytes) |bytes| self.allocator.free(bytes);
+            return;
+        }
+        self.results[write & mask] = result;
+        self.result_write.store(write +% 1, .release);
+    }
+
+    /// The worker loop. Nothing in here may touch Roc.
+    fn run(self: *EffectWorker) void {
+        // Its own IO: `mainThreadIo` is explicitly single-threaded.
+        var threaded: std.Io.Threaded = .init(self.allocator, .{});
+        defer threaded.deinit();
+        const io = threaded.io();
+
+        while (!self.should_stop.load(.acquire)) {
+            const read = self.request_read.load(.monotonic);
+            if (read == self.request_write.load(.acquire)) {
+                // Polling rather than a futex keeps the boundary to plain data.
+                // A millisecond of latency is immaterial next to a frame.
+                std.Io.sleep(io, .fromMilliseconds(1), .awake) catch return;
+                continue;
+            }
+
+            const request = self.requests[read & mask];
+            self.request_read.store(read +% 1, .release);
+
+            const path = request.path[0..request.path_len];
+            const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+                self.postResult(.{
+                    .id = request.id,
+                    .bytes = null,
+                    .err = switch (err) {
+                        error.FileNotFound => HOST_ERR_NOT_FOUND,
+                        else => HOST_ERR_READ_FAILED,
+                    },
+                });
+                continue;
+            };
+            self.postResult(.{ .id = request.id, .bytes = bytes, .err = 0 });
+        }
+    }
+};
+
+var effect_worker = EffectWorker{};
+
+/// The clock this frame reported to Roc, so a delay's deadline sits on the
+/// timeline the app sees rather than on the wall clock.
+var last_frame_nanos: u64 = 0;
+
+/// Commands whose result is due once a deadline passes.
+const PendingTimer = struct { id: u64, due_nanos: u64 };
+var pending_timers: [32]PendingTimer = undefined;
+var pending_timer_count: usize = 0;
 
 /// Messages waiting to reach `update!`, oldest first.
 ///
@@ -570,7 +749,12 @@ fn allocatorFromHost(host: *RocHost) std.mem.Allocator {
     return env.allocator;
 }
 
-fn defaultIo() std.Io {
+/// The main thread's IO implementation.
+///
+/// Named for the thread rather than for being a default because it is
+/// explicitly single-threaded: handing this to the effect worker would be
+/// unsound and would appear to work. The worker builds its own instead.
+fn mainThreadIo() std.Io {
     if (comptime builtin.is_test) {
         return std.testing.io;
     } else {
@@ -772,7 +956,7 @@ fn nonNegativeCInt(value: i32) c_int {
 }
 
 fn pathExists(path: []const u8) bool {
-    std.Io.Dir.cwd().access(defaultIo(), path, .{}) catch return false;
+    std.Io.Dir.cwd().access(mainThreadIo(), path, .{}) catch return false;
     return true;
 }
 
@@ -2100,7 +2284,7 @@ fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) Host
 
     const allocator = allocatorFromHost(roc_host);
     const path = path_arg.asSlice();
-    const bytes = std.Io.Dir.cwd().readFileAlloc(defaultIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
         var result = emptyHostReadFileRawResult();
         result.err = switch (err) {
             error.FileNotFound => HOST_ERR_NOT_FOUND,
@@ -2125,7 +2309,7 @@ fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
-    var map = tmx_loader.load(allocatorFromHost(roc_host), defaultIo(), path) catch |err| {
+    var map = tmx_loader.load(allocatorFromHost(roc_host), mainThreadIo(), path) catch |err| {
         return emptyTilemapLoadResult(tilemapLoadErrorCode(err));
     };
     defer map.deinit();
@@ -2258,7 +2442,7 @@ fn captureOutputDir() []const u8 {
 fn prepareCapturePath(buffer: []u8, path: []const u8) ?[]const u8 {
     const joined = capture.joinOutputPath(buffer, captureOutputDir(), path) orelse return null;
     if (std.fs.path.dirname(joined)) |parent| {
-        std.Io.Dir.cwd().createDirPath(defaultIo(), parent) catch return null;
+        std.Io.Dir.cwd().createDirPath(mainThreadIo(), parent) catch return null;
     }
     return joined;
 }
@@ -2280,7 +2464,7 @@ fn writeCaptureImage(image: raylib.CaptureImage, path: []const u8, bytes_out: ?*
     if (!image.exportPng(c_path.ptr)) return capture.err_write_failed;
 
     if (bytes_out) |out| {
-        const stat = std.Io.Dir.cwd().statFile(defaultIo(), resolved, .{}) catch {
+        const stat = std.Io.Dir.cwd().statFile(mainThreadIo(), resolved, .{}) catch {
             // The file is written; only its size is unknown.
             return capture.err_none;
         };
@@ -2410,7 +2594,7 @@ fn openCaptureGif() u8 {
     ) orelse return capture.err_write_failed;
 
     gif_encoder.open(
-        defaultIo(),
+        mainThreadIo(),
         &capture_gif,
         resolved,
         capture_session.width,
@@ -2432,7 +2616,7 @@ fn openCaptureWebm() u8 {
     ) orelse return capture.err_write_failed;
 
     capture_vp8.open(
-        defaultIo(),
+        mainThreadIo(),
         &capture_webm,
         resolved,
         capture_session.width,
@@ -3326,9 +3510,9 @@ const takeModelForRender = takeModel;
 /// queued: the model box is already `null` at that point, so `dropFinalModel`
 /// is correctly a no-op, but the undelivered messages still hold Roc references
 /// and would otherwise leak.
-fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox) ?i32 {
+fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_model: *RocBox) ?i32 {
     while (queue.pop()) |msg| {
-        const result = updateOnce(boxed_model, msg);
+        const result = updateOnce(queue, roc_host, snapshot, boxed_model, msg);
         if (result.tag == .Err) {
             const code: i32 = @intCast(result.payload_err());
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{code});
@@ -3343,22 +3527,30 @@ fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox) ?i32 {
 ///
 /// Consumes `input`: the message's Roc-owned payloads are transferred into the
 /// call. Returns the raw result so the caller owns the exit-code decision.
-fn updateOnce(boxed_model: *RocBox, input: UpdateInput) UpdateResult {
+fn updateOnce(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_model: *RocBox, input: UpdateInput) UpdateResult {
     const result = update_for_host(takeModel(boxed_model), input);
     if (result.tag == .Ok) {
         const ok = result.payload_ok();
         boxed_model.* = ok.model;
-        dispatchCmds(ok.cmds);
+        dispatchCmds(queue, roc_host, snapshot, ok.cmds);
     }
     return result;
 }
 
 /// Execute the commands returned by one `update!` call and release the list.
 ///
-/// Commit 1 recognizes no command kinds yet; an unknown kind is ignored rather
-/// than fatal so a host older than the app degrades instead of crashing.
-fn dispatchCmds(cmds: abi.RocList(CmdToHost)) void {
-    const roc_host = activeHost();
+/// A read goes to the worker so the frame is not held up. If the worker is
+/// absent or saturated the effect runs inline instead, which changes only *when*
+/// the result arrives, never whether it does -- every command yields exactly one
+/// result message.
+///
+/// Under `headlessMode()` reads always run inline: `all_tests.py` runs every
+/// example headlessly and CI compares the output, so a result landing on a
+/// different frame from run to run would make that nondeterministic.
+///
+/// An unknown kind is ignored rather than fatal, so a host older than the app
+/// degrades instead of crashing.
+fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, cmds: abi.RocList(CmdToHost)) void {
     defer {
         if (cmds.hasOneRef()) {
             for (cmds.allocationItems()) |item| item.decref(roc_host);
@@ -3368,7 +3560,71 @@ fn dispatchCmds(cmds: abi.RocList(CmdToHost)) void {
 
     for (cmds.items()) |cmd| {
         switch (cmd.kind) {
+            CMD_READ_FILE => {
+                const path = cmd.path.asSlice();
+                if (headlessMode() or !effect_worker.submitReadFile(cmd.id, path)) {
+                    readFileInline(queue, roc_host, snapshot, cmd.id, path);
+                }
+            },
+            CMD_DELAY => armTimer(cmd.id, cmd.millis),
             else => if (TRACE_HOST) std.log.debug("[HOST] Ignoring cmd kind {d}", .{cmd.kind}),
+        }
+    }
+}
+
+/// Run a read on the main thread and queue its result for the next drain.
+///
+/// Still delivered as a message rather than returned, so app code takes exactly
+/// the same path whether or not the work went off-thread.
+fn readFileInline(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, id: u64, path: []const u8) void {
+    const allocator = allocatorFromHost(roc_host);
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+        const code: u8 = switch (err) {
+            error.FileNotFound => HOST_ERR_NOT_FOUND,
+            else => HOST_ERR_READ_FAILED,
+        };
+        queue.push(roc_host, effectResultInput(snapshot, id, VALUE_UNIT, abi.RocStr.empty(), code));
+        return;
+    };
+    defer allocator.free(bytes);
+    queue.push(roc_host, effectResultInput(snapshot, id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
+}
+
+/// Record a delay so its result can be delivered once the deadline passes.
+fn armTimer(id: u64, millis: u64) void {
+    if (pending_timer_count == pending_timers.len) {
+        std.log.warn("roc-ray timer table full; dropping delay {d}", .{id});
+        return;
+    }
+    pending_timers[pending_timer_count] = .{ .id = id, .due_nanos = last_frame_nanos + millis * std.time.ns_per_ms };
+    pending_timer_count += 1;
+}
+
+/// Queue a result for every timer whose deadline has passed.
+fn expireTimers(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, now_nanos: u64) void {
+    var index: usize = 0;
+    while (index < pending_timer_count) {
+        if (pending_timers[index].due_nanos <= now_nanos) {
+            queue.push(roc_host, effectResultInput(snapshot, pending_timers[index].id, VALUE_UNIT, abi.RocStr.empty(), 0));
+            pending_timer_count -= 1;
+            pending_timers[index] = pending_timers[pending_timer_count];
+        } else {
+            index += 1;
+        }
+    }
+}
+
+/// Move finished worker results onto the message queue.
+///
+/// The only place a worker result becomes a Roc value, and it runs on the main
+/// thread -- which is exactly what keeps `roc_alloc` single-threaded.
+fn drainWorkerResults(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState) void {
+    while (effect_worker.takeResult()) |result| {
+        if (result.bytes) |bytes| {
+            defer effect_worker.allocator.free(bytes);
+            queue.push(roc_host, effectResultInput(snapshot, result.id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
+        } else {
+            queue.push(roc_host, effectResultInput(snapshot, result.id, VALUE_UNIT, abi.RocStr.empty(), result.err));
         }
     }
 }
@@ -3877,6 +4133,76 @@ test "releasing the queue frees the Roc payloads of undelivered messages" {
     try std.testing.expectEqual(@as(usize, 0), queue.len);
 }
 
+test "the effect worker ring round-trips a request and a result" {
+    // Exercised without a thread: the ring is the contract, and both ends are
+    // just plain data. Anything Roc-owned would be a bug here by construction.
+    var worker = EffectWorker{};
+    worker.allocator = std.testing.allocator;
+    worker.accepting = true;
+
+    try std.testing.expect(worker.submitReadFile(7, "some/path.txt"));
+
+    const read = worker.request_read.load(.monotonic);
+    try std.testing.expect(read != worker.request_write.load(.acquire));
+    const request = worker.requests[read & EffectWorker.mask];
+    try std.testing.expectEqual(@as(u64, 7), request.id);
+    try std.testing.expectEqualStrings("some/path.txt", request.path[0..request.path_len]);
+    worker.request_read.store(read +% 1, .release);
+
+    worker.postResult(.{ .id = 7, .bytes = null, .err = HOST_ERR_NOT_FOUND });
+    const result = worker.takeResult().?;
+    try std.testing.expectEqual(@as(u64, 7), result.id);
+    try std.testing.expectEqual(HOST_ERR_NOT_FOUND, result.err);
+    try std.testing.expectEqual(@as(?EffectWorker.Result, null), worker.takeResult());
+
+}
+
+test "a saturated request ring refuses rather than dropping the command" {
+    // Refusing is what lets the caller fall back to running the effect inline.
+    // Silently dropping would leave an app waiting for a result forever.
+    var worker = EffectWorker{};
+    worker.allocator = std.testing.allocator;
+    worker.accepting = true;
+
+    var accepted: usize = 0;
+    while (accepted < EffectWorker.capacity) : (accepted += 1) {
+        try std.testing.expect(worker.submitReadFile(accepted, "x"));
+    }
+    try std.testing.expect(!worker.submitReadFile(9999, "x"));
+
+}
+
+test "an unstarted worker refuses work so the caller runs it inline" {
+    var worker = EffectWorker{};
+    worker.allocator = std.testing.allocator;
+    try std.testing.expect(!worker.submitReadFile(1, "README.md"));
+}
+
+test "timers fire once their deadline passes and are then forgotten" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var queue = MsgQueue{};
+    const snapshot = emptyTestSnapshot();
+    pending_timer_count = 0;
+    last_frame_nanos = 0;
+
+    armTimer(1, 10);
+    armTimer(2, 30);
+    try std.testing.expectEqual(@as(usize, 2), pending_timer_count);
+
+    expireTimers(&queue, &roc_host, snapshot, 15 * std.time.ns_per_ms);
+    try std.testing.expectEqual(@as(usize, 1), pending_timer_count);
+    const fired = queue.pop().?;
+    try std.testing.expectEqual(INPUT_EFFECT_RESULT, fired.kind);
+    try std.testing.expectEqual(@as(u64, 1), fired.id);
+    fired.decref(&roc_host);
+
+    expireTimers(&queue, &roc_host, snapshot, 40 * std.time.ns_per_ms);
+    try std.testing.expectEqual(@as(usize, 0), pending_timer_count);
+    queue.releaseAll(&roc_host);
+}
+
 test "a full message queue drops the newest rather than evicting a queued one" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -3913,6 +4239,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         return 1;
     };
     defer window_title.deinit();
+
+    // Only the windowed host runs a worker: headless executes every effect
+    // inline so its output stays bit-identical run to run for CI.
+    effect_worker.start(allocator);
+    defer effect_worker.stop();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -4013,12 +4344,15 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             text_input,
         );
 
+        last_frame_nanos = now_ns;
         queue.push(roc_host, frameInput(platform_state));
         queue.push(roc_host, tickInput(platform_state, frame_count, now_ns, frame_time));
+        drainWorkerResults(&queue, roc_host, platform_state);
+        expireTimers(&queue, roc_host, platform_state, now_ns);
 
         // Every message is delivered before the drawing scope opens, so
         // `update!` structurally cannot draw -- it is never handed a Frame.
-        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
+        if (drainQueue(&queue, roc_host, platform_state, &boxed_model)) |code| {
             exit_code = code;
             break;
         }
@@ -4077,10 +4411,13 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             &.{},
         );
 
+        last_frame_nanos = timestamp_nanos;
         queue.push(roc_host, frameInput(platform_state));
         queue.push(roc_host, tickInput(platform_state, frame_count, timestamp_nanos, frame_time));
+        drainWorkerResults(&queue, roc_host, platform_state);
+        expireTimers(&queue, roc_host, platform_state, timestamp_nanos);
 
-        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
+        if (drainQueue(&queue, roc_host, platform_state, &boxed_model)) |code| {
             exit_code = code;
             break;
         }

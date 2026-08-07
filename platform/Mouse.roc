@@ -4,6 +4,9 @@
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `State` here and in the package are the same
 ## nominal type and its receivers are available either way.
+##
+## Receivers are documented in the [roc-ray-types docs](../types/),
+## which is where the nominal is declared.
 import rrt.Mouse as RrtMouse
 
 Mouse := [].{

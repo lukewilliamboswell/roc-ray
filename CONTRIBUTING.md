@@ -201,6 +201,26 @@ When adding an example:
 Public API changes should update module documentation, relevant examples, and
 the user-facing README when they change how an app is started or structured.
 
+## API documentation
+
+The published reference is two doc sets: the platform at `www/<version>/` and
+the `roc-ray-types` package at `www/<version>/types/`. Both are required.
+`roc docs` attaches a nominal's receivers to the module that *declares* it, so
+the platform's re-export modules carry the signatures while `Camera2D.with_zoom`,
+`Mouse.State.position` and the rest live only on the package's pages. Each
+re-export module links across.
+
+Build and validate both locally:
+
+```bash
+scripts/build_docs.py --check              # temp dir, touches nothing
+scripts/build_docs.py --version 0.10.0     # writes www/0.10.0 and www/0.10.0/types
+```
+
+`--check` fails on a module missing a page, a broken relative link, or a
+re-export module that stops pointing at the package docs. The release workflow
+runs `--check` before building and the versioned form when publishing.
+
 ## ABI and host changes
 
 `platform/main.roc` and `platform/main-wayland.roc` are the same platform built

@@ -6,6 +6,9 @@
 ##
 ## For the common "move per frame" case you can use `Host.frame_time` directly
 ## (seconds since the previous frame) without touching this module.
+##
+## Receivers are documented in the [roc-ray-types docs](../types/),
+## which is where the nominal is declared.
 import rrt.Time as RrtTime
 
 Time := [].{

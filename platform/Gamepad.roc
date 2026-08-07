@@ -3,6 +3,9 @@
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so the nominal types are shared either way.
+##
+## Receivers are documented in the [roc-ray-types docs](../types/),
+## which is where the nominal is declared.
 import rrt.Gamepad as RrtGamepad
 
 Gamepad := [].{

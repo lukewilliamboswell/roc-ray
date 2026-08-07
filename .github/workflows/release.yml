@@ -78,8 +78,7 @@ jobs:
       - name: Validate Roc examples and docs
         run: |
           scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
-          rm -rf /tmp/roc-ray-release-docs
-          roc docs platform/main.roc --output=/tmp/roc-ray-release-docs
+          python3 scripts/build_docs.py --check
 
       - name: Verify release hosts
         run: scripts/check_release_hosts.py
@@ -295,10 +294,12 @@ jobs:
         with:
           docs_root: www
 
+      # Builds the platform docs and, nested under them at `types/`, the
+      # roc-ray-types package docs. Both are needed: `roc docs` attaches a
+      # nominal's receivers to the module that declares it, so the platform's
+      # re-export modules carry the signatures but not the receivers.
       - name: Generate docs
-        run: |
-          rm -rf "www/${{ needs.build.outputs.docs_version }}"
-          roc docs platform/main.roc --output="www/${{ needs.build.outputs.docs_version }}"
+        run: python3 scripts/build_docs.py --version "${{ needs.build.outputs.docs_version }}"
 
       - name: Update docs index
         uses: roc-lang/release-package/actions/docs-index@d2560ead9f724bfaabfbc8134b8895e120171064

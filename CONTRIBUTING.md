@@ -324,6 +324,31 @@ source checkout with:
 scripts/build-raylib-wayland.sh /path/to/raylib-6.0
 ```
 
+## Vendored encoders
+
+Screenshots go through raylib's own PNG writer, but GIF and video need encoders
+the vendored raylib does not have. Both are vendored as *source* and compiled by
+`zig build` for every target, so there is no configure step, no prebuilt archive
+to re-vendor per platform, and no per-OS CI runner in the loop:
+
+- `vendor/msf_gif/` -- a single-header GIF encoder (MIT or public domain). Built
+  freestanding like the host; the handful of libc declarations it needs come
+  from the two-file `shim/` directory beside it.
+- `vendor/libvpx/` -- the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
+  Only the pure-C encoder is vendored: every SIMD directory and every assembly
+  source is excluded, because those are NASM/GAS syntax Zig cannot assemble.
+  `vendor/libvpx/README.md` records the `configure` invocation that produced the
+  generated headers in `config/`, which is the one thing that has to be redone
+  when upgrading.
+
+Both expose only primitives and opaque pointers to Zig through a small C shim,
+so the freestanding host module never needs C headers. Each produces its own
+static archive, copied into `platform/targets/<target>/` and named in the
+`targets:` block of `platform/main.roc`, exactly as `libraylib.a` is.
+
+libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
+added to the glibc link stubs in `platform/targets/*/libc_stub.s`.
+
 Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
 Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
 ARM Linux is not currently included.

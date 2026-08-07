@@ -44,6 +44,15 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
 
+      # Pixel-level rendering and capture checks. They need a GL context, so
+      # they run under a virtual display; without this the target never runs.
+      - name: Run graphical smoke tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run -a zig build graphical-smoke
+
       - name: Bundle platform
         run: |
           # The platform depends on roc-ray-types by relative path, which cannot

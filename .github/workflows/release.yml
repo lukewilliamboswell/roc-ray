@@ -121,7 +121,7 @@ jobs:
           # the release notes use.
           types_url_base="https://github.com/${{ github.repository }}/releases/download/${{ steps.validate.outputs.release_version }}"
 
-          default_output="$(scripts/bundle.sh --platform default --output-dir dist --types-url-base "$types_url_base")"
+          default_output="$(scripts/bundle.sh --platform default --output-dir dist --types-output-dir dist-types --types-url-base "$types_url_base")"
           echo "$default_output"
           default_bundle="$(printf '%s\n' "$default_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$default_bundle" || ! -f "$default_bundle" ]]; then
@@ -130,13 +130,13 @@ jobs:
           fi
 
           types_bundle_name="$(printf '%s\n' "$default_output" | sed -n 's|^Types package bundle: ||p' | tail -1)"
-          types_bundle="dist/$types_bundle_name"
+          types_bundle="dist-types/$types_bundle_name"
           if [[ -z "$types_bundle_name" || ! -f "$types_bundle" ]]; then
             echo "Error: could not determine roc-ray-types bundle filename"
             exit 1
           fi
 
-          wayland_output="$(scripts/bundle.sh --platform wayland --output-dir dist --types-url-base "$types_url_base")"
+          wayland_output="$(scripts/bundle.sh --platform wayland --output-dir dist --types-output-dir dist-types --types-url-base "$types_url_base")"
           echo "$wayland_output"
           wayland_bundle="$(printf '%s\n' "$wayland_output" | awk '/^Created:/ {print $2}' | tail -1)"
           if [[ -z "$wayland_bundle" || ! -f "$wayland_bundle" ]]; then
@@ -162,6 +162,17 @@ jobs:
         with:
           bundle_glob: dist/*.tar.zst
           bundle_manifest_path: .release/bundle-manifest.json
+
+      # prepare-bundles requires a non-empty test matrix for everything it sees,
+      # and the types package has no app to build from it. Add it afterwards so
+      # it still ships at the URL the platform bundles were rewritten to point at.
+      - name: Add roc-ray-types release asset
+        run: |
+          python3 scripts/release_helpers.py add-release-asset \
+            --path "${{ steps.bundle.outputs.types_bundle }}" \
+            --name roc-ray-types \
+            --bundle-dir .release/bundles \
+            --release-list-file .release/release-bundles.json
 
       - name: Upload release bundles
         uses: actions/upload-artifact@v4

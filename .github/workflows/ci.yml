@@ -51,7 +51,9 @@ jobs:
           # below. Port 8000 matches the HTTP server step.
           output="$(scripts/bundle.sh --types-url-base http://127.0.0.1:8000)"
           echo "$output"
-          platform_bundle="$(printf '%s\n' "$output" | sed -n 's|^Created: .*/||p' | tail -1)"
+          # Basename of the `Created:` path; Git Bash on Windows reports
+          # backslash separators, so strip either.
+          platform_bundle="$(printf '%s\n' "$output" | sed -n 's|^Created: ||p' | tail -1 | sed 's|.*[/\\]||')"
           if [ -z "$platform_bundle" ]; then
             echo "Error: could not determine the platform bundle filename"
             exit 1

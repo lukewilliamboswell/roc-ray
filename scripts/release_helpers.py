@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,16 @@ def main() -> int:
     manifest.add_argument("--default-bundle", required=True)
     manifest.add_argument("--wayland-bundle", required=True)
     manifest.add_argument("--output", required=True)
+
+    asset = subcommands.add_parser(
+        "add-release-asset",
+        help="publish an extra file as a release asset without giving it a test entry",
+    )
+    asset.add_argument("--path", required=True)
+    asset.add_argument("--name", required=True)
+    asset.add_argument("--bundle-dir", required=True)
+    asset.add_argument("--release-list-file", required=True)
+    asset.set_defaults(func=cmd_add_release_asset)
     manifest.set_defaults(func=cmd_write_bundle_manifest)
 
     previous = subcommands.add_parser("resolve-previous-default-url")
@@ -83,6 +94,33 @@ def cmd_write_bundle_manifest(args: argparse.Namespace) -> int:
             },
         ],
     )
+    return 0
+
+
+def cmd_add_release_asset(args: argparse.Namespace) -> int:
+    """Add a file to the prepared release assets.
+
+    `prepare-bundles` only handles platform bundles: every file it sees must
+    carry a non-empty test matrix. The roc-ray-types package has to ship as a
+    release asset, because the platform bundles reference it by that URL, but
+    there is no app to build from it and so nothing to test. Append it after
+    the fact instead.
+    """
+    source = require_bundle(args.path, "release asset")
+    bundle_dir = Path(args.bundle_dir)
+    if not bundle_dir.is_dir():
+        raise RuntimeError(f"release bundle directory is missing: {bundle_dir}")
+
+    release_list = read_json(args.release_list_file)
+    if not isinstance(release_list, list) or not release_list:
+        raise RuntimeError("release bundle list must be a non-empty JSON array")
+    if any(entry.get("artifact_file") == source.name for entry in release_list):
+        raise RuntimeError(f"release asset already present: {source.name}")
+
+    shutil.copy2(source, bundle_dir / source.name)
+    release_list.append({"name": args.name, "artifact_file": source.name, "source_path": str(source)})
+    write_json(args.release_list_file, release_list)
+    print(f"Added release asset {source.name} as '{args.name}'")
     return 0
 
 
@@ -142,6 +180,24 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         f'platform "{wayland_url}"',
         "```",
     ]
+    types_file = next(
+        (b.get("artifact_file") for b in bundles if b.get("name") == "roc-ray-types"), None
+    )
+    if types_file:
+        types_url = release_asset_url(repo, release_version, types_file)
+        lines.extend([
+            "",
+            "### roc-ray-types package",
+            "",
+            "Shared data types and pure helpers. The platform bundles above already depend on this",
+            "package; add it to your app only if you also want to use these types from a reusable",
+            "package of your own, so that both resolve the same types.",
+            "",
+            "```roc",
+            f'"{types_url}"',
+            "```",
+        ])
+
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
         lines.extend(["", "## Docs", "", f"- [View docs for {release_version}]({docs_url})"])

@@ -6,6 +6,7 @@ platform_dir="$root_dir/platform"
 output_dir="$root_dir"
 package="default"
 types_url_base=""
+types_output_dir=""
 roc_bundle_args=()
 roc_bin="${ROC:-roc}"
 
@@ -72,6 +73,18 @@ while [[ $# -gt 0 ]]; do
             types_url_base="${2%/}"
             shift 2
             ;;
+        --types-output-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "error: --types-output-dir requires a directory" >&2
+                exit 1
+            fi
+            types_output_dir="$2"
+            shift 2
+            ;;
+        --types-output-dir=*)
+            types_output_dir="${1#--types-output-dir=}"
+            shift
+            ;;
         --types-url-base=*)
             types_url_base="${1#--types-url-base=}"
             types_url_base="${types_url_base%/}"
@@ -115,6 +128,16 @@ esac
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
 
+# The types bundle can be written elsewhere so a release glob that collects
+# platform bundles does not also pick it up -- it is a release asset, but it is
+# not a platform bundle and has nothing to test.
+if [[ -z "$types_output_dir" ]]; then
+    types_output_dir="$output_dir"
+else
+    mkdir -p "$types_output_dir"
+    types_output_dir="$(cd "$types_output_dir" && pwd)"
+fi
+
 # The platform header points at the roc-ray-types package by relative path so
 # local development works without a published artifact. `roc bundle` silently
 # drops such a dependency -- the archive builds and then fails at the consumer
@@ -139,12 +162,14 @@ if [[ -n "$types_url_base" ]]; then
     # Bundle from inside the package directory. Bundling `package/main.roc` from
     # the repo root roots the archive at `package/`, one level deeper than roc
     # resolves on extraction.
-    if ! types_output="$(cd "$root_dir/package" && "$roc_bin" bundle main.roc --output-dir "$output_dir" 2>&1)"; then
+    if ! types_output="$(cd "$root_dir/package" && "$roc_bin" bundle main.roc --output-dir "$types_output_dir" 2>&1)"; then
         echo "$types_output" >&2
         echo "error: failed to bundle the roc-ray-types package" >&2
         exit 1
     fi
-    types_bundle="$(printf '%s\n' "$types_output" | sed -n 's|^Created: .*/||p' | tail -1)"
+    # `Created:` carries an absolute path; take its basename. Git Bash on Windows
+    # reports backslash separators, so strip either.
+    types_bundle="$(printf '%s\n' "$types_output" | sed -n 's|^Created: ||p' | tail -1 | sed 's|.*[/\\]||')"
     if [[ -z "$types_bundle" ]]; then
         echo "$types_output" >&2
         echo "error: could not determine the roc-ray-types bundle filename" >&2
@@ -152,6 +177,7 @@ if [[ -n "$types_url_base" ]]; then
     fi
     types_url="$types_url_base/$types_bundle"
     echo "Types package bundle: $types_bundle"
+    echo "Types package path: $types_output_dir/$types_bundle"
     echo "Types package URL: $types_url"
 fi
 

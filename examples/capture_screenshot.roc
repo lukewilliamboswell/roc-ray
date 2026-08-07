@@ -5,6 +5,7 @@ import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Text
 
 ## Take a single screenshot, and show what the output sandbox refuses.
@@ -30,7 +31,7 @@ Model : {
 	result : Text.Prepared,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -53,12 +54,58 @@ init! = App.init(
 		},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+## Screenshots are host effects driven by input, so they belong here. Asking
+## for one during drawing would put an effect outside the message stream.
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
+
+			# `..` cannot reach outside the output directory, so this reports
+			# PathEscapesOutputDir rather than writing beside the example source.
+			escaped =
+				if host.key_pressed(KeyE) {
+					match Capture.screenshot!("../escaped.png") {
+						Err(PathEscapesOutputDir) => Ok(model.refused)
+						# Any other outcome means the sandbox let something through.
+						_ => Ok(model.save_failed)
+					}
+				} else {
+					Err(NotRequested)
+				}
+
+			saved =
+				if host.key_pressed(KeyS) or host.frame_count == 3 {
+					match Capture.screenshot!("scene.png") {
+						Ok({}) => Ok(model.saved)
+						Err(_) => Ok(model.save_failed)
+					}
+				} else {
+					Err(NotRequested)
+				}
+
+			# The screenshot is written at the end of this frame, so leave the
+			# host a frame to do it before asking to exit.
+			if host.frame_count > 3 {
+				host.exit!(0)
+			}
+
+			next = match (escaped, saved) {
+				(Ok(text), _) => { ..model, result: text }
+				(_, Ok(text)) => { ..model, result: text }
+				_ => model
+			}
+			Ok({ model: next, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
 	}
 
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
 	model.help.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
@@ -70,38 +117,5 @@ render! = |model, host, frame| {
 		style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
 	})
 
-	# `..` cannot reach outside the output directory, so this reports
-	# PathEscapesOutputDir rather than writing beside the example source.
-	escaped =
-		if host.key_pressed(KeyE) {
-			match Capture.screenshot!("../escaped.png") {
-				Err(PathEscapesOutputDir) => Ok(model.refused)
-				# Any other outcome means the sandbox let something through.
-				_ => Ok(model.save_failed)
-			}
-		} else {
-			Err(NotRequested)
-		}
-
-	saved =
-		if host.key_pressed(KeyS) or host.frame_count == 3 {
-			match Capture.screenshot!("scene.png") {
-				Ok({}) => Ok(model.saved)
-				Err(_) => Ok(model.save_failed)
-			}
-		} else {
-			Err(NotRequested)
-		}
-
-	# The screenshot is written at the end of this frame, so leave the host a
-	# frame to do it before asking to exit.
-	if host.frame_count > 3 {
-		host.exit!(0)
-	}
-
-	match (escaped, saved) {
-		(Ok(text), _) => Ok({ ..model, result: text })
-		(_, Ok(text)) => Ok({ ..model, result: text })
-		_ => Ok(model)
-	}
+	Ok(model)
 }

@@ -5,6 +5,7 @@ import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Text
 
 ## Render an animated bar chart to a file, with no runtime capture code.
@@ -30,7 +31,7 @@ Model : {
 	status : Text.Prepared,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 bar_count : U64
 bar_count = 12
@@ -66,26 +67,37 @@ init! = App.init(
 		}),
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	elapsed = model.elapsed + host.frame_time
+## Elapsed time advances on the tick rather than inside the draw, so the plot
+## is a pure function of the model when `render!` runs.
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Tick(tick) => Ok({ model: { ..model, elapsed: model.elapsed + tick.frame_time }, cmds: [] })
 
+		Frame(host) => {
+			# The host finalizes the file itself once the recording reaches its
+			# frame cap, which leaves the session idle. That is the signal there
+			# is nothing left to capture, so shut down.
+			match Capture.status!() {
+				Idle => host.exit!(0)
+				Failed(_) => host.exit!(1)
+				Active(_) => {}
+			}
+			Ok({ model: model, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
+	}
+
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
 	model.status.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
 
-	draw_bars!(frame, elapsed)
+	draw_bars!(frame, model.elapsed)
 
-	# The host finalizes the file itself once the recording reaches its frame
-	# cap, which leaves the session idle. That is the signal there is nothing
-	# left to capture, so shut down.
-	match Capture.status!() {
-		Idle => host.exit!(0)
-		Failed(_) => host.exit!(1)
-		Active(_) => {}
-	}
-
-	Ok({ ..model, elapsed: elapsed })
+	Ok(model)
 }
 
 draw_bars! : Draw.Frame, F32 => {}

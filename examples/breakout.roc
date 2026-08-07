@@ -5,6 +5,7 @@ import rr.Audio
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Math
 
 Brick : {
@@ -64,7 +65,7 @@ StepResult : {
 	paddle_hit : Bool,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -430,23 +431,35 @@ play_step_events! = |sounds, events| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+## `advance_game` was already a pure step returning events, and the events were
+## already interpreted effectfully -- so this split is mostly a matter of moving
+## the seam that was there all along.
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
+
+			result = advance_game(model.game, frame_input(host))
+			if result.paddle_hit {
+				model.sounds.paddle.play!()
+			}
+			play_step_events!(model.sounds, result.events)
+
+			Ok({ model: { ..model, game: result.game }, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
 	}
 
-	result = advance_game(model.game, frame_input(host))
-	if result.paddle_hit {
-		model.sounds.paddle.play!()
-	}
-	play_step_events!(model.sounds, result.events)
-	next = { ..model, game: result.game }
-
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.ray_white)
-	draw_game!(frame, next.game)
+	draw_game!(frame, model.game)
 
-	Ok(next)
+	Ok(model)
 }
 
 draw_brick! : Draw.Frame, Brick => {}

@@ -5,6 +5,7 @@ import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
@@ -23,6 +24,12 @@ Model : {
 	frame : U64,
 	pointer : { x : F32, y : F32 },
 	clicking : Bool,
+
+	## What `host.mouse` actually reported this frame, as distinct from the
+	## scripted `pointer` above. Hover and press styling are drawn from this,
+	## so the recording shows what the app was really told.
+	mouse : { x : F32, y : F32 },
+	held : Bool,
 	clicks : U64,
 	toggled : Bool,
 	slider : F32,
@@ -32,7 +39,7 @@ Model : {
 	counter_labels : List(Text.Prepared),
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
@@ -76,6 +83,8 @@ init! = App.init(
 			frame: 0,
 			pointer: { x: 40, y: 300 },
 			clicking: Bool.False,
+			mouse: { x: 40, y: 300 },
+			held: Bool.False,
 			clicks: 0,
 			toggled: Bool.False,
 			slider: 0,
@@ -96,59 +105,77 @@ prepare_counter_labels! = |index, acc|
 		prepare_counter_labels!(index + 1, List.append(acc, label))
 	}
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	# Drive the pointer for the *next* frame from the script, then read
-	# `host.mouse` exactly as any app would.
-	step = pointer_for_frame(model.frame)
-	Capture.set_virtual_mouse!(
-		if step.clicking Capture.clicking_at(step.pos) else Capture.at(step.pos),
-	)
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			# Drive the pointer for the *next* frame from the script, then read
+			# `host.mouse` exactly as any app would.
+			step = pointer_for_frame(model.frame)
+			Capture.set_virtual_mouse!(
+				if step.clicking Capture.clicking_at(step.pos) else Capture.at(step.pos),
+			)
 
-	mouse = host.mouse.position()
-	over_increment = inside(mouse, increment_button)
-	over_toggle = inside(mouse, toggle_button)
+			mouse = host.mouse.position()
+			over_increment = inside(mouse, increment_button)
+			over_toggle = inside(mouse, toggle_button)
 
-	# Ordinary edge-triggered click handling. The virtual pointer produces real
-	# pressed-this-frame bits, so this needs no special casing.
-	pressed = host.mouse.button_pressed(Left)
-	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
-	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
+			# Ordinary edge-triggered click handling. The virtual pointer
+			# produces real pressed-this-frame bits, so this needs no special
+			# casing.
+			pressed = host.mouse.button_pressed(Left)
+			clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
+			toggled = if pressed and over_toggle !(model.toggled) else model.toggled
 
-	held = host.mouse.button_down(Left)
-	slider =
-		if held and inside_slider(mouse) {
-			clamp_unit((mouse.x - slider_track.x) / slider_track.width)
-		} else {
-			model.slider
+			held = host.mouse.button_down(Left)
+			slider =
+				if held and inside_slider(mouse) {
+					clamp_unit((mouse.x - slider_track.x) / slider_track.width)
+				} else {
+					model.slider
+				}
+
+			if model.frame >= recorded_frames {
+				host.exit!(0)
+			}
+
+			Ok({
+				model: {
+					..model,
+					frame: model.frame + 1,
+					pointer: step.pos,
+					clicking: step.clicking,
+					mouse: mouse,
+					held: held,
+					clicks: clicks,
+					toggled: toggled,
+					slider: slider,
+				},
+				cmds: [],
+			})
 		}
+
+		_ => Ok({ model: model, cmds: [] })
+	}
+
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
+	over_increment = inside(model.mouse, increment_button)
+	over_toggle = inside(model.mouse, toggle_button)
 
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 60, y: 60 }, color: Color.white, align: Text.align_top_left })
 
-	draw_button!(frame, increment_button, over_increment, held and over_increment, model.increment_label)
-	draw_button!(frame, toggle_button, over_toggle, toggled, model.toggle_label)
-	draw_slider!(frame, slider)
+	draw_button!(frame, increment_button, over_increment, model.held and over_increment, model.increment_label)
+	draw_button!(frame, toggle_button, over_toggle, model.toggled, model.toggle_label)
+	draw_slider!(frame, model.slider)
 
-	when_counter = List.get(model.counter_labels, U64.to_u64(clicks))
-	match when_counter {
+	match List.get(model.counter_labels, U64.to_u64(model.clicks)) {
 		Ok(label) => label.draw!(frame, { pos: { x: 60, y: 100 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
 		Err(_) => {}
 	}
 
-	if model.frame >= recorded_frames {
-		host.exit!(0)
-	}
-
-	Ok({
-		..model,
-		frame: model.frame + 1,
-		pointer: step.pos,
-		clicking: step.clicking,
-		clicks: clicks,
-		toggled: toggled,
-		slider: slider,
-	})
+	Ok(model)
 }
 
 ## Where the scripted pointer is on a given frame, and whether it is clicking.

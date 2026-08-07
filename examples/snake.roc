@@ -5,6 +5,7 @@ import rr.Audio
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Math
 
 Cell : {
@@ -31,7 +32,7 @@ Model : {
 	start_sound : Audio.Sound,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -238,27 +239,37 @@ advance_playing! = |model, host| {
 	advance_fixed_steps!(with_accumulator, host)
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
-
-	next = match model.state {
-		Playing => advance_playing!(model, host)
-		GameOver =>
-			if host.key_pressed(KeySpace) {
-				model.start_sound.play!()
-				new_game!(model, host)
-			} else {
-				model
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
 			}
+
+			next = match model.state {
+				Playing => advance_playing!(model, host)
+				GameOver =>
+					if host.key_pressed(KeySpace) {
+						model.start_sound.play!()
+						new_game!(model, host)
+					} else {
+						model
+					}
+				}
+
+			Ok({ model: next, cmds: [] })
 		}
 
-	frame.clear!(Color.ray_white)
-	draw_game!(frame, next)
+		_ => Ok({ model: model, cmds: [] })
+	}
 
-	Ok(next)
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
+	frame.clear!(Color.ray_white)
+	draw_game!(frame, model)
+
+	Ok(model)
 }
 
 cell_rect : Cell -> Math.Rect

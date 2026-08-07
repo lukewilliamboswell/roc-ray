@@ -6,16 +6,18 @@ import rr.Color
 import rr.Draw
 import rr.Host
 import rr.Math
+import rr.Program
 import rr.Text
 
 Model : {
 	player : Math.Vec2,
 	zoom : F32,
 	rotation : F32,
+	mouse : Math.Vec2,
 	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -43,6 +45,7 @@ init! = App.init(
 			player: { x: 400, y: 300 },
 			zoom: 1,
 			rotation: 0,
+			mouse: { x: 0, y: 0 },
 			hud: Box.box({
 				title: Text.from("Camera world").size(24).prepare!()?,
 				subtitle: Text.from("world-space draw + screen-space HUD").size(18).prepare!()?,
@@ -69,35 +72,46 @@ move_player = |player, host| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
+
+			player = move_player(model.player, host)
+			zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
+			rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
+			rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+
+			Ok({ model: { ..model, player, zoom, rotation, mouse: host.mouse.position() }, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
 	}
 
-	player = move_player(model.player, host)
-	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
-	rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
-
-	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)?
-	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })
+## The camera and both mouse projections are derived rather than stored: they
+## are a pure function of the model, so keeping them out of it means there is
+## one less thing that can disagree with itself.
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
+render! = |model, frame| {
+	camera = (Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom })?).with_rotation(model.rotation)?
+	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
-
-	next = { ..model, player, zoom, rotation }
 
 	frame.clear!(Color.ray_white)
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, player, mouse_world)
+			draw_world!(world_frame, model.player, mouse_world)
 			Ok({})
 		},
 	)?
 	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
-	draw_hud!(frame, next)
+	draw_hud!(frame, model)
 
-	Ok(next)
+	Ok(model)
 }
 
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}

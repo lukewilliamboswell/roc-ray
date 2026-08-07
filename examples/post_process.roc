@@ -3,8 +3,8 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Host
 import rr.Math
+import rr.Program
 
 Model : {
 	target : Draw.RenderTexture,
@@ -12,7 +12,7 @@ Model : {
 	time : Draw.F32Uniform,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -31,11 +31,22 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
-render! = |model, host, frame| {
-	seconds = U64.to_f32(host.timestamp_nanos) / 1_000_000_000
-	model.time.set!(seconds)
+## The shader clock is the only state this example advances, and a Tick is
+## precisely the message that carries it -- so the uniform is set here rather
+## than mid-draw.
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Tick(tick) => {
+			model.time.set!(U64.to_f32(tick.timestamp_nanos) / 1_000_000_000)
+			Ok({ model: model, cmds: [] })
+		}
 
+		_ => Ok({ model: model, cmds: [] })
+	}
+
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
+render! = |model, frame| {
 	frame.with_render_texture!(
 		model.target,
 		|target_frame| {

@@ -212,6 +212,7 @@ App := [].{
 	## callback that creates the first model after raylib/audio are ready.
 	init : Config, InitCallback(model, errors) -> Init(model, errors)
 	init = |cfg, callback!| { config: cfg, run!: callback! }
+
 }
 
 default_width : I32

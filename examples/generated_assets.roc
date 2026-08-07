@@ -8,6 +8,7 @@ import rr.Draw
 import rr.Host
 import rr.Math
 import rr.Mouse
+import rr.Program
 import rr.Text
 
 PaintState := [Idle, Painted(U64)].{
@@ -20,10 +21,11 @@ Model : {
 	paint_sound : Audio.Sound,
 	palette : U64,
 	last_cell : PaintState,
+	mouse : Math.Vec2,
 	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 grid_side : U64
 grid_side = 16
@@ -84,6 +86,7 @@ init! = App.init(
 			paint_sound,
 			palette: 1,
 			last_cell: Idle,
+			mouse: { x: 0, y: 0 },
 			ui: Box.box({
 				title: Text.from("Pixel Workshop").size(34).prepare!()?,
 				help: Text.from("Paint with the mouse | 1-4 palette | C restores the design").size(17).prepare!()?,
@@ -152,27 +155,38 @@ draw_swatch! = |frame, index, selected| {
 	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), PixelCountMismatch, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), PixelCountMismatch, ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
+
+			next = update_editor!(model, host)?
+			mouse = host.mouse.position()
+			host.set_cursor!(
+				match cell_at(mouse) {
+					Ok(_) => Crosshair
+					Err(_) => Arrow
+				},
+			)
+
+			Ok({ model: { ..next, mouse }, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
 	}
 
-	next = update_editor!(model, host)?
-	ui = Box.unbox(next.ui)
-	hover_cell = cell_at(host.mouse.position())
-	host.set_cursor!(
-		match hover_cell {
-			Ok(_) => Crosshair
-			Err(_) => Arrow
-		},
-	)
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
+	ui = Box.unbox(model.ui)
 
 	frame.clear!(Color.from_hex_rgb(0x0e1625))
 	ui.title.draw!(frame, { pos: { x: canvas_x, y: 24 }, color: Color.white, align: Text.align_top_left })
 	frame.texture!({
-		texture: next.texture.view(),
-		source: next.texture.rect(),
+		texture: model.texture.view(),
+		source: model.texture.rect(),
 		dest: canvas_bounds,
 		origin: Math.zero,
 		rotation: 0,
@@ -180,7 +194,7 @@ render! = |model, host, frame| {
 	})
 	frame.rectangle!({ x: canvas_bounds.x - 4, y: canvas_bounds.y - 4, width: canvas_bounds.width + 8, height: canvas_bounds.height + 8, style: Draw.outlined(Color.from_hex_rgb(0x7083a8), 4) })
 
-	match hover_cell {
+	match cell_at(model.mouse) {
 		Err(_) => {}
 		Ok(index) => {
 			col = index % grid_side
@@ -190,11 +204,11 @@ render! = |model, host, frame| {
 	}
 
 	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: Color.white, align: Text.align_top_left })
-	draw_swatch!(frame, 0, next.palette)
-	draw_swatch!(frame, 1, next.palette)
-	draw_swatch!(frame, 2, next.palette)
-	draw_swatch!(frame, 3, next.palette)
+	draw_swatch!(frame, 0, model.palette)
+	draw_swatch!(frame, 1, model.palette)
+	draw_swatch!(frame, 2, model.palette)
+	draw_swatch!(frame, 3, model.palette)
 	ui.help.draw!(frame, { pos: { x: canvas_x, y: 558 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
 
-	Ok(next)
+	Ok(model)
 }

@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.Draw
 import rr.Color
 import rr.Host
+import rr.Program
 import rr.Audio
 import rr.App
 import rr.Math
@@ -102,7 +103,7 @@ new_round! = |model, host| {
 play_if! : Bool, Audio.Sound => {}
 play_if! = |cond, sound| if cond sound.play!() else {}
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
@@ -127,33 +128,48 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+## Whether the match is over is a function of the scores, so both `update!` and
+## `render!` ask rather than storing a flag that could drift out of step.
+game_over : Model -> Bool
+game_over = |model| model.left_score >= win_score or model.right_score >= win_score
+
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
+
+			next = if game_over(model) step_game_over!(model, host) else step_playing!(model, host)
+			Ok({ model: next, cmds: [] })
+		}
+
+		_ => Ok({ model: model, cmds: [] })
 	}
 
-	game_over = model.left_score >= win_score or model.right_score >= win_score
-	if game_over render_game_over!(model, host, frame) else render_playing!(model, host, frame)
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
+	frame.clear!(Color.black)
+	draw_field!(frame, model)
+
+	if game_over(model) {
+		winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
+		frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
+		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
+	}
+
+	Ok(model)
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-render_game_over! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render_game_over! = |model, host, frame| {
-	restart = host.key_pressed(KeySpace)
-	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
-
-	frame.clear!(Color.black)
-	draw_field!(frame, model)
-	frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
-	frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
-
-	Ok(if restart new_round!(model, host) else model)
-}
+step_game_over! : Model, Host => Model
+step_game_over! = |model, host|
+	if host.key_pressed(KeySpace) new_round!(model, host) else model
 
 # --- Active play ---
-render_playing! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render_playing! = |model, host, frame| {
+step_playing! : Model, Host => Model
+step_playing! = |model, host| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
@@ -226,10 +242,7 @@ render_playing! = |model, host, frame| {
 	play_if!(hit_top or hit_bottom, model.wall_sound)
 	play_if!(out_left or out_right, model.score_sound)
 
-	frame.clear!(Color.black)
-	draw_field!(frame, next)
-
-	Ok(next)
+	next
 }
 
 # Draw the static scene (center line, paddles, ball, scores) for a model.

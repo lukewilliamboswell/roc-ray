@@ -7,6 +7,7 @@ import rr.Draw
 import rr.Host
 import rr.Math
 import rr.Mouse
+import rr.Program
 import rr.Text
 
 Corners : Draw.ProjectiveQuadCorners
@@ -19,7 +20,7 @@ Model : {
 	dragging : Bool,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 initial_corners : Corners
 initial_corners = {
@@ -48,8 +49,19 @@ init! = App.init(
 	},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => Ok({ model: drag_corner!(model, host), cmds: [] })
+		_ => Ok({ model: model, cmds: [] })
+	}
+
+## Fold one frame of pointer input into the quad.
+##
+## The cursor shape is a host effect rather than model state, so it belongs on
+## this side of the split: `render!` gets no `Host` to set it with.
+drag_corner! : Model, Host => Model
+drag_corner! = |model, host| {
 	mouse = host.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = host.mouse.button_down(Left) and (model.dragging or (host.mouse.button_pressed(Left) and handle_near))
@@ -69,28 +81,31 @@ render! = |model, host, frame| {
 		model.corners
 	}
 
-	next = match Draw.ProjectiveQuad.from_corners(candidate) {
+	match Draw.ProjectiveQuad.from_corners(candidate) {
 		Ok(quad) => { ..model, quad, corners: candidate, dragging }
 		Err(_) => { ..model, dragging }
 	}
+}
 
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101827))
 	frame.projective_texture!({
-		texture: next.texture,
-		source: next.texture.rect(),
-		quad: next.quad,
+		texture: model.texture,
+		source: model.texture.rect(),
+		quad: model.quad,
 		tint: Color.white,
 	})
 
 	# Overlay points go through the same homography as the texture.
-	center = next.quad.project({ x: 0.5, y: 0.5 })
+	center = model.quad.project({ x: 0.5, y: 0.5 })
 	frame.circle!({ center, radius: 7, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xffd166), Color.black, 2) })
-	frame.line!({ start: next.corners.top_left, end: next.corners.top_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: next.corners.top_right, end: next.corners.bottom_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: next.corners.bottom_right, end: next.corners.bottom_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: next.corners.bottom_left, end: next.corners.top_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.circle!({ center: next.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
-	next.guide.draw!(frame, { pos: { x: 400, y: 565 }, color: Color.ray_white, align: Text.align_top_center })
+	frame.line!({ start: model.corners.top_left, end: model.corners.top_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
+	frame.line!({ start: model.corners.top_right, end: model.corners.bottom_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
+	frame.line!({ start: model.corners.bottom_right, end: model.corners.bottom_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
+	frame.line!({ start: model.corners.bottom_left, end: model.corners.top_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
+	frame.circle!({ center: model.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
+	model.guide.draw!(frame, { pos: { x: 400, y: 565 }, color: Color.ray_white, align: Text.align_top_center })
 
-	Ok(next)
+	Ok(model)
 }

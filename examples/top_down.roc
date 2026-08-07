@@ -7,6 +7,7 @@ import rr.Camera
 import rr.Color
 import rr.Draw
 import rr.Host
+import rr.Program
 import rr.Keys
 import rr.Math
 import rr.Sprite
@@ -287,7 +288,7 @@ Model : {
 	world : World,
 }
 
-program = { init!, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -1003,44 +1004,56 @@ advance_playing! = |model, host| {
 	{ ..model, world: result.world }
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+update! : Model, Program.Input => Try({ model : Model, cmds : List(Program.Cmd) }, [Exit(I64), ..])
+update! = |model, input|
+	match input {
+		Frame(host) => {
+			if host.key_pressed(KeyEscape) {
+				host.exit!(0)
+			}
 
-	next = match model.world.state {
-		Playing => advance_playing!(model, host)
-		Won =>
-			if host.key_pressed(KeySpace) {
-				model.sounds.music.set_volume!(0.13)
-				new_game(model.characters, model.tiles, model.level, model.sounds)
-			} else {
-				model
-			}
-		GameOver =>
-			if host.key_pressed(KeySpace) {
-				model.sounds.music.set_volume!(0.13)
-				new_game(model.characters, model.tiles, model.level, model.sounds)
-			} else {
-				model
-			}
+			next = match model.world.state {
+				Playing => advance_playing!(model, host)
+				Won =>
+					if host.key_pressed(KeySpace) {
+						model.sounds.music.set_volume!(0.13)
+						new_game(model.characters, model.tiles, model.level, model.sounds)
+					} else {
+						model
+					}
+				GameOver =>
+					if host.key_pressed(KeySpace) {
+						model.sounds.music.set_volume!(0.13)
+						new_game(model.characters, model.tiles, model.level, model.sounds)
+					} else {
+						model
+					}
+				}
+
+			Ok({ model: next, cmds: [] })
 		}
 
-	camera = Camera.follow(shaken_target(next.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
+		_ => Ok({ model: model, cmds: [] })
+	}
+
+## The camera follows the (shaken) player position, so it is a pure function of
+## the model and is derived here rather than stored.
+render! : Model, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! = |model, frame| {
+	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x071018))
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, next.level, next.characters, next.tiles, next.world, viewport)
+			draw_world!(world_frame, model.level, model.characters, model.tiles, model.world, viewport)
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, next.level, next.world)
+	draw_hud!(frame, model.level, model.world)
 
-	Ok(next)
+	Ok(model)
 }
 
 shaken_target : World -> Math.Vec2

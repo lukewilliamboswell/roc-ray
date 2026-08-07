@@ -81,14 +81,18 @@ Program := [].{
 	## degrades rather than crashing.
 	value_from_host : { value_kind : U8, i32_value : I32, str_value : Str, err : U8 } -> Value
 	value_from_host = |raw|
-		if raw.value_kind == value_i32 {
+	# A failure is reported as a non-zero code, whatever the value kind says:
+	# the host has no payload to hand back when a command did not succeed.
+	# Checking the kind first made `Failed` unreachable and left a failed
+	# read indistinguishable from a completed `Delay`.
+		if raw.err != 0 {
+			Failed(raw.err)
+		} else if raw.value_kind == value_i32 {
 			I32Value(raw.i32_value)
 		} else if raw.value_kind == value_str {
 			StrValue(raw.str_value)
-		} else if raw.value_kind == value_unit {
-			Unit
 		} else {
-			Failed(raw.err)
+			Unit
 		}
 }
 
@@ -123,4 +127,7 @@ expect Program.to_host(ReadFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 
 expect Program.to_host(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250 }
 expect Program.value_from_host({ value_kind: 1, i32_value: -3, str_value: "", err: 0 }) == I32Value(-3)
 expect Program.value_from_host({ value_kind: 2, i32_value: 0, str_value: "hi", err: 0 }) == StrValue("hi")
-expect Program.value_from_host({ value_kind: 9, i32_value: 0, str_value: "", err: 4 }) == Failed(4)
+# The host reports a failure as VALUE_UNIT plus a non-zero code, so that is the
+# shape the decoder has to recognise.
+expect Program.value_from_host({ value_kind: 0, i32_value: 0, str_value: "", err: 1 }) == Failed(1)
+expect Program.value_from_host({ value_kind: 0, i32_value: 0, str_value: "", err: 0 }) == Unit

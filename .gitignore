@@ -120,6 +120,8 @@ examples/capture_plot
 examples/capture_screenshot
 examples/capture_ui_demo
 examples/async_read
+# `roc build examples/x.roc` from the repo root lands the binary here.
+async_read
 
 # Output written by the capture examples
 captures/

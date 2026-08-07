@@ -85,6 +85,15 @@ const VALUE_STR: u8 = 2;
 const CMD_READ_FILE: u8 = 0;
 const CMD_DELAY: u8 = 1;
 
+/// A snapshot owning no Roc storage.
+///
+/// Only a `Frame` message carries real input; the other variants still have to
+/// fill the field because the generated `decref` walks it unconditionally, and
+/// a zeroed Roc list decrefs to nothing.
+fn emptySnapshot() HostState {
+    return std.mem.zeroes(HostState);
+}
+
 /// A message carrying no Roc-owned payload, used as the base for every variant.
 ///
 /// `snapshot` is the one field that cannot be left inert, because its list
@@ -124,11 +133,11 @@ fn frameInput(snapshot: HostState) UpdateInput {
 /// advancing time is "deliver none". Fused with input, neither is expressible.
 ///
 /// Roc never reads the snapshot on a tick -- `kind` says not to -- but the
-/// generated `decref` walks it regardless, so the message must still own a
-/// reference of its own rather than borrowing the frame's.
-fn tickInput(snapshot: HostState, frame_count: u64, timestamp_nanos: u64, frame_time: f32) UpdateInput {
-    snapshot.incref(1);
-    var msg = emptyInput(INPUT_TICK, snapshot);
+/// generated `decref` walks it regardless. Rather than balance that with an
+/// incref, carry an empty snapshot: decref of a zeroed list is a no-op, so the
+/// message owns nothing and there is no reference to get wrong.
+fn tickInput(frame_count: u64, timestamp_nanos: u64, frame_time: f32) UpdateInput {
+    var msg = emptyInput(INPUT_TICK, emptySnapshot());
     msg.frame_count = frame_count;
     msg.timestamp_nanos = timestamp_nanos;
     msg.frame_time = frame_time;
@@ -138,8 +147,8 @@ fn tickInput(snapshot: HostState, frame_count: u64, timestamp_nanos: u64, frame_
 /// Build the message that reports a completed command.
 ///
 /// Transfers `str_value` into the message; the caller must not decref it.
-fn effectResultInput(snapshot: HostState, id: u64, value_kind: u8, str_value: abi.RocStr, err: u8) UpdateInput {
-    var msg = emptyInput(INPUT_EFFECT_RESULT, snapshot);
+fn effectResultInput(id: u64, value_kind: u8, str_value: abi.RocStr, err: u8) UpdateInput {
+    var msg = emptyInput(INPUT_EFFECT_RESULT, emptySnapshot());
     msg.id = id;
     msg.value_kind = value_kind;
     msg.str_value = str_value;
@@ -157,6 +166,12 @@ fn effectResultInput(snapshot: HostState, id: u64, value_kind: u8, str_value: ab
 ///
 /// That is what buys non-blocking I/O without atomic refcounts. `roc_alloc`
 /// and the resource heaps stay exactly as single-threaded as they were.
+///
+/// Two caveats the invariant does not cover, both currently satisfied:
+/// the worker shares the host allocator, so that allocator must be thread-safe
+/// (`std.heap.smp_allocator` is; `DebugAllocator` is unless `thread_safe` is
+/// turned off); and `std.Io.Threaded.init` installs process-wide SIGPIPE and
+/// SIGIO handlers, restoring them on `deinit`.
 ///
 /// Both rings are single-producer/single-consumer -- main writes requests and
 /// reads results, the worker does the reverse -- so acquire/release on the
@@ -327,7 +342,6 @@ const Tape = struct {
     reader: replay.Reader = undefined,
     allocator: std.mem.Allocator = undefined,
     path: ?[]const u8 = null,
-    exhausted: bool = false,
 
     fn deinit(self: *Tape) void {
         self.buffer.deinit(self.allocator);
@@ -401,6 +415,11 @@ const Tape = struct {
 
 var tape = Tape{};
 
+/// Replay the recorded input but let commands reach the world again. The
+/// negative control: output is expected to differ, which is what shows the
+/// recorded results were doing the work.
+var replay_live_effects = false;
+
 /// Rebuild one recorded message and queue it.
 ///
 /// A `Frame` writes the recorded bytes back into the host's own input buffers
@@ -425,7 +444,7 @@ fn pushRecorded(queue: *MsgQueue, roc_host: *RocHost, input: *InputState, entry:
                 entry.snapshot.mouse_y,
                 .{ .x = entry.snapshot.mouse_delta_x, .y = entry.snapshot.mouse_delta_y },
                 .{ .x = entry.snapshot.mouse_wheel_x, .y = entry.snapshot.mouse_wheel_y },
-                entry.snapshot.text_input[0..entry.snapshot.text_len],
+                entry.snapshot.text_input[0..@min(entry.snapshot.text_len, entry.snapshot.text_input.len)],
             );
             queue.push(roc_host, frameInput(snapshot));
         },
@@ -434,9 +453,9 @@ fn pushRecorded(queue: *MsgQueue, roc_host: *RocHost, input: *InputState, entry:
                 abi.RocStr.fromSlice(payload, roc_host)
             else
                 abi.RocStr.empty();
-            queue.push(roc_host, effectResultInput(std.mem.zeroes(HostState), entry.id, entry.value_kind, value, entry.err));
+            queue.push(roc_host, effectResultInput(entry.id, entry.value_kind, value, entry.err));
         },
-        else => queue.push(roc_host, tickInput(std.mem.zeroes(HostState), entry.frame_count, entry.timestamp_nanos, entry.frame_time)),
+        else => queue.push(roc_host, tickInput(entry.frame_count, entry.timestamp_nanos, entry.frame_time)),
     }
 }
 
@@ -454,7 +473,6 @@ fn pushRecordedFrame(queue: *MsgQueue, roc_host: *RocHost, input: *InputState) b
         delivered += 1;
         if (entry.record.kind == INPUT_TICK) return true;
     }
-    tape.exhausted = true;
     return delivered != 0;
 }
 
@@ -3557,8 +3575,11 @@ const InputState = struct {
             .timestamp_nanos = timestamp_nanos,
             .frame_time = frame_time,
             .screen = .{
-                .width = if (active_headless) headless_screen_width else raylib.getScreenWidth(),
-                .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
+                // A replay reports the recorded size: the app has to see the
+                // window it was recorded in, or the same messages draw
+                // differently and the comparison means nothing.
+                .width = if (replay_screen) |screen| screen.width else if (active_headless) headless_screen_width else raylib.getScreenWidth(),
+                .height = if (replay_screen) |screen| screen.height else if (active_headless) headless_screen_height else raylib.getScreenHeight(),
             },
             .keys = self.keys.list,
             .text_input = self.text_input.list,
@@ -3676,17 +3697,24 @@ fn setUpTape(allocator: std.mem.Allocator, options: RuntimeOptions, app_config: 
 
         const header = tape.reader.readHeader() orelse {
             std.debug.print("{s} is too short to be a tape\n", .{path});
+            tape.deinit();
+            tape.source = null;
             return error.TapeUnavailable;
         };
         header.verify(app_config.width, app_config.height) catch |err| {
             std.debug.print("cannot replay {s}: {s}\n", .{ path, @errorName(err) });
+            // `deinit` is only registered by the caller once setup succeeds.
+            tape.deinit();
+            tape.source = null;
             return error.TapeUnavailable;
         };
         // Without this the recorded results are ignored and effects hit the
         // real world again -- the negative control that proves the tape matters.
-        if (!options.replay_live_effects) {
-            std.log.info("roc-ray replaying {s}", .{path});
-        }
+        replay_live_effects = options.replay_live_effects;
+        std.log.info("roc-ray replaying {s}{s}", .{
+            path,
+            if (options.replay_live_effects) " with live effects" else "",
+        });
     }
 }
 
@@ -3728,10 +3756,10 @@ const takeModelForRender = takeModel;
 /// queued: the model box is already `null` at that point, so `dropFinalModel`
 /// is correctly a no-op, but the undelivered messages still hold Roc references
 /// and would otherwise leak.
-fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_model: *RocBox) ?i32 {
+fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox) ?i32 {
     while (queue.pop()) |msg| {
         tape.record(msg);
-        const result = updateOnce(queue, roc_host, snapshot, boxed_model, msg);
+        const result = updateOnce(queue, roc_host, boxed_model, msg);
         if (result.tag == .Err) {
             const code: i32 = @intCast(result.payload_err());
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{code});
@@ -3746,12 +3774,12 @@ fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_m
 ///
 /// Consumes `input`: the message's Roc-owned payloads are transferred into the
 /// call. Returns the raw result so the caller owns the exit-code decision.
-fn updateOnce(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_model: *RocBox, input: UpdateInput) UpdateResult {
+fn updateOnce(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox, input: UpdateInput) UpdateResult {
     const result = update_for_host(takeModel(boxed_model), input);
     if (result.tag == .Ok) {
         const ok = result.payload_ok();
         boxed_model.* = ok.model;
-        dispatchCmds(queue, roc_host, snapshot, ok.cmds);
+        dispatchCmds(queue, roc_host, ok.cmds);
     }
     return result;
 }
@@ -3769,7 +3797,12 @@ fn updateOnce(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, boxed_m
 ///
 /// An unknown kind is ignored rather than fatal, so a host older than the app
 /// degrades instead of crashing.
-fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, cmds: abi.RocList(CmdToHost)) void {
+fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, cmds: abi.RocList(CmdToHost)) void {
+    // A replay already holds the answer to every command in the tape, so
+    // running them again would both duplicate the result and let the outside
+    // world back in. `--replay-live-effects` is the deliberate exception: it is
+    // the negative control, and its output is expected to differ.
+    const replaying_hermetically = tape.replaying() and !replay_live_effects;
     defer {
         if (cmds.hasOneRef()) {
             for (cmds.allocationItems()) |item| item.decref(roc_host);
@@ -3777,12 +3810,14 @@ fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, cmds:
         cmds.decref(roc_host);
     }
 
+    if (replaying_hermetically) return;
+
     for (cmds.items()) |cmd| {
         switch (cmd.kind) {
             CMD_READ_FILE => {
                 const path = cmd.path.asSlice();
                 if (headlessMode() or !effect_worker.submitReadFile(cmd.id, path)) {
-                    readFileInline(queue, roc_host, snapshot, cmd.id, path);
+                    readFileInline(queue, roc_host, cmd.id, path);
                 }
             },
             CMD_DELAY => armTimer(cmd.id, cmd.millis),
@@ -3795,18 +3830,18 @@ fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, cmds:
 ///
 /// Still delivered as a message rather than returned, so app code takes exactly
 /// the same path whether or not the work went off-thread.
-fn readFileInline(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, id: u64, path: []const u8) void {
+fn readFileInline(queue: *MsgQueue, roc_host: *RocHost, id: u64, path: []const u8) void {
     const allocator = allocatorFromHost(roc_host);
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
         const code: u8 = switch (err) {
             error.FileNotFound => HOST_ERR_NOT_FOUND,
             else => HOST_ERR_READ_FAILED,
         };
-        queue.push(roc_host, effectResultInput(snapshot, id, VALUE_UNIT, abi.RocStr.empty(), code));
+        queue.push(roc_host, effectResultInput(id, VALUE_UNIT, abi.RocStr.empty(), code));
         return;
     };
     defer allocator.free(bytes);
-    queue.push(roc_host, effectResultInput(snapshot, id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
+    queue.push(roc_host, effectResultInput(id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
 }
 
 /// Record a delay so its result can be delivered once the deadline passes.
@@ -3815,16 +3850,19 @@ fn armTimer(id: u64, millis: u64) void {
         std.log.warn("roc-ray timer table full; dropping delay {d}", .{id});
         return;
     }
-    pending_timers[pending_timer_count] = .{ .id = id, .due_nanos = last_frame_nanos + millis * std.time.ns_per_ms };
+    // `millis` comes from the app, so saturate rather than wrap: a wrapped
+    // deadline fires immediately, which looks like a delay that did not work.
+    const delay_nanos = std.math.mul(u64, millis, std.time.ns_per_ms) catch std.math.maxInt(u64);
+    pending_timers[pending_timer_count] = .{ .id = id, .due_nanos = last_frame_nanos +| delay_nanos };
     pending_timer_count += 1;
 }
 
 /// Queue a result for every timer whose deadline has passed.
-fn expireTimers(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, now_nanos: u64) void {
+fn expireTimers(queue: *MsgQueue, roc_host: *RocHost, now_nanos: u64) void {
     var index: usize = 0;
     while (index < pending_timer_count) {
         if (pending_timers[index].due_nanos <= now_nanos) {
-            queue.push(roc_host, effectResultInput(snapshot, pending_timers[index].id, VALUE_UNIT, abi.RocStr.empty(), 0));
+            queue.push(roc_host, effectResultInput(pending_timers[index].id, VALUE_UNIT, abi.RocStr.empty(), 0));
             pending_timer_count -= 1;
             pending_timers[index] = pending_timers[pending_timer_count];
         } else {
@@ -3837,13 +3875,13 @@ fn expireTimers(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState, now_n
 ///
 /// The only place a worker result becomes a Roc value, and it runs on the main
 /// thread -- which is exactly what keeps `roc_alloc` single-threaded.
-fn drainWorkerResults(queue: *MsgQueue, roc_host: *RocHost, snapshot: HostState) void {
+fn drainWorkerResults(queue: *MsgQueue, roc_host: *RocHost) void {
     while (effect_worker.takeResult()) |result| {
         if (result.bytes) |bytes| {
             defer effect_worker.allocator.free(bytes);
-            queue.push(roc_host, effectResultInput(snapshot, result.id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
+            queue.push(roc_host, effectResultInput(result.id, VALUE_STR, abi.RocStr.fromSlice(bytes, roc_host), 0));
         } else {
-            queue.push(roc_host, effectResultInput(snapshot, result.id, VALUE_UNIT, abi.RocStr.empty(), result.err));
+            queue.push(roc_host, effectResultInput(result.id, VALUE_UNIT, abi.RocStr.empty(), result.err));
         }
     }
 }
@@ -4319,7 +4357,7 @@ test "the message queue delivers in order and releases what it still holds" {
     const snapshot = emptyTestSnapshot();
 
     queue.push(&roc_host, frameInput(snapshot));
-    queue.push(&roc_host, tickInput(snapshot, 7, 99, 0.5));
+    queue.push(&roc_host, tickInput(7, 99, 0.5));
 
     const first = queue.pop().?;
     try std.testing.expectEqual(INPUT_FRAME, first.kind);
@@ -4402,7 +4440,6 @@ test "timers fire once their deadline passes and are then forgotten" {
     var roc_host = abi.makeRocHost(&roc_env);
 
     var queue = MsgQueue{};
-    const snapshot = emptyTestSnapshot();
     pending_timer_count = 0;
     last_frame_nanos = 0;
 
@@ -4410,16 +4447,27 @@ test "timers fire once their deadline passes and are then forgotten" {
     armTimer(2, 30);
     try std.testing.expectEqual(@as(usize, 2), pending_timer_count);
 
-    expireTimers(&queue, &roc_host, snapshot, 15 * std.time.ns_per_ms);
+    expireTimers(&queue, &roc_host, 15 * std.time.ns_per_ms);
     try std.testing.expectEqual(@as(usize, 1), pending_timer_count);
     const fired = queue.pop().?;
     try std.testing.expectEqual(INPUT_EFFECT_RESULT, fired.kind);
     try std.testing.expectEqual(@as(u64, 1), fired.id);
     fired.decref(&roc_host);
 
-    expireTimers(&queue, &roc_host, snapshot, 40 * std.time.ns_per_ms);
+    expireTimers(&queue, &roc_host, 40 * std.time.ns_per_ms);
     try std.testing.expectEqual(@as(usize, 0), pending_timer_count);
     queue.releaseAll(&roc_host);
+}
+
+test "an absurd delay saturates its deadline instead of wrapping to the past" {
+    // A wrapped deadline fires immediately, which looks like a delay that did
+    // not work rather than one that was out of range.
+    pending_timer_count = 0;
+    last_frame_nanos = 1_000;
+    armTimer(1, std.math.maxInt(u64));
+    try std.testing.expectEqual(@as(usize, 1), pending_timer_count);
+    try std.testing.expectEqual(std.math.maxInt(u64), pending_timers[0].due_nanos);
+    pending_timer_count = 0;
 }
 
 test "a full message queue drops the newest rather than evicting a queued one" {
@@ -4427,15 +4475,14 @@ test "a full message queue drops the newest rather than evicting a queued one" {
     var roc_host = abi.makeRocHost(&roc_env);
 
     var queue = MsgQueue{};
-    const snapshot = emptyTestSnapshot();
 
     var pushed: usize = 0;
     while (pushed < MsgQueue.capacity) : (pushed += 1) {
-        queue.push(&roc_host, tickInput(snapshot, pushed, 0, 0));
+        queue.push(&roc_host, tickInput(pushed, 0, 0));
     }
     try std.testing.expectEqual(@as(usize, MsgQueue.capacity), queue.len);
 
-    queue.push(&roc_host, tickInput(snapshot, 9999, 0, 0));
+    queue.push(&roc_host, tickInput(9999, 0, 0));
     try std.testing.expectEqual(@as(usize, MsgQueue.capacity), queue.len);
 
     // The oldest survived; the overflow message is the one that went away.
@@ -4565,7 +4612,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             virtual_mouse_wheel = 0;
         }
         const text_input = raylib.getTextInput();
-        const platform_state = input.hostState(
+        // Only built on the live branch: `hostState` retains the six input
+        // lists for the message that will consume them, and a replay builds its
+        // own snapshot from the tape instead. Building one here unconditionally
+        // stranded a retained generation on every replayed frame.
+        const platform_state = if (tape.replaying()) null else input.hostState(
             frame_count,
             now_ns,
             frame_time,
@@ -4584,15 +4635,15 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             // changing on disk cannot change what the app sees.
             if (!pushRecordedFrame(&queue, roc_host, &input)) break;
         } else {
-            queue.push(roc_host, frameInput(platform_state));
-            queue.push(roc_host, tickInput(platform_state, frame_count, now_ns, frame_time));
-            drainWorkerResults(&queue, roc_host, platform_state);
-            expireTimers(&queue, roc_host, platform_state, now_ns);
+            queue.push(roc_host, frameInput(platform_state.?));
+            queue.push(roc_host, tickInput(frame_count, now_ns, frame_time));
+            drainWorkerResults(&queue, roc_host);
+            expireTimers(&queue, roc_host, now_ns);
         }
 
         // Every message is delivered before the drawing scope opens, so
         // `update!` structurally cannot draw -- it is never handed a Frame.
-        if (drainQueue(&queue, roc_host, platform_state, &boxed_model)) |code| {
+        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
             exit_code = code;
             break;
         }
@@ -4620,6 +4671,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
     resetHeadlessRuntime(app_config);
     defer deinitResources();
+    defer tape.flush();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -4652,12 +4704,16 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         );
 
         last_frame_nanos = timestamp_nanos;
-        queue.push(roc_host, frameInput(platform_state));
-        queue.push(roc_host, tickInput(platform_state, frame_count, timestamp_nanos, frame_time));
-        drainWorkerResults(&queue, roc_host, platform_state);
-        expireTimers(&queue, roc_host, platform_state, timestamp_nanos);
+        if (tape.replaying()) {
+            if (!pushRecordedFrame(&queue, roc_host, &input)) break;
+        } else {
+            queue.push(roc_host, frameInput(platform_state));
+            queue.push(roc_host, tickInput(frame_count, timestamp_nanos, frame_time));
+            drainWorkerResults(&queue, roc_host);
+            expireTimers(&queue, roc_host, timestamp_nanos);
+        }
 
-        if (drainQueue(&queue, roc_host, platform_state, &boxed_model)) |code| {
+        if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
             exit_code = code;
             break;
         }

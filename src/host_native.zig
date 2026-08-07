@@ -16,7 +16,6 @@ const tmx_loader = @import("tmx_loader.zig");
 
 // Import backend
 const raylib = @import("backend_raylib.zig");
-const replay = @import("replay.zig");
 
 // Type aliases
 const RocBox = ffi.RocBox;
@@ -322,159 +321,6 @@ var last_frame_nanos: u64 = 0;
 const PendingTimer = struct { id: u64, due_nanos: u64 };
 var pending_timers: [32]PendingTimer = undefined;
 var pending_timer_count: usize = 0;
-
-/// Recording and replaying the message stream.
-///
-/// The whole reason the architecture is worth the disruption: because every
-/// unpredictable value now arrives as a message, writing the messages down is
-/// writing the run down. A replay pushes the recorded messages instead of
-/// sampling raylib, and the app cannot tell the difference -- it is handed the
-/// same values through the same channel.
-///
-/// Entirely host-side and driven from argv, so `Capture` remains the only
-/// file-writing capability an app is granted.
-const Tape = struct {
-    /// Bytes accumulated this run, flushed once at shutdown.
-    buffer: std.ArrayList(u8) = .empty,
-    recording: bool = false,
-    /// Records read back on a replay, and a cursor into them.
-    source: ?[]const u8 = null,
-    reader: replay.Reader = undefined,
-    allocator: std.mem.Allocator = undefined,
-    path: ?[]const u8 = null,
-
-    fn deinit(self: *Tape) void {
-        self.buffer.deinit(self.allocator);
-        if (self.source) |bytes| self.allocator.free(bytes);
-    }
-
-    fn replaying(self: *const Tape) bool {
-        return self.source != null;
-    }
-
-    /// Write one delivered message to the tape.
-    ///
-    /// Recorded at dequeue rather than enqueue, so the file is by construction
-    /// the exact sequence `update!` observed, in the order it observed it.
-    fn record(self: *Tape, msg: UpdateInput) void {
-        if (!self.recording) return;
-
-        var entry = std.mem.zeroes(replay.Record);
-        entry.kind = msg.kind;
-        entry.value_kind = msg.value_kind;
-        entry.err = msg.err;
-        entry.frame_count = msg.frame_count;
-        entry.timestamp_nanos = msg.timestamp_nanos;
-        entry.id = msg.id;
-        entry.frame_time = msg.frame_time;
-
-        if (msg.kind == INPUT_FRAME) {
-            const snapshot = msg.snapshot;
-            copyInto(&entry.snapshot.keys, snapshot.keys.items());
-            copyInto(&entry.snapshot.mouse_buttons, snapshot.mouse.buttons.items());
-            copyInto(&entry.snapshot.gamepad_available, snapshot.gamepads.available.items());
-            copyInto(&entry.snapshot.gamepad_buttons, snapshot.gamepads.buttons.items());
-            copyInto(&entry.snapshot.gamepad_axes, snapshot.gamepads.axes.items());
-            const text = snapshot.text_input.items();
-            const text_len = @min(text.len, entry.snapshot.text_input.len);
-            @memcpy(entry.snapshot.text_input[0..text_len], text[0..text_len]);
-            entry.snapshot.text_len = @intCast(text_len);
-            entry.snapshot.screen_width = snapshot.screen.width;
-            entry.snapshot.screen_height = snapshot.screen.height;
-            entry.snapshot.mouse_x = snapshot.mouse.x;
-            entry.snapshot.mouse_y = snapshot.mouse.y;
-            entry.snapshot.mouse_delta_x = snapshot.mouse.delta_x;
-            entry.snapshot.mouse_delta_y = snapshot.mouse.delta_y;
-            entry.snapshot.mouse_wheel_x = snapshot.mouse.wheel_x;
-            entry.snapshot.mouse_wheel_y = snapshot.mouse.wheel_y;
-        }
-
-        const payload = if (msg.value_kind == VALUE_STR) msg.str_value.asSlice() else "";
-        replay.append(&self.buffer, self.allocator, entry, payload) catch {
-            std.log.warn("roc-ray could not grow the tape; recording stopped", .{});
-            self.recording = false;
-        };
-    }
-
-    fn copyInto(destination: anytype, source: anytype) void {
-        const count = @min(destination.len, source.len);
-        @memcpy(destination[0..count], source[0..count]);
-    }
-
-    /// Flush the tape to disk. Called once, at shutdown.
-    fn flush(self: *Tape) void {
-        if (!self.recording) return;
-        const path = self.path orelse return;
-        std.Io.Dir.cwd().writeFile(mainThreadIo(), .{ .sub_path = path, .data = self.buffer.items }) catch |err| {
-            std.log.warn("roc-ray could not write the tape to {s}: {s}", .{ path, @errorName(err) });
-            return;
-        };
-        std.log.info("roc-ray wrote {d} bytes of messages to {s}", .{ self.buffer.items.len, path });
-    }
-};
-
-var tape = Tape{};
-
-/// Replay the recorded input but let commands reach the world again. The
-/// negative control: output is expected to differ, which is what shows the
-/// recorded results were doing the work.
-var replay_live_effects = false;
-
-/// Rebuild one recorded message and queue it.
-///
-/// A `Frame` writes the recorded bytes back into the host's own input buffers
-/// and then goes through `hostState` exactly as live input does, so the app is
-/// handed a snapshot it cannot distinguish from a real one. The recorded bytes
-/// are already post-edge-detection, so press and release cannot drift.
-fn pushRecorded(queue: *MsgQueue, roc_host: *RocHost, input: *InputState, entry: replay.Record, payload: []const u8) void {
-    switch (entry.kind) {
-        INPUT_FRAME => {
-            input.keys.update(&entry.snapshot.keys);
-            input.mouse_buttons.update(&entry.snapshot.mouse_buttons);
-            input.gamepad_available.update(&entry.snapshot.gamepad_available);
-            input.gamepad_buttons.update(&entry.snapshot.gamepad_buttons);
-            input.gamepad_axes.update(&entry.snapshot.gamepad_axes);
-
-            replay_screen = .{ .width = entry.snapshot.screen_width, .height = entry.snapshot.screen_height };
-            const snapshot = input.hostState(
-                entry.frame_count,
-                entry.timestamp_nanos,
-                entry.frame_time,
-                entry.snapshot.mouse_x,
-                entry.snapshot.mouse_y,
-                .{ .x = entry.snapshot.mouse_delta_x, .y = entry.snapshot.mouse_delta_y },
-                .{ .x = entry.snapshot.mouse_wheel_x, .y = entry.snapshot.mouse_wheel_y },
-                entry.snapshot.text_input[0..@min(entry.snapshot.text_len, entry.snapshot.text_input.len)],
-            );
-            queue.push(roc_host, frameInput(snapshot));
-        },
-        INPUT_EFFECT_RESULT => {
-            const value = if (entry.value_kind == VALUE_STR)
-                abi.RocStr.fromSlice(payload, roc_host)
-            else
-                abi.RocStr.empty();
-            queue.push(roc_host, effectResultInput(entry.id, entry.value_kind, value, entry.err));
-        },
-        else => queue.push(roc_host, tickInput(entry.frame_count, entry.timestamp_nanos, entry.frame_time)),
-    }
-}
-
-/// The window size a replay reports, taken from the tape rather than raylib.
-var replay_screen: ?struct { width: i32, height: i32 } = null;
-
-/// Queue every recorded message up to and including the next frame boundary.
-///
-/// Returns false at the end of the tape, which ends the run: a replay is over
-/// when the recording is, not when someone closes the window.
-fn pushRecordedFrame(queue: *MsgQueue, roc_host: *RocHost, input: *InputState) bool {
-    var delivered: usize = 0;
-    while (tape.reader.next()) |entry| {
-        pushRecorded(queue, roc_host, input, entry.record, entry.payload);
-        delivered += 1;
-        if (entry.record.kind == INPUT_TICK) return true;
-    }
-    return delivered != 0;
-}
 
 /// Messages waiting to reach `update!`, oldest first.
 ///
@@ -3503,22 +3349,7 @@ const RuntimeOptions = struct {
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
     debug_allocator: bool = false,
     help: bool = false,
-    /// Tape paths come from argv rather than from a Roc effect, so an app can
-    /// neither write a tape, read one, nor detect that it is being replayed --
-    /// which is what makes a replay faithful.
-    record_path: ?[]const u8 = null,
-    replay_path: ?[]const u8 = null,
-    /// Replay the recorded input but let effects hit the real world again. The
-    /// negative control for the demo: on an app that uses randomness or reads a
-    /// file, output must differ, which is what proves the tape is load-bearing.
-    replay_live_effects: bool = false,
 };
-
-/// The seed used whenever a run is being recorded or replayed.
-///
-/// `random_i32!` is otherwise seeded from ASLR, which alone would make any
-/// randomness-using app diverge on replay.
-const REPLAY_RANDOM_SEED: u32 = 0x5eed_10c1;
 
 const InputState = struct {
     keys: ffi.Keys,
@@ -3575,11 +3406,8 @@ const InputState = struct {
             .timestamp_nanos = timestamp_nanos,
             .frame_time = frame_time,
             .screen = .{
-                // A replay reports the recorded size: the app has to see the
-                // window it was recorded in, or the same messages draw
-                // differently and the comparison means nothing.
-                .width = if (replay_screen) |screen| screen.width else if (active_headless) headless_screen_width else raylib.getScreenWidth(),
-                .height = if (replay_screen) |screen| screen.height else if (active_headless) headless_screen_height else raylib.getScreenHeight(),
+                .width = if (active_headless) headless_screen_width else raylib.getScreenWidth(),
+                .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
             },
             .keys = self.keys.list,
             .text_input = self.text_input.list,
@@ -3626,7 +3454,6 @@ const InputState = struct {
 
 fn printUsage() void {
     std.debug.print("usage: app [--headless] [--headless-frames=N] [--debug-allocator]\n", .{});
-    std.debug.print("           [--record-msgs=PATH] [--replay-msgs=PATH] [--replay-live-effects]\n", .{});
 }
 
 fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
@@ -3648,12 +3475,6 @@ fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
                 return error.InvalidArgument;
             }
             options.headless_frames = frames;
-        } else if (std.mem.startsWith(u8, arg, "--record-msgs=")) {
-            options.record_path = arg["--record-msgs=".len..];
-        } else if (std.mem.startsWith(u8, arg, "--replay-msgs=")) {
-            options.replay_path = arg["--replay-msgs=".len..];
-        } else if (std.mem.eql(u8, arg, "--replay-live-effects")) {
-            options.replay_live_effects = true;
         } else if (std.mem.eql(u8, arg, "--debug-allocator")) {
             options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
@@ -3663,59 +3484,7 @@ fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
             return error.InvalidArgument;
         }
     }
-    if (options.record_path != null and options.replay_path != null) {
-        std.debug.print("--record-msgs and --replay-msgs are mutually exclusive\n", .{});
-        return error.InvalidArgument;
-    }
     return options;
-}
-
-/// Arm recording or load a tape, before any frame runs.
-///
-/// A tape that does not match this binary or this window is refused outright
-/// rather than replayed approximately, because an approximate replay produces
-/// output that looks like a regression and is not one.
-fn setUpTape(allocator: std.mem.Allocator, options: RuntimeOptions, app_config: AppConfig) !void {
-    tape.allocator = allocator;
-
-    if (options.record_path) |path| {
-        tape.recording = true;
-        tape.path = path;
-        replay.appendHeader(&tape.buffer, allocator, replay.Header.init(app_config.width, app_config.height, REPLAY_RANDOM_SEED)) catch {
-            std.debug.print("out of memory arming the recording\n", .{});
-            return error.TapeUnavailable;
-        };
-    }
-
-    if (options.replay_path) |path| {
-        const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(64 * 1024 * 1024)) catch |err| {
-            std.debug.print("could not read {s}: {s}\n", .{ path, @errorName(err) });
-            return error.TapeUnavailable;
-        };
-        tape.source = bytes;
-        tape.reader = replay.Reader.init(bytes);
-
-        const header = tape.reader.readHeader() orelse {
-            std.debug.print("{s} is too short to be a tape\n", .{path});
-            tape.deinit();
-            tape.source = null;
-            return error.TapeUnavailable;
-        };
-        header.verify(app_config.width, app_config.height) catch |err| {
-            std.debug.print("cannot replay {s}: {s}\n", .{ path, @errorName(err) });
-            // `deinit` is only registered by the caller once setup succeeds.
-            tape.deinit();
-            tape.source = null;
-            return error.TapeUnavailable;
-        };
-        // Without this the recorded results are ignored and effects hit the
-        // real world again -- the negative control that proves the tape matters.
-        replay_live_effects = options.replay_live_effects;
-        std.log.info("roc-ray replaying {s}{s}", .{
-            path,
-            if (options.replay_live_effects) " with live effects" else "",
-        });
-    }
 }
 
 fn finalExitCode(exit_code: i32) c_int {
@@ -3758,7 +3527,6 @@ const takeModelForRender = takeModel;
 /// and would otherwise leak.
 fn drainQueue(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox) ?i32 {
     while (queue.pop()) |msg| {
-        tape.record(msg);
         const result = updateOnce(queue, roc_host, boxed_model, msg);
         if (result.tag == .Err) {
             const code: i32 = @intCast(result.payload_err());
@@ -3798,19 +3566,12 @@ fn updateOnce(queue: *MsgQueue, roc_host: *RocHost, boxed_model: *RocBox, input:
 /// An unknown kind is ignored rather than fatal, so a host older than the app
 /// degrades instead of crashing.
 fn dispatchCmds(queue: *MsgQueue, roc_host: *RocHost, cmds: abi.RocList(CmdToHost)) void {
-    // A replay already holds the answer to every command in the tape, so
-    // running them again would both duplicate the result and let the outside
-    // world back in. `--replay-live-effects` is the deliberate exception: it is
-    // the negative control, and its output is expected to differ.
-    const replaying_hermetically = tape.replaying() and !replay_live_effects;
     defer {
         if (cmds.hasOneRef()) {
             for (cmds.allocationItems()) |item| item.decref(roc_host);
         }
         cmds.decref(roc_host);
     }
-
-    if (replaying_hermetically) return;
 
     for (cmds.items()) |cmd| {
         switch (cmd.kind) {
@@ -4510,14 +4271,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // inline so its output stays bit-identical run to run for CI.
     effect_worker.start(allocator);
     defer effect_worker.stop();
-    defer tape.flush();
 
-    if (tape.replaying()) {
-        // A stray keypress must not truncate a replay: the tape controls what
-        // Roc sees, but raylib still watches the real keyboard for its exit key.
-        raylib.setExitKey(0);
-        raylib.setTargetFps(0);
-    }
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -4549,12 +4303,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // Seed raylib's PRNG with a run-varying value. We avoid OS entropy APIs
     // (not uniformly available across our -nostdlib targets) and instead use
     // ASLR: the address of a live object differs run-to-run on PIE builds.
-    // Recording or replaying pins the seed so randomness reproduces; otherwise
-    // ASLR keeps runs varied without touching an OS entropy API.
-    raylib.setRandomSeed(if (tape.recording or tape.replaying())
-        REPLAY_RANDOM_SEED
-    else
-        @truncate(@intFromPtr(roc_host)));
+    raylib.setRandomSeed(@truncate(@intFromPtr(roc_host)));
 
     // Audio device must be ready before init! generates/plays any sounds.
     raylib.initAudioDevice();
@@ -4612,11 +4361,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             virtual_mouse_wheel = 0;
         }
         const text_input = raylib.getTextInput();
-        // Only built on the live branch: `hostState` retains the six input
-        // lists for the message that will consume them, and a replay builds its
-        // own snapshot from the tape instead. Building one here unconditionally
-        // stranded a retained generation on every replayed frame.
-        const platform_state = if (tape.replaying()) null else input.hostState(
+        const platform_state = input.hostState(
             frame_count,
             now_ns,
             frame_time,
@@ -4628,18 +4373,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         );
 
         last_frame_nanos = now_ns;
-        if (tape.replaying()) {
-            // The tape is authoritative: raylib is not sampled at all, and any
-            // effect result that arrived live is discarded in favour of the
-            // recorded one. That is what makes a replay hermetic -- a file
-            // changing on disk cannot change what the app sees.
-            if (!pushRecordedFrame(&queue, roc_host, &input)) break;
-        } else {
-            queue.push(roc_host, frameInput(platform_state.?));
-            queue.push(roc_host, tickInput(frame_count, now_ns, frame_time));
-            drainWorkerResults(&queue, roc_host);
-            expireTimers(&queue, roc_host, now_ns);
-        }
+        queue.push(roc_host, frameInput(platform_state));
+        queue.push(roc_host, tickInput(frame_count, now_ns, frame_time));
+        drainWorkerResults(&queue, roc_host);
+        expireTimers(&queue, roc_host, now_ns);
 
         // Every message is delivered before the drawing scope opens, so
         // `update!` structurally cannot draw -- it is never handed a Frame.
@@ -4671,7 +4408,6 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
     resetHeadlessRuntime(app_config);
     defer deinitResources();
-    defer tape.flush();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -4704,14 +4440,10 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         );
 
         last_frame_nanos = timestamp_nanos;
-        if (tape.replaying()) {
-            if (!pushRecordedFrame(&queue, roc_host, &input)) break;
-        } else {
-            queue.push(roc_host, frameInput(platform_state));
-            queue.push(roc_host, tickInput(frame_count, timestamp_nanos, frame_time));
-            drainWorkerResults(&queue, roc_host);
-            expireTimers(&queue, roc_host, timestamp_nanos);
-        }
+        queue.push(roc_host, frameInput(platform_state));
+        queue.push(roc_host, tickInput(frame_count, timestamp_nanos, frame_time));
+        drainWorkerResults(&queue, roc_host);
+        expireTimers(&queue, roc_host, timestamp_nanos);
 
         if (drainQueue(&queue, roc_host, &boxed_model)) |code| {
             exit_code = code;
@@ -4805,11 +4537,6 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var app_config = app_config_for_host();
     // The config now carries three Roc strings; `decref` releases all of them.
     defer app_config.decref(&roc_host);
-
-    setUpTape(allocator, options, app_config) catch {
-        return 1;
-    };
-    defer tape.deinit();
 
     if (options.headless) {
         return runHeadlessApp(&roc_host, app_config, options.headless_frames);

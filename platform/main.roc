@@ -9,7 +9,9 @@ platform ""
 		}
 	}
 	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
-	packages {}
+	packages {
+		rrt: "../package/main.roc",
+	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
 		"init_for_host": init_for_host!,

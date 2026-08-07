@@ -34,8 +34,11 @@ ARCHIVES = [
 
 # GNU nm reads ELF and COFF but not Mach-O, so the two macOS archives need an
 # llvm-nm. Try the ones that exist rather than hard-coding either.
-NM_CANDIDATES = ["llvm-nm", "llvm-nm-20", "llvm-nm-19", "llvm-nm-18",
-                 "llvm-nm-17", "nm"]
+# Version range covers what CI runners actually ship: ubuntu-22.04 images carry
+# llvm-nm-13/14/15, newer images and local installs carry higher. GNU nm is last
+# because it cannot read Mach-O, and reading none of an archive's symbols must
+# fail rather than look like a clean result.
+NM_CANDIDATES = ["llvm-nm"] + [f"llvm-nm-{v}" for v in range(21, 12, -1)] + ["nm"]
 
 
 def read_symbols(nm, archive, flag):

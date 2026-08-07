@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLATFORM_ENTRY = ROOT / "platform" / "main.roc"
-PACKAGE_ENTRY = ROOT / "package" / "main.roc"
+PACKAGE_ENTRY = ROOT / "types" / "main.roc"
 TYPES_SUBDIR = "types"
 
 

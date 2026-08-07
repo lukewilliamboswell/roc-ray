@@ -52,6 +52,7 @@ scripts/run-example.py examples/cave_climb.roc -- --debug-allocator
 | `examples/` | Complete apps and focused, reusable patterns |
 | `scripts/` | Local development, profiling, ABI, bundle, and release helpers |
 | `test/compile_fail/` | Checks that internal platform details stay private |
+| `types/` | The `roc-ray-types` package, released independently |
 | `www/` | Versioned generated API documentation |
 
 ## Everyday checks
@@ -220,6 +221,23 @@ scripts/build_docs.py --version 0.10.0     # writes www/0.10.0 and www/0.10.0/ty
 `--check` fails on a module missing a page, a broken relative link, or a
 re-export module that stops pointing at the package docs. The release workflow
 runs `--check` before building and the versioned form when publishing.
+
+## Releases
+
+The platform and the `roc-ray-types` package release independently, so either
+can be bumped on its own:
+
+- **Types package** — run the "Release roc-ray-types" workflow, then update
+  `.types-version` with the URL it prints.
+- **Platform** — run the "Release" workflow. `scripts/bundle.sh` rewrites the
+  staged platform header to the pinned package URL and refuses to build if
+  `types/` no longer bundles to the pinned filename. Bundles are content
+  addressed, so a platform release can never reference a package build that was
+  never published.
+
+When `types/` changes, release the package first. The local and CI bundle tests
+bypass the pin with `--types-url-base`, bundling and serving the package
+themselves.
 
 ## ABI and host changes
 

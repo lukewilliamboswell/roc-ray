@@ -7,7 +7,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,17 +30,6 @@ def main() -> int:
     manifest.add_argument("--default-bundle", required=True)
     manifest.add_argument("--wayland-bundle", required=True)
     manifest.add_argument("--output", required=True)
-
-    asset = subcommands.add_parser(
-        "add-release-asset",
-        help="publish an extra file as a release asset without giving it a test entry",
-    )
-    asset.add_argument("--path", required=True)
-    asset.add_argument("--name", required=True)
-    asset.add_argument("--bundle-dir", required=True)
-    asset.add_argument("--release-list-file", required=True)
-    asset.set_defaults(func=cmd_add_release_asset)
-    manifest.set_defaults(func=cmd_write_bundle_manifest)
 
     previous = subcommands.add_parser("resolve-previous-default-url")
     previous.add_argument("--provided-url", default="")
@@ -97,33 +85,6 @@ def cmd_write_bundle_manifest(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_add_release_asset(args: argparse.Namespace) -> int:
-    """Add a file to the prepared release assets.
-
-    `prepare-bundles` only handles platform bundles: every file it sees must
-    carry a non-empty test matrix. The roc-ray-types package has to ship as a
-    release asset, because the platform bundles reference it by that URL, but
-    there is no app to build from it and so nothing to test. Append it after
-    the fact instead.
-    """
-    source = require_bundle(args.path, "release asset")
-    bundle_dir = Path(args.bundle_dir)
-    if not bundle_dir.is_dir():
-        raise RuntimeError(f"release bundle directory is missing: {bundle_dir}")
-
-    release_list = read_json(args.release_list_file)
-    if not isinstance(release_list, list) or not release_list:
-        raise RuntimeError("release bundle list must be a non-empty JSON array")
-    if any(entry.get("artifact_file") == source.name for entry in release_list):
-        raise RuntimeError(f"release asset already present: {source.name}")
-
-    shutil.copy2(source, bundle_dir / source.name)
-    release_list.append({"name": args.name, "artifact_file": source.name, "source_path": str(source)})
-    write_json(args.release_list_file, release_list)
-    print(f"Added release asset {source.name} as '{args.name}'")
-    return 0
-
-
 def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
     provided = args.provided_url.strip()
     if provided:
@@ -142,6 +103,18 @@ def cmd_resolve_previous_default_url(args: argparse.Namespace) -> int:
         append_github_output(args.github_output, "previous_url", previous_url)
         append_github_output(args.github_output, "bump_check", bump_check_mode(previous_url))
     return 0
+
+
+def read_types_pin() -> str:
+    """The published roc-ray-types bundle the platform bundles were built against."""
+    pin = Path(__file__).resolve().parent.parent / ".types-version"
+    if not pin.is_file():
+        return ""
+    for line in pin.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped
+    return ""
 
 
 def cmd_make_release_notes(args: argparse.Namespace) -> int:
@@ -180,18 +153,15 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
         f'platform "{wayland_url}"',
         "```",
     ]
-    types_file = next(
-        (b.get("artifact_file") for b in bundles if b.get("name") == "roc-ray-types"), None
-    )
-    if types_file:
-        types_url = release_asset_url(repo, release_version, types_file)
+    types_url = read_types_pin()
+    if types_url:
         lines.extend([
             "",
             "### roc-ray-types package",
             "",
-            "Shared data types and pure helpers. The platform bundles above already depend on this",
-            "package; add it to your app only if you also want to use these types from a reusable",
-            "package of your own, so that both resolve the same types.",
+            "Shared data types and pure helpers, released independently of the platform. The",
+            "bundles above already depend on this version; add it to your app only if a reusable",
+            "package of your own also uses these types, so both resolve the same URL.",
             "",
             "```roc",
             f'"{types_url}"',

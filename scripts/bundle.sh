@@ -141,17 +141,26 @@ fi
 # The platform header points at the roc-ray-types package by relative path so
 # local development works without a published artifact. `roc bundle` silently
 # drops such a dependency -- the archive builds and then fails at the consumer
-# with INVALID PACKAGE DEPENDENCY -- so refuse rather than emit a broken bundle.
-types_dep_line="$(grep -n 'rrt:' "$platform_dir/main.roc" || true)"
-if [[ "$types_dep_line" == *'"../package/'* && -z "$types_url_base" ]]; then
+# with INVALID PACKAGE DEPENDENCY -- so the header is rewritten to a real URL
+# here.
+#
+# With --types-url-base the package is bundled and served from that base, which
+# is what the local and CI bundle tests do. Without it the pinned published URL
+# in .types-version is used, which is what a platform release does.
+pinned_types_url=""
+if [[ -f "$root_dir/.types-version" ]]; then
+    # An all-comments file yields no lines; grep exits 1 and would trip set -e.
+    pinned_types_url="$(grep -v '^[[:space:]]*#' "$root_dir/.types-version" 2>/dev/null | tr -d '[:space:]' | head -1 || true)"
+fi
+
+if [[ -z "$types_url_base" && -z "$pinned_types_url" ]]; then
     cat >&2 <<'EOF'
-error: --types-url-base is required.
+error: no roc-ray-types URL available.
 
-platform/main.roc depends on the roc-ray-types package by relative path, which
-cannot survive bundling. Pass the base URL the package bundle will be served
-from, for example:
+The platform depends on the types package by relative path, which cannot
+survive bundling. Either pin a published package in .types-version by running
+the "Release roc-ray-types" workflow, or pass a base URL to serve it from:
 
-    scripts/bundle.sh --types-url-base https://github.com/OWNER/REPO/releases/download/VERSION
     scripts/bundle.sh --types-url-base http://127.0.0.1:8000
 EOF
     exit 1
@@ -159,10 +168,10 @@ fi
 
 types_url=""
 if [[ -n "$types_url_base" ]]; then
-    # Bundle from inside the package directory. Bundling `package/main.roc` from
+    # Bundle from inside the types directory. Bundling `types/main.roc` from
     # the repo root roots the archive at `package/`, one level deeper than roc
     # resolves on extraction.
-    if ! types_output="$(cd "$root_dir/package" && "$roc_bin" bundle main.roc --output-dir "$types_output_dir" 2>&1)"; then
+    if ! types_output="$(cd "$root_dir/types" && "$roc_bin" bundle main.roc --output-dir "$types_output_dir" 2>&1)"; then
         echo "$types_output" >&2
         echo "error: failed to bundle the roc-ray-types package" >&2
         exit 1
@@ -179,6 +188,32 @@ if [[ -n "$types_url_base" ]]; then
     echo "Types package bundle: $types_bundle"
     echo "Types package path: $types_output_dir/$types_bundle"
     echo "Types package URL: $types_url"
+else
+    types_url="$pinned_types_url"
+    # Bundles are content addressed, so re-bundling types/ and comparing the
+    # filename says whether the pin still describes this source tree.
+    verify_dir="$(mktemp -d)"
+    if ! verify_output="$(cd "$root_dir/types" && "$roc_bin" bundle main.roc --output-dir "$verify_dir" 2>&1)"; then
+        echo "$verify_output" >&2
+        rm -rf "$verify_dir"
+        echo "error: failed to bundle the roc-ray-types package for verification" >&2
+        exit 1
+    fi
+    verify_bundle="$(printf '%s\n' "$verify_output" | sed -n 's|^Created: ||p' | tail -1 | sed 's|.*[/\\]||')"
+    rm -rf "$verify_dir"
+    if [[ "${types_url##*/}" != "$verify_bundle" ]]; then
+        cat >&2 <<EOF
+error: types/ has changed since the pinned roc-ray-types release.
+
+  pinned:  ${types_url##*/}
+  current: $verify_bundle
+
+Release the types package first with the "Release roc-ray-types" workflow,
+update .types-version, then release the platform.
+EOF
+        exit 1
+    fi
+    echo "Types package (pinned): $types_url"
 fi
 
 # Point the staged header at the bundled package instead of the relative path
@@ -186,7 +221,7 @@ fi
 rewrite_types_dep() {
     local staged="$1"
     [[ -n "$types_url" ]] || return 0
-    if ! grep -q 'rrt: "\.\./package/main\.roc",' "$staged"; then
+    if ! grep -q 'rrt: "\.\./types/main\.roc",' "$staged"; then
         echo "error: expected a relative rrt: dependency in $staged to rewrite" >&2
         exit 1
     fi
@@ -194,7 +229,7 @@ rewrite_types_dep() {
 import pathlib, sys
 staged, url = pathlib.Path(sys.argv[1]), sys.argv[2]
 text = staged.read_text(encoding="utf-8")
-staged.write_text(text.replace('rrt: "../package/main.roc",', f'rrt: "{url}",'), encoding="utf-8")
+staged.write_text(text.replace('rrt: "../types/main.roc",', f'rrt: "{url}",'), encoding="utf-8")
 PYEOF
 }
 

@@ -1,1 +1,1 @@
-package [Input] { rrt: "../../../package/main.roc" }
+package [Input] { rrt: "../../../types/main.roc" }

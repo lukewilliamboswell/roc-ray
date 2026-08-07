@@ -4,6 +4,39 @@ on:
   pull_request:
 
 jobs:
+  # Pixel-level rendering and capture checks. They need a real GL context, so
+  # they run under a virtual display -- without this the target never runs
+  # anywhere, which is how it sat unrun for so long.
+  #
+  # Deliberately outside the build matrix. This is the only thing here that
+  # links the system libc directly (`-lc`), and the vendored raylib references
+  # glibc 2.38's `__isoc23_*` symbols, which ubuntu-22.04 does not provide. The
+  # platform and the examples are unaffected: they link through the generated
+  # libc stub instead.
+  graphical-smoke:
+    name: Graphical smoke tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.0.5
+        with:
+          version: 0.16.0
+
+      # Xvfb provides the display; the X11 dev packages are what raylib links
+      # against, and mesa's software rasteriser is what gives xvfb a GL context.
+      - name: Install X11 and GL dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
+            libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libgl1-mesa-dev libglx-mesa0 mesa-utils
+
+      - name: Run graphical smoke tests
+        run: xvfb-run -a zig build graphical-smoke
+
   build-and-test:
     name: Build and Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -43,6 +76,15 @@ jobs:
         # Native tests require MSVC libraries on Windows which aren't available in CI
         if: runner.os != 'Windows'
         run: zig build test -Droc-tests=false
+
+      # Checks each vendored libvpx SIMD kernel against its C reference. It has
+      # to run on the target -- macos-15 is arm64, and NEON is where an arm64
+      # build replaces ~200 kernels that nothing else here would exercise.
+      # `zig build test` already depends on this; naming it separately makes a
+      # kernel mismatch obvious in the job list rather than buried in the tests.
+      - name: Check libvpx SIMD parity
+        if: runner.os != 'Windows'
+        run: zig build libvpx-parity
 
       - name: Bundle platform
         run: |
@@ -133,8 +175,14 @@ jobs:
         if: runner.os != 'Windows'
         run: scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
 
+      # Headless mode exists so every platform can build and run its examples
+      # without a display, so run it on every platform. Linking is also what
+      # catches a host library missing a definition: a static archive does not
+      # complain about an unresolved reference, so a build can look clean on all
+      # four targets and still fail in every app that links it.
+      #
+      # Bounded because a headless run that hangs would otherwise sit until the
+      # six-hour job limit.
       - name: Build and run examples headlessly
-        # Linux covers headless runtime; macOS currently hangs in generated executables
-        # and Windows has roc executable PATH issues plus MSVC requirements.
-        if: runner.os == 'Linux'
+        timeout-minutes: 20
         run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test

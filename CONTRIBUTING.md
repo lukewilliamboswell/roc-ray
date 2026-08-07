@@ -324,6 +324,42 @@ source checkout with:
 scripts/build-raylib-wayland.sh /path/to/raylib-6.0
 ```
 
+## Vendored encoders
+
+Screenshots go through raylib's own PNG writer, but GIF and video need encoders
+the vendored raylib does not have. Both are vendored as *source* and compiled by
+`zig build` for every target, so there is no configure step, no prebuilt archive
+to re-vendor per platform, and no per-OS CI runner in the loop:
+
+- `vendor/msf_gif/` -- a single-header GIF encoder (MIT or public domain). Built
+  freestanding like the host; the handful of libc declarations it needs come
+  from the `shim/` directory beside it.
+- `vendor/libvpx/` -- the VP8 encoder from libvpx (BSD-3-Clause, royalty-free).
+  C only: libvpx writes some of its SIMD as compiler intrinsics, which `zig cc`
+  compiles, and the rest as NASM/GAS assembly, which Zig cannot assemble. The
+  intrinsics are vendored, the assembly is not, so no assembler is needed to
+  build or to re-vendor. Because the ISA is fixed at compile time (there is no
+  runtime CPU detection), the generated headers are per architecture:
+  `config/x86_64/` for the three x86-64 targets, `config/arm64/` for arm64mac.
+  `vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
+  `config/README.md` explains what it produces -- that is the one thing to run
+  when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
+
+`zig build graphical-smoke` runs the pixel-level rendering and capture checks
+under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
+newer runner than the build matrix: it is the only target that links the system
+libc directly, and the vendored raylib references glibc 2.38 symbols that
+ubuntu-22.04 lacks. The platform and examples link through the generated libc
+stub and are unaffected.
+
+Both expose only primitives and opaque pointers to Zig through a small C shim,
+so the freestanding host module never needs C headers. Each produces its own
+static archive, copied into `platform/targets/<target>/` and named in the
+`targets:` block of `platform/main.roc`, exactly as `libraylib.a` is.
+
+libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
+added to the glibc link stubs in `platform/targets/*/libc_stub.s`.
+
 Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
 Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
 ARM Linux is not currently included.

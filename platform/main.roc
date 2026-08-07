@@ -8,7 +8,7 @@ platform ""
 			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics]
+	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture]
 	packages {
 		rrt: "../types/main.roc",
 	}
@@ -76,6 +76,11 @@ platform ""
 		"roc_draw_text_raw": DrawHost.text!,
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,
+		"roc_capture_screenshot": CaptureHost.screenshot!,
+		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
+		"roc_capture_start_recording": CaptureHost.start_recording!,
+		"roc_capture_stop_recording": CaptureHost.stop_recording!,
+		"roc_capture_recording_status": CaptureHost.recording_status!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_random_i32": HostHost.random_i32!,
@@ -111,10 +116,10 @@ platform ""
 	}
 	targets: {
 		inputs_dir: "targets/",
-		x64mac: { inputs: ["libhost.a", "libraylib.a", app] },
-		arm64mac: { inputs: ["libhost.a", "libraylib.a", app] },
-		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
-		x64win: { inputs: ["host.lib", "raylib.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app] },
+		x64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", app] },
+		arm64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", app] },
+		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
+		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", app] },
 	}
 
 import Draw
@@ -132,6 +137,8 @@ import Audio
 import AudioHost
 import App
 import AppConfig
+import Capture
+import CaptureHost
 import Assets
 import AssetsHost
 import Math

@@ -398,7 +398,8 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
 
                 expected_target = (
                     'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
-                    '"libraylib.a", "libm.so", app, "libc.so", "crtn.o"] }'
+                    '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
+                    '"libc.so", "crtn.o"] }'
                 )
                 if expected_target not in main_text:
                     print("  Wayland main.roc does not contain the expected Linux-only target")
@@ -410,6 +411,8 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
                 "targets/x64glibc/crtn.o",
                 "targets/x64glibc/libhost.a",
                 "targets/x64glibc/libraylib.a",
+                "targets/x64glibc/libmsf_gif.a",
+                "targets/x64glibc/libvpx.a",
                 "targets/x64glibc/libm.so",
                 "targets/x64glibc/libc.so",
             }
@@ -568,6 +571,20 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
             failed.append("zig build")
         else:
             print("  ok")
+
+    # The vendored libvpx's dispatch headers are pruned to match its
+    # per-architecture source lists; this catches the two falling out of step.
+    print("\nChecking libvpx archives...")
+    if run_cmd(
+        [sys.executable, str(root / "scripts" / "check_libvpx_archives.py")],
+        "check_libvpx_archives",
+        args.verbose,
+        cwd=root,
+    ):
+        print("  ok")
+    else:
+        print("  FAILED")
+        failed.append("libvpx archive check")
 
     if args.runtime_only:
         print("\nSkipping roc check/fmt/test (--runtime-only)")

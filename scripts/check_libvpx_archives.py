@@ -38,6 +38,13 @@ ARCHIVES = [
 # llvm-nm-13/14/15, newer images and local installs carry higher. GNU nm is last
 # because it cannot read Mach-O, and reading none of an archive's symbols must
 # fail rather than look like a clean result.
+# libvpx internals that its own naming convention misses. `arm_cpu_caps` is the
+# one that matters: the generated arm64 rtcd setup calls it, and leaving its
+# definition out of the build still produces a clean-looking archive that fails
+# at the final link of every arm64 app. Checking only vpx_/vp8_ prefixes let
+# that through once already.
+EXTRA_INTERNAL_SYMBOLS = {"arm_cpu_caps"}
+
 NM_CANDIDATES = ["llvm-nm"] + [f"llvm-nm-{v}" for v in range(21, 12, -1)] + ["nm"]
 
 
@@ -52,7 +59,7 @@ def read_symbols(nm, archive, flag):
             continue
         # Mach-O decorates C symbols with a leading underscore.
         name = parts[-1].lstrip("_")
-        if name.startswith(("vpx_", "vp8_")):
+        if name.startswith(("vpx_", "vp8_")) or name in EXTRA_INTERNAL_SYMBOLS:
             out.add(name)
     return out
 

@@ -552,6 +552,11 @@ const libvpx_x86_64_sources = [_][]const u8{
 /// is the complete set configure selects for an arm64 VP8-encoder build, so
 /// nothing is pruned out of `config/arm64/` and NEON covers the hot path.
 const libvpx_arm64_sources = [_][]const u8{
+    // The generated arm64 rtcd setup calls arm_cpu_caps(), so its definition
+    // has to be compiled in. A static archive does not complain about an
+    // unresolved reference, so leaving this out builds cleanly and then fails
+    // at the final link of every arm64 app.
+    "vpx_ports/aarch64_cpudetect.c",
     "vp8/common/arm/loopfilter_arm.c",
     "vp8/common/arm/neon/bilinearpredict_neon.c",
     "vp8/common/arm/neon/copymem_neon.c",

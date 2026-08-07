@@ -1048,6 +1048,23 @@ pub fn setExitKey(key: c_int) void {
     rl.SetExitKey(key);
 }
 
+/// Read UTF-8 text from the system clipboard.
+///
+/// The returned pointer is owned by the windowing backend: never free it, and
+/// copy it before the next clipboard call invalidates it. Returns null when the
+/// clipboard is empty or holds non-text content. Requires a live window.
+pub fn getClipboardText() ?[*:0]const u8 {
+    const text = rl.GetClipboardText();
+    if (text == null) return null;
+    return @ptrCast(text);
+}
+
+/// Replace the system clipboard contents. raylib copies the string, so the
+/// caller keeps ownership. Requires a live window.
+pub fn setClipboardText(text: [*:0]const u8) void {
+    rl.SetClipboardText(text);
+}
+
 /// Get frame time (delta time) in seconds since the previous frame.
 pub fn getFrameTime() f32 {
     return rl.GetFrameTime();

@@ -154,6 +154,23 @@ Host := {
 	set_exit_key! : Host, ExitKey => {}
 	set_exit_key! = |_host, key| HostHost.set_exit_key!(AppConfig.host_exit_key_code(key))
 
+	## Read UTF-8 text from the system clipboard.
+	## Returns `Err(Unavailable)` when the clipboard is empty, holds non-text
+	## content, or the windowing backend refuses the request -- the underlying
+	## platform does not distinguish these cases.
+	## Receiver form: `host.get_clipboard_text!()`.
+	get_clipboard_text! : Host => Try(Str, [Unavailable, ..])
+	get_clipboard_text! = |_host|
+		match HostHost.get_clipboard_text!() {
+			Ok(text) => Ok(text)
+			Err(Unavailable) => Err(Unavailable)
+		}
+
+	## Replace the system clipboard contents with UTF-8 text.
+	## Receiver form: `host.set_clipboard_text!(text)`.
+	set_clipboard_text! : Host, Str => {}
+	set_clipboard_text! = |_host, text| HostHost.set_clipboard_text!(text)
+
 	## Apply cursor visibility/capture atomically through one tagged operation.
 	set_cursor_mode! : Host, CursorMode => {}
 	set_cursor_mode! = |_host, mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))

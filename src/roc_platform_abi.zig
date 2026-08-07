@@ -4665,6 +4665,65 @@ comptime {
 }
 
 /// Tag discriminant for Try.
+pub const HostHostGet_clipboard_textResultTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const HostHostGet_clipboard_textResultPayload = extern union {
+    err: [0]u8,
+    ok: RocStr,
+};
+
+/// Tag union: Try
+pub const HostHostGet_clipboard_textResult = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: HostHostGet_clipboard_textResultTag,
+    pub fn payload_ok(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostHostGet_clipboard_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostHostGet_clipboard_textResult(self, amount);
+    }
+} else extern struct {
+    payload: HostHostGet_clipboard_textResultPayload,
+    tag: HostHostGet_clipboard_textResultTag,
+    pub fn payload_ok(self: *const @This()) RocStr {
+        return self.payload.ok;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostHostGet_clipboard_textResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostHostGet_clipboard_textResult(self, amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostHostGet_clipboard_textResult) != 32) @compileError("HostHostGet_clipboard_textResult size mismatch");
+        if (@alignOf(HostHostGet_clipboard_textResult) != 8) @compileError("HostHostGet_clipboard_textResult alignment mismatch");
+        if (@offsetOf(HostHostGet_clipboard_textResult, "tag") != 24) @compileError("HostHostGet_clipboard_textResult tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostHostGet_clipboard_textResult) != 16) @compileError("HostHostGet_clipboard_textResult size mismatch");
+        if (@alignOf(HostHostGet_clipboard_textResult) != 4) @compileError("HostHostGet_clipboard_textResult alignment mismatch");
+        if (@offsetOf(HostHostGet_clipboard_textResult, "tag") != 12) @compileError("HostHostGet_clipboard_textResult tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
 pub const HostHostRead_envResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
@@ -6958,6 +7017,13 @@ pub const HostHostRead_fileArgs = extern struct {
     arg0: RocStr,
 };
 
+/// Arguments for HostHost.set_clipboard_text!
+/// Roc signature: Str => {}
+/// Refcounted fields are owned by the hosted function.
+pub const HostHostSet_clipboard_textArgs = extern struct {
+    arg0: RocStr,
+};
+
 /// Arguments for HostHost.set_exit_key!
 /// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
@@ -7184,6 +7250,24 @@ fn increfDefaultFontOrLoadedFont(value: DefaultFontOrLoadedFont, amount: isize) 
         .DefaultFont => {},
         .LoadedFont => {
             increfBox(@ptrCast(value.payload_loaded_font()), amount);
+        },
+    }
+}
+
+fn decrefHostHostGet_clipboard_textResult(value: HostHostGet_clipboard_textResult, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+fn increfHostHostGet_clipboard_textResult(value: HostHostGet_clipboard_textResult, amount: isize) void {
+    switch (value.tag) {
+        .Err => {},
+        .Ok => {
+            value.payload_ok().incref(amount);
         },
     }
 }
@@ -7846,6 +7930,10 @@ pub extern fn roc_draw_triangle_lines_raw(arg0: DrawHostTriangle_linesArgs) call
 /// Roc signature: I32 => {}
 pub extern fn roc_host_exit(arg0: i32) callconv(.c) void;
 
+/// Hosted symbol for HostHost.get_clipboard_text!
+/// Roc signature: {} => Try(Str, [Unavailable])
+pub extern fn roc_host_get_clipboard_text() callconv(.c) HostHostGet_clipboard_textResult;
+
 /// Hosted symbol for HostHost.random_i32!
 /// Roc signature: I32, I32 => I32
 pub extern fn roc_host_random_i32(arg0: i32, arg1: i32) callconv(.c) i32;
@@ -7857,6 +7945,10 @@ pub extern fn roc_host_read_env(arg0: RocStr) callconv(.c) HostHostRead_envResul
 /// Hosted symbol for HostHost.read_file!
 /// Roc signature: Str => { contents : Str, err : U8, ok : Bool }
 pub extern fn roc_host_read_file_raw(arg0: RocStr) callconv(.c) __AnonStruct_1504326a3d41a158;
+
+/// Hosted symbol for HostHost.set_clipboard_text!
+/// Roc signature: Str => {}
+pub extern fn roc_host_set_clipboard_text(arg0: RocStr) callconv(.c) void;
 
 /// Hosted symbol for HostHost.set_exit_key!
 /// Roc signature: I32 => {}

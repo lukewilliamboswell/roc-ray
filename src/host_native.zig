@@ -22,6 +22,10 @@ const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
 const ReadEnvResult = abi.HostHostRead_envResult;
+// get_clipboard_text! returns Try(Str, [Unavailable]) -- the same shape as
+// read_env!'s result, generated separately because the error tag differs.
+const ClipboardTextResult = abi.HostHostGet_clipboard_textResult;
+const ClipboardTextResultTag = abi.HostHostGet_clipboard_textResultTag;
 const HostReadFileRawResult = abi.HostHostRead_fileRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapHostLoad_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
@@ -50,6 +54,7 @@ const TEXTURE_UPDATE_PIXEL_COUNT: u8 = 1;
 const TEXTURE_UPDATE_NOT_MUTABLE: u8 = 2;
 const TRY_TAG_OK: u8 = 1;
 const MAX_HOST_TEXT_FILE_BYTES: usize = 16 * 1024 * 1024;
+const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
 extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
@@ -80,6 +85,14 @@ inline fn headlessMode() bool {
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
 var headless_random_state: u32 = 0x4d595df4;
+/// Headless runs never open a window, so there is no system clipboard to talk
+/// to. Back the clipboard effects with a process-local buffer instead of a
+/// no-op, so an example that round-trips the clipboard is still exercised by
+/// the headless CI runs. Writes longer than the buffer are refused, leaving the
+/// previous contents intact.
+var headless_clipboard: [HEADLESS_CLIPBOARD_CAPACITY]u8 = undefined;
+var headless_clipboard_len: usize = 0;
+var headless_clipboard_set: bool = false;
 var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
@@ -594,6 +607,8 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_screen_width = positiveI32(app_config.width, 800);
     headless_screen_height = positiveI32(app_config.height, 600);
     headless_random_state = 0x4d595df4;
+    headless_clipboard_len = 0;
+    headless_clipboard_set = false;
     headless_render_texture_depth = 0;
     headless_shader_depth = 0;
     render_texture_lease_count = 0;
@@ -2035,6 +2050,60 @@ fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     raylib.setExitKey(nonNegativeCInt(key_code));
 }
 
+fn hostedGetClipboardText(roc_host: *RocHost) callconv(.c) ClipboardTextResult {
+    var result: ClipboardTextResult = undefined;
+
+    if (headlessMode()) {
+        if (!headless_clipboard_set) {
+            result.tag = .Err;
+            return result;
+        }
+        result.payload = .{ .ok = abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host) };
+        result.tag = .Ok;
+        return result;
+    }
+
+    // The pointer belongs to the windowing backend: it is null when the
+    // clipboard is empty or holds non-text content, must never be freed, and is
+    // invalidated by the next clipboard call -- so copy it into a Roc Str now.
+    const text = raylib.getClipboardText() orelse {
+        result.tag = .Err;
+        return result;
+    };
+    result.payload = .{ .ok = abi.RocStr.fromSlice(std.mem.span(text), roc_host) };
+    result.tag = .Ok;
+    return result;
+}
+
+fn exportedGetClipboardText() callconv(.c) ClipboardTextResult {
+    return hostedGetClipboardText(activeHost());
+}
+
+fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
+    // Roc transfers ownership of refcounted args to the hosted fn; release it
+    // on every path, including the early returns below.
+    defer text_arg.decref(roc_host);
+
+    const text_slice = text_arg.asSlice();
+
+    if (headlessMode()) {
+        if (text_slice.len > headless_clipboard.len) return;
+        @memcpy(headless_clipboard[0..text_slice.len], text_slice);
+        headless_clipboard_len = text_slice.len;
+        headless_clipboard_set = true;
+        return;
+    }
+
+    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
+    var text = makeTempCString(allocatorFromHost(roc_host), &stack, text_slice) catch return;
+    defer text.deinit();
+    raylib.setClipboardText(text.ptr);
+}
+
+fn exportedSetClipboardText(text_arg: abi.RocStr) callconv(.c) void {
+    hostedSetClipboardText(activeHost(), text_arg);
+}
+
 const CursorMode = enum {
     visible,
     hidden,
@@ -2095,6 +2164,36 @@ test "window minimums and exit keys clamp negatives to the no-op zero" {
     try std.testing.expectEqual(@as(c_int, 0), nonNegativeCInt(std.math.minInt(i32)));
     try std.testing.expectEqual(@as(c_int, 256), nonNegativeCInt(256));
     try std.testing.expectEqual(@as(c_int, 640), nonNegativeCInt(640));
+}
+
+test "headless clipboard round-trips text and refuses oversized writes" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    defer {
+        headless_clipboard_len = 0;
+        headless_clipboard_set = false;
+    }
+    headless_clipboard_len = 0;
+    headless_clipboard_set = false;
+
+    // Nothing written yet, so a read reports the clipboard as unavailable
+    // rather than handing back an empty string.
+    try std.testing.expectEqual(ClipboardTextResultTag.Err, hostedGetClipboardText(&roc_host).tag);
+
+    hostedSetClipboardText(&roc_host, abi.RocStr.fromSlice("copied", &roc_host));
+    const stored = hostedGetClipboardText(&roc_host);
+    defer stored.decref(&roc_host);
+    try std.testing.expectEqual(ClipboardTextResultTag.Ok, stored.tag);
+    try std.testing.expectEqualStrings("copied", stored.payload.ok.asSlice());
+
+    // A write that cannot fit leaves the previous contents intact, and still
+    // releases the Roc string it was handed.
+    const oversized = abi.RocStr.fromSlice(&([_]u8{'x'} ** (HEADLESS_CLIPBOARD_CAPACITY + 1)), &roc_host);
+    hostedSetClipboardText(&roc_host, oversized);
+    const unchanged = hostedGetClipboardText(&roc_host);
+    defer unchanged.decref(&roc_host);
+    try std.testing.expectEqualStrings("copied", unchanged.payload.ok.asSlice());
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
@@ -2496,9 +2595,11 @@ comptime {
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
+        @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
+        @export(&exportedSetClipboardText, .{ .name = "roc_host_set_clipboard_text" });
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });

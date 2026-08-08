@@ -1453,6 +1453,16 @@ pub fn getScreenHeight() c_int {
     return rl.GetScreenHeight();
 }
 
+/// Whether the window currently has keyboard input focus.
+pub fn isWindowFocused() bool {
+    return rl.IsWindowFocused();
+}
+
+/// Whether the window is currently minimized.
+pub fn isWindowMinimized() bool {
+    return rl.IsWindowMinimized();
+}
+
 /// Get framebuffer width in pixels, which exceeds the screen width on HiDPI.
 pub fn getRenderWidth() c_int {
     return rl.GetRenderWidth();

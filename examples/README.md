@@ -40,10 +40,10 @@ demonstrate how the same APIs fit into larger state and resource lifecycles.
 - Construct `App.Config` with receiver updates and create assets in `init!`.
 - Keep textures, sounds, shaders, fonts, and prepared text in the model instead
   of loading or preparing them inside `render!`.
-- Treat `Host` as the current frame's snapshot. Derive plain game input from it;
-  do not retain input snapshot lists in the model.
-- Scale continuous motion by `host.frame_time`. For discrete simulation, clamp
-  catch-up time and retain the fixed-step remainder.
+- Treat `step.input` as the current frame's snapshot. Derive plain game input
+  from it; do not retain input snapshot lists in the model.
+- Scale continuous motion by `step.time.elapsed_seconds`. For discrete
+  simulation, clamp catch-up time and retain the fixed-step remainder.
 - Update game state before drawing, and isolate effectful reactions to game
   events where the example is large enough to benefit from that split.
 - Draw only through the supplied `Draw.Frame`; pass scoped frames into helpers

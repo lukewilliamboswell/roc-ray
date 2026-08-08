@@ -27,7 +27,10 @@
 ##
 ## Roc still only ever runs on one thread. The host owns whatever concurrency
 ## exists, and `Box(Model)` is never shared.
-import Host
+import Input
+import Window
+import Time
+import Keys
 import Mouse
 import Audio
 import Assets
@@ -39,6 +42,11 @@ Program := [].{
 
 	## Everything the host observed since the previous cycle.
 	##
+	## The three observations are kept apart on purpose. `input` is what the
+	## devices said, `window` is what the window looked like, `time` is when it
+	## happened -- one value each, sampled together but never merged, so a
+	## helper can ask for exactly the one it needs.
+	##
 	## `completed` is bounded per step, so a burst of finished work cannot
 	## consume a whole frame; the remainder arrives on the next one. It is empty
 	## on an ordinary frame, which is the case that has to stay cheap.
@@ -47,17 +55,11 @@ Program := [].{
 	## `Capture.status!`, and a recording's state is one small record, so the
 	## host fills it in on every step whether or not anything is recording.
 	Step : {
-		input : Host,
-		time : Time,
+		input : Input.Snapshot,
+		window : Window.Snapshot,
+		time : Time.Frame,
 		completed : List(Completion),
 		capture : Capture.Status,
-	}
-
-	## When this cycle happened, and how much time it covers.
-	Time : {
-		frame_count : U64,
-		timestamp_nanos : U64,
-		elapsed_seconds : F32,
 	}
 
 	## What `update` returns: the next model, plus work for the platform.
@@ -82,9 +84,9 @@ Program := [].{
 	Action : [
 		Exit(I64),
 		SetCursor(Mouse.Cursor),
-		SetCursorMode(Host.CursorMode),
+		SetCursorMode(Mouse.CursorMode),
 		SetClipboardText(Str),
-		SetExitKey(Host.ExitKey),
+		SetExitKey(Keys.ExitKey),
 		SetWindowMinSize({ width : I32, height : I32 }),
 		PlaySound(Audio.Playback),
 		SetMusicVolume({ music : Audio.Music, volume : F32 }),

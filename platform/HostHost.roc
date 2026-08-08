@@ -2,6 +2,13 @@
 ##
 ## This module is intentionally not exposed by the platform package.
 HostHost := [].{
+
+	## Zero-sized startup capability constructed only by the platform adapter.
+	Startup :: {}.{
+		for_host : Startup
+		for_host = Startup.({})
+	}
+
 	ReadFileResult : {
 		ok : Bool,
 		err : U8,

@@ -20,7 +20,8 @@ const raylib = @import("backend_raylib.zig");
 // Type aliases
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
-const HostState = ffi.HostState;
+const InputSnapshot = ffi.InputSnapshot;
+const WindowSnapshot = ffi.WindowSnapshot;
 const RocHost = ffi.RocHost;
 // read_env! returns Try(Str, [NotFound, ..]); the generated `abi.Try` (payload
 // union of RocStr/err-ptr) is the correct 32-byte layout for it.
@@ -72,7 +73,7 @@ const MAX_HOST_TEXT_FILE_BYTES: usize = 16 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
 
 extern fn app_config_for_host() callconv(.c) AppConfig;
-extern fn init_for_host(arg0: HostState) callconv(.c) RocResult;
+extern fn init_for_host() callconv(.c) RocResult;
 extern fn update_for_host(arg0: RocBox, arg1: StepFromHost) callconv(.c) UpdateResult;
 extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
@@ -603,6 +604,10 @@ var capture_clock_last_real_ns: u64 = 0;
 
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
+/// A headless run reports a focused, non-minimized window. There is no window
+/// to ask, and a constant keeps `--headless` output reproducible.
+const HEADLESS_WINDOW_FOCUSED = true;
+const HEADLESS_WINDOW_MINIMIZED = false;
 var headless_random_state: u32 = 0x4d595df4;
 /// Headless runs never open a window, so there is no system clipboard to talk
 /// to. Back the clipboard effects with a process-local buffer instead of a
@@ -3600,25 +3605,15 @@ const InputState = struct {
 
     fn hostState(
         self: *InputState,
-        frame_count: u64,
-        timestamp_nanos: u64,
-        frame_time: f32,
         mouse_x: f32,
         mouse_y: f32,
         mouse_delta: raylib.Vec2,
         mouse_wheel: raylib.Vec2,
         text_input: []const u32,
-    ) HostState {
+    ) InputSnapshot {
         self.text_input.update(text_input);
         self.retainForRoc();
         return .{
-            .frame_count = frame_count,
-            .timestamp_nanos = timestamp_nanos,
-            .frame_time = frame_time,
-            .screen = .{
-                .width = if (active_headless) headless_screen_width else raylib.getScreenWidth(),
-                .height = if (active_headless) headless_screen_height else raylib.getScreenHeight(),
-            },
             .keys = self.keys.list,
             .text_input = self.text_input.list,
             .gamepads = .{
@@ -3661,6 +3656,26 @@ const InputState = struct {
         self.gamepad_axes.update(raylib.getGamepadAxes());
     }
 };
+
+/// Sample the window for one cycle: logical drawing size, focus, minimization.
+///
+/// A headless run never opens a window, so every field is a fixed constant
+/// rather than a raylib query -- `--headless` output has to be reproducible run
+/// to run, and asking a window that does not exist would not be.
+fn windowState() WindowSnapshot {
+    if (active_headless) {
+        return .{
+            .size = .{ .width = headless_screen_width, .height = headless_screen_height },
+            .focused = HEADLESS_WINDOW_FOCUSED,
+            .minimized = HEADLESS_WINDOW_MINIMIZED,
+        };
+    }
+    return .{
+        .size = .{ .width = raylib.getScreenWidth(), .height = raylib.getScreenHeight() },
+        .focused = raylib.isWindowFocused(),
+        .minimized = raylib.isWindowMinimized(),
+    };
+}
 
 fn printUsage() void {
     std.debug.print("usage: app [--headless] [--headless-frames=N] [--debug-allocator]\n", .{});
@@ -4799,12 +4814,16 @@ test "an operation called from its own phase is not rejected" {
 }
 
 
-fn initModel(input: *InputState) RocResult {
+/// Run the app's startup callback.
+///
+/// It takes no snapshot: `App.Startup` is authority, not observation. Nothing
+/// has been sampled when this runs, so there is nothing to hand over -- an app
+/// seeds its model with `Input.empty` and waits for the first `Step`.
+fn initModel() RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
-    const init_state = input.hostState(0, 0, 0, 0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, &.{});
     const phase = PhaseScope.enter(.startup);
     defer phase.leave();
-    const init_result = init_for_host(init_state);
+    const init_result = init_for_host();
     if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
     return init_result;
 }
@@ -4866,7 +4885,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     configureCapture(app_config);
     defer finalizeCapture();
 
-    const init_result = initModel(&input);
+    const init_result = initModel();
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
         if (TRACE_HOST) std.log.debug("[HOST] init returned Err({d})", .{err_code});
@@ -4912,10 +4931,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             virtual_mouse_wheel = 0;
         }
         const text_input = raylib.getTextInput();
-        const platform_state = input.hostState(
-            frame_count,
-            now_ns,
-            frame_time,
+        const input_snapshot = input.hostState(
             mouse_pos.x,
             mouse_pos.y,
             mouse_delta,
@@ -4932,10 +4948,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         // could not draw in any case; the platform applies its actions before
         // this returns, which is where the effects they replace used to run.
         const update_result = updateOnce(&boxed_model, .{
-            .snapshot = platform_state,
-            .frame_count = frame_count,
-            .timestamp_nanos = now_ns,
-            .elapsed_seconds = frame_time,
+            .input = input_snapshot,
+            .window = windowState(),
+            .time = .{
+                .frame_count = frame_count,
+                .timestamp_nanos = now_ns,
+                .elapsed_seconds = frame_time,
+            },
             .completed = staging.take(roc_host),
             .capture = captureStateForStep(),
         });
@@ -4975,7 +4994,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var input = InputState.init(roc_host);
     defer input.deinit();
 
-    const init_result = initModel(&input);
+    const init_result = initModel();
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
         if (TRACE_HOST) std.log.debug("[HOST] init returned Err({d})", .{err_code});
@@ -4994,10 +5013,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     while (frame_count < frames) : (frame_count += 1) {
         const frame_time: f32 = if (frame_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = frame_count * HEADLESS_FRAME_NANOS;
-        const platform_state = input.hostState(
-            frame_count,
-            timestamp_nanos,
-            frame_time,
+        const input_snapshot = input.hostState(
             0,
             0,
             .{ .x = 0, .y = 0 },
@@ -5014,10 +5030,13 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // could not draw in any case; the platform applies its actions before
         // this returns, which is where the effects they replace used to run.
         const update_result = updateOnce(&boxed_model, .{
-            .snapshot = platform_state,
-            .frame_count = frame_count,
-            .timestamp_nanos = timestamp_nanos,
-            .elapsed_seconds = frame_time,
+            .input = input_snapshot,
+            .window = windowState(),
+            .time = .{
+                .frame_count = frame_count,
+                .timestamp_nanos = timestamp_nanos,
+                .elapsed_seconds = frame_time,
+            },
             .completed = staging.take(roc_host),
             .capture = captureStateForStep(),
         });

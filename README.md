@@ -50,8 +50,10 @@ A RocRay program has two parts. The model is the app state that survives from
 one frame to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
-- `render!` receives that model, a read-only `Host` snapshot of input and window
-  state, and a `Frame` used for drawing. It returns the next model.
+- `update` receives that model and a read-only `Step` -- this cycle's
+  `Input.Snapshot`, `Window.Snapshot` and `Time.Frame` -- and returns the next
+  model plus any work for the platform. It is pure.
+- `render!` receives the model and a `Frame` used for drawing.
 
 Read the complete, 44-line [`hello_world.roc`](examples/hello_world.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived

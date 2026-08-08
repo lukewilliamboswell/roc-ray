@@ -3,13 +3,13 @@ platform ""
 		[Model : model] for program : {
 			init! : {
 				config : App.Config,
-				run! : Host => Try(model, [Exit(I64), ..]),
+				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
 			update : model, Program.Step -> Try(Program.Next(model), [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
+	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
 	}
@@ -125,7 +125,8 @@ import Draw
 import DrawHost
 import Text
 import Color
-import Host
+import Input
+import Window
 import HostHost
 import Keys
 import Mouse
@@ -149,14 +150,10 @@ import Physics
 import Program
 import Random
 
-## Internal type for host boundary.
-## Keep this layout-compatible with the public Host record; the compiler may
-## optimize the reshaping below into a direct pass-through.
-HostStateFromHost : {
-	frame_count : U64,
-	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
-	frame_time : F32, ## seconds since previous frame (0 on first frame)
-	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
+## Internal type for the host boundary, carrying one cycle of sampled input.
+## Keep this layout-compatible with the public `Input.Snapshot` record; the
+## compiler may optimize the reshaping below into a direct pass-through.
+InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	text_input : List(U32), ## Unicode codepoints entered this frame
 	gamepads : {
@@ -181,14 +178,17 @@ HostStateFromHost : {
 
 ## Internal type for the host boundary, carrying one cycle of observations.
 ##
+## `window` and `time` are already flat records of scalars, so the public types
+## cross the boundary unchanged rather than being mirrored by a second copy that
+## could drift. Only `input` needs reshaping, and only to rename one field.
+##
 ## Unions do not cross this boundary, so completions and the recording state
 ## arrive as flat records that `Program` decodes. The completion list is empty
 ## on an ordinary frame.
 StepFromHost : {
-	snapshot : HostStateFromHost,
-	frame_count : U64,
-	timestamp_nanos : U64,
-	elapsed_seconds : F32,
+	input : InputFromHost,
+	window : Window.Snapshot,
+	time : Time.Frame,
 	completed : List(Program.CompletionFromHost),
 	capture : Program.CaptureFromHost,
 }
@@ -196,43 +196,41 @@ StepFromHost : {
 app_config_for_host! : () => AppConfig.HostConfig
 app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
 
-## Reshape the flat host snapshot into the public nested `Host` record.
+## Reshape the flat sampled input into the public `Input.Snapshot` record.
 ##
 ## Only `gamepads.available` is renamed; the compiler may optimize the rest of
 ## this into a direct pass-through, which is why the two layouts are kept
 ## deliberately compatible.
-host_from_raw : HostStateFromHost -> Host
-host_from_raw = |host_state| {
-	frame_count: host_state.frame_count,
-	timestamp_nanos: host_state.timestamp_nanos,
-	frame_time: host_state.frame_time,
-	screen: host_state.screen,
-	keys: host_state.keys,
-	text_input: host_state.text_input,
+input_from_raw : InputFromHost -> Input.Snapshot
+input_from_raw = |raw| {
+	keys: raw.keys,
+	text_input: raw.text_input,
 	gamepads: {
-		connected: host_state.gamepads.available,
-		buttons: host_state.gamepads.buttons,
-		axes: host_state.gamepads.axes,
+		connected: raw.gamepads.available,
+		buttons: raw.gamepads.buttons,
+		axes: raw.gamepads.axes,
 	},
-	mouse: host_state.mouse,
+	mouse: raw.mouse,
 }
 
 ## Rebuild a `Program.Step` from the host's flat cycle record.
 step_from_raw : StepFromHost -> Program.Step
 step_from_raw = |raw| {
-	input: host_from_raw(raw.snapshot),
-	time: {
-		frame_count: raw.frame_count,
-		timestamp_nanos: raw.timestamp_nanos,
-		elapsed_seconds: raw.elapsed_seconds,
-	},
+	input: input_from_raw(raw.input),
+	window: raw.window,
+	time: raw.time,
 	completed: List.map(raw.completed, Program.completion_from_host),
 	capture: Program.capture_from_host(raw.capture),
 }
 
-init_for_host! : HostStateFromHost => Try(Box(Model), I64)
-init_for_host! = |host_state|
-	match (program.init!.run!)(host_from_raw(host_state)) {
+## Run the app's startup callback with the platform's startup authority.
+##
+## It takes no argument: `App.Startup` is authority, not observation, so there
+## is nothing for the host to hand over. Nothing has been sampled yet when this
+## runs, which is exactly why `Input.empty` exists.
+init_for_host! : () => Try(Box(Model), I64)
+init_for_host! = ||
+	match (program.init!.run!)(App.Startup.from_host(HostHost.Startup.for_host)) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
@@ -297,7 +295,7 @@ run_action! = |action|
 		# immediate form.
 		Exit(code) => Ok(HostHost.exit!(I64.to_i32_wrap(code)))
 		SetCursor(cursor) => Ok(MouseHost.set_cursor!(Mouse.cursor_code(cursor)))
-		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Host.cursor_mode_code(mode)))
+		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode)))
 		SetClipboardText(text) => Ok(HostHost.set_clipboard_text!(text))
 		SetExitKey(key) => Ok(HostHost.set_exit_key!(Keys.exit_key_code(key)))
 		SetWindowMinSize(size) =>

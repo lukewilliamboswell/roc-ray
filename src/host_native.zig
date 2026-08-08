@@ -33,12 +33,17 @@ const ClipboardTextResultTag = abi.HostHostGet_clipboard_textResultTag;
 const HostReadFileRawResult = abi.HostHostRead_fileRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapHostLoad_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
-// One cycle of observations handed to update!. Unions do not cross this
-// boundary, so completions arrive as flat records that Roc decodes.
+// One cycle of observations handed to update. Unions do not cross this
+// boundary, so completions and the recording state arrive as flat records that
+// Roc decodes.
 const StepFromHost = abi.Update_for_hostArg1;
 const UpdateResult = abi.Update_for_hostResult;
 const CompletionFromHost = abi.Update_for_hostArg1Completed;
-const CommandToHost = abi.Update_for_hostOkCommands;
+const CaptureFromHost = abi.Update_for_hostArg1Capture;
+// Actions never come here: `update` is pure, and the platform's own adapter
+// applies them in Roc, through effects that already exist. Only tasks -- the
+// work that answers back -- reach the host.
+const TaskToHost = abi.Update_for_hostOkTasks;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -75,10 +80,14 @@ extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
 /// `kind` codes for a completion. Mirrored in `platform/Program.roc`.
 const COMPLETION_SMALL_FILE_READ: u8 = 0;
 const COMPLETION_DELAY: u8 = 1;
+const COMPLETION_SCREENSHOT_FINISHED: u8 = 2;
+const COMPLETION_CLIPBOARD_READ: u8 = 3;
 
-/// `kind` codes for a command returned by `update!`. Mirrored in `platform/Program.roc`.
-const CMD_READ_SMALL_FILE: u8 = 0;
-const CMD_DELAY: u8 = 1;
+/// `kind` codes for a task returned by `update`. Mirrored in `platform/Program.roc`.
+const TASK_READ_SMALL_FILE: u8 = 0;
+const TASK_DELAY: u8 = 1;
+const TASK_SCREENSHOT: u8 = 2;
+const TASK_READ_CLIPBOARD: u8 = 3;
 
 /// Read-error codes. Mirrored in `platform/Program.roc`.
 ///
@@ -278,7 +287,7 @@ const PendingTimer = struct { id: u64, due_nanos: u64 };
 var pending_timers: [32]PendingTimer = undefined;
 var pending_timer_count: usize = 0;
 
-/// How many finished commands one step may carry.
+/// How many finished tasks one step may carry.
 ///
 /// A burst of completions must not become an unbounded amount of work inside a
 /// single frame, so the remainder waits for the next cycle.
@@ -315,10 +324,35 @@ const CompletionStaging = struct {
         self.push(.{ .kind = COMPLETION_DELAY, .id = id, .err = 0, .contents = abi.RocStr.empty() });
     }
 
+    fn screenshotFinished(self: *CompletionStaging, id: u64, err: u8) void {
+        self.push(.{ .kind = COMPLETION_SCREENSHOT_FINISHED, .id = id, .err = err, .contents = abi.RocStr.empty() });
+    }
+
+    fn clipboardRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, text: []const u8) void {
+        self.push(.{
+            .kind = COMPLETION_CLIPBOARD_READ,
+            .id = id,
+            .err = err,
+            .contents = if (text.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(text, roc_host),
+        });
+    }
+
     /// Hand the staged completions to Roc as one list, transferring ownership.
     fn toRocList(self: *CompletionStaging, roc_host: *RocHost) abi.RocList(CompletionFromHost) {
         if (self.len == 0) return abi.RocList(CompletionFromHost).empty();
         return abi.RocList(CompletionFromHost).fromSlice(self.items[0..self.len], roc_host);
+    }
+
+    /// Hand this step's completions to Roc and empty the staging area.
+    ///
+    /// Emptying is the point: the payloads now belong to the list Roc drops, so
+    /// releasing them here too would free them twice. Anything staged after this
+    /// -- a refused task, a screenshot serviced at the end of this frame -- is
+    /// owned by the staging area again and is delivered on the next step.
+    fn take(self: *CompletionStaging, roc_host: *RocHost) abi.RocList(CompletionFromHost) {
+        const list = self.toRocList(roc_host);
+        self.len = 0;
+        return list;
     }
 
     /// Release staged completions that never reached Roc.
@@ -368,6 +402,14 @@ var capture_screenshot_pending: bool = false;
 /// `Capture.screenshot!` report that the previous one failed rather than
 /// letting the failure vanish.
 var capture_screenshot_result: u8 = capture.err_none;
+/// Id of the screenshot task that queued the pending request, if a task did.
+///
+/// A `Screenshot` task has somewhere to report to, so its outcome becomes a
+/// completion on the next step instead of being latched for a later call.
+var capture_screenshot_task_id: ?u64 = null;
+/// A serviced screenshot task whose completion has not reached Roc yet.
+var capture_screenshot_done: ?ScreenshotOutcome = null;
+const ScreenshotOutcome = struct { id: u64, err: u8 };
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -943,6 +985,8 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
 
     capture_screenshot_pending = false;
     capture_screenshot_result = capture.err_none;
+    capture_screenshot_task_id = null;
+    capture_screenshot_done = null;
     capture_screenshot_path_len = 0;
     capture_recording_path_len = 0;
     capture_output_dir_len = 0;
@@ -2737,6 +2781,20 @@ fn hostedCaptureRecordingStatus() callconv(.c) abi.CaptureHostRecording_statusRe
     };
 }
 
+/// The recording state sampled onto every step.
+///
+/// A pure `update` cannot ask for this, and asking would cost a host call on
+/// every frame regardless of whether anything is recording. It is four scalars,
+/// so it rides along on the step record instead.
+fn captureStateForStep() CaptureFromHost {
+    return .{
+        .status = capture_session.status,
+        .err = capture_session.failure,
+        .frames = capture_session.captured_frames,
+        .dropped = capture_session.dropped_frames,
+    };
+}
+
 fn hostedGetClipboardText(roc_host: *RocHost) callconv(.c) ClipboardTextResult {
     var result: ClipboardTextResult = undefined;
 
@@ -3467,8 +3525,8 @@ fn dropFinalModel(boxed_model: RocBox) void {
 ///
 /// `update_for_host` and `render_for_host` both consume their Box argument even
 /// when they return `Err`, so clear the host slot before the call. Only an `Ok`
-/// result installs a new owned model reference. `update!` may run several times
-/// per frame, so this applies once per call rather than once per frame.
+/// result installs a new owned model reference. `update` runs once per frame,
+/// so this applies once per call rather than once per frame.
 fn takeModel(boxed_model: *RocBox) RocBox {
     const transferred = boxed_model.*;
     boxed_model.* = null;
@@ -3488,10 +3546,10 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
     return update_for_host(takeModel(boxed_model), step);
 }
 
-/// Execute the commands returned by one `update!` call and release the list.
+/// Execute the tasks returned by one `update` call and release the list.
 ///
 /// A read goes to the worker and is answered on a later step. If the worker is
-/// absent or its slots are full the command is refused *immediately* with
+/// absent or its slots are full the task is refused *immediately* with
 /// `Unavailable` or `Busy` rather than run here: the point of the split is that
 /// slow work never touches the frame thread, and an inline fallback puts back
 /// exactly the stall the design exists to avoid.
@@ -3502,32 +3560,119 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
 /// immediately and is still delivered as a completion, so the app takes an
 /// identical code path either way.
 ///
-/// Every accepted command yields exactly one completion, and a refusal is a
+/// A screenshot and a clipboard read are main-thread work by nature -- one
+/// needs the framebuffer, the other the windowing backend -- so they are
+/// serviced in this cycle and answered on the next. Neither is slow.
+///
+/// Every accepted task yields exactly one completion, and a refusal is a
 /// completion too, so an app never waits forever for an id it will never see.
-fn dispatchCommands(staging: *CompletionStaging, roc_host: *RocHost, commands: abi.RocList(CommandToHost)) void {
+/// Completions staged here land on the *next* step, because this step's list
+/// has already been handed to Roc.
+fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.RocList(TaskToHost)) void {
     defer {
-        if (commands.hasOneRef()) {
-            for (commands.allocationItems()) |item| item.decref(roc_host);
+        if (tasks.hasOneRef()) {
+            for (tasks.allocationItems()) |item| item.decref(roc_host);
         }
-        commands.decref(roc_host);
+        tasks.decref(roc_host);
     }
 
-    for (commands.items()) |command| {
-        switch (command.kind) {
-            CMD_READ_SMALL_FILE => {
-                const path = command.path.asSlice();
+    for (tasks.items()) |task| {
+        switch (task.kind) {
+            TASK_READ_SMALL_FILE => {
+                const path = task.path.asSlice();
                 if (headlessMode()) {
-                    readFileNow(staging, roc_host, command.id, path);
-                } else switch (effect_worker.submitReadFile(command.id, path)) {
+                    readFileNow(staging, roc_host, task.id, path);
+                } else switch (effect_worker.submitReadFile(task.id, path)) {
                     .accepted => {},
-                    .busy => staging.fileRead(roc_host, command.id, READ_ERR_BUSY, ""),
-                    .unavailable => staging.fileRead(roc_host, command.id, READ_ERR_UNAVAILABLE, ""),
+                    .busy => staging.fileRead(roc_host, task.id, READ_ERR_BUSY, ""),
+                    .unavailable => staging.fileRead(roc_host, task.id, READ_ERR_UNAVAILABLE, ""),
                 }
             },
-            CMD_DELAY => armTimer(command.id, command.millis),
-            else => if (TRACE_HOST) std.log.debug("[HOST] Ignoring command kind {d}", .{command.kind}),
+            TASK_DELAY => armTimer(task.id, task.millis),
+            TASK_SCREENSHOT => {
+                if (beginScreenshotTask(task.id, task.path.asSlice())) |err| {
+                    staging.screenshotFinished(task.id, err);
+                }
+            },
+            TASK_READ_CLIPBOARD => stageClipboardRead(staging, roc_host, task.id),
+            else => if (TRACE_HOST) std.log.debug("[HOST] Ignoring task kind {d}", .{task.kind}),
         }
     }
+}
+
+/// Queue a screenshot, or refuse it with a capture error code.
+///
+/// Returns null when the request was accepted: the framebuffer is read at the
+/// end of this frame -- the same instant `Capture.screenshot!` reads it -- so
+/// the pixels are the ones the app just drew, and only the report waits for the
+/// next step. The sandbox check is the same one the effect uses, so a path that
+/// escapes the output directory is still refused rather than rewritten.
+fn beginScreenshotTask(id: u64, path: []const u8) ?u8 {
+    const validation = capture.validateRelativePath(path);
+    if (validation != capture.err_none) return validation;
+
+    // Headless runs have no framebuffer to read, so the request is validated
+    // and then reported as done rather than writing a file of zeroes. Answering
+    // in the same cycle also keeps CI output identical between runs.
+    if (headlessMode()) return capture.err_none;
+
+    // A request already queued this frame has not been serviced yet, and there
+    // is only one slot. Refuse rather than silently discarding the first path.
+    if (capture_screenshot_pending) return capture.err_already_recording;
+
+    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
+        return capture.err_path_invalid;
+    }
+    capture_screenshot_pending = true;
+    capture_screenshot_task_id = id;
+    return null;
+}
+
+/// Stage the completion for a screenshot serviced at the end of a past frame.
+fn stageCaptureResults(staging: *CompletionStaging) void {
+    if (staging.full()) return;
+    const done = capture_screenshot_done orelse return;
+    capture_screenshot_done = null;
+    staging.screenshotFinished(done.id, done.err);
+}
+
+/// Record the outcome of the screenshot just serviced.
+///
+/// A task has somewhere to report to, so its outcome becomes a completion on
+/// the next step. `Capture.screenshot!` has nowhere to report to until it is
+/// called again, so its outcome is latched, as it always was.
+fn reportScreenshotResult(err: u8) void {
+    if (capture_screenshot_task_id) |id| {
+        capture_screenshot_task_id = null;
+        capture_screenshot_done = .{ .id = id, .err = err };
+        return;
+    }
+    capture_screenshot_result = err;
+}
+
+/// Read the clipboard on the calling thread and stage the completion.
+///
+/// The windowing backend only answers on the thread that owns the window, and
+/// the read is a pointer copy rather than I/O, so there is nothing to move off
+/// the frame thread. One step of latency is the cost of `update` being pure.
+fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64) void {
+    if (headlessMode()) {
+        if (!headless_clipboard_set) {
+            staging.clipboardRead(roc_host, id, READ_ERR_UNAVAILABLE, "");
+            return;
+        }
+        staging.clipboardRead(roc_host, id, 0, headless_clipboard[0..headless_clipboard_len]);
+        return;
+    }
+
+    // The pointer belongs to the windowing backend: it is null when the
+    // clipboard is empty or holds non-text content, must never be freed, and is
+    // invalidated by the next clipboard call -- so copy it out now.
+    const text = raylib.getClipboardText() orelse {
+        staging.clipboardRead(roc_host, id, READ_ERR_UNAVAILABLE, "");
+        return;
+    };
+    staging.clipboardRead(roc_host, id, 0, std.mem.span(text));
 }
 
 /// Read on the calling thread and stage the completion. Headless only.
@@ -3609,6 +3754,8 @@ fn configureCapture(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
+    capture_screenshot_task_id = null;
+    capture_screenshot_done = null;
     capture_recording_bytes = 0;
     capture_clock_offset_ns = 0;
     capture_clock_last_real_ns = 0;
@@ -3718,17 +3865,17 @@ fn serviceCaptureRequests() void {
 
     var image = raylib.captureFramebuffer() orelse {
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
-        if (wants_screenshot) capture_screenshot_result = capture.err_out_of_memory;
+        if (wants_screenshot) reportScreenshotResult(capture.err_out_of_memory);
         return;
     };
     defer image.deinit();
 
     if (wants_screenshot) {
-        capture_screenshot_result = writeCaptureImage(
+        reportScreenshotResult(writeCaptureImage(
             image,
             capture_screenshot_path[0..capture_screenshot_path_len],
             null,
-        );
+        ));
     }
 
     if (!wants_frame) return;
@@ -4034,8 +4181,8 @@ test "taking a model for render clears the host-owned reference" {
 }
 
 test "each update call takes the model afresh so one reference stays live" {
-    // `update!` runs once per message, and every call consumes its Box. Taking
-    // once per frame would hand the same reference to the second call.
+    // Every update call consumes its Box, so the host must take the model
+    // afresh each time; reusing the slot would hand out a stale reference.
     var boxed_model: RocBox = @ptrFromInt(@alignOf(usize));
 
     var call: usize = 0;
@@ -4082,7 +4229,7 @@ test "staged completions become one Roc list, and an idle step allocates none" {
 }
 
 test "releasing staged completions frees payloads that never reach Roc" {
-    // The path where update! fails before the step is delivered.
+    // The path where update fails before the step is delivered.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
@@ -4156,6 +4303,111 @@ test "a read above the inline cap is refused rather than copied on the frame thr
     try std.testing.expectEqual(READ_ERR_TOO_LARGE, staging.items[0].err);
     // Nothing was copied: the completion carries an empty string.
     try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
+    staging.release(&roc_host);
+}
+
+test "taking a step's completions hands them over and empties the staging area" {
+    // The list belongs to Roc after this, so releasing the staging area must
+    // not free the same payloads a second time -- and anything staged after the
+    // handover is a completion for the *next* step, not this one.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var staging = CompletionStaging{};
+    staging.fileRead(&roc_host, 1, 0, "contents long enough to reach the heap");
+
+    const list = staging.take(&roc_host);
+    try std.testing.expectEqual(@as(usize, 1), list.items().len);
+    try std.testing.expectEqual(@as(usize, 0), staging.len);
+
+    // Stands in for Roc consuming the step.
+    for (list.allocationItems()) |item| item.contents.decref(&roc_host);
+    list.decref(&roc_host);
+
+    staging.delayElapsed(2);
+    try std.testing.expectEqual(@as(usize, 1), staging.len);
+    staging.release(&roc_host);
+}
+
+test "a screenshot task that escapes the output directory is refused, not rewritten" {
+    defer {
+        capture_screenshot_task_id = null;
+        capture_screenshot_pending = false;
+    }
+
+    // The sandbox check runs first, so the refusal becomes a completion rather
+    // than a file appearing beside the example source.
+    const refusal = beginScreenshotTask(4, "../escaped.png") orelse return error.TestExpectedRefusal;
+    try std.testing.expectEqual(capture.err_path_escapes, refusal);
+    try std.testing.expectEqual(@as(?u64, null), capture_screenshot_task_id);
+
+    // A valid path is accepted. Tests run headless, where there is no
+    // framebuffer to read, so it is answered at once instead of at frame end.
+    const accepted = beginScreenshotTask(5, "scene.png") orelse return error.TestExpectedImmediateAnswer;
+    try std.testing.expectEqual(capture.err_none, accepted);
+    try std.testing.expectEqual(@as(?u64, null), capture_screenshot_task_id);
+}
+
+test "a serviced screenshot task answers on the next step" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer {
+        capture_screenshot_task_id = null;
+        capture_screenshot_done = null;
+        capture_screenshot_result = capture.err_none;
+    }
+
+    // The frame that asked carries no completion for it: the write happens at
+    // the end of that frame, after its step has already gone to Roc.
+    capture_screenshot_task_id = 9;
+    var staging = CompletionStaging{};
+    stageCaptureResults(&staging);
+    try std.testing.expectEqual(@as(usize, 0), staging.len);
+
+    reportScreenshotResult(capture.err_write_failed);
+    // A task reports through its completion, so nothing is latched for the
+    // `Capture.screenshot!` effect to pick up later.
+    try std.testing.expectEqual(capture.err_none, capture_screenshot_result);
+
+    stageCaptureResults(&staging);
+    try std.testing.expectEqual(@as(usize, 1), staging.len);
+    try std.testing.expectEqual(COMPLETION_SCREENSHOT_FINISHED, staging.items[0].kind);
+    try std.testing.expectEqual(@as(u64, 9), staging.items[0].id);
+    try std.testing.expectEqual(capture.err_write_failed, staging.items[0].err);
+
+    // Exactly one completion per accepted task, so the next step reports none.
+    stageCaptureResults(&staging);
+    try std.testing.expectEqual(@as(usize, 1), staging.len);
+    staging.release(&roc_host);
+}
+
+test "a clipboard read is serviced in the cycle it was dispatched in" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer {
+        headless_clipboard_len = 0;
+        headless_clipboard_set = false;
+    }
+
+    headless_clipboard_len = 0;
+    headless_clipboard_set = false;
+
+    var empty = CompletionStaging{};
+    stageClipboardRead(&empty, &roc_host, 1);
+    try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, empty.items[0].kind);
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, empty.items[0].err);
+    empty.release(&roc_host);
+
+    const text = "pasted from the scripted clipboard";
+    @memcpy(headless_clipboard[0..text.len], text);
+    headless_clipboard_len = text.len;
+    headless_clipboard_set = true;
+
+    var staging = CompletionStaging{};
+    stageClipboardRead(&staging, &roc_host, 2);
+    try std.testing.expectEqual(@as(u64, 2), staging.items[0].id);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqualStrings(text, staging.items[0].contents.asSlice());
     staging.release(&roc_host);
 }
 
@@ -4252,6 +4504,11 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
 
+    // Outlives the frame: a task dispatched at the end of one cycle answers on
+    // the next, so its completion waits here in between.
+    var staging = CompletionStaging{};
+    defer staging.release(roc_host);
+
     while (!raylib.windowShouldClose()) {
         // Sample raylib's monotonic clock (seconds since window init) at the
         // start of the frame and expose it as nanoseconds. frame_time is
@@ -4294,18 +4551,20 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         );
 
         last_frame_nanos = now_ns;
-        var staging = CompletionStaging{};
         stageWorkerResults(&staging, roc_host);
         expireTimers(&staging, now_ns);
+        stageCaptureResults(&staging);
 
-        // One call, before the drawing scope opens, so `update!` structurally
-        // cannot draw -- it is never handed a Frame.
+        // One call, before the drawing scope opens. `update` is pure, so it
+        // could not draw in any case; the platform applies its actions before
+        // this returns, which is where the effects they replace used to run.
         const update_result = updateOnce(&boxed_model, .{
             .snapshot = platform_state,
             .frame_count = frame_count,
             .timestamp_nanos = now_ns,
             .elapsed_seconds = frame_time,
-            .completed = staging.toRocList(roc_host),
+            .completed = staging.take(roc_host),
+            .capture = captureStateForStep(),
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
@@ -4314,8 +4573,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         }
         const next = update_result.payload_ok();
         boxed_model = next.model;
-        dispatchCommands(&staging, roc_host, next.commands);
-        staging.release(roc_host);
+        dispatchTasks(&staging, roc_host, next.tasks);
 
         const render_result = renderFrame(takeModelForRender(&boxed_model));
         if (render_result.isErr()) {
@@ -4355,6 +4613,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
 
+    // Outlives the frame: a task dispatched at the end of one cycle answers on
+    // the next, so its completion waits here in between.
+    var staging = CompletionStaging{};
+    defer staging.release(roc_host);
+
     while (frame_count < frames) : (frame_count += 1) {
         const frame_time: f32 = if (frame_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = frame_count * HEADLESS_FRAME_NANOS;
@@ -4370,18 +4633,20 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         );
 
         last_frame_nanos = timestamp_nanos;
-        var staging = CompletionStaging{};
         stageWorkerResults(&staging, roc_host);
         expireTimers(&staging, timestamp_nanos);
+        stageCaptureResults(&staging);
 
-        // One call, before the drawing scope opens, so `update!` structurally
-        // cannot draw -- it is never handed a Frame.
+        // One call, before the drawing scope opens. `update` is pure, so it
+        // could not draw in any case; the platform applies its actions before
+        // this returns, which is where the effects they replace used to run.
         const update_result = updateOnce(&boxed_model, .{
             .snapshot = platform_state,
             .frame_count = frame_count,
             .timestamp_nanos = timestamp_nanos,
             .elapsed_seconds = frame_time,
-            .completed = staging.toRocList(roc_host),
+            .completed = staging.take(roc_host),
+            .capture = captureStateForStep(),
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
@@ -4390,8 +4655,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         }
         const next = update_result.payload_ok();
         boxed_model = next.model;
-        dispatchCommands(&staging, roc_host, next.commands);
-        staging.release(roc_host);
+        dispatchTasks(&staging, roc_host, next.tasks);
 
         const render_result = renderFrame(takeModelForRender(&boxed_model));
         if (render_result.isErr()) {

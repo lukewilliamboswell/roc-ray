@@ -77,7 +77,7 @@ initial_pixels = List.map_with_index(
 	},
 )
 
-init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
+init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed, UploadBudgetExceeded])
 init! = App.init(
 	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
 	|_startup| {
@@ -159,7 +159,16 @@ update_editor = |model, input| {
 							{
 								model: { ..base, pixels, last_cell: Painted(index) },
 								actions: [
-									base.texture.update(pixels),
+									# One cell changed, so one cell is uploaded.
+									# Re-uploading the whole canvas would send
+									# 256 pixels to say something about one.
+									base.texture.update_region({
+										x: U64.to_i32_wrap(index % grid_side),
+										y: U64.to_i32_wrap(index // grid_side),
+										width: 1,
+										height: 1,
+										pixels: [palette_color(palette)],
+									}),
 									paint(base.paint_sound, 0.8 + U64.to_f32(palette) * 0.18),
 								],
 							}

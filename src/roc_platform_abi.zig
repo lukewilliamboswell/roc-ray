@@ -925,6 +925,60 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_bcb6a1422aea167b
+pub const __AnonStruct_bcb6a1422aea167b = if (@sizeOf(usize) == 4) extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: AssetsHostTexture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+} else extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: AssetsHostTexture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.pixels.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.pixels.incref(amount);
+        value.texture.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_bcb6a1422aea167b) != 48) @compileError("__AnonStruct_bcb6a1422aea167b size mismatch");
+        if (@alignOf(__AnonStruct_bcb6a1422aea167b) != 8) @compileError("__AnonStruct_bcb6a1422aea167b alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_bcb6a1422aea167b) != 32) @compileError("__AnonStruct_bcb6a1422aea167b size mismatch");
+        if (@alignOf(__AnonStruct_bcb6a1422aea167b) != 4) @compileError("__AnonStruct_bcb6a1422aea167b alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_82ca12cef4f5714b
 pub const __AnonStruct_82ca12cef4f5714b = if (@sizeOf(usize) == 4) extern struct {
     sound: *u64,
@@ -7063,6 +7117,36 @@ comptime {
     }
 }
 
+/// Arguments for AssetsHost.update_texture_region!
+/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : AssetsHost.Texture, width : I32, x : I32, y : I32 } => U8
+/// Refcounted fields are owned by the hosted function.
+pub const AssetsHostUpdate_texture_regionArgs = if (@sizeOf(usize) == 4) extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: AssetsHostTexture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+} else extern struct {
+    pixels: RocListWith(ColorRgba, false),
+    texture: AssetsHostTexture,
+    height: i32,
+    width: i32,
+    x: i32,
+    y: i32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(AssetsHostUpdate_texture_regionArgs) != 48) @compileError("AssetsHostUpdate_texture_regionArgs size mismatch");
+        if (@alignOf(AssetsHostUpdate_texture_regionArgs) != 8) @compileError("AssetsHostUpdate_texture_regionArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(AssetsHostUpdate_texture_regionArgs) != 32) @compileError("AssetsHostUpdate_texture_regionArgs size mismatch");
+        if (@alignOf(AssetsHostUpdate_texture_regionArgs) != 4) @compileError("AssetsHostUpdate_texture_regionArgs alignment mismatch");
+    }
+}
+
 /// Arguments for AudioHost.gen_sound!
 /// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => { err : U8, sound : AudioHost.Sound }
 /// Refcounted fields are owned by the hosted function.
@@ -8565,6 +8649,8 @@ pub const AssetsHostGenerate_color_texture = __AnonStruct_305525378f1dbe54;
 pub const AssetsHostLoad_texture = __AnonStruct_305525378f1dbe54;
 pub const AssetsHostUpdate_textureArg0 = __AnonStruct_8d3b3e47df28392c;
 pub const AssetsHostUpdate_textureArg0Pixels = ColorRgba;
+pub const AssetsHostUpdate_texture_regionArg0 = __AnonStruct_bcb6a1422aea167b;
+pub const AssetsHostUpdate_texture_regionArg0Pixels = ColorRgba;
 pub const AudioHostGen_soundArg0 = __AnonStruct_37b6eb678c2c2ca2;
 pub const AudioHostGen_sound = __AnonStruct_82ca12cef4f5714b;
 pub const AudioHostGen_toneArg0 = __AnonStruct_74e1febaa758f087;
@@ -9125,6 +9211,10 @@ pub extern fn roc_assets_set_texture_wrap_raw(arg0: AssetsHostTexture, arg1: u8)
 /// Hosted symbol for AssetsHost.update_texture!
 /// Roc signature: { pixels : List(Color.Rgba), texture : AssetsHost.Texture } => U8
 pub extern fn roc_assets_update_texture_raw(arg0: AssetsHostUpdate_textureArgs) callconv(.c) u8;
+
+/// Hosted symbol for AssetsHost.update_texture_region!
+/// Roc signature: { height : I32, pixels : List(Color.Rgba), texture : AssetsHost.Texture, width : I32, x : I32, y : I32 } => U8
+pub extern fn roc_assets_update_texture_region_raw(arg0: AssetsHostUpdate_texture_regionArgs) callconv(.c) u8;
 
 /// Hosted symbol for AudioHost.gen_sound!
 /// Roc signature: { attack_ms : I32, decay_ms : I32, freq_end : F32, freq_start : F32, ms : I32, release_ms : I32, sustain : F32, volume : F32, waveform : U8 } => { err : U8, sound : AudioHost.Sound }

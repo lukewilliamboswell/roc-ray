@@ -25,6 +25,7 @@ platform ""
 		"roc_assets_generate_color_texture_raw": AssetsHost.generate_color_texture!,
 		"roc_assets_generate_checked_texture_raw": AssetsHost.generate_checked_texture!,
 		"roc_assets_update_texture_raw": AssetsHost.update_texture!,
+		"roc_assets_update_texture_region_raw": AssetsHost.update_texture_region!,
 		"roc_assets_set_texture_filter_raw": AssetsHost.set_texture_filter!,
 		"roc_assets_set_texture_wrap_raw": AssetsHost.set_texture_wrap!,
 		"roc_audio_gen_tone_raw": AudioHost.gen_tone!,
@@ -271,9 +272,10 @@ update_for_host! = |boxed_model, raw|
 ##
 ## Walked by index rather than folded because each step is effectful and may
 ## fail: `texture.update(pixels)` reports a pixel count that does not match the
-## texture, and that has to end the cycle the same way `texture.update!(pixels)?`
-## ended it when `update!` was effectful.
-run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, ..])
+## texture, or an upload the frame's budget would not take, and that has to end
+## the cycle the same way `texture.update!(pixels)?` ended it when `update!` was
+## effectful.
+run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
 run_actions! = |actions, index|
 	if index >= List.len(actions) {
 		Ok({})
@@ -294,7 +296,7 @@ run_actions! = |actions, index|
 ## This is the whole reason actions need no wire format: the adapter is itself
 ## effectful, so it can call the platform's existing effects directly and an
 ## `Action` never has to flatten to scalars or cross the ABI.
-run_action! : Program.Action => Try({}, [PixelCountMismatch, ..])
+run_action! : Program.Action => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
 run_action! = |action|
 	match action {
 		# Deferred rather than immediate, matching `host.exit!`: the host
@@ -317,6 +319,7 @@ run_action! = |action|
 		PlaySound(settings) => Ok(settings.play!())
 		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
 		UpdateTexture(request) => request.texture.update!(request.pixels)
+		UpdateTextureRegion(request) => request.texture.update_region!(request.region)
 		SetVirtualMouse(pointer) => Ok(Capture.set_virtual_mouse!(pointer))
 		# Frees host memory in this cycle rather than reporting back later, which
 		# is exactly what an action is for.

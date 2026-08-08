@@ -101,6 +101,7 @@ Program := [].{
 		PlaySound(Audio.Playback),
 		SetMusicVolume({ music : Audio.Music, volume : F32 }),
 		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
+		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
 		SetVirtualMouse(Capture.Pointer),
 		ReleaseBlob(File.Blob),
 	]

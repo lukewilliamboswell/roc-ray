@@ -69,6 +69,18 @@ const SCOPE_LIMIT: u8 = 2;
 const TEXTURE_UPDATE_OK: u8 = 0;
 const TEXTURE_UPDATE_PIXEL_COUNT: u8 = 1;
 const TEXTURE_UPDATE_NOT_MUTABLE: u8 = 2;
+const TEXTURE_UPDATE_OUT_OF_BOUNDS: u8 = 3;
+const TEXTURE_UPDATE_BUDGET: u8 = 4;
+
+/// How many bytes of pixel data may be pushed to the GPU in one frame.
+///
+/// An upload is a synchronous driver call whose cost is proportional to the
+/// bytes handed over, so "it is only a commit action" does not make it free.
+/// The budget is one 1024x1024 RGBA texture per frame: enough that no
+/// reasonable upload is refused, small enough that a loop uploading an atlas
+/// every frame is told about it rather than quietly costing the frame.
+const MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME: usize = 4 * 1024 * 1024;
+var texture_upload_bytes_this_frame: usize = 0;
 const TRY_TAG_OK: u8 = 1;
 const MAX_HOST_TEXT_FILE_BYTES: usize = 16 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
@@ -2090,6 +2102,35 @@ fn texturePixelCount(width: i32, height: i32) ?usize {
     return std.math.mul(usize, @intCast(width), @intCast(height)) catch null;
 }
 
+test "a frame's texture uploads are metered, and startup's are not" {
+    const budget_pixels = MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME / @sizeOf(abi.ColorRgba);
+    defer texture_upload_bytes_this_frame = 0;
+
+    {
+        // Startup is not a frame: there is nothing to stall, so an app is not
+        // asked to split its initial uploads across imaginary ones.
+        const scope = PhaseScope.enter(.startup);
+        defer scope.leave();
+        texture_upload_bytes_this_frame = 0;
+        try std.testing.expect(chargeTextureUpload(budget_pixels * 4));
+        try std.testing.expectEqual(@as(usize, 0), texture_upload_bytes_this_frame);
+    }
+
+    const scope = PhaseScope.enter(.commit);
+    defer scope.leave();
+    texture_upload_bytes_this_frame = 0;
+
+    // Right up to the budget is fine...
+    try std.testing.expect(chargeTextureUpload(budget_pixels));
+    // ...and one pixel past it is refused rather than absorbed.
+    try std.testing.expect(!chargeTextureUpload(1));
+    try std.testing.expectEqual(MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME, texture_upload_bytes_this_frame);
+
+    // A refusal costs nothing, so the next frame starts clear.
+    texture_upload_bytes_this_frame = 0;
+    try std.testing.expect(chargeTextureUpload(1));
+}
+
 test "texture pixel count validates dimensions" {
     try std.testing.expectEqual(@as(?usize, 16), texturePixelCount(4, 4));
     try std.testing.expectEqual(@as(?usize, null), texturePixelCount(0, 4));
@@ -2167,6 +2208,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
         .native => |texture| texturePixelCount(texture.width, texture.height) orelse return TEXTURE_UPDATE_PIXEL_COUNT,
     };
     if (args.pixels.len() != expected) return TEXTURE_UPDATE_PIXEL_COUNT;
+    if (!chargeTextureUpload(args.pixels.len())) return TEXTURE_UPDATE_BUDGET;
     switch (resource.*) {
         .headless => {},
         .native => |texture| if (!builtin.is_test) raylib.updateTexture(texture, args.pixels.items()),
@@ -2174,8 +2216,68 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
     return TEXTURE_UPDATE_OK;
 }
 
+/// Upload one rectangle of a texture, charged for what it actually covers.
+///
+/// The reason this exists rather than being a convenience: without it, changing
+/// one pixel of an atlas means re-uploading the atlas, and a per-frame budget
+/// on whole-texture uploads is just a smaller ceiling on the same waste.
+fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
+    enforcePhase("Assets.Texture.update_region!", during_any_callback);
+    defer args.pixels.decref(host);
+    defer args.texture.decref(host);
+
+    if (args.width <= 0 or args.height <= 0 or args.x < 0 or args.y < 0) return TEXTURE_UPDATE_OUT_OF_BOUNDS;
+
+    const token = args.texture.resource.handle;
+    if (render_texture_heap.get(token) != null) return TEXTURE_UPDATE_NOT_MUTABLE;
+    const resource = texture_heap.get(token) orelse return TEXTURE_UPDATE_NOT_MUTABLE;
+
+    const Size = struct { width: i64, height: i64 };
+    const size: Size = switch (resource.*) {
+        .headless => |texture| .{ .width = texture.width, .height = texture.height },
+        .native => |texture| .{ .width = texture.width, .height = texture.height },
+    };
+    const right = @as(i64, args.x) + @as(i64, args.width);
+    const bottom = @as(i64, args.y) + @as(i64, args.height);
+    if (right > size.width or bottom > size.height) return TEXTURE_UPDATE_OUT_OF_BOUNDS;
+
+    const covered = texturePixelCount(args.width, args.height) orelse
+        return TEXTURE_UPDATE_PIXEL_COUNT;
+    if (args.pixels.len() != covered) return TEXTURE_UPDATE_PIXEL_COUNT;
+    if (!chargeTextureUpload(covered)) return TEXTURE_UPDATE_BUDGET;
+
+    switch (resource.*) {
+        .headless => {},
+        .native => |texture| if (!builtin.is_test) raylib.updateTextureRegion(
+            texture,
+            .{ .x = args.x, .y = args.y, .width = args.width, .height = args.height },
+            args.pixels.items(),
+        ),
+    }
+    return TEXTURE_UPDATE_OK;
+}
+
+/// Charge a texture upload against this frame's budget.
+///
+/// Startup is not metered: it is not a frame, there is nothing to stall, and
+/// making an app split its initial uploads across imaginary frames would be
+/// pure ceremony. Everywhere else, exceeding the budget is reported rather
+/// than absorbed -- an upload the host performed anyway would show up as a
+/// frame time nobody asked about.
+fn chargeTextureUpload(pixels: usize) bool {
+    if (active_phase == .startup) return true;
+    const bytes = pixels * @sizeOf(abi.ColorRgba);
+    if (texture_upload_bytes_this_frame + bytes > MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME) return false;
+    texture_upload_bytes_this_frame += bytes;
+    return true;
+}
+
 fn exportedAssetsUpdateTextureRaw(args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
     return hostedAssetsUpdateTextureRaw(activeHost(), args);
+}
+
+fn exportedAssetsUpdateTextureRegionRaw(args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
+    return hostedAssetsUpdateTextureRegionRaw(activeHost(), args);
 }
 
 fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
@@ -3942,6 +4044,7 @@ comptime {
         @export(&hostedAssetsGenerateColorTextureRaw, .{ .name = "roc_assets_generate_color_texture_raw" });
         @export(&hostedAssetsGenerateCheckedTextureRaw, .{ .name = "roc_assets_generate_checked_texture_raw" });
         @export(&exportedAssetsUpdateTextureRaw, .{ .name = "roc_assets_update_texture_raw" });
+        @export(&exportedAssetsUpdateTextureRegionRaw, .{ .name = "roc_assets_update_texture_region_raw" });
         @export(&hostedAssetsSetTextureFilterRaw, .{ .name = "roc_assets_set_texture_filter_raw" });
         @export(&hostedAssetsSetTextureWrapRaw, .{ .name = "roc_assets_set_texture_wrap_raw" });
         @export(&hostedAudioGenSound, .{ .name = "roc_audio_gen_sound_raw" });
@@ -5978,6 +6081,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         );
 
         last_frame_nanos = now_ns;
+        texture_upload_bytes_this_frame = 0;
         stageWorkerResults(&staging, roc_host);
         expireTimers(&staging, now_ns);
         stageCaptureResults(&staging);
@@ -6061,6 +6165,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         );
 
         last_frame_nanos = timestamp_nanos;
+        texture_upload_bytes_this_frame = 0;
         stageWorkerResults(&staging, roc_host);
         expireTimers(&staging, timestamp_nanos);
         stageCaptureResults(&staging);

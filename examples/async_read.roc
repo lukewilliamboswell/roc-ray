@@ -65,7 +65,7 @@ update! = |model, step| {
 	# blocking effect is what keeps this frame short.
 	commands =
 		if step.time.frame_count == 0 {
-			[ReadFile({ id: read_id, path: "README.md" })]
+			[ReadSmallFile({ id: read_id, path: "README.md" })]
 		} else {
 			[]
 		}
@@ -80,7 +80,7 @@ update! = |model, step| {
 is_our_read : Program.Completion -> Bool
 is_our_read = |completion|
 	match completion {
-		FileRead(finished) => finished.id == read_id
+		SmallFileRead(finished) => finished.id == read_id
 		DelayElapsed(_) => Bool.False
 	}
 
@@ -93,7 +93,7 @@ is_our_read = |completion|
 apply_completion : Program.Completion -> LoadState
 apply_completion = |completion|
 	match completion {
-		FileRead(finished) =>
+		SmallFileRead(finished) =>
 			match finished.result {
 				Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
 				Err(NotFound) => Failed("not found")

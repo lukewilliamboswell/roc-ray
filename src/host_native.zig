@@ -73,11 +73,11 @@ extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
 
 /// `kind` codes for a completion. Mirrored in `platform/Program.roc`.
-const COMPLETION_FILE_READ: u8 = 0;
+const COMPLETION_SMALL_FILE_READ: u8 = 0;
 const COMPLETION_DELAY: u8 = 1;
 
 /// `kind` codes for a command returned by `update!`. Mirrored in `platform/Program.roc`.
-const CMD_READ_FILE: u8 = 0;
+const CMD_READ_SMALL_FILE: u8 = 0;
 const CMD_DELAY: u8 = 1;
 
 /// Read-error codes. Mirrored in `platform/Program.roc`.
@@ -304,7 +304,7 @@ const CompletionStaging = struct {
 
     fn fileRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, contents: []const u8) void {
         self.push(.{
-            .kind = COMPLETION_FILE_READ,
+            .kind = COMPLETION_SMALL_FILE_READ,
             .id = id,
             .err = err,
             .contents = if (contents.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(contents, roc_host),
@@ -3514,7 +3514,7 @@ fn dispatchCommands(staging: *CompletionStaging, roc_host: *RocHost, commands: a
 
     for (commands.items()) |command| {
         switch (command.kind) {
-            CMD_READ_FILE => {
+            CMD_READ_SMALL_FILE => {
                 const path = command.path.asSlice();
                 if (headlessMode()) {
                     readFileNow(staging, roc_host, command.id, path);
@@ -4072,7 +4072,7 @@ test "staged completions become one Roc list, and an idle step allocates none" {
 
     const list = staging.toRocList(&roc_host);
     try std.testing.expectEqual(@as(usize, 2), list.items().len);
-    try std.testing.expectEqual(COMPLETION_FILE_READ, list.items()[0].kind);
+    try std.testing.expectEqual(COMPLETION_SMALL_FILE_READ, list.items()[0].kind);
     try std.testing.expectEqual(@as(u64, 9), list.items()[1].id);
 
     // Roc consumes the list in the real loop; this stands in for that. A leak

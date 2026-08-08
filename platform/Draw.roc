@@ -569,12 +569,6 @@ Draw := [].{
 	F32Uniform :: DrawHost.Uniform.{
 		set! : F32Uniform, F32 => {}
 		set! = |F32Uniform.(uniform), value| DrawHost.set_shader_float!({ uniform, value })
-
-		## Set this uniform as an action a pure `update` can return, for a value
-		## the model computes rather than the frame. Receiver form:
-		## `model.time.set(seconds)`.
-		set : F32Uniform, F32 -> [SetShaderF32Uniform({ uniform : F32Uniform, value : F32 }), ..]
-		set = |uniform, value| SetShaderF32Uniform({ uniform: uniform, value: value })
 	}
 
 	I32Uniform :: DrawHost.Uniform.{

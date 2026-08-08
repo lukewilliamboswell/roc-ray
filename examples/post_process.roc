@@ -9,7 +9,13 @@ import rr.Program
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
-	time : Draw.F32Uniform,
+
+	## The uniform's location, resolved once, and the value to write into it.
+	## The value lives in the model because `update` computes it; the write
+	## happens in `render!` because a uniform is a statement about the draws
+	## that follow it, and only `render!` knows where those are.
+	time_uniform : Draw.F32Uniform,
+	seconds : F32,
 }
 
 program = { init!, update, render! }
@@ -26,20 +32,20 @@ init! = App.init(
 	|_host| {
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.load!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?
-		time = shader.uniform_f32!("time")?
-		Ok({ target, shader, time })
+		time_uniform = shader.uniform_f32!("time")?
+		Ok({ target, shader, time_uniform, seconds: 0 })
 	},
 )
 
 ## The shader clock is the only state this example advances, and the step
-## carries it -- so the uniform write is returned as an action rather than done
-## mid-draw. Actions are applied before `render!` runs, so the shader still sees
-## this frame's clock.
+## carries it, so `update` reads it off the step and stores it. Writing it into
+## the shader is `render!`'s job: the uniform only means anything relative to
+## the draws it precedes.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step|
 	Ok({
-		model: model,
-		actions: [model.time.set(U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000)],
+		model: { ..model, seconds: U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000 },
+		actions: [],
 		tasks: [],
 	})
 
@@ -75,6 +81,9 @@ render! = |model, frame| {
 	frame.with_shader!(
 		model.shader,
 		|shader_frame| {
+			# Inside the scope and before the draw it applies to, which is the
+			# whole reason this is here rather than in an action list.
+			model.time_uniform.set!(model.seconds)
 			shader_frame.texture!(target_draw)
 			Ok({})
 		},

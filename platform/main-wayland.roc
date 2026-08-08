@@ -314,7 +314,6 @@ run_action! = |action|
 		PlaySound(settings) => Ok(settings.play!())
 		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
 		UpdateTexture(request) => request.texture.update!(request.pixels)
-		SetShaderF32Uniform(request) => Ok(request.uniform.set!(request.value))
 		SetVirtualMouse(pointer) => Ok(Capture.set_virtual_mouse!(pointer))
 		# Frees host memory in this cycle rather than reporting back later, which
 		# is exactly what an action is for.

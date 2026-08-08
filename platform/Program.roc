@@ -85,6 +85,12 @@ Program := [].{
 	## `PlaySound` deliberately carries volume, pitch, and pan together rather
 	## than being reachable through three separate actions: one atomic value
 	## cannot be got into the wrong order, and it is one action instead of four.
+	##
+	## Shader uniforms are deliberately *not* here. A uniform says how the draws
+	## after it are interpreted, so two draws through one shader may need
+	## different values, and a list applied before `render!` cannot express
+	## that ordering. Keep the value in the model and write it inside
+	## `Frame.with_shader!`, where the ordering is the code.
 	Action : [
 		Exit(I64),
 		SetCursor(Mouse.Cursor),
@@ -95,7 +101,6 @@ Program := [].{
 		PlaySound(Audio.Playback),
 		SetMusicVolume({ music : Audio.Music, volume : F32 }),
 		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
-		SetShaderF32Uniform({ uniform : Draw.F32Uniform, value : F32 }),
 		SetVirtualMouse(Capture.Pointer),
 		ReleaseBlob(File.Blob),
 	]

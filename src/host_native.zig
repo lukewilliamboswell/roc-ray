@@ -737,8 +737,15 @@ const Phase = enum {
     idle,
     /// Inside `init_for_host`, and inside the startup config callback.
     startup,
-    /// Inside `update_for_host`, including the actions it applies.
-    update,
+    /// Inside `update_for_host`, applying the actions `update` returned.
+    ///
+    /// Note what this is *not* named. The pure reducer has no phase at all,
+    /// because it cannot reach the host: `update` is annotated `->` rather than
+    /// `=>`, so Roc's effect system rejects any effect call inside it at compile
+    /// time. Every host call in this window is therefore an action being
+    /// applied, which is a different thing from computing the next model and is
+    /// worth a different name.
+    commit,
     /// Inside `render_for_host`.
     render,
 
@@ -747,11 +754,34 @@ const Phase = enum {
         return switch (self) {
             .idle => "outside any app callback",
             .startup => "init!",
-            .update => "update",
+            .commit => "an action returned by update",
             .render => "render!",
         };
     }
 };
+
+/// The phases an operation may be reached from.
+///
+/// A set rather than a single phase, because the honest answer for most
+/// operations is more than one: setting the cursor is meaningful while
+/// starting up and while applying an action, and nonsense in between.
+const PhaseSet = std.EnumSet(Phase);
+
+/// Loading, allocating or generating a resource. Startup only: all of these
+/// block, allocate on the GPU, or both, and a frame is not the place for it.
+const during_startup = PhaseSet.initOne(.startup);
+
+/// Drawing, and anything that changes how the draws after it are interpreted.
+/// Only defined inside the frame scope the host opens around `render!`.
+const during_render = PhaseSet.initOne(.render);
+
+/// Changing host state between frames: cursor, window, audio, releases.
+/// Reachable while starting up and while applying an action, and nowhere else.
+const during_commit = PhaseSet.initMany(&.{ .startup, .commit });
+
+/// Reading something back. Cheap, allocates nothing, and meaningful wherever
+/// the app is running -- but still not from outside a callback entirely.
+const during_any_callback = PhaseSet.initMany(&.{ .startup, .commit, .render });
 
 var active_phase: Phase = .idle;
 
@@ -775,8 +805,20 @@ const PhaseScope = struct {
 };
 
 /// The rejection a phase guard produced, recorded instead of aborting in tests.
-const PhaseViolation = struct { operation: []const u8, required: Phase, actual: Phase };
+const PhaseViolation = struct { operation: []const u8, allowed: PhaseSet, actual: Phase };
 var last_phase_violation: ?PhaseViolation = null;
+
+/// Name the phases an operation was allowed in, for a rejection message.
+fn describePhases(allowed: PhaseSet, buffer: []u8) []const u8 {
+    var written: usize = 0;
+    var iterator = allowed.iterator();
+    while (iterator.next()) |phase| {
+        const separator = if (written == 0) "" else " or ";
+        const printed = std.fmt.bufPrint(buffer[written..], "{s}{s}", .{ separator, phase.label() }) catch break;
+        written += printed.len;
+    }
+    return buffer[0..written];
+}
 
 /// Refuse an operation that was reached from the wrong phase.
 ///
@@ -795,19 +837,21 @@ var last_phase_violation: ?PhaseViolation = null;
 /// Under `zig test` the violation is recorded rather than raised: the unit
 /// tests call hosted effects directly, with no callback entered, and aborting
 /// the runner would make the guard itself untestable.
-fn enforcePhase(operation: []const u8, required: Phase) void {
-    if (active_phase == required) return;
-    last_phase_violation = .{ .operation = operation, .required = required, .actual = active_phase };
+fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
+    if (allowed.contains(active_phase)) return;
+    last_phase_violation = .{ .operation = operation, .allowed = allowed, .actual = active_phase };
     if (comptime builtin.is_test) return;
+    var buffer: [160]u8 = undefined;
     std.debug.panic("roc-ray: {s} is only valid during {s}, but it was called during {s}.{s}", .{
         operation,
-        required.label(),
+        describePhases(allowed, &buffer),
         active_phase.label(),
-        switch (required) {
-            .startup => " Load it in init! and keep the handle in your model; loading during a frame blocks it.",
-            .render => " Drawing is only defined inside the frame scope the host opens around render!.",
-            else => "",
-        },
+        if (allowed.eql(during_startup))
+            " Load it in init! and keep the handle in your model; loading during a frame blocks it."
+        else if (allowed.eql(during_render))
+            " Drawing is only defined inside the frame scope the host opens around render!."
+        else
+            "",
     });
 }
 
@@ -2053,7 +2097,7 @@ test "texture pixel count validates dimensions" {
 }
 
 fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AssetsHostLoad_textureRetRecord {
-    enforcePhase("Assets.Texture.load!", .startup);
+    enforcePhase("Assets.Texture.load!", during_startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -2084,6 +2128,7 @@ fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.AssetsHos
 }
 
 fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textureArgs) callconv(.c) abi.AssetsHostGenerate_color_textureRetRecord {
+    enforcePhase("Assets.generate_color_texture!", during_startup);
     if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
@@ -2097,6 +2142,7 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textur
 }
 
 fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_textureArgs) callconv(.c) abi.AssetsHostGenerate_checked_textureRetRecord {
+    enforcePhase("Assets.generate_checked_texture!", during_startup);
     if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (active_headless) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
@@ -2110,6 +2156,7 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_te
 }
 
 fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
+    enforcePhase("Assets.Texture.update!", during_any_callback);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
     const token = args.texture.resource.handle;
@@ -2132,6 +2179,7 @@ fn exportedAssetsUpdateTextureRaw(args: abi.AssetsHostUpdate_textureArgs) callco
 }
 
 fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
+    enforcePhase("Assets.Texture.set_filter!", during_commit);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
@@ -2139,6 +2187,7 @@ fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.AssetsHostTexture, code: u
 }
 
 fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
+    enforcePhase("Assets.Texture.set_wrap!", during_commit);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
@@ -2162,6 +2211,7 @@ fn storeShader(resource: ShaderResource) ?*u64 {
 }
 
 fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) abi.DrawHostLoad_render_textureRetRecord {
+    enforcePhase("Draw.RenderTexture.load!", during_startup);
     if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const target = storeRenderTexture(.headless, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
@@ -2181,7 +2231,7 @@ fn shaderPathsExist(vertex: []const u8, fragment: []const u8) bool {
 }
 
 fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi.DrawHostLoad_shaderRetRecord {
-    enforcePhase("Draw.Shader.load!", .startup);
+    enforcePhase("Draw.Shader.load!", during_startup);
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     const vertex_slice = args.vertex_path.asSlice();
@@ -2209,7 +2259,7 @@ fn exportedDrawLoadShaderRaw(args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi
 }
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
-    enforcePhase("Draw.Shader.from_source!", .startup);
+    enforcePhase("Draw.Shader.from_source!", during_startup);
     defer args.vertex_source.decref(host);
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
@@ -2253,7 +2303,7 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
 }
 
 fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) u8 {
-    enforcePhase("Draw.with_render_texture!", .render);
+    enforcePhase("Draw.with_render_texture!", during_render);
     const host = activeHost();
     const owner = args.resource;
     if (render_texture_lease_count == SCOPE_STACK_LIMIT) {
@@ -2274,7 +2324,7 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
 }
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
-    enforcePhase("Draw.with_render_texture!", .render);
+    enforcePhase("Draw.with_render_texture!", during_render);
     if (render_texture_lease_count == 0) return;
     if (headlessMode()) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
     render_texture_lease_count -= 1;
@@ -2288,7 +2338,7 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 {
-    enforcePhase("Draw.with_shader!", .render);
+    enforcePhase("Draw.with_shader!", during_render);
     const host = activeHost();
     const owner = args.arg0;
     if (shader_lease_count == SCOPE_STACK_LIMIT) {
@@ -2309,7 +2359,7 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 
 }
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
-    enforcePhase("Draw.with_shader!", .render);
+    enforcePhase("Draw.with_shader!", during_render);
     if (shader_lease_count == 0) return;
     if (headlessMode()) headless_shader_depth -|= 1 else raylib.endShaderMode();
     shader_lease_count -= 1;
@@ -2323,7 +2373,7 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
-    enforcePhase("Draw.with_blend_mode!", .render);
+    enforcePhase("Draw.with_blend_mode!", during_render);
     if (blend_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (args.arg0 > 5) return SCOPE_UNAVAILABLE;
     if (!headlessMode()) raylib.beginBlendMode(args.arg0);
@@ -2333,7 +2383,7 @@ fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
-    enforcePhase("Draw.with_blend_mode!", .render);
+    enforcePhase("Draw.with_blend_mode!", during_render);
     if (blend_scope_count == 0) return;
     if (!headlessMode()) raylib.endBlendMode();
     blend_scope_count -= 1;
@@ -2341,6 +2391,7 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
 }
 
 fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
+    enforcePhase("Draw.Shader.uniform_*!", during_startup);
     defer args.name.decref(host);
     defer releaseResourceBox(host, args.shader);
     const resource = shader_heap.get(args.shader.*) orelse return -1;
@@ -2362,6 +2413,7 @@ fn exportedDrawShaderLocationRaw(args: abi.DrawHostShader_locationArgs) callconv
 }
 
 fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(.c) void {
+    enforcePhase("Draw.F32Uniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -2370,6 +2422,7 @@ fn hostedDrawSetShaderFloatRaw(args: abi.DrawHostSet_shader_floatArgs) callconv(
 }
 
 fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) void {
+    enforcePhase("Draw.I32Uniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -2378,6 +2431,7 @@ fn hostedDrawSetShaderIntRaw(args: abi.DrawHostSet_shader_intArgs) callconv(.c) 
 }
 
 fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c) void {
+    enforcePhase("Draw.Vec2Uniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -2386,6 +2440,7 @@ fn hostedDrawSetShaderVec2Raw(args: abi.DrawHostSet_shader_vec2Args) callconv(.c
 }
 
 fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c) void {
+    enforcePhase("Draw.Vec3Uniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -2394,6 +2449,7 @@ fn hostedDrawSetShaderVec3Raw(args: abi.DrawHostSet_shader_vec3Args) callconv(.c
 }
 
 fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c) void {
+    enforcePhase("Draw.Vec4Uniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
@@ -2402,6 +2458,7 @@ fn hostedDrawSetShaderVec4Raw(args: abi.DrawHostSet_shader_vec4Args) callconv(.c
 }
 
 fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callconv(.c) void {
+    enforcePhase("Draw.TextureUniform.set!", during_render);
     defer args.uniform.decref(activeHost());
     defer args.texture.decref(activeHost());
     if (builtin.is_test) return;
@@ -2413,7 +2470,7 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
 
 /// Forward Roc scissor bounds to the raylib backend.
 fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u8 {
-    enforcePhase("Draw.with_scissor!", .render);
+    enforcePhase("Draw.with_scissor!", during_render);
     if (scissor_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginScissor(args.x, args.y, args.width, args.height);
     scissor_scopes[scissor_scope_count] = args;
@@ -2423,7 +2480,7 @@ fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u
 
 /// End the scissor region opened by the Roc renderer.
 fn hostedDrawEndScissorRaw() callconv(.c) void {
-    enforcePhase("Draw.with_scissor!", .render);
+    enforcePhase("Draw.with_scissor!", during_render);
     if (scissor_scope_count == 0) return;
     if (!headlessMode()) raylib.endScissor();
     scissor_scope_count -= 1;
@@ -2434,7 +2491,7 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
-    enforcePhase("Draw.with_camera!", .render);
+    enforcePhase("Draw.with_camera!", during_render);
     if (camera_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginMode2D(args);
     camera_scopes[camera_scope_count] = args;
@@ -2443,31 +2500,31 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
 }
 
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
-    enforcePhase("Draw.circle!", .render);
+    enforcePhase("Draw.circle!", during_render);
     if (active_headless) return;
     raylib.drawCircle(args);
 }
 
 fn hostedDrawCircleGradient(args: abi.DrawHostCircle_gradientArgs) callconv(.c) void {
-    enforcePhase("Draw.circle_gradient!", .render);
+    enforcePhase("Draw.circle_gradient!", during_render);
     if (active_headless) return;
     raylib.drawCircleGradient(args);
 }
 
 fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) void {
-    enforcePhase("Draw.circle_lines!", .render);
+    enforcePhase("Draw.circle_lines!", during_render);
     if (active_headless) return;
     raylib.drawCircleLines(args);
 }
 
 fn hostedDrawClear(color: Color) callconv(.c) void {
-    enforcePhase("Draw.clear!", .render);
+    enforcePhase("Draw.clear!", during_render);
     if (active_headless) return;
     raylib.clearBackground(color);
 }
 
 fn hostedDrawEndCamera() callconv(.c) void {
-    enforcePhase("Draw.with_camera!", .render);
+    enforcePhase("Draw.with_camera!", during_render);
     if (camera_scope_count == 0) return;
     if (!headlessMode()) raylib.endMode2D();
     camera_scope_count -= 1;
@@ -2475,19 +2532,19 @@ fn hostedDrawEndCamera() callconv(.c) void {
 }
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
-    enforcePhase("Draw.fps!", .render);
+    enforcePhase("Draw.fps!", during_render);
     if (active_headless) return;
     raylib.drawFps(args);
 }
 
 fn hostedDrawLineRaw(args: abi.DrawHostLineArgs) callconv(.c) void {
-    enforcePhase("Draw.line!", .render);
+    enforcePhase("Draw.line!", during_render);
     if (active_headless) return;
     raylib.drawLine(args);
 }
 
 fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawHostPolygonArgs) callconv(.c) void {
-    enforcePhase("Draw.polygon!", .render);
+    enforcePhase("Draw.polygon!", during_render);
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygon(args.points.items(), args.color);
@@ -2498,7 +2555,7 @@ fn exportedDrawPolygonRaw(args: abi.DrawHostPolygonArgs) callconv(.c) void {
 }
 
 fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawHostPolygon_linesArgs) callconv(.c) void {
-    enforcePhase("Draw.polygon_lines!", .render);
+    enforcePhase("Draw.polygon_lines!", during_render);
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
@@ -2509,55 +2566,55 @@ fn exportedDrawPolygonLinesRaw(args: abi.DrawHostPolygon_linesArgs) callconv(.c)
 }
 
 fn hostedDrawRectangleRaw(args: abi.DrawHostRectangleArgs) callconv(.c) void {
-    enforcePhase("Draw.rectangle!", .render);
+    enforcePhase("Draw.rectangle!", during_render);
     if (active_headless) return;
     raylib.drawRectangle(args);
 }
 
 fn hostedDrawRectangleLinesRaw(args: abi.DrawHostRectangle_linesArgs) callconv(.c) void {
-    enforcePhase("Draw.rectangle_lines!", .render);
+    enforcePhase("Draw.rectangle_lines!", during_render);
     if (active_headless) return;
     raylib.drawRectangleLines(args);
 }
 
 fn hostedDrawRectangleGradientH(args: abi.DrawHostRectangle_gradient_hArgs) callconv(.c) void {
-    enforcePhase("Draw.rectangle_gradient_h!", .render);
+    enforcePhase("Draw.rectangle_gradient_h!", during_render);
     if (active_headless) return;
     raylib.drawRectangleGradientH(args);
 }
 
 fn hostedDrawRectangleGradientV(args: abi.DrawHostRectangle_gradient_vArgs) callconv(.c) void {
-    enforcePhase("Draw.rectangle_gradient_v!", .render);
+    enforcePhase("Draw.rectangle_gradient_v!", during_render);
     if (active_headless) return;
     raylib.drawRectangleGradientV(args);
 }
 
 fn hostedDrawRoundedRectangleRaw(args: abi.DrawHostRounded_rectangleArgs) callconv(.c) void {
-    enforcePhase("Draw.rounded_rectangle!", .render);
+    enforcePhase("Draw.rounded_rectangle!", during_render);
     if (active_headless) return;
     raylib.drawRoundedRectangle(args);
 }
 
 fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawHostRounded_rectangle_linesArgs) callconv(.c) void {
-    enforcePhase("Draw.rounded_rectangle_lines!", .render);
+    enforcePhase("Draw.rounded_rectangle_lines!", during_render);
     if (active_headless) return;
     raylib.drawRoundedRectangleLines(args);
 }
 
 fn hostedDrawTriangleRaw(args: abi.DrawHostTriangleArgs) callconv(.c) void {
-    enforcePhase("Draw.triangle!", .render);
+    enforcePhase("Draw.triangle!", during_render);
     if (active_headless) return;
     raylib.drawTriangle(args);
 }
 
 fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c) void {
-    enforcePhase("Draw.triangle_lines!", .render);
+    enforcePhase("Draw.triangle_lines!", during_render);
     if (active_headless) return;
     raylib.drawTriangleLines(args);
 }
 
 fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawHostLoad_fontArgs) callconv(.c) abi.DrawHostLoad_fontRetRecord {
-    enforcePhase("Draw.load_font!", .startup);
+    enforcePhase("Draw.load_font!", during_startup);
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
@@ -2590,6 +2647,7 @@ fn fontForValue(font_value: *const abi.DefaultFontOrLoadedFont) raylib.Font {
 }
 
 fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
+    enforcePhase("Draw.measure_text!", during_any_callback);
     defer args.text.decref(host);
     defer args.font.decref(host);
     var result: abi.DrawHostMeasure_textRetRecord = .{ .height = 0, .width = 0 };
@@ -2611,6 +2669,7 @@ fn exportedDrawMeasureTextRaw(args: abi.DrawHostMeasure_textArgs) callconv(.c) a
 }
 
 fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
+    enforcePhase("Text.prepare!", during_startup);
     defer args.text.decref(host);
     prepared_text_prepare_calls += 1;
 
@@ -2665,7 +2724,7 @@ fn exportedDrawPrepareTextRaw(args: abi.DrawHostPrepare_textArgs) callconv(.c) a
 }
 
 fn hostedDrawPreparedTextRaw(host: *RocHost, args: abi.DrawHostDraw_prepared_textArgs) callconv(.c) void {
-    enforcePhase("Text.Prepared.draw!", .render);
+    enforcePhase("Text.Prepared.draw!", during_render);
     defer releaseResourceBox(host, args.prepared);
     const resource = prepared_text_heap.get(args.prepared.*) orelse return;
     prepared_text_draw_calls += 1;
@@ -2686,7 +2745,7 @@ fn exportedDrawPreparedTextRaw(args: abi.DrawHostDraw_prepared_textArgs) callcon
 }
 
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
-    enforcePhase("Draw.text!", .render);
+    enforcePhase("Draw.text!", during_render);
     defer args.text.decref(host);
     defer args.font.decref(host);
     if (headlessMode()) return;
@@ -2711,7 +2770,7 @@ fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
 }
 
 fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) callconv(.c) void {
-    enforcePhase("Draw.text_at!", .render);
+    enforcePhase("Draw.text_at!", during_render);
     defer args.text.decref(host);
     defer args.font.decref(host);
     if (active_headless) return;
@@ -2737,7 +2796,7 @@ fn exportedDrawTextAlignedRaw(args: abi.DrawHostText_alignedArgs) callconv(.c) v
 }
 
 fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
-    enforcePhase("Draw.texture!", .render);
+    enforcePhase("Draw.texture!", during_render);
     defer args.texture.decref(activeHost());
     if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
@@ -2745,7 +2804,7 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
-    enforcePhase("Draw.projective_texture!", .render);
+    enforcePhase("Draw.projective_texture!", during_render);
     defer args.texture.decref(activeHost());
     if (active_headless) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
@@ -2756,7 +2815,7 @@ fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c
 var exit_requested: ?i64 = null;
 
 fn hostedReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    enforcePhase("Host.read_env!", .startup);
+    enforcePhase("Host.read_env!", during_startup);
     // Windows doesn't link libc, so env var reading is not yet supported
     var result: ReadEnvResult = undefined;
     result.tag = .Err;
@@ -2770,7 +2829,7 @@ fn exportedReadEnvWindows(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 }
 
 fn hostedReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
-    enforcePhase("Host.read_env!", .startup);
+    enforcePhase("Host.read_env!", during_startup);
     var result: ReadEnvResult = undefined;
     const key = key_arg.asSlice();
     const value = hostGetEnv(key);
@@ -2793,7 +2852,7 @@ fn exportedReadEnvPosix(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 }
 
 fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
-    enforcePhase("Host.read_file!", .startup);
+    enforcePhase("Host.read_file!", during_startup);
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
@@ -2842,6 +2901,7 @@ fn blobSliceError(err: u8) abi.FileHostBlob_sliceRetRecord {
 /// thread. A range past the end is refused rather than clamped: a short read
 /// that looks complete is worse than one that says so.
 fn hostedFileBlobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
+    enforcePhase("File.Blob.slice_to_str!", during_any_callback);
     const bytes = blobBytes(args.handle) orelse return blobSliceError(BLOB_ERR_RELEASED);
 
     const end = std.math.add(u64, args.offset, args.count) catch return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
@@ -2865,6 +2925,7 @@ fn exportedFileBlobSlice(args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.File
 
 /// Read one byte of a blob, leaving the rest where it is.
 fn hostedFileBlobByte(args: abi.FileHostBlob_byteArgs) callconv(.c) abi.FileHostBlob_byteRetRecord {
+    enforcePhase("File.Blob.byte!", during_any_callback);
     const bytes = blobBytes(args.handle) orelse return .{ .byte = 0, .err = BLOB_ERR_RELEASED };
     if (args.offset >= bytes.len) return .{ .byte = 0, .err = BLOB_ERR_OUT_OF_BOUNDS };
     return .{ .byte = bytes[@intCast(args.offset)], .err = 0 };
@@ -2877,11 +2938,12 @@ fn hostedFileBlobByte(args: abi.FileHostBlob_byteArgs) callconv(.c) abi.FileHost
 /// is given the slot next. Releasing an unknown handle is not an error; the
 /// app asked for these bytes to be gone, and they are.
 fn hostedFileReleaseBlob(handle: u64) callconv(.c) void {
+    enforcePhase("File.Blob.release!", during_any_callback);
     _ = blob_table.release(handle);
 }
 
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
-    enforcePhase("Tilemap.load_tmx!", .startup);
+    enforcePhase("Tilemap.load_tmx!", during_startup);
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
@@ -2943,7 +3005,7 @@ fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
 }
 
 fn hostedTilemapDrawRaw(host: *RocHost, args: abi.TilemapHostDrawArgs) callconv(.c) void {
-    enforcePhase("Tilemap.draw_layers!", .render);
+    enforcePhase("Tilemap.draw_layers!", during_render);
     defer releaseTilemapDrawArgs(host, args);
     if (headlessMode()) headless_tilemap_draw_calls += 1;
     const submitted = tilemap_batch.draw(.{
@@ -2970,10 +3032,12 @@ fn exportedTilemapDrawRaw(args: abi.TilemapHostDrawArgs) callconv(.c) void {
 }
 
 fn hostedExit(code: i32) callconv(.c) void {
+    enforcePhase("Program.exit", during_commit);
     exit_requested = @as(i64, code);
 }
 
 fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
+    enforcePhase("App.Startup.set_screen_size!", during_startup);
     if (active_headless) {
         headless_screen_width = positiveI32(args.width, headless_screen_width);
         headless_screen_height = positiveI32(args.height, headless_screen_height);
@@ -2984,16 +3048,19 @@ fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
 }
 
 fn hostedSetTargetFps(fps: i32) callconv(.c) void {
+    enforcePhase("App.Startup.set_target_fps!", during_startup);
     if (active_headless) return;
     raylib.setTargetFps(fps);
 }
 
 fn hostedSetWindowMinSize(args: abi.HostHostSet_window_min_sizeArgs) callconv(.c) void {
+    enforcePhase("Window.set_window_min_size", during_commit);
     if (active_headless) return;
     raylib.setWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
 
 fn hostedSetExitKey(key_code: i32) callconv(.c) void {
+    enforcePhase("Keys.set_exit_key", during_commit);
     if (active_headless) return;
     raylib.setExitKey(nonNegativeCInt(key_code));
 }
@@ -3062,6 +3129,7 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
 }
 
 fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase("Capture.screenshot!", during_any_callback);
     defer path_arg.decref(roc_host);
     const path = path_arg.asSlice();
 
@@ -3094,6 +3162,7 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
 }
 
 fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
+    enforcePhase("Capture.start!", during_any_callback);
     defer args.path.decref(roc_host);
     return startCaptureRecording(.{
         .path = args.path.asSlice(),
@@ -3283,6 +3352,7 @@ fn currentRenderHeight() i32 {
 }
 
 fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) callconv(.c) void {
+    enforcePhase("Capture.set_virtual_mouse", during_any_callback);
     if (!args.active) {
         virtual_mouse_active = false;
         virtual_mouse_has_last = false;
@@ -3318,6 +3388,7 @@ fn recordVirtualMousePosition() void {
 }
 
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
+    enforcePhase("Capture.stop!", during_any_callback);
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
     if (stop_result == capture.err_not_recording) {
@@ -3332,6 +3403,7 @@ fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRec
 }
 
 fn hostedCaptureRecordingStatus() callconv(.c) abi.CaptureHostRecording_statusRetRecord {
+    enforcePhase("Capture.status!", during_any_callback);
     return .{
         .status = capture_session.status,
         .err = capture_session.failure,
@@ -3355,6 +3427,7 @@ fn captureStateForStep() CaptureFromHost {
 }
 
 fn hostedGetClipboardText(roc_host: *RocHost) callconv(.c) ClipboardTextResult {
+    enforcePhase("App.Startup.get_clipboard_text!", during_startup);
     var result: ClipboardTextResult = undefined;
 
     if (headlessMode()) {
@@ -3384,6 +3457,7 @@ fn exportedGetClipboardText() callconv(.c) ClipboardTextResult {
 }
 
 fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
+    enforcePhase("Window.set_clipboard_text", during_commit);
     // Roc transfers ownership of refcounted args to the hosted fn; release it
     // on every path, including the early returns below.
     defer text_arg.decref(roc_host);
@@ -3423,6 +3497,7 @@ fn cursorModeFromCode(code: u8) CursorMode {
 }
 
 fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
+    enforcePhase("Mouse.set_cursor_mode", during_commit);
     if (active_headless) return;
     switch (cursorModeFromCode(mode_code)) {
         .visible => raylib.enableCursor(),
@@ -3440,6 +3515,7 @@ fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
 }
 
 fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
+    enforcePhase("Mouse.set_cursor", during_commit);
     if (active_headless) return;
     const next = mouseCursorFromCode(cursor);
     const next_code: u8 = @intCast(@intFromEnum(next));
@@ -3501,6 +3577,7 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
+    enforcePhase("Random.i32!", during_any_callback);
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
 }
@@ -3526,6 +3603,7 @@ fn storeMusic(resource: MusicResource) ?*u64 {
 }
 
 fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHostGen_toneRetRecord {
+    enforcePhase("Audio.gen_tone!", during_startup);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -3536,6 +3614,7 @@ fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHos
 }
 
 fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioHostGen_soundRetRecord {
+    enforcePhase("Audio.gen_sound!", during_startup);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -3546,7 +3625,7 @@ fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioH
 }
 
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_soundRetRecord {
-    enforcePhase("Audio.load_sound!", .startup);
+    enforcePhase("Audio.load_sound!", during_startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -3570,7 +3649,7 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_s
 }
 
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
-    enforcePhase("Audio.load_music!", .startup);
+    enforcePhase("Audio.load_music!", during_startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -3594,6 +3673,7 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
 }
 
 fn hostedAudioPlay(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Sound.play!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     if (builtin.is_test) return;
     const resource = sound_heap.get(handle.*) orelse return;
@@ -3604,6 +3684,7 @@ fn hostedAudioPlay(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioStop(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Sound.stop!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3613,6 +3694,7 @@ fn hostedAudioStop(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioPause(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Sound.pause!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3622,6 +3704,7 @@ fn hostedAudioPause(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioResume(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Sound.resume!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3631,6 +3714,7 @@ fn hostedAudioResume(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
+    enforcePhase("Audio.Sound.is_playing!", during_any_callback);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -3640,6 +3724,7 @@ fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
 }
 
 fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
+    enforcePhase("Audio.Sound.set_volume!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3649,6 +3734,7 @@ fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
+    enforcePhase("Audio.Sound.set_pitch!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3658,6 +3744,7 @@ fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
+    enforcePhase("Audio.Sound.set_pan!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3667,6 +3754,7 @@ fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
 }
 
 fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Music.play!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3676,6 +3764,7 @@ fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Music.stop!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3685,6 +3774,7 @@ fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Music.pause!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3694,6 +3784,7 @@ fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
+    enforcePhase("Audio.Music.resume!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3703,6 +3794,7 @@ fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
+    enforcePhase("Audio.Music.set_volume!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3712,6 +3804,7 @@ fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
+    enforcePhase("Audio.Music.set_pitch!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3721,6 +3814,7 @@ fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
+    enforcePhase("Audio.Music.set_pan!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3730,6 +3824,7 @@ fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
+    enforcePhase("Audio.Music.set_looping!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3739,6 +3834,7 @@ fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
 }
 
 fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
+    enforcePhase("Audio.Music.is_playing!", during_any_callback);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -3748,6 +3844,7 @@ fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
 }
 
 fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
+    enforcePhase("Audio.Music.seek!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -3757,6 +3854,7 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
 }
 
 fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
+    enforcePhase("Audio.Music.length!", during_any_callback);
     defer releaseResourceBox(activeHost(), handle);
     if (builtin.is_test) return 0;
     const resource = music_heap.get(handle.*) orelse return 0;
@@ -3767,6 +3865,7 @@ fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
 }
 
 fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
+    enforcePhase("Audio.Music.time_played!", during_any_callback);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
@@ -3776,6 +3875,7 @@ fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
 }
 
 fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
+    enforcePhase("Audio.set_master_volume!", during_commit);
     if (active_headless) return;
     raylib.setMasterVolume(volume);
 }
@@ -4133,7 +4233,7 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
     // The actions `update` returns are applied by the platform before this
     // call returns, so they run inside this scope too -- which is why an
     // action's effect is checked against the update phase and not against idle.
-    const phase = PhaseScope.enter(.update);
+    const phase = PhaseScope.enter(.commit);
     defer phase.leave();
     return update_for_host(takeModel(boxed_model), step);
 }
@@ -5645,11 +5745,11 @@ test "phases restore what they interrupted rather than falling back to idle" {
     // Actions run inside the update call that produced them, so a nested scope
     // has to land back in update and not in idle -- otherwise the phase after
     // an action would be wrong for the rest of the call.
-    const update = PhaseScope.enter(.update);
+    const update = PhaseScope.enter(.commit);
     const nested = PhaseScope.enter(.render);
     try std.testing.expectEqual(Phase.render, active_phase);
     nested.leave();
-    try std.testing.expectEqual(Phase.update, active_phase);
+    try std.testing.expectEqual(Phase.commit, active_phase);
     update.leave();
     try std.testing.expectEqual(Phase.idle, active_phase);
 }
@@ -5672,12 +5772,12 @@ test "a startup-only loader called from render! is rejected" {
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
-    try std.testing.expectEqual(Phase.startup, violation.required);
+    try std.testing.expect(violation.allowed.eql(during_startup));
     try std.testing.expectEqual(Phase.render, violation.actual);
 }
 
 test "a drawing primitive called from update is rejected" {
-    const phase = PhaseScope.enter(.update);
+    const phase = PhaseScope.enter(.commit);
     defer phase.leave();
     last_phase_violation = null;
     defer last_phase_violation = null;
@@ -5687,8 +5787,55 @@ test "a drawing primitive called from update is rejected" {
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.with_blend_mode!", violation.operation);
-    try std.testing.expectEqual(Phase.render, violation.required);
-    try std.testing.expectEqual(Phase.update, violation.actual);
+    try std.testing.expect(violation.allowed.eql(during_render));
+    try std.testing.expectEqual(Phase.commit, violation.actual);
+}
+
+test "allocating a render texture during a frame is rejected" {
+    // The review case this guard exists for: GPU allocation is not blocking
+    // I/O, so "it does not block" was never the right test for what belongs
+    // in a frame.
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    _ = hostedDrawLoadRenderTextureRaw(.{ .width = 0, .height = 0 });
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Draw.RenderTexture.load!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_startup));
+}
+
+test "an operation allowed in several phases is accepted in each of them" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    for ([_]Phase{ .startup, .commit }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        enforcePhase("Mouse.set_cursor", during_commit);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+
+    // ...and rejected everywhere else, including the phase it is nearest to.
+    for ([_]Phase{ .idle, .render }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Mouse.set_cursor", during_commit);
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqual(phase, violation.actual);
+    }
+}
+
+test "a rejection names every phase the operation was allowed in" {
+    var buffer: [160]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "init! or an action returned by update",
+        describePhases(during_commit, &buffer),
+    );
+    try std.testing.expectEqualStrings("render!", describePhases(during_render, &buffer));
 }
 
 test "an operation called from its own phase is not rejected" {

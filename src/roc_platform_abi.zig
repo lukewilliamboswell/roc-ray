@@ -5043,10 +5043,10 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_6b33d8d5fd6ed20e
-pub const __AnonStruct_6b33d8d5fd6ed20e = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_fc16aa9e5ee5152
+pub const __AnonStruct_fc16aa9e5ee5152 = if (@sizeOf(usize) == 4) extern struct {
     capture: __AnonStruct_725e46d8f9e562ab,
-    time: __AnonStruct_a7fabf5808088b4c,
+    time: __AnonStruct_50df62c1741fc0e0,
     completed: RocList(__AnonStruct_f00636e965e48f7d),
     input: __AnonStruct_3b3b4ff72bac1c3c,
     window: __AnonStruct_225d69ea1bc0e508,
@@ -5079,7 +5079,7 @@ pub const __AnonStruct_6b33d8d5fd6ed20e = if (@sizeOf(usize) == 4) extern struct
     }
 } else extern struct {
     capture: __AnonStruct_725e46d8f9e562ab,
-    time: __AnonStruct_a7fabf5808088b4c,
+    time: __AnonStruct_50df62c1741fc0e0,
     completed: RocList(__AnonStruct_f00636e965e48f7d),
     input: __AnonStruct_3b3b4ff72bac1c3c,
     window: __AnonStruct_225d69ea1bc0e508,
@@ -5114,12 +5114,12 @@ pub const __AnonStruct_6b33d8d5fd6ed20e = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_6b33d8d5fd6ed20e) != 264) @compileError("__AnonStruct_6b33d8d5fd6ed20e size mismatch");
-        if (@alignOf(__AnonStruct_6b33d8d5fd6ed20e) != 8) @compileError("__AnonStruct_6b33d8d5fd6ed20e alignment mismatch");
+        if (@sizeOf(__AnonStruct_fc16aa9e5ee5152) != 272) @compileError("__AnonStruct_fc16aa9e5ee5152 size mismatch");
+        if (@alignOf(__AnonStruct_fc16aa9e5ee5152) != 8) @compileError("__AnonStruct_fc16aa9e5ee5152 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_6b33d8d5fd6ed20e) != 176) @compileError("__AnonStruct_6b33d8d5fd6ed20e size mismatch");
-        if (@alignOf(__AnonStruct_6b33d8d5fd6ed20e) != 8) @compileError("__AnonStruct_6b33d8d5fd6ed20e alignment mismatch");
+        if (@sizeOf(__AnonStruct_fc16aa9e5ee5152) != 184) @compileError("__AnonStruct_fc16aa9e5ee5152 size mismatch");
+        if (@alignOf(__AnonStruct_fc16aa9e5ee5152) != 8) @compileError("__AnonStruct_fc16aa9e5ee5152 alignment mismatch");
     }
 }
 
@@ -5343,10 +5343,11 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_a7fabf5808088b4c
-pub const __AnonStruct_a7fabf5808088b4c = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_50df62c1741fc0e0
+pub const __AnonStruct_50df62c1741fc0e0 = if (@sizeOf(usize) == 4) extern struct {
     frame_count: u64,
     timestamp_nanos: u64,
+    wall_timestamp_nanos: u64,
     elapsed_seconds: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -5364,6 +5365,7 @@ pub const __AnonStruct_a7fabf5808088b4c = if (@sizeOf(usize) == 4) extern struct
 } else extern struct {
     frame_count: u64,
     timestamp_nanos: u64,
+    wall_timestamp_nanos: u64,
     elapsed_seconds: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -5382,12 +5384,12 @@ pub const __AnonStruct_a7fabf5808088b4c = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_a7fabf5808088b4c) != 24) @compileError("__AnonStruct_a7fabf5808088b4c size mismatch");
-        if (@alignOf(__AnonStruct_a7fabf5808088b4c) != 8) @compileError("__AnonStruct_a7fabf5808088b4c alignment mismatch");
+        if (@sizeOf(__AnonStruct_50df62c1741fc0e0) != 32) @compileError("__AnonStruct_50df62c1741fc0e0 size mismatch");
+        if (@alignOf(__AnonStruct_50df62c1741fc0e0) != 8) @compileError("__AnonStruct_50df62c1741fc0e0 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_a7fabf5808088b4c) != 24) @compileError("__AnonStruct_a7fabf5808088b4c size mismatch");
-        if (@alignOf(__AnonStruct_a7fabf5808088b4c) != 8) @compileError("__AnonStruct_a7fabf5808088b4c alignment mismatch");
+        if (@sizeOf(__AnonStruct_50df62c1741fc0e0) != 32) @compileError("__AnonStruct_50df62c1741fc0e0 size mismatch");
+        if (@alignOf(__AnonStruct_50df62c1741fc0e0) != 8) @compileError("__AnonStruct_50df62c1741fc0e0 alignment mismatch");
     }
 }
 
@@ -8733,9 +8735,9 @@ pub const TilemapHostLoad_tmxMapProperties = __AnonStruct_f80f1d26742641bb;
 pub const TilemapHostLoad_tmxMapTileProperties = __AnonStruct_6ef82b7d80b893b3;
 pub const TilemapHostLoad_tmxMapTilesets = __AnonStruct_756aabd194c61573;
 pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
-pub const Update_for_hostArg1 = __AnonStruct_6b33d8d5fd6ed20e;
+pub const Update_for_hostArg1 = __AnonStruct_fc16aa9e5ee5152;
 pub const Update_for_hostArg1Capture = __AnonStruct_725e46d8f9e562ab;
-pub const Update_for_hostArg1Time = __AnonStruct_a7fabf5808088b4c;
+pub const Update_for_hostArg1Time = __AnonStruct_50df62c1741fc0e0;
 pub const Update_for_hostArg1Completed = __AnonStruct_f00636e965e48f7d;
 pub const Update_for_hostArg1Input = __AnonStruct_3b3b4ff72bac1c3c;
 pub const Update_for_hostArg1InputGamepads = __AnonStruct_1c8617e96852f779;
@@ -9732,7 +9734,7 @@ pub extern fn app_config_for_host() callconv(.c) __AnonStruct_1fdbe5c9dee1b2d2;
 pub extern fn init_for_host() callconv(.c) Init_for_hostResult;
 
 /// Entrypoint: update_for_host!
-pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_6b33d8d5fd6ed20e) callconv(.c) Update_for_hostResult;
+pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_fc16aa9e5ee5152) callconv(.c) Update_for_hostResult;
 
 /// Entrypoint: render_for_host!
 pub extern fn render_for_host(arg0: RocBox) callconv(.c) Render_for_hostResult;

@@ -19,6 +19,11 @@
 ## exist. That is why an `Action` may hold rich values -- a `Audio.Sound`, an
 ## `Assets.Texture` -- while a `Task` must flatten to scalars.
 ##
+## `Delay` is wall time. An app that asks to hear back in a second means a
+## second, and a fixed-step recording changing what a timeout means would be a
+## surprise nobody asked for. Everything on the simulation clock -- animation,
+## physics -- reads `step.time` instead.
+##
 ## One `Step` per cycle, rather than one call per event, is deliberate. Each
 ## call crosses the ABI and boxes and unboxes the model, which Roc treats as
 ## expensive; batching makes that a fixed cost per rendered frame instead of one

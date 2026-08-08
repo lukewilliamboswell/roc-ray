@@ -568,9 +568,17 @@ fn writeWholeFile(io: std.Io, path: []const u8, bytes: []const u8) u8 {
 
 var effect_worker = EffectWorker{};
 
-/// The clock this frame reported to Roc, so a delay's deadline sits on the
-/// timeline the app sees rather than on the wall clock.
+/// The simulation clock this frame reported to Roc.
 var last_frame_nanos: u64 = 0;
+
+/// Real monotonic time at the start of this frame.
+///
+/// Separate from `last_frame_nanos` because a fixed-step recording makes the
+/// simulation clock advance by an exact delta rather than by however long the
+/// frame took. Delays are armed and expired against *this* one: `Delay(1000)`
+/// means a second, and an app recording at a fixed step has not asked for its
+/// timeouts to be re-scaled.
+var last_wall_nanos: u64 = 0;
 
 /// How many tasks may be accepted but not yet answered.
 ///
@@ -4734,7 +4742,7 @@ fn armTimer(id: u64, millis: u64) bool {
     // `millis` comes from the app, so saturate rather than wrap: a wrapped
     // deadline fires immediately, which looks like a delay that did not work.
     const delay_nanos = std.math.mul(u64, millis, std.time.ns_per_ms) catch std.math.maxInt(u64);
-    pending_timers[pending_timer_count] = .{ .id = id, .due_nanos = last_frame_nanos +| delay_nanos };
+    pending_timers[pending_timer_count] = .{ .id = id, .due_nanos = last_wall_nanos +| delay_nanos };
     pending_timer_count += 1;
     return false;
 }
@@ -5415,7 +5423,7 @@ test "every task in an oversized batch is answered exactly once" {
     var roc_host = abi.makeRocHost(&roc_env);
 
     pending_timer_count = 0;
-    last_frame_nanos = 0;
+    last_wall_nanos = 0;
     defer pending_timer_count = 0;
 
     // More delays than the host will hold at once.
@@ -5455,7 +5463,7 @@ test "timers expire once" {
     var roc_host = abi.makeRocHost(&roc_env);
 
     pending_timer_count = 0;
-    last_frame_nanos = 0;
+    last_wall_nanos = 0;
     var staging = CompletionStaging.init(std.testing.allocator);
     defer staging.deinit();
     // Arming is what dispatch does after reserving; expiry gives the
@@ -5475,9 +5483,35 @@ test "timers expire once" {
     staging.release(&roc_host);
 }
 
+test "a delay is a real second even while the simulation clock is fixed-step" {
+    pending_timer_count = 0;
+    capture_clock_offset_ns = 0;
+    capture_clock_last_real_ns = 0;
+    defer {
+        pending_timer_count = 0;
+        capture_clock_offset_ns = 0;
+        capture_clock_last_real_ns = 0;
+    }
+
+    // A 30fps recording of a frame that really took 100ms. The simulation clock
+    // is told the frame was 1/30s, so it falls behind the wall clock -- which
+    // is the point: the captured animation plays at the rate it asked for.
+    const real_ns: u64 = 100 * std.time.ns_per_ms;
+    const simulated = captureAdjustedClock(real_ns, 1.0 / 30.0);
+    try std.testing.expect(simulated < real_ns);
+
+    // A delay armed on that frame is still due one real second later. Arming it
+    // off the simulation clock would have made `Delay(1000)` mean whatever the
+    // recording's step happened to add up to.
+    last_frame_nanos = simulated;
+    last_wall_nanos = real_ns;
+    _ = armTimer(1, 1_000);
+    try std.testing.expectEqual(real_ns + std.time.ns_per_s, pending_timers[0].due_nanos);
+}
+
 test "an absurd delay saturates its deadline instead of wrapping to the past" {
     pending_timer_count = 0;
-    last_frame_nanos = 1_000;
+    last_wall_nanos = 1_000;
     _ = armTimer(1, std.math.maxInt(u64));
     try std.testing.expectEqual(std.math.maxInt(u64), pending_timers[0].due_nanos);
     pending_timer_count = 0;
@@ -6251,9 +6285,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         );
 
         last_frame_nanos = now_ns;
+        last_wall_nanos = real_ns;
         texture_upload_bytes_this_frame = 0;
         stageWorkerResults(&staging, roc_host);
-        expireTimers(&staging, now_ns);
+        expireTimers(&staging, real_ns);
         stageCaptureResults(&staging);
 
         // One call, before the drawing scope opens. `update` is pure, so it
@@ -6265,6 +6300,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             .time = .{
                 .frame_count = frame_count,
                 .timestamp_nanos = now_ns,
+                .wall_timestamp_nanos = real_ns,
                 .elapsed_seconds = frame_time,
             },
             .completed = staging.take(roc_host),
@@ -6336,6 +6372,10 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         );
 
         last_frame_nanos = timestamp_nanos;
+        // A headless run has no real clock to expose: it exists to produce the
+        // same output twice, and a wall clock would be the one thing in the
+        // step that differed between runs.
+        last_wall_nanos = timestamp_nanos;
         texture_upload_bytes_this_frame = 0;
         stageWorkerResults(&staging, roc_host);
         expireTimers(&staging, timestamp_nanos);
@@ -6350,6 +6390,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             .time = .{
                 .frame_count = frame_count,
                 .timestamp_nanos = timestamp_nanos,
+                .wall_timestamp_nanos = timestamp_nanos,
                 .elapsed_seconds = frame_time,
             },
             .completed = staging.take(roc_host),

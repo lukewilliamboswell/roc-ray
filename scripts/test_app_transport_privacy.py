@@ -24,6 +24,10 @@ CASES = (
         ROOT / "test" / "compile_fail" / "app_config_module.roc",
         ("PACKAGE MODULE IS PRIVATE", "`rr.AppConfig`"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "file_host_module.roc",
+        ("PACKAGE MODULE IS PRIVATE", "`rr.FileHost`"),
+    ),
 )
 
 

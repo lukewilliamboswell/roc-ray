@@ -83,12 +83,20 @@ const COMPLETION_SMALL_FILE_READ: u8 = 0;
 const COMPLETION_DELAY: u8 = 1;
 const COMPLETION_SCREENSHOT_FINISHED: u8 = 2;
 const COMPLETION_CLIPBOARD_READ: u8 = 3;
+const COMPLETION_FILE_READ: u8 = 4;
 
 /// `kind` codes for a task returned by `update`. Mirrored in `platform/Program.roc`.
 const TASK_READ_SMALL_FILE: u8 = 0;
 const TASK_DELAY: u8 = 1;
 const TASK_SCREENSHOT: u8 = 2;
 const TASK_READ_CLIPBOARD: u8 = 3;
+const TASK_READ_FILE: u8 = 4;
+
+/// Why an operation on a blob produced no bytes. Mirrored in `platform/File.roc`.
+const BLOB_ERR_RELEASED: u8 = 1;
+const BLOB_ERR_OUT_OF_BOUNDS: u8 = 2;
+const BLOB_ERR_NOT_UTF8: u8 = 3;
+const BLOB_ERR_TOO_LARGE: u8 = 4;
 
 /// Read-error codes. Mirrored in `platform/Program.roc`.
 ///
@@ -100,18 +108,41 @@ const READ_ERR_BUSY: u8 = 3;
 const READ_ERR_UNAVAILABLE: u8 = 4;
 const READ_ERR_TOO_LARGE: u8 = 5;
 
-/// How much of a finished read the frame thread will copy into a Roc string.
+/// The most the host will copy into a Roc string in one operation.
 ///
-/// The worker does the reading off-thread, but turning the bytes into a `Str`
-/// happens here, on the frame thread -- so without a bound a 16 MiB "async"
-/// read still costs a 16 MiB allocation and copy mid-frame, which is most of
-/// what moving the read off-thread was supposed to buy.
+/// The worker does the reading off-thread, but turning bytes into a `Str`
+/// happens on the frame thread -- so without a bound a 16 MiB "async" read
+/// still costs a 16 MiB allocation and copy mid-frame, which is most of what
+/// moving the read off-thread was supposed to buy.
 ///
-/// Above this the read is reported as `TooLarge` rather than copied. Handing
-/// back a host-owned handle instead, so a large payload never crosses into Roc
-/// during a frame at all, is the next step; refusing is the honest interim,
-/// because it keeps the invariant the split exists for.
+/// One number with one meaning, applied everywhere a copy could be that large:
+/// `ReadSmallFile` reports `TooLarge` above it, and so does any blob-to-string
+/// copy. `ReadFile` has no such limit *because it makes no such copy* -- the
+/// worker's allocation is installed into a blob slot and the app is handed a
+/// handle. Reaching past this limit is therefore not a refusal to do the work;
+/// it is a signal to use the operation that does not copy.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
+
+/// How many host-owned blobs may be live at once.
+///
+/// Small on purpose. A blob is released by hand, so this is also the bound on
+/// what an app that never releases can pin: with the 16 MiB per-file ceiling
+/// that is a few hundred megabytes, refused rather than unbounded. An app that
+/// wants more should copy what it needs and release.
+const MAX_LIVE_BLOBS: usize = 32;
+
+/// Name a failed read in the app's vocabulary.
+///
+/// A file past the host's per-file ceiling is `TooLarge` rather than
+/// `ReadFailed`: nothing went wrong, the host declined a read of that size, and
+/// those are different things for an app deciding what to do next.
+fn readErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound => READ_ERR_NOT_FOUND,
+        error.StreamTooLong => READ_ERR_TOO_LARGE,
+        else => READ_ERR_FAILED,
+    };
+}
 
 
 
@@ -153,14 +184,23 @@ const EffectWorker = struct {
         id: u64,
         path: [capture.path_capacity]u8,
         path_len: usize,
+        /// Whether the answer is a host-owned blob rather than a Roc string.
+        ///
+        /// The worker reads a file the same way either way -- it allocates and
+        /// fills native memory and knows nothing about Roc. This only says what
+        /// the main thread will do with the buffer when it drains the result:
+        /// install it into a blob slot, or copy it into a `RocStr` and free it.
+        deliver_blob: bool,
     };
 
-    /// `bytes` is owned by `allocator` until the main thread copies it into a
-    /// `RocStr` and frees it.
+    /// `bytes` is owned by `allocator` until the main thread takes it: either by
+    /// copying it into a `RocStr` and freeing it, or -- for a blob -- by moving
+    /// the allocation itself into a blob slot without touching its contents.
     const Result = struct {
         id: u64,
         bytes: ?[]u8,
         err: u8,
+        deliver_blob: bool,
     };
 
     requests: [capacity]Request = undefined,
@@ -251,7 +291,7 @@ const EffectWorker = struct {
     const Submission = enum { accepted, busy, unavailable };
 
     /// Queue a read. Frame thread only.
-    fn submitReadFile(self: *EffectWorker, id: u64, path: []const u8) Submission {
+    fn submitReadFile(self: *EffectWorker, id: u64, path: []const u8, deliver_blob: bool) Submission {
         if (!self.accepting) return .unavailable;
         if (path.len > capture.path_capacity) return .unavailable;
 
@@ -263,6 +303,7 @@ const EffectWorker = struct {
         @memcpy(slot.path[0..path.len], path);
         slot.path_len = path.len;
         slot.id = id;
+        slot.deliver_blob = deliver_blob;
         self.request_write.store(write +% 1, .release);
         // Only after the request is visible; a refusal wakes nobody, which is
         // what keeps `Busy` and `Unavailable` pure refusals.
@@ -327,18 +368,24 @@ const EffectWorker = struct {
 
         while (self.awaitRequest(io)) |request| {
             const path = request.path[0..request.path_len];
+            // The allocation the blob path hands to Roc is made here, on this
+            // thread, and is filled here. The main thread only ever moves the
+            // slice -- which is the entire claim of the feature.
             const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
                 self.postResult(.{
                     .id = request.id,
                     .bytes = null,
-                    .err = switch (err) {
-                        error.FileNotFound => HOST_ERR_NOT_FOUND,
-                        else => HOST_ERR_READ_FAILED,
-                    },
+                    .err = readErrorCode(err),
+                    .deliver_blob = request.deliver_blob,
                 });
                 continue;
             };
-            self.postResult(.{ .id = request.id, .bytes = bytes, .err = 0 });
+            self.postResult(.{
+                .id = request.id,
+                .bytes = bytes,
+                .err = 0,
+                .deliver_blob = request.deliver_blob,
+            });
         }
     }
 };
@@ -378,30 +425,52 @@ const CompletionStaging = struct {
         self.len += 1;
     }
 
-    fn fileRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, contents: []const u8) void {
-        self.push(.{
-            .kind = COMPLETION_SMALL_FILE_READ,
+    /// A completion that carries nothing Roc has to free.
+    ///
+    /// Every field the operation does not use is spelled out once here rather
+    /// than at each call site, so adding one to the transport record does not
+    /// mean editing five constructors that never fill it in.
+    fn plain(kind: u8, id: u64, err: u8) CompletionFromHost {
+        return .{
+            .kind = kind,
             .id = id,
             .err = err,
-            .contents = if (contents.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(contents, roc_host),
-        });
+            .contents = abi.RocStr.empty(),
+            .blob = 0,
+            .blob_len = 0,
+        };
+    }
+
+    fn fileRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, contents: []const u8) void {
+        var item = plain(COMPLETION_SMALL_FILE_READ, id, err);
+        if (contents.len != 0) item.contents = abi.RocStr.fromSlice(contents, roc_host);
+        self.push(item);
+    }
+
+    /// Report a read whose bytes stayed here.
+    ///
+    /// `token` names a blob slot and `len` describes it; neither is a payload,
+    /// which is why this constructor -- unlike `fileRead` -- takes no `RocHost`.
+    /// There is nothing to allocate.
+    fn blobRead(self: *CompletionStaging, id: u64, err: u8, token: u64, len: usize) void {
+        var item = plain(COMPLETION_FILE_READ, id, err);
+        item.blob = token;
+        item.blob_len = @intCast(len);
+        self.push(item);
     }
 
     fn delayElapsed(self: *CompletionStaging, id: u64) void {
-        self.push(.{ .kind = COMPLETION_DELAY, .id = id, .err = 0, .contents = abi.RocStr.empty() });
+        self.push(plain(COMPLETION_DELAY, id, 0));
     }
 
     fn screenshotFinished(self: *CompletionStaging, id: u64, err: u8) void {
-        self.push(.{ .kind = COMPLETION_SCREENSHOT_FINISHED, .id = id, .err = err, .contents = abi.RocStr.empty() });
+        self.push(plain(COMPLETION_SCREENSHOT_FINISHED, id, err));
     }
 
     fn clipboardRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, text: []const u8) void {
-        self.push(.{
-            .kind = COMPLETION_CLIPBOARD_READ,
-            .id = id,
-            .err = err,
-            .contents = if (text.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(text, roc_host),
-        });
+        var item = plain(COMPLETION_CLIPBOARD_READ, id, err);
+        if (text.len != 0) item.contents = abi.RocStr.fromSlice(text, roc_host);
+        self.push(item);
     }
 
     /// Hand the staged completions to Roc as one list, transferring ownership.
@@ -759,6 +828,32 @@ const TextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource
 const RenderTextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
+
+/// Bytes a finished `ReadFile` handed over, and the allocator that owns them.
+///
+/// The allocator travels with the buffer because the two paths that produce one
+/// do not share one: the worker allocates from its own handle on the host
+/// allocator, while a headless run reads on the frame thread through the Roc
+/// environment's. Whoever allocated it is who frees it.
+const BlobResource = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+};
+
+fn destroyBlob(resource: *BlobResource) void {
+    resource.allocator.free(resource.bytes);
+    resource.bytes = &.{};
+}
+
+/// Blobs are the one host resource Roc does not hold a `Box` for.
+///
+/// The other seven heaps are driven by Roc's refcount: the app drops the value
+/// and `nativeRocDealloc` routes the free back. A blob handle is a scalar the
+/// app copies and drops silently, so there is no refcount to drive anything and
+/// `File.Blob.release` is how the app says it is done. See `HostHandleTable`
+/// for why that is the honest arrangement rather than a missing feature.
+const BlobTable = host_resource.HostHandleTable(BlobResource, MAX_LIVE_BLOBS, 8, destroyBlob);
+var blob_table: BlobTable = .{};
 
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
@@ -2517,6 +2612,67 @@ fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult 
     return hostedReadFileRaw(activeHost(), path_arg);
 }
 
+/// Resolve a blob handle, or null if it names no live buffer.
+///
+/// Null covers every way a handle can be wrong at once -- never valid, already
+/// released, or naming a slot that has since been reused -- because the app has
+/// the same thing to do about all of them, and because the alternative is
+/// reading memory that has been freed.
+fn blobBytes(handle: u64) ?[]const u8 {
+    const resource = blob_table.get(handle) orelse return null;
+    return resource.bytes;
+}
+
+fn blobSliceError(err: u8) abi.FileHostBlob_sliceRetRecord {
+    return .{ .contents = abi.RocStr.empty(), .err = err };
+}
+
+/// Copy a bounded range of a blob into a Roc string.
+///
+/// The only place blob bytes are copied, and it copies exactly the range the
+/// app named. The size limit is `MAX_INLINE_READ_BYTES` -- the same one
+/// `ReadSmallFile` is held to, because this is the same cost on the same
+/// thread. A range past the end is refused rather than clamped: a short read
+/// that looks complete is worse than one that says so.
+fn hostedFileBlobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
+    const bytes = blobBytes(args.handle) orelse return blobSliceError(BLOB_ERR_RELEASED);
+
+    const end = std.math.add(u64, args.offset, args.count) catch return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
+    if (end > bytes.len) return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
+    if (args.count > MAX_INLINE_READ_BYTES) return blobSliceError(BLOB_ERR_TOO_LARGE);
+
+    const slice = bytes[@intCast(args.offset)..@intCast(end)];
+    // A blob is bytes; a `Str` is not. Handing Roc invalid UTF-8 would make
+    // every later string operation on it undefined.
+    if (!std.unicode.utf8ValidateSlice(slice)) return blobSliceError(BLOB_ERR_NOT_UTF8);
+
+    return .{
+        .contents = if (slice.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(slice, roc_host),
+        .err = 0,
+    };
+}
+
+fn exportedFileBlobSlice(args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
+    return hostedFileBlobSlice(activeHost(), args);
+}
+
+/// Read one byte of a blob, leaving the rest where it is.
+fn hostedFileBlobByte(args: abi.FileHostBlob_byteArgs) callconv(.c) abi.FileHostBlob_byteRetRecord {
+    const bytes = blobBytes(args.handle) orelse return .{ .byte = 0, .err = BLOB_ERR_RELEASED };
+    if (args.offset >= bytes.len) return .{ .byte = 0, .err = BLOB_ERR_OUT_OF_BOUNDS };
+    return .{ .byte = bytes[@intCast(args.offset)], .err = 0 };
+}
+
+/// Free the buffer a handle names.
+///
+/// The slot's generation moves on, so the handle the app still holds -- and any
+/// copy of it -- resolves to nothing from here on rather than to whatever read
+/// is given the slot next. Releasing an unknown handle is not an error; the
+/// app asked for these bytes to be gone, and they are.
+fn hostedFileReleaseBlob(handle: u64) callconv(.c) void {
+    _ = blob_table.release(handle);
+}
+
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
     enforcePhase("Tilemap.load_tmx!", .startup);
     defer path_arg.decref(roc_host);
@@ -3444,6 +3600,19 @@ fn deinitResources() void {
     std.debug.assert(font_heap.active() == 0);
     std.debug.assert(music_heap.active() == 0);
     std.debug.assert(sound_heap.active() == 0);
+    // Deliberately not asserted. Every other heap is emptied by Roc dropping
+    // its last reference, so a survivor there is a lifecycle bug; a blob is
+    // released by hand, and an app that keeps one until it exits has done
+    // nothing wrong. Freeing them here is what makes "release it later" a
+    // choice rather than a leak -- but it is worth saying out loud, because
+    // holding a blob is holding the whole file.
+    if (blob_table.active() != 0) {
+        std.log.warn(
+            "roc-ray freed {d} blob(s) at shutdown that the app never released",
+            .{blob_table.active()},
+        );
+    }
+    blob_table.deinitAll();
     shader_heap.deinitAll();
     prepared_text_heap.deinitAll();
     render_texture_heap.deinitAll();
@@ -3543,6 +3712,9 @@ comptime {
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&exportedSetClipboardText, .{ .name = "roc_host_set_clipboard_text" });
+        @export(&exportedFileBlobSlice, .{ .name = "roc_file_blob_slice" });
+        @export(&hostedFileBlobByte, .{ .name = "roc_file_blob_byte" });
+        @export(&hostedFileReleaseBlob, .{ .name = "roc_file_release_blob" });
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
         @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
@@ -3791,16 +3963,8 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
 
     for (tasks.items()) |task| {
         switch (task.kind) {
-            TASK_READ_SMALL_FILE => {
-                const path = task.path.asSlice();
-                if (headlessMode()) {
-                    readFileNow(staging, roc_host, task.id, path);
-                } else switch (effect_worker.submitReadFile(task.id, path)) {
-                    .accepted => {},
-                    .busy => staging.fileRead(roc_host, task.id, READ_ERR_BUSY, ""),
-                    .unavailable => staging.fileRead(roc_host, task.id, READ_ERR_UNAVAILABLE, ""),
-                }
-            },
+            TASK_READ_SMALL_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), false),
+            TASK_READ_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), true),
             TASK_DELAY => armTimer(task.id, task.millis),
             TASK_SCREENSHOT => {
                 if (beginScreenshotTask(task.id, task.path.asSlice())) |err| {
@@ -3888,16 +4052,65 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64) 
     staging.clipboardRead(roc_host, id, 0, std.mem.span(text));
 }
 
-/// Read on the calling thread and stage the completion. Headless only.
-fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8) void {
-    const allocator = allocatorFromHost(roc_host);
-    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
-        staging.fileRead(roc_host, id, switch (err) {
-            error.FileNotFound => READ_ERR_NOT_FOUND,
-            else => READ_ERR_FAILED,
-        }, "");
+/// Hand one read to the worker, or answer it in this cycle if it was refused.
+///
+/// `deliver_blob` decides which completion the app will be looking for, and a
+/// refusal has to use the same one: an app waiting on `FileRead` must not be
+/// answered with `SmallFileRead` because the request ring happened to be full.
+fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool) void {
+    if (headlessMode()) {
+        readFileNow(staging, roc_host, id, path, deliver_blob);
+        return;
+    }
+    switch (effect_worker.submitReadFile(id, path, deliver_blob)) {
+        .accepted => {},
+        .busy => stageReadError(staging, roc_host, id, READ_ERR_BUSY, deliver_blob),
+        .unavailable => stageReadError(staging, roc_host, id, READ_ERR_UNAVAILABLE, deliver_blob),
+    }
+}
+
+/// Report a read that produced no bytes, in whichever completion it asked for.
+fn stageReadError(staging: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, deliver_blob: bool) void {
+    if (deliver_blob) {
+        staging.blobRead(id, err, 0, 0);
+    } else {
+        staging.fileRead(roc_host, id, err, "");
+    }
+}
+
+/// Install a finished read's buffer as a blob and report the handle.
+///
+/// This is the operation the whole feature is about, and it is deliberately
+/// this short: a slice moves into a slot. Nothing is copied, nothing is
+/// allocated for Roc, and the cost does not depend on how big the file was.
+///
+/// Takes ownership of `bytes`. With no slot free the buffer is freed here and
+/// the read is refused with `Busy` -- holding memory no handle names would be a
+/// leak, and evicting a live blob would break a handle the app may still use.
+fn stageBlobRead(staging: *CompletionStaging, id: u64, allocator: std.mem.Allocator, bytes: []u8) void {
+    const token = blob_table.insert(.{ .allocator = allocator, .bytes = bytes }) orelse {
+        allocator.free(bytes);
+        staging.blobRead(id, READ_ERR_BUSY, 0, 0);
         return;
     };
+    staging.blobRead(id, 0, token, bytes.len);
+}
+
+/// Read on the calling thread and stage the completion. Headless only.
+///
+/// The blob path runs here too, and installs exactly the same way, so a
+/// headless run and a windowed one differ in which thread allocated the buffer
+/// and in nothing else the app can observe.
+fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool) void {
+    const allocator = allocatorFromHost(roc_host);
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+        stageReadError(staging, roc_host, id, readErrorCode(err), deliver_blob);
+        return;
+    };
+    if (deliver_blob) {
+        stageBlobRead(staging, id, allocator, bytes);
+        return;
+    }
     defer allocator.free(bytes);
     if (bytes.len > MAX_INLINE_READ_BYTES) {
         staging.fileRead(roc_host, id, READ_ERR_TOO_LARGE, "");
@@ -3938,18 +4151,27 @@ fn expireTimers(staging: *CompletionStaging, now_nanos: u64) void {
 /// The only place a worker result becomes a Roc value, and it runs on the main
 /// thread -- which is what keeps `roc_alloc` single-threaded. Stops at the
 /// per-step budget and leaves the rest for the next cycle.
+///
+/// The two paths part company here, and the difference is the feature: a small
+/// read is copied into a `RocStr` and its buffer freed, while a blob read moves
+/// the worker's allocation into a slot and copies nothing. Only the first is
+/// proportional to the file, which is why only the first is capped.
 fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
     while (!staging.full()) {
         const result = effect_worker.takeResult() orelse return;
-        if (result.bytes) |bytes| {
-            defer effect_worker.allocator.free(bytes);
-            if (bytes.len > MAX_INLINE_READ_BYTES) {
-                staging.fileRead(roc_host, result.id, READ_ERR_TOO_LARGE, "");
-            } else {
-                staging.fileRead(roc_host, result.id, 0, bytes);
-            }
+        const bytes = result.bytes orelse {
+            stageReadError(staging, roc_host, result.id, result.err, result.deliver_blob);
+            continue;
+        };
+        if (result.deliver_blob) {
+            stageBlobRead(staging, result.id, effect_worker.allocator, bytes);
+            continue;
+        }
+        defer effect_worker.allocator.free(bytes);
+        if (bytes.len > MAX_INLINE_READ_BYTES) {
+            staging.fileRead(roc_host, result.id, READ_ERR_TOO_LARGE, "");
         } else {
-            staging.fileRead(roc_host, result.id, result.err, "");
+            staging.fileRead(roc_host, result.id, 0, bytes);
         }
     }
 }
@@ -4530,6 +4752,241 @@ test "a read above the inline cap is refused rather than copied on the frame thr
     staging.release(&roc_host);
 }
 
+/// An allocator that reports how many bytes it was asked for.
+///
+/// It wraps a real allocator rather than standing in for one: the memory is
+/// genuinely allocated and genuinely freed, so `std.testing.allocator`
+/// underneath still fails a leak, and the count is of work that actually
+/// happened. Installed as the Roc environment's allocator, it measures exactly
+/// the thing the blob path claims not to do.
+const CountingAllocator = struct {
+    inner: std.mem.Allocator,
+    allocated_bytes: usize = 0,
+
+    fn allocator(self: *CountingAllocator) std.mem.Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free },
+        };
+    }
+
+    fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        const result = self.inner.rawAlloc(len, alignment, ret_addr);
+        if (result != null) self.allocated_bytes += len;
+        return result;
+    }
+
+    fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        return self.inner.rawResize(memory, alignment, new_len, ret_addr);
+    }
+
+    fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        return self.inner.rawRemap(memory, alignment, new_len, ret_addr);
+    }
+
+    fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+        const self: *CountingAllocator = @ptrCast(@alignCast(context));
+        self.inner.rawFree(memory, alignment, ret_addr);
+    }
+};
+
+test "completing a large read installs a handle instead of copying the file" {
+    // The claim under test, stated as a measurement: finishing a 16 MiB read
+    // costs the frame thread no allocation proportional to the file -- and, on
+    // the same instrument, the small-file path costs exactly one.
+    const file_bytes: usize = 16 * 1024 * 1024;
+
+    var counter = CountingAllocator{ .inner = std.testing.allocator };
+    var roc_env = abi.RocEnv{ .allocator = counter.allocator(), .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    // Stands in for the worker thread, which allocates and fills the buffer
+    // before the frame thread ever sees it. A different allocator on purpose:
+    // whatever the frame thread does shows up in `counter` and nowhere else.
+    const worker_bytes = try std.testing.allocator.alloc(u8, file_bytes);
+    @memset(worker_bytes, 'z');
+    const worker_ptr = worker_bytes.ptr;
+
+    var staging = CompletionStaging{};
+    counter.allocated_bytes = 0;
+    stageBlobRead(&staging, 1, std.testing.allocator, worker_bytes);
+
+    try std.testing.expectEqual(@as(usize, 0), counter.allocated_bytes);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqual(@as(u64, file_bytes), staging.items[0].blob_len);
+    try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
+
+    // Installed, not copied: what Roc's handle names is the worker's own
+    // allocation, at the same address.
+    const token = staging.items[0].blob;
+    try std.testing.expectEqual(worker_ptr, blob_table.get(token).?.bytes.ptr);
+
+    // The control. A 64 KiB small-file completion moves its payload through
+    // the Roc allocator, so the zero above is a result and not a broken meter.
+    const inline_bytes = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES);
+    defer std.testing.allocator.free(inline_bytes);
+    @memset(inline_bytes, 'a');
+    counter.allocated_bytes = 0;
+    staging.fileRead(&roc_host, 2, 0, inline_bytes);
+    try std.testing.expect(counter.allocated_bytes >= MAX_INLINE_READ_BYTES);
+
+    staging.release(&roc_host);
+    try std.testing.expect(blob_table.release(token));
+    try std.testing.expectEqual(@as(usize, 0), blob_table.active());
+}
+
+test "a released blob answers Released rather than reading freed memory" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    const payload = "bytes the host is holding for the app";
+    const owned = try std.testing.allocator.dupe(u8, payload);
+
+    var staging = CompletionStaging{};
+    stageBlobRead(&staging, 1, std.testing.allocator, owned);
+    const token = staging.items[0].blob;
+    staging.release(&roc_host);
+
+    const whole = hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = payload.len });
+    try std.testing.expectEqual(@as(u8, 0), whole.err);
+    try std.testing.expectEqualStrings(payload, whole.contents.asSlice());
+    whole.contents.decref(&roc_host);
+
+    // Releasing frees the storage now -- `std.testing.allocator` fails this
+    // test if it did not -- and every later use of the handle is refused.
+    hostedFileReleaseBlob(token);
+    try std.testing.expectEqual(@as(usize, 0), blob_table.active());
+    try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 1 }).err);
+    try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobByte(.{ .handle = token, .offset = 0 }).err);
+
+    // Releasing again is not an error, and must not disturb whatever has since
+    // been given the slot.
+    hostedFileReleaseBlob(token);
+
+    const replacement = try std.testing.allocator.dupe(u8, "a different file entirely");
+    var later = CompletionStaging{};
+    stageBlobRead(&later, 2, std.testing.allocator, replacement);
+    const fresh = later.items[0].blob;
+    later.release(&roc_host);
+    try std.testing.expect(fresh != token);
+
+    // The stale handle names the same slot the replacement now occupies. The
+    // generation is the only thing keeping the two apart.
+    try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 1 }).err);
+    try std.testing.expectEqual(@as(u8, 0), hostedFileBlobSlice(&roc_host, .{ .handle = fresh, .offset = 0, .count = 0 }).err);
+    hostedFileReleaseBlob(fresh);
+}
+
+test "copying out of a blob is bounded, checked, and never silently short" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    // Big enough to ask for more than the host will copy in one go, with a
+    // stray byte near the front that is not valid UTF-8.
+    const owned = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES + 16);
+    @memset(owned, 'a');
+    owned[4] = 0xff;
+
+    var staging = CompletionStaging{};
+    stageBlobRead(&staging, 1, std.testing.allocator, owned);
+    const token = staging.items[0].blob;
+    staging.release(&roc_host);
+    defer hostedFileReleaseBlob(token);
+
+    // A range that runs past the end is refused rather than clamped: a short
+    // read that looks complete is the failure that gets shipped.
+    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = owned.len - 2, .count = 4 }).err);
+    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 8, .count = std.math.maxInt(u64) }).err);
+
+    // Bounds first, then the copy limit: the whole blob is in range but larger
+    // than the frame thread will copy at once.
+    try std.testing.expectEqual(BLOB_ERR_TOO_LARGE, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = owned.len }).err);
+
+    // A `Str` has to be UTF-8, so a range that is not is refused rather than
+    // handed over to be misinterpreted later.
+    try std.testing.expectEqual(BLOB_ERR_NOT_UTF8, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 8 }).err);
+
+    const preview = hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 5, .count = 8 });
+    try std.testing.expectEqual(@as(u8, 0), preview.err);
+    try std.testing.expectEqualStrings("aaaaaaaa", preview.contents.asSlice());
+    preview.contents.decref(&roc_host);
+
+    // One byte, without copying anything else.
+    const byte = hostedFileBlobByte(.{ .handle = token, .offset = 4 });
+    try std.testing.expectEqual(@as(u8, 0), byte.err);
+    try std.testing.expectEqual(@as(u8, 0xff), byte.byte);
+    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, hostedFileBlobByte(.{ .handle = token, .offset = owned.len }).err);
+}
+
+test "a full blob table refuses the read rather than holding what nothing names" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    // One completion per read, and a step carries at most its own budget, so
+    // each read gets a staging area of its own rather than sharing one.
+    var filled: usize = 0;
+    while (filled < MAX_LIVE_BLOBS) : (filled += 1) {
+        const owned = try std.testing.allocator.dupe(u8, "held");
+        var staging = CompletionStaging{};
+        stageBlobRead(&staging, filled, std.testing.allocator, owned);
+        try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+        staging.release(&roc_host);
+    }
+    try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_table.active());
+
+    // The refused read's buffer is freed here rather than held by nothing:
+    // `std.testing.allocator` is what proves it.
+    const refused = try std.testing.allocator.dupe(u8, "no slot for this");
+    var full = CompletionStaging{};
+    stageBlobRead(&full, 999, std.testing.allocator, refused);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, full.items[0].kind);
+    try std.testing.expectEqual(READ_ERR_BUSY, full.items[0].err);
+    try std.testing.expectEqual(@as(u64, 0), full.items[0].blob);
+    try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_table.active());
+    full.release(&roc_host);
+}
+
+test "a headless read delivers a blob by the same path a worker result does" {
+    // Headless runs the read on this thread for determinism, but it must still
+    // hand back a handle rather than a string, or CI would exercise a different
+    // feature from the one a desktop run does.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const payload = "read on the frame thread, delivered as a handle";
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blob.txt", .data = payload });
+
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
+
+    var staging = CompletionStaging{};
+    readFileNow(&staging, &roc_host, 3, path, true);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items[0].kind);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqual(@as(u64, payload.len), staging.items[0].blob_len);
+
+    const token = staging.items[0].blob;
+    try std.testing.expectEqualStrings(payload, blob_table.get(token).?.bytes);
+    hostedFileReleaseBlob(token);
+
+    // A read that fails still answers on the blob path -- an app waiting for
+    // `FileRead` must never be answered with `SmallFileRead`.
+    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items[1].kind);
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items[1].err);
+    staging.release(&roc_host);
+}
+
 test "taking a step's completions hands them over and empties the staging area" {
     // The list belongs to Roc after this, so releasing the staging area must
     // not free the same payloads a second time -- and anything staged after the
@@ -4641,14 +5098,14 @@ test "a saturated worker refuses with Busy rather than running work inline" {
     // waiting for an id that will never come back.
     var worker = EffectWorker{};
     worker.allocator = std.testing.allocator;
-    try std.testing.expectEqual(EffectWorker.Submission.unavailable, worker.submitReadFile(1, "x"));
+    try std.testing.expectEqual(EffectWorker.Submission.unavailable, worker.submitReadFile(1, "x", false));
 
     worker.accepting = true;
     var accepted: usize = 0;
     while (accepted < EffectWorker.capacity) : (accepted += 1) {
-        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(accepted, "x"));
+        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(accepted, "x", false));
     }
-    try std.testing.expectEqual(EffectWorker.Submission.busy, worker.submitReadFile(9999, "x"));
+    try std.testing.expectEqual(EffectWorker.Submission.busy, worker.submitReadFile(9999, "x", false));
 }
 
 /// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.
@@ -4703,13 +5160,47 @@ test "a submission wakes a blocked worker" {
     // test would pass even with no wakeup at all.
     try awaitWorkerParked(&worker, 1);
 
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(7, path));
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(7, path, false));
 
     const result = try awaitWorkerResult(&worker);
     defer std.testing.allocator.free(result.bytes.?);
     try std.testing.expectEqual(@as(u64, 7), result.id);
     try std.testing.expectEqual(@as(u8, 0), result.err);
     try std.testing.expectEqualStrings(payload, result.bytes.?);
+}
+
+test "a blob read is filled by the worker and installed by the frame thread" {
+    // End to end across the thread boundary: the buffer Roc ends up with is
+    // the one the worker allocated, and the frame thread only moved it.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer blob_table.deinitAll();
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const payload = "allocated off the frame thread and never copied onto it";
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blob.txt", .data = payload });
+
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
+
+    var worker = EffectWorker{};
+    worker.start(std.testing.allocator);
+    defer worker.stop();
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(11, path, true));
+
+    const result = try awaitWorkerResult(&worker);
+    try std.testing.expect(result.deliver_blob);
+    try std.testing.expectEqualStrings(payload, result.bytes.?);
+    const worker_ptr = result.bytes.?.ptr;
+
+    var staging = CompletionStaging{};
+    stageBlobRead(&staging, result.id, worker.allocator, result.bytes.?);
+    const token = staging.items[0].blob;
+    staging.release(&roc_host);
+
+    try std.testing.expectEqual(worker_ptr, blob_table.get(token).?.bytes.ptr);
+    hostedFileReleaseBlob(token);
 }
 
 test "shutting down with work still queued terminates and frees what it produced" {
@@ -4725,7 +5216,7 @@ test "shutting down with work still queued terminates and frees what it produced
 
     var queued: u64 = 0;
     while (queued < EffectWorker.capacity) : (queued += 1) {
-        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(queued, path));
+        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(queued, path, false));
     }
 
     // Wait for the first answer without consuming it, so the shutdown below has

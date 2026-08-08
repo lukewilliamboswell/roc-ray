@@ -112,6 +112,10 @@ const BLOB_ERR_RELEASED: u8 = 1;
 const BLOB_ERR_OUT_OF_BOUNDS: u8 = 2;
 const BLOB_ERR_NOT_UTF8: u8 = 3;
 const BLOB_ERR_TOO_LARGE: u8 = 4;
+/// The host would not start the read. The blob is untouched and still live --
+/// which is why this is not `BLOB_ERR_RELEASED`, however similar the two look
+/// from the app's side.
+const BLOB_ERR_BUSY: u8 = 5;
 
 /// Read-error codes. Mirrored in `platform/Program.roc`.
 ///
@@ -4567,17 +4571,20 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) 
 ///
 /// Answering with the wrong kind would be worse than not answering at all: an
 /// app waiting on `FileRead` must not have its id retired by a `SmallFileRead`.
+///
+/// Every one of these says `Busy`, and that is the whole content of the report.
+/// Saturation is one condition, and borrowing a nearby error for it -- a live
+/// blob answered `Released`, a working clipboard answered `Unavailable` -- told
+/// the app something that was not true and pointed it away from the one action
+/// that works, which is to ask again next cycle.
 fn refuseTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) void {
     switch (task.kind) {
         TASK_READ_SMALL_FILE => stageReadError(staging, roc_host, task.id, READ_ERR_BUSY, false),
         TASK_READ_FILE => stageReadError(staging, roc_host, task.id, READ_ERR_BUSY, true),
         TASK_DELAY => staging.delayElapsed(task.id, DELAY_ERR_BUSY),
-        TASK_SCREENSHOT => staging.screenshotFinished(task.id, capture.err_already_recording),
-        TASK_READ_CLIPBOARD => staging.clipboardRead(roc_host, task.id, READ_ERR_UNAVAILABLE, ""),
-        // A refused slice reports `Released` rather than a new refusal code:
-        // the app asked for bytes and got none, and adding a fifth way for
-        // that to be phrased would not tell it anything it can act on.
-        TASK_READ_BLOB_SLICE => staging.blobSliceRead(roc_host, task.id, BLOB_ERR_RELEASED, ""),
+        TASK_SCREENSHOT => staging.screenshotFinished(task.id, capture.err_busy),
+        TASK_READ_CLIPBOARD => staging.clipboardRead(roc_host, task.id, READ_ERR_BUSY, ""),
+        TASK_READ_BLOB_SLICE => staging.blobSliceRead(roc_host, task.id, BLOB_ERR_BUSY, ""),
         else => std.debug.panic("roc-ray: unknown task kind {d}", .{task.kind}),
     }
 }
@@ -5460,6 +5467,42 @@ test "one step's completions always fit the staging area" {
     }
 
     try std.testing.expectEqual(CompletionStaging.capacity, staging.count());
+}
+
+test "a refused task says the host was busy, not something about the app" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    // Saturated, so every task in the step below is refused rather than started.
+    var staging = CompletionStaging{};
+    var held: usize = 0;
+    while (held < MAX_TASKS_IN_FLIGHT) : (held += 1) try std.testing.expect(staging.reserve());
+
+    const kinds = [_]u8{ TASK_SCREENSHOT, TASK_READ_CLIPBOARD, TASK_READ_BLOB_SLICE };
+    var tasks: [kinds.len]TaskToHost = undefined;
+    for (&tasks, kinds, 0..) |*task, kind, index| {
+        task.* = .{ .kind = kind, .id = index, .path = abi.RocStr.empty(), .millis = 0, .blob = 0, .offset = 0, .count = 0 };
+    }
+
+    dispatchTasks(&staging, &roc_host, abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host));
+    try std.testing.expectEqual(kinds.len, staging.count());
+
+    // Each of these used to borrow a nearby error, and each of those errors is
+    // a claim about something that is in fact fine: the screenshot the app
+    // already had outstanding, the clipboard, the blob it still holds.
+    try std.testing.expectEqual(COMPLETION_SCREENSHOT_FINISHED, staging.items[0].kind);
+    try std.testing.expectEqual(capture.err_busy, staging.items[0].err);
+    try std.testing.expect(staging.items[0].err != capture.err_already_recording);
+
+    try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, staging.items[1].kind);
+    try std.testing.expectEqual(READ_ERR_BUSY, staging.items[1].err);
+    try std.testing.expect(staging.items[1].err != READ_ERR_UNAVAILABLE);
+
+    try std.testing.expectEqual(COMPLETION_BLOB_SLICE_READ, staging.items[2].kind);
+    try std.testing.expectEqual(BLOB_ERR_BUSY, staging.items[2].err);
+    try std.testing.expect(staging.items[2].err != BLOB_ERR_RELEASED);
+
+    staging.release(&roc_host);
 }
 
 test "a step's tasks are bounded separately from the work already in flight" {

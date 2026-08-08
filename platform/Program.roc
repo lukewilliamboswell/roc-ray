@@ -247,8 +247,8 @@ Program := [].{
 		FileRead({ id : U64, result : Try(File.Blob, ReadError) }),
 		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
-		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge]) }),
-		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released]) }),
+		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge, Busy]) }),
+		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released, Busy]) }),
 	]
 
 	## Why a read produced no contents.
@@ -272,15 +272,22 @@ Program := [].{
 		TooLarge,
 	]
 
-	## Why a screenshot was not written. The same refusals `Capture.screenshot!`
-	## reports, including the sandbox refusing a path that escapes the output
-	## directory.
+	## Why a screenshot was not written, including the sandbox refusing a path
+	## that escapes the output directory.
+	##
+	## `AlreadyPending` and `Busy` are both refusals and are deliberately not the
+	## same one. `AlreadyPending` is about this app's own outstanding request --
+	## a second screenshot in the frame the first has not been serviced in --
+	## and says the app asked for two things at once. `Busy` is about the host
+	## being at its limit across everything, and says nothing about what this app
+	## did. Only the second is reliably worth retrying unchanged.
 	ScreenshotError : [
 		PathInvalid,
 		PathEscapesOutputDir,
 		AlreadyPending,
 		OutOfMemory,
 		WriteFailed,
+		Busy,
 	]
 
 	## The flat record a `Task` becomes on the way out to the host.
@@ -388,6 +395,8 @@ Program := [].{
 					Ok(raw.contents)
 				} else if raw.err == read_err_too_large {
 					Err(TooLarge)
+				} else if raw.err == read_err_busy {
+					Err(Busy)
 				} else {
 					Err(Unavailable)
 				},
@@ -466,7 +475,7 @@ completion_blob_slice_read : U8
 completion_blob_slice_read = 5
 
 ## Decode the host's blob-error code. Mirrored in `src/host_native.zig`.
-blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Released]
+blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Released, Busy]
 blob_error = |code|
 	if code == 1 {
 		Released
@@ -474,6 +483,8 @@ blob_error = |code|
 		OutOfBounds
 	} else if code == 4 {
 		TooLarge
+	} else if code == 5 {
+		Busy
 	} else {
 		NotUtf8
 	}
@@ -491,12 +502,17 @@ capture_status_failed = 2
 read_err_too_large : U8
 read_err_too_large = 5
 
+## Error code for work the host would not start. Mirrored in
+## `src/host_native.zig`.
+read_err_busy : U8
+read_err_busy = 3
+
 ## Decode the host's read-error code. Mirrored in `src/host_native.zig`.
 read_error : U8 -> Program.ReadError
 read_error = |code|
 	if code == 1 {
 		NotFound
-	} else if code == 3 {
+	} else if code == read_err_busy {
 		Busy
 	} else if code == 4 {
 		Unavailable
@@ -518,6 +534,7 @@ screenshot_error = |code|
 		2 => PathEscapesOutputDir
 		3 => AlreadyPending
 		7 => OutOfMemory
+		10 => Busy
 		_ => WriteFailed
 	}
 
@@ -596,6 +613,17 @@ expect Program.completion_from_host({ kind: 3, id: 2, err: 4, contents: "", blob
 ## Another process decides how much text the clipboard holds, so the frame
 ## thread refuses to copy an unbounded one rather than stalling on it.
 expect Program.completion_from_host({ kind: 3, id: 2, err: 5, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(TooLarge) })
+
+## Saturation is its own answer everywhere it can happen. A clipboard the host
+## would not read yet is not an `Unavailable` one, a live blob it would not
+## slice yet is not a `Released` one, and a screenshot it would not start is not
+## one this app already had outstanding. Each of those would send an app looking
+## for a fault that is not there, instead of asking again next cycle.
+expect Program.completion_from_host({ kind: 3, id: 2, err: 3, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(Busy) })
+expect Program.completion_from_host({ kind: 5, id: 2, err: 5, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Busy) })
+expect Program.completion_from_host({ kind: 5, id: 2, err: 1, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Released) })
+expect Program.completion_from_host({ kind: 2, id: 8, err: 10, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Busy) })
+expect Program.completion_from_host({ kind: 2, id: 8, err: 3, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(AlreadyPending) })
 expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0 }) == Idle
 expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1 }) == Active({ frames: 12, dropped: 1 })
 expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0 }) == Failed({ frames: 3, reason: WriteFailed })

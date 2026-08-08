@@ -210,6 +210,9 @@ advance_preview = |current, completed|
 				Err(TooLarge) => PreviewFailed("(preview too large)")
 				Err(OutOfBounds) => PreviewFailed("(shorter than the preview)")
 				Err(Released) => PreviewFailed("(already released)")
+				# The host was at its limit, not the blob's end: a real app
+				# would ask again next cycle rather than give up.
+				Err(Busy) => PreviewFailed("(host busy, try again)")
 			}
 
 		# Unreachable: `answers_preview` kept only this app's slice.

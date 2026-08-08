@@ -109,6 +109,7 @@ update = |model, step| {
 		Pasted(text) => Str.concat(clipboard.typed, text)
 		NoText => clipboard.typed
 		TooMuchText => clipboard.typed
+		HostBusy => clipboard.typed
 		NotYet => clipboard.typed
 	}
 	clipboard_status = match paste {
@@ -117,6 +118,7 @@ update = |model, step| {
 		# windowing backend does not tell them apart.
 		NoText => "clipboard has no text"
 		TooMuchText => "clipboard holds too much text to paste"
+		HostBusy => "host was busy -- press Ctrl+V again"
 		NotYet => clipboard.clipboard_status
 	}
 
@@ -146,7 +148,11 @@ update = |model, step| {
 ## *is* text, the host just would not copy that much of it onto the frame
 ## thread, and telling someone their clipboard is empty when it is not would be
 ## a lie the app is in a position to avoid.
-paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText, TooMuchText]
+##
+## `Busy` is separate again, and for the same reason in reverse: the clipboard
+## is fine and so is this app, the host simply had no room to start the read.
+## That is the one outcome here worth asking for a second time.
+paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText, TooMuchText, HostBusy]
 paste_outcome = |completed|
 	match List.first(List.keep_if(completed, is_our_paste)) {
 		Ok(ClipboardRead(finished)) =>
@@ -154,6 +160,7 @@ paste_outcome = |completed|
 				Ok(pasted) => Pasted(pasted)
 				Err(Unavailable) => NoText
 				Err(TooLarge) => TooMuchText
+				Err(Busy) => HostBusy
 			}
 
 		# Unreachable: `is_our_paste` kept only this app's clipboard read.

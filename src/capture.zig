@@ -60,6 +60,13 @@ pub const err_out_of_memory: u8 = 7;
 pub const err_write_failed: u8 = 8;
 /// The encoder rejected a frame or failed to finalize.
 pub const err_encode_failed: u8 = 9;
+/// The host declined to start the work, and nothing was captured or written.
+///
+/// Distinct from `err_already_recording`, which says a specific request is
+/// still outstanding. This one says the host is at its limit across all
+/// requests -- the same operation offered on a later frame may well be taken,
+/// which is exactly the difference an app needs to decide whether to retry.
+pub const err_busy: u8 = 10;
 
 /// No recording is active.
 pub const status_idle: u8 = 0;

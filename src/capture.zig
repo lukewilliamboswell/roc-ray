@@ -67,6 +67,14 @@ pub const err_encode_failed: u8 = 9;
 /// requests -- the same operation offered on a later frame may well be taken,
 /// which is exactly the difference an app needs to decide whether to retry.
 pub const err_busy: u8 = 10;
+/// The host cannot do this work at all in this run.
+///
+/// Distinct from `err_busy`, which is about right now: this one says retrying
+/// will not help, because the facility the work needs is not there. A host that
+/// could not start its effect worker cannot write a screenshot off the frame
+/// thread, and doing it on the frame thread is the stall the worker exists to
+/// remove.
+pub const err_unavailable: u8 = 11;
 
 /// No recording is active.
 pub const status_idle: u8 = 0;

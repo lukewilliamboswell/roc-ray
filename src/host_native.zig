@@ -301,8 +301,13 @@ const EffectWorker = struct {
             // Same protocol as a submission, for the same reason: the flag is
             // published before the lock is taken, so a worker that reaches the
             // sleep decision after this cannot fail to see it, and a worker
-            // already asleep is signalled. Queued requests are not serviced,
-            // so shutdown costs at most the operation already in flight.
+            // already asleep is signalled. Queued *writes* are then flushed --
+            // see `awaitRequest` -- so shutdown costs the screenshots the app
+            // has already been promised, and nothing else.
+            //
+            // The flush cannot deadlock on a full result ring: `postResult`
+            // stops waiting once `should_stop` is set, and by then the file it
+            // was reporting on is already written.
             self.should_stop.store(true, .release);
             self.wake();
             thread.join();
@@ -469,7 +474,18 @@ const EffectWorker = struct {
         self.idle.lockUncancelable(io);
         defer self.idle.unlock(io);
         while (true) {
-            if (self.should_stop.load(.acquire)) return null;
+            if (self.should_stop.load(.acquire)) {
+                // Shutting down, but an accepted write is still finished. The
+                // app was told the host had taken that screenshot -- it got a
+                // completion saying so -- and a file that never appears makes
+                // that a lie. Reads are abandoned instead: their answer was
+                // going to a model that is about to stop existing, and a
+                // request holds no memory of its own, so nothing leaks.
+                while (self.takeRequest()) |request| {
+                    if (request.kind == .write_png) return request;
+                }
+                return null;
+            }
             if (self.takeRequest()) |request| return request;
             // Bumped under `idle`, so a frame thread that has seen it knows the
             // worker is past its last predicate check and cannot miss a signal.
@@ -4927,13 +4943,24 @@ fn serviceCaptureRequests() void {
     finishRecordingAtFrameCap();
 }
 
-/// Hand a screenshot to the worker, or write it here if there is no worker.
+/// Hand a screenshot to the worker, or refuse it.
 ///
 /// The readback above had to happen on this thread -- it is a GL operation, and
 /// only inside the drawing scope. Everything after it is CPU work on a plain
 /// byte buffer, so it goes to the worker: encoding a 1080p PNG is tens of
 /// milliseconds, which is several dropped frames spent on a file the app is not
 /// waiting for.
+///
+/// **There is deliberately no inline fallback.** Encoding here when the worker
+/// is full is the exact behaviour that turns a busy host into a stalled one:
+/// the queue backs up, so the frame thread takes on the most expensive work in
+/// the system, so frames get longer, so the queue drains slower. An app that is
+/// told `Busy` can ask again next frame; an app whose frame rate collapsed
+/// cannot do anything at all.
+///
+/// Headless is not this path -- `beginScreenshotTask` answers a headless
+/// request without a framebuffer to read -- so nothing here has to make an
+/// exception for a run with no frame deadline.
 ///
 /// The pixels are copied rather than moved because the readback buffer belongs
 /// to the graphics backend, which frees it on this thread. A memcpy is the
@@ -4948,30 +4975,42 @@ fn writeScreenshot(image: raylib.CaptureImage, path: []const u8) void {
         return;
     };
 
-    const source = image.pixels();
-    if (effect_worker.accepting) submit: {
-        const pixels = effect_worker.allocator.alloc(u8, source.len) catch break :submit;
-        @memcpy(pixels, source);
-        switch (effect_worker.submitWritePng(
-            task_id orelse 0,
-            resolved,
-            pixels,
-            image.width(),
-            image.height(),
-        )) {
-            .accepted => {
-                // The outcome now arrives as a worker result. Clear the task id
-                // so a second screenshot this frame is correlated to itself.
-                capture_screenshot_task_id = null;
-                return;
-            },
-            .busy, .unavailable => effect_worker.allocator.free(pixels),
-        }
+    // No worker at all -- the thread would not spawn -- so there is nowhere for
+    // this to go except here. Retrying will not change that, which is what
+    // `Unavailable` says and `Busy` would not.
+    if (!effect_worker.accepting) {
+        reportScreenshotResult(capture.err_unavailable);
+        return;
     }
 
-    // No worker, or it would not take this: writing here is slow but correct,
-    // and it is what headless runs and a failed thread spawn already do.
-    reportScreenshotResult(writeCaptureImage(image, path, null));
+    const source = image.pixels();
+    const pixels = effect_worker.allocator.alloc(u8, source.len) catch {
+        reportScreenshotResult(capture.err_out_of_memory);
+        return;
+    };
+
+    @memcpy(pixels, source);
+    switch (effect_worker.submitWritePng(
+        task_id orelse 0,
+        resolved,
+        pixels,
+        image.width(),
+        image.height(),
+    )) {
+        .accepted => {
+            // The outcome now arrives as a worker result. Clear the task id
+            // so a second screenshot this frame is correlated to itself.
+            capture_screenshot_task_id = null;
+        },
+        .busy => {
+            effect_worker.allocator.free(pixels);
+            reportScreenshotResult(capture.err_busy);
+        },
+        .unavailable => {
+            effect_worker.allocator.free(pixels);
+            reportScreenshotResult(capture.err_unavailable);
+        },
+    }
 }
 
 /// Hand one captured frame, already at the recording's size, to its sink.
@@ -5956,6 +5995,34 @@ fn awaitWorkerParked(worker: *EffectWorker, count: u64) !void {
         std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
     }
     return error.WorkerNeverParked;
+}
+
+test "shutdown flushes accepted writes and abandons pending reads" {
+    var worker = EffectWorker{};
+    worker.allocator = std.testing.allocator;
+    worker.accepting = true;
+
+    // Interleaved on purpose: the flush has to walk past the reads rather than
+    // stopping at the first one it does not want.
+    const pixels = try std.testing.allocator.alloc(u8, 4);
+    @memset(pixels, 0xff);
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(1, "a", false));
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitWritePng(2, "shot.png", pixels, 1, 1));
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(3, "b", false));
+
+    worker.should_stop.store(true, .release);
+    const io = mainThreadIo();
+
+    // The app was told the host had taken this screenshot, so the write is
+    // still handed out to be done. Nothing else is.
+    const flushed = worker.awaitRequest(io) orelse return error.WriteWasAbandoned;
+    try std.testing.expectEqual(EffectWorker.Kind.write_png, flushed.kind);
+    try std.testing.expectEqual(@as(u64, 2), flushed.id);
+    try std.testing.expectEqual(@as(?EffectWorker.Request, null), worker.awaitRequest(io));
+
+    // A read owns no memory of its own, so abandoning it leaks nothing; the
+    // write's pixels belong to whoever runs it, which here is this test.
+    std.testing.allocator.free(flushed.pixels);
 }
 
 test "a submission wakes a blocked worker" {

@@ -298,6 +298,11 @@ Program := [].{
 		OutOfMemory,
 		WriteFailed,
 		Busy,
+
+		## This host cannot write a screenshot at all: its effect worker did not
+		## start, and encoding one on the frame thread is the stall the worker
+		## exists to remove. Unlike `Busy`, retrying will not help.
+		Unavailable,
 	]
 
 	## The flat record a `Task` becomes on the way out to the host.
@@ -554,6 +559,7 @@ screenshot_error = |code|
 		3 => AlreadyPending
 		7 => OutOfMemory
 		10 => Busy
+		11 => Unavailable
 		_ => WriteFailed
 	}
 
@@ -648,6 +654,11 @@ expect Program.completion_from_host({ kind: 5, id: 2, err: 5, contents: "", blob
 expect Program.completion_from_host({ kind: 5, id: 2, err: 1, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Released) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 10, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Busy) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 3, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(AlreadyPending) })
+
+## A screenshot the worker had no room for is refused rather than encoded on
+## the frame thread. Both of these mean the file was not written, and the
+## difference between them is whether asking again is worth anything.
+expect Program.completion_from_host({ kind: 2, id: 8, err: 11, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Unavailable) })
 expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0, bytes: 0 }) == Idle
 expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1, bytes: 0 }) == Active({ frames: 12, dropped: 1 })
 expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0, bytes: 0 }) == Failed({ frames: 3, reason: WriteFailed })

@@ -11,6 +11,7 @@ const capture = @import("capture.zig");
 const capture_vp8 = @import("capture_vp8.zig");
 const gif_encoder = @import("gif_encoder.zig");
 const host_resource = @import("host_resource.zig");
+const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 
@@ -184,7 +185,15 @@ const EffectWorker = struct {
     const capacity: usize = 64;
     const mask: usize = capacity - 1;
 
+    /// What the worker was asked to do.
+    ///
+    /// The two share a ring because they share the property that matters: a
+    /// bounded amount of plain-Zig state goes in, slow work happens on this
+    /// thread, and a plain-Zig answer comes back.
+    const Kind = enum(u8) { read_file, write_png };
+
     const Request = struct {
+        kind: Kind,
         id: u64,
         path: [capture.path_capacity]u8,
         path_len: usize,
@@ -194,17 +203,27 @@ const EffectWorker = struct {
         /// fills native memory and knows nothing about Roc. This only says what
         /// the main thread will do with the buffer when it drains the result:
         /// install it into a blob slot, or copy it into a `RocStr` and free it.
-        deliver_blob: bool,
+        deliver_blob: bool = false,
+        /// `write_png`: the framebuffer readback, owned by `allocator` and
+        /// freed on this thread once it has been encoded.
+        pixels: []u8 = &.{},
+        width: u32 = 0,
+        height: u32 = 0,
+        /// `write_png`: false for the `Capture.screenshot!` effect, which has
+        /// no completion to report to and latches its outcome instead.
+        for_task: bool = false,
     };
 
     /// `bytes` is owned by `allocator` until the main thread takes it: either by
     /// copying it into a `RocStr` and freeing it, or -- for a blob -- by moving
     /// the allocation itself into a blob slot without touching its contents.
     const Result = struct {
+        kind: Kind,
         id: u64,
-        bytes: ?[]u8,
-        err: u8,
-        deliver_blob: bool,
+        bytes: ?[]u8 = null,
+        err: u8 = 0,
+        deliver_blob: bool = false,
+        for_task: bool = false,
     };
 
     requests: [capacity]Request = undefined,
@@ -257,15 +276,18 @@ const EffectWorker = struct {
             // Same protocol as a submission, for the same reason: the flag is
             // published before the lock is taken, so a worker that reaches the
             // sleep decision after this cannot fail to see it, and a worker
-            // already asleep is signalled. Requests still queued are abandoned
-            // rather than drained, so shutdown costs at most the read already
-            // in flight.
+            // already asleep is signalled. Queued requests are not serviced,
+            // so shutdown costs at most the operation already in flight.
             self.should_stop.store(true, .release);
             self.wake();
             thread.join();
             self.thread = null;
         }
-        // Results that completed after the final drain still own buffers.
+        // The worker has stopped, so both rings belong to this thread again.
+        // Everything still in them owns memory nobody will come back for.
+        while (self.takeRequest()) |request| {
+            if (request.pixels.len != 0) self.allocator.free(request.pixels);
+        }
         while (self.takeResult()) |result| {
             if (result.bytes) |bytes| self.allocator.free(bytes);
         }
@@ -309,14 +331,49 @@ const EffectWorker = struct {
         if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
 
         const slot = &self.requests[write & mask];
+        slot.* = .{ .kind = .read_file, .id = id, .path = undefined, .path_len = path.len, .deliver_blob = deliver_blob };
         // The worker cannot borrow the Roc string the path arrived in.
         @memcpy(slot.path[0..path.len], path);
-        slot.path_len = path.len;
-        slot.id = id;
-        slot.deliver_blob = deliver_blob;
         self.request_write.store(write +% 1, .release);
         // Only after the request is visible; a refusal wakes nobody, which is
         // what keeps `Busy` and `Unavailable` pure refusals.
+        self.wake();
+        return .accepted;
+    }
+
+    /// Queue a screenshot write. Frame thread only.
+    ///
+    /// Takes ownership of `pixels` on acceptance, and leaves it with the caller
+    /// otherwise -- a refusal must not free a buffer the caller may still want
+    /// to write inline.
+    fn submitWritePng(
+        self: *EffectWorker,
+        id: u64,
+        path: []const u8,
+        pixels: []u8,
+        width: u32,
+        height: u32,
+        for_task: bool,
+    ) Submission {
+        if (!self.accepting) return .unavailable;
+        if (path.len > capture.path_capacity) return .unavailable;
+
+        const write = self.request_write.load(.monotonic);
+        if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
+
+        const slot = &self.requests[write & mask];
+        slot.* = .{
+            .kind = .write_png,
+            .id = id,
+            .path = undefined,
+            .path_len = path.len,
+            .pixels = pixels,
+            .width = width,
+            .height = height,
+            .for_task = for_task,
+        };
+        @memcpy(slot.path[0..path.len], path);
+        self.request_write.store(write +% 1, .release);
         self.wake();
         return .accepted;
     }
@@ -407,28 +464,78 @@ const EffectWorker = struct {
         const io = threaded.io();
 
         while (self.awaitRequest(io)) |request| {
-            const path = request.path[0..request.path_len];
-            // The allocation the blob path hands to Roc is made here, on this
-            // thread, and is filled here. The main thread only ever moves the
-            // slice -- which is the entire claim of the feature.
-            const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
-                self.postResult(io, .{
-                    .id = request.id,
-                    .bytes = null,
-                    .err = readErrorCode(err),
-                    .deliver_blob = request.deliver_blob,
-                });
-                continue;
-            };
-            self.postResult(io, .{
-                .id = request.id,
-                .bytes = bytes,
-                .err = 0,
-                .deliver_blob = request.deliver_blob,
-            });
+            switch (request.kind) {
+                .read_file => self.runRead(io, request),
+                .write_png => self.runWritePng(io, request),
+            }
         }
     }
+
+    /// Read a file whole. Worker thread only.
+    fn runRead(self: *EffectWorker, io: std.Io, request: Request) void {
+        const path = request.path[0..request.path_len];
+        // The allocation the blob path hands to Roc is made here, on this
+        // thread, and is filled here. The main thread only ever moves the
+        // slice -- which is the entire claim of the feature.
+        const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+            self.postResult(io, .{
+                .kind = .read_file,
+                .id = request.id,
+                .err = readErrorCode(err),
+                .deliver_blob = request.deliver_blob,
+            });
+            return;
+        };
+        self.postResult(io, .{
+            .kind = .read_file,
+            .id = request.id,
+            .bytes = bytes,
+            .deliver_blob = request.deliver_blob,
+        });
+    }
+
+    /// Encode a framebuffer readback as a PNG and write it. Worker thread only.
+    ///
+    /// This is the slow half of a screenshot -- deflate over a few megabytes,
+    /// plus a directory create and a file write -- and it is the whole reason
+    /// the frame thread now only does the readback. Nothing here touches
+    /// raylib: the pixels arrived as a plain byte slice and `png` is
+    /// deliberately backend-free.
+    fn runWritePng(self: *EffectWorker, io: std.Io, request: Request) void {
+        defer self.allocator.free(request.pixels);
+        const path = request.path[0..request.path_len];
+
+        const encoded = png.encodeRgba(self.allocator, request.pixels, request.width, request.height) catch |err| {
+            self.postResult(io, .{
+                .kind = .write_png,
+                .id = request.id,
+                .err = switch (err) {
+                    error.OutOfMemory => capture.err_out_of_memory,
+                    else => capture.err_write_failed,
+                },
+                .for_task = request.for_task,
+            });
+            return;
+        };
+        defer self.allocator.free(encoded);
+
+        self.postResult(io, .{
+            .kind = .write_png,
+            .id = request.id,
+            .err = writeWholeFile(io, path, encoded),
+            .for_task = request.for_task,
+        });
+    }
 };
+
+/// Create the parent directory if needed, then write the file. Any thread.
+fn writeWholeFile(io: std.Io, path: []const u8, bytes: []const u8) u8 {
+    if (std.fs.path.dirname(path)) |parent| {
+        std.Io.Dir.cwd().createDirPath(io, parent) catch return capture.err_write_failed;
+    }
+    std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = bytes }) catch return capture.err_write_failed;
+    return capture.err_none;
+}
 
 var effect_worker = EffectWorker{};
 
@@ -4296,6 +4403,22 @@ fn expireTimers(staging: *CompletionStaging, now_nanos: u64) void {
 fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
     while (true) {
         const result = effect_worker.takeResult() orelse return;
+
+        if (result.kind == .write_png) {
+            // A screenshot asked for by the effect has no completion to go to;
+            // it latches, exactly as it did when the write was inline. Set the
+            // latch directly rather than through `reportScreenshotResult`,
+            // which would hand this outcome to whichever task happens to be
+            // queued now. Only the task path holds a reservation.
+            if (!result.for_task) {
+                capture_screenshot_result = result.err;
+                continue;
+            }
+            staging.screenshotFinished(result.id, result.err);
+            staging.finish();
+            continue;
+        }
+
         defer staging.finish();
         const bytes = result.bytes orelse {
             stageReadError(staging, roc_host, result.id, result.err, result.deliver_blob);
@@ -4444,11 +4567,7 @@ fn serviceCaptureRequests() void {
     defer image.deinit();
 
     if (wants_screenshot) {
-        reportScreenshotResult(writeCaptureImage(
-            image,
-            capture_screenshot_path[0..capture_screenshot_path_len],
-            null,
-        ));
+        writeScreenshot(image, capture_screenshot_path[0..capture_screenshot_path_len]);
     }
 
     if (!wants_frame) return;
@@ -4461,7 +4580,59 @@ fn serviceCaptureRequests() void {
     finishRecordingAtFrameCap();
 }
 
+/// Hand a screenshot to the worker, or write it here if there is no worker.
+///
+/// The readback above had to happen on this thread -- it is a GL operation, and
+/// only inside the drawing scope. Everything after it is CPU work on a plain
+/// byte buffer, so it goes to the worker: encoding a 1080p PNG is tens of
+/// milliseconds, which is several dropped frames spent on a file the app is not
+/// waiting for.
+///
+/// The pixels are copied rather than moved because the readback buffer belongs
+/// to the graphics backend, which frees it on this thread. A memcpy is the
+/// price of not having the worker call into raylib, and it is a small fraction
+/// of the encode it replaces.
+fn writeScreenshot(image: raylib.CaptureImage, path: []const u8) void {
+    const task_id = capture_screenshot_task_id;
+
+    var resolved_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse {
+        reportScreenshotResult(capture.err_write_failed);
+        return;
+    };
+
+    const source = image.pixels();
+    if (effect_worker.accepting) submit: {
+        const pixels = effect_worker.allocator.alloc(u8, source.len) catch break :submit;
+        @memcpy(pixels, source);
+        switch (effect_worker.submitWritePng(
+            task_id orelse 0,
+            resolved,
+            pixels,
+            image.width(),
+            image.height(),
+            task_id != null,
+        )) {
+            .accepted => {
+                // The outcome now arrives as a worker result. Clear the task id
+                // so a second screenshot this frame is correlated to itself.
+                capture_screenshot_task_id = null;
+                return;
+            },
+            .busy, .unavailable => effect_worker.allocator.free(pixels),
+        }
+    }
+
+    // No worker, or it would not take this: writing here is slow but correct,
+    // and it is what headless runs and a failed thread spawn already do.
+    reportScreenshotResult(writeCaptureImage(image, path, null));
+}
+
 /// Hand one captured frame, already at the recording's size, to its sink.
+///
+/// Recording frames still encode on this thread. Unlike a screenshot they are
+/// part of a metered stream with its own dropped-frame accounting, and ordering
+/// between frames is load-bearing for the GIF and WebM sinks.
 fn writeRecordingFrame(image: raylib.CaptureImage) void {
     switch (capture_session.format) {
         capture.format_png => writeRecordingFramePng(image),

@@ -38,6 +38,11 @@ Model : {
 	## Where task ids come from. They only have to be unique, not dense, so
 	## this advances by two every cycle whether or not either was requested.
 	next_id : U64,
+
+	## Whether any screenshot has reported back yet. The file is encoded and
+	## written off the frame thread, so how many frames that takes is not
+	## something this app gets to assume.
+	settled : Bool,
 }
 
 ## A screenshot task in flight, by the id its completion will echo back.
@@ -68,6 +73,7 @@ init! = App.init(
 				pending_escape: Idle,
 				pending_save: Idle,
 				next_id: 0,
+				settled: Bool.False,
 			})
 		},
 )
@@ -109,10 +115,14 @@ update = |model, step| {
 			NotYet => Err(NotRequested)
 		}
 
-	# Frame 3 asks, the host writes the file at the end of that frame, frame 4
-	# is handed the outcome and draws it -- so the exit waits until frame 5.
+	# Frame 3 asks and the host reads the framebuffer at the end of it, but the
+	# file is encoded and written off the frame thread, so the outcome arrives
+	# on whichever later step the write finished by. Wait for it rather than for
+	# a frame number: that is the whole difference between a task and an action.
+	# The frame cap is only so an unattended run cannot hang.
+	settled = model.settled or escape_outcome != NotYet or saved_outcome != NotYet
 	actions =
-		if input.key_pressed(KeyEscape) or step.time.frame_count > 4 {
+		if input.key_pressed(KeyEscape) or (settled and step.time.frame_count > 4) or step.time.frame_count > 240 {
 			[Program.exit(0)]
 		} else {
 			[]
@@ -136,6 +146,7 @@ update = |model, step| {
 			pending_escape: still_pending(model.pending_escape, escape_requested, escape_id, escape_outcome),
 			pending_save: still_pending(model.pending_save, save_requested, save_id, saved_outcome),
 			next_id: model.next_id + 2,
+			settled: settled,
 		},
 		actions: actions,
 		tasks: tasks,

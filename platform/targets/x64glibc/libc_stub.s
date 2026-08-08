@@ -2236,3 +2236,260 @@ _setjmp:
 longjmp:
     xor %rax, %rax
     ret
+
+# Pulled in by std.Io.Threaded, which the effect worker instantiates so it has
+# an IO implementation of its own rather than borrowing the main thread's.
+# These are link-time placeholders only; the real glibc provides them at run
+# time, exactly like every stub above.
+
+.balign 8
+.globl getrandom
+.type getrandom, %function
+getrandom:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl socketpair
+.type socketpair, %function
+socketpair:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl getsockname
+.type getsockname, %function
+getsockname:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl chmod
+.type chmod, %function
+chmod:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl clock_getres
+.type clock_getres, %function
+clock_getres:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl clock_nanosleep
+.type clock_nanosleep, %function
+clock_nanosleep:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl fchdir
+.type fchdir, %function
+fchdir:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl fchmod
+.type fchmod, %function
+fchmod:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl fchmodat
+.type fchmodat, %function
+fchmodat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl fchown
+.type fchown, %function
+fchown:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl fsync
+.type fsync, %function
+fsync:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl futimens
+.type futimens, %function
+futimens:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl kill
+.type kill, %function
+kill:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl linkat
+.type linkat, %function
+linkat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl openat
+.type openat, %function
+openat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pwrite64
+.type pwrite64, %function
+pwrite64:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl setpgid
+.type setpgid, %function
+setpgid:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl setregid
+.type setregid, %function
+setregid:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl setreuid
+.type setreuid, %function
+setreuid:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl statx
+.type statx, %function
+statx:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl symlinkat
+.type symlinkat, %function
+symlinkat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl utimensat
+.type utimensat, %function
+utimensat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl wait4
+.type wait4, %function
+wait4:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl accept4
+.type accept4, %function
+accept4:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl faccessat
+.type faccessat, %function
+faccessat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl mkdirat
+.type mkdirat, %function
+mkdirat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_attr_setguardsize
+.type pthread_attr_setguardsize, %function
+pthread_attr_setguardsize:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_detach
+.type pthread_detach, %function
+pthread_detach:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl pthread_kill
+.type pthread_kill, %function
+pthread_kill:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl readlinkat
+.type readlinkat, %function
+readlinkat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl recvmsg
+.type recvmsg, %function
+recvmsg:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl renameat
+.type renameat, %function
+renameat:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sendmmsg
+.type sendmmsg, %function
+sendmmsg:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sendmsg
+.type sendmsg, %function
+sendmsg:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl sigaltstack
+.type sigaltstack, %function
+sigaltstack:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl unlinkat
+.type unlinkat, %function
+unlinkat:
+    xor %rax, %rax
+    ret

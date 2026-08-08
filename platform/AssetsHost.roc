@@ -32,10 +32,20 @@ AssetsHost := [].{
 
 	UpdateTexture : { texture : Texture, pixels : List(Color.Rgba) }
 
+	UpdateTextureRegion : {
+		texture : Texture,
+		x : I32,
+		y : I32,
+		width : I32,
+		height : I32,
+		pixels : List(Color.Rgba),
+	}
+
 	load_texture! : Str => TextureResult
 	generate_color_texture! : GenerateColorTexture => TextureResult
 	generate_checked_texture! : GenerateCheckedTexture => TextureResult
 	update_texture! : UpdateTexture => U8
+	update_texture_region! : UpdateTextureRegion => U8
 	set_texture_filter! : Texture, U8 => {}
 	set_texture_wrap! : Texture, U8 => {}
 }

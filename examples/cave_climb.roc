@@ -5,7 +5,8 @@ import rr.Assets
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
+import rr.Program
 import rr.Keys
 import rr.Math
 import rr.Mouse
@@ -128,7 +129,7 @@ Model : {
 	world : World,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -238,7 +239,7 @@ air_drag = 0.35
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		tiles = Assets.load_texture!(tiles_path)?
 		characters = Assets.load_texture!(characters_path)?
 		enemies_texture = Assets.load_texture!(enemies_path)?
@@ -434,10 +435,10 @@ checkpoints_from_tilemap = |tilemap| {
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Host -> F32
-input_axis = |host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
+input_axis : Input.Snapshot -> F32
+input_axis = |input| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
 	axis(left, right)
 }
 
@@ -485,14 +486,14 @@ unit_from_turn = |turn| Physics.normalize(Physics.vector(cos_turn(turn), sin_tur
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 screen_to_map = |camera, screen| camera.screen_to_world(screen)
 
-tool_input : Host, Camera.Camera2D -> ToolInput
-tool_input = |host, camera| {
-	aim = map_to_world(screen_to_map(camera, { x: host.mouse.x, y: host.mouse.y }))
+tool_input : Input.Snapshot, Camera.Camera2D -> ToolInput
+tool_input = |input, camera| {
+	aim = map_to_world(screen_to_map(camera, { x: input.mouse.x, y: input.mouse.y }))
 	{
 		aim,
-		laser_down: host.mouse.button_down(Left),
-		hook_down: host.mouse.button_down(Right),
-		hook_pressed: host.mouse.button_pressed(Right),
+		laser_down: input.mouse.button_down(Left),
+		hook_down: input.mouse.button_down(Right),
+		hook_pressed: input.mouse.button_pressed(Right),
 	}
 }
 
@@ -936,43 +937,51 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+update = |model, step| {
+	input = step.input
 
-	restart = host.key_pressed(KeySpace)
+	restart = input.key_pressed(KeySpace)
 	input_camera = camera_for(model.level, model.world.player.pos)?
-	input = tool_input(host, input_camera)
+	tools = tool_input(input, input_camera)
 	next_world = match model.world.state {
 		Playing => advance_world(
 			model.level,
 			model.world,
-			input_axis(host),
-			host.key_pressed(KeySpace) or host.key_pressed(KeyUp) or host.key_pressed(KeyW),
-			input,
-			host.frame_time,
+			input_axis(input),
+			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
+			tools,
+			step.time.elapsed_seconds,
 		)
 		Won => if restart new_world(model.level) else model.world
 		GameOver => if restart new_world(model.level) else model.world
 	}
 
-	next = { ..model, world: next_world }
-	camera = camera_for(model.level, next_world.player.pos)?
+	Ok({
+		model: { ..model, world: next_world },
+		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		tasks: [],
+	})
+}
+
+## The camera follows the player, so it is a pure function of the model and is
+## derived here rather than stored.
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! = |model, frame| {
+	camera = camera_for(model.level, model.world.player.pos)?
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x101820))
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, next.level, next.background, next.tiles, next.characters, next.enemies_texture, next.world, viewport)
+			draw_world!(world_frame, model.level, model.background, model.tiles, model.characters, model.enemies_texture, model.world, viewport)
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, next.level, next.world)
+	draw_hud!(frame, model.level, model.world)
 
-	Ok(next)
+	Ok({})
 }
 
 camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])

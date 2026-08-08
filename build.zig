@@ -840,6 +840,12 @@ fn buildHostLib(
             .optimize = optimize,
             .strip = optimize != .Debug,
             .pic = true,
+            // Selects Zig's pthread path for std.Thread. The native path
+            // depends on TLS that Zig's start code sets up, and the start code
+            // never runs here: this is a static library that `roc build` links
+            // into an executable of its own. Without this, spawning the effect
+            // worker panics inside std.Thread rather than returning an error.
+            .link_libc = true,
         }),
     });
 

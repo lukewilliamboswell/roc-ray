@@ -25,23 +25,32 @@ Keys := [].{
 	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])
 	from_code = RrtKeys.from_code
 
-	## raylib key code for a key (index into the Host key-state lists).
+	## raylib key code for a key (index into the sampled key-state lists).
 	key_code : KeyboardKey -> U64
 	key_code = RrtKeys.key_code
 
-	## Check if a specific key is currently held down. Pass `host` directly.
+	## Check if a specific key is currently held down. Pass `step.input` directly.
 	key_down : { keys : List(U8), ..state }, KeyboardKey -> Bool
 	key_down = RrtKeys.key_down
 
-	## Check if a specific key is currently not pressed (up). Pass `host` directly.
+	## Check if a specific key is currently not pressed (up). Pass `step.input` directly.
 	key_up : { keys : List(U8), ..state }, KeyboardKey -> Bool
 	key_up = RrtKeys.key_up
 
-	## Check if a key was first pressed this frame. Pass `host` directly.
+	## Check if a key was first pressed this frame. Pass `step.input` directly.
 	key_pressed : { keys : List(U8), ..state }, KeyboardKey -> Bool
 	key_pressed = RrtKeys.key_pressed
 
-	## Check if a key was released this frame. Pass `host` directly.
+	## Check if a key was released this frame. Pass `step.input` directly.
 	key_released : { keys : List(U8), ..state }, KeyboardKey -> Bool
 	key_released = RrtKeys.key_released
+
+	## Set which key closes the window, as an action.
+	##
+	## `NoExitKey` stops any key from closing it; raylib defaults to
+	## `ExitKey(KeyEscape)`. The window close button is unaffected either way,
+	## so an app that disables the exit key should still handle shutdown itself
+	## through `Program.exit`.
+	set_exit_key : ExitKey -> [SetExitKey(ExitKey), ..]
+	set_exit_key = |key| SetExitKey(key)
 }

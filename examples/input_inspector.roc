@@ -2,7 +2,9 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 
 import rr.Draw
 import rr.Color
-import rr.Host
+import rr.Input
+import rr.Window
+import rr.Program
 import rr.Keys
 import rr.Mouse
 import rr.Gamepad
@@ -13,9 +15,25 @@ Model : {
 	## Text typed since the last clear, and what the clipboard last did with it.
 	typed : Str,
 	clipboard_status : Str,
+
+	## The frame this view describes. An input inspector's whole job is to show
+	## the snapshot, so here the snapshot genuinely is the model.
+	##
+	## `init!` cannot supply one: `App.Startup` is authority, and nothing has
+	## been sampled before the first frame. `Input.empty` is that "nothing" as a
+	## value -- every list empty, the pointer at the origin, and every receiver
+	## answering `False` rather than crashing.
+	input : Input.Snapshot,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
+
+## The id the host echoes back on a finished clipboard read, so the answer can
+## be matched to the request. Ctrl+V is edge-triggered and the answer arrives on
+## the very next step, so only one read is ever outstanding and a constant id is
+## enough; an app juggling several would allocate them.
+paste_id : U64
+paste_id = 1
 
 init! : App.Init(Model, [])
 init! = App.init(
@@ -27,7 +45,7 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_host| Ok({ typed: "", clipboard_status: "clipboard idle" }),
+	|_startup| Ok({ typed: "", clipboard_status: "clipboard idle", input: Input.empty }),
 )
 
 title : Str
@@ -56,82 +74,139 @@ ascii_typed = |codepoints|
 		),
 	)
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyQ) {
-		host.exit!(0)
-	}
+## Everything the host used to be told mid-update is returned instead: settings
+## that just happen become actions, and reading the clipboard -- which answers
+## back -- becomes a task.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
 
-	if host.key_pressed(KeyH) {
-		host.set_cursor_mode!(Hidden)
-	}
-	if host.key_pressed(KeyJ) {
-		host.set_cursor_mode!(Visible)
-	}
-	if host.key_pressed(KeyK) {
-		host.set_cursor_mode!(Locked)
-	}
-	if host.key_pressed(KeyL) {
-		host.set_cursor_mode!(Visible)
-	}
-
-	ctrl_held = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
-	typed_this_frame = if ctrl_held "" else ascii_typed(host.text_input)
+	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
+	typed_this_frame = if ctrl_held "" else ascii_typed(input.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
-	clipboard = if ctrl_held and host.key_pressed(KeyC) {
-		host.set_clipboard_text!(buffered)
-		{ typed: buffered, clipboard_status: "copied to clipboard" }
-	} else if ctrl_held and host.key_pressed(KeyV) {
-		match host.get_clipboard_text!() {
-			Ok(pasted) => { typed: Str.concat(buffered, pasted), clipboard_status: "pasted from clipboard" }
-			# One error covers an empty clipboard and non-text content alike;
-			# the windowing backend does not tell them apart.
-			Err(Unavailable) => { typed: buffered, clipboard_status: "clipboard has no text" }
-		}
-	} else if ctrl_held and host.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared" }
-	} else if ctrl_held and host.key_pressed(KeyE) {
+	# One chain, as before, so two shortcuts pressed together still resolve in
+	# this order -- it now yields the work to do alongside the new buffer.
+	clipboard = if ctrl_held and input.key_pressed(KeyC) {
+		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: [] }
+	} else if ctrl_held and input.key_pressed(KeyV) {
+		# A read answers back, so it is a task: the pasted text is appended on
+		# the step that carries the answer rather than on this one.
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [ReadClipboard({ id: paste_id })] }
+	} else if ctrl_held and input.key_pressed(KeyX) {
+		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
+	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		host.set_exit_key!(ExitKey(KeyEscape))
-		{ typed: buffered, clipboard_status: "Esc now exits again" }
-	} else if ctrl_held and host.key_pressed(KeyM) {
-		host.set_window_min_size!({ width: 640, height: 480 })
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480" }
+		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
+	} else if ctrl_held and input.key_pressed(KeyM) {
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
 	}
 
-	w_down = host.key_down(KeyW)
-	a_down = host.key_down(KeyA)
-	s_down = host.key_down(KeyS)
-	d_down = host.key_down(KeyD)
-	up_down = host.key_down(KeyUp)
-	left_down = host.key_down(KeyLeft)
-	down_down = host.key_down(KeyDown)
-	right_down = host.key_down(KeyRight)
-	one_down = host.key_down(Key1)
-	shift_down = host.key_down(KeyLeftShift) or host.key_down(KeyRightShift)
-	ctrl_down = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
-	escape_pressed = host.key_pressed(KeyEscape)
-	space_released = host.key_released(KeySpace)
-	mouse_left_pressed = host.mouse.button_pressed(Left)
-	mouse_left_released = host.mouse.button_released(Left)
-	mouse_position = host.mouse.position()
-	mouse_delta = host.mouse.delta()
-	wheel_delta = host.mouse.wheel_delta()
-	gamepad_input = match host.gamepad(One) {
+	paste = paste_outcome(step.completed)
+	typed = match paste {
+		Pasted(text) => Str.concat(clipboard.typed, text)
+		NoText => clipboard.typed
+		TooMuchText => clipboard.typed
+		NotYet => clipboard.typed
+	}
+	clipboard_status = match paste {
+		Pasted(_) => "pasted from clipboard"
+		# One error covers an empty clipboard and non-text content alike; the
+		# windowing backend does not tell them apart.
+		NoText => "clipboard has no text"
+		TooMuchText => "clipboard holds too much text to paste"
+		NotYet => clipboard.clipboard_status
+	}
+
+	# Applied in order, before anything is drawn, which is where the effects
+	# they replace used to run.
+	actions =
+		List.join([
+			if input.key_pressed(KeyQ) [Program.exit(0)] else [],
+			if input.key_pressed(KeyH) [Mouse.set_cursor_mode(Hidden)] else [],
+			if input.key_pressed(KeyJ) [Mouse.set_cursor_mode(Visible)] else [],
+			if input.key_pressed(KeyK) [Mouse.set_cursor_mode(Locked)] else [],
+			if input.key_pressed(KeyL) [Mouse.set_cursor_mode(Visible)] else [],
+			clipboard.actions,
+			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
+		])
+
+	Ok({
+		model: { typed: typed, clipboard_status: clipboard_status, input: input },
+		actions: actions,
+		tasks: clipboard.tasks,
+	})
+}
+
+## What this step's completions say about an outstanding paste.
+##
+## `TooLarge` is its own outcome rather than being folded into `NoText`: there
+## *is* text, the host just would not copy that much of it onto the frame
+## thread, and telling someone their clipboard is empty when it is not would be
+## a lie the app is in a position to avoid.
+paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText, TooMuchText]
+paste_outcome = |completed|
+	match List.first(List.keep_if(completed, is_our_paste)) {
+		Ok(ClipboardRead(finished)) =>
+			match finished.result {
+				Ok(pasted) => Pasted(pasted)
+				Err(Unavailable) => NoText
+				Err(TooLarge) => TooMuchText
+			}
+
+		# Unreachable: `is_our_paste` kept only this app's clipboard read.
+		Ok(_) => NotYet
+		Err(_) => NotYet
+	}
+
+## Whether a completion answers this app's clipboard read.
+is_our_paste : Program.Completion -> Bool
+is_our_paste = |completion|
+	match completion {
+		ClipboardRead(finished) => finished.id == paste_id
+
+		# Every other completion belongs to some other request. A wildcard
+		# rather than a branch each: this asks one question, and enumerating
+		# the platform's whole task list here would break the app every time
+		# a new kind of task existed.
+		_ => Bool.False
+	}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
+	input = model.input
+
+	w_down = input.key_down(KeyW)
+	a_down = input.key_down(KeyA)
+	s_down = input.key_down(KeyS)
+	d_down = input.key_down(KeyD)
+	up_down = input.key_down(KeyUp)
+	left_down = input.key_down(KeyLeft)
+	down_down = input.key_down(KeyDown)
+	right_down = input.key_down(KeyRight)
+	one_down = input.key_down(Key1)
+	shift_down = input.key_down(KeyLeftShift) or input.key_down(KeyRightShift)
+	ctrl_down = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
+	escape_pressed = input.key_pressed(KeyEscape)
+	space_released = input.key_released(KeySpace)
+	mouse_left_pressed = input.mouse.button_pressed(Left)
+	mouse_left_released = input.mouse.button_released(Left)
+	mouse_position = input.mouse.position()
+	mouse_delta = input.mouse.delta()
+	wheel_delta = input.mouse.wheel_delta()
+	gamepad_input = match input.gamepad(One) {
 		Connected(pad) => { connected: Bool.True, left_stick: pad.left_stick(), action_pressed: pad.button_pressed(FaceDown) }
 		Disconnected => { connected: Bool.False, left_stick: { x: 0, y: 0 }, action_pressed: Bool.False }
 	}
 	gamepad_connected = gamepad_input.connected
 	left_stick = gamepad_input.left_stick
 	gamepad_action_pressed = gamepad_input.action_pressed
-	text_entered = List.len(host.text_input) > 0
+	text_entered = List.len(input.text_input) > 0
 	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
-	host.set_cursor!(if host.mouse.button_down(Left) Crosshair else Arrow)
 
 	frame.clear!(Color.ray_white)
 	frame.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
@@ -205,8 +280,8 @@ render! = |model, host, frame| {
 	frame.text_at!({ pos: { x: 30, y: 450 }, text: Str.concat("Mouse ", Str.concat(F32.to_str(mouse_position.x), Str.concat(", ", F32.to_str(mouse_position.y)))), size: 18, color: Color.gray })
 	frame.text_at!({ pos: { x: 30, y: 486 }, text: clipboard_help, size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 30, y: 512 }, text: window_help, size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", clipboard.typed), size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 568 }, text: clipboard.clipboard_status, size: 18, color: Color.gray })
+	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", model.typed), size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 568 }, text: model.clipboard_status, size: 18, color: Color.gray })
 	frame.text_at!({ pos: { x: 30, y: 594 }, text: "Hold left mouse for crosshair | Q exits | Esc is a normal key", size: 18, color: Color.gray })
-	Ok(clipboard)
+	Ok({})
 }

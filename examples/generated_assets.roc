@@ -5,9 +5,10 @@ import rr.Assets
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
 import rr.Mouse
+import rr.Program
 import rr.Text
 
 PaintState := [Idle, Painted(U64)].{
@@ -20,10 +21,11 @@ Model : {
 	paint_sound : Audio.Sound,
 	palette : U64,
 	last_cell : PaintState,
+	mouse : Math.Vec2,
 	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 grid_side : U64
 grid_side = 16
@@ -42,6 +44,13 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
+
+## The brush is quiet next to the tone it is generated from. Named once because
+## `init!` applies it to the sound and every `PlaySound` action carries it again:
+## a `Playback` states all three settings, so it would otherwise reset to full
+## volume the first time a pitch is chosen.
+paint_volume : F32
+paint_volume = 0.35
 
 palette_color : U64 -> Color.Rgba
 palette_color = |index|
@@ -68,22 +77,23 @@ initial_pixels = List.map_with_index(
 	},
 )
 
-init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
+init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed, UploadBudgetExceeded])
 init! = App.init(
 	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		texture = Assets.Texture.generate_color!({ width: 16, height: 16, color: Color.white })?
 		texture.update!(initial_pixels)?
 		texture.set_filter!(Point)
 		texture.set_wrap!(Clamp)
 		paint_sound = Audio.gen_tone!({ freq: 520, ms: 35 })?
-		paint_sound.set_volume!(0.35)
+		paint_sound.set_volume!(paint_volume)
 		Ok({
 			texture,
 			pixels: initial_pixels,
 			paint_sound,
 			palette: 1,
 			last_cell: Idle,
+			mouse: { x: 0, y: 0 },
 			ui: Box.box({
 				title: Text.from("Pixel Workshop").size(34).prepare!()?,
 				help: Text.from("Paint with the mouse | 1-4 palette | C restores the design").size(17).prepare!()?,
@@ -93,9 +103,9 @@ init! = App.init(
 	},
 )
 
-palette_from_input : U64, Host -> U64
-palette_from_input = |current, host|
-	if host.key_pressed(Key1) 0 else if host.key_pressed(Key2) 1 else if host.key_pressed(Key3) 2 else if host.key_pressed(Key4) 3 else current
+palette_from_input : U64, Input.Snapshot -> U64
+palette_from_input = |current, input|
+	if input.key_pressed(Key1) 0 else if input.key_pressed(Key2) 1 else if input.key_pressed(Key3) 2 else if input.key_pressed(Key4) 3 else current
 
 cell_at : Math.Vec2 -> Try(U64, [Outside])
 cell_at = |point| {
@@ -112,38 +122,72 @@ cell_at = |point| {
 	}
 }
 
-update_editor! : Model, Host => Try(Model, [PixelCountMismatch, ..])
-update_editor! = |model, host| {
-	palette = palette_from_input(model.palette, host)
+## A step of the editor: the canvas it produced, and the work that makes the
+## canvas visible and audible.
+##
+## The pixels live in the model and on the GPU, so every branch that changes them
+## has to emit the matching `UpdateTexture`; returning both together is what keeps
+## the two from drifting apart.
+Edited : {
+	model : Model,
+	actions : List(Program.Action),
+}
+
+update_editor : Model, Input.Snapshot -> Edited
+update_editor = |model, input| {
+	palette = palette_from_input(model.palette, input)
 	base = { ..model, palette }
 
-	if host.key_pressed(KeyC) {
-		base.texture.update!(initial_pixels)?
-		base.paint_sound.set_pitch!(0.7)
-		base.paint_sound.play!()
-		Ok({ ..base, pixels: initial_pixels, last_cell: Idle })
-	} else if host.mouse.button_down(Left) {
-		match cell_at(host.mouse.position()) {
-			Err(_) => Ok({ ..base, last_cell: Idle })
+	if input.key_pressed(KeyC) {
+		{
+			model: { ..base, pixels: initial_pixels, last_cell: Idle },
+			actions: [
+				base.texture.update(initial_pixels),
+				paint(base.paint_sound, 0.7),
+			],
+		}
+	} else if input.mouse.button_down(Left) {
+		match cell_at(input.mouse.position()) {
+			Err(_) => { model: { ..base, last_cell: Idle }, actions: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
-					Ok(base)
+					{ model: base, actions: [] }
 				} else {
 					match base.pixels.set(index, palette_color(palette)) {
-						Err(_) => Ok(base)
+						Err(_) => { model: base, actions: [] }
 						Ok(pixels) => {
-							base.texture.update!(pixels)?
-							base.paint_sound.set_pitch!(0.8 + U64.to_f32(palette) * 0.18)
-							base.paint_sound.play!()
-							Ok({ ..base, pixels, last_cell: Painted(index) })
+							{
+								model: { ..base, pixels, last_cell: Painted(index) },
+								actions: [
+									# One cell changed, so one cell is uploaded.
+									# Re-uploading the whole canvas would send
+									# 256 pixels to say something about one.
+									base.texture.update_region({
+										x: U64.to_i32_wrap(index % grid_side),
+										y: U64.to_i32_wrap(index // grid_side),
+										width: 1,
+										height: 1,
+										pixels: [palette_color(palette)],
+									}),
+									paint(base.paint_sound, 0.8 + U64.to_f32(palette) * 0.18),
+								],
+							}
 						}
 					}
 				}
 			}
 	} else {
-		Ok({ ..base, last_cell: Idle })
+		{ model: { ..base, last_cell: Idle }, actions: [] }
 	}
 }
+
+## One brush stroke, at the pitch this stroke chose.
+##
+## Pitch and playback travel as a single `Playback`, so a stroke can no longer be
+## heard at the previous stroke's pitch.
+paint : Audio.Sound, F32 -> Program.Action
+paint = |sound, pitch|
+	sound.playback().with_volume(paint_volume).with_pitch(pitch).play()
 
 draw_swatch! : Draw.Frame, U64, U64 => {}
 draw_swatch! = |frame, index, selected| {
@@ -152,27 +196,40 @@ draw_swatch! = |frame, index, selected| {
 	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), PixelCountMismatch, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+## A mismatched pixel count is no longer this function's problem: the check
+## happens where the upload does, when the platform applies the `UpdateTexture`
+## action, and a failure ends the cycle exactly as `texture.update!(pixels)?`
+## used to. So the error type is the same one every other example has.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	next = update_editor!(model, host)?
-	ui = Box.unbox(next.ui)
-	hover_cell = cell_at(host.mouse.position())
-	host.set_cursor!(
-		match hover_cell {
+	next = update_editor(model, input)
+	mouse = input.mouse.position()
+	cursor = Mouse.set_cursor(
+		match cell_at(mouse) {
 			Ok(_) => Crosshair
 			Err(_) => Arrow
 		},
 	)
 
+	Ok({
+		model: { ..next.model, mouse },
+		actions: List.concat(exit_actions, List.append(next.actions, cursor)),
+		tasks: [],
+	})
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
+	ui = Box.unbox(model.ui)
+
 	frame.clear!(Color.from_hex_rgb(0x0e1625))
 	ui.title.draw!(frame, { pos: { x: canvas_x, y: 24 }, color: Color.white, align: Text.align_top_left })
 	frame.texture!({
-		texture: next.texture.view(),
-		source: next.texture.rect(),
+		texture: model.texture.view(),
+		source: model.texture.rect(),
 		dest: canvas_bounds,
 		origin: Math.zero,
 		rotation: 0,
@@ -180,7 +237,7 @@ render! = |model, host, frame| {
 	})
 	frame.rectangle!({ x: canvas_bounds.x - 4, y: canvas_bounds.y - 4, width: canvas_bounds.width + 8, height: canvas_bounds.height + 8, style: Draw.outlined(Color.from_hex_rgb(0x7083a8), 4) })
 
-	match hover_cell {
+	match cell_at(model.mouse) {
 		Err(_) => {}
 		Ok(index) => {
 			col = index % grid_side
@@ -190,11 +247,11 @@ render! = |model, host, frame| {
 	}
 
 	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: Color.white, align: Text.align_top_left })
-	draw_swatch!(frame, 0, next.palette)
-	draw_swatch!(frame, 1, next.palette)
-	draw_swatch!(frame, 2, next.palette)
-	draw_swatch!(frame, 3, next.palette)
+	draw_swatch!(frame, 0, model.palette)
+	draw_swatch!(frame, 1, model.palette)
+	draw_swatch!(frame, 2, model.palette)
+	draw_swatch!(frame, 3, model.palette)
 	ui.help.draw!(frame, { pos: { x: canvas_x, y: 558 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
 
-	Ok(next)
+	Ok({})
 }

@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Prove that app code cannot reach App's internal host transport."""
+"""Prove that app code cannot reach capabilities the platform withholds.
+
+Each case must fail to compile, must fail with the expected diagnostic, and
+must produce exactly one error. That last check is what stops a fixture from
+passing for the wrong reason: without it, a fixture left stale by an unrelated
+API change still fails, still contains the expected text somewhere, and quietly
+stops testing what it was written for.
+"""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +32,17 @@ CASES = (
         ROOT / "test" / "compile_fail" / "app_config_module.roc",
         ("PACKAGE MODULE IS PRIVATE", "`rr.AppConfig`"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "file_host_module.roc",
+        ("PACKAGE MODULE IS PRIVATE", "`rr.FileHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "texture_view_sampler.roc",
+        ("MISSING METHOD", "`set_filter!`", "Assets.TextureView"),
+    ),
 )
+
+ONE_ERROR = re.compile(r"Found 1 error and \d+ warnings?")
 
 
 def main() -> int:
@@ -58,7 +76,16 @@ def main() -> int:
             failed = True
             continue
 
-        print(f"Verified private App transport: {source.relative_to(ROOT)}")
+        if not ONE_ERROR.search(diagnostics):
+            print(
+                f"ERROR: {source} did not fail with exactly one error, so the "
+                f"expected diagnostic may not be the reason it failed\n{diagnostics}",
+                file=sys.stderr,
+            )
+            failed = True
+            continue
+
+        print(f"Verified withheld capability: {source.relative_to(ROOT)}")
 
     return 1 if failed else 0
 

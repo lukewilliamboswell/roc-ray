@@ -3,18 +3,20 @@ platform ""
 		[Model : model] for program : {
 			init! : {
 				config : App.Config,
-				run! : Host => Try(model, [Exit(I64), ..]),
+				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
+			update : model, Program.Step -> Try(Program.Next(model), [Exit(I64), ..]),
+			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture]
+	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, File, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
 		"init_for_host": init_for_host!,
+		"update_for_host": update_for_host!,
 		"render_for_host": render_for_host!,
 		"drop_model_for_host": drop_model_for_host!,
 	}
@@ -23,6 +25,7 @@ platform ""
 		"roc_assets_generate_color_texture_raw": AssetsHost.generate_color_texture!,
 		"roc_assets_generate_checked_texture_raw": AssetsHost.generate_checked_texture!,
 		"roc_assets_update_texture_raw": AssetsHost.update_texture!,
+		"roc_assets_update_texture_region_raw": AssetsHost.update_texture_region!,
 		"roc_assets_set_texture_filter_raw": AssetsHost.set_texture_filter!,
 		"roc_assets_set_texture_wrap_raw": AssetsHost.set_texture_wrap!,
 		"roc_audio_gen_tone_raw": AudioHost.gen_tone!,
@@ -50,6 +53,9 @@ platform ""
 		"roc_audio_music_length_raw": AudioHost.music_length!,
 		"roc_audio_music_time_played_raw": AudioHost.music_time_played!,
 		"roc_audio_set_master_volume_raw": AudioHost.set_master_volume!,
+		"roc_file_blob_slice": FileHost.blob_slice!,
+		"roc_file_blob_byte": FileHost.blob_byte!,
+		"roc_file_release_blob": FileHost.release_blob!,
 		"roc_draw_begin_scissor_raw": DrawHost.begin_scissor!,
 		"roc_draw_circle_gradient": DrawHost.circle_gradient!,
 		"roc_draw_circle_lines_raw": DrawHost.circle_lines!,
@@ -123,7 +129,8 @@ import Draw
 import DrawHost
 import Text
 import Color
-import Host
+import Input
+import Window
 import HostHost
 import Keys
 import Mouse
@@ -138,21 +145,21 @@ import Capture
 import CaptureHost
 import Assets
 import AssetsHost
+import File
+import FileHost
 import Math
 import Camera
 import Sprite
 import Tilemap
 import TilemapHost
 import Physics
+import Program
+import Random
 
-## Internal type for host boundary.
-## Keep this layout-compatible with the public Host record; the compiler may
-## optimize the reshaping below into a direct pass-through.
-HostStateFromHost : {
-	frame_count : U64,
-	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
-	frame_time : F32, ## seconds since previous frame (0 on first frame)
-	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
+## Internal type for the host boundary, carrying one cycle of sampled input.
+## Keep this layout-compatible with the public `Input.Snapshot` record; the
+## compiler may optimize the reshaping below into a direct pass-through.
+InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	text_input : List(U32), ## Unicode codepoints entered this frame
 	gamepads : {
@@ -175,51 +182,158 @@ HostStateFromHost : {
 	},
 }
 
+## Internal type for the host boundary, carrying one cycle of observations.
+##
+## `window` and `time` are already flat records of scalars, so the public types
+## cross the boundary unchanged rather than being mirrored by a second copy that
+## could drift. Only `input` needs reshaping, and only to rename one field.
+##
+## Unions do not cross this boundary, so completions and the recording state
+## arrive as flat records that `Program` decodes. The completion list is empty
+## on an ordinary frame.
+StepFromHost : {
+	input : InputFromHost,
+	window : Window.Snapshot,
+	time : Time.Frame,
+	completed : List(Program.CompletionFromHost),
+	capture : Program.CaptureFromHost,
+}
+
 app_config_for_host! : () => AppConfig.HostConfig
 app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
 
-init_for_host! : HostStateFromHost => Try(Box(Model), I64)
-init_for_host! = |host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
-	}
-	match (program.init!.run!)(host) {
+## Reshape the flat sampled input into the public `Input.Snapshot` record.
+##
+## Only `gamepads.available` is renamed; the compiler may optimize the rest of
+## this into a direct pass-through, which is why the two layouts are kept
+## deliberately compatible.
+input_from_raw : InputFromHost -> Input.Snapshot
+input_from_raw = |raw| {
+	keys: raw.keys,
+	text_input: raw.text_input,
+	gamepads: {
+		connected: raw.gamepads.available,
+		buttons: raw.gamepads.buttons,
+		axes: raw.gamepads.axes,
+	},
+	mouse: raw.mouse,
+}
+
+## Rebuild a `Program.Step` from the host's flat cycle record.
+step_from_raw : StepFromHost -> Program.Step
+step_from_raw = |raw| {
+	input: input_from_raw(raw.input),
+	window: raw.window,
+	time: raw.time,
+	completed: List.map(raw.completed, Program.completion_from_host),
+	capture: Program.capture_from_host(raw.capture),
+}
+
+## Run the app's startup callback with the platform's startup authority.
+##
+## It takes no argument: `App.Startup` is authority, not observation, so there
+## is nothing for the host to hand over. Nothing has been sampled yet when this
+## runs, which is exactly why `Input.empty` exists.
+init_for_host! : () => Try(Box(Model), I64)
+init_for_host! = ||
+	match (program.init!.run!)(App.Startup.from_host(HostHost.Startup.for_host)) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
-}
 
-render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
-render_for_host! = |boxed_model, host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
+## Advance the model by one cycle and hand the host back any work it wants done.
+##
+## Called once per rendered frame rather than once per event, so the model is
+## boxed and unboxed once regardless of how much happened.
+##
+## `program.update` is pure, so the work it asked for is done here instead:
+## actions are applied immediately, before this returns and therefore before
+## anything is drawn, which is exactly where the effects they replace used to
+## run. Only tasks -- the work that answers back -- reach the host.
+update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), tasks : List(Program.TaskToHost) }, I64)
+update_for_host! = |boxed_model, raw|
+	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
+		Ok(next) =>
+			match run_actions!(next.actions, 0) {
+				Ok({}) => Ok({ model: Box.box(next.model), tasks: List.map(next.tasks, Program.to_host) })
+				Err(Exit(code)) => Err(code)
+				Err(_) => Err(-1)
+			}
+
+		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
 	}
+
+## Apply a cycle's actions in order, stopping at the first one that fails.
+##
+## Walked by index rather than folded because each step is effectful and may
+## fail: `texture.update(pixels)` reports a pixel count that does not match the
+## texture, or an upload the frame's budget would not take, and that has to end
+## the cycle the same way `texture.update!(pixels)?` ended it when `update!` was
+## effectful.
+run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+run_actions! = |actions, index|
+	if index >= List.len(actions) {
+		Ok({})
+	} else {
+		match List.get(actions, index) {
+			Ok(action) => {
+				run_action!(action)?
+				run_actions!(actions, index + 1)
+			}
+
+			# Unreachable: the index is bounded above.
+			Err(_) => Ok({})
+		}
+	}
+
+## Apply one action through the effect it stands for.
+##
+## This is the whole reason actions need no wire format: the adapter is itself
+## effectful, so it can call the platform's existing effects directly and an
+## `Action` never has to flatten to scalars or cross the ABI.
+run_action! : Program.Action => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+run_action! = |action|
+	match action {
+		# Deferred rather than immediate, matching `host.exit!`: the host
+		# finishes this cycle -- including the draw, and including capturing it
+		# -- and shuts down afterwards. `Err(Exit(code))` from `update` is the
+		# immediate form.
+		Exit(code) => Ok(HostHost.exit!(I64.to_i32_wrap(code)))
+		SetCursor(cursor) => Ok(MouseHost.set_cursor!(Mouse.cursor_code(cursor)))
+		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode)))
+		SetClipboardText(text) => Ok(HostHost.set_clipboard_text!(text))
+		SetExitKey(key) => Ok(HostHost.set_exit_key!(Keys.exit_key_code(key)))
+		SetWindowMinSize(size) =>
+			Ok(
+				HostHost.set_window_min_size!({
+					width: if size.width > 0 size.width else 0,
+					height: if size.height > 0 size.height else 0,
+				}),
+			)
+
+		PlaySound(settings) => Ok(settings.play!())
+		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
+		UpdateTexture(request) => request.texture.update!(request.pixels)
+		UpdateTextureRegion(request) => request.texture.update_region!(request.region)
+		SetVirtualMouse(pointer) => Ok(Capture.set_virtual_mouse!(pointer))
+		# Frees host memory in this cycle rather than reporting back later, which
+		# is exactly what an action is for.
+		ReleaseBlob(blob) => Ok(blob.release!())
+	}
+
+## Draw the current model, then hand the same box back.
+##
+## `render!` returns `{}` rather than a model: drawing is a view of state, not a
+## step of it, and having it return a model invited the two to be confused.
+## Unboxing borrows rather than consumes, so the box the host passed in is still
+## the live reference and is returned unchanged.
+render_for_host! : Box(Model) => Try(Box(Model), I64)
+render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
-	match (program.render!)(Box.unbox(boxed_model), host, frame) {
-		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+	match (program.render!)(Box.unbox(boxed_model), frame) {
+		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}

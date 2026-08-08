@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -6,7 +6,8 @@ import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
+import rr.Program
 import rr.Keys
 import rr.Math
 import rr.Sprite
@@ -287,7 +288,7 @@ Model : {
 	world : World,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -358,6 +359,43 @@ dash_path = "examples/assets/kenney-audio/sfx/dash.ogg"
 music_path : Str
 music_path = "examples/assets/kenney-audio/music/spark_loop.wav"
 
+## How loud each effect is mixed.
+##
+## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
+## so every action has to name its sound's level -- there is no longer a
+## `set_volume!` in `init!` for it to inherit. These constants are the one place
+## the levels live, so an action cannot drift away from what the mix intends.
+collect_volume : F32
+collect_volume = 0.58
+
+hurt_volume : F32
+hurt_volume = 0.55
+
+win_volume : F32
+win_volume = 0.48
+
+lose_volume : F32
+lose_volume = 0.58
+
+gate_volume : F32
+gate_volume = 0.46
+
+dash_volume : F32
+dash_volume = 0.3
+
+sparkle_volume : F32
+sparkle_volume = 0.16
+
+## The music stream is different: `SetMusicVolume` is a real mutation that
+## sticks, so this is the level `init!` starts at and a restart returns to.
+music_volume : F32
+music_volume = 0.13
+
+## Where the music is ducked to once the exit is reached, so the win sting sits
+## on top of it.
+music_won_volume : F32
+music_won_volume = 0.08
+
 fallback_spawn : Math.Vec2
 fallback_spawn = { x: -560, y: -360 }
 
@@ -373,7 +411,7 @@ burst_duration = 0.36
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		characters = Assets.load_texture!(characters_path)?
 		tiles = Assets.load_texture!(tiles_path)?
 		raw_map = Tilemap.load_tmx!(top_down_map_path)?
@@ -454,14 +492,10 @@ make_sounds! = || {
 	sparkle = make_sound!(Sine, 980, 1620, 140, 0.36)?
 	music = Audio.load_music!(music_path)?
 
-	collect.set_volume!(0.58)
-	hurt.set_volume!(0.55)
-	win.set_volume!(0.48)
-	lose.set_volume!(0.58)
-	gate.set_volume!(0.46)
-	dash.set_volume!(0.3)
-	sparkle.set_volume!(0.16)
-	music.set_volume!(0.13)
+	# Only the music sets a volume here. Every effect is played through a
+	# `Playback` that states its own, so setting one now would be a second
+	# source of truth that the next action overwrites anyway.
+	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
@@ -677,12 +711,12 @@ hazard_color = |id|
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Host -> Math.Vec2
-input_axis = |host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
-	up = host.key_down(KeyUp) or host.key_down(KeyW)
-	down = host.key_down(KeyDown) or host.key_down(KeyS)
+input_axis : Input.Snapshot -> Math.Vec2
+input_axis = |input| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
+	up = input.key_down(KeyUp) or input.key_down(KeyW)
+	down = input.key_down(KeyDown) or input.key_down(KeyS)
 
 	{ x: axis(left, right), y: axis(up, down) }
 }
@@ -758,9 +792,6 @@ find_hit_spark = |sparks, player_circle, index|
 			}
 		Err(_) => Err(NoSpark)
 	}
-
-play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond sound.play!() else {}
 
 pan_for_world_x : F32 -> F32
 pan_for_world_x = |x| Math.clamp((x - world_left) / (world_right - world_left) * 2 - 1, -1, 1)
@@ -921,8 +952,8 @@ step_events = |dash_started, collected, gate_opened, escaped, damaged, damage_st
 		),
 	)
 
-advance_playing : Level, World, World.StepInput -> World.StepResult
-advance_playing = |level, world, input| {
+advance_world : Level, World, World.StepInput -> World.StepResult
+advance_world = |level, world, input| {
 	moving = is_moving(input.raw_dir)
 	dash_started = input.dash_pressed and world.player.dash_ready()
 	dash_active = dash_started or world.player.dash_active()
@@ -961,86 +992,126 @@ advance_playing = |level, world, input| {
 	}
 }
 
-play_step_events! : Model, World.StepResult => {}
-play_step_events! = |model, result| {
+## Turn a cycle's world events into the sound actions they ask for.
+##
+## Pure, because `update` is: nothing is played here, each event just names the
+## playback it wants. The pan and pitch that used to be written immediately
+## before a `play!` become that same sound's `Playback` parameters, so a
+## parameter can no longer be left behind on the wrong sound -- note that a
+## collected spark pans `collect` but pitches `sparkle`.
+play_step_events : Model, World.StepResult -> List(Program.Action)
+play_step_events = |model, result| {
 	sounds = model.sounds
 
+	var $actions = []
 	for event in result.events {
-		match event {
-			DashStarted(pos) => {
-				sounds.dash.set_pan!(pan_for_world_x(pos.x))
-				sounds.dash.set_pitch!(0.95 + U64.to_f32(model.world.score) * 0.015)
-				sounds.dash.play!()
-			}
-			SparkCollected(spark) => {
-				sounds.collect.set_pan!(pan_for_world_x(spark.pos.x))
-				sounds.sparkle.set_pitch!(0.92 + U64.to_f32(result.world.score) * 0.045)
-				sounds.collect.play!()
-				play_if!(result.world.score % 3 == 0, sounds.sparkle)
-			}
-			GateOpened => sounds.gate.play!()
-			Escaped => {
-				sounds.music.set_volume!(0.08)
-				sounds.win.play!()
-			}
-			Damaged(state) => (if state == GameOver sounds.lose else sounds.hurt).play!()
-		}
+		event_actions =
+			match event {
+				DashStarted(pos) => [
+					sounds.dash
+						.playback()
+						.with_volume(dash_volume)
+						.with_pan(pan_for_world_x(pos.x))
+						.with_pitch(0.95 + U64.to_f32(model.world.score) * 0.015)
+						.play(),
+				]
+				SparkCollected(spark) => {
+					collect = sounds.collect.playback().with_volume(collect_volume).with_pan(pan_for_world_x(spark.pos.x)).play()
+					sparkle = sounds.sparkle.playback().with_volume(sparkle_volume).with_pitch(0.92 + U64.to_f32(result.world.score) * 0.045).play()
+					if result.world.score % 3 == 0 [collect, sparkle] else [collect]
+				}
+				GateOpened => [sounds.gate.playback().with_volume(gate_volume).play()]
+				Escaped => [sounds.music.set_volume(music_won_volume), sounds.win.playback().with_volume(win_volume).play()]
+				Damaged(state) =>
+					if state == GameOver {
+						[sounds.lose.playback().with_volume(lose_volume).play()]
+					} else {
+						[sounds.hurt.playback().with_volume(hurt_volume).play()]
+					}
+				}
+
+		$actions = List.concat($actions, event_actions)
 	}
+	$actions
 }
 
-advance_playing! : Model, Host => Model
-advance_playing! = |model, host| {
-	result = advance_playing(
+## One cycle of play: the next model together with the actions it wants run.
+##
+## The actions travel back with the model rather than being fired here, and the
+## caller concatenates them as it unwinds.
+##
+## The seconds to advance by are a plain parameter rather than a whole
+## `Time.Frame`: only the elapsed time is used, so the caller stays free to pass
+## a fixed step instead of whatever the last frame happened to take.
+advance_playing : Model, Input.Snapshot, F32 -> { model : Model, actions : List(Program.Action) }
+advance_playing = |model, input, dt| {
+	result = advance_world(
 		model.level,
 		model.world,
 		{
-			raw_dir: input_axis(host),
-			dash_pressed: host.key_pressed(KeySpace),
-			dt: host.frame_time,
+			raw_dir: input_axis(input),
+			dash_pressed: input.key_pressed(KeySpace),
+			dt,
 		},
 	)
-	play_step_events!(model, result)
-	{ ..model, world: result.world }
+
+	{
+		model: { ..model, world: result.world },
+		actions: play_step_events(model, result),
+	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+## Space restarts from either end state, restoring the music to the level
+## `Escaped` ducked it away from.
+restart_on_space : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+restart_on_space = |model, input|
+	if input.key_pressed(KeySpace) {
+		{
+			model: new_game(model.characters, model.tiles, model.level, model.sounds),
+			actions: [model.sounds.music.set_volume(music_volume)],
+		}
+	} else {
+		{ model, actions: [] }
 	}
 
-	next = match model.world.state {
-		Playing => advance_playing!(model, host)
-		Won =>
-			if host.key_pressed(KeySpace) {
-				model.sounds.music.set_volume!(0.13)
-				new_game(model.characters, model.tiles, model.level, model.sounds)
-			} else {
-				model
-			}
-		GameOver =>
-			if host.key_pressed(KeySpace) {
-				model.sounds.music.set_volume!(0.13)
-				new_game(model.characters, model.tiles, model.level, model.sounds)
-			} else {
-				model
-			}
-		}
+## No `!`: the sounds this frame plays and the exit Escape asks for are returned
+## as actions, and the platform applies them in order before `render!`.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	camera = Camera.follow(shaken_target(next.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
+	next = match model.world.state {
+		Playing => advance_playing(model, input, step.time.elapsed_seconds)
+		Won => restart_on_space(model, input)
+		GameOver => restart_on_space(model, input)
+	}
+
+	Ok({
+		model: next.model,
+		actions: List.concat(exit_actions, next.actions),
+		tasks: [],
+	})
+}
+
+## The camera follows the (shaken) player position, so it is a pure function of
+## the model and is derived here rather than stored.
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! = |model, frame| {
+	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x071018))
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, next.level, next.characters, next.tiles, next.world, viewport)
+			draw_world!(world_frame, model.level, model.characters, model.tiles, model.world, viewport)
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, next.level, next.world)
+	draw_hud!(frame, model.level, model.world)
 
-	Ok(next)
+	Ok({})
 }
 
 shaken_target : World -> Math.Vec2
@@ -1373,6 +1444,6 @@ expect {
 }
 
 expect {
-	result = advance_playing(fallback_level, World.new(fallback_level), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
+	result = advance_world(fallback_level, World.new(fallback_level), { raw_dir: { x: 1, y: 0 }, dash_pressed: Bool.True, dt: 0.01 })
 	List.first(result.events) == Ok(DashStarted(fallback_spawn)) and result.world.player.dash_timer == dash_duration
 }

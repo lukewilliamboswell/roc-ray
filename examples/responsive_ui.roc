@@ -3,9 +3,10 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
 import rr.Mouse
+import rr.Program
 import rr.Text
 
 Selection := [Display, AudioSettings, Controls].{
@@ -27,9 +28,12 @@ UiCopy : {
 Model : {
 	ui : Box(UiCopy),
 	selection : Selection,
+	screen : { width : I32, height : I32 },
+	mouse : Math.Vec2,
+	timestamp_nanos : U64,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -44,7 +48,7 @@ init! = App.init(
 	# raylib and own shutdown ourselves.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_host|
+	|_startup|
 		Ok({
 			ui: Box.box({
 				title: Text.from("Settings").size(38).prepare!()?,
@@ -58,6 +62,9 @@ init! = App.init(
 				help: Text.from("Arrow keys or click to select | ESC does nothing | Q quits").size(16).prepare!()?,
 			}),
 			selection: Display,
+			screen: { width: 960, height: 640 },
+			mouse: { x: 0, y: 0 },
+			timestamp_nanos: 0,
 		}),
 )
 
@@ -77,17 +84,17 @@ next_selection = |selection|
 		Controls => Display
 	}
 
-keyboard_selection : Selection, Host -> Selection
-keyboard_selection = |selection, host|
-	if host.key_pressed(KeyUp) {
+keyboard_selection : Selection, Input.Snapshot -> Selection
+keyboard_selection = |selection, input|
+	if input.key_pressed(KeyUp) {
 		previous_selection(selection)
-	} else if host.key_pressed(KeyDown) {
+	} else if input.key_pressed(KeyDown) {
 		next_selection(selection)
-	} else if host.key_pressed(Key1) {
+	} else if input.key_pressed(Key1) {
 		Display
-	} else if host.key_pressed(Key2) {
+	} else if input.key_pressed(Key2) {
 		AudioSettings
-	} else if host.key_pressed(Key3) {
+	} else if input.key_pressed(Key3) {
 		Controls
 	} else {
 		selection
@@ -144,17 +151,23 @@ draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, time
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ..])
-render! = |model, host, frame| {
-	# With `with_exit_key(NoExitKey)` no key closes the window on its own, so
-	# the app decides. Escape is left free for the UI to use.
-	if host.key_pressed(KeyQ) {
-		host.exit!(0)
-	}
+## Layout is a pure function of the window size, so `update` (deciding what the
+## pointer is over) and `render!` (drawing it) derive the same value rather than
+## storing it -- one less thing that can disagree with itself.
+Layout : {
+	margin : F32,
+	screen_h : F32,
+	nav : Math.Rect,
+	preview : Math.Rect,
+	display_bounds : Math.Rect,
+	audio_bounds : Math.Rect,
+	controls_bounds : Math.Rect,
+}
 
-	ui = Box.unbox(model.ui)
-	screen_w = F32.max(I32.to_f32(host.screen.width), 360)
-	screen_h = F32.max(I32.to_f32(host.screen.height), 360)
+layout_for : { width : I32, height : I32 } -> Layout
+layout_for = |screen| {
+	screen_w = F32.max(I32.to_f32(screen.width), 360)
+	screen_h = F32.max(I32.to_f32(screen.height), 360)
 	compact = screen_w < 700
 	margin = if compact 16 else 30
 	content_top = 104
@@ -164,43 +177,74 @@ render! = |model, host, frame| {
 	nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
 	preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
 	item_w = nav.width - 24
-	display_bounds = Math.rect(nav.x + 12, nav.y + 14, item_w, 46)
-	audio_bounds = Math.rect(nav.x + 12, nav.y + 66, item_w, 46)
-	controls_bounds = Math.rect(nav.x + 12, nav.y + 118, item_w, 46)
 
-	mouse = host.mouse.position()
-	hover_display = display_bounds.contains(mouse)
-	hover_audio = audio_bounds.contains(mouse)
-	hover_controls = controls_bounds.contains(mouse)
-	hovered = hover_display or hover_audio or hover_controls
-	host.set_cursor!(if hovered PointingHand else Arrow)
+	{
+		margin,
+		screen_h,
+		nav,
+		preview,
+		display_bounds: Math.rect(nav.x + 12, nav.y + 14, item_w, 46),
+		audio_bounds: Math.rect(nav.x + 12, nav.y + 66, item_w, 46),
+		controls_bounds: Math.rect(nav.x + 12, nav.y + 118, item_w, 46),
+	}
+}
 
-	from_keyboard = keyboard_selection(model.selection, host)
-	selection = if host.mouse.button_pressed(Left) and hover_display {
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+
+	# Layout follows the window, pointing follows the mouse, and the preview
+	# animates on the clock -- three separate observations off one step.
+	view = layout_for(step.window.size)
+	mouse = input.mouse.position()
+	hover_display = view.display_bounds.contains(mouse)
+	hover_audio = view.audio_bounds.contains(mouse)
+	hover_controls = view.controls_bounds.contains(mouse)
+	cursor = Mouse.set_cursor(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+
+	from_keyboard = keyboard_selection(model.selection, input)
+	selection = if input.mouse.button_pressed(Left) and hover_display {
 		Display
-	} else if host.mouse.button_pressed(Left) and hover_audio {
+	} else if input.mouse.button_pressed(Left) and hover_audio {
 		AudioSettings
-	} else if host.mouse.button_pressed(Left) and hover_controls {
+	} else if input.mouse.button_pressed(Left) and hover_controls {
 		Controls
 	} else {
 		from_keyboard
 	}
 
+	Ok({
+		model: { ..model, selection, screen: step.window.size, mouse, timestamp_nanos: step.time.timestamp_nanos },
+		# With `with_exit_key(NoExitKey)` no key closes the window on its
+		# own, so the app decides. Escape is left free for the UI to use.
+		actions: if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
+		tasks: [],
+	})
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
+render! = |model, frame| {
+	ui = Box.unbox(model.ui)
+	view = layout_for(model.screen)
+	hover_display = view.display_bounds.contains(model.mouse)
+	hover_audio = view.audio_bounds.contains(model.mouse)
+	hover_controls = view.controls_bounds.contains(model.mouse)
+
 	frame.clear!(Color.from_hex_rgb(0x090f1c))
-	ui.title.draw!(frame, { pos: { x: margin, y: 24 }, color: Color.white, align: Text.align_top_left })
-	ui.subtitle.draw!(frame, { pos: { x: margin, y: 70 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
-	frame.rounded_rectangle!({ x: nav.x, y: nav.y, width: nav.width, height: nav.height, radius: 14, segments: 8, style: Draw.filled(Color.from_hex_rgb(0x111a2b)) })
-	draw_menu_item!(frame, display_bounds, ui.display, selection == Display, hover_display)
-	draw_menu_item!(frame, audio_bounds, ui.audio, selection == AudioSettings, hover_audio)
-	draw_menu_item!(frame, controls_bounds, ui.controls, selection == Controls, hover_controls)
+	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: Color.white, align: Text.align_top_left })
+	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
+	frame.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled(Color.from_hex_rgb(0x111a2b)) })
+	draw_menu_item!(frame, view.display_bounds, ui.display, model.selection == Display, hover_display)
+	draw_menu_item!(frame, view.audio_bounds, ui.audio, model.selection == AudioSettings, hover_audio)
+	draw_menu_item!(frame, view.controls_bounds, ui.controls, model.selection == Controls, hover_controls)
 	frame.with_scissor!(
-		preview,
+		view.preview,
 		|clipped_frame| {
-			draw_preview!(clipped_frame, preview, selection, ui, host.screen.width, host.screen.height, host.timestamp_nanos)
+			draw_preview!(clipped_frame, view.preview, model.selection, ui, model.screen.width, model.screen.height, model.timestamp_nanos)
 			Ok({})
 		},
 	)?
-	ui.help.draw!(frame, { pos: { x: margin, y: screen_h - 24 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_bottom_left })
+	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_bottom_left })
 
-	Ok({ ..model, selection })
+	Ok({})
 }

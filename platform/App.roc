@@ -7,8 +7,10 @@
 ## that its receivers appear in the generated API docs -- `roc docs` attaches
 ## associated items to the module that declares the nominal, and an alias to an
 ## unexposed module documents nothing.
-import Host
+import HostHost
 import Keys
+import Mouse
+import MouseHost
 import rrt.Capture as RrtCapture
 
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
@@ -179,10 +181,129 @@ App := [].{
 		recording = |cfg| cfg.recording
 	}
 
+	## Opaque, zero-sized authority supplied only while the host is running
+	## `init!`, the way `Draw.Frame` is supplied only during `render!`.
+	##
+	## This is where the platform's one-shot system effects live. It is
+	## deliberately *authority only* and carries no observations: there is no
+	## input, window or timing here, because nothing has been sampled yet when
+	## it is handed over. Seed a model with `Input.empty` and let the first
+	## `Step` supply the rest.
+	##
+	## Once the app is running, a pure `update` cannot call any of these. It
+	## returns a `Program.Action` or a `Program.Task` instead, and the platform
+	## performs the effect on its behalf.
+	Startup :: HostHost.Startup.{
+
+		## Wrap the host's startup token. Internal to the platform adapter.
+		from_host : HostHost.Startup -> Startup
+		from_host = |startup| Startup.(startup)
+
+		## Exit the application with the given exit code.
+		## The exit happens after startup completes to allow proper cleanup.
+		exit! : Startup, I32 => {}
+		exit! = |_startup, code| HostHost.exit!(code)
+
+		## Read an environment variable by key.
+		## Returns Ok with the value if found, or Err NotFound if not set.
+		read_env! : Startup, Str => Try(Str, [NotFound, ..])
+		read_env! = |_startup, key|
+			match HostHost.read_env!(key) {
+				Ok(value) => Ok(value)
+				Err(NotFound) => Err(NotFound)
+			}
+
+		## Read a UTF-8 text file from disk.
+		## Receiver form: `startup.read_file!(path)`.
+		read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
+		read_file! = |_startup, path| {
+			result = HostHost.read_file!(path)
+			if result.ok {
+				Ok(result.contents)
+			} else if result.err == 1 {
+				Err(NotFound)
+			} else {
+				Err(ReadFailed)
+			}
+		}
+
+		## Get a random integer in the range [min, max] (both endpoints included).
+		## The generator is seeded once at startup, so sequences differ between runs.
+		## Derive other ranges/floats from this, e.g. a random direction with
+		## `if startup.random_i32!(0, 1) == 0 -1 else 1`.
+		random_i32! : Startup, I32, I32 => I32
+		random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
+
+		## Set the window/screen size to positive integer dimensions.
+		## Returns Err NotSupported on platforms that don't support window resizing.
+		## Receiver form: `startup.set_screen_size!(size)`.
+		set_screen_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
+		set_screen_size! = |_startup, size|
+			if size.width <= 0 or size.height <= 0 {
+				Err(InvalidSize)
+			} else {
+				match HostHost.set_screen_size!(size) {
+					Ok({}) => Ok({})
+					Err(NotSupported) => Err(NotSupported)
+				}
+			}
+
+		## Set the smallest window size the user can drag the window down to. Each
+		## negative dimension is clamped to `0`, which leaves that axis
+		## unconstrained. The minimum only applies to a resizable window, so pair it
+		## with `App.default.with_resizable(Bool.True)`.
+		## Receiver form: `startup.set_window_min_size!(size)`.
+		set_window_min_size! : Startup, { width : I32, height : I32 } => {}
+		set_window_min_size! = |_startup, size|
+			HostHost.set_window_min_size!({
+				width: if size.width > 0 size.width else 0,
+				height: if size.height > 0 size.height else 0,
+			})
+
+		## Set raylib's CPU-side frame-rate cap. Values at or below zero render
+		## uncapped. This neither selects a software renderer nor controls VSync.
+		## Receiver form: `startup.set_target_fps!(fps)`.
+		set_target_fps! : Startup, I32 => {}
+		set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
+
+		## Set which key closes the window, or `NoExitKey` to stop any key from
+		## closing it. raylib defaults to `ExitKey(KeyEscape)`. The window close
+		## button is unaffected either way, so an app that disables the exit key
+		## should still handle shutdown through `Program.exit`.
+		## Receiver form: `startup.set_exit_key!(NoExitKey)`.
+		set_exit_key! : Startup, ExitKey => {}
+		set_exit_key! = |_startup, key| HostHost.set_exit_key!(Keys.exit_key_code(key))
+
+		## Read UTF-8 text from the system clipboard.
+		## Returns `Err(Unavailable)` when the clipboard is empty, holds non-text
+		## content, or the windowing backend refuses the request -- the underlying
+		## platform does not distinguish these cases.
+		## Receiver form: `startup.get_clipboard_text!()`.
+		get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
+		get_clipboard_text! = |_startup|
+			match HostHost.get_clipboard_text!() {
+				Ok(text) => Ok(text)
+				Err(Unavailable) => Err(Unavailable)
+			}
+
+		## Replace the system clipboard contents with UTF-8 text.
+		## Receiver form: `startup.set_clipboard_text!(text)`.
+		set_clipboard_text! : Startup, Str => {}
+		set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
+
+		## Apply cursor visibility/capture atomically through one tagged operation.
+		set_cursor_mode! : Startup, Mouse.CursorMode => {}
+		set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
+
+		## Set the native operating-system cursor shape.
+		set_cursor! : Startup, Mouse.Cursor => {}
+		set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
+	}
+
 	## Effectful startup callback run after the host has initialized raylib and
 	## audio. Return `Ok(model)` to start the app, `Err(Exit(code))` to quit
 	## before the first frame, or let other initialization errors propagate.
-	InitCallback(model, errors) : Host => Try(model, [Exit(I64), ..errors])
+	InitCallback(model, errors) : Startup => Try(model, [Exit(I64), ..errors])
 
 	## Startup configuration paired with an effectful model initializer.
 	Init(model, errors) : {
@@ -212,6 +333,7 @@ App := [].{
 	## callback that creates the first model after raylib/audio are ready.
 	init : Config, InitCallback(model, errors) -> Init(model, errors)
 	init = |cfg, callback!| { config: cfg, run!: callback! }
+
 }
 
 default_width : I32

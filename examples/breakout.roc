@@ -4,7 +4,8 @@ import rr.App
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
+import rr.Program
 import rr.Math
 
 Brick : {
@@ -64,7 +65,7 @@ StepResult : {
 	paddle_hit : Bool,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -147,7 +148,7 @@ initial_lives = 3
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		Ok({
 			game: new_game_state(),
 			sounds: {
@@ -251,10 +252,10 @@ fresh_bricks = List.concat(
 	),
 )
 
-paddle_move_from_host : Host -> PaddleMove
-paddle_move_from_host = |host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
+paddle_move_from_input : Input.Snapshot -> PaddleMove
+paddle_move_from_input = |input| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
 
 	if left PaddleLeft else if right PaddleRight else PaddleStill
 }
@@ -267,11 +268,14 @@ paddle_move_dir = |move|
 		PaddleStill => 0
 	}
 
-frame_input : Host -> FrameInput
-frame_input = |host| {
-	paddle_move: paddle_move_from_host(host),
-	action_pressed: host.key_pressed(KeySpace),
-	dt: host.frame_time,
+## The step's own `dt` is a parameter rather than something read off a frame,
+## because the caller decides how much time this step covers -- a fixed step can
+## be handed straight in, which a sampled frame could not express.
+frame_input : Input.Snapshot, F32 -> FrameInput
+frame_input = |input, dt| {
+	paddle_move: paddle_move_from_input(input),
+	action_pressed: input.key_pressed(KeySpace),
+	dt,
 }
 
 paddle_rect : F32 -> Math.Rect
@@ -417,36 +421,54 @@ advance_game = |game, input|
 		GameOver => advance_finished(game, input)
 	}
 
-play_step_events! : Sounds, List(StepEvent) => {}
-play_step_events! = |sounds, events| {
-	for event in events {
-		match event {
-			GameStarted => sounds.start.play!()
-			WallHit => sounds.wall.play!()
-			BrickHit(_) => sounds.brick.play!()
-			LifeLost(_) => sounds.lose.play!()
-			WallCleared => sounds.start.play!()
-		}
-	}
+## One sound per event, in the order the step produced them.
+##
+## `List.map` rather than a fold: every event makes exactly one sound, so the
+## action list is the event list retyped, and two brick hits in one step stay
+## two brick sounds.
+step_event_actions : Sounds, List(StepEvent) -> List(Program.Action)
+step_event_actions = |sounds, events|
+	List.map(
+		events,
+		|event|
+			match event {
+				GameStarted => sounds.start.play()
+				WallHit => sounds.wall.play()
+				BrickHit(_) => sounds.brick.play()
+				LifeLost(_) => sounds.lose.play()
+				WallCleared => sounds.start.play()
+			},
+	)
+
+## `advance_game` was already a pure step returning events, and the events were
+## already interpreted effectfully -- so this split is mostly a matter of moving
+## the seam that was there all along. What used to be a `for` loop calling
+## `play!` is now the same loop building the actions `update` hands back.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+	dt = step.time.elapsed_seconds
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+
+	result = advance_game(model.game, frame_input(input, dt))
+	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
+
+	Ok({
+		model: { ..model, game: result.game },
+		actions: List.concat(
+			exit_actions,
+			List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
+		),
+		tasks: [],
+	})
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
-
-	result = advance_game(model.game, frame_input(host))
-	if result.paddle_hit {
-		model.sounds.paddle.play!()
-	}
-	play_step_events!(model.sounds, result.events)
-	next = { ..model, game: result.game }
-
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.ray_white)
-	draw_game!(frame, next.game)
+	draw_game!(frame, model.game)
 
-	Ok(next)
+	Ok({})
 }
 
 draw_brick! : Draw.Frame, Brick => {}

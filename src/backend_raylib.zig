@@ -355,6 +355,18 @@ pub fn updateTexture(texture: Texture, pixels: []const Color) void {
     rl.UpdateTexture(texture, pixels.ptr);
 }
 
+/// One rectangle of a texture. `area` is in pixels and must lie inside it;
+/// raylib does no bounds checking of its own, so the caller does.
+pub fn updateTextureRegion(texture: Texture, area: struct { x: i32, y: i32, width: i32, height: i32 }, pixels: []const Color) void {
+    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
+    rl.UpdateTextureRec(texture, .{
+        .x = @floatFromInt(area.x),
+        .y = @floatFromInt(area.y),
+        .width = @floatFromInt(area.width),
+        .height = @floatFromInt(area.height),
+    }, pixels.ptr);
+}
+
 /// Set a texture's scaling filter from the Roc enum code.
 pub fn setTextureFilter(texture: Texture, code: u8) void {
     const filter: c_int = switch (code) {
@@ -1451,6 +1463,16 @@ pub fn getScreenWidth() c_int {
 /// Get screen height.
 pub fn getScreenHeight() c_int {
     return rl.GetScreenHeight();
+}
+
+/// Whether the window currently has keyboard input focus.
+pub fn isWindowFocused() bool {
+    return rl.IsWindowFocused();
+}
+
+/// Whether the window is currently minimized.
+pub fn isWindowMinimized() bool {
+    return rl.IsWindowMinimized();
 }
 
 /// Get framebuffer width in pixels, which exceeds the screen width on HiDPI.

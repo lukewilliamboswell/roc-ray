@@ -4,15 +4,15 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Program
 import rr.Text
 
 ## Render an animated bar chart to a file, with no runtime capture code.
 ##
 ## The recording is declared in the startup config, so the host arms it before
 ## the first frame and finalizes it on exit. Because it asks for `FixedStep`
-## timing, `host.frame_time` is exactly 1/25s every frame no matter how long the
-## readback actually took -- so the animation in the file is smooth and
+## timing, `step.time.elapsed_seconds` is exactly 1/25s every frame no matter how
+## long the readback actually took -- so the animation in the file is smooth and
 ## identical between runs, even though capturing stalls the GPU.
 ##
 ## `with_visible(Bool.False)` keeps the window off screen while still rendering
@@ -30,7 +30,7 @@ Model : {
 	status : Text.Prepared,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 bar_count : U64
 bar_count = 12
@@ -58,7 +58,7 @@ init! = App.init(
 					.with_timing(FixedStep),
 			),
 		),
-	|_host|
+	|_startup|
 		Ok({
 			elapsed: 0,
 			title: Text.from("Recording a plot").size(28).prepare!()?,
@@ -66,26 +66,36 @@ init! = App.init(
 		}),
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	elapsed = model.elapsed + host.frame_time
+## Elapsed time advances on the tick rather than inside the draw, so the plot
+## is a pure function of the model when `render!` runs.
+##
+## The recording state arrives on the step rather than being asked for: a pure
+## `update` cannot call `Capture.status!`, and the host samples it onto every
+## cycle anyway.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	# The host finalizes the file itself once the recording reaches its frame
+	# cap, which leaves the session idle. That is the signal there is nothing
+	# left to capture, so shut down.
+	actions =
+		match step.capture {
+			Idle => [Program.exit(0)]
+			Failed(_) => [Program.exit(1)]
+			Active(_) => []
+		}
 
+	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: [] })
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
 	model.status.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
 
-	draw_bars!(frame, elapsed)
+	draw_bars!(frame, model.elapsed)
 
-	# The host finalizes the file itself once the recording reaches its frame
-	# cap, which leaves the session idle. That is the signal there is nothing
-	# left to capture, so shut down.
-	match Capture.status!() {
-		Idle => host.exit!(0)
-		Failed(_) => host.exit!(1)
-		Active(_) => {}
-	}
-
-	Ok({ ..model, elapsed: elapsed })
+	Ok({})
 }
 
 draw_bars! : Draw.Frame, F32 => {}

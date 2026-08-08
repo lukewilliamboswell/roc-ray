@@ -41,6 +41,53 @@ Audio := [].{
 		## Set stereo pan, clamped by the host to -1 through 1.
 		set_pan! : Sound, F32 => {}
 		set_pan! = |sound, pan| AudioHost.set_sound_pan!(sound.resource, pan)
+
+		## Play this sound at its default volume, pitch, and pan, as an action a
+		## pure `update` can return. Receiver form: `sound.play()`.
+		play : Sound -> [PlaySound(Playback), ..]
+		play = |sound| PlaySound(sound.playback())
+
+		## The settings this sound plays at by default, so a `PlaySound` action
+		## can adjust one of them without spelling out the rest:
+		## `sound.playback().with_pitch(0.8).play()`.
+		playback : Sound -> Playback
+		playback = |sound| Playback.({ sound: sound, volume: 1, pitch: 1, pan: 0 })
+	}
+
+	## A sound together with the settings it should be played at.
+	##
+	## One value rather than three separate actions: volume, pitch, and pan are
+	## applied and playback starts, in that order, with no way for a caller to
+	## get the ordering wrong or to leave a pitch behind on the next play.
+	Playback := { sound : Sound, volume : F32, pitch : F32, pan : F32 }.{
+
+		## Volume for this play, clamped by the host to 0 through 1.
+		with_volume : Playback, F32 -> Playback
+		with_volume = |Playback.(settings), volume| Playback.({ ..settings, volume: volume })
+
+		## Pitch multiplier for this play. Non-positive values are clamped.
+		with_pitch : Playback, F32 -> Playback
+		with_pitch = |Playback.(settings), pitch| Playback.({ ..settings, pitch: pitch })
+
+		## Stereo pan for this play, clamped by the host to -1 through 1.
+		with_pan : Playback, F32 -> Playback
+		with_pan = |Playback.(settings), pan| Playback.({ ..settings, pan: pan })
+
+		## Turn these settings into an action. Receiver form: `settings.play()`.
+		play : Playback -> [PlaySound(Playback), ..]
+		play = |settings| PlaySound(settings)
+
+		## Apply the settings and start playback.
+		##
+		## The platform calls this to service a `PlaySound` action; an effectful
+		## context such as `init!` can call it directly.
+		play! : Playback => {}
+		play! = |Playback.(settings)| {
+			settings.sound.set_volume!(settings.volume)
+			settings.sound.set_pitch!(settings.pitch)
+			settings.sound.set_pan!(settings.pan)
+			settings.sound.play!()
+		}
 	}
 
 	## Host-owned streamed music. The platform updates active streams each frame.
@@ -93,6 +140,11 @@ Audio := [].{
 		## Current playback position in seconds.
 		time_played! : Music => F32
 		time_played! = |music| AudioHost.music_time_played!(music.resource)
+
+		## Set stream volume as an action a pure `update` can return, clamped by
+		## the host to 0 through 1. Receiver form: `music.set_volume(0.13)`.
+		set_volume : Music, F32 -> [SetMusicVolume({ music : Music, volume : F32 }), ..]
+		set_volume = |music, volume| SetMusicVolume({ music: music, volume: volume })
 	}
 
 	## Procedural waveform used by `gen_sound!`.

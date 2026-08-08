@@ -2,7 +2,7 @@ app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Draw
-import rr.Host
+import rr.Program
 
 Model : {}
 
@@ -34,10 +34,13 @@ transport = {
 	record_quality: 1,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_host| Ok({}))
+init! = App.init(App.default, |_startup| Ok({}))
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, _host, _frame| Ok(model)
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, _step| Ok({ model, actions: [], tasks: [] })
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |_model, _frame| Ok({})

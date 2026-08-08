@@ -2,7 +2,7 @@
 
 Tests whether RocRay's public data types can live in an ordinary Roc package
 that both the platform and reusable third-party packages depend on. Without
-this, any pure `Host`-to-framework translation is stuck inside the application,
+this, any pure snapshot-to-framework translation is stuck inside the application,
 because a package cannot import from the app's chosen platform.
 
 The platform depends on `types/` and re-exports each moved module under the
@@ -27,9 +27,9 @@ pure whatever shape it takes.
 
 - `input_adapter/` — a package depending **only** on `roc-ray-types`, never on
   the platform.
-- `app.roc` — runs on the platform and passes it the platform's `Host`,
-  `host.mouse`, `host.gamepads`, and a re-exported `KeyboardKey`, then feeds the
-  returned key back into `rr.Keys.key_code`.
+- `app.roc` — runs on the platform and passes it the platform's
+  `Input.Snapshot`, `input.mouse`, `input.gamepads`, and a re-exported
+  `KeyboardKey`, then feeds the returned key back into `rr.Keys.key_code`.
 
 It compiles only if those are the same nominal types on both sides. Give
 `input_adapter` a look-alike local key type instead and it fails, so this is

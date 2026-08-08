@@ -146,10 +146,11 @@ resources.
 
 ### Snapshot input once per frame
 
-Keyboard, mouse, gamepad, text, timing, and screen information are sampled into
-`Host`. Prefer pure queries over repeated host calls. Views such as a connected
-gamepad belong to that snapshot and should be queried immediately rather than
-stored in the model.
+Keyboard, mouse, gamepad and text state is sampled into `Input.Snapshot`,
+window geometry into `Window.Snapshot`, and timing into `Time.Frame`; one step
+carries all three. Prefer pure queries over repeated host calls. Views such as a
+connected gamepad belong to that snapshot and should be queried immediately
+rather than stored in the model.
 
 Snapshot lists are designed for in-place reuse while uniquely owned. Retaining
 an old snapshot can trigger copy-on-write on the next frame, so derive ordinary

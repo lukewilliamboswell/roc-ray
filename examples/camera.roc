@@ -4,18 +4,20 @@ import rr.App
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
+import rr.Program
 import rr.Text
 
 Model : {
 	player : Math.Vec2,
 	zoom : F32,
 	rotation : F32,
+	mouse : Math.Vec2,
 	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -38,11 +40,12 @@ world_bottom = 1200
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
-	|_host|
+	|_startup|
 		Ok({
 			player: { x: 400, y: 300 },
 			zoom: 1,
 			rotation: 0,
+			mouse: { x: 0, y: 0 },
 			hud: Box.box({
 				title: Text.from("Camera world").size(24).prepare!()?,
 				subtitle: Text.from("world-space draw + screen-space HUD").size(18).prepare!()?,
@@ -54,50 +57,60 @@ init! = App.init(
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-move_player : Math.Vec2, Host -> Math.Vec2
-move_player = |player, host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
-	up = host.key_down(KeyUp) or host.key_down(KeyW)
-	down = host.key_down(KeyDown) or host.key_down(KeyS)
+## Movement is input plus a duration, so that is exactly what it asks for: the
+## sampled devices, and the seconds the caller wants integrated over.
+move_player : Math.Vec2, Input.Snapshot, F32 -> Math.Vec2
+move_player = |player, input, dt| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
+	up = input.key_down(KeyUp) or input.key_down(KeyW)
+	down = input.key_down(KeyDown) or input.key_down(KeyS)
 
 	speed = 360
-	dt = host.frame_time
 	{
 		x: Math.clamp(player.x + axis(left, right) * speed * dt, world_left + 40, world_right - 40),
 		y: Math.clamp(player.y + axis(up, down) * speed * dt, world_top + 40, world_bottom - 40),
 	}
 }
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+	dt = step.time.elapsed_seconds
 
-	player = move_player(model.player, host)
-	zoom = Math.clamp(model.zoom + host.mouse.wheel * 0.1, 0.5, 2.5)
-	rotation_dir = axis(host.key_down(KeyQ), host.key_down(KeyE))
-	rotation = if host.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * host.frame_time
+	player = move_player(model.player, input, dt)
+	zoom = Math.clamp(model.zoom + input.mouse.wheel * 0.1, 0.5, 2.5)
+	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
+	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	camera = (Camera.follow(player, { screen: { x: screen_w, y: screen_h }, zoom })?).with_rotation(rotation)?
-	mouse_world = camera.screen_to_world({ x: host.mouse.x, y: host.mouse.y })
+	Ok({
+		model: { ..model, player, zoom, rotation, mouse: input.mouse.position() },
+		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		tasks: [],
+	})
+}
+
+## The camera and both mouse projections are derived rather than stored: they
+## are a pure function of the model, so keeping them out of it means there is
+## one less thing that can disagree with itself.
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
+render! = |model, frame| {
+	camera = (Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom })?).with_rotation(model.rotation)?
+	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
-
-	next = { ..model, player, zoom, rotation }
 
 	frame.clear!(Color.ray_white)
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, player, mouse_world)
+			draw_world!(world_frame, model.player, mouse_world)
 			Ok({})
 		},
 	)?
 	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
-	draw_hud!(frame, next)
+	draw_hud!(frame, model)
 
-	Ok(next)
+	Ok({})
 }
 
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}

@@ -2,7 +2,9 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 
 import rr.Draw
 import rr.Color
-import rr.Host
+import rr.Input
+import rr.Program
+import rr.Random
 import rr.Audio
 import rr.App
 import rr.Math
@@ -10,7 +12,8 @@ import rr.Math
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
 # Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
-# Motion is in pixels/second scaled by host.frame_time (frame-rate independent).
+# Motion is in pixels/second scaled by the step's elapsed seconds (frame-rate
+# independent).
 # Serves leave at a random angle. When someone reaches `win_score`, the game
 # freezes on a win screen until SPACE is pressed (edge-detected, so holding it
 # doesn't instantly restart again).
@@ -28,6 +31,10 @@ Model : {
 	hit_sound : Audio.Sound,
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
+
+	## Simulation randomness lives in the model, so a serve is drawn on the
+	## frame that needs it and a run replays exactly from its seed.
+	rng : Random.Generator,
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
@@ -68,8 +75,13 @@ win_score = 5
 
 # A random vertical serve speed in px/second, so each serve leaves at a
 # different angle instead of the same predictable line.
-random_serve_vy! : Host => F32
-random_serve_vy! = |host| I32.to_f32(host.random_i32!(-160, 160))
+# Drawing from the model's own generator rather than an effect keeps the serve
+# immediate: the ball leaves on the frame that scored, not the frame after.
+random_serve_vy : Random.Generator -> { value : F32, next : Random.Generator }
+random_serve_vy = |rng| {
+	drawn = Random.in_range(rng, -160, 160)
+	{ value: I32.to_f32(drawn.value), next: drawn.next }
+}
 
 left_paddle : F32 -> Math.Rect
 left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
@@ -82,15 +94,19 @@ ball_circle = |x, y| Math.circle({ x, y }, ball_r)
 
 # A fresh round: ball centred, scores zeroed, served in a random direction.
 # Sound handles are carried over from the previous model (generated once).
-new_round! : Model, Host => Model
-new_round! = |model, host| {
-	serve_dir = if host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
+new_round : Model -> Model
+new_round = |model| {
+	# Direction then speed, drawn in that order from one generator, so the
+	# sequence is the same every time a given seed replays.
+	direction = Random.in_range(model.rng, 0, 1)
+	serve = random_serve_vy(direction.next)
 	{
 		..model,
 		ball_x: screen_w * 0.5,
 		ball_y: screen_h * 0.5,
-		ball_vx: serve_dir,
-		ball_vy: random_serve_vy!(host),
+		ball_vx: if direction.value == 0 (init_vx * -1) else init_vx,
+		ball_vy: serve.value,
+		rng: serve.next,
 		left_y: 250,
 		right_y: 250,
 		left_score: 0,
@@ -98,17 +114,20 @@ new_round! = |model, host| {
 	}
 }
 
-# Play a sound only when `cond` is true (a no-op otherwise).
-play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond sound.play!() else {}
+# The actions for a sound that should only be heard when `cond` is true.
+#
+# An empty list is the no-op: nothing plays, and the caller can concatenate it
+# unconditionally instead of branching around it.
+play_if : Bool, Audio.Sound -> List(Program.Action)
+play_if = |cond, sound| if cond [sound.play()] else []
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Pong"),
-	|host| {
-		# Generate the sound effects once; new_round! carries the handles forward.
+	|startup| {
+		# Generate the sound effects once; new_round carries the handles forward.
 		seed = {
 			ball_x: 0,
 			ball_y: 0,
@@ -121,46 +140,78 @@ init! = App.init(
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
+			# Entropy is asked for once, here. From this point randomness is
+			# model state that `update` advances without an effect.
+			rng: Random.from_seed(I32.to_u64_wrap(startup.random_i32!(0, 2_000_000_000))),
 		}
 
-		Ok(new_round!(seed, host))
+		Ok(new_round(seed))
 	},
 )
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
+## Whether the match is over is a function of the scores, so both `update` and
+## `render!` ask rather than storing a flag that could drift out of step.
+game_over : Model -> Bool
+game_over = |model| model.left_score >= win_score or model.right_score >= win_score
+
+## A frame's outcome: the model it produced, and the sounds it wants heard.
+##
+## Both steppers return this shape even when one of them can never make a sound,
+## so `update` joins them without caring which branch it took.
+Stepped : {
+	model : Model,
+	actions : List(Program.Action),
+}
+
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+
+	# Seconds since the previous frame - the basis for all motion this frame.
+	dt = step.time.elapsed_seconds
+
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+
+	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
+
+	Ok({
+		model: stepped.model,
+		actions: List.concat(exit_actions, stepped.actions),
+		tasks: [],
+	})
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
+	frame.clear!(Color.black)
+	draw_field!(frame, model)
+
+	if game_over(model) {
+		winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
+		frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
+		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
 	}
 
-	game_over = model.left_score >= win_score or model.right_score >= win_score
-	if game_over render_game_over!(model, host, frame) else render_playing!(model, host, frame)
+	Ok({})
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-render_game_over! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render_game_over! = |model, host, frame| {
-	restart = host.key_pressed(KeySpace)
-	winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
-
-	frame.clear!(Color.black)
-	draw_field!(frame, model)
-	frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
-	frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
-
-	Ok(if restart new_round!(model, host) else model)
+step_game_over : Model, Input.Snapshot -> Stepped
+step_game_over = |model, input| {
+	model: if input.key_pressed(KeySpace) new_round(model) else model,
+	actions: [],
 }
 
 # --- Active play ---
-render_playing! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render_playing! = |model, host, frame| {
-
-	# Seconds since the previous frame - the basis for all motion this frame.
-	dt = host.frame_time
+## Play is a function of the sampled input and how much time to advance by, so
+## the caller passes both rather than a whole frame the stepper would only take
+## one field from.
+step_playing : Model, Input.Snapshot, F32 -> Stepped
+step_playing = |model, input, dt| {
 
 	# --- Left paddle: player input (W up, S down) ---
-	w_down = host.key_down(KeyW)
-	s_down = host.key_down(KeyS)
+	w_down = input.key_down(KeyW)
+	s_down = input.key_down(KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
 	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 
@@ -199,12 +250,14 @@ render_playing! = |model, host, frame| {
 	out_left = nx - ball_r < 0
 	out_right = nx + ball_r > screen_w
 	# Draw randomness only when a new serve is actually needed.
-	serve_vy = if out_left or out_right random_serve_vy!(host) else vy
+	# The generator only advances when a serve is actually needed, so an idle
+	# rally does not consume draws.
+	serve = if out_left or out_right random_serve_vy(model.rng) else { value: vy, next: model.rng }
 
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny
 	final_vx = if out_left (init_vx * -1) else if out_right init_vx else vx
-	final_vy = if out_left serve_vy else if out_right serve_vy else vy
+	final_vy = if out_left serve.value else if out_right serve.value else vy
 
 	left_score = if out_right model.left_score + 1 else model.left_score
 	right_score = if out_left model.right_score + 1 else model.right_score
@@ -219,17 +272,22 @@ render_playing! = |model, host, frame| {
 		right_y: right_y,
 		left_score: left_score,
 		right_score: right_score,
+		rng: serve.next,
 	}
 
-	# Sound effects for this frame's events.
-	play_if!(hit_left or hit_right, model.hit_sound)
-	play_if!(hit_top or hit_bottom, model.wall_sound)
-	play_if!(out_left or out_right, model.score_sound)
-
-	frame.clear!(Color.black)
-	draw_field!(frame, next)
-
-	Ok(next)
+	# Sound effects for this frame's events, in the order they used to be played.
+	# The platform applies them before anything is drawn, so a paddle hit is
+	# still heard on the frame it happened.
+	{
+		model: next,
+		actions: List.concat(
+			play_if(hit_left or hit_right, model.hit_sound),
+			List.concat(
+				play_if(hit_top or hit_bottom, model.wall_sound),
+				play_if(out_left or out_right, model.score_sound),
+			),
+		),
+	}
 }
 
 # Draw the static scene (center line, paddles, ball, scores) for a model.

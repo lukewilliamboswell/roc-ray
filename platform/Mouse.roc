@@ -20,6 +20,58 @@ Mouse := [].{
 	## Standard mouse buttons sampled by the platform.
 	MouseButton : RrtMouse.MouseButton
 
+	## Cursor visibility and capture policy, applied atomically as one tagged
+	## operation by `Mouse.set_cursor_mode` or `startup.set_cursor_mode!`.
+	CursorMode : [Visible, Hidden, Locked]
+
+	## Flatten a cursor shape to the raylib code the host passes to
+	## `SetMouseCursor`, the way `Keys.exit_key_code` flattens an exit key.
+	##
+	## Apps do not need this: `Mouse.set_cursor(shape)` and
+	## `startup.set_cursor!` both take the shape itself. The platform uses it to
+	## apply a `SetCursor` action without having to keep a second copy of the
+	## numbering.
+	cursor_code : Cursor -> U8
+	cursor_code = |cursor|
+		match cursor {
+			Default => 0
+			Arrow => 1
+			IBeam => 2
+			Crosshair => 3
+			PointingHand => 4
+			ResizeEastWest => 5
+			ResizeNorthSouth => 6
+			ResizeNorthwestSoutheast => 7
+			ResizeNortheastSouthwest => 8
+			ResizeAll => 9
+			NotAllowed => 10
+		}
+
+	expect Mouse.cursor_code(Default) == 0
+	expect Mouse.cursor_code(PointingHand) == 4
+	expect Mouse.cursor_code(NotAllowed) == 10
+
+	## Flatten a cursor mode to the code the host applies. Apps take the tag
+	## itself; the platform uses this to apply a `SetCursorMode` action.
+	cursor_mode_code : CursorMode -> U8
+	cursor_mode_code = |mode|
+		match mode {
+			Visible => 0
+			Hidden => 1
+			Locked => 2
+		}
+
+	expect Mouse.cursor_mode_code(Visible) == 0
+	expect Mouse.cursor_mode_code(Locked) == 2
+
+	## Ask for the native cursor shape, as an action a pure `update` can return.
+	set_cursor : Cursor -> [SetCursor(Cursor), ..]
+	set_cursor = |cursor| SetCursor(cursor)
+
+	## Ask for cursor visibility/capture, as an action.
+	set_cursor_mode : CursorMode -> [SetCursorMode(CursorMode), ..]
+	set_cursor_mode = |mode| SetCursorMode(mode)
+
 	## Current cursor position in logical drawing coordinates.
 	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
 	position = RrtMouse.position

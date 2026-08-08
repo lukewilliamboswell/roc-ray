@@ -4,14 +4,14 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Program
 import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
 ##
-## `Capture.set_virtual_mouse!` replaces only what the host reports to
-## `render!`, so the widget code below is ordinary hover and hit-test logic
-## reading `host.mouse` -- it has no idea the pointer is scripted. That is the
+## `Capture.set_virtual_mouse!` replaces only what the host reports on the
+## step, so the widget code below is ordinary hover and hit-test logic
+## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
 ## fake one, so what you see in the GIF is what a real click would do.
 ##
@@ -23,6 +23,12 @@ Model : {
 	frame : U64,
 	pointer : { x : F32, y : F32 },
 	clicking : Bool,
+
+	## What `step.input.mouse` actually reported this frame, as distinct from the
+	## scripted `pointer` above. Hover and press styling are drawn from this,
+	## so the recording shows what the app was really told.
+	mouse : { x : F32, y : F32 },
+	held : Bool,
 	clicks : U64,
 	toggled : Bool,
 	slider : F32,
@@ -32,7 +38,7 @@ Model : {
 	counter_labels : List(Text.Prepared),
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
@@ -71,11 +77,13 @@ init! = App.init(
 					.with_cursor(DrawCursor),
 			),
 		),
-	|_host|
+	|_startup|
 		Ok({
 			frame: 0,
 			pointer: { x: 40, y: 300 },
 			clicking: Bool.False,
+			mouse: { x: 40, y: 300 },
+			held: Bool.False,
 			clicks: 0,
 			toggled: Bool.False,
 			slider: 0,
@@ -96,26 +104,29 @@ prepare_counter_labels! = |index, acc|
 		prepare_counter_labels!(index + 1, List.append(acc, label))
 	}
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, host, frame| {
-	# Drive the pointer for the *next* frame from the script, then read
-	# `host.mouse` exactly as any app would.
-	step = pointer_for_frame(model.frame)
-	Capture.set_virtual_mouse!(
-		if step.clicking Capture.clicking_at(step.pos) else Capture.at(step.pos),
-	)
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	input = step.input
+	# Drive the pointer for the *next* frame from the script.
+	pointer_step = pointer_for_frame(model.frame)
 
-	mouse = host.mouse.position()
+	# Where the pointer is *this* frame: the position commanded on the previous
+	# one, which the model already kept. Reading it back off `input.mouse` would
+	# work -- the host samples the scripted pointer into the step exactly as it
+	# does a hardware one -- but the app is the thing that scripted it, so it
+	# has no reason to ask the host what it already said.
+	mouse = model.pointer
 	over_increment = inside(mouse, increment_button)
 	over_toggle = inside(mouse, toggle_button)
 
-	# Ordinary edge-triggered click handling. The virtual pointer produces real
-	# pressed-this-frame bits, so this needs no special casing.
-	pressed = host.mouse.button_pressed(Left)
+	# Ordinary edge-triggered click handling. The virtual pointer
+	# produces real pressed-this-frame bits, so this needs no special
+	# casing.
+	pressed = input.mouse.button_pressed(Left)
 	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
 	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
 
-	held = host.mouse.button_down(Left)
+	held = input.mouse.button_down(Left)
 	slider =
 		if held and inside_slider(mouse) {
 			clamp_unit((mouse.x - slider_track.x) / slider_track.width)
@@ -123,32 +134,55 @@ render! = |model, host, frame| {
 			model.slider
 		}
 
+	# The scripted pointer is an action, so the platform installs it after this
+	# returns and before anything is drawn -- the same instant
+	# `Capture.set_virtual_mouse!` reached the host from inside an effectful
+	# update, and still a frame before the host samples it back.
+	pointer_action = Capture.set_virtual_mouse(
+		if pointer_step.clicking Capture.clicking_at(pointer_step.pos) else Capture.at(pointer_step.pos),
+	)
+	actions =
+		if model.frame >= recorded_frames {
+			[pointer_action, Program.exit(0)]
+		} else {
+			[pointer_action]
+		}
+
+	Ok({
+		model: {
+			..model,
+			frame: model.frame + 1,
+			pointer: pointer_step.pos,
+			clicking: pointer_step.clicking,
+			mouse: mouse,
+			held: held,
+			clicks: clicks,
+			toggled: toggled,
+			slider: slider,
+		},
+		actions: actions,
+		tasks: [],
+	})
+}
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |model, frame| {
+	over_increment = inside(model.mouse, increment_button)
+	over_toggle = inside(model.mouse, toggle_button)
+
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 60, y: 60 }, color: Color.white, align: Text.align_top_left })
 
-	draw_button!(frame, increment_button, over_increment, held and over_increment, model.increment_label)
-	draw_button!(frame, toggle_button, over_toggle, toggled, model.toggle_label)
-	draw_slider!(frame, slider)
+	draw_button!(frame, increment_button, over_increment, model.held and over_increment, model.increment_label)
+	draw_button!(frame, toggle_button, over_toggle, model.toggled, model.toggle_label)
+	draw_slider!(frame, model.slider)
 
-	when_counter = List.get(model.counter_labels, U64.to_u64(clicks))
-	match when_counter {
+	match List.get(model.counter_labels, U64.to_u64(model.clicks)) {
 		Ok(label) => label.draw!(frame, { pos: { x: 60, y: 100 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
 		Err(_) => {}
 	}
 
-	if model.frame >= recorded_frames {
-		host.exit!(0)
-	}
-
-	Ok({
-		..model,
-		frame: model.frame + 1,
-		pointer: step.pos,
-		clicking: step.clicking,
-		clicks: clicks,
-		toggled: toggled,
-		slider: slider,
-	})
+	Ok({})
 }
 
 ## Where the scripted pointer is on a given frame, and whether it is clicking.

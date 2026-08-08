@@ -2,7 +2,8 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 
 import rr.Draw
 import rr.Color
-import rr.Host
+import rr.Input
+import rr.Window
 import rr.Program
 import rr.Keys
 import rr.Mouse
@@ -17,7 +18,12 @@ Model : {
 
 	## The frame this view describes. An input inspector's whole job is to show
 	## the snapshot, so here the snapshot genuinely is the model.
-	host : Host,
+	##
+	## `init!` cannot supply one: `App.Startup` is authority, and nothing has
+	## been sampled before the first frame. `Input.empty` is that "nothing" as a
+	## value -- every list empty, the pointer at the origin, and every receiver
+	## answering `False` rather than crashing.
+	input : Input.Snapshot,
 }
 
 program = { init!, update, render! }
@@ -39,7 +45,7 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|host| Ok({ typed: "", clipboard_status: "clipboard idle", host: host }),
+	|_startup| Ok({ typed: "", clipboard_status: "clipboard idle", input: Input.empty }),
 )
 
 title : Str
@@ -73,27 +79,27 @@ ascii_typed = |codepoints|
 ## back -- becomes a task.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
+	input = step.input
 
-	ctrl_held = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
-	typed_this_frame = if ctrl_held "" else ascii_typed(host.text_input)
+	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
+	typed_this_frame = if ctrl_held "" else ascii_typed(input.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
 	# One chain, as before, so two shortcuts pressed together still resolve in
 	# this order -- it now yields the work to do alongside the new buffer.
-	clipboard = if ctrl_held and host.key_pressed(KeyC) {
-		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Host.set_clipboard_text(buffered)], tasks: [] }
-	} else if ctrl_held and host.key_pressed(KeyV) {
+	clipboard = if ctrl_held and input.key_pressed(KeyC) {
+		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: [] }
+	} else if ctrl_held and input.key_pressed(KeyV) {
 		# A read answers back, so it is a task: the pasted text is appended on
 		# the step that carries the answer rather than on this one.
 		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [ReadClipboard({ id: paste_id })] }
-	} else if ctrl_held and host.key_pressed(KeyX) {
+	} else if ctrl_held and input.key_pressed(KeyX) {
 		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
-	} else if ctrl_held and host.key_pressed(KeyE) {
+	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Host.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
-	} else if ctrl_held and host.key_pressed(KeyM) {
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Host.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
+		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
+	} else if ctrl_held and input.key_pressed(KeyM) {
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
 	} else {
 		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
 	}
@@ -116,17 +122,17 @@ update = |model, step| {
 	# they replace used to run.
 	actions =
 		List.join([
-			if host.key_pressed(KeyQ) [Program.exit(0)] else [],
-			if host.key_pressed(KeyH) [Host.set_cursor_mode(Hidden)] else [],
-			if host.key_pressed(KeyJ) [Host.set_cursor_mode(Visible)] else [],
-			if host.key_pressed(KeyK) [Host.set_cursor_mode(Locked)] else [],
-			if host.key_pressed(KeyL) [Host.set_cursor_mode(Visible)] else [],
+			if input.key_pressed(KeyQ) [Program.exit(0)] else [],
+			if input.key_pressed(KeyH) [Mouse.set_cursor_mode(Hidden)] else [],
+			if input.key_pressed(KeyJ) [Mouse.set_cursor_mode(Visible)] else [],
+			if input.key_pressed(KeyK) [Mouse.set_cursor_mode(Locked)] else [],
+			if input.key_pressed(KeyL) [Mouse.set_cursor_mode(Visible)] else [],
 			clipboard.actions,
-			[Host.set_cursor(if host.mouse.button_down(Left) Crosshair else Arrow)],
+			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
 		])
 
 	Ok({
-		model: { typed: typed, clipboard_status: clipboard_status, host: host },
+		model: { typed: typed, clipboard_status: clipboard_status, input: input },
 		actions: actions,
 		tasks: clipboard.tasks,
 	})
@@ -159,34 +165,34 @@ is_our_paste = |completion|
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	host = model.host
+	input = model.input
 
-	w_down = host.key_down(KeyW)
-	a_down = host.key_down(KeyA)
-	s_down = host.key_down(KeyS)
-	d_down = host.key_down(KeyD)
-	up_down = host.key_down(KeyUp)
-	left_down = host.key_down(KeyLeft)
-	down_down = host.key_down(KeyDown)
-	right_down = host.key_down(KeyRight)
-	one_down = host.key_down(Key1)
-	shift_down = host.key_down(KeyLeftShift) or host.key_down(KeyRightShift)
-	ctrl_down = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
-	escape_pressed = host.key_pressed(KeyEscape)
-	space_released = host.key_released(KeySpace)
-	mouse_left_pressed = host.mouse.button_pressed(Left)
-	mouse_left_released = host.mouse.button_released(Left)
-	mouse_position = host.mouse.position()
-	mouse_delta = host.mouse.delta()
-	wheel_delta = host.mouse.wheel_delta()
-	gamepad_input = match host.gamepad(One) {
+	w_down = input.key_down(KeyW)
+	a_down = input.key_down(KeyA)
+	s_down = input.key_down(KeyS)
+	d_down = input.key_down(KeyD)
+	up_down = input.key_down(KeyUp)
+	left_down = input.key_down(KeyLeft)
+	down_down = input.key_down(KeyDown)
+	right_down = input.key_down(KeyRight)
+	one_down = input.key_down(Key1)
+	shift_down = input.key_down(KeyLeftShift) or input.key_down(KeyRightShift)
+	ctrl_down = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
+	escape_pressed = input.key_pressed(KeyEscape)
+	space_released = input.key_released(KeySpace)
+	mouse_left_pressed = input.mouse.button_pressed(Left)
+	mouse_left_released = input.mouse.button_released(Left)
+	mouse_position = input.mouse.position()
+	mouse_delta = input.mouse.delta()
+	wheel_delta = input.mouse.wheel_delta()
+	gamepad_input = match input.gamepad(One) {
 		Connected(pad) => { connected: Bool.True, left_stick: pad.left_stick(), action_pressed: pad.button_pressed(FaceDown) }
 		Disconnected => { connected: Bool.False, left_stick: { x: 0, y: 0 }, action_pressed: Bool.False }
 	}
 	gamepad_connected = gamepad_input.connected
 	left_stick = gamepad_input.left_stick
 	gamepad_action_pressed = gamepad_input.action_pressed
-	text_entered = List.len(host.text_input) > 0
+	text_entered = List.len(input.text_input) > 0
 	mouse_moved = mouse_delta.x != 0 or mouse_delta.y != 0
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1

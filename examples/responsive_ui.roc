@@ -3,7 +3,7 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
 import rr.Mouse
 import rr.Program
@@ -48,7 +48,7 @@ init! = App.init(
 	# raylib and own shutdown ourselves.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_host|
+	|_startup|
 		Ok({
 			ui: Box.box({
 				title: Text.from("Settings").size(38).prepare!()?,
@@ -84,17 +84,17 @@ next_selection = |selection|
 		Controls => Display
 	}
 
-keyboard_selection : Selection, Host -> Selection
-keyboard_selection = |selection, host|
-	if host.key_pressed(KeyUp) {
+keyboard_selection : Selection, Input.Snapshot -> Selection
+keyboard_selection = |selection, input|
+	if input.key_pressed(KeyUp) {
 		previous_selection(selection)
-	} else if host.key_pressed(KeyDown) {
+	} else if input.key_pressed(KeyDown) {
 		next_selection(selection)
-	} else if host.key_pressed(Key1) {
+	} else if input.key_pressed(Key1) {
 		Display
-	} else if host.key_pressed(Key2) {
+	} else if input.key_pressed(Key2) {
 		AudioSettings
-	} else if host.key_pressed(Key3) {
+	} else if input.key_pressed(Key3) {
 		Controls
 	} else {
 		selection
@@ -191,31 +191,33 @@ layout_for = |screen| {
 
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
+	input = step.input
 
-	view = layout_for(host.screen)
-	mouse = host.mouse.position()
+	# Layout follows the window, pointing follows the mouse, and the preview
+	# animates on the clock -- three separate observations off one step.
+	view = layout_for(step.window.size)
+	mouse = input.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
-	cursor = Host.set_cursor(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+	cursor = Mouse.set_cursor(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
-	from_keyboard = keyboard_selection(model.selection, host)
-	selection = if host.mouse.button_pressed(Left) and hover_display {
+	from_keyboard = keyboard_selection(model.selection, input)
+	selection = if input.mouse.button_pressed(Left) and hover_display {
 		Display
-	} else if host.mouse.button_pressed(Left) and hover_audio {
+	} else if input.mouse.button_pressed(Left) and hover_audio {
 		AudioSettings
-	} else if host.mouse.button_pressed(Left) and hover_controls {
+	} else if input.mouse.button_pressed(Left) and hover_controls {
 		Controls
 	} else {
 		from_keyboard
 	}
 
 	Ok({
-		model: { ..model, selection, screen: host.screen, mouse, timestamp_nanos: host.timestamp_nanos },
+		model: { ..model, selection, screen: step.window.size, mouse, timestamp_nanos: step.time.timestamp_nanos },
 		# With `with_exit_key(NoExitKey)` no key closes the window on its
 		# own, so the app decides. Escape is left free for the UI to use.
-		actions: if host.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
+		actions: if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
 		tasks: [],
 	})
 }

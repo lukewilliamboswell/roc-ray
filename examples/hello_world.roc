@@ -8,7 +8,7 @@ import rr.Program
 import rr.Text
 
 ## Everything `render!` needs must live here now: it is handed no `Host`, so
-## anything read from input or the clock has to be recorded by `update!` first.
+## anything read from input or the clock has to be recorded by `update` first.
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
@@ -16,7 +16,7 @@ Model : {
 	accent_on : Bool,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -30,19 +30,18 @@ init! = App.init(
 		}),
 )
 
-## Fold one message into the model.
+## Fold one cycle of observations into the model.
 ##
-## Reading `host` here rather than in `render!` is the whole change: the frame
-## snapshot arrives as a message, so the host can record and replay it.
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+## No `!`: this is a pure function, so it cannot read input or exit by itself.
+## It is handed everything the host saw and returns the next model plus the work
+## it wants done -- here, an `Exit` action on the frame Escape is pressed.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
 	Ok({
 		model: { ..model, pointer: host.mouse.position(), accent_on: host.mouse.button_down(Left) },
-		commands: [],
+		actions: if host.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		tasks: [],
 	})
 }
 

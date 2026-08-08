@@ -31,7 +31,7 @@ Model : {
 	status : Text.Prepared,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 bar_count : U64
 bar_count = 12
@@ -69,18 +69,23 @@ init! = App.init(
 
 ## Elapsed time advances on the tick rather than inside the draw, so the plot
 ## is a pure function of the model when `render!` runs.
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+##
+## The recording state arrives on the step rather than being asked for: a pure
+## `update` cannot call `Capture.status!`, and the host samples it onto every
+## cycle anyway.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, which leaves the session idle. That is the signal there is nothing
 	# left to capture, so shut down.
-	match Capture.status!() {
-		Idle => step.input.exit!(0)
-		Failed(_) => step.input.exit!(1)
-		Active(_) => {}
-	}
+	actions =
+		match step.capture {
+			Idle => [Program.exit(0)]
+			Failed(_) => [Program.exit(1)]
+			Active(_) => []
+		}
 
-	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, commands: [] })
+	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: [] })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

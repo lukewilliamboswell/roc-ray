@@ -161,7 +161,7 @@ update = |model, step| {
 			slider: slider,
 		},
 		actions: actions,
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

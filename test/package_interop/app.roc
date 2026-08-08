@@ -76,7 +76,7 @@ update = |model, step| {
 			age: Events.age_seconds(started, step.time.timestamp_nanos),
 		},
 		actions: if input.key_pressed(KeyQ) [Program.exit(0)] else [],
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

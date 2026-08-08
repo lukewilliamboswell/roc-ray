@@ -218,7 +218,7 @@ update = |model, step| {
 		# With `with_exit_key(NoExitKey)` no key closes the window on its
 		# own, so the app decides. Escape is left free for the UI to use.
 		actions: if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

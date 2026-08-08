@@ -46,7 +46,7 @@ update = |model, step|
 	Ok({
 		model: { ..model, seconds: U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000 },
 		actions: [],
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])

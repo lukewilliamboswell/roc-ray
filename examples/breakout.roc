@@ -459,7 +459,7 @@ update = |model, step| {
 			exit_actions,
 			List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
 		),
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

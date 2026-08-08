@@ -88,20 +88,20 @@ update = |model, step| {
 	# One chain, as before, so two shortcuts pressed together still resolve in
 	# this order -- it now yields the work to do alongside the new buffer.
 	clipboard = if ctrl_held and input.key_pressed(KeyC) {
-		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: [] }
+		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: Program.no_tasks }
 	} else if ctrl_held and input.key_pressed(KeyV) {
 		# A read answers back, so it is a task: the pasted text is appended on
 		# the step that carries the answer rather than on this one.
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [ReadClipboard({ id: paste_id })] }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: Program.task(ReadClipboard({ id: paste_id })) }
 	} else if ctrl_held and input.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
+		{ typed: "", clipboard_status: "cleared", actions: [], tasks: Program.no_tasks }
 	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
+		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: Program.no_tasks }
 	} else if ctrl_held and input.key_pressed(KeyM) {
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: Program.no_tasks }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: Program.no_tasks }
 	}
 
 	paste = paste_outcome(step.completed)

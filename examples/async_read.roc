@@ -41,6 +41,14 @@ Model : {
 	## paying for a copy and a UTF-8 scan every frame for a value that changed
 	## once.
 	preview : PreviewState,
+
+	## Tasks this app wants started but the cycle would not carry.
+	##
+	## A cycle takes at most `Program.max_tasks_per_step`, so a work list the
+	## app does not control the size of has to live somewhere between frames.
+	## This app never actually overflows -- it asks for four tasks at most --
+	## but carrying the remainder is what the shape looks like when it does.
+	queued : List(Program.Task),
 	elapsed : F32,
 	title : Text.Prepared,
 }
@@ -111,6 +119,7 @@ init! = App.init(
 			refused: Waiting,
 			blob: Waiting,
 			preview: NoPreview,
+			queued: [],
 			elapsed: 0,
 			title: Text.from("Reading while the frame keeps moving").size(22).prepare!()?,
 		}),
@@ -160,7 +169,7 @@ update = |model, step| {
 
 	# Frame 0 issues all three reads. Returning them as tasks rather than
 	# calling blocking effects is what keeps this frame short.
-	tasks =
+	reads =
 		if step.time.frame_count == 0 {
 			[
 				ReadSmallFile({ id: small_id, path: small_path }),
@@ -171,6 +180,10 @@ update = |model, step| {
 			[]
 		}
 
+	# Anything a previous cycle could not carry goes first, so a deferred task
+	# is delayed rather than starved.
+	filled = Program.fill(List.join([model.queued, reads, preview_tasks]))
+
 	Ok({
 		model: {
 			..model,
@@ -178,10 +191,11 @@ update = |model, step| {
 			refused: next_refused,
 			blob: next_blob,
 			preview: preview,
+			queued: filled.deferred,
 			elapsed: model.elapsed + step.time.elapsed_seconds,
 		},
 		actions: if step.input.key_pressed(KeyEscape) List.append(releases, Program.exit(0)) else releases,
-		tasks: List.concat(tasks, preview_tasks),
+		tasks: filled.batch,
 	})
 }
 

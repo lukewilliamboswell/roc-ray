@@ -128,11 +128,15 @@ update = |model, step| {
 			[]
 		}
 
+	# A cycle carries at most `Program.max_tasks_per_step` tasks, and this one
+	# asks for at most two, so nothing is ever left over to defer.
 	tasks =
-		List.concat(
-			if escape_requested [Screenshot({ id: escape_id, path: "../escaped.png" })] else [],
-			if save_requested [Screenshot({ id: save_id, path: "scene.png" })] else [],
-		)
+		Program.fill(
+			List.concat(
+				if escape_requested [Screenshot({ id: escape_id, path: "../escaped.png" })] else [],
+				if save_requested [Screenshot({ id: save_id, path: "scene.png" })] else [],
+			),
+		).batch
 
 	next = match (escaped, saved) {
 		(Ok(text), _) => { ..model, result: text }

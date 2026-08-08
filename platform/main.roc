@@ -259,7 +259,7 @@ update_for_host! = |boxed_model, raw|
 	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
 		Ok(next) =>
 			match run_actions!(next.actions, 0) {
-				Ok({}) => Ok({ model: Box.box(next.model), tasks: List.map(next.tasks, Program.to_host) })
+				Ok({}) => Ok({ model: Box.box(next.model), tasks: next.tasks.to_host_list() })
 				Err(Exit(code)) => Err(code)
 				Err(_) => Err(-1)
 			}

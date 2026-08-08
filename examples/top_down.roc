@@ -1090,7 +1090,7 @@ update = |model, step| {
 	Ok({
 		model: next.model,
 		actions: List.concat(exit_actions, next.actions),
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

@@ -84,7 +84,7 @@ update = |model, step| {
 			Active(_) => []
 		}
 
-	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: [] })
+	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: Program.no_tasks })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

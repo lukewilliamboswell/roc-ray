@@ -177,7 +177,7 @@ update = |model, step| {
 	Ok({
 		model: stepped.model,
 		actions: List.concat(exit_actions, stepped.actions),
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

@@ -582,18 +582,32 @@ var last_wall_nanos: u64 = 0;
 
 /// How many tasks may be accepted but not yet answered.
 ///
-/// This is the only bound in the task system, and it is deliberately on
-/// *acceptance* rather than on delivery. A task is accepted only if a
+/// Bounds *acceptance* rather than delivery. A task is accepted only if a
 /// reservation is free, and it holds that reservation until its completion is
-/// staged. So the amount of deferred work one step can be handed is bounded
+/// staged. So the amount of deferred work the host is carrying is bounded
 /// without any completion ever being dropped -- which is what makes "every
 /// accepted task yields exactly one completion" a property of the code rather
 /// than a hope.
-///
-/// Refusing a task is not deferred work: it allocates nothing, does no I/O and
-/// touches no table, so refusals are not reserved. Their cost is proportional
-/// to the list the app itself submitted, which is the app's own budget to keep.
 const MAX_TASKS_IN_FLIGHT: usize = 32;
+
+/// How many tasks one step may hand over.
+///
+/// A second, separate budget, because it bounds a different thing. The
+/// reservation budget above bounds how much unanswered work exists; this one
+/// bounds how much work a single cycle can *start*, and therefore how much of a
+/// frame one `update` can spend.
+///
+/// The two are not interchangeable, and assuming they were is what this fixes:
+/// a task serviced within the cycle -- a blob slice, a clipboard read -- takes
+/// a reservation and gives it straight back, so the next task in the list finds
+/// one free. A hundred thousand blob slices are therefore each individually
+/// within the reservation budget while together being a frame the app never
+/// returns from.
+///
+/// Mirrored by `Program.max_tasks_per_step`, which refuses the ninth task in
+/// Roc, purely, before any of them are submitted. The check here is the
+/// backstop for that one, not a second policy.
+const MAX_TASKS_PER_STEP: usize = 8;
 
 /// Commands whose result is due once a deadline passes.
 ///
@@ -605,27 +619,26 @@ var pending_timer_count: usize = 0;
 
 /// Completions gathered for the step being assembled.
 ///
-/// Grows rather than truncating. The normal frame completes nothing and this
-/// keeps whatever capacity it reached, so an ordinary frame still allocates
-/// nothing; the growable part exists only so that an app which submits more
-/// tasks than the host will accept gets a refusal for every one of them,
-/// instead of silence for the tail.
+/// Fixed capacity, and provably enough rather than generously sized. Between
+/// two steps, exactly two things stage anything: an accepted task being
+/// answered, of which there are at most `MAX_TASKS_IN_FLIGHT` because each
+/// holds a reservation until it is; and a task being refused, of which there
+/// are at most `MAX_TASKS_PER_STEP` because that is all a step may hand over.
+/// Their sum is the capacity below, so overflowing it is not a load condition
+/// -- it means one of those two budgets was not enforced.
+///
+/// The consequence worth stating: the step an ordinary frame assembles
+/// allocates nothing at all, and neither does a saturated one.
 const CompletionStaging = struct {
-    allocator: std.mem.Allocator,
-    items: std.ArrayList(CompletionFromHost) = .empty,
+    const capacity: usize = MAX_TASKS_IN_FLIGHT + MAX_TASKS_PER_STEP;
+
+    items: [capacity]CompletionFromHost = undefined,
+    len: usize = 0,
     /// Reservations held by accepted tasks that have not been answered yet.
     in_flight: usize = 0,
 
-    fn init(allocator: std.mem.Allocator) CompletionStaging {
-        return .{ .allocator = allocator };
-    }
-
-    fn deinit(self: *CompletionStaging) void {
-        self.items.deinit(self.allocator);
-    }
-
     fn count(self: *const CompletionStaging) usize {
-        return self.items.items.len;
+        return self.len;
     }
 
     /// Claim the right to answer one task on a later step.
@@ -647,11 +660,12 @@ const CompletionStaging = struct {
 
     fn push(self: *CompletionStaging, item: CompletionFromHost) void {
         // A completion is the only report an app will ever get for its task, so
-        // failing to keep it would strand that task forever. There is nothing
-        // sensible to do here but fail loudly.
-        self.items.append(self.allocator, item) catch {
-            @panic("roc-ray: out of memory staging a completion");
-        };
+        // failing to keep it would strand that task forever. The capacity is
+        // derived from the two budgets, so reaching this means one of them was
+        // not enforced -- a bug in the host, not pressure from the app.
+        if (self.len == capacity) @panic("roc-ray: staged more completions than the task budgets allow");
+        self.items[self.len] = item;
+        self.len += 1;
     }
 
     /// A completion that carries nothing Roc has to free.
@@ -718,7 +732,7 @@ const CompletionStaging = struct {
     /// Hand the staged completions to Roc as one list, transferring ownership.
     fn toRocList(self: *CompletionStaging, roc_host: *RocHost) abi.RocList(CompletionFromHost) {
         if (self.count() == 0) return abi.RocList(CompletionFromHost).empty();
-        return abi.RocList(CompletionFromHost).fromSlice(self.items.items, roc_host);
+        return abi.RocList(CompletionFromHost).fromSlice(self.items[0..self.len], roc_host);
     }
 
     /// Hand this step's completions to Roc and empty the staging area.
@@ -729,14 +743,14 @@ const CompletionStaging = struct {
     /// owned by the staging area again and is delivered on the next step.
     fn take(self: *CompletionStaging, roc_host: *RocHost) abi.RocList(CompletionFromHost) {
         const list = self.toRocList(roc_host);
-        self.items.clearRetainingCapacity();
+        self.len = 0;
         return list;
     }
 
     /// Release staged completions that never reached Roc.
     fn release(self: *CompletionStaging, roc_host: *RocHost) void {
-        for (self.items.items) |item| item.contents.decref(roc_host);
-        self.items.clearRetainingCapacity();
+        for (self.items[0..self.len]) |item| item.contents.decref(roc_host);
+        self.len = 0;
     }
 };
 
@@ -4487,17 +4501,29 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
 /// staged here land on the *next* step, because this step's list has already
 /// been handed to Roc.
 ///
-/// Admission is the whole shape of this loop. A task is started only once a
-/// reservation is in hand, so the host is never holding more deferred work than
-/// it can report; and a task that cannot get one is refused rather than
-/// silently dropped. Refusals are not reserved, so a saturated host answers a
-/// list of any length.
+/// Admission is the whole shape of this loop, and it is bounded twice. The list
+/// itself is at most `MAX_TASKS_PER_STEP` long, which is what stops one cycle
+/// spending a frame on work it services immediately; and within that, a task is
+/// started only once a reservation is in hand, which is what stops the host
+/// holding more deferred work than it can report. A task that cannot get a
+/// reservation is refused rather than silently dropped.
 fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.RocList(TaskToHost)) void {
     defer {
         if (tasks.hasOneRef()) {
             for (tasks.allocationItems()) |item| item.decref(roc_host);
         }
         tasks.decref(roc_host);
+    }
+
+    // `Program.TaskBatch` cannot hold more than this, and an app cannot build a
+    // batch any other way, so a longer list is transport disagreeing with
+    // itself rather than an app asking for too much. Refusing the tail here
+    // would be the wrong answer to the wrong question.
+    if (tasks.items().len > MAX_TASKS_PER_STEP) {
+        std.debug.panic(
+            "roc-ray: a step handed over {d} tasks, more than the {d} a batch can hold",
+            .{ tasks.items().len, MAX_TASKS_PER_STEP },
+        );
     }
 
     for (tasks.items()) |task| {
@@ -5363,14 +5389,12 @@ test "staged completions become one Roc list, and an idle step allocates none" {
     var roc_host = abi.makeRocHost(&roc_env);
 
     // The ordinary frame completes nothing, so it must allocate nothing.
-    var idle = CompletionStaging.init(std.testing.allocator);
-    defer idle.deinit();
+    var idle = CompletionStaging{};
     const empty = idle.toRocList(&roc_host);
     try std.testing.expectEqual(@as(usize, 0), empty.items().len);
     empty.decref(&roc_host);
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     staging.fileRead(&roc_host, 7, 0, "a payload long enough to need the heap");
     staging.delayElapsed(9, 0);
 
@@ -5390,8 +5414,7 @@ test "releasing staged completions frees payloads that never reach Roc" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     staging.fileRead(&roc_host, 1, 0, "contents the staging area still owns");
     staging.fileRead(&roc_host, 2, 0, "and a second one for good measure");
     staging.release(&roc_host);
@@ -5399,8 +5422,7 @@ test "releasing staged completions frees payloads that never reach Roc" {
 }
 
 test "the budget bounds what is accepted, not what is delivered" {
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
 
     var taken: usize = 0;
     while (taken < MAX_TASKS_IN_FLIGHT) : (taken += 1) {
@@ -5409,16 +5431,38 @@ test "the budget bounds what is accepted, not what is delivered" {
     // Saturated: the next task cannot be started...
     try std.testing.expect(!staging.reserve());
 
-    // ...but the staging area still takes every refusal, because a refusal is
-    // the only thing that stops an app waiting on that id forever.
+    // ...but the staging area still takes a refusal for every task the step
+    // offered, because a refusal is the only thing that stops an app waiting on
+    // that id forever.
     var refused: usize = 0;
-    while (refused < MAX_TASKS_IN_FLIGHT + 8) : (refused += 1) {
+    while (refused < MAX_TASKS_PER_STEP) : (refused += 1) {
         staging.delayElapsed(refused, DELAY_ERR_BUSY);
     }
-    try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT + 8, staging.count());
+    try std.testing.expectEqual(MAX_TASKS_PER_STEP, staging.count());
 }
 
-test "every task in an oversized batch is answered exactly once" {
+test "one step's completions always fit the staging area" {
+    // The worst case the two budgets allow, built exactly: every outstanding
+    // task answers, and then every task the next step offers is refused. If
+    // this fits, nothing can overflow, because nothing else stages anything.
+    var staging = CompletionStaging{};
+
+    var answered: usize = 0;
+    while (answered < MAX_TASKS_IN_FLIGHT) : (answered += 1) {
+        try std.testing.expect(staging.reserve());
+        staging.delayElapsed(answered, 0);
+        staging.finish();
+    }
+
+    var refused: usize = 0;
+    while (refused < MAX_TASKS_PER_STEP) : (refused += 1) {
+        staging.delayElapsed(MAX_TASKS_IN_FLIGHT + refused, DELAY_ERR_BUSY);
+    }
+
+    try std.testing.expectEqual(CompletionStaging.capacity, staging.count());
+}
+
+test "a step's tasks are bounded separately from the work already in flight" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
@@ -5426,25 +5470,30 @@ test "every task in an oversized batch is answered exactly once" {
     last_wall_nanos = 0;
     defer pending_timer_count = 0;
 
-    // More delays than the host will hold at once.
-    const batch_len = MAX_TASKS_IN_FLIGHT + 11;
+    // Nearly saturated already, so a full step splits across both outcomes.
+    var staging = CompletionStaging{};
+    const free_reservations = 3;
+    var held: usize = 0;
+    while (held < MAX_TASKS_IN_FLIGHT - free_reservations) : (held += 1) {
+        try std.testing.expect(staging.reserve());
+    }
+
+    const batch_len = MAX_TASKS_PER_STEP;
     var tasks: [batch_len]TaskToHost = undefined;
     for (&tasks, 0..) |*task, index| {
         task.* = .{ .kind = TASK_DELAY, .id = index, .path = abi.RocStr.empty(), .millis = 1_000, .blob = 0, .offset = 0, .count = 0 };
     }
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
     dispatchTasks(&staging, &roc_host, abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host));
 
-    // The excess is refused now; the rest is armed and will elapse later.
-    try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT, pending_timer_count);
-    try std.testing.expectEqual(batch_len - MAX_TASKS_IN_FLIGHT, staging.count());
+    // Three found a reservation and are armed; the rest are refused now.
+    try std.testing.expectEqual(@as(usize, free_reservations), pending_timer_count);
+    try std.testing.expectEqual(batch_len - free_reservations, staging.count());
     try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT, staging.in_flight);
 
     // Union the two sets: every id the app submitted is accounted for once.
     var seen = [_]bool{false} ** batch_len;
-    for (staging.items.items) |item| {
+    for (staging.items[0..staging.count()]) |item| {
         try std.testing.expectEqual(DELAY_ERR_BUSY, item.err);
         try std.testing.expect(!seen[item.id]);
         seen[item.id] = true;
@@ -5464,8 +5513,7 @@ test "timers expire once" {
 
     pending_timer_count = 0;
     last_wall_nanos = 0;
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     // Arming is what dispatch does after reserving; expiry gives the
     // reservation back, so the two have to be paired here as well.
     try std.testing.expect(staging.reserve());
@@ -5475,7 +5523,7 @@ test "timers expire once" {
 
     expireTimers(&staging, 15 * std.time.ns_per_ms);
     try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(@as(u64, 1), staging.items.items[0].id);
+    try std.testing.expectEqual(@as(u64, 1), staging.items[0].id);
     try std.testing.expectEqual(@as(usize, 1), pending_timer_count);
 
     expireTimers(&staging, 40 * std.time.ns_per_ms);
@@ -5528,17 +5576,16 @@ test "a read above the inline cap is refused rather than copied on the frame thr
     defer std.testing.allocator.free(oversized);
     @memset(oversized, 'x');
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     if (oversized.len > MAX_INLINE_READ_BYTES) {
         staging.fileRead(&roc_host, 1, READ_ERR_TOO_LARGE, "");
     } else {
         staging.fileRead(&roc_host, 1, 0, oversized);
     }
 
-    try std.testing.expectEqual(READ_ERR_TOO_LARGE, staging.items.items[0].err);
+    try std.testing.expectEqual(READ_ERR_TOO_LARGE, staging.items[0].err);
     // Nothing was copied: the completion carries an empty string.
-    try std.testing.expectEqual(@as(usize, 0), staging.items.items[0].contents.asSlice().len);
+    try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
     staging.release(&roc_host);
 }
 
@@ -5601,19 +5648,18 @@ test "completing a large read installs a handle instead of copying the file" {
     @memset(worker_bytes, 'z');
     const worker_ptr = worker_bytes.ptr;
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     counter.allocated_bytes = 0;
     stageBlobRead(&staging, 1, std.testing.allocator, worker_bytes);
 
     try std.testing.expectEqual(@as(usize, 0), counter.allocated_bytes);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
-    try std.testing.expectEqual(@as(u64, file_bytes), staging.items.items[0].blob_len);
-    try std.testing.expectEqual(@as(usize, 0), staging.items.items[0].contents.asSlice().len);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqual(@as(u64, file_bytes), staging.items[0].blob_len);
+    try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
 
     // Installed, not copied: what Roc's handle names is the worker's own
     // allocation, at the same address.
-    const token = staging.items.items[0].blob;
+    const token = staging.items[0].blob;
     try std.testing.expectEqual(worker_ptr, blob_table.get(token).?.bytes.ptr);
 
     // The control. A 64 KiB small-file completion moves its payload through
@@ -5638,10 +5684,9 @@ test "a released blob answers Released rather than reading freed memory" {
     const payload = "bytes the host is holding for the app";
     const owned = try std.testing.allocator.dupe(u8, payload);
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     stageBlobRead(&staging, 1, std.testing.allocator, owned);
-    const token = staging.items.items[0].blob;
+    const token = staging.items[0].blob;
     staging.release(&roc_host);
 
     const whole = hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = payload.len });
@@ -5661,10 +5706,9 @@ test "a released blob answers Released rather than reading freed memory" {
     hostedFileReleaseBlob(token);
 
     const replacement = try std.testing.allocator.dupe(u8, "a different file entirely");
-    var later = CompletionStaging.init(std.testing.allocator);
-    defer later.deinit();
+    var later = CompletionStaging{};
     stageBlobRead(&later, 2, std.testing.allocator, replacement);
-    const fresh = later.items.items[0].blob;
+    const fresh = later.items[0].blob;
     later.release(&roc_host);
     try std.testing.expect(fresh != token);
 
@@ -5686,10 +5730,9 @@ test "copying out of a blob is bounded, checked, and never silently short" {
     @memset(owned, 'a');
     owned[4] = 0xff;
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     stageBlobRead(&staging, 1, std.testing.allocator, owned);
-    const token = staging.items.items[0].blob;
+    const token = staging.items[0].blob;
     staging.release(&roc_host);
     defer hostedFileReleaseBlob(token);
 
@@ -5728,10 +5771,9 @@ test "a full blob table refuses the read rather than holding what nothing names"
     var filled: usize = 0;
     while (filled < MAX_LIVE_BLOBS) : (filled += 1) {
         const owned = try std.testing.allocator.dupe(u8, "held");
-        var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+        var staging = CompletionStaging{};
         stageBlobRead(&staging, filled, std.testing.allocator, owned);
-        try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
+        try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
         staging.release(&roc_host);
     }
     try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_table.active());
@@ -5739,12 +5781,11 @@ test "a full blob table refuses the read rather than holding what nothing names"
     // The refused read's buffer is freed here rather than held by nothing:
     // `std.testing.allocator` is what proves it.
     const refused = try std.testing.allocator.dupe(u8, "no slot for this");
-    var full = CompletionStaging.init(std.testing.allocator);
-    defer full.deinit();
+    var full = CompletionStaging{};
     stageBlobRead(&full, 999, std.testing.allocator, refused);
-    try std.testing.expectEqual(COMPLETION_FILE_READ, full.items.items[0].kind);
-    try std.testing.expectEqual(READ_ERR_BUSY, full.items.items[0].err);
-    try std.testing.expectEqual(@as(u64, 0), full.items.items[0].blob);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, full.items[0].kind);
+    try std.testing.expectEqual(READ_ERR_BUSY, full.items[0].err);
+    try std.testing.expectEqual(@as(u64, 0), full.items[0].blob);
     try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_table.active());
     full.release(&roc_host);
 }
@@ -5765,22 +5806,21 @@ test "a headless read delivers a blob by the same path a worker result does" {
     var path_buffer: [capture.path_capacity]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     readFileNow(&staging, &roc_host, 3, path, true);
-    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[0].kind);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
-    try std.testing.expectEqual(@as(u64, payload.len), staging.items.items[0].blob_len);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items[0].kind);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqual(@as(u64, payload.len), staging.items[0].blob_len);
 
-    const token = staging.items.items[0].blob;
+    const token = staging.items[0].blob;
     try std.testing.expectEqualStrings(payload, blob_table.get(token).?.bytes);
     hostedFileReleaseBlob(token);
 
     // A read that fails still answers on the blob path -- an app waiting for
     // `FileRead` must never be answered with `SmallFileRead`.
     readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true);
-    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[1].kind);
-    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].err);
+    try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items[1].kind);
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items[1].err);
     staging.release(&roc_host);
 }
 
@@ -5791,8 +5831,7 @@ test "taking a step's completions hands them over and empties the staging area" 
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     staging.fileRead(&roc_host, 1, 0, "contents long enough to reach the heap");
 
     const list = staging.take(&roc_host);
@@ -5839,8 +5878,7 @@ test "a serviced screenshot task answers on the next step" {
     // The frame that asked carries no completion for it: the write happens at
     // the end of that frame, after its step has already gone to Roc.
     capture_screenshot_task_id = 9;
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     // The accepted task holds a reservation until its outcome is staged.
     try std.testing.expect(staging.reserve());
     stageCaptureResults(&staging);
@@ -5853,9 +5891,9 @@ test "a serviced screenshot task answers on the next step" {
 
     stageCaptureResults(&staging);
     try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(COMPLETION_SCREENSHOT_FINISHED, staging.items.items[0].kind);
-    try std.testing.expectEqual(@as(u64, 9), staging.items.items[0].id);
-    try std.testing.expectEqual(capture.err_write_failed, staging.items.items[0].err);
+    try std.testing.expectEqual(COMPLETION_SCREENSHOT_FINISHED, staging.items[0].kind);
+    try std.testing.expectEqual(@as(u64, 9), staging.items[0].id);
+    try std.testing.expectEqual(capture.err_write_failed, staging.items[0].err);
 
     // Exactly one completion per accepted task, so the next step reports none
     // and the reservation has been given back.
@@ -5876,11 +5914,10 @@ test "a clipboard read is serviced in the cycle it was dispatched in" {
     headless_clipboard_len = 0;
     headless_clipboard_set = false;
 
-    var empty = CompletionStaging.init(std.testing.allocator);
-    defer empty.deinit();
+    var empty = CompletionStaging{};
     stageClipboardRead(&empty, &roc_host, 1);
-    try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, empty.items.items[0].kind);
-    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, empty.items.items[0].err);
+    try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, empty.items[0].kind);
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, empty.items[0].err);
     empty.release(&roc_host);
 
     const text = "pasted from the scripted clipboard";
@@ -5888,12 +5925,11 @@ test "a clipboard read is serviced in the cycle it was dispatched in" {
     headless_clipboard_len = text.len;
     headless_clipboard_set = true;
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     stageClipboardRead(&staging, &roc_host, 2);
-    try std.testing.expectEqual(@as(u64, 2), staging.items.items[0].id);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
-    try std.testing.expectEqualStrings(text, staging.items.items[0].contents.asSlice());
+    try std.testing.expectEqual(@as(u64, 2), staging.items[0].id);
+    try std.testing.expectEqual(@as(u8, 0), staging.items[0].err);
+    try std.testing.expectEqualStrings(text, staging.items[0].contents.asSlice());
     staging.release(&roc_host);
 }
 
@@ -5999,10 +6035,9 @@ test "a blob read is filled by the worker and installed by the frame thread" {
     try std.testing.expectEqualStrings(payload, result.bytes.?);
     const worker_ptr = result.bytes.?.ptr;
 
-    var staging = CompletionStaging.init(std.testing.allocator);
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     stageBlobRead(&staging, result.id, worker.allocator, result.bytes.?);
-    const token = staging.items.items[0].blob;
+    const token = staging.items[0].blob;
     staging.release(&roc_host);
 
     try std.testing.expectEqual(worker_ptr, blob_table.get(token).?.bytes.ptr);
@@ -6242,8 +6277,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     // Outlives the frame: a task dispatched at the end of one cycle answers on
     // the next, so its completion waits here in between.
-    var staging = CompletionStaging.init(allocatorFromHost(roc_host));
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     defer staging.release(roc_host);
 
     while (!raylib.windowShouldClose()) {
@@ -6356,8 +6390,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     // Outlives the frame: a task dispatched at the end of one cycle answers on
     // the next, so its completion waits here in between.
-    var staging = CompletionStaging.init(allocatorFromHost(roc_host));
-    defer staging.deinit();
+    var staging = CompletionStaging{};
     defer staging.release(roc_host);
 
     while (frame_count < frames) : (frame_count += 1) {

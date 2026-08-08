@@ -40,7 +40,7 @@ update = |model, step| {
 	Ok({
 		model: { ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) },
 		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

@@ -54,11 +54,12 @@ Program := [].{
 	## happened -- one value each, sampled together but never merged, so a
 	## helper can ask for exactly the one it needs.
 	##
-	## `completed` is bounded because *acceptance* is bounded: the host will
-	## only ever hold so many unanswered tasks at once, so a burst of finished
-	## work cannot consume a whole frame. Nothing is ever held back, though --
-	## a completion the host has is a completion this step carries. It is empty
-	## on an ordinary frame, which is the case that has to stay cheap.
+	## `completed` is bounded because *acceptance* is bounded, twice over: the
+	## host will only ever hold `max_tasks_per_step` new tasks from one cycle,
+	## and only so many unanswered tasks across all of them, so a burst of
+	## finished work cannot consume a whole frame. Nothing is ever held back,
+	## though -- a completion the host has is a completion this step carries. It
+	## is empty on an ordinary frame, which is the case that has to stay cheap.
 	##
 	## `capture` is sampled rather than asked for: a pure `update` cannot call
 	## `Capture.status!`, and a recording's state is one small record, so the
@@ -78,7 +79,85 @@ Program := [].{
 	Next(model) : {
 		model : model,
 		actions : List(Action),
-		tasks : List(Task),
+		tasks : TaskBatch,
+	}
+
+	## The most tasks the host will take from one cycle.
+	##
+	## This is a *separate* budget from how many tasks may be outstanding at
+	## once, and the two bound different things. The in-flight budget bounds how
+	## much deferred work the host is holding; this one bounds how much work a
+	## single cycle can start, and therefore how much of a frame one `update`
+	## can spend. Without it a cycle could hand over a hundred thousand blob
+	## slices, every one of which is serviced in that same frame -- each within
+	## the in-flight budget, because each finishes before the next begins.
+	##
+	## Eight is chosen to be small enough that a full batch of the most
+	## expensive task the host has costs a fraction of a frame, and large enough
+	## that no reasonable cycle notices it. An app with more work than that is
+	## describing a queue rather than a cycle, which is what `fill` is for.
+	max_tasks_per_step : U64
+	max_tasks_per_step = 8
+
+	## The tasks one cycle is handing over: at most `max_tasks_per_step` of them.
+	##
+	## Opaque, and bounded by construction. A plain `List(Task)` could not be:
+	## the host would have to discover the list was too long *after* the app
+	## built it, and its only remaining move would be to refuse tasks it had
+	## already been given -- which costs a completion each, on the frame that was
+	## already over budget. Refusing to accept the ninth task, purely, before
+	## anything is accepted at all, is both cheaper and easier to act on.
+	TaskBatch :: List(Task).{
+
+		## Add one task, or refuse because this cycle is full.
+		##
+		## `Busy` here is a pure fact about the batch, not a report from the
+		## host: nothing has been submitted, nothing has been started, and the
+		## same task offered on the next cycle will be taken. Receiver form:
+		## `batch.add(task)`.
+		add : TaskBatch, Task -> Try(TaskBatch, [Busy])
+		add = |TaskBatch.(tasks), task|
+			if List.len(tasks) >= max_tasks_per_step {
+				Err(Busy)
+			} else {
+				Ok(TaskBatch.(List.append(tasks, task)))
+			}
+
+		## How many tasks this cycle is handing over.
+		len : TaskBatch -> U64
+		len = |TaskBatch.(tasks)| List.len(tasks)
+
+		## Whether this cycle is handing over no work at all -- the usual case.
+		is_empty : TaskBatch -> Bool
+		is_empty = |batch| batch.len() == 0
+
+		## Flatten for the host. Platform-internal: `TaskToHost` is transport.
+		to_host_list : TaskBatch -> List(TaskToHost)
+		to_host_list = |TaskBatch.(tasks)| List.map(tasks, to_host)
+	}
+
+	## A cycle that wants nothing done. The common case, and free.
+	no_tasks : TaskBatch
+	no_tasks = TaskBatch.([])
+
+	## A cycle that wants exactly one thing done.
+	##
+	## Cannot fail: one task always fits, so this is the form to reach for when
+	## the count is written down in the source rather than computed.
+	task : Task -> TaskBatch
+	task = |one| TaskBatch.([one])
+
+	## Take as much of a work list as this cycle will carry, and hand back the
+	## rest.
+	##
+	## The honest shape for work whose size the app does not control -- a queue
+	## of files to load, a directory to walk. `deferred` goes in the model and
+	## comes back to `fill` on the next cycle, so the bound spreads the work over
+	## frames instead of failing on it.
+	fill : List(Task) -> { batch : TaskBatch, deferred : List(Task) }
+	fill = |requested| {
+		batch: TaskBatch.(List.take_first(requested, max_tasks_per_step)),
+		deferred: List.drop_first(requested, max_tasks_per_step),
 	}
 
 	## Something the platform does on the app's behalf during this cycle.
@@ -251,8 +330,8 @@ Program := [].{
 
 	## Flatten a `Task` for the host.
 	to_host : Task -> TaskToHost
-	to_host = |task|
-		match task {
+	to_host = |pending|
+		match pending {
 			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
 			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
 			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis, blob: 0, offset: 0, count: 0 }
@@ -461,6 +540,36 @@ capture_failure = |code|
 sample_blob_read : Program.CompletionFromHost
 sample_blob_read = { kind: 4, id: 3, err: 0, contents: "", blob: 0x0001_0002_0003, blob_len: 16 * 1024 * 1024 }
 
+## A work list one longer than a cycle will carry, for the batch expects below.
+nine_delays : List(Program.Task)
+nine_delays = [
+	Delay({ id: 1, millis: 1 }),
+	Delay({ id: 2, millis: 1 }),
+	Delay({ id: 3, millis: 1 }),
+	Delay({ id: 4, millis: 1 }),
+	Delay({ id: 5, millis: 1 }),
+	Delay({ id: 6, millis: 1 }),
+	Delay({ id: 7, millis: 1 }),
+	Delay({ id: 8, millis: 1 }),
+	Delay({ id: 9, millis: 1 }),
+]
+
+expect Program.no_tasks.len() == 0
+expect Program.no_tasks.is_empty()
+expect Program.task(Delay({ id: 1, millis: 5 })).len() == 1
+
+## What a cycle takes of a work list one longer than it will carry.
+filled_nine : { batch : Program.TaskBatch, deferred : List(Program.Task) }
+filled_nine = Program.fill(nine_delays)
+
+expect filled_nine.batch.len() == Program.max_tasks_per_step
+expect List.len(filled_nine.deferred) == 1
+
+## The ninth task is refused, and refused *purely*: nothing has been submitted,
+## so an app that gets this can hold the task and offer it again next cycle.
+expect filled_nine.batch.add(Delay({ id: 99, millis: 1 })).is_err()
+expect Program.no_tasks.add(Delay({ id: 99, millis: 1 })).is_ok()
+expect Program.task(Delay({ id: 9, millis: 250 })).to_host_list() == [{ kind: 1, id: 9, path: "", millis: 250, blob: 0, offset: 0, count: 0 }]
 expect Program.to_host(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0, blob: 0, offset: 0, count: 0 }
 expect Program.to_host(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0, blob: 0, offset: 0, count: 0 }
 expect Program.to_host(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250, blob: 0, offset: 0, count: 0 }

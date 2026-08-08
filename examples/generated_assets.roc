@@ -217,7 +217,7 @@ update = |model, step| {
 	Ok({
 		model: { ..next.model, mouse },
 		actions: List.concat(exit_actions, List.append(next.actions, cursor)),
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

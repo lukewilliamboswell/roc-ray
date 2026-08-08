@@ -86,7 +86,7 @@ update = |model, step| {
 	Ok({
 		model: { ..model, player, zoom, rotation, mouse: input.mouse.position() },
 		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: [],
+		tasks: Program.no_tasks,
 	})
 }
 

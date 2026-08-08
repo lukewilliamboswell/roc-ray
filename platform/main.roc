@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program]
+	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
 	}
@@ -150,6 +150,7 @@ import Tilemap
 import TilemapHost
 import Physics
 import Program
+import Random
 
 ## Internal type for host boundary.
 ## Keep this layout-compatible with the public Host record; the compiler may
@@ -249,9 +250,6 @@ update_for_host! = |boxed_model, raw|
 		Err(_) => Err(-1)
 	}
 
-## Draw the current model. Takes no `Host`: every nondeterministic value now
-## reaches the app through `update!`, which is what makes the message stream a
-## complete recording of a session.
 ## Draw the current model, then hand the same box back.
 ##
 ## `render!` returns `{}` rather than a model: drawing is a view of state, not a

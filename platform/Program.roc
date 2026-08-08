@@ -102,9 +102,10 @@ Program := [].{
 
 	## Rebuild a `Completion` from the host's flat record.
 	##
-	## An unrecognised kind decodes as an elapsed delay rather than crashing: a
-	## host newer than the app can only add operations, and dropping one is
-	## safer than refusing to run.
+	## The host and the app are built together, so an unrecognised kind is not a
+	## newer host talking to an older app -- it is transport that disagrees with
+	## itself. Reinterpreting it as an elapsed delay would invent a timer nobody
+	## asked for, so this refuses loudly instead.
 	completion_from_host : CompletionFromHost -> Completion
 	completion_from_host = |raw|
 		if raw.kind == completion_file_read {
@@ -112,14 +113,20 @@ Program := [].{
 				id: raw.id,
 				result: if raw.err == 0 Ok(raw.contents) else Err(read_error(raw.err)),
 			})
-		} else {
+		} else if raw.kind == completion_delay {
 			DelayElapsed({ id: raw.id })
+		} else {
+			crash "roc-ray: host sent an unknown completion kind"
 		}
 }
 
 ## `kind` code for a finished read. Mirrored in `src/host_native.zig`.
 completion_file_read : U8
 completion_file_read = 0
+
+## `kind` code for an elapsed delay. Mirrored in `src/host_native.zig`.
+completion_delay : U8
+completion_delay = 1
 
 ## `kind` code for a read command. Mirrored in `src/host_native.zig`.
 cmd_read_file : U8

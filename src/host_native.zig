@@ -449,6 +449,91 @@ inline fn headlessMode() bool {
     return builtin.is_test or active_headless;
 }
 
+/// Which of the app's callbacks the host is currently inside.
+///
+/// Roc capabilities outlive the call that produced them -- a `Draw.Frame` is a
+/// value, a texture handle is a value -- and nothing in the type system stops
+/// an app from stashing one and reaching for it a frame later. The phase is how
+/// the host says when an operation is actually meaningful.
+const Phase = enum {
+    /// Between callbacks: config, host bookkeeping, capture, shutdown.
+    idle,
+    /// Inside `init_for_host`, and inside the startup config callback.
+    startup,
+    /// Inside `update_for_host`, including the actions it applies.
+    update,
+    /// Inside `render_for_host`.
+    render,
+
+    /// How the phase is named in a rejection, in the app's own vocabulary.
+    fn label(self: Phase) []const u8 {
+        return switch (self) {
+            .idle => "outside any app callback",
+            .startup => "init!",
+            .update => "update",
+            .render => "render!",
+        };
+    }
+};
+
+var active_phase: Phase = .idle;
+
+/// Enter a phase for the duration of one call, restoring the previous one.
+///
+/// Restoring rather than resetting to `idle` keeps nesting honest: the actions
+/// `update` applies run inside the update phase, and nothing has to know
+/// whether it was entered from the frame loop or from somewhere else.
+const PhaseScope = struct {
+    previous: Phase,
+
+    fn enter(phase: Phase) PhaseScope {
+        const scope = PhaseScope{ .previous = active_phase };
+        active_phase = phase;
+        return scope;
+    }
+
+    fn leave(self: PhaseScope) void {
+        active_phase = self.previous;
+    }
+};
+
+/// The rejection a phase guard produced, recorded instead of aborting in tests.
+const PhaseViolation = struct { operation: []const u8, required: Phase, actual: Phase };
+var last_phase_violation: ?PhaseViolation = null;
+
+/// Refuse an operation that was reached from the wrong phase.
+///
+/// This aborts, in every build mode, and that is the deliberate part. Both
+/// guarded families are bugs rather than degraded behaviour: a blocking loader
+/// called mid-frame reintroduces exactly the stall the task/worker split exists
+/// to remove, and a draw call outside `render!` reaches raylib outside the
+/// host's `BeginDrawing`/`EndDrawing` scope, where the result is undefined
+/// rather than merely misplaced. Neither has a sensible fallback value --
+/// returning a blank texture or silently dropping the draw would hide the bug
+/// in release while debug shouted about it, which is the worst of both.
+///
+/// No shipped example trips either guard, so nothing that works today starts
+/// aborting; the survey that established this is in the commit message.
+///
+/// Under `zig test` the violation is recorded rather than raised: the unit
+/// tests call hosted effects directly, with no callback entered, and aborting
+/// the runner would make the guard itself untestable.
+fn enforcePhase(operation: []const u8, required: Phase) void {
+    if (active_phase == required) return;
+    last_phase_violation = .{ .operation = operation, .required = required, .actual = active_phase };
+    if (comptime builtin.is_test) return;
+    std.debug.panic("roc-ray: {s} is only valid during {s}, but it was called during {s}.{s}", .{
+        operation,
+        required.label(),
+        active_phase.label(),
+        switch (required) {
+            .startup => " Load it in init! and keep the handle in your model; loading during a frame blocks it.",
+            .render => " Drawing is only defined inside the frame scope the host opens around render!.",
+            else => "",
+        },
+    });
+}
+
 /// Recording policy and state for this process. See `capture.zig`.
 var capture_session: capture.Session = .{};
 /// Sandbox root every capture path is resolved beneath.
@@ -1661,6 +1746,7 @@ test "texture pixel count validates dimensions" {
 }
 
 fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AssetsHostLoad_textureRetRecord {
+    enforcePhase("Assets.Texture.load!", .startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -1788,6 +1874,7 @@ fn shaderPathsExist(vertex: []const u8, fragment: []const u8) bool {
 }
 
 fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi.DrawHostLoad_shaderRetRecord {
+    enforcePhase("Draw.Shader.load!", .startup);
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     const vertex_slice = args.vertex_path.asSlice();
@@ -1815,6 +1902,7 @@ fn exportedDrawLoadShaderRaw(args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi
 }
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
+    enforcePhase("Draw.Shader.from_source!", .startup);
     defer args.vertex_source.decref(host);
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
@@ -1858,6 +1946,7 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
 }
 
 fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_render_texture!", .render);
     const host = activeHost();
     const owner = args.resource;
     if (render_texture_lease_count == SCOPE_STACK_LIMIT) {
@@ -1878,6 +1967,7 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
 }
 
 fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
+    enforcePhase("Draw.with_render_texture!", .render);
     if (render_texture_lease_count == 0) return;
     if (headlessMode()) headless_render_texture_depth -|= 1 else raylib.endTextureMode();
     render_texture_lease_count -= 1;
@@ -1891,6 +1981,7 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_shader!", .render);
     const host = activeHost();
     const owner = args.arg0;
     if (shader_lease_count == SCOPE_STACK_LIMIT) {
@@ -1911,6 +2002,7 @@ fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 
 }
 
 fn hostedDrawEndShaderRaw() callconv(.c) void {
+    enforcePhase("Draw.with_shader!", .render);
     if (shader_lease_count == 0) return;
     if (headlessMode()) headless_shader_depth -|= 1 else raylib.endShaderMode();
     shader_lease_count -= 1;
@@ -1924,6 +2016,7 @@ fn hostedDrawEndShaderRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_blend_mode!", .render);
     if (blend_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (args.arg0 > 5) return SCOPE_UNAVAILABLE;
     if (!headlessMode()) raylib.beginBlendMode(args.arg0);
@@ -1933,6 +2026,7 @@ fn hostedDrawBeginBlendRaw(args: abi.DrawHostBegin_blendArgs) callconv(.c) u8 {
 }
 
 fn hostedDrawEndBlendRaw() callconv(.c) void {
+    enforcePhase("Draw.with_blend_mode!", .render);
     if (blend_scope_count == 0) return;
     if (!headlessMode()) raylib.endBlendMode();
     blend_scope_count -= 1;
@@ -2012,6 +2106,7 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
 
 /// Forward Roc scissor bounds to the raylib backend.
 fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_scissor!", .render);
     if (scissor_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginScissor(args.x, args.y, args.width, args.height);
     scissor_scopes[scissor_scope_count] = args;
@@ -2021,6 +2116,7 @@ fn hostedDrawBeginScissorRaw(args: abi.DrawHostBegin_scissorArgs) callconv(.c) u
 
 /// End the scissor region opened by the Roc renderer.
 fn hostedDrawEndScissorRaw() callconv(.c) void {
+    enforcePhase("Draw.with_scissor!", .render);
     if (scissor_scope_count == 0) return;
     if (!headlessMode()) raylib.endScissor();
     scissor_scope_count -= 1;
@@ -2031,6 +2127,7 @@ fn hostedDrawEndScissorRaw() callconv(.c) void {
 }
 
 fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_camera!", .render);
     if (camera_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
     if (!headlessMode()) raylib.beginMode2D(args);
     camera_scopes[camera_scope_count] = args;
@@ -2039,26 +2136,31 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
 }
 
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
+    enforcePhase("Draw.circle!", .render);
     if (active_headless) return;
     raylib.drawCircle(args);
 }
 
 fn hostedDrawCircleGradient(args: abi.DrawHostCircle_gradientArgs) callconv(.c) void {
+    enforcePhase("Draw.circle_gradient!", .render);
     if (active_headless) return;
     raylib.drawCircleGradient(args);
 }
 
 fn hostedDrawCircleLinesRaw(args: abi.DrawHostCircle_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.circle_lines!", .render);
     if (active_headless) return;
     raylib.drawCircleLines(args);
 }
 
 fn hostedDrawClear(color: Color) callconv(.c) void {
+    enforcePhase("Draw.clear!", .render);
     if (active_headless) return;
     raylib.clearBackground(color);
 }
 
 fn hostedDrawEndCamera() callconv(.c) void {
+    enforcePhase("Draw.with_camera!", .render);
     if (camera_scope_count == 0) return;
     if (!headlessMode()) raylib.endMode2D();
     camera_scope_count -= 1;
@@ -2066,16 +2168,19 @@ fn hostedDrawEndCamera() callconv(.c) void {
 }
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
+    enforcePhase("Draw.fps!", .render);
     if (active_headless) return;
     raylib.drawFps(args);
 }
 
 fn hostedDrawLineRaw(args: abi.DrawHostLineArgs) callconv(.c) void {
+    enforcePhase("Draw.line!", .render);
     if (active_headless) return;
     raylib.drawLine(args);
 }
 
 fn hostedDrawPolygonRaw(host: *RocHost, args: abi.DrawHostPolygonArgs) callconv(.c) void {
+    enforcePhase("Draw.polygon!", .render);
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygon(args.points.items(), args.color);
@@ -2086,6 +2191,7 @@ fn exportedDrawPolygonRaw(args: abi.DrawHostPolygonArgs) callconv(.c) void {
 }
 
 fn hostedDrawPolygonLinesRaw(host: *RocHost, args: abi.DrawHostPolygon_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.polygon_lines!", .render);
     defer args.points.decref(host);
     if (active_headless) return;
     raylib.drawPolygonLines(args.points.items(), args.thickness, args.color);
@@ -2096,46 +2202,55 @@ fn exportedDrawPolygonLinesRaw(args: abi.DrawHostPolygon_linesArgs) callconv(.c)
 }
 
 fn hostedDrawRectangleRaw(args: abi.DrawHostRectangleArgs) callconv(.c) void {
+    enforcePhase("Draw.rectangle!", .render);
     if (active_headless) return;
     raylib.drawRectangle(args);
 }
 
 fn hostedDrawRectangleLinesRaw(args: abi.DrawHostRectangle_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.rectangle_lines!", .render);
     if (active_headless) return;
     raylib.drawRectangleLines(args);
 }
 
 fn hostedDrawRectangleGradientH(args: abi.DrawHostRectangle_gradient_hArgs) callconv(.c) void {
+    enforcePhase("Draw.rectangle_gradient_h!", .render);
     if (active_headless) return;
     raylib.drawRectangleGradientH(args);
 }
 
 fn hostedDrawRectangleGradientV(args: abi.DrawHostRectangle_gradient_vArgs) callconv(.c) void {
+    enforcePhase("Draw.rectangle_gradient_v!", .render);
     if (active_headless) return;
     raylib.drawRectangleGradientV(args);
 }
 
 fn hostedDrawRoundedRectangleRaw(args: abi.DrawHostRounded_rectangleArgs) callconv(.c) void {
+    enforcePhase("Draw.rounded_rectangle!", .render);
     if (active_headless) return;
     raylib.drawRoundedRectangle(args);
 }
 
 fn hostedDrawRoundedRectangleLinesRaw(args: abi.DrawHostRounded_rectangle_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.rounded_rectangle_lines!", .render);
     if (active_headless) return;
     raylib.drawRoundedRectangleLines(args);
 }
 
 fn hostedDrawTriangleRaw(args: abi.DrawHostTriangleArgs) callconv(.c) void {
+    enforcePhase("Draw.triangle!", .render);
     if (active_headless) return;
     raylib.drawTriangle(args);
 }
 
 fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c) void {
+    enforcePhase("Draw.triangle_lines!", .render);
     if (active_headless) return;
     raylib.drawTriangleLines(args);
 }
 
 fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawHostLoad_fontArgs) callconv(.c) abi.DrawHostLoad_fontRetRecord {
+    enforcePhase("Draw.load_font!", .startup);
     defer args.path.decref(host);
 
     const path_slice = args.path.asSlice();
@@ -2243,6 +2358,7 @@ fn exportedDrawPrepareTextRaw(args: abi.DrawHostPrepare_textArgs) callconv(.c) a
 }
 
 fn hostedDrawPreparedTextRaw(host: *RocHost, args: abi.DrawHostDraw_prepared_textArgs) callconv(.c) void {
+    enforcePhase("Text.Prepared.draw!", .render);
     defer releaseResourceBox(host, args.prepared);
     const resource = prepared_text_heap.get(args.prepared.*) orelse return;
     prepared_text_draw_calls += 1;
@@ -2263,6 +2379,7 @@ fn exportedDrawPreparedTextRaw(args: abi.DrawHostDraw_prepared_textArgs) callcon
 }
 
 fn hostedDrawTextRaw(host: *RocHost, args: abi.DrawHostTextArgs) callconv(.c) void {
+    enforcePhase("Draw.text!", .render);
     defer args.text.decref(host);
     defer args.font.decref(host);
     if (headlessMode()) return;
@@ -2287,6 +2404,7 @@ fn exportedDrawTextRaw(args: abi.DrawHostTextArgs) callconv(.c) void {
 }
 
 fn hostedDrawTextAlignedRaw(host: *RocHost, args: abi.DrawHostText_alignedArgs) callconv(.c) void {
+    enforcePhase("Draw.text_at!", .render);
     defer args.text.decref(host);
     defer args.font.decref(host);
     if (active_headless) return;
@@ -2312,6 +2430,7 @@ fn exportedDrawTextAlignedRaw(args: abi.DrawHostText_alignedArgs) callconv(.c) v
 }
 
 fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
+    enforcePhase("Draw.texture!", .render);
     defer args.texture.decref(activeHost());
     if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
@@ -2319,6 +2438,7 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
+    enforcePhase("Draw.projective_texture!", .render);
     defer args.texture.decref(activeHost());
     if (active_headless) return;
     const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
@@ -2329,6 +2449,7 @@ fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c
 var exit_requested: ?i64 = null;
 
 fn hostedReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+    enforcePhase("Host.read_env!", .startup);
     // Windows doesn't link libc, so env var reading is not yet supported
     var result: ReadEnvResult = undefined;
     result.tag = .Err;
@@ -2342,6 +2463,7 @@ fn exportedReadEnvWindows(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 }
 
 fn hostedReadEnvPosix(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
+    enforcePhase("Host.read_env!", .startup);
     var result: ReadEnvResult = undefined;
     const key = key_arg.asSlice();
     const value = hostGetEnv(key);
@@ -2364,6 +2486,7 @@ fn exportedReadEnvPosix(key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
 }
 
 fn hostedReadFileRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult {
+    enforcePhase("Host.read_file!", .startup);
     defer path_arg.decref(roc_host);
 
     const allocator = allocatorFromHost(roc_host);
@@ -2390,6 +2513,7 @@ fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult 
 }
 
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
+    enforcePhase("Tilemap.load_tmx!", .startup);
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
@@ -2451,6 +2575,7 @@ fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
 }
 
 fn hostedTilemapDrawRaw(host: *RocHost, args: abi.TilemapHostDrawArgs) callconv(.c) void {
+    enforcePhase("Tilemap.draw_layers!", .render);
     defer releaseTilemapDrawArgs(host, args);
     if (headlessMode()) headless_tilemap_draw_calls += 1;
     const submitted = tilemap_batch.draw(.{
@@ -3053,6 +3178,7 @@ fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioH
 }
 
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_soundRetRecord {
+    enforcePhase("Audio.load_sound!", .startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -3076,6 +3202,7 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_s
 }
 
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
+    enforcePhase("Audio.load_music!", .startup);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -3609,6 +3736,11 @@ const takeModelForRender = takeModel;
 /// how much happened. Consumes the step, which owns the input snapshot and the
 /// completion list.
 fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
+    // The actions `update` returns are applied by the platform before this
+    // call returns, so they run inside this scope too -- which is why an
+    // action's effect is checked against the update phase and not against idle.
+    const phase = PhaseScope.enter(.update);
+    defer phase.leave();
     return update_for_host(takeModel(boxed_model), step);
 }
 
@@ -4104,10 +4236,21 @@ fn writeRecordingFrameGif(image: raylib.CaptureImage) void {
     capture_recording_bytes = capture_gif.bytesWritten();
 }
 
+/// Call `render!` in the render phase.
+///
+/// Narrower than the drawing scope on purpose: capture services its requests
+/// after `render!` returns and draws its own cursor overlay directly through
+/// raylib, which is host business and not an app draw call.
+fn callRender(boxed_model: RocBox) RocResult {
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+    return render_for_host(boxed_model);
+}
+
 /// Run one Roc render call inside the host-owned raylib frame scope.
 /// `defer` closes the frame for both `Ok` and `Err` results.
 fn renderFrame(boxed_model: RocBox) RocResult {
-    if (active_headless) return render_for_host(boxed_model);
+    if (active_headless) return callRender(boxed_model);
 
     const NativeRender = struct {
         model: RocBox,
@@ -4117,7 +4260,7 @@ fn renderFrame(boxed_model: RocBox) RocResult {
         }
 
         fn render(self: *@This()) RocResult {
-            return render_for_host(self.model);
+            return callRender(self.model);
         }
 
         fn end(_: *@This()) void {
@@ -4586,10 +4729,81 @@ test "shutting down with work still queued terminates and frees what it produced
     try std.testing.expect(worker.takeResult() == null);
 }
 
+test "phases restore what they interrupted rather than falling back to idle" {
+    try std.testing.expectEqual(Phase.idle, active_phase);
+
+    const startup = PhaseScope.enter(.startup);
+    try std.testing.expectEqual(Phase.startup, active_phase);
+    startup.leave();
+    try std.testing.expectEqual(Phase.idle, active_phase);
+
+    // Actions run inside the update call that produced them, so a nested scope
+    // has to land back in update and not in idle -- otherwise the phase after
+    // an action would be wrong for the rest of the call.
+    const update = PhaseScope.enter(.update);
+    const nested = PhaseScope.enter(.render);
+    try std.testing.expectEqual(Phase.render, active_phase);
+    nested.leave();
+    try std.testing.expectEqual(Phase.update, active_phase);
+    update.leave();
+    try std.testing.expectEqual(Phase.idle, active_phase);
+}
+
+test "a startup-only loader called from render! is rejected" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Reachable from an app today: the loader is an ordinary effect and nothing
+    // but the phase says it may not run mid-frame. In a real build this call
+    // aborts and never returns; under `zig test` the guard records instead, so
+    // what the test can check is that it fired and named the right things.
+    const result = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice("examples/assets/nothing.tmx", &roc_host));
+    try std.testing.expect(!result.ok);
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
+    try std.testing.expectEqual(Phase.startup, violation.required);
+    try std.testing.expectEqual(Phase.render, violation.actual);
+}
+
+test "a drawing primitive called from update is rejected" {
+    const phase = PhaseScope.enter(.update);
+    defer phase.leave();
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+    defer blend_scope_count = 0;
+
+    _ = hostedDrawBeginBlendRaw(.{ .arg0 = 1 });
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Draw.with_blend_mode!", violation.operation);
+    try std.testing.expectEqual(Phase.render, violation.required);
+    try std.testing.expectEqual(Phase.update, violation.actual);
+}
+
+test "an operation called from its own phase is not rejected" {
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+    defer blend_scope_count = 0;
+
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginBlendRaw(.{ .arg0 = 1 }));
+    hostedDrawEndBlendRaw();
+    try std.testing.expect(last_phase_violation == null);
+}
+
 
 fn initModel(input: *InputState) RocResult {
     if (TRACE_HOST) std.log.debug("[HOST] Calling init_for_host...", .{});
     const init_state = input.hostState(0, 0, 0, 0, 0, .{ .x = 0, .y = 0 }, .{ .x = 0, .y = 0 }, &.{});
+    const phase = PhaseScope.enter(.startup);
+    defer phase.leave();
     const init_result = init_for_host(init_state);
     if (TRACE_HOST) std.log.debug("[HOST] init returned, tag={d}", .{@intFromEnum(init_result.tag)});
     return init_result;
@@ -4900,7 +5114,13 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         active_roc_host = null;
     }
 
+    // Startup, not idle: reading an environment variable to decide the window
+    // size is a reasonable thing for a config to do, and it works today. It is
+    // still before `InitWindow`, so a texture load here would fail for its own
+    // reasons rather than because the phase guard caught it.
+    const config_phase = PhaseScope.enter(.startup);
     var app_config = app_config_for_host();
+    config_phase.leave();
     // The config now carries three Roc strings; `decref` releases all of them.
     defer app_config.decref(&roc_host);
 

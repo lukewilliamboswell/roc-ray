@@ -824,9 +824,19 @@ const during_render = PhaseSet.initOne(.render);
 /// Reachable while starting up and while applying an action, and nowhere else.
 const during_commit = PhaseSet.initMany(&.{ .startup, .commit });
 
-/// Reading something back. Cheap, allocates nothing, and meaningful wherever
-/// the app is running -- but still not from outside a callback entirely.
-const during_any_callback = PhaseSet.initMany(&.{ .startup, .commit, .render });
+/// Constant-time operations with nothing to allocate and no I/O to do: reading
+/// a font metric, asking whether a sound is still playing, taking a random
+/// number. Reachable from every callback because there is no phase in which the
+/// answer is meaningless and none in which the cost is a problem -- but still
+/// not from outside a callback entirely.
+///
+/// The bar for membership is the cost, and it is worth stating because this set
+/// used to be the place things went when no other phase felt right. It held
+/// texture uploads, blob copies, screenshots and recording start/stop, all of
+/// which are proportional to something, and the comment claiming everything
+/// here was cheap was simply wrong. Anything that copies, allocates, writes a
+/// file or talks to a driver belongs in `during_commit` or nowhere.
+const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .commit, .render });
 
 var active_phase: Phase = .idle;
 
@@ -895,6 +905,8 @@ fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
             " Load it in init! and keep the handle in your model; loading during a frame blocks it."
         else if (allowed.eql(during_render))
             " Drawing is only defined inside the frame scope the host opens around render!."
+        else if (allowed.eql(during_commit))
+            " Return it from update as an action; it changes host state rather than drawing, so it runs before the frame."
         else
             "",
     });
@@ -2308,7 +2320,7 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_te
 }
 
 fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
-    enforcePhase("Assets.Texture.update!", during_any_callback);
+    enforcePhase("Assets.Texture.update", during_commit);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
     const token = args.texture.resource.handle;
@@ -2333,7 +2345,7 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
 /// one pixel of an atlas means re-uploading the atlas, and a per-frame budget
 /// on whole-texture uploads is just a smaller ceiling on the same waste.
 fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
-    enforcePhase("Assets.Texture.update_region!", during_any_callback);
+    enforcePhase("Assets.Texture.update_region", during_commit);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
 
@@ -2860,7 +2872,7 @@ fn fontForValue(font_value: *const abi.DefaultFontOrLoadedFont) raylib.Font {
 }
 
 fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
-    enforcePhase("Draw.measure_text!", during_any_callback);
+    enforcePhase("Draw.measure_text!", constant_time_anywhere);
     defer args.text.decref(host);
     defer args.font.decref(host);
     var result: abi.DrawHostMeasure_textRetRecord = .{ .height = 0, .width = 0 };
@@ -3140,7 +3152,7 @@ fn blobSlice(roc_host: *RocHost, handle: u64, offset: u64, count: u64) BlobSlice
 
 /// Read one byte of a blob, leaving the rest where it is.
 fn hostedFileBlobByte(args: abi.FileHostBlob_byteArgs) callconv(.c) abi.FileHostBlob_byteRetRecord {
-    enforcePhase("File.Blob.byte!", during_any_callback);
+    enforcePhase("File.Blob.byte!", constant_time_anywhere);
     const bytes = blobBytes(args.handle) orelse return .{ .byte = 0, .err = BLOB_ERR_RELEASED };
     if (args.offset >= bytes.len) return .{ .byte = 0, .err = BLOB_ERR_OUT_OF_BOUNDS };
     return .{ .byte = bytes[@intCast(args.offset)], .err = 0 };
@@ -3760,7 +3772,7 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
-    enforcePhase("Random.i32!", during_any_callback);
+    enforcePhase("Random.i32!", constant_time_anywhere);
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
 }
@@ -3897,7 +3909,7 @@ fn hostedAudioResume(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
-    enforcePhase("Audio.Sound.is_playing!", during_any_callback);
+    enforcePhase("Audio.Sound.is_playing!", constant_time_anywhere);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -4017,7 +4029,7 @@ fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
 }
 
 fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
-    enforcePhase("Audio.Music.is_playing!", during_any_callback);
+    enforcePhase("Audio.Music.is_playing!", constant_time_anywhere);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
@@ -4037,7 +4049,7 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
 }
 
 fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
-    enforcePhase("Audio.Music.length!", during_any_callback);
+    enforcePhase("Audio.Music.length!", constant_time_anywhere);
     defer releaseResourceBox(activeHost(), handle);
     if (builtin.is_test) return 0;
     const resource = music_heap.get(handle.*) orelse return 0;
@@ -4048,7 +4060,7 @@ fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
 }
 
 fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
-    enforcePhase("Audio.Music.time_played!", during_any_callback);
+    enforcePhase("Audio.Music.time_played!", constant_time_anywhere);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
@@ -6136,6 +6148,32 @@ test "an operation allowed in several phases is accepted in each of them" {
         enforcePhase("Mouse.set_cursor", during_commit);
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
         try std.testing.expectEqual(phase, violation.actual);
+    }
+}
+
+test "uploading pixels is refused from render, and taken while committing" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // An upload mutates a resource and may enter the graphics driver. It is
+    // not drawing, and being allowed here is what let an app pay for a
+    // full-texture upload in the middle of a frame it was already behind on.
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+        enforcePhase("Assets.Texture.update", during_commit);
+        const violation = last_phase_violation orelse return error.UploadWasNotRejected;
+        try std.testing.expectEqual(Phase.render, violation.actual);
+    }
+
+    // Startup is exempt from the per-frame byte budget, so it has to stay in
+    // the set: an app builds its atlas before there is a frame to charge it to.
+    for ([_]Phase{ .startup, .commit }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Assets.Texture.update", during_commit);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
 }
 

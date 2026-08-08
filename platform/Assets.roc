@@ -64,6 +64,12 @@ Assets := [].{
 		##
 		## Prefer `update_region!` when only part of the texture changed. This
 		## uploads all of it however little of it differs.
+		##
+		## Valid in `init!` and while the platform is applying an action, and
+		## nowhere else. An upload is not drawing: it mutates a resource and may
+		## enter the graphics driver synchronously, so a `render!` that reached
+		## for it would pay for that in the middle of a frame -- which is
+		## exactly the stall the budget below exists to bound.
 		update! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, UploadBudgetExceeded, ..])
 		update! = |Texture.(texture), pixels|
 			whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
@@ -87,6 +93,9 @@ Assets := [].{
 		## The rectangle must lie inside the texture: the graphics backend does
 		## no bounds checking of its own, so a region that hangs over the edge
 		## is refused here rather than read past the end of the list.
+		##
+		## Valid in `init!` and while an action is being applied, for the same
+		## reason `update!` is.
 		update_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
 		update_region! = |Texture.(texture), region|
 			region_result(

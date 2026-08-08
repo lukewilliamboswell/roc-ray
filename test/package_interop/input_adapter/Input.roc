@@ -15,17 +15,17 @@ Input := [].{
 	## A framework-side event, carrying the platform's own key type.
 	Event : [KeyDown(Keys.KeyboardKey), Click({ x : F32, y : F32 }), Pad(Gamepad.GamepadId), Nothing]
 
-	## Takes the platform's `Host` directly. The open record is what makes this
-	## work: `Host` is a nominal record the package cannot name, but it has these
-	## fields, so the package never needs to know the nominal.
+	## Takes the platform's `Input.Snapshot` directly. The open record is what
+	## makes this work: `Snapshot` is a nominal record the package cannot name,
+	## but it has these fields, so the package never needs to know the nominal.
 	key_event : { keys : List(U8), ..state }, Keys.KeyboardKey -> Event
-	key_event = |host, key| if Keys.key_down(host, key) KeyDown(key) else Nothing
+	key_event = |input, key| if Keys.key_down(input, key) KeyDown(key) else Nothing
 
-	## Takes `host.mouse`, which IS a package-owned nominal (`Mouse.State`).
+	## Takes `input.mouse`, which IS a package-owned nominal (`Mouse.State`).
 	click_event : Mouse.State -> Event
 	click_event = |mouse| if Mouse.button_pressed(mouse, Left) Click(Mouse.position(mouse)) else Nothing
 
-	## Takes `host.gamepads`, another package-owned nominal.
+	## Takes `input.gamepads`, another package-owned nominal.
 	pad_event : Gamepad.Snapshot, Gamepad.GamepadId -> Event
 	pad_event = |snapshot, id| if Gamepad.available(snapshot, id) Pad(id) else Nothing
 

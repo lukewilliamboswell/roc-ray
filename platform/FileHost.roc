@@ -26,25 +26,11 @@ FileHost := [].{
 		size = |Blob.(raw)| raw.byte_len
 	}
 
-	## Outcome of copying part of a blob into a Roc string. `err` is `0` when
-	## `contents` holds the requested range.
-	SliceResult : {
-		err : U8,
-		contents : Str,
-	}
-
 	## Outcome of reading one byte of a blob. `err` is `0` when `byte` is it.
 	ByteResult : {
 		err : U8,
 		byte : U8,
 	}
-
-	## Copy `count` bytes from `offset` into a Roc string.
-	##
-	## This is the one operation that copies, which is why it takes a bounded
-	## range rather than a blob: every byte it moves is a byte the app asked for
-	## by name.
-	blob_slice! : { handle : U64, offset : U64, count : U64 } => SliceResult
 
 	## Read a single byte without copying the rest.
 	blob_byte! : { handle : U64, offset : U64 } => ByteResult

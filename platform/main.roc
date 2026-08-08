@@ -53,7 +53,6 @@ platform ""
 		"roc_audio_music_length_raw": AudioHost.music_length!,
 		"roc_audio_music_time_played_raw": AudioHost.music_time_played!,
 		"roc_audio_set_master_volume_raw": AudioHost.set_master_volume!,
-		"roc_file_blob_slice": FileHost.blob_slice!,
 		"roc_file_blob_byte": FileHost.blob_byte!,
 		"roc_file_release_blob": FileHost.release_blob!,
 		"roc_draw_begin_scissor_raw": DrawHost.begin_scissor!,

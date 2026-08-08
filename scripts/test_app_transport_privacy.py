@@ -44,6 +44,10 @@ CASES = (
         ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
         ("DOES NOT EXIST", "`rr.Capture.stop!`"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "blob_slice_effect.roc",
+        ("MISSING METHOD", "`slice_to_str!`", "File.Blob"),
+    ),
 )
 
 ONE_ERROR = re.compile(r"Found 1 error and \d+ warnings?")

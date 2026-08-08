@@ -3102,7 +3102,14 @@ fn blobBytes(handle: u64) ?[]const u8 {
     return resource.bytes;
 }
 
-fn blobSliceError(err: u8) abi.FileHostBlob_sliceRetRecord {
+/// A range of a blob, copied into a Roc string.
+///
+/// A plain struct rather than a glue type, because there is no longer a hosted
+/// effect that returns one: the only caller is the `ReadBlobSlice` task, which
+/// the host services on the app's behalf from the frame loop.
+const BlobSlice = struct { contents: abi.RocStr, err: u8 };
+
+fn blobSliceError(err: u8) BlobSlice {
     return .{ .contents = abi.RocStr.empty(), .err = err };
 }
 
@@ -3113,25 +3120,14 @@ fn blobSliceError(err: u8) abi.FileHostBlob_sliceRetRecord {
 /// `ReadSmallFile` is held to, because this is the same cost on the same
 /// thread. A range past the end is refused rather than clamped: a short read
 /// that looks complete is worse than one that says so.
-fn hostedFileBlobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
-    enforcePhase("File.Blob.slice_to_str!", during_any_callback);
-    return blobSlice(roc_host, args);
-}
+fn blobSlice(roc_host: *RocHost, handle: u64, offset: u64, count: u64) BlobSlice {
+    const bytes = blobBytes(handle) orelse return blobSliceError(BLOB_ERR_RELEASED);
 
-/// The copy itself, with no phase guard.
-///
-/// Separate from the hosted effect because the host services a `ReadBlobSlice`
-/// task from the frame loop, outside any app callback -- that is bookkeeping on
-/// the app's behalf, not the app reaching for an effect, and the guard is right
-/// to reject the second while this is the first.
-fn blobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) abi.FileHostBlob_sliceRetRecord {
-    const bytes = blobBytes(args.handle) orelse return blobSliceError(BLOB_ERR_RELEASED);
-
-    const end = std.math.add(u64, args.offset, args.count) catch return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
+    const end = std.math.add(u64, offset, count) catch return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
     if (end > bytes.len) return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
-    if (args.count > MAX_INLINE_READ_BYTES) return blobSliceError(BLOB_ERR_TOO_LARGE);
+    if (count > MAX_INLINE_READ_BYTES) return blobSliceError(BLOB_ERR_TOO_LARGE);
 
-    const slice = bytes[@intCast(args.offset)..@intCast(end)];
+    const slice = bytes[@intCast(offset)..@intCast(end)];
     // A blob is bytes; a `Str` is not. Handing Roc invalid UTF-8 would make
     // every later string operation on it undefined.
     if (!std.unicode.utf8ValidateSlice(slice)) return blobSliceError(BLOB_ERR_NOT_UTF8);
@@ -3140,10 +3136,6 @@ fn blobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) abi.FileHostB
         .contents = if (slice.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(slice, roc_host),
         .err = 0,
     };
-}
-
-fn exportedFileBlobSlice(args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
-    return hostedFileBlobSlice(activeHost(), args);
 }
 
 /// Read one byte of a blob, leaving the rest where it is.
@@ -3161,7 +3153,7 @@ fn hostedFileBlobByte(args: abi.FileHostBlob_byteArgs) callconv(.c) abi.FileHost
 /// is given the slot next. Releasing an unknown handle is not an error; the
 /// app asked for these bytes to be gone, and they are.
 fn hostedFileReleaseBlob(handle: u64) callconv(.c) void {
-    enforcePhase("File.Blob.release!", during_any_callback);
+    enforcePhase("File.Blob.release", during_commit);
     _ = blob_table.release(handle);
 }
 
@@ -4217,7 +4209,6 @@ comptime {
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
         @export(&exportedSetClipboardText, .{ .name = "roc_host_set_clipboard_text" });
-        @export(&exportedFileBlobSlice, .{ .name = "roc_file_blob_slice" });
         @export(&hostedFileBlobByte, .{ .name = "roc_file_blob_byte" });
         @export(&hostedFileReleaseBlob, .{ .name = "roc_file_release_blob" });
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
@@ -4641,11 +4632,7 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64) 
 /// step the range was asked for, rather than every frame from inside `render!`
 /// because a pure `update` had no way to reach the bytes.
 fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) void {
-    const result = blobSlice(roc_host, .{
-        .handle = task.blob,
-        .offset = task.offset,
-        .count = task.count,
-    });
+    const result = blobSlice(roc_host, task.blob, task.offset, task.count);
     // The string it built is the one the completion carries; copying it again
     // to hand it over would double the one cost this whole path is about.
     staging.blobSliceReadOwned(task.id, result.err, result.contents);
@@ -5675,7 +5662,7 @@ test "a released blob answers Released rather than reading freed memory" {
     const token = staging.items[0].blob;
     staging.release(&roc_host);
 
-    const whole = hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = payload.len });
+    const whole = blobSlice(&roc_host, token, 0, payload.len);
     try std.testing.expectEqual(@as(u8, 0), whole.err);
     try std.testing.expectEqualStrings(payload, whole.contents.asSlice());
     whole.contents.decref(&roc_host);
@@ -5684,7 +5671,7 @@ test "a released blob answers Released rather than reading freed memory" {
     // test if it did not -- and every later use of the handle is refused.
     hostedFileReleaseBlob(token);
     try std.testing.expectEqual(@as(usize, 0), blob_table.active());
-    try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 1 }).err);
+    try std.testing.expectEqual(BLOB_ERR_RELEASED, blobSlice(&roc_host, token, 0, 1).err);
     try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobByte(.{ .handle = token, .offset = 0 }).err);
 
     // Releasing again is not an error, and must not disturb whatever has since
@@ -5700,8 +5687,8 @@ test "a released blob answers Released rather than reading freed memory" {
 
     // The stale handle names the same slot the replacement now occupies. The
     // generation is the only thing keeping the two apart.
-    try std.testing.expectEqual(BLOB_ERR_RELEASED, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 1 }).err);
-    try std.testing.expectEqual(@as(u8, 0), hostedFileBlobSlice(&roc_host, .{ .handle = fresh, .offset = 0, .count = 0 }).err);
+    try std.testing.expectEqual(BLOB_ERR_RELEASED, blobSlice(&roc_host, token, 0, 1).err);
+    try std.testing.expectEqual(@as(u8, 0), blobSlice(&roc_host, fresh, 0, 0).err);
     hostedFileReleaseBlob(fresh);
 }
 
@@ -5724,18 +5711,18 @@ test "copying out of a blob is bounded, checked, and never silently short" {
 
     // A range that runs past the end is refused rather than clamped: a short
     // read that looks complete is the failure that gets shipped.
-    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = owned.len - 2, .count = 4 }).err);
-    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 8, .count = std.math.maxInt(u64) }).err);
+    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, blobSlice(&roc_host, token, owned.len - 2, 4).err);
+    try std.testing.expectEqual(BLOB_ERR_OUT_OF_BOUNDS, blobSlice(&roc_host, token, 8, std.math.maxInt(u64)).err);
 
     // Bounds first, then the copy limit: the whole blob is in range but larger
     // than the frame thread will copy at once.
-    try std.testing.expectEqual(BLOB_ERR_TOO_LARGE, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = owned.len }).err);
+    try std.testing.expectEqual(BLOB_ERR_TOO_LARGE, blobSlice(&roc_host, token, 0, owned.len).err);
 
     // A `Str` has to be UTF-8, so a range that is not is refused rather than
     // handed over to be misinterpreted later.
-    try std.testing.expectEqual(BLOB_ERR_NOT_UTF8, hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 0, .count = 8 }).err);
+    try std.testing.expectEqual(BLOB_ERR_NOT_UTF8, blobSlice(&roc_host, token, 0, 8).err);
 
-    const preview = hostedFileBlobSlice(&roc_host, .{ .handle = token, .offset = 5, .count = 8 });
+    const preview = blobSlice(&roc_host, token, 5, 8);
     try std.testing.expectEqual(@as(u8, 0), preview.err);
     try std.testing.expectEqualStrings("aaaaaaaa", preview.contents.asSlice());
     preview.contents.decref(&roc_host);

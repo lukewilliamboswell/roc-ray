@@ -16,6 +16,13 @@
 ## until the app asks for some of them, which is what makes every copy in this
 ## module something the app wrote down.
 ##
+## Getting bytes out of a blob is a `ReadBlobSlice` task, not an effect. There
+## is no `to_str!` to reach for, and that is the point: an effect that copies
+## can only be called from `render!`, so an app that wanted a string ended up
+## copying and UTF-8-scanning the same range on every frame that drew it, for a
+## value that changed once. As a task the copy happens once, on the step the
+## range was asked for, and `update` puts the result in the model.
+##
 ## There is still a ceiling, and it is worth stating rather than implying: the
 ## host will not read a file larger than **16 MiB** at all, and a bigger one
 ## comes back as `TooLarge`. What a blob removes is the cost of the bytes
@@ -64,41 +71,6 @@ File := [].{
 		is_empty : Blob -> Bool
 		is_empty = |blob| blob.len() == 0
 
-		## Copy the whole blob into a string.
-		##
-		## The explicit copy, and the only one this module makes without being
-		## given a range. It costs `len` bytes on the calling thread, which is
-		## why it refuses with `TooLarge` above the host's copy limit -- the same
-		## limit `ReadSmallFile` is capped at, because it is the same cost. Walk
-		## a large blob with `slice_to_str!` instead.
-		##
-		## `NotUtf8` is not a formality: a blob is bytes, and a `Str` is not.
-		to_str! : Blob => Try(Str, [NotUtf8, TooLarge, Released])
-		to_str! = |Blob.(raw)| {
-			result = FileHost.blob_slice!({
-				handle: FileHost.Blob.token(raw),
-				offset: 0,
-				count: FileHost.Blob.size(raw),
-			})
-			if result.err == 0 Ok(result.contents) else Err(copy_error(result.err))
-		}
-
-		## Copy `count` bytes starting at `offset` into a string.
-		##
-		## The bounded form, for reading a header, showing a preview, or walking
-		## a large blob a chunk at a time. A range that runs past the end is
-		## `OutOfBounds` rather than being silently clamped: a short read that
-		## looks like a complete one is worse than a refusal.
-		slice_to_str! : Blob, { offset : U64, count : U64 } => Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released])
-		slice_to_str! = |Blob.(raw), range| {
-			result = FileHost.blob_slice!({
-				handle: FileHost.Blob.token(raw),
-				offset: range.offset,
-				count: range.count,
-			})
-			if result.err == 0 Ok(result.contents) else Err(slice_error(result.err))
-		}
-
 		## Read one byte, copying nothing else.
 		byte! : Blob, U64 => Try(U8, [OutOfBounds, Released])
 		byte! = |Blob.(raw), offset| {
@@ -130,31 +102,6 @@ File := [].{
 	}
 }
 
-## Decode the host's copy-error code for a whole-blob copy. A blob that no
-## longer names bytes is `Released` however the host phrased it.
-copy_error : U8 -> [NotUtf8, TooLarge, Released]
-copy_error = |code|
-	if code == err_not_utf8 {
-		NotUtf8
-	} else if code == err_too_large {
-		TooLarge
-	} else {
-		Released
-	}
-
-## Decode the host's copy-error code for a ranged copy.
-slice_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Released]
-slice_error = |code|
-	if code == err_not_utf8 {
-		NotUtf8
-	} else if code == err_too_large {
-		TooLarge
-	} else if code == err_out_of_bounds {
-		OutOfBounds
-	} else {
-		Released
-	}
-
 ## Code for a handle that names no live buffer. Mirrored in `src/host_native.zig`.
 err_released : U8
 err_released = 1
@@ -162,19 +109,3 @@ err_released = 1
 ## Code for a range that runs past the end. Mirrored in `src/host_native.zig`.
 err_out_of_bounds : U8
 err_out_of_bounds = 2
-
-## Code for bytes that are not valid UTF-8. Mirrored in `src/host_native.zig`.
-err_not_utf8 : U8
-err_not_utf8 = 3
-
-## Code for a copy larger than the host will make in one go. Mirrored in
-## `src/host_native.zig`.
-err_too_large : U8
-err_too_large = 4
-
-expect copy_error(err_not_utf8) == NotUtf8
-expect copy_error(err_too_large) == TooLarge
-expect copy_error(err_released) == Released
-expect slice_error(err_out_of_bounds) == OutOfBounds
-expect slice_error(err_not_utf8) == NotUtf8
-expect slice_error(err_released) == Released

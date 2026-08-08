@@ -136,9 +136,13 @@ const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 ///
 /// Both rings are single-producer/single-consumer -- main writes requests and
 /// reads results, the worker does the reverse -- so acquire/release on the
-/// indices is sufficient and no lock is involved. Zig 0.16 moved `Mutex` into
-/// `std.Io` where locking is cancelable and takes an `Io`; sidestepping it
-/// keeps the boundary obviously just data.
+/// indices is all the *data* transfer needs, and neither ring is ever locked.
+///
+/// The lock below exists for one thing only: deciding whether the worker may
+/// go to sleep. An idle app must not burn a core polling, so the worker blocks
+/// on a condition variable rather than waking every millisecond; the mutex is
+/// what makes "the ring looked empty, so I will sleep" and "I just filled the
+/// ring" impossible to interleave. See `wake` and `awaitRequest`.
 const EffectWorker = struct {
     /// Power of two so the index wrap is a mask.
     const capacity: usize = 64;
@@ -168,6 +172,18 @@ const EffectWorker = struct {
 
     should_stop: std.atomic.Value(bool) = .init(false),
 
+    /// Guards the sleep decision, and nothing else. Never held across a read.
+    idle: std.Io.Mutex = .init,
+    /// Signalled when `should_stop` is set or a request is published.
+    wakeup: std.Io.Condition = .init,
+    /// How many times the worker has decided to sleep.
+    ///
+    /// Observability only, and the reason it lives here rather than in a test:
+    /// nothing else distinguishes "the submission woke a parked worker" from
+    /// "the worker had not looked at the ring yet", and only the first of those
+    /// exercises the wake protocol at all.
+    parks: std.atomic.Value(u64) = .init(0),
+
     /// Whether requests will be serviced. Separate from `thread` so the ring
     /// can be tested without spawning one.
     accepting: bool = false,
@@ -190,7 +206,14 @@ const EffectWorker = struct {
     fn stop(self: *EffectWorker) void {
         self.accepting = false;
         if (self.thread) |thread| {
+            // Same protocol as a submission, for the same reason: the flag is
+            // published before the lock is taken, so a worker that reaches the
+            // sleep decision after this cannot fail to see it, and a worker
+            // already asleep is signalled. Requests still queued are abandoned
+            // rather than drained, so shutdown costs at most the read already
+            // in flight.
             self.should_stop.store(true, .release);
+            self.wake();
             thread.join();
             self.thread = null;
         }
@@ -200,11 +223,33 @@ const EffectWorker = struct {
         }
     }
 
+    /// Nudge the worker out of `awaitRequest`. Frame thread only.
+    ///
+    /// This is the half of the protocol that makes a lost wakeup impossible.
+    /// The caller has already published the state change (a ring index or
+    /// `should_stop`) with a release store. Taking and immediately releasing
+    /// `idle` orders that publication against the worker's sleep decision:
+    ///
+    ///   * If the worker already read the predicate under `idle` and found
+    ///     nothing, it registered itself as a waiter *before* releasing the
+    ///     lock inside `wait`, so this `lock` can only succeed once it is
+    ///     parked -- and the `signal` below therefore reaches it.
+    ///   * Otherwise the worker takes `idle` after this `unlock`, so it
+    ///     observes the published change and never waits at all.
+    ///
+    /// There is no third case, which is why the wait is never a bare one-shot.
+    fn wake(self: *EffectWorker) void {
+        const io = mainThreadIo();
+        self.idle.lockUncancelable(io);
+        self.idle.unlock(io);
+        self.wakeup.signal(io);
+    }
+
     /// Why a submission was refused, so the caller can report it rather than
     /// dropping the command or running it on the frame thread.
     const Submission = enum { accepted, busy, unavailable };
 
-    /// Queue a read.
+    /// Queue a read. Frame thread only.
     fn submitReadFile(self: *EffectWorker, id: u64, path: []const u8) Submission {
         if (!self.accepting) return .unavailable;
         if (path.len > capture.path_capacity) return .unavailable;
@@ -218,7 +263,19 @@ const EffectWorker = struct {
         slot.path_len = path.len;
         slot.id = id;
         self.request_write.store(write +% 1, .release);
+        // Only after the request is visible; a refusal wakes nobody, which is
+        // what keeps `Busy` and `Unavailable` pure refusals.
+        self.wake();
         return .accepted;
+    }
+
+    /// Pop one request. Worker thread only.
+    fn takeRequest(self: *EffectWorker) ?Request {
+        const read = self.request_read.load(.monotonic);
+        if (read == self.request_write.load(.acquire)) return null;
+        const request = self.requests[read & mask];
+        self.request_read.store(read +% 1, .release);
+        return request;
     }
 
     fn takeResult(self: *EffectWorker) ?Result {
@@ -240,25 +297,34 @@ const EffectWorker = struct {
         self.result_write.store(write +% 1, .release);
     }
 
+    /// Block until there is a request to run, or until shutdown. Worker only.
+    ///
+    /// The predicate -- "shutting down, or the ring is non-empty" -- is read
+    /// under `idle` and re-read in a loop, so a spurious wakeup just goes back
+    /// to sleep and a real one cannot be missed. See `wake` for the other half.
+    /// The lock is released before the caller does any I/O.
+    fn awaitRequest(self: *EffectWorker, io: std.Io) ?Request {
+        self.idle.lockUncancelable(io);
+        defer self.idle.unlock(io);
+        while (true) {
+            if (self.should_stop.load(.acquire)) return null;
+            if (self.takeRequest()) |request| return request;
+            // Bumped under `idle`, so a frame thread that has seen it knows the
+            // worker is past its last predicate check and cannot miss a signal.
+            _ = self.parks.fetchAdd(1, .release);
+            self.wakeup.waitUncancelable(io, &self.idle);
+        }
+    }
+
     /// The worker loop. Nothing in here may touch Roc.
     fn run(self: *EffectWorker) void {
-        // Its own IO: `mainThreadIo` is explicitly single-threaded.
+        // Its own IO: `mainThreadIo` is explicitly single-threaded, and this
+        // thread must never reach for it.
         var threaded: std.Io.Threaded = .init(self.allocator, .{});
         defer threaded.deinit();
         const io = threaded.io();
 
-        while (!self.should_stop.load(.acquire)) {
-            const read = self.request_read.load(.monotonic);
-            if (read == self.request_write.load(.acquire)) {
-                // Polling rather than a futex keeps the boundary to plain data.
-                // A millisecond of latency is immaterial next to a frame.
-                std.Io.sleep(io, .fromMilliseconds(1), .awake) catch return;
-                continue;
-            }
-
-            const request = self.requests[read & mask];
-            self.request_read.store(read +% 1, .release);
-
+        while (self.awaitRequest(io)) |request| {
             const path = request.path[0..request.path_len];
             const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
                 self.postResult(.{
@@ -4425,6 +4491,99 @@ test "a saturated worker refuses with Busy rather than running work inline" {
         try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(accepted, "x"));
     }
     try std.testing.expectEqual(EffectWorker.Submission.busy, worker.submitReadFile(9999, "x"));
+}
+
+/// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.
+///
+/// The worker resolves paths against `cwd`, so a test file has to be named the
+/// way the worker will look for it.
+const testing_tmp_prefix = ".zig-cache/tmp/";
+
+/// Spin until the worker answers, or give up.
+///
+/// The deadline is the assertion: with a lost wakeup the worker sleeps forever
+/// and nothing ever arrives, so "it answered at all" is the property under test.
+fn awaitWorkerResult(worker: *EffectWorker) !EffectWorker.Result {
+    var waited: usize = 0;
+    while (waited < 5_000) : (waited += 1) {
+        if (worker.takeResult()) |result| return result;
+        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
+    }
+    return error.WorkerNeverAnswered;
+}
+
+/// Spin until the worker has gone to sleep at least `count` times.
+fn awaitWorkerParked(worker: *EffectWorker, count: u64) !void {
+    var waited: usize = 0;
+    while (waited < 5_000) : (waited += 1) {
+        if (worker.parks.load(.acquire) >= count) return;
+        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
+    }
+    return error.WorkerNeverParked;
+}
+
+test "a submission wakes a blocked worker" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // A real file, so the result the worker posts owns real storage. A value
+    // built with `std.mem.zeroes` would carry a null buffer and could not tell
+    // a correct free from a missing one.
+    const payload = "the frame thread never read this";
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "read.txt", .data = payload });
+
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/read.txt", .{tmp.sub_path});
+
+    var worker = EffectWorker{};
+    worker.start(std.testing.allocator);
+    defer worker.stop();
+    try std.testing.expect(worker.thread != null);
+
+    // Wait for the worker to be genuinely asleep first. Without this the
+    // submission can land before the worker ever looks at the ring, and the
+    // test would pass even with no wakeup at all.
+    try awaitWorkerParked(&worker, 1);
+
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(7, path));
+
+    const result = try awaitWorkerResult(&worker);
+    defer std.testing.allocator.free(result.bytes.?);
+    try std.testing.expectEqual(@as(u64, 7), result.id);
+    try std.testing.expectEqual(@as(u8, 0), result.err);
+    try std.testing.expectEqualStrings(payload, result.bytes.?);
+}
+
+test "shutting down with work still queued terminates and frees what it produced" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "read.txt", .data = "queued work" });
+
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/read.txt", .{tmp.sub_path});
+
+    var worker = EffectWorker{};
+    worker.start(std.testing.allocator);
+
+    var queued: u64 = 0;
+    while (queued < EffectWorker.capacity) : (queued += 1) {
+        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(queued, path));
+    }
+
+    // Wait for the first answer without consuming it, so the shutdown below has
+    // finished buffers to release and not just an empty ring.
+    var waited: usize = 0;
+    while (worker.result_write.load(.acquire) == 0 and waited < 5_000) : (waited += 1) {
+        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
+    }
+    try std.testing.expect(worker.result_write.load(.acquire) > 0);
+
+    // Nothing was ever drained, so every buffer the worker allocated is still
+    // owned here. `std.testing.allocator` fails this test if `stop` leaks one,
+    // and hangs it if the worker misses the shutdown signal.
+    worker.stop();
+    try std.testing.expect(worker.thread == null);
+    try std.testing.expect(worker.takeResult() == null);
 }
 
 

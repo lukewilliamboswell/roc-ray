@@ -26,15 +26,6 @@ CaptureHost := [].{
 		bytes : U64,
 	}
 
-	## Live recording state. `status` is idle/active/failed; `err` carries the
-	## latched reason when a recording stopped early.
-	StatusResult : {
-		status : U8,
-		err : U8,
-		frames : U64,
-		dropped : U64,
-	}
-
 	## A scripted pointer state. `active` false hands control back to hardware.
 	VirtualMouse : {
 		active : Bool,
@@ -46,9 +37,13 @@ CaptureHost := [].{
 		wheel : F32,
 	}
 
-	screenshot! : Str => U8
 	set_virtual_mouse! : VirtualMouse => {}
+
+	## Arm a recording. The refusal code is latched by the host rather than
+	## acted on here: starting is an action, and an action has nowhere to report
+	## to. An app reads the outcome off `step.capture` on the next cycle.
 	start_recording! : StartRecording => U8
+
+	## Finalize the running recording and write its file.
 	stop_recording! : () => StopResult
-	recording_status! : () => StatusResult
 }

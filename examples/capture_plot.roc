@@ -69,18 +69,21 @@ init! = App.init(
 ## Elapsed time advances on the tick rather than inside the draw, so the plot
 ## is a pure function of the model when `render!` runs.
 ##
-## The recording state arrives on the step rather than being asked for: a pure
-## `update` cannot call `Capture.status!`, and the host samples it onto every
-## cycle anyway.
+## The recording state arrives on the step rather than being asked for. There is
+## no effect that asks: starting and stopping are actions, so the sampled state
+## is the only channel a recording's outcome has.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
 	# The host finalizes the file itself once the recording reaches its frame
-	# cap, which leaves the session idle. That is the signal there is nothing
-	# left to capture, so shut down.
+	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
+	# is also what a run with no recording at all looks like, and a headless
+	# run is exactly that, so this app used to exit on its first step having
+	# captured nothing and call it a success.
 	actions =
 		match step.capture {
-			Idle => [Program.exit(0)]
+			Finished(_) => [Program.exit(0)]
 			Failed(_) => [Program.exit(1)]
+			Idle => []
 			Active(_) => []
 		}
 

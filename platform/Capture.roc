@@ -7,8 +7,14 @@
 ##
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
-## containing `..` -- is refused rather than rewritten. These effects are the
-## only file-writing capability the platform grants.
+## containing `..` -- is refused rather than rewritten. Capture is the only
+## file-writing capability the platform grants.
+##
+## Nothing here is an effect an app can call. Recording starts and stops through
+## actions, a screenshot is a `Program.Task`, and the live state is sampled onto
+## `step.capture` every cycle. That is not tidiness: an effectful `stop!` is
+## reachable from `render!`, where it would finalize a file -- an encode and a
+## write -- in the middle of drawing a frame.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
@@ -40,15 +46,40 @@ Capture := [].{
 	## A validated recording request. Update it through its receivers.
 	Recording : RrtCapture.Recording
 
-	## Live recording state, as reported by `Capture.status!`.
+	## Live recording state, sampled onto every `Program.Step` as `step.capture`.
+	##
+	## There is no effect that asks for this, and that is deliberate: starting
+	## and stopping are actions, so this is the only channel their outcome has.
+	##
+	## `Finished` is separate from `Idle` on purpose. A recording that reaches
+	## its frame cap finalizes itself with nothing to tell the app, and `Idle`
+	## would be indistinguishable from never having recorded at all -- so an app
+	## waiting for its capture to complete would have nothing to wait on.
 	Status : [
 		Idle,
 		Active({ frames : U64, dropped : U64 }),
+		Finished({ frames : U64, bytes : U64 }),
 		Failed({ frames : U64, reason : FailureReason }),
 	]
 
-	## Why a running recording stopped early.
-	FailureReason : [UnsupportedFormat, OutOfMemory, WriteFailed, EncodeFailed, Unknown]
+	## Why a recording is not running.
+	##
+	## The first four are refusals of a `Capture.start` action -- the request
+	## was never armed, and nothing was written. The rest are a running
+	## recording that stopped early. They share one type because they reach the
+	## app the same way, in `Failed`, and an app that just wants to know whether
+	## its capture worked should not have to care which kind it got.
+	FailureReason : [
+		PathInvalid,
+		PathEscapesOutputDir,
+		AlreadyRecording,
+		BudgetExceeded,
+		UnsupportedFormat,
+		OutOfMemory,
+		WriteFailed,
+		EncodeFailed,
+		Unknown,
+	]
 
 	## Where pointer input comes from.
 	##
@@ -87,8 +118,10 @@ Capture := [].{
 	## The pointer is invisible in a recording unless the recording also asks
 	## for `DrawCursor`, because the system cursor is not part of the
 	## framebuffer that gets captured.
-	set_virtual_mouse! : Pointer => {}
-	set_virtual_mouse! = |pointer|
+	## Apply a `SetVirtualMouse` action. Platform-internal: `main.roc`'s adapter
+	## calls this, and an app reaches it through `Capture.set_virtual_mouse`.
+	apply_virtual_mouse! : Pointer => {}
+	apply_virtual_mouse! = |pointer|
 		match pointer {
 			Real =>
 				CaptureHost.set_virtual_mouse!({
@@ -120,29 +153,41 @@ Capture := [].{
 	set_virtual_mouse : Pointer -> [SetVirtualMouse(Pointer), ..]
 	set_virtual_mouse = |pointer| SetVirtualMouse(pointer)
 
-	## Write a single still image of the current frame.
+	## Begin recording, as an action a pure `update` can return.
 	##
-	## The extension selects the encoder; `.png` is the portable choice. The
-	## file is written at the end of the frame in which this is called, so the
-	## image shows everything the app drew this frame.
-	screenshot! : Str => Try({}, [PathInvalid, PathEscapesOutputDir, WriteFailed, OutOfMemory, AlreadyPending, ..])
-	screenshot! = |path|
-		match CaptureHost.screenshot!(path) {
-			0 => Ok({})
-			1 => Err(PathInvalid)
-			2 => Err(PathEscapesOutputDir)
-			3 => Err(AlreadyPending)
-			7 => Err(OutOfMemory)
-			_ => Err(WriteFailed)
-		}
-
-	## Begin recording. Frames accumulate until the recording hits its frame
-	## cap, `Capture.stop!` is called, or the app exits -- all three finalize
+	## Frames accumulate until the recording hits its frame cap, a
+	## `Capture.stop` action is applied, or the app exits -- all three finalize
 	## the file.
-	start! : Recording => Try({}, [AlreadyRecording, PathInvalid, PathEscapesOutputDir, UnsupportedFormat, BudgetExceeded, OutOfMemory, WriteFailed, EncodeFailed, ..])
-	start! = |recording| {
+	##
+	## An action rather than a task because there is nothing to correlate back:
+	## a recording is either running or it is not, and `step.capture` says which
+	## on every cycle. A start the host refuses shows up there as `Failed`
+	## carrying the reason, on the very next step.
+	##
+	## There is deliberately no effectful form. One reachable from `render!`
+	## could finalize a file in the middle of drawing a frame, which is both a
+	## stall nobody asked for and an ordering nobody can see.
+	start : Recording -> [StartRecording(Recording), ..]
+	start = |recording| StartRecording(recording)
+
+	## Finish the current recording and write its file, as an action.
+	##
+	## Stopping when nothing is recording does nothing and is not an error: the
+	## state the app asked for is the state it already had. The frame count and
+	## the file size arrive on the next step, as `Finished`.
+	stop : [StopRecording, ..]
+	stop = StopRecording
+
+	## Apply a `StartRecording` action. Platform-internal.
+	##
+	## The refusal code is dropped here rather than propagated: an action has
+	## nobody to return it to, so the host latches it and the app reads it off
+	## `step.capture`. Failing the cycle instead would take the app down for a
+	## bad path.
+	apply_start! : Recording => {}
+	apply_start! = |recording| {
 		ratio = RrtCapture.scale_ratio(recording.scale())
-		result = CaptureHost.start_recording!({
+		_refusal = CaptureHost.start_recording!({
 			path: recording.path(),
 			format: RrtCapture.format_code(recording.format()),
 			fps: recording.fps(),
@@ -154,67 +199,44 @@ Capture := [].{
 			cursor: RrtCapture.cursor_code(recording.cursor()),
 			quality: RrtCapture.quality_code(recording.quality()),
 		})
-		match result {
-			0 => Ok({})
-			1 => Err(PathInvalid)
-			2 => Err(PathEscapesOutputDir)
-			3 => Err(AlreadyRecording)
-			5 => Err(UnsupportedFormat)
-			6 => Err(BudgetExceeded)
-			7 => Err(OutOfMemory)
-			8 => Err(WriteFailed)
-			_ => Err(EncodeFailed)
-		}
+		{}
 	}
 
-	## Finish the current recording and write its file, reporting how many
-	## frames it holds and how large it is on disk.
-	stop! : () => Try({ frames : U64, bytes : U64 }, [NotRecording, UnsupportedFormat, OutOfMemory, WriteFailed, EncodeFailed, ..])
-	stop! = || {
-		result = CaptureHost.stop_recording!()
-		match result.err {
-			0 => Ok({ frames: result.frames, bytes: result.bytes })
-			4 => Err(NotRecording)
-			5 => Err(UnsupportedFormat)
-			7 => Err(OutOfMemory)
-			8 => Err(WriteFailed)
-			_ => Err(EncodeFailed)
-		}
-	}
-
-	## Check on a recording without stopping it.
+	## Apply a `StopRecording` action. Platform-internal.
 	##
-	## A recording that ran out of memory or could not write reports `Failed`
-	## rather than crashing the app, so a long capture can degrade without
-	## taking the visualization down with it.
-	status! : () => Status
-	status! = || {
-		result = CaptureHost.recording_status!()
-		if result.status == 1 {
-			Active({ frames: result.frames, dropped: result.dropped })
-		} else if result.status == 2 {
-			Failed({ frames: result.frames, reason: failure_reason(result.err) })
-		} else {
-			Idle
-		}
+	## The frame count and byte count it returns are dropped for the same
+	## reason, and reach the app as `Finished` on the next step instead.
+	apply_stop! : () => {}
+	apply_stop! = || {
+		_finished = CaptureHost.stop_recording!()
+		{}
 	}
 }
 
-## Name every failure code the host can latch on a running recording.
+## Name every failure code the host can latch, whether it refused a start or
+## stopped a running recording.
 ##
 ## `Unknown` means the host reported a code this module has no name for, which
 ## is a drift bug rather than a state an app should have to handle.
 failure_reason : U8 -> Capture.FailureReason
 failure_reason = |code|
 	match code {
+		1 => PathInvalid
+		2 => PathEscapesOutputDir
+		3 => AlreadyRecording
 		5 => UnsupportedFormat
+		6 => BudgetExceeded
 		7 => OutOfMemory
 		8 => WriteFailed
 		9 => EncodeFailed
 		_ => Unknown
 	}
 
+expect failure_reason(1) == PathInvalid
+expect failure_reason(2) == PathEscapesOutputDir
+expect failure_reason(3) == AlreadyRecording
 expect failure_reason(5) == UnsupportedFormat
+expect failure_reason(6) == BudgetExceeded
 expect failure_reason(7) == OutOfMemory
 expect failure_reason(8) == WriteFailed
 expect failure_reason(9) == EncodeFailed

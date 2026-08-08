@@ -40,6 +40,10 @@ CASES = (
         ROOT / "test" / "compile_fail" / "texture_view_sampler.roc",
         ("MISSING METHOD", "`set_filter!`", "Assets.TextureView"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
+        ("DOES NOT EXIST", "`rr.Capture.stop!`"),
+    ),
 )
 
 ONE_ERROR = re.compile(r"Found 1 error and \d+ warnings?")

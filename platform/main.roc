@@ -82,11 +82,9 @@ platform ""
 		"roc_draw_text_raw": DrawHost.text!,
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,
-		"roc_capture_screenshot": CaptureHost.screenshot!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
-		"roc_capture_recording_status": CaptureHost.recording_status!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_random_i32": HostHost.random_i32!,
@@ -320,7 +318,9 @@ run_action! = |action|
 		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
 		UpdateTexture(request) => request.texture.update!(request.pixels)
 		UpdateTextureRegion(request) => request.texture.update_region!(request.region)
-		SetVirtualMouse(pointer) => Ok(Capture.set_virtual_mouse!(pointer))
+		SetVirtualMouse(pointer) => Ok(Capture.apply_virtual_mouse!(pointer))
+		StartRecording(recording) => Ok(Capture.apply_start!(recording))
+		StopRecording => Ok(Capture.apply_stop!())
 		# Frees host memory in this cycle rather than reporting back later, which
 		# is exactly what an action is for.
 		ReleaseBlob(blob) => Ok(blob.release!())

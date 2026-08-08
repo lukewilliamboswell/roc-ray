@@ -74,6 +74,13 @@ pub const status_idle: u8 = 0;
 pub const status_active: u8 = 1;
 /// A recording stopped early; `Session.failure` holds the reason.
 pub const status_failed: u8 = 2;
+/// A recording ran to its end and its file was written.
+///
+/// Distinct from `status_idle`, which an app cannot tell apart from never
+/// having recorded at all. A recording that reaches its frame cap finalizes
+/// itself, and this is how the app finds out -- there is no call to make and,
+/// now that starting and stopping are actions, nothing that returns to it.
+pub const status_finished: u8 = 3;
 
 /// Largest in-memory footprint a buffering encoder may reach, in bytes.
 ///
@@ -412,6 +419,31 @@ pub const Session = struct {
         self.failure = reason;
     }
 
+    /// Latch a start that never happened.
+    ///
+    /// Starting is an action, so there is nobody to return a refusal code to;
+    /// the app finds out by looking at the recording state on the next step.
+    /// `failed` rather than `idle` is the honest answer -- the app asked for a
+    /// recording and there is not one -- and `idle` would be indistinguishable
+    /// from never having asked.
+    ///
+    /// A refusal while a recording is running says nothing about that
+    /// recording, which is still fine, so it is not latched over it.
+    pub fn refuse(self: *Session, reason: Failure) void {
+        if (self.status == status_active) return;
+        self.status = status_failed;
+        self.failure = reason;
+    }
+
+    /// Undo a start that could not be completed, leaving no trace of it.
+    ///
+    /// Not `stop`: nothing was recorded and no file exists, so reporting the
+    /// session as finished would be a claim about an artifact that is not there.
+    pub fn abandon(self: *Session) void {
+        self.status = status_idle;
+        self.failure = err_none;
+    }
+
     /// Leave the active state, returning the code Roc should observe.
     ///
     /// A recording that already failed reports its latched reason rather than
@@ -419,7 +451,7 @@ pub const Session = struct {
     pub fn stop(self: *Session) u8 {
         switch (self.status) {
             status_active => {
-                self.status = status_idle;
+                self.status = status_finished;
                 return err_none;
             },
             status_failed => {
@@ -743,11 +775,48 @@ test "a failure latches, halts capture, and surfaces on stop" {
     try std.testing.expectEqual(err_none, session.failure);
 }
 
+test "a stopped recording is finished rather than idle" {
+    var session = Session{};
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    try std.testing.expectEqual(err_none, session.stop());
+
+    // The distinction the app needs: this is not the state it was in before it
+    // ever recorded anything, and it captures no further frames either.
+    try std.testing.expectEqual(status_finished, session.status);
+    try std.testing.expect(!session.isActive());
+    try std.testing.expect(!session.shouldCaptureFrame());
+
+    // Stopping again is not stopping anything, and starting again is allowed.
+    try std.testing.expectEqual(err_not_recording, session.stop());
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    try std.testing.expectEqual(status_active, session.status);
+}
+
 test "failing an idle session changes nothing" {
     var session = Session{};
     session.fail(err_out_of_memory);
     try std.testing.expectEqual(status_idle, session.status);
     try std.testing.expectEqual(err_none, session.failure);
+}
+
+test "a refused start is reported even though nothing was recording" {
+    var session = Session{};
+    session.refuse(err_path_escapes);
+    try std.testing.expectEqual(status_failed, session.status);
+    try std.testing.expectEqual(err_path_escapes, session.failure);
+
+    // Observing it clears it, and the next start is unaffected.
+    try std.testing.expectEqual(err_path_escapes, session.stop());
+    try std.testing.expectEqual(status_idle, session.status);
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+}
+
+test "a refusal never overwrites a running recording's state" {
+    var session = Session{};
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    session.refuse(err_already_recording);
+    try std.testing.expectEqual(status_active, session.status);
+    try std.testing.expect(session.isActive());
 }
 
 test "reset returns a used session to its startup state" {

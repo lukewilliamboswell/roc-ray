@@ -188,6 +188,16 @@ Program := [].{
 		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
 		SetVirtualMouse(Capture.Pointer),
 		ReleaseBlob(File.Blob),
+
+		## Arm a recording, or finalize the one that is running.
+		##
+		## Actions rather than effects because finalizing writes a file, and an
+		## effect that does that is reachable from `render!` -- an encode and a
+		## write in the middle of a frame, at a point in the drawing order
+		## nobody can see. As actions they run before anything is drawn, and
+		## the outcome of both arrives on `step.capture`.
+		StartRecording(Capture.Recording),
+		StopRecording,
 	]
 
 	## Ask the host to shut down with an exit code.
@@ -326,13 +336,15 @@ Program := [].{
 
 	## The flat record a cycle's recording state arrives in.
 	##
-	## Mirrors `CaptureHost.StatusResult`, which `Capture.status!` decodes; this
-	## is the same observation, sampled once per step instead of asked for.
+	## The only channel a recording's outcome has, now that starting and
+	## stopping are actions with nowhere to report back to. `bytes` is the size
+	## of a finished file; it is zero while a recording is still running.
 	CaptureFromHost : {
 		status : U8,
 		err : U8,
 		frames : U64,
 		dropped : U64,
+		bytes : U64,
 	}
 
 	## Flatten a `Task` for the host.
@@ -412,6 +424,8 @@ Program := [].{
 			Active({ frames: raw.frames, dropped: raw.dropped })
 		} else if raw.status == capture_status_failed {
 			Failed({ frames: raw.frames, reason: capture_failure(raw.err) })
+		} else if raw.status == capture_status_finished {
+			Finished({ frames: raw.frames, bytes: raw.bytes })
 		} else {
 			Idle
 		}
@@ -497,6 +511,11 @@ capture_status_active = 1
 capture_status_failed : U8
 capture_status_failed = 2
 
+## `status` code for a recording that ran to its end and wrote its file.
+## Mirrored in `src/capture.zig`.
+capture_status_finished : U8
+capture_status_finished = 3
+
 ## Error code for content the frame thread declined to copy into a `Str`.
 ## Mirrored in `src/host_native.zig`.
 read_err_too_large : U8
@@ -538,11 +557,16 @@ screenshot_error = |code|
 		_ => WriteFailed
 	}
 
-## Name every failure code a recording can latch. Mirrors `Capture.status!`.
+## Name every failure code a recording can latch -- a start the host refused as
+## well as a running recording that stopped early.
 capture_failure : U8 -> Capture.FailureReason
 capture_failure = |code|
 	match code {
+		1 => PathInvalid
+		2 => PathEscapesOutputDir
+		3 => AlreadyRecording
 		5 => UnsupportedFormat
+		6 => BudgetExceeded
 		7 => OutOfMemory
 		8 => WriteFailed
 		9 => EncodeFailed
@@ -624,7 +648,16 @@ expect Program.completion_from_host({ kind: 5, id: 2, err: 5, contents: "", blob
 expect Program.completion_from_host({ kind: 5, id: 2, err: 1, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Released) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 10, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Busy) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 3, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(AlreadyPending) })
-expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0 }) == Idle
-expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1 }) == Active({ frames: 12, dropped: 1 })
-expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0 }) == Failed({ frames: 3, reason: WriteFailed })
-expect Program.capture_from_host({ status: 2, err: 0, frames: 3, dropped: 0 }) == Failed({ frames: 3, reason: Unknown })
+expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0, bytes: 0 }) == Idle
+expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1, bytes: 0 }) == Active({ frames: 12, dropped: 1 })
+expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0, bytes: 0 }) == Failed({ frames: 3, reason: WriteFailed })
+expect Program.capture_from_host({ status: 2, err: 0, frames: 3, dropped: 0, bytes: 0 }) == Failed({ frames: 3, reason: Unknown })
+
+## A recording that finished is not one that never ran. Both would have been
+## `Idle` before, which left an app waiting for its capture with nothing to
+## wait on.
+expect Program.capture_from_host({ status: 3, err: 0, frames: 300, dropped: 4, bytes: 98_304 }) == Finished({ frames: 300, bytes: 98_304 })
+
+## A start the host would not arm is reported too, because an action has no
+## other way to say so.
+expect Program.capture_from_host({ status: 2, err: 2, frames: 0, dropped: 0, bytes: 0 }) == Failed({ frames: 0, reason: PathEscapesOutputDir })

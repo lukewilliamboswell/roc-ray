@@ -238,9 +238,6 @@ const EffectWorker = struct {
         pixels: []u8 = &.{},
         width: u32 = 0,
         height: u32 = 0,
-        /// `write_png`: false for the `Capture.screenshot!` effect, which has
-        /// no completion to report to and latches its outcome instead.
-        for_task: bool = false,
     };
 
     /// `bytes` is owned by `allocator` until the main thread takes it: either by
@@ -252,7 +249,6 @@ const EffectWorker = struct {
         bytes: ?[]u8 = null,
         err: u8 = 0,
         deliver_blob: bool = false,
-        for_task: bool = false,
     };
 
     requests: [capacity]Request = undefined,
@@ -382,7 +378,6 @@ const EffectWorker = struct {
         pixels: []u8,
         width: u32,
         height: u32,
-        for_task: bool,
     ) Submission {
         if (!self.accepting) return .unavailable;
         if (path.len > capture.path_capacity) return .unavailable;
@@ -399,7 +394,6 @@ const EffectWorker = struct {
             .pixels = pixels,
             .width = width,
             .height = height,
-            .for_task = for_task,
         };
         @memcpy(slot.path[0..path.len], path);
         self.request_write.store(write +% 1, .release);
@@ -546,7 +540,6 @@ const EffectWorker = struct {
                     error.OutOfMemory => capture.err_out_of_memory,
                     else => capture.err_write_failed,
                 },
-                .for_task = request.for_task,
             });
             return;
         };
@@ -556,7 +549,6 @@ const EffectWorker = struct {
             .kind = .write_png,
             .id = request.id,
             .err = writeWholeFile(io, path, encoded),
-            .for_task = request.for_task,
         });
     }
 };
@@ -920,17 +912,12 @@ var capture_recording_path_len: usize = 0;
 var capture_screenshot_path: [capture.path_capacity]u8 = undefined;
 var capture_screenshot_path_len: usize = 0;
 var capture_screenshot_pending: bool = false;
-/// Outcome of the most recent serviced screenshot.
+/// Id of the screenshot task that queued the pending request.
 ///
-/// A screenshot is written at the end of the frame that asked for it, so the
-/// effect cannot return the write's result. Latching it here lets the next
-/// `Capture.screenshot!` report that the previous one failed rather than
-/// letting the failure vanish.
-var capture_screenshot_result: u8 = capture.err_none;
-/// Id of the screenshot task that queued the pending request, if a task did.
-///
-/// A `Screenshot` task has somewhere to report to, so its outcome becomes a
-/// completion on the next step instead of being latched for a later call.
+/// Every screenshot is a task now, so this is set whenever a request is
+/// pending. It exists as an optional because the write happens at the end of a
+/// later part of the frame than the accept, and the two have to agree on
+/// whether there is anything outstanding.
 var capture_screenshot_task_id: ?u64 = null;
 /// A serviced screenshot task whose completion has not reached Roc yet.
 var capture_screenshot_done: ?ScreenshotOutcome = null;
@@ -1539,7 +1526,6 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
-    capture_screenshot_result = capture.err_none;
     capture_screenshot_task_id = null;
     capture_screenshot_done = null;
     capture_screenshot_path_len = 0;
@@ -3365,43 +3351,16 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
     return std.fmt.bufPrint(buffer, "{s}_{d:0>5}{s}", .{ stem, index, extension }) catch null;
 }
 
-fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase("Capture.screenshot!", during_any_callback);
-    defer path_arg.decref(roc_host);
-    const path = path_arg.asSlice();
-
-    const validation = capture.validateRelativePath(path);
-    if (validation != capture.err_none) return validation;
-
-    // Headless runs have no framebuffer to read, so the request is validated
-    // and then dropped rather than writing a file that would be all zeroes.
-    if (headlessMode()) return capture.err_none;
-
-    // A request already queued this frame has not been serviced yet, and there
-    // is only one slot. Refuse rather than silently discarding the first path.
-    if (capture_screenshot_pending) return capture.err_already_recording;
-
-    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
-        return capture.err_path_invalid;
-    }
-    capture_screenshot_pending = true;
-
-    // The write happens at the end of this frame, so the only failure this call
-    // can report is the previous screenshot's. Reporting it late beats losing
-    // it: the alternative is a write that fails with no signal anywhere.
-    const previous = capture_screenshot_result;
-    capture_screenshot_result = capture.err_none;
-    return previous;
-}
-
-fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
-    return hostedCaptureScreenshot(activeHost(), path_arg);
-}
-
+/// Apply a `Capture.start` action.
+///
+/// The refusal code goes into the session rather than back to Roc: an action
+/// has nobody to report to, and an app reads the outcome off `step.capture` on
+/// the next cycle. The code is still returned so the effect keeps a shape the
+/// ABI can carry, and so a test can assert on it directly.
 fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
-    enforcePhase("Capture.start!", during_any_callback);
+    enforcePhase("Capture.start", during_commit);
     defer args.path.decref(roc_host);
-    return startCaptureRecording(.{
+    const result = startCaptureRecording(.{
         .path = args.path.asSlice(),
         .format = args.format,
         .fps = args.fps,
@@ -3413,6 +3372,8 @@ fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_re
         .cursor = args.cursor,
         .quality = args.quality,
     });
+    if (result != capture.err_none) capture_session.refuse(result);
+    return result;
 }
 
 fn exportedCaptureStartRecording(args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
@@ -3446,7 +3407,7 @@ fn startCaptureRecording(request: capture.Request) u8 {
     capture_downscale_unavailable = false;
 
     if (!storeCapturePath(&capture_recording_path, &capture_recording_path_len, request.path)) {
-        _ = capture_session.stop();
+        capture_session.abandon();
         return capture.err_path_invalid;
     }
     capture_recording_bytes = 0;
@@ -3461,7 +3422,7 @@ fn startCaptureRecording(request: capture.Request) u8 {
             else => capture.err_none,
         };
         if (opened != capture.err_none) {
-            _ = capture_session.stop();
+            capture_session.abandon();
             return opened;
         }
     }
@@ -3589,7 +3550,7 @@ fn currentRenderHeight() i32 {
 }
 
 fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) callconv(.c) void {
-    enforcePhase("Capture.set_virtual_mouse", during_any_callback);
+    enforcePhase("Capture.set_virtual_mouse", during_commit);
     if (!args.active) {
         virtual_mouse_active = false;
         virtual_mouse_has_last = false;
@@ -3625,7 +3586,7 @@ fn recordVirtualMousePosition() void {
 }
 
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
-    enforcePhase("Capture.stop!", during_any_callback);
+    enforcePhase("Capture.stop", during_commit);
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
     if (stop_result == capture.err_not_recording) {
@@ -3639,27 +3600,20 @@ fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRec
     return .{ .err = err, .frames = frames, .bytes = capture_recording_bytes };
 }
 
-fn hostedCaptureRecordingStatus() callconv(.c) abi.CaptureHostRecording_statusRetRecord {
-    enforcePhase("Capture.status!", during_any_callback);
-    return .{
-        .status = capture_session.status,
-        .err = capture_session.failure,
-        .frames = capture_session.captured_frames,
-        .dropped = capture_session.dropped_frames,
-    };
-}
-
 /// The recording state sampled onto every step.
 ///
-/// A pure `update` cannot ask for this, and asking would cost a host call on
-/// every frame regardless of whether anything is recording. It is four scalars,
-/// so it rides along on the step record instead.
+/// A pure `update` cannot ask for this, and there is no longer anything to ask:
+/// starting and stopping are actions, so this is the only channel the outcome
+/// has. It is five scalars, so it rides along on the step record rather than
+/// costing a host call on every frame regardless of whether anything is
+/// recording.
 fn captureStateForStep() CaptureFromHost {
     return .{
         .status = capture_session.status,
         .err = capture_session.failure,
         .frames = capture_session.captured_frames,
         .dropped = capture_session.dropped_frames,
+        .bytes = capture_recording_bytes,
     };
 }
 
@@ -4267,11 +4221,9 @@ comptime {
         @export(&hostedFileBlobByte, .{ .name = "roc_file_blob_byte" });
         @export(&hostedFileReleaseBlob, .{ .name = "roc_file_release_blob" });
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
-        @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
-        @export(&hostedCaptureRecordingStatus, .{ .name = "roc_capture_recording_status" });
         @export(&hostedSetScreenSize, .{ .name = "roc_host_set_screen_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSetWindowMinSize, .{ .name = "roc_host_set_window_min_size" });
@@ -4635,16 +4587,15 @@ fn stageCaptureResults(staging: *CompletionStaging) void {
 
 /// Record the outcome of the screenshot just serviced.
 ///
-/// A task has somewhere to report to, so its outcome becomes a completion on
-/// the next step. `Capture.screenshot!` has nowhere to report to until it is
-/// called again, so its outcome is latched, as it always was.
+/// A screenshot is always a task and a task always has somewhere to report to,
+/// so its outcome becomes a completion on the next step. Servicing a screenshot
+/// nobody asked for would mean the pending flag and the id disagree, which is a
+/// host bug rather than a state an app can reach.
 fn reportScreenshotResult(err: u8) void {
-    if (capture_screenshot_task_id) |id| {
-        capture_screenshot_task_id = null;
-        capture_screenshot_done = .{ .id = id, .err = err };
-        return;
-    }
-    capture_screenshot_result = err;
+    const id = capture_screenshot_task_id orelse
+        @panic("roc-ray: serviced a screenshot with no task to report it to");
+    capture_screenshot_task_id = null;
+    capture_screenshot_done = .{ .id = id, .err = err };
 }
 
 /// Read the clipboard on the calling thread and stage the completion.
@@ -4811,15 +4762,6 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
         const result = effect_worker.takeResult() orelse return;
 
         if (result.kind == .write_png) {
-            // A screenshot asked for by the effect has no completion to go to;
-            // it latches, exactly as it did when the write was inline. Set the
-            // latch directly rather than through `reportScreenshotResult`,
-            // which would hand this outcome to whichever task happens to be
-            // queued now. Only the task path holds a reservation.
-            if (!result.for_task) {
-                capture_screenshot_result = result.err;
-                continue;
-            }
             staging.screenshotFinished(result.id, result.err);
             staging.finish();
             continue;
@@ -4890,8 +4832,10 @@ fn configureCapture(app_config: AppConfig) void {
 /// Reaching the frame cap, calling `Capture.stop!`, and simply exiting all have
 /// to produce a complete file, so every exit path funnels through here.
 fn finalizeCapture() void {
-    if (capture_session.status == capture.status_idle) {
-        // A recording stopped through `Capture.stop!` has already closed its
+    if (capture_session.status == capture.status_idle or
+        capture_session.status == capture.status_finished)
+    {
+        // A recording stopped through `Capture.stop` has already closed its
         // container; this only guards against a sink left open some other way.
         _ = closeCaptureSink(true);
         return;
@@ -5015,7 +4959,6 @@ fn writeScreenshot(image: raylib.CaptureImage, path: []const u8) void {
             pixels,
             image.width(),
             image.height(),
-            task_id != null,
         )) {
             .accepted => {
                 // The outcome now arrives as a worker result. Clear the task id
@@ -5915,7 +5858,6 @@ test "a serviced screenshot task answers on the next step" {
     defer {
         capture_screenshot_task_id = null;
         capture_screenshot_done = null;
-        capture_screenshot_result = capture.err_none;
     }
 
     // The frame that asked carries no completion for it: the write happens at
@@ -5928,10 +5870,6 @@ test "a serviced screenshot task answers on the next step" {
     try std.testing.expectEqual(@as(usize, 0), staging.count());
 
     reportScreenshotResult(capture.err_write_failed);
-    // A task reports through its completion, so nothing is latched for the
-    // `Capture.screenshot!` effect to pick up later.
-    try std.testing.expectEqual(capture.err_none, capture_screenshot_result);
-
     stageCaptureResults(&staging);
     try std.testing.expectEqual(@as(usize, 1), staging.count());
     try std.testing.expectEqual(COMPLETION_SCREENSHOT_FINISHED, staging.items[0].kind);

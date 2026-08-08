@@ -1573,7 +1573,9 @@ test "makeTempCString stops at embedded nul" {
 }
 
 test "prepared text allocates long native bytes once and retains its loaded font" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -1581,6 +1583,10 @@ test "prepared text allocates long native bytes once and retains its loaded font
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1598,7 +1604,9 @@ test "prepared text allocates long native bytes once and retains its loaded font
         .spacing = 1,
     });
     try std.testing.expectEqual(RESOURCE_ERR_NONE, result.err);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
     const resource = prepared_text_heap.get(result.prepared.*).?;
     try std.testing.expectEqual(long_text.len, resource.text.len);
@@ -1615,11 +1623,15 @@ test "prepared text allocates long native bytes once and retains its loaded font
     try std.testing.expectEqual(@as(usize, 1), prepared_text_prepare_calls);
     try std.testing.expectEqual(@as(usize, 1), prepared_text_storage_allocations);
     try std.testing.expectEqual(@as(usize, 10), prepared_text_draw_calls);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), prepared_text_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), font_heap.active());
 
     releaseResourceBox(&roc_host, result.prepared);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
 }
 
@@ -1630,6 +1642,10 @@ test "prepared text rejects resource kind confusion and releases transferred own
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1640,6 +1656,7 @@ test "prepared text rejects resource kind confusion and releases transferred own
         .pos = .{ .x = 0, .y = 0 },
         .color = .{ .r = 0, .g = 0, .b = 0, .a = 255 },
     });
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
     const font_shader = storeShader(.headless).?;
@@ -1650,12 +1667,16 @@ test "prepared text rejects resource kind confusion and releases transferred own
         .spacing = 1,
     });
     try std.testing.expectEqual(RESOURCE_ERR_FAILED, result.err);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 }
 
 test "nested render and shader scopes lease last references until matching end" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -1663,6 +1684,10 @@ test "nested render and shader scopes lease last references until matching end" 
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1671,11 +1696,14 @@ test "nested render and shader scopes lease last references until matching end" 
     const inner_target = storeRenderTexture(.headless, 80, 45).?;
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = outer_target }));
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = inner_target }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_render_texture_depth);
     hostedDrawEndRenderTextureRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), render_texture_heap.active());
     hostedDrawEndRenderTextureRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
 
@@ -1683,11 +1711,14 @@ test "nested render and shader scopes lease last references until matching end" 
     const inner_shader = storeShader(.headless).?;
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = outer_shader }));
     try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = inner_shader }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_shader_depth);
     hostedDrawEndShaderRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 1), shader_heap.active());
     hostedDrawEndShaderRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
 
@@ -1753,7 +1784,9 @@ test "nested value scopes restore outer state and report bounded saturation" {
 }
 
 test "resource scopes report bounded saturation without leaking transferred owners" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -1761,6 +1794,10 @@ test "resource scopes report bounded saturation without leaking transferred owne
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1770,6 +1807,7 @@ test "resource scopes report bounded saturation without leaking transferred owne
     for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
     try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndRenderTextureRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 
     const shader = storeShader(.headless).?;
@@ -1777,6 +1815,7 @@ test "resource scopes report bounded saturation without leaking transferred owne
     for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
     try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginShaderRaw(.{ .arg0 = shader }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndShaderRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 }
 
@@ -1787,15 +1826,21 @@ test "scope kind confusion fails and releases transferred owners" {
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
 
     const shader = storeShader(.headless).?;
     try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{ .resource = @ptrCast(shader) }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
     const target = storeRenderTexture(.headless, 16, 16).?;
     try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = @ptrCast(target) }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
 
@@ -1806,6 +1851,7 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     const target = hostedDrawLoadRenderTextureRaw(.{ .height = 0, .width = 160 });
     try std.testing.expectEqual(RESOURCE_ERR_FAILED, target.err);
     try std.testing.expectEqual(@as(u64, 0), target.target.resource.handle);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(before, render_texture_heap.active());
 }
 
@@ -1816,20 +1862,27 @@ test "last resource references remain live through owning host operations" {
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
 
     const sound = storeSound(.headless).?;
     hostedAudioPlay(sound);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), sound_heap.active());
 
     const music = storeMusic(.headless).?;
     _ = hostedAudioMusicLength(music);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), music_heap.active());
 
     const texture = storeTexture(.{ .headless = .{ .width = 2, .height = 2 } }, 2, 2).?;
     hostedAssetsSetTextureFilterRaw(.{ .resource = texture }, 1);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
     const font = storeFont(.headless).?;
@@ -1840,10 +1893,12 @@ test "last resource references remain live through owning host operations" {
         .size = 16,
         .spacing = 1,
     });
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
 
     const shader = storeShader(.headless).?;
     hostedDrawSetShaderFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
     const sampler_shader = storeShader(.headless).?;
@@ -1852,7 +1907,9 @@ test "last resource references remain live through owning host operations" {
         .texture = .{ .resource = sampler_texture },
         .uniform = .{ .shader = sampler_shader, .location = 0 },
     });
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
     const target = storeRenderTexture(.headless, 8, 8).?;
@@ -1864,6 +1921,7 @@ test "last resource references remain live through owning host operations" {
         .source = .{ .height = 8, .width = 8, .x = 0, .y = 0 },
         .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
     });
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
 
@@ -1929,6 +1987,10 @@ test "one tilemap host call draws a culled batch and releases texture owners" {
     headless_tilemap_tiles = 0;
     headless_tilemap_last_quad = null;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1945,6 +2007,7 @@ test "one tilemap host call draws a culled batch and releases texture owners" {
     try std.testing.expectEqual(@as(f32, 20), quad.top_left.y);
     try std.testing.expectEqual(@as(f32, 36), quad.bottom_left.y);
     try std.testing.expectEqual(@as(f32, 0), quad.source.x);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 }
 
@@ -1955,6 +2018,10 @@ test "role batching cannot select hidden layers but named selection can" {
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1967,6 +2034,7 @@ test "role batching cannot select hidden layers but named selection can" {
     const named_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
     hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, named_texture, TILEMAP_SELECTOR_LAYER, 1, false));
     try std.testing.expectEqual(@as(usize, 6), headless_tilemap_tiles);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 }
 
@@ -1977,6 +2045,10 @@ test "render target texture views report not mutable and release ownership" {
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -1987,6 +2059,7 @@ test "render target texture views report not mutable and release ownership" {
         .texture = .{ .resource = target },
     });
     try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, err);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
 
@@ -1997,6 +2070,10 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     active_roc_host = &roc_host;
     active_headless = true;
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }
@@ -2060,12 +2137,19 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     }).err);
     for (prepared_texts) |prepared| releaseResourceBox(&roc_host, prepared);
 
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), sound_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), music_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
 }
 
@@ -3994,6 +4078,12 @@ fn updateMusicStreams() void {
 }
 
 fn deinitResources() void {
+    // The final model has been dropped, so everything it held is retired.
+    // Destroy it all before the assertions below, which are about whether Roc
+    // *released* its handles rather than about when the host got round to the
+    // driver calls. There is no frame left to protect, so no budget either.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+
     // Roc should have released every handle by the time the final model is
     // dropped. Keep a shutdown drain for optimized builds, but catch lifecycle
     // regressions in the debug host used by the test suite.
@@ -4958,6 +5048,35 @@ fn writeRecordingFrameWebm(image: raylib.CaptureImage) void {
 ///
 /// Uses the virtual pointer when one is active and the hardware pointer
 /// otherwise, so a recording of real interaction also shows a cursor.
+/// How many retired resources may be destroyed at the end of one frame.
+///
+/// Each destruction is a driver or audio-device call, so a model that dropped
+/// two hundred textures in one transition would otherwise stall the frame it
+/// happened to be dropped in. Sixteen is comfortably more than an app churns
+/// per frame in steady state, and the rest simply waits for the next one.
+const MAX_RESOURCE_RETIREMENTS_PER_FRAME: usize = 16;
+
+/// Destroy resources whose last Roc reference has gone, up to a budget.
+///
+/// Called at the end of a frame, which is the point of the whole arrangement:
+/// releasing the final reference happens inside the pure `update`, and a GPU
+/// unload there is an effect in a function that is supposed to have none.
+fn drainRetiredResources() void {
+    drainRetiredResourcesUpTo(MAX_RESOURCE_RETIREMENTS_PER_FRAME);
+}
+
+/// Destroy up to `limit` retired resources across every heap.
+fn drainRetiredResourcesUpTo(limit: usize) void {
+    var budget = limit;
+    budget -= prepared_text_heap.drainRetired(budget);
+    budget -= shader_heap.drainRetired(budget);
+    budget -= render_texture_heap.drainRetired(budget);
+    budget -= texture_heap.drainRetired(budget);
+    budget -= font_heap.drainRetired(budget);
+    budget -= music_heap.drainRetired(budget);
+    budget -= sound_heap.drainRetired(budget);
+}
+
 fn drawCaptureCursorOverlay() void {
     const position = if (virtual_mouse_active)
         raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
@@ -6117,6 +6236,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         }
 
         boxed_model = render_result.getOk();
+        drainRetiredResources();
         frame_count += 1;
 
         if (exit_requested) |code| {
@@ -6201,6 +6321,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         }
 
         boxed_model = render_result.getOk();
+        drainRetiredResources();
         if (exit_requested) |code| {
             exit_code = @intCast(code);
             break;
@@ -6273,6 +6394,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     exit_requested = null;
     debug_or_expect_called.store(false, .release);
     defer {
+        // No frame loop here to end, so the retirement queue is drained by
+        // hand -- and without a frame's budget, since there is no frame to
+        // protect and anything left behind reads as a leak.
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
         active_roc_host = null;
     }

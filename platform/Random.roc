@@ -60,12 +60,20 @@ Random := [].{
 			{ value: lowest, next: generator }
 		} else {
 			drawn = next_u64(generator)
-			# Fold the draw into a non-negative I32 first, so the range maths
-			# stays in I32 and needs no U64 conversion: this Roc has no I32
-			# widening to U64. Taking the low 31 bits keeps it non-negative.
-			folded = U64.to_i32_wrap(drawn.value % 2_147_483_648)
-			span = highest - lowest + 1
-			{ value: lowest + folded % span, next: drawn.next }
+			low = I32.to_i64(lowest)
+			# Widen before subtracting. The number of values in an I32 range
+			# does not fit in an I32 -- `[I32.min, I32.max]` spans 2^32 of them
+			# -- so doing this arithmetic in I32 overflowed for any range wider
+			# than half the type, which are exactly the ranges an app writes
+			# when it wants "some I32".
+			span = I64.to_u64_wrap(I32.to_i64(highest) - low + 1)
+			# Reduce the whole 64-bit draw rather than a folded 31-bit one.
+			# Modulo still favours the low end of the range, but by at most
+			# span/2^64 -- under one part in 2^32 for any I32 span, against the
+			# one part in two the fold produced for a span near 2^31.
+			offset = U64.to_i64_wrap(drawn.value % span)
+			# `low + offset` is at most `highest`, so this narrowing is exact.
+			{ value: I64.to_i32_wrap(low + offset), next: drawn.next }
 		}
 
 	## Draw a fraction in `[0, 1)`.
@@ -80,6 +88,15 @@ Random := [].{
 ## The SplitMix64 increment: the odd 64-bit approximation of the golden ratio.
 golden_gamma : U64
 golden_gamma = 0x9E3779B97F4A7C15
+
+## Draws from a dozen seeds over a range too wide for I32 arithmetic, for the
+## expects below.
+wide_draws : List(I32)
+wide_draws =
+	List.map(
+		[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+		|seed| Random.in_range(Random.from_seed(seed), -1000000000, 1000000000).value,
+	)
 
 expect Random.from_seed(7) == Random.from_seed(7)
 
@@ -102,6 +119,18 @@ expect Random.in_range(Random.from_seed(88), 0, 3).value <= 3
 ## An empty or inverted range yields its lower bound rather than crashing.
 expect Random.in_range(Random.from_seed(3), 4, 4).value == 4
 expect Random.in_range(Random.from_seed(3), 9, 2).value == 9
+
+## The widest range there is stays inside itself. Its span is 2^32, which does
+## not fit in an I32 -- computing it there is what used to overflow.
+expect Random.in_range(Random.from_seed(3), -2147483648, 2147483647).value >= -2147483648
+expect Random.in_range(Random.from_seed(3), -2147483648, 2147483647).value <= 2147483647
+expect Random.in_range(Random.from_seed(1234), -2000000000, 2000000000).value >= -2000000000
+expect Random.in_range(Random.from_seed(1234), -2000000000, 2000000000).value <= 2000000000
+
+## Both ends of a wide range are reachable. Folding the draw to 31 bits first
+## could not reach the top half of one at all.
+expect List.any(wide_draws, |value| value < 0)
+expect List.any(wide_draws, |value| value > 0)
 
 ## A fraction stays in [0, 1).
 expect Random.fraction(Random.from_seed(11)).value >= 0

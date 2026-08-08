@@ -141,6 +141,17 @@ const MAX_LIVE_BLOBS: usize = 32;
 /// A file past the host's per-file ceiling is `TooLarge` rather than
 /// `ReadFailed`: nothing went wrong, the host declined a read of that size, and
 /// those are different things for an app deciding what to do next.
+/// How many bytes a read may take before it is refused as too large.
+///
+/// A blob read has no per-file ceiling below the host's own, because nothing
+/// proportional to the file happens on the frame thread. A small read is
+/// delivered as a `Str`, so it stops one byte past the largest string the frame
+/// thread will build -- `readFileAlloc` refuses at the limit, and one past is
+/// what makes a file of exactly that size succeed.
+fn smallReadLimit(deliver_blob: bool) usize {
+    return if (deliver_blob) MAX_HOST_TEXT_FILE_BYTES else MAX_INLINE_READ_BYTES + 1;
+}
+
 fn readErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound => READ_ERR_NOT_FOUND,
@@ -477,7 +488,11 @@ const EffectWorker = struct {
         // The allocation the blob path hands to Roc is made here, on this
         // thread, and is filled here. The main thread only ever moves the
         // slice -- which is the entire claim of the feature.
-        const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+        //
+        // A small read stops one byte past what it could deliver rather than
+        // reading up to the blob ceiling and then rejecting it: refusing a
+        // 16 MiB file should not mean having read 16 MiB first.
+        const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(smallReadLimit(request.deliver_blob))) catch |err| {
             self.postResult(io, .{
                 .kind = .read_file,
                 .id = request.id,
@@ -4353,7 +4368,7 @@ fn stageBlobRead(staging: *CompletionStaging, id: u64, allocator: std.mem.Alloca
 /// and in nothing else the app can observe.
 fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool) void {
     const allocator = allocatorFromHost(roc_host);
-    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_HOST_TEXT_FILE_BYTES)) catch |err| {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(smallReadLimit(deliver_blob))) catch |err| {
         stageReadError(staging, roc_host, id, readErrorCode(err), deliver_blob);
         return;
     };
@@ -4362,10 +4377,6 @@ fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: [
         return;
     }
     defer allocator.free(bytes);
-    if (bytes.len > MAX_INLINE_READ_BYTES) {
-        staging.fileRead(roc_host, id, READ_ERR_TOO_LARGE, "");
-        return;
-    }
     staging.fileRead(roc_host, id, 0, bytes);
 }
 
@@ -4438,12 +4449,10 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
             stageBlobRead(staging, result.id, effect_worker.allocator, bytes);
             continue;
         }
+        // The read stopped at the ceiling, so anything that arrives here fits.
+        std.debug.assert(bytes.len <= MAX_INLINE_READ_BYTES);
         defer effect_worker.allocator.free(bytes);
-        if (bytes.len > MAX_INLINE_READ_BYTES) {
-            staging.fileRead(roc_host, result.id, READ_ERR_TOO_LARGE, "");
-        } else {
-            staging.fileRead(roc_host, result.id, 0, bytes);
-        }
+        staging.fileRead(roc_host, result.id, 0, bytes);
     }
 }
 

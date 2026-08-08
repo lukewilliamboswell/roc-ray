@@ -49,8 +49,10 @@ Program := [].{
 	## happened -- one value each, sampled together but never merged, so a
 	## helper can ask for exactly the one it needs.
 	##
-	## `completed` is bounded per step, so a burst of finished work cannot
-	## consume a whole frame; the remainder arrives on the next one. It is empty
+	## `completed` is bounded because *acceptance* is bounded: the host will
+	## only ever hold so many unanswered tasks at once, so a burst of finished
+	## work cannot consume a whole frame. Nothing is ever held back, though --
+	## a completion the host has is a completion this step carries. It is empty
 	## on an ordinary frame, which is the case that has to stay cheap.
 	##
 	## `capture` is sampled rather than asked for: a pure `update` cannot call
@@ -145,7 +147,7 @@ Program := [].{
 	Completion : [
 		SmallFileRead({ id : U64, result : Try(Str, ReadError) }),
 		FileRead({ id : U64, result : Try(File.Blob, ReadError) }),
-		DelayElapsed({ id : U64 }),
+		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
 		ClipboardRead({ id : U64, result : Try(Str, [Unavailable]) }),
 	]
@@ -250,7 +252,10 @@ Program := [].{
 				result: if raw.err == 0 Ok(blob_from_host(raw)) else Err(read_error(raw.err)),
 			})
 		} else if raw.kind == completion_delay {
-			DelayElapsed({ id: raw.id })
+			DelayElapsed({
+				id: raw.id,
+				result: if raw.err == 0 Ok({}) else Err(Busy),
+			})
 		} else if raw.kind == completion_screenshot_finished {
 			ScreenshotFinished({
 				id: raw.id,
@@ -395,7 +400,11 @@ expect Program.completion_from_host(sample_blob_read) == FileRead({ id: 3, resul
 expect blob_from_host(sample_blob_read).len() == 16 * 1024 * 1024
 expect Program.completion_from_host({ kind: 4, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == FileRead({ id: 3, result: Err(Busy) })
 expect Program.completion_from_host({ kind: 4, id: 3, err: 5, contents: "", blob: 0, blob_len: 0 }) == FileRead({ id: 3, result: Err(TooLarge) })
-expect Program.completion_from_host({ kind: 1, id: 5, err: 0, contents: "", blob: 0, blob_len: 0 }) == DelayElapsed({ id: 5 })
+expect Program.completion_from_host({ kind: 1, id: 5, err: 0, contents: "", blob: 0, blob_len: 0 }) == DelayElapsed({ id: 5, result: Ok({}) })
+
+## A delay the host would not start is reported as such rather than as one that
+## elapsed instantly -- the app asked to be told later, and never was.
+expect Program.completion_from_host({ kind: 1, id: 5, err: 1, contents: "", blob: 0, blob_len: 0 }) == DelayElapsed({ id: 5, result: Err(Busy) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 0, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Ok({}) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 2, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(PathEscapesOutputDir) })
 expect Program.completion_from_host({ kind: 2, id: 8, err: 99, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(WriteFailed) })

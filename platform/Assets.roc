@@ -69,17 +69,31 @@ Assets := [].{
 		update = |texture, pixels| UpdateTexture({ texture: texture, pixels: pixels })
 
 		## Change how this texture is sampled when scaled.
+		##
+		## Sampler state belongs to the texture itself, not to a draw: it is
+		## stored on the GPU object, so it applies to every draw of this
+		## texture and to every value that shares the resource -- including any
+		## `TextureView` taken from it. Set it once, where the texture is
+		## created, rather than treating it as per-draw configuration.
 		set_filter! : Texture, TextureFilter => {}
 		set_filter! = |Texture.(texture), filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
 		## Change how out-of-range texture coordinates are wrapped.
+		##
+		## Texture-global, exactly as `set_filter!` is, and for the same reason.
 		set_wrap! : Texture, TextureWrap => {}
 		set_wrap! = |Texture.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
 	}
 
 	## Read-only sampled texture view. It owns the same ARC reference as its
-	## source but deliberately has no pixel-update capability.
+	## source but deliberately cannot change it.
+	##
+	## That means no pixel updates and no sampler changes. Sampler state lives
+	## on the shared GPU object, so a filter set "on a view" would silently
+	## change how the owning texture and every other view of it are drawn --
+	## which is the one thing a value called a read-only view must not do.
+	## Set it on the `Texture` the view came from.
 	TextureView :: AssetsHost.Texture.{
 
 		## Width in pixels.
@@ -97,14 +111,6 @@ Assets := [].{
 		## Rectangle covering the complete texture in pixel coordinates.
 		rect : TextureView -> Math.Rect
 		rect = |texture| { x: 0, y: 0, width: texture.width(), height: texture.height() }
-
-		## Change how this view is sampled when scaled.
-		set_filter! : TextureView, TextureFilter => {}
-		set_filter! = |TextureView.(texture), filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
-
-		## Change how out-of-range texture coordinates are wrapped.
-		set_wrap! : TextureView, TextureWrap => {}
-		set_wrap! = |TextureView.(texture), wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
 	}
 

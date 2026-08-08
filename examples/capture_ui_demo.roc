@@ -39,7 +39,7 @@ Model : {
 	counter_labels : List(Text.Prepared),
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
@@ -105,17 +105,18 @@ prepare_counter_labels! = |index, acc|
 		prepare_counter_labels!(index + 1, List.append(acc, label))
 	}
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	# Drive the pointer for the *next* frame from the script, then read
-	# `host.mouse` exactly as any app would.
+	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
-	Capture.set_virtual_mouse!(
-		if pointer_step.clicking Capture.clicking_at(pointer_step.pos) else Capture.at(pointer_step.pos),
-	)
 
-	mouse = host.mouse.position()
+	# Where the pointer is *this* frame: the position commanded on the previous
+	# one, which the model already kept. Reading it back off `host.mouse` would
+	# work -- the host samples the scripted pointer into the step exactly as it
+	# does a hardware one -- but the app is the thing that scripted it, so it
+	# has no reason to ask the host what it already said.
+	mouse = model.pointer
 	over_increment = inside(mouse, increment_button)
 	over_toggle = inside(mouse, toggle_button)
 
@@ -134,9 +135,19 @@ update! = |model, step| {
 			model.slider
 		}
 
-	if model.frame >= recorded_frames {
-		host.exit!(0)
-	}
+	# The scripted pointer is an action, so the platform installs it after this
+	# returns and before anything is drawn -- the same instant
+	# `Capture.set_virtual_mouse!` reached the host from inside an effectful
+	# update, and still a frame before the host samples it back.
+	pointer_action = Capture.set_virtual_mouse(
+		if pointer_step.clicking Capture.clicking_at(pointer_step.pos) else Capture.at(pointer_step.pos),
+	)
+	actions =
+		if model.frame >= recorded_frames {
+			[pointer_action, Program.exit(0)]
+		} else {
+			[pointer_action]
+		}
 
 	Ok({
 		model: {
@@ -150,7 +161,8 @@ update! = |model, step| {
 			toggled: toggled,
 			slider: slider,
 		},
-		commands: [],
+		actions: actions,
+		tasks: [],
 	})
 }
 

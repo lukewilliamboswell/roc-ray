@@ -113,11 +113,14 @@ new_round = |model| {
 	}
 }
 
-# Play a sound only when `cond` is true (a no-op otherwise).
-play_if! : Bool, Audio.Sound => {}
-play_if! = |cond, sound| if cond sound.play!() else {}
+# The actions for a sound that should only be heard when `cond` is true.
+#
+# An empty list is the no-op: nothing plays, and the caller can concatenate it
+# unconditionally instead of branching around it.
+play_if : Bool, Audio.Sound -> List(Program.Action)
+play_if = |cond, sound| if cond [sound.play()] else []
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
@@ -145,20 +148,32 @@ init! = App.init(
 	},
 )
 
-## Whether the match is over is a function of the scores, so both `update!` and
+## Whether the match is over is a function of the scores, so both `update` and
 ## `render!` ask rather than storing a flag that could drift out of step.
 game_over : Model -> Bool
 game_over = |model| model.left_score >= win_score or model.right_score >= win_score
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
-	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+## A frame's outcome: the model it produced, and the sounds it wants heard.
+##
+## Both steppers return this shape even when one of them can never make a sound,
+## so `update` joins them without caring which branch it took.
+Stepped : {
+	model : Model,
+	actions : List(Program.Action),
+}
 
-	next = if game_over(model) step_game_over!(model, host) else step_playing!(model, host)
-	Ok({ model: next, commands: [] })
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	host = step.input
+	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+
+	stepped = if game_over(model) step_game_over(model, host) else step_playing(model, host)
+
+	Ok({
+		model: stepped.model,
+		actions: List.concat(exit_actions, stepped.actions),
+		tasks: [],
+	})
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -176,13 +191,15 @@ render! = |model, frame| {
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-step_game_over! : Model, Host => Model
-step_game_over! = |model, host|
-	if host.key_pressed(KeySpace) new_round(model) else model
+step_game_over : Model, Host -> Stepped
+step_game_over = |model, host| {
+	model: if host.key_pressed(KeySpace) new_round(model) else model,
+	actions: [],
+}
 
 # --- Active play ---
-step_playing! : Model, Host => Model
-step_playing! = |model, host| {
+step_playing : Model, Host -> Stepped
+step_playing = |model, host| {
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = host.frame_time
@@ -253,12 +270,19 @@ step_playing! = |model, host| {
 		rng: serve.next,
 	}
 
-	# Sound effects for this frame's events.
-	play_if!(hit_left or hit_right, model.hit_sound)
-	play_if!(hit_top or hit_bottom, model.wall_sound)
-	play_if!(out_left or out_right, model.score_sound)
-
-	next
+	# Sound effects for this frame's events, in the order they used to be played.
+	# The platform applies them before anything is drawn, so a paddle hit is
+	# still heard on the frame it happened.
+	{
+		model: next,
+		actions: List.concat(
+			play_if(hit_left or hit_right, model.hit_sound),
+			List.concat(
+				play_if(hit_top or hit_bottom, model.wall_sound),
+				play_if(out_left or out_right, model.score_sound),
+			),
+		),
+	}
 }
 
 # Draw the static scene (center line, paddles, ball, scores) for a model.

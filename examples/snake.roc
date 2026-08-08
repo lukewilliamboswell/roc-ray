@@ -37,7 +37,18 @@ Model : {
 	rng : Random.Generator,
 }
 
-program = { init!, update!, render! }
+## What a slice of simulation produced: the model it left behind, and the sounds
+## it made getting there.
+##
+## One frame can run several fixed steps, and each of them can crash or eat, so
+## the actions have to be carried out of the recursion rather than returned by
+## whichever step happened to be last.
+Stepped : {
+	model : Model,
+	actions : List(Program.Action),
+}
+
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -182,8 +193,8 @@ apply_input = |model, host| {
 	{ ..model, pending_direction: pending }
 }
 
-step_snake! : Model => Model
-step_snake! = |model| {
+step_snake : Model -> Stepped
+step_snake = |model| {
 	move = delta(model.pending_direction)
 	head = head_of(model.snake)
 	next_head = { x: head.x + move.x, y: head.y + move.y }
@@ -193,81 +204,97 @@ step_snake! = |model| {
 	hit_self = List.contains(body_for_collision, next_head)
 
 	if hit_wall or hit_self {
-		model.crash_sound.play!()
-		{ ..model, accumulator: 0, state: GameOver }
+		{
+			model: { ..model, accumulator: 0, state: GameOver },
+			actions: [model.crash_sound.play()],
+		}
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
 		next_snake = List.prepend(next_body, next_head)
 
 		if ate {
-			model.eat_sound.play!()
 			spawned = spawn_food(model.rng, next_snake)
 			{
-				..model,
-				snake: next_snake,
-				direction: model.pending_direction,
-				pending_direction: model.pending_direction,
-				food: spawned.cell,
-				rng: spawned.next,
-				score: model.score + 1,
-				accumulator: model.accumulator,
-				state: Playing,
+				model: {
+					..model,
+					snake: next_snake,
+					direction: model.pending_direction,
+					pending_direction: model.pending_direction,
+					food: spawned.cell,
+					rng: spawned.next,
+					score: model.score + 1,
+					accumulator: model.accumulator,
+					state: Playing,
+				},
+				actions: [model.eat_sound.play()],
 			}
 		} else {
 			{
-				..model,
-				snake: next_snake,
-				direction: model.pending_direction,
-				pending_direction: model.pending_direction,
-				accumulator: model.accumulator,
-				state: Playing,
+				model: {
+					..model,
+					snake: next_snake,
+					direction: model.pending_direction,
+					pending_direction: model.pending_direction,
+					accumulator: model.accumulator,
+					state: Playing,
+				},
+				actions: [],
 			}
 		}
 	}
 }
 
-advance_fixed_steps! : Model, Host => Model
-advance_fixed_steps! = |model, host| {
+## Run as many fixed steps as the accumulator has paid for, carrying the sounds
+## along.
+##
+## `actions` is the running total rather than something the tail returns: a
+## frame that catches up over three steps can eat twice and then crash, and all
+## three sounds have to survive, in that order. Returning only the last step's
+## actions would silently drop the earlier ones.
+advance_fixed_steps : Model, List(Program.Action) -> Stepped
+advance_fixed_steps = |model, actions| {
 	if model.accumulator < step_time {
-		model
+		{ model, actions }
 	} else {
-		next = step_snake!({ ..model, accumulator: model.accumulator - step_time })
-		match next.state {
-			Playing => advance_fixed_steps!(next, host)
-			GameOver => next
+		stepped = step_snake({ ..model, accumulator: model.accumulator - step_time })
+		so_far = List.concat(actions, stepped.actions)
+		match stepped.model.state {
+			Playing => advance_fixed_steps(stepped.model, so_far)
+			GameOver => { model: stepped.model, actions: so_far }
 		}
 	}
 }
 
-advance_playing! : Model, Host => Model
-advance_playing! = |model, host| {
+advance_playing : Model, Host -> Stepped
+advance_playing = |model, host| {
 	input_model = apply_input(model, host)
 	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
 	# step remainder so normal frame-rate variation does not change game speed.
 	accumulator = input_model.accumulator + Math.clamp(host.frame_time, 0, 0.25)
 	with_accumulator = { ..input_model, accumulator }
-	advance_fixed_steps!(with_accumulator, host)
+	advance_fixed_steps(with_accumulator, [])
 }
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	next = match model.state {
-		Playing => advance_playing!(model, host)
+	stepped = match model.state {
+		Playing => advance_playing(model, host)
 		GameOver =>
 			if host.key_pressed(KeySpace) {
-				model.start_sound.play!()
-				new_game(model)
+				{ model: new_game(model), actions: [model.start_sound.play()] }
 			} else {
-				model
+				{ model, actions: [] }
 			}
 		}
 
-	Ok({ model: next, commands: [] })
+	Ok({
+		model: stepped.model,
+		actions: List.concat(exit_actions, stepped.actions),
+		tasks: [],
+	})
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

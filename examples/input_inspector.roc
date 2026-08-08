@@ -20,7 +20,14 @@ Model : {
 	host : Host,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
+
+## The id the host echoes back on a finished clipboard read, so the answer can
+## be matched to the request. Ctrl+V is edge-triggered and the answer arrives on
+## the very next step, so only one read is ever outstanding and a constant id is
+## enough; an app juggling several would allocate them.
+paste_id : U64
+paste_id = 1
 
 init! : App.Init(Model, [])
 init! = App.init(
@@ -61,60 +68,94 @@ ascii_typed = |codepoints|
 		),
 	)
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+## Everything the host used to be told mid-update is returned instead: settings
+## that just happen become actions, and reading the clipboard -- which answers
+## back -- becomes a task.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyQ) {
-		host.exit!(0)
-	}
-
-	if host.key_pressed(KeyH) {
-		host.set_cursor_mode!(Hidden)
-	}
-	if host.key_pressed(KeyJ) {
-		host.set_cursor_mode!(Visible)
-	}
-	if host.key_pressed(KeyK) {
-		host.set_cursor_mode!(Locked)
-	}
-	if host.key_pressed(KeyL) {
-		host.set_cursor_mode!(Visible)
-	}
 
 	ctrl_held = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
 	typed_this_frame = if ctrl_held "" else ascii_typed(host.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
+	# One chain, as before, so two shortcuts pressed together still resolve in
+	# this order -- it now yields the work to do alongside the new buffer.
 	clipboard = if ctrl_held and host.key_pressed(KeyC) {
-		host.set_clipboard_text!(buffered)
-		{ typed: buffered, clipboard_status: "copied to clipboard" }
+		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Host.set_clipboard_text(buffered)], tasks: [] }
 	} else if ctrl_held and host.key_pressed(KeyV) {
-		match host.get_clipboard_text!() {
-			Ok(pasted) => { typed: Str.concat(buffered, pasted), clipboard_status: "pasted from clipboard" }
-			# One error covers an empty clipboard and non-text content alike;
-			# the windowing backend does not tell them apart.
-			Err(Unavailable) => { typed: buffered, clipboard_status: "clipboard has no text" }
-		}
+		# A read answers back, so it is a task: the pasted text is appended on
+		# the step that carries the answer rather than on this one.
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [ReadClipboard({ id: paste_id })] }
 	} else if ctrl_held and host.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared" }
+		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
 	} else if ctrl_held and host.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		host.set_exit_key!(ExitKey(KeyEscape))
-		{ typed: buffered, clipboard_status: "Esc now exits again" }
+		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Host.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
 	} else if ctrl_held and host.key_pressed(KeyM) {
-		host.set_window_min_size!({ width: 640, height: 480 })
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480" }
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Host.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
 	}
 
-	host.set_cursor!(if host.mouse.button_down(Left) Crosshair else Arrow)
+	paste = paste_outcome(step.completed)
+	typed = match paste {
+		Pasted(text) => Str.concat(clipboard.typed, text)
+		NoText => clipboard.typed
+		NotYet => clipboard.typed
+	}
+	clipboard_status = match paste {
+		Pasted(_) => "pasted from clipboard"
+		# One error covers an empty clipboard and non-text content alike; the
+		# windowing backend does not tell them apart.
+		NoText => "clipboard has no text"
+		NotYet => clipboard.clipboard_status
+	}
+
+	# Applied in order, before anything is drawn, which is where the effects
+	# they replace used to run.
+	actions =
+		List.join([
+			if host.key_pressed(KeyQ) [Program.exit(0)] else [],
+			if host.key_pressed(KeyH) [Host.set_cursor_mode(Hidden)] else [],
+			if host.key_pressed(KeyJ) [Host.set_cursor_mode(Visible)] else [],
+			if host.key_pressed(KeyK) [Host.set_cursor_mode(Locked)] else [],
+			if host.key_pressed(KeyL) [Host.set_cursor_mode(Visible)] else [],
+			clipboard.actions,
+			[Host.set_cursor(if host.mouse.button_down(Left) Crosshair else Arrow)],
+		])
 
 	Ok({
-		model: { typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, host: host },
-		commands: [],
+		model: { typed: typed, clipboard_status: clipboard_status, host: host },
+		actions: actions,
+		tasks: clipboard.tasks,
 	})
 }
+
+## What this step's completions say about an outstanding paste.
+paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText]
+paste_outcome = |completed|
+	match List.first(List.keep_if(completed, is_our_paste)) {
+		Ok(ClipboardRead(finished)) =>
+			match finished.result {
+				Ok(pasted) => Pasted(pasted)
+				Err(Unavailable) => NoText
+			}
+
+		# Unreachable: `is_our_paste` kept only this app's clipboard read.
+		Ok(_) => NotYet
+		Err(_) => NotYet
+	}
+
+## Whether a completion answers this app's clipboard read.
+is_our_paste : Program.Completion -> Bool
+is_our_paste = |completion|
+	match completion {
+		ClipboardRead(finished) => finished.id == paste_id
+		SmallFileRead(_) => Bool.False
+		DelayElapsed(_) => Bool.False
+		ScreenshotFinished(_) => Bool.False
+	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

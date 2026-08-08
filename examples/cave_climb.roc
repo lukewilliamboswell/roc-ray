@@ -129,7 +129,7 @@ Model : {
 	world : World,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -937,12 +937,9 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
-update! = |model, step| {
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
 
 	restart = host.key_pressed(KeySpace)
 	input_camera = camera_for(model.level, model.world.player.pos)?
@@ -960,7 +957,11 @@ update! = |model, step| {
 		GameOver => if restart new_world(model.level) else model.world
 	}
 
-	Ok({ model: { ..model, world: next_world }, commands: [] })
+	Ok({
+		model: { ..model, world: next_world },
+		actions: if host.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		tasks: [],
+	})
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

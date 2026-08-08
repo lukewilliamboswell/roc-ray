@@ -25,7 +25,7 @@ Model : {
 	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 grid_side : U64
 grid_side = 16
@@ -44,6 +44,13 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
+
+## The brush is quiet next to the tone it is generated from. Named once because
+## `init!` applies it to the sound and every `PlaySound` action carries it again:
+## a `Playback` states all three settings, so it would otherwise reset to full
+## volume the first time a pitch is chosen.
+paint_volume : F32
+paint_volume = 0.35
 
 palette_color : U64 -> Color.Rgba
 palette_color = |index|
@@ -79,7 +86,7 @@ init! = App.init(
 		texture.set_filter!(Point)
 		texture.set_wrap!(Clamp)
 		paint_sound = Audio.gen_tone!({ freq: 520, ms: 35 })?
-		paint_sound.set_volume!(0.35)
+		paint_sound.set_volume!(paint_volume)
 		Ok({
 			texture,
 			pixels: initial_pixels,
@@ -115,38 +122,63 @@ cell_at = |point| {
 	}
 }
 
-update_editor! : Model, Host => Try(Model, [PixelCountMismatch, ..])
-update_editor! = |model, host| {
+## A step of the editor: the canvas it produced, and the work that makes the
+## canvas visible and audible.
+##
+## The pixels live in the model and on the GPU, so every branch that changes them
+## has to emit the matching `UpdateTexture`; returning both together is what keeps
+## the two from drifting apart.
+Edited : {
+	model : Model,
+	actions : List(Program.Action),
+}
+
+update_editor : Model, Host -> Edited
+update_editor = |model, host| {
 	palette = palette_from_input(model.palette, host)
 	base = { ..model, palette }
 
 	if host.key_pressed(KeyC) {
-		base.texture.update!(initial_pixels)?
-		base.paint_sound.set_pitch!(0.7)
-		base.paint_sound.play!()
-		Ok({ ..base, pixels: initial_pixels, last_cell: Idle })
+		{
+			model: { ..base, pixels: initial_pixels, last_cell: Idle },
+			actions: [
+				base.texture.update(initial_pixels),
+				paint(base.paint_sound, 0.7),
+			],
+		}
 	} else if host.mouse.button_down(Left) {
 		match cell_at(host.mouse.position()) {
-			Err(_) => Ok({ ..base, last_cell: Idle })
+			Err(_) => { model: { ..base, last_cell: Idle }, actions: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
-					Ok(base)
+					{ model: base, actions: [] }
 				} else {
 					match base.pixels.set(index, palette_color(palette)) {
-						Err(_) => Ok(base)
+						Err(_) => { model: base, actions: [] }
 						Ok(pixels) => {
-							base.texture.update!(pixels)?
-							base.paint_sound.set_pitch!(0.8 + U64.to_f32(palette) * 0.18)
-							base.paint_sound.play!()
-							Ok({ ..base, pixels, last_cell: Painted(index) })
+							{
+								model: { ..base, pixels, last_cell: Painted(index) },
+								actions: [
+									base.texture.update(pixels),
+									paint(base.paint_sound, 0.8 + U64.to_f32(palette) * 0.18),
+								],
+							}
 						}
 					}
 				}
 			}
 	} else {
-		Ok({ ..base, last_cell: Idle })
+		{ model: { ..base, last_cell: Idle }, actions: [] }
 	}
 }
+
+## One brush stroke, at the pitch this stroke chose.
+##
+## Pitch and playback travel as a single `Playback`, so a stroke can no longer be
+## heard at the previous stroke's pitch.
+paint : Audio.Sound, F32 -> Program.Action
+paint = |sound, pitch|
+	sound.playback().with_volume(paint_volume).with_pitch(pitch).play()
 
 draw_swatch! : Draw.Frame, U64, U64 => {}
 draw_swatch! = |frame, index, selected| {
@@ -155,23 +187,29 @@ draw_swatch! = |frame, index, selected| {
 	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
 }
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), PixelCountMismatch, ..])
-update! = |model, step| {
+## A mismatched pixel count is no longer this function's problem: the check
+## happens where the upload does, when the platform applies the `UpdateTexture`
+## action, and a failure ends the cycle exactly as `texture.update!(pixels)?`
+## used to. So the error type is the same one every other example has.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	next = update_editor!(model, host)?
+	next = update_editor(model, host)
 	mouse = host.mouse.position()
-	host.set_cursor!(
+	cursor = Host.set_cursor(
 		match cell_at(mouse) {
 			Ok(_) => Crosshair
 			Err(_) => Arrow
 		},
 	)
 
-	Ok({ model: { ..next, mouse }, commands: [] })
+	Ok({
+		model: { ..next.model, mouse },
+		actions: List.concat(exit_actions, List.append(next.actions, cursor)),
+		tasks: [],
+	})
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

@@ -65,7 +65,7 @@ StepResult : {
 	paddle_hit : Bool,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -418,36 +418,45 @@ advance_game = |game, input|
 		GameOver => advance_finished(game, input)
 	}
 
-play_step_events! : Sounds, List(StepEvent) => {}
-play_step_events! = |sounds, events| {
-	for event in events {
-		match event {
-			GameStarted => sounds.start.play!()
-			WallHit => sounds.wall.play!()
-			BrickHit(_) => sounds.brick.play!()
-			LifeLost(_) => sounds.lose.play!()
-			WallCleared => sounds.start.play!()
-		}
-	}
-}
+## One sound per event, in the order the step produced them.
+##
+## `List.map` rather than a fold: every event makes exactly one sound, so the
+## action list is the event list retyped, and two brick hits in one step stay
+## two brick sounds.
+step_event_actions : Sounds, List(StepEvent) -> List(Program.Action)
+step_event_actions = |sounds, events|
+	List.map(
+		events,
+		|event|
+			match event {
+				GameStarted => sounds.start.play()
+				WallHit => sounds.wall.play()
+				BrickHit(_) => sounds.brick.play()
+				LifeLost(_) => sounds.lose.play()
+				WallCleared => sounds.start.play()
+			},
+	)
 
 ## `advance_game` was already a pure step returning events, and the events were
 ## already interpreted effectfully -- so this split is mostly a matter of moving
-## the seam that was there all along.
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+## the seam that was there all along. What used to be a `for` loop calling
+## `play!` is now the same loop building the actions `update` hands back.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
+	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
 
 	result = advance_game(model.game, frame_input(host))
-	if result.paddle_hit {
-		model.sounds.paddle.play!()
-	}
-	play_step_events!(model.sounds, result.events)
+	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
 
-	Ok({ model: { ..model, game: result.game }, commands: [] })
+	Ok({
+		model: { ..model, game: result.game },
+		actions: List.concat(
+			exit_actions,
+			List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
+		),
+		tasks: [],
+	})
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

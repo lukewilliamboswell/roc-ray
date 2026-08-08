@@ -33,7 +33,7 @@ Model : {
 	timestamp_nanos : U64,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -151,7 +151,7 @@ draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, time
 	}
 }
 
-## Layout is a pure function of the window size, so `update!` (deciding what the
+## Layout is a pure function of the window size, so `update` (deciding what the
 ## pointer is over) and `render!` (drawing it) derive the same value rather than
 ## storing it -- one less thing that can disagree with itself.
 Layout : {
@@ -189,21 +189,16 @@ layout_for = |screen| {
 	}
 }
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	# With `with_exit_key(NoExitKey)` no key closes the window on its
-	# own, so the app decides. Escape is left free for the UI to use.
-	if host.key_pressed(KeyQ) {
-		host.exit!(0)
-	}
 
 	view = layout_for(host.screen)
 	mouse = host.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
-	host.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+	cursor = Host.set_cursor(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
 	from_keyboard = keyboard_selection(model.selection, host)
 	selection = if host.mouse.button_pressed(Left) and hover_display {
@@ -218,7 +213,10 @@ update! = |model, step| {
 
 	Ok({
 		model: { ..model, selection, screen: host.screen, mouse, timestamp_nanos: host.timestamp_nanos },
-		commands: [],
+		# With `with_exit_key(NoExitKey)` no key closes the window on its
+		# own, so the app decides. Escape is left free for the UI to use.
+		actions: if host.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
+		tasks: [],
 	})
 }
 

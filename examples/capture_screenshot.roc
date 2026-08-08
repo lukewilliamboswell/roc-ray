@@ -1,7 +1,6 @@
 app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
-import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Host
@@ -29,9 +28,26 @@ Model : {
 	save_failed : Text.Prepared,
 	refused : Text.Prepared,
 	result : Text.Prepared,
+
+	## The screenshot each outstanding task will answer for, by the id it
+	## echoes back. An outcome arrives a step after the request, so the id has
+	## to outlive the frame that asked -- and a refusal and a save mean
+	## different things, so they cannot share one slot.
+	pending_escape : Pending,
+	pending_save : Pending,
+
+	## Where task ids come from. They only have to be unique, not dense, so
+	## this advances by two every cycle whether or not either was requested.
+	next_id : U64,
 }
 
-program = { init!, update!, render! }
+## A screenshot task in flight, by the id its completion will echo back.
+Pending : [Idle, Waiting(U64)]
+
+## What a step said about an outstanding screenshot.
+Outcome : [NotYet, Finished(Try({}, Program.ScreenshotError))]
+
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -50,55 +66,122 @@ init! = App.init(
 				save_failed: Text.from("could not write shots/scene.png").size(16).prepare!()?,
 				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)").size(16).prepare!()?,
 				result: idle,
+				pending_escape: Idle,
+				pending_save: Idle,
+				next_id: 0,
 			})
 		},
 )
 
-## Screenshots are host effects driven by input, so they belong here. Asking
-## for one during drawing would put an effect outside the message stream.
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
+## A screenshot can fail, and this app branches on that, so it is a task rather
+## than an action: the request goes out here and the outcome comes back on a
+## later step instead of being read off the call.
+##
+## The pixels are still this frame's -- the host reads the framebuffer at the
+## end of the frame that asked, exactly where `Capture.screenshot!` read it --
+## so only the report waits.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	host = step.input
-	if host.key_pressed(KeyEscape) {
-		host.exit!(0)
-	}
 
-	# `..` cannot reach outside the output directory, so this reports
+	escape_id = model.next_id
+	save_id = model.next_id + 1
+
+	# `..` cannot reach outside the output directory, so this comes back as
 	# PathEscapesOutputDir rather than writing beside the example source.
+	escape_requested = host.key_pressed(KeyE)
+	save_requested = host.key_pressed(KeyS) or host.frame_count == 3
+
+	escape_outcome = screenshot_outcome(step.completed, model.pending_escape)
+	saved_outcome = screenshot_outcome(step.completed, model.pending_save)
+
 	escaped =
-		if host.key_pressed(KeyE) {
-			match Capture.screenshot!("../escaped.png") {
-				Err(PathEscapesOutputDir) => Ok(model.refused)
-				# Any other outcome means the sandbox let something through.
-				_ => Ok(model.save_failed)
-			}
-		} else {
-			Err(NotRequested)
+		match escape_outcome {
+			Finished(Err(PathEscapesOutputDir)) => Ok(model.refused)
+			# Any other outcome means the sandbox let something through.
+			Finished(_) => Ok(model.save_failed)
+			NotYet => Err(NotRequested)
 		}
 
 	saved =
-		if host.key_pressed(KeyS) or host.frame_count == 3 {
-			match Capture.screenshot!("scene.png") {
-				Ok({}) => Ok(model.saved)
-				Err(_) => Ok(model.save_failed)
-			}
-		} else {
-			Err(NotRequested)
+		match saved_outcome {
+			Finished(Ok(_)) => Ok(model.saved)
+			Finished(Err(_)) => Ok(model.save_failed)
+			NotYet => Err(NotRequested)
 		}
 
-	# The screenshot is written at the end of this frame, so leave the
-	# host a frame to do it before asking to exit.
-	if host.frame_count > 3 {
-		host.exit!(0)
-	}
+	# Frame 3 asks, the host writes the file at the end of that frame, frame 4
+	# is handed the outcome and draws it -- so the exit waits until frame 5.
+	actions =
+		if host.key_pressed(KeyEscape) or host.frame_count > 4 {
+			[Program.exit(0)]
+		} else {
+			[]
+		}
+
+	tasks =
+		List.concat(
+			if escape_requested [Screenshot({ id: escape_id, path: "../escaped.png" })] else [],
+			if save_requested [Screenshot({ id: save_id, path: "scene.png" })] else [],
+		)
 
 	next = match (escaped, saved) {
 		(Ok(text), _) => { ..model, result: text }
 		(_, Ok(text)) => { ..model, result: text }
 		_ => model
 	}
-	Ok({ model: next, commands: [] })
+
+	Ok({
+		model: {
+			..next,
+			pending_escape: still_pending(model.pending_escape, escape_requested, escape_id, escape_outcome),
+			pending_save: still_pending(model.pending_save, save_requested, save_id, saved_outcome),
+			next_id: model.next_id + 2,
+		},
+		actions: actions,
+		tasks: tasks,
+	})
 }
+
+## The outcome of an outstanding screenshot, if this step is the one carrying it.
+##
+## Completions are matched by the id the request was made with, so another
+## screenshot finishing on the same step is not mistaken for this one.
+screenshot_outcome : List(Program.Completion), Pending -> Outcome
+screenshot_outcome = |completed, pending|
+	match pending {
+		Idle => NotYet
+		Waiting(id) =>
+			match List.first(List.keep_if(completed, |completion| answers(completion, id))) {
+				Ok(ScreenshotFinished(finished)) => Finished(finished.result)
+				# Unreachable: `answers` kept only this task's screenshot.
+				Ok(_) => NotYet
+				Err(_) => NotYet
+			}
+		}
+
+## Whether a completion answers the screenshot task with this id.
+answers : Program.Completion, U64 -> Bool
+answers = |completion, id|
+	match completion {
+		ScreenshotFinished(finished) => finished.id == id
+		SmallFileRead(_) => Bool.False
+		DelayElapsed(_) => Bool.False
+		ClipboardRead(_) => Bool.False
+	}
+
+## Carry an outstanding request into the next cycle: a fresh request replaces
+## it, an answered one clears it, and anything else is still waiting.
+still_pending : Pending, Bool, U64, Outcome -> Pending
+still_pending = |pending, requested, id, outcome|
+	if requested {
+		Waiting(id)
+	} else {
+		match outcome {
+			Finished(_) => Idle
+			NotYet => pending
+		}
+	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

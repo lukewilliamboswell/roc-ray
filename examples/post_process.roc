@@ -12,7 +12,7 @@ Model : {
 	time : Draw.F32Uniform,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 screen_w : F32
 screen_w = 800
@@ -31,14 +31,17 @@ init! = App.init(
 	},
 )
 
-## The shader clock is the only state this example advances, and a Tick is
-## precisely the message that carries it -- so the uniform is set here rather
-## than mid-draw.
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
-	model.time.set!(U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000)
-	Ok({ model: model, commands: [] })
-}
+## The shader clock is the only state this example advances, and the step
+## carries it -- so the uniform write is returned as an action rather than done
+## mid-draw. Actions are applied before `render!` runs, so the shader still sees
+## this frame's clock.
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step|
+	Ok({
+		model: model,
+		actions: [model.time.set(U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000)],
+		tasks: [],
+	})
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {

@@ -8,14 +8,14 @@ import rr.Text
 
 ## Read a file without stalling the frame.
 ##
-## The read is a `Cmd`, so `update!` hands it to the host and returns
+## The read is a `Task`, so `update` hands it to the host and returns
 ## immediately; the host does the blocking work on another thread and the answer
-## arrives later as an `EffectResult` carrying the id the app chose. Nothing here
+## arrives later as a `Completion` carrying the id the app chose. Nothing here
 ## waits, and the animation below keeps running while the read is outstanding --
 ## which is the whole point.
 ##
 ## The same code path runs when the host has no worker: the result simply
-## arrives on the frame the command was issued instead of a later one.
+## arrives on the frame the task was issued instead of a later one.
 Model : {
 	state : LoadState,
 	elapsed : F32,
@@ -33,7 +33,7 @@ LoadState : [
 read_id : U64
 read_id = 1
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -46,12 +46,8 @@ init! = App.init(
 		}),
 )
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step| {
-	if step.input.key_pressed(KeyEscape) {
-		step.input.exit!(0)
-	}
-
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
 	# Whatever finished since the last cycle arrives together. This app has one
 	# request outstanding, so it picks its own out; an app juggling several
 	# would fold over the list instead. On an ordinary frame it is empty.
@@ -61,9 +57,9 @@ update! = |model, step| {
 			Err(_) => model.state
 		}
 
-	# Frame 0 issues the read. Returning it as a command rather than calling a
+	# Frame 0 issues the read. Returning it as a task rather than calling a
 	# blocking effect is what keeps this frame short.
-	commands =
+	tasks =
 		if step.time.frame_count == 0 {
 			[ReadSmallFile({ id: read_id, path: "README.md" })]
 		} else {
@@ -72,7 +68,8 @@ update! = |model, step| {
 
 	Ok({
 		model: { ..model, state: next_state, elapsed: model.elapsed + step.time.elapsed_seconds },
-		commands: commands,
+		actions: if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		tasks: tasks,
 	})
 }
 
@@ -82,6 +79,8 @@ is_our_read = |completion|
 	match completion {
 		SmallFileRead(finished) => finished.id == read_id
 		DelayElapsed(_) => Bool.False
+		ScreenshotFinished(_) => Bool.False
+		ClipboardRead(_) => Bool.False
 	}
 
 ## Turn a finished read into the state to display.
@@ -105,7 +104,10 @@ apply_completion = |completion|
 				Err(TooLarge) => Failed("file too large to deliver inline")
 			}
 
+		# Only a read reaches here: `is_our_read` filters the rest out first.
 		DelayElapsed(_) => Requested
+		ScreenshotFinished(_) => Requested
+		ClipboardRead(_) => Requested
 	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

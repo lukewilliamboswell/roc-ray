@@ -20,7 +20,7 @@ Model : {
 	dragging : Bool,
 }
 
-program = { init!, update!, render! }
+program = { init!, update, render! }
 
 initial_corners : Corners
 initial_corners = {
@@ -49,20 +49,23 @@ init! = App.init(
 	},
 )
 
-update! : Model, Program.Step => Try(Program.Next(Model), [Exit(I64), ..])
-update! = |model, step|
-	Ok({ model: drag_corner!(model, step.input), commands: [] })
+update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update = |model, step| {
+	dragged = drag_corner(model, step.input)
+	Ok({ model: dragged.model, actions: dragged.actions, tasks: [] })
+}
 
 ## Fold one frame of pointer input into the quad.
 ##
-## The cursor shape is a host effect rather than model state, so it belongs on
-## this side of the split: `render!` gets no `Host` to set it with.
-drag_corner! : Model, Host => Model
-drag_corner! = |model, host| {
+## The cursor shape is a host effect rather than model state, and `update` is
+## pure, so this hands the change back as an action instead of applying it. The
+## platform runs it before `render!` draws, which is when it used to happen.
+drag_corner : Model, Host -> { model : Model, actions : List(Program.Action) }
+drag_corner = |model, host| {
 	mouse = host.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = host.mouse.button_down(Left) and (model.dragging or (host.mouse.button_pressed(Left) and handle_near))
-	host.set_cursor!(if handle_near or dragging ResizeAll else Arrow)
+	actions = [Host.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
 
 	candidate = if host.key_pressed(KeyR) {
 		initial_corners
@@ -79,8 +82,8 @@ drag_corner! = |model, host| {
 	}
 
 	match Draw.ProjectiveQuad.from_corners(candidate) {
-		Ok(quad) => { ..model, quad, corners: candidate, dragging }
-		Err(_) => { ..model, dragging }
+		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, actions }
+		Err(_) => { model: { ..model, dragging }, actions }
 	}
 }
 

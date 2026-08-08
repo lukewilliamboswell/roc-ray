@@ -20,6 +20,32 @@ Mouse := [].{
 	## Standard mouse buttons sampled by the platform.
 	MouseButton : RrtMouse.MouseButton
 
+	## Flatten a cursor shape to the raylib code the host passes to
+	## `SetMouseCursor`, the way `Keys.exit_key_code` flattens an exit key.
+	##
+	## Apps do not need this: `Host.set_cursor(shape)` and `host.set_cursor!`
+	## both take the shape itself. The platform uses it to apply a `SetCursor`
+	## action without having to keep a second copy of the numbering.
+	cursor_code : Cursor -> U8
+	cursor_code = |cursor|
+		match cursor {
+			Default => 0
+			Arrow => 1
+			IBeam => 2
+			Crosshair => 3
+			PointingHand => 4
+			ResizeEastWest => 5
+			ResizeNorthSouth => 6
+			ResizeNorthwestSoutheast => 7
+			ResizeNortheastSouthwest => 8
+			ResizeAll => 9
+			NotAllowed => 10
+		}
+
+	expect Mouse.cursor_code(Default) == 0
+	expect Mouse.cursor_code(PointingHand) == 4
+	expect Mouse.cursor_code(NotAllowed) == 10
+
 	## Current cursor position in logical drawing coordinates.
 	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
 	position = RrtMouse.position

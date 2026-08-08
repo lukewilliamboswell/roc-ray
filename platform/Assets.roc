@@ -59,6 +59,15 @@ Assets := [].{
 		update! = |Texture.(texture), pixels|
 			if AssetsHost.update_texture!({ texture, pixels }) == 0 Ok({}) else Err(PixelCountMismatch)
 
+		## Replace every pixel in row-major RGBA order, as an action a pure
+		## `update` can return. Receiver form: `texture.update(pixels)`.
+		##
+		## The count is checked when the platform applies the action, so a list
+		## that does not match the texture fails the cycle the same way
+		## `texture.update!(pixels)?` fails it inside an effectful function.
+		update : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
+		update = |texture, pixels| UpdateTexture({ texture: texture, pixels: pixels })
+
 		## Change how this texture is sampled when scaled.
 		set_filter! : Texture, TextureFilter => {}
 		set_filter! = |Texture.(texture), filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
@@ -136,6 +145,10 @@ Assets := [].{
 	## texture dimensions and is borrowed only for this host call.
 	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels| texture.update!(pixels)
+
+	## Replace every pixel, as an action a pure `update` can return.
+	update_texture : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
+	update_texture = |texture, pixels| texture.update(pixels)
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

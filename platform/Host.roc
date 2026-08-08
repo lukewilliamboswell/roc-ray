@@ -172,36 +172,48 @@ Host := {
 
 	## Apply cursor visibility/capture atomically through one tagged operation.
 	set_cursor_mode! : Host, CursorMode => {}
-	set_cursor_mode! = |_host, mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
+	set_cursor_mode! = |_host, mode| MouseHost.set_cursor_mode!(Host.cursor_mode_code(mode))
 
 	## Set the native operating-system cursor shape.
 	set_cursor! : Host, Mouse.Cursor => {}
-	set_cursor! = |_host, cursor| MouseHost.set_cursor!(cursor_code(cursor))
+	set_cursor! = |_host, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
+
+	## Flatten a cursor mode to the code the host applies. Apps take the tag
+	## itself; the platform uses this to apply a `SetCursorMode` action.
+	cursor_mode_code : CursorMode -> U8
+	cursor_mode_code = |mode|
+		match mode {
+			Visible => 0
+			Hidden => 1
+			Locked => 2
+		}
+
+	## Ask for the native cursor shape, as an action a pure `update` can return.
+	set_cursor : Mouse.Cursor -> [SetCursor(Mouse.Cursor), ..]
+	set_cursor = |cursor| SetCursor(cursor)
+
+	## Ask for cursor visibility/capture, as an action.
+	set_cursor_mode : CursorMode -> [SetCursorMode(CursorMode), ..]
+	set_cursor_mode = |mode| SetCursorMode(mode)
+
+	## Replace the system clipboard contents, as an action. Reading it back is a
+	## `ReadClipboard` task, because a read has an answer to deliver.
+	set_clipboard_text : Str -> [SetClipboardText(Str), ..]
+	set_clipboard_text = |text| SetClipboardText(text)
+
+	## Set which key closes the window, as an action.
+	set_exit_key : ExitKey -> [SetExitKey(ExitKey), ..]
+	set_exit_key = |key| SetExitKey(key)
+
+	## Set the smallest size the window can be dragged down to, as an action.
+	## Each negative dimension is clamped to `0`, leaving that axis
+	## unconstrained, exactly as `host.set_window_min_size!` does.
+	set_window_min_size : { width : I32, height : I32 } -> [SetWindowMinSize({ width : I32, height : I32 }), ..]
+	set_window_min_size = |size| SetWindowMinSize(size)
+
+	expect Host.cursor_mode_code(Visible) == 0
+	expect Host.cursor_mode_code(Locked) == 2
 }
-
-cursor_code : Mouse.Cursor -> U8
-cursor_code = |cursor|
-	match cursor {
-		Default => 0
-		Arrow => 1
-		IBeam => 2
-		Crosshair => 3
-		PointingHand => 4
-		ResizeEastWest => 5
-		ResizeNorthSouth => 6
-		ResizeNorthwestSoutheast => 7
-		ResizeNortheastSouthwest => 8
-		ResizeAll => 9
-		NotAllowed => 10
-	}
-
-cursor_mode_code : Host.CursorMode -> U8
-cursor_mode_code = |mode|
-	match mode {
-		Visible => 0
-		Hidden => 1
-		Locked => 2
-	}
 
 compose_public_validations : U64, U64 -> Try({}, [InvalidGamepadIndex, InvalidKeyCode, ..])
 compose_public_validations = |gamepad_index, key_code| {

@@ -113,6 +113,13 @@ Capture := [].{
 				})
 			}
 
+	## Drive `host.mouse` from a script, as an action a pure `update` can
+	## return. The platform applies it in the cycle that asked for it, so the
+	## scripted pointer reaches `render!` on the very next draw, exactly as
+	## `Capture.set_virtual_mouse!` did from inside an effectful update.
+	set_virtual_mouse : Pointer -> [SetVirtualMouse(Pointer), ..]
+	set_virtual_mouse = |pointer| SetVirtualMouse(pointer)
+
 	## Write a single still image of the current frame.
 	##
 	## The extension selects the encoder; `.png` is the portable choice. The

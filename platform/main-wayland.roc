@@ -5,7 +5,7 @@ platform ""
 				config : App.Config,
 				run! : Host => Try(model, [Exit(I64), ..]),
 			},
-			update! : model, Program.Step => Try(Program.Next(model), [Exit(I64), ..]),
+			update : model, Program.Step -> Try(Program.Next(model), [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
@@ -181,14 +181,16 @@ HostStateFromHost : {
 
 ## Internal type for the host boundary, carrying one cycle of observations.
 ##
-## Unions do not cross this boundary, so completions arrive as a list of flat
-## records that `Program` decodes. The list is empty on an ordinary frame.
+## Unions do not cross this boundary, so completions and the recording state
+## arrive as flat records that `Program` decodes. The completion list is empty
+## on an ordinary frame.
 StepFromHost : {
 	snapshot : HostStateFromHost,
 	frame_count : U64,
 	timestamp_nanos : U64,
 	elapsed_seconds : F32,
 	completed : List(Program.CompletionFromHost),
+	capture : Program.CaptureFromHost,
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
@@ -225,6 +227,7 @@ step_from_raw = |raw| {
 		elapsed_seconds: raw.elapsed_seconds,
 	},
 	completed: List.map(raw.completed, Program.completion_from_host),
+	capture: Program.capture_from_host(raw.capture),
 }
 
 init_for_host! : HostStateFromHost => Try(Box(Model), I64)
@@ -239,12 +242,77 @@ init_for_host! = |host_state|
 ##
 ## Called once per rendered frame rather than once per event, so the model is
 ## boxed and unboxed once regardless of how much happened.
-update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), commands : List(Program.CommandToHost) }, I64)
+##
+## `program.update` is pure, so the work it asked for is done here instead:
+## actions are applied immediately, before this returns and therefore before
+## anything is drawn, which is exactly where the effects they replace used to
+## run. Only tasks -- the work that answers back -- reach the host.
+update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), tasks : List(Program.TaskToHost) }, I64)
 update_for_host! = |boxed_model, raw|
-	match (program.update!)(Box.unbox(boxed_model), step_from_raw(raw)) {
-		Ok(next) => Ok({ model: Box.box(next.model), commands: List.map(next.commands, Program.to_host) })
+	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
+		Ok(next) =>
+			match run_actions!(next.actions, 0) {
+				Ok({}) => Ok({ model: Box.box(next.model), tasks: List.map(next.tasks, Program.to_host) })
+				Err(Exit(code)) => Err(code)
+				Err(_) => Err(-1)
+			}
+
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
+	}
+
+## Apply a cycle's actions in order, stopping at the first one that fails.
+##
+## Walked by index rather than folded because each step is effectful and may
+## fail: `texture.update(pixels)` reports a pixel count that does not match the
+## texture, and that has to end the cycle the same way `texture.update!(pixels)?`
+## ended it when `update!` was effectful.
+run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, ..])
+run_actions! = |actions, index|
+	if index >= List.len(actions) {
+		Ok({})
+	} else {
+		match List.get(actions, index) {
+			Ok(action) => {
+				run_action!(action)?
+				run_actions!(actions, index + 1)
+			}
+
+			# Unreachable: the index is bounded above.
+			Err(_) => Ok({})
+		}
+	}
+
+## Apply one action through the effect it stands for.
+##
+## This is the whole reason actions need no wire format: the adapter is itself
+## effectful, so it can call the platform's existing effects directly and an
+## `Action` never has to flatten to scalars or cross the ABI.
+run_action! : Program.Action => Try({}, [PixelCountMismatch, ..])
+run_action! = |action|
+	match action {
+		# Deferred rather than immediate, matching `host.exit!`: the host
+		# finishes this cycle -- including the draw, and including capturing it
+		# -- and shuts down afterwards. `Err(Exit(code))` from `update` is the
+		# immediate form.
+		Exit(code) => Ok(HostHost.exit!(I64.to_i32_wrap(code)))
+		SetCursor(cursor) => Ok(MouseHost.set_cursor!(Mouse.cursor_code(cursor)))
+		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Host.cursor_mode_code(mode)))
+		SetClipboardText(text) => Ok(HostHost.set_clipboard_text!(text))
+		SetExitKey(key) => Ok(HostHost.set_exit_key!(Keys.exit_key_code(key)))
+		SetWindowMinSize(size) =>
+			Ok(
+				HostHost.set_window_min_size!({
+					width: if size.width > 0 size.width else 0,
+					height: if size.height > 0 size.height else 0,
+				}),
+			)
+
+		PlaySound(settings) => Ok(settings.play!())
+		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
+		UpdateTexture(request) => request.texture.update!(request.pixels)
+		SetShaderF32Uniform(request) => Ok(request.uniform.set!(request.value))
+		SetVirtualMouse(pointer) => Ok(Capture.set_virtual_mouse!(pointer))
 	}
 
 ## Draw the current model, then hand the same box back.

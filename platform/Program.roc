@@ -149,7 +149,7 @@ Program := [].{
 		FileRead({ id : U64, result : Try(File.Blob, ReadError) }),
 		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
-		ClipboardRead({ id : U64, result : Try(Str, [Unavailable]) }),
+		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge]) }),
 	]
 
 	## Why a read produced no contents.
@@ -264,7 +264,13 @@ Program := [].{
 		} else if raw.kind == completion_clipboard_read {
 			ClipboardRead({
 				id: raw.id,
-				result: if raw.err == 0 Ok(raw.contents) else Err(Unavailable),
+				result: if raw.err == 0 {
+					Ok(raw.contents)
+				} else if raw.err == read_err_too_large {
+					Err(TooLarge)
+				} else {
+					Err(Unavailable)
+				},
 			})
 		} else {
 			crash "roc-ray: host sent an unknown completion kind"
@@ -339,6 +345,11 @@ capture_status_active = 1
 capture_status_failed : U8
 capture_status_failed = 2
 
+## Error code for content the frame thread declined to copy into a `Str`.
+## Mirrored in `src/host_native.zig`.
+read_err_too_large : U8
+read_err_too_large = 5
+
 ## Decode the host's read-error code. Mirrored in `src/host_native.zig`.
 read_error : U8 -> Program.ReadError
 read_error = |code|
@@ -348,7 +359,7 @@ read_error = |code|
 		Busy
 	} else if code == 4 {
 		Unavailable
-	} else if code == 5 {
+	} else if code == read_err_too_large {
 		TooLarge
 	} else {
 		ReadFailed
@@ -410,6 +421,10 @@ expect Program.completion_from_host({ kind: 2, id: 8, err: 2, contents: "", blob
 expect Program.completion_from_host({ kind: 2, id: 8, err: 99, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(WriteFailed) })
 expect Program.completion_from_host({ kind: 3, id: 2, err: 0, contents: "pasted", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Ok("pasted") })
 expect Program.completion_from_host({ kind: 3, id: 2, err: 4, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(Unavailable) })
+
+## Another process decides how much text the clipboard holds, so the frame
+## thread refuses to copy an unbounded one rather than stalling on it.
+expect Program.completion_from_host({ kind: 3, id: 2, err: 5, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(TooLarge) })
 expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0 }) == Idle
 expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1 }) == Active({ frames: 12, dropped: 1 })
 expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0 }) == Failed({ frames: 3, reason: WriteFailed })

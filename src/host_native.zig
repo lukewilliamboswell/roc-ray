@@ -4287,7 +4287,17 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64) 
         staging.clipboardRead(roc_host, id, READ_ERR_UNAVAILABLE, "");
         return;
     };
-    staging.clipboardRead(roc_host, id, 0, std.mem.span(text));
+
+    // The clipboard is arbitrary content from outside the app -- another
+    // process decides how big it is -- and turning it into a `Str` is a copy
+    // and a UTF-8 scan on this thread. Cap it at the same size a small file
+    // read is capped at, and for the same reason.
+    const contents = std.mem.span(text);
+    if (contents.len > MAX_INLINE_READ_BYTES) {
+        staging.clipboardRead(roc_host, id, READ_ERR_TOO_LARGE, "");
+        return;
+    }
+    staging.clipboardRead(roc_host, id, 0, contents);
 }
 
 /// Hand one read to the worker, or answer it in this cycle if it was refused.

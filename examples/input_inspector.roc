@@ -108,6 +108,7 @@ update = |model, step| {
 	typed = match paste {
 		Pasted(text) => Str.concat(clipboard.typed, text)
 		NoText => clipboard.typed
+		TooMuchText => clipboard.typed
 		NotYet => clipboard.typed
 	}
 	clipboard_status = match paste {
@@ -115,6 +116,7 @@ update = |model, step| {
 		# One error covers an empty clipboard and non-text content alike; the
 		# windowing backend does not tell them apart.
 		NoText => "clipboard has no text"
+		TooMuchText => "clipboard holds too much text to paste"
 		NotYet => clipboard.clipboard_status
 	}
 
@@ -139,13 +141,19 @@ update = |model, step| {
 }
 
 ## What this step's completions say about an outstanding paste.
-paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText]
+##
+## `TooLarge` is its own outcome rather than being folded into `NoText`: there
+## *is* text, the host just would not copy that much of it onto the frame
+## thread, and telling someone their clipboard is empty when it is not would be
+## a lie the app is in a position to avoid.
+paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText, TooMuchText]
 paste_outcome = |completed|
 	match List.first(List.keep_if(completed, is_our_paste)) {
 		Ok(ClipboardRead(finished)) =>
 			match finished.result {
 				Ok(pasted) => Pasted(pasted)
 				Err(Unavailable) => NoText
+				Err(TooLarge) => TooMuchText
 			}
 
 		# Unreachable: `is_our_paste` kept only this app's clipboard read.

@@ -44,6 +44,7 @@ import Color
 import Draw
 import File
 import FileHost
+import AssetsHost
 
 Program := [].{
 
@@ -199,6 +200,24 @@ Program := [].{
 		StartRecording(Capture.Recording),
 		StopRecording,
 	]
+
+	## Why a cycle's uploads would be refused, or `Ok` if all of them fit.
+	##
+	## Actions are applied in order, so an upload refused partway through the
+	## list would leave the earlier ones already in their textures while the
+	## cycle itself was rejected -- external state mutated by a transition that
+	## did not happen. The platform runs this over every cycle before applying
+	## anything, which is what makes the list all-or-nothing.
+	##
+	## It is public because it is also the *recoverable* form. Everything an
+	## upload can be refused for is knowable without doing it -- the texture's
+	## own size, the region's bounds, and the total bytes against
+	## `Assets.max_upload_bytes_per_step` -- so an app generating pixels can ask
+	## here, in `update`, and defer what does not fit. An app that does not ask
+	## and does not fit is a programming error, and the platform says so by
+	## name rather than exiting with -1.
+	check_uploads : List(Action) -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
+	check_uploads = |actions| check_uploads_from(actions, 0, 0, Assets.max_upload_bytes_per_step)
 
 	## Ask the host to shut down with an exit code.
 	##
@@ -436,6 +455,76 @@ Program := [].{
 		}
 }
 
+## Walk a cycle's actions, accumulating upload bytes and stopping at the first
+## upload that would be refused.
+##
+## By index rather than folded because it carries two things forward -- the
+## running byte total and the first refusal -- and the total is what makes two
+## uploads that each fit, but do not together, a refusal rather than a surprise.
+##
+## `budget` is a parameter rather than a constant read here so the accumulation
+## rule can be exercised against a small one. Charging past four mebibytes for
+## real would mean building a megapixel list at check time, which is not a cost
+## worth paying to assert that addition works.
+check_uploads_from : List(Program.Action), U64, U64, U64 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
+check_uploads_from = |actions, index, charged, budget|
+	if index >= List.len(actions) {
+		Ok({})
+	} else {
+		match List.get(actions, index) {
+			Ok(action) => check_uploads_from(actions, index + 1, charge_upload(action, charged, budget)?, budget)
+
+			# Unreachable: the index is bounded above.
+			Err(_) => Ok({})
+		}
+	}
+
+## Add one action's upload to the running total, or name why it cannot be made.
+##
+## Actions that are not uploads pass through: they cannot be refused, which is
+## what makes checking only the uploads enough to make the whole list atomic.
+charge_upload : Program.Action, U64, U64 -> Try(U64, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
+charge_upload = |action, charged, budget|
+	match action {
+		UpdateTexture(request) =>
+			if U64.to_f32(List.len(request.pixels)) != request.texture.width() * request.texture.height() {
+				Err(PixelCountMismatch)
+			} else {
+				add_upload(charged, request.pixels, budget)
+			}
+
+		UpdateTextureRegion(request) => {
+			region = request.region
+			# Sizes are compared as F32 because that is what a texture reports
+			# its own size in, and adding in F32 also means a huge `x + width`
+			# cannot wrap the way I32 addition would.
+			width = I32.to_f32(region.width)
+			height = I32.to_f32(region.height)
+			if region.width <= 0 or region.height <= 0 or region.x < 0 or region.y < 0 {
+				Err(RegionOutOfBounds)
+			} else if I32.to_f32(region.x) + width > request.texture.width() or I32.to_f32(region.y) + height > request.texture.height() {
+				Err(RegionOutOfBounds)
+			} else if U64.to_f32(List.len(region.pixels)) != width * height {
+				Err(PixelCountMismatch)
+			} else {
+				add_upload(charged, region.pixels, budget)
+			}
+		}
+
+		_ => Ok(charged)
+	}
+
+## Charge one upload against the frame's budget.
+##
+## The error union is the caller's rather than this function's one case, so a
+## charge can be returned straight out of `charge_upload` alongside the two
+## shape refusals.
+add_upload : U64, List(Color.Rgba), U64 -> Try(U64, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
+add_upload = |charged, pixels, budget| {
+	total = charged + Assets.upload_bytes(pixels)
+	if total > budget Err(UploadBudgetExceeded) else Ok(total)
+}
+
 ## Rebuild the handle a finished `ReadFile` installed.
 ##
 ## Nothing is copied here and nothing can be: the record carries a slot token
@@ -586,6 +675,44 @@ capture_failure = |code|
 ## it is asserted rather than described.
 sample_blob_read : Program.CompletionFromHost
 sample_blob_read = { kind: 4, id: 3, err: 0, contents: "", blob: 0x0001_0002_0003, blob_len: 16 * 1024 * 1024 }
+
+## A four-by-four texture, for the upload expects below.
+##
+## Built by hand rather than loaded: nothing here reaches the host, because
+## everything an upload can be refused for is knowable without it -- which is
+## the whole claim `check_uploads` makes.
+tiny_texture : Assets.Texture
+tiny_texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 0, width: 4, height: 4 })))
+
+## Sixteen pixels: exactly what `tiny_texture` holds.
+sixteen_pixels : List(Color.Rgba)
+sixteen_pixels = List.repeat({ r: 1, g: 2, b: 3, a: 255 }, 16)
+
+expect Program.check_uploads([]) == Ok({})
+expect Program.check_uploads([tiny_texture.update(sixteen_pixels)]) == Ok({})
+expect Program.check_uploads([tiny_texture.update(List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 15))]) == Err(PixelCountMismatch)
+
+## The region has to be inside the texture: the graphics backend does no bounds
+## checking of its own, so a rectangle hanging over the edge would be read past
+## the end of the list rather than refused.
+expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Ok({})
+expect Program.check_uploads([tiny_texture.update_region({ x: 3, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Err(RegionOutOfBounds)
+expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 0, height: 2, pixels: [] })]) == Err(RegionOutOfBounds)
+
+## The budget is a total across the cycle, not a per-upload ceiling: two
+## uploads that each fit but do not fit together are refused, and refused
+## before either of them has changed anything.
+##
+## Checked against a small budget rather than the real four mebibytes, which
+## would mean building a megapixel list here to assert that addition works.
+expect Assets.upload_bytes(sixteen_pixels) == 64
+expect check_uploads_from([tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Ok({})
+expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Err(UploadBudgetExceeded)
+expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 128) == Ok({})
+
+## Actions that are not uploads pass through untouched, which is what makes
+## checking only the uploads enough to make the whole list atomic.
+expect Program.check_uploads([Program.exit(0), tiny_texture.update(sixteen_pixels)]) == Ok({})
 
 ## A work list one longer than a cycle will carry, for the batch expects below.
 nine_delays : List(Program.Task)

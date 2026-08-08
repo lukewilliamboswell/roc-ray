@@ -254,15 +254,46 @@ init_for_host! = ||
 update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), tasks : List(Program.TaskToHost) }, I64)
 update_for_host! = |boxed_model, raw|
 	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
-		Ok(next) =>
+		Ok(next) => {
+			# Uploads are the only actions that can be refused, and everything
+			# they can be refused for is knowable before any of them run. Check
+			# the whole list first so a refusal cannot land after earlier
+			# uploads have already changed their textures.
+			refuse_unfittable_uploads(next.actions)
 			match run_actions!(next.actions, 0) {
 				Ok({}) => Ok({ model: Box.box(next.model), tasks: next.tasks.to_host_list() })
 				Err(Exit(code)) => Err(code)
 				Err(_) => Err(-1)
 			}
+		}
 
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
+	}
+
+## Stop the cycle before any of its uploads are applied, if one of them cannot
+## be.
+##
+## This is the backstop, not the interface: `Program.check_uploads` is the same
+## check, pure, so an app that generates pixels can ask in `update` and defer
+## what does not fit. Reaching here means it did not ask -- and the alternative
+## to saying so is the cycle dying with exit -1 and no indication which action
+## caused it or what the limit was.
+refuse_unfittable_uploads : List(Program.Action) -> {}
+refuse_unfittable_uploads = |actions|
+	match Program.check_uploads(actions) {
+		Ok({}) => {}
+		Err(PixelCountMismatch) => {
+			crash "roc-ray: an UpdateTexture action carried a pixel list that is not exactly width * height for its texture. Check it with Program.check_uploads before returning it."
+		}
+
+		Err(RegionOutOfBounds) => {
+			crash "roc-ray: an UpdateTextureRegion action named a rectangle that is not inside its texture. Check it with Program.check_uploads before returning it."
+		}
+
+		Err(UploadBudgetExceeded) => {
+			crash "roc-ray: one cycle's actions ask to upload more than Assets.max_upload_bytes_per_step. Split the work across frames, or check it with Program.check_uploads and defer what does not fit."
+		}
 	}
 
 ## Apply a cycle's actions in order, stopping at the first one that fails.

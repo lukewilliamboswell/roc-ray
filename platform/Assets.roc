@@ -34,6 +34,13 @@ Assets := [].{
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureGenerationFailed) else Ok(Texture.(result.texture))
 		}
 
+		## Wrap the transport handle. Platform-internal, and useless outside the
+		## platform: `AssetsHost` is not exposed, so an app cannot build one of
+		## these to pass in. This exists so `Program.check_uploads` can be
+		## tested against a texture of a known size without a GPU.
+		from_host : AssetsHost.Texture -> Texture
+		from_host = |raw| Texture.(raw)
+
 		## Read-only sampling view sharing this texture's host-owned ARC resource.
 		view : Texture -> TextureView
 		view = |Texture.(texture)| TextureView.(texture)
@@ -169,6 +176,24 @@ Assets := [].{
 		height : I32,
 		pixels : List(Color.Rgba),
 	}
+
+	## How many bytes of texture upload one cycle may ask for.
+	##
+	## A frame has a fixed upload budget because an upload enters the graphics
+	## driver synchronously and a driver call is not free. `init!` is exempt:
+	## startup is not a frame, and an app builds its atlases there.
+	##
+	## Exposed so an app that generates pixels can stay inside the budget rather
+	## than discover it. `Program.check_uploads` does that check over a whole
+	## cycle's actions, which is the form worth reaching for.
+	##
+	## Mirrors `MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME` in `src/host_native.zig`.
+	max_upload_bytes_per_step : U64
+	max_upload_bytes_per_step = 4 * 1024 * 1024
+
+	## What uploading these pixels costs against the budget: four bytes each.
+	upload_bytes : List(Color.Rgba) -> U64
+	upload_bytes = |pixels| List.len(pixels) * 4
 
 	## Texture sampling filter used when an image is scaled.
 	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x]

@@ -16,7 +16,10 @@ import roc_platform_abi as abi
 
 def run_git(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", "-C", str(repo), *args],
+        # Signing off: this repository is a scratch fixture, and a developer
+        # whose global config signs every commit would otherwise fail here on
+        # a pinentry prompt that has no terminal to appear on.
+        ["git", "-C", str(repo), "-c", "commit.gpgsign=false", *args],
         check=True,
         capture_output=True,
         text=True,

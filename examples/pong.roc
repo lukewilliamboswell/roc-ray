@@ -4,6 +4,7 @@ import rr.Draw
 import rr.Color
 import rr.Host
 import rr.Program
+import rr.Random
 import rr.Audio
 import rr.App
 import rr.Math
@@ -29,6 +30,10 @@ Model : {
 	hit_sound : Audio.Sound,
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
+
+	## Simulation randomness lives in the model, so a serve is drawn on the
+	## frame that needs it and a run replays exactly from its seed.
+	rng : Random.Generator,
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
@@ -69,8 +74,13 @@ win_score = 5
 
 # A random vertical serve speed in px/second, so each serve leaves at a
 # different angle instead of the same predictable line.
-random_serve_vy! : Host => F32
-random_serve_vy! = |host| I32.to_f32(host.random_i32!(-160, 160))
+# Drawing from the model's own generator rather than an effect keeps the serve
+# immediate: the ball leaves on the frame that scored, not the frame after.
+random_serve_vy : Random.Generator -> { value : F32, next : Random.Generator }
+random_serve_vy = |rng| {
+	drawn = Random.in_range(rng, -160, 160)
+	{ value: I32.to_f32(drawn.value), next: drawn.next }
+}
 
 left_paddle : F32 -> Math.Rect
 left_paddle = |y| Math.rect(paddle_margin, y, paddle_w, paddle_h)
@@ -83,15 +93,19 @@ ball_circle = |x, y| Math.circle({ x, y }, ball_r)
 
 # A fresh round: ball centred, scores zeroed, served in a random direction.
 # Sound handles are carried over from the previous model (generated once).
-new_round! : Model, Host => Model
-new_round! = |model, host| {
-	serve_dir = if host.random_i32!(0, 1) == 0 (init_vx * -1) else init_vx
+new_round : Model -> Model
+new_round = |model| {
+	# Direction then speed, drawn in that order from one generator, so the
+	# sequence is the same every time a given seed replays.
+	direction = Random.in_range(model.rng, 0, 1)
+	serve = random_serve_vy(direction.next)
 	{
 		..model,
 		ball_x: screen_w * 0.5,
 		ball_y: screen_h * 0.5,
-		ball_vx: serve_dir,
-		ball_vy: random_serve_vy!(host),
+		ball_vx: if direction.value == 0 (init_vx * -1) else init_vx,
+		ball_vy: serve.value,
+		rng: serve.next,
 		left_y: 250,
 		right_y: 250,
 		left_score: 0,
@@ -109,7 +123,7 @@ init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Pong"),
 	|host| {
-		# Generate the sound effects once; new_round! carries the handles forward.
+		# Generate the sound effects once; new_round carries the handles forward.
 		seed = {
 			ball_x: 0,
 			ball_y: 0,
@@ -122,9 +136,12 @@ init! = App.init(
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
+			# Entropy is asked for once, here. From this point randomness is
+			# model state that `update` advances without an effect.
+			rng: Random.from_seed(I32.to_u64_wrap(host.random_i32!(0, 2_000_000_000))),
 		}
 
-		Ok(new_round!(seed, host))
+		Ok(new_round(seed))
 	},
 )
 
@@ -161,7 +178,7 @@ render! = |model, frame| {
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
 step_game_over! : Model, Host => Model
 step_game_over! = |model, host|
-	if host.key_pressed(KeySpace) new_round!(model, host) else model
+	if host.key_pressed(KeySpace) new_round(model) else model
 
 # --- Active play ---
 step_playing! : Model, Host => Model
@@ -211,12 +228,14 @@ step_playing! = |model, host| {
 	out_left = nx - ball_r < 0
 	out_right = nx + ball_r > screen_w
 	# Draw randomness only when a new serve is actually needed.
-	serve_vy = if out_left or out_right random_serve_vy!(host) else vy
+	# The generator only advances when a serve is actually needed, so an idle
+	# rally does not consume draws.
+	serve = if out_left or out_right random_serve_vy(model.rng) else { value: vy, next: model.rng }
 
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny
 	final_vx = if out_left (init_vx * -1) else if out_right init_vx else vx
-	final_vy = if out_left serve_vy else if out_right serve_vy else vy
+	final_vy = if out_left serve.value else if out_right serve.value else vy
 
 	left_score = if out_right model.left_score + 1 else model.left_score
 	right_score = if out_left model.right_score + 1 else model.right_score
@@ -231,6 +250,7 @@ step_playing! = |model, host| {
 		right_y: right_y,
 		left_score: left_score,
 		right_score: right_score,
+		rng: serve.next,
 	}
 
 	# Sound effects for this frame's events.

@@ -6,6 +6,7 @@ import rr.Color
 import rr.Draw
 import rr.Host
 import rr.Program
+import rr.Random
 import rr.Math
 
 Cell : {
@@ -30,6 +31,10 @@ Model : {
 	eat_sound : Audio.Sound,
 	crash_sound : Audio.Sound,
 	start_sound : Audio.Sound,
+
+	## Simulation randomness lives in the model, so food appears on the frame it
+	## was eaten and a run replays exactly from its seed.
+	rng : Random.Generator,
 }
 
 program = { init!, update!, render! }
@@ -76,21 +81,25 @@ init! = App.init(
 			eat_sound: Audio.gen_tone!({ freq: 620, ms: 70 })?,
 			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 })?,
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
+			# Entropy is asked for once, here. From this point randomness is
+			# model state that `update` advances without an effect.
+			rng: Random.from_seed(I32.to_u64_wrap(host.random_i32!(0, 2_000_000_000))),
 		}
 
-		Ok(new_game!(seed, host))
+		Ok(new_game(seed))
 	},
 )
 
-new_game! : Model, Host => Model
-new_game! = |model, host| {
-	food = spawn_food!(host, start_snake)
+new_game : Model -> Model
+new_game = |model| {
+	spawned = spawn_food(model.rng, start_snake)
 	{
 		..model,
+		rng: spawned.next,
 		snake: start_snake,
 		direction: DirRight,
 		pending_direction: DirRight,
-		food,
+		food: spawned.cell,
 		score: 0,
 		accumulator: 0,
 		state: Playing,
@@ -137,14 +146,13 @@ find_open_cell = |seed, snake, attempt| {
 	}
 }
 
-spawn_food! : Host, List(Cell) => Cell
-spawn_food! = |host, snake| {
-	seed = {
-		x: host.random_i32!(0, grid_cols - 1),
-		y: host.random_i32!(0, grid_rows - 1),
-	}
-
-	find_open_cell(seed, snake, 0)
+# Drawing from the model's generator rather than an effect keeps food placement
+# immediate, and makes a run replay exactly from its seed.
+spawn_food : Random.Generator, List(Cell) -> { cell : Cell, next : Random.Generator }
+spawn_food = |rng, snake| {
+	column = Random.in_range(rng, 0, grid_cols - 1)
+	row = Random.in_range(column.next, 0, grid_rows - 1)
+	{ cell: find_open_cell({ x: column.value, y: row.value }, snake, 0), next: row.next }
 }
 
 requested_direction : Model, Host -> Direction
@@ -174,8 +182,8 @@ apply_input = |model, host| {
 	{ ..model, pending_direction: pending }
 }
 
-step_snake! : Model, Host => Model
-step_snake! = |model, host| {
+step_snake! : Model => Model
+step_snake! = |model| {
 	move = delta(model.pending_direction)
 	head = head_of(model.snake)
 	next_head = { x: head.x + move.x, y: head.y + move.y }
@@ -193,12 +201,14 @@ step_snake! = |model, host| {
 
 		if ate {
 			model.eat_sound.play!()
+			spawned = spawn_food(model.rng, next_snake)
 			{
 				..model,
 				snake: next_snake,
 				direction: model.pending_direction,
 				pending_direction: model.pending_direction,
-				food: spawn_food!(host, next_snake),
+				food: spawned.cell,
+				rng: spawned.next,
 				score: model.score + 1,
 				accumulator: model.accumulator,
 				state: Playing,
@@ -221,7 +231,7 @@ advance_fixed_steps! = |model, host| {
 	if model.accumulator < step_time {
 		model
 	} else {
-		next = step_snake!({ ..model, accumulator: model.accumulator - step_time }, host)
+		next = step_snake!({ ..model, accumulator: model.accumulator - step_time })
 		match next.state {
 			Playing => advance_fixed_steps!(next, host)
 			GameOver => next
@@ -251,7 +261,7 @@ update! = |model, step| {
 		GameOver =>
 			if host.key_pressed(KeySpace) {
 				model.start_sound.play!()
-				new_game!(model, host)
+				new_game(model)
 			} else {
 				model
 			}

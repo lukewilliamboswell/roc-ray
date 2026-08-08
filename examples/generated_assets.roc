@@ -5,7 +5,7 @@ import rr.Assets
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
 import rr.Mouse
 import rr.Program
@@ -80,7 +80,7 @@ initial_pixels = List.map_with_index(
 init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		texture = Assets.Texture.generate_color!({ width: 16, height: 16, color: Color.white })?
 		texture.update!(initial_pixels)?
 		texture.set_filter!(Point)
@@ -103,9 +103,9 @@ init! = App.init(
 	},
 )
 
-palette_from_input : U64, Host -> U64
-palette_from_input = |current, host|
-	if host.key_pressed(Key1) 0 else if host.key_pressed(Key2) 1 else if host.key_pressed(Key3) 2 else if host.key_pressed(Key4) 3 else current
+palette_from_input : U64, Input.Snapshot -> U64
+palette_from_input = |current, input|
+	if input.key_pressed(Key1) 0 else if input.key_pressed(Key2) 1 else if input.key_pressed(Key3) 2 else if input.key_pressed(Key4) 3 else current
 
 cell_at : Math.Vec2 -> Try(U64, [Outside])
 cell_at = |point| {
@@ -133,12 +133,12 @@ Edited : {
 	actions : List(Program.Action),
 }
 
-update_editor : Model, Host -> Edited
-update_editor = |model, host| {
-	palette = palette_from_input(model.palette, host)
+update_editor : Model, Input.Snapshot -> Edited
+update_editor = |model, input| {
+	palette = palette_from_input(model.palette, input)
 	base = { ..model, palette }
 
-	if host.key_pressed(KeyC) {
+	if input.key_pressed(KeyC) {
 		{
 			model: { ..base, pixels: initial_pixels, last_cell: Idle },
 			actions: [
@@ -146,8 +146,8 @@ update_editor = |model, host| {
 				paint(base.paint_sound, 0.7),
 			],
 		}
-	} else if host.mouse.button_down(Left) {
-		match cell_at(host.mouse.position()) {
+	} else if input.mouse.button_down(Left) {
+		match cell_at(input.mouse.position()) {
 			Err(_) => { model: { ..base, last_cell: Idle }, actions: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
@@ -193,12 +193,12 @@ draw_swatch! = |frame, index, selected| {
 ## used to. So the error type is the same one every other example has.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
-	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+	input = step.input
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	next = update_editor(model, host)
-	mouse = host.mouse.position()
-	cursor = Host.set_cursor(
+	next = update_editor(model, input)
+	mouse = input.mouse.position()
+	cursor = Mouse.set_cursor(
 		match cell_at(mouse) {
 			Ok(_) => Crosshair
 			Err(_) => Arrow

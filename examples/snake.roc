@@ -4,7 +4,7 @@ import rr.App
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Program
 import rr.Random
 import rr.Math
@@ -80,7 +80,7 @@ start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120)),
-	|host| {
+	|startup| {
 		seed = {
 			snake: start_snake,
 			direction: DirRight,
@@ -94,7 +94,7 @@ init! = App.init(
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.from_seed(I32.to_u64_wrap(host.random_i32!(0, 2_000_000_000))),
+			rng: Random.from_seed(I32.to_u64_wrap(startup.random_i32!(0, 2_000_000_000))),
 		}
 
 		Ok(new_game(seed))
@@ -166,12 +166,12 @@ spawn_food = |rng, snake| {
 	{ cell: find_open_cell({ x: column.value, y: row.value }, snake, 0), next: row.next }
 }
 
-requested_direction : Model, Host -> Direction
-requested_direction = |model, host| {
-	up = host.key_pressed(KeyUp) or host.key_pressed(KeyW)
-	down = host.key_pressed(KeyDown) or host.key_pressed(KeyS)
-	left = host.key_pressed(KeyLeft) or host.key_pressed(KeyA)
-	right = host.key_pressed(KeyRight) or host.key_pressed(KeyD)
+requested_direction : Model, Input.Snapshot -> Direction
+requested_direction = |model, input| {
+	up = input.key_pressed(KeyUp) or input.key_pressed(KeyW)
+	down = input.key_pressed(KeyDown) or input.key_pressed(KeyS)
+	left = input.key_pressed(KeyLeft) or input.key_pressed(KeyA)
+	right = input.key_pressed(KeyRight) or input.key_pressed(KeyD)
 
 	if up {
 		DirUp
@@ -186,9 +186,9 @@ requested_direction = |model, host| {
 	}
 }
 
-apply_input : Model, Host -> Model
-apply_input = |model, host| {
-	requested = requested_direction(model, host)
+apply_input : Model, Input.Snapshot -> Model
+apply_input = |model, input| {
+	requested = requested_direction(model, input)
 	pending = if can_turn(model.direction, requested) requested else model.pending_direction
 	{ ..model, pending_direction: pending }
 }
@@ -265,25 +265,34 @@ advance_fixed_steps = |model, actions| {
 	}
 }
 
-advance_playing : Model, Host -> Stepped
-advance_playing = |model, host| {
-	input_model = apply_input(model, host)
-	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
-	# step remainder so normal frame-rate variation does not change game speed.
-	accumulator = input_model.accumulator + Math.clamp(host.frame_time, 0, 0.25)
+## Fold one frame's worth of time into the accumulator and run the steps it pays
+## for.
+##
+## `dt` arrives already bounded rather than being read from a frame here: this
+## takes the seconds it should advance by, so a caller can hand it a real
+## frame's elapsed time or a fixed step without inventing a `Time.Frame` that
+## never happened.
+advance_playing : Model, Input.Snapshot, F32 -> Stepped
+advance_playing = |model, input, dt| {
+	input_model = apply_input(model, input)
+	accumulator = input_model.accumulator + dt
 	with_accumulator = { ..input_model, accumulator }
 	advance_fixed_steps(with_accumulator, [])
 }
 
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
-	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+	input = step.input
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+
+	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
+	# step remainder so normal frame-rate variation does not change game speed.
+	dt = Math.clamp(step.time.elapsed_seconds, 0, 0.25)
 
 	stepped = match model.state {
-		Playing => advance_playing(model, host)
+		Playing => advance_playing(model, input, dt)
 		GameOver =>
-			if host.key_pressed(KeySpace) {
+			if input.key_pressed(KeySpace) {
 				{ model: new_game(model), actions: [model.start_sound.play()] }
 			} else {
 				{ model, actions: [] }

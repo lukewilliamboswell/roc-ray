@@ -4,7 +4,6 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Host
 import rr.Program
 import rr.Text
 
@@ -12,8 +11,8 @@ import rr.Text
 ##
 ## The recording is declared in the startup config, so the host arms it before
 ## the first frame and finalizes it on exit. Because it asks for `FixedStep`
-## timing, `host.frame_time` is exactly 1/25s every frame no matter how long the
-## readback actually took -- so the animation in the file is smooth and
+## timing, `step.time.elapsed_seconds` is exactly 1/25s every frame no matter how
+## long the readback actually took -- so the animation in the file is smooth and
 ## identical between runs, even though capturing stalls the GPU.
 ##
 ## `with_visible(Bool.False)` keeps the window off screen while still rendering
@@ -59,7 +58,7 @@ init! = App.init(
 					.with_timing(FixedStep),
 			),
 		),
-	|_host|
+	|_startup|
 		Ok({
 			elapsed: 0,
 			title: Text.from("Recording a plot").size(28).prepare!()?,

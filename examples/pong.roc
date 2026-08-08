@@ -2,7 +2,7 @@ app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-r
 
 import rr.Draw
 import rr.Color
-import rr.Host
+import rr.Input
 import rr.Program
 import rr.Random
 import rr.Audio
@@ -12,7 +12,8 @@ import rr.Math
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
 # Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
-# Motion is in pixels/second scaled by host.frame_time (frame-rate independent).
+# Motion is in pixels/second scaled by the step's elapsed seconds (frame-rate
+# independent).
 # Serves leave at a random angle. When someone reaches `win_score`, the game
 # freezes on a win screen until SPACE is pressed (edge-detected, so holding it
 # doesn't instantly restart again).
@@ -125,7 +126,7 @@ program = { init!, update, render! }
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Pong"),
-	|host| {
+	|startup| {
 		# Generate the sound effects once; new_round carries the handles forward.
 		seed = {
 			ball_x: 0,
@@ -141,7 +142,7 @@ init! = App.init(
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.from_seed(I32.to_u64_wrap(host.random_i32!(0, 2_000_000_000))),
+			rng: Random.from_seed(I32.to_u64_wrap(startup.random_i32!(0, 2_000_000_000))),
 		}
 
 		Ok(new_round(seed))
@@ -164,10 +165,14 @@ Stepped : {
 
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
-	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+	input = step.input
 
-	stepped = if game_over(model) step_game_over(model, host) else step_playing(model, host)
+	# Seconds since the previous frame - the basis for all motion this frame.
+	dt = step.time.elapsed_seconds
+
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+
+	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
 
 	Ok({
 		model: stepped.model,
@@ -191,22 +196,22 @@ render! = |model, frame| {
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-step_game_over : Model, Host -> Stepped
-step_game_over = |model, host| {
-	model: if host.key_pressed(KeySpace) new_round(model) else model,
+step_game_over : Model, Input.Snapshot -> Stepped
+step_game_over = |model, input| {
+	model: if input.key_pressed(KeySpace) new_round(model) else model,
 	actions: [],
 }
 
 # --- Active play ---
-step_playing : Model, Host -> Stepped
-step_playing = |model, host| {
-
-	# Seconds since the previous frame - the basis for all motion this frame.
-	dt = host.frame_time
+## Play is a function of the sampled input and how much time to advance by, so
+## the caller passes both rather than a whole frame the stepper would only take
+## one field from.
+step_playing : Model, Input.Snapshot, F32 -> Stepped
+step_playing = |model, input, dt| {
 
 	# --- Left paddle: player input (W up, S down) ---
-	w_down = host.key_down(KeyW)
-	s_down = host.key_down(KeyS)
+	w_down = input.key_down(KeyW)
+	s_down = input.key_down(KeyS)
 	left_dir = if w_down (paddle_speed * -1) else if s_down paddle_speed else 0
 	left_y = Math.clamp(model.left_y + left_dir * dt, 0, screen_h - paddle_h)
 

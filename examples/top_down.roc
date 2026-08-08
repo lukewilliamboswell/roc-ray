@@ -6,7 +6,7 @@ import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Program
 import rr.Keys
 import rr.Math
@@ -411,7 +411,7 @@ burst_duration = 0.36
 init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		characters = Assets.load_texture!(characters_path)?
 		tiles = Assets.load_texture!(tiles_path)?
 		raw_map = Tilemap.load_tmx!(top_down_map_path)?
@@ -711,12 +711,12 @@ hazard_color = |id|
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Host -> Math.Vec2
-input_axis = |host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
-	up = host.key_down(KeyUp) or host.key_down(KeyW)
-	down = host.key_down(KeyDown) or host.key_down(KeyS)
+input_axis : Input.Snapshot -> Math.Vec2
+input_axis = |input| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
+	up = input.key_down(KeyUp) or input.key_down(KeyW)
+	down = input.key_down(KeyDown) or input.key_down(KeyS)
 
 	{ x: axis(left, right), y: axis(up, down) }
 }
@@ -1039,15 +1039,19 @@ play_step_events = |model, result| {
 ##
 ## The actions travel back with the model rather than being fired here, and the
 ## caller concatenates them as it unwinds.
-advance_playing : Model, Host -> { model : Model, actions : List(Program.Action) }
-advance_playing = |model, host| {
+##
+## The seconds to advance by are a plain parameter rather than a whole
+## `Time.Frame`: only the elapsed time is used, so the caller stays free to pass
+## a fixed step instead of whatever the last frame happened to take.
+advance_playing : Model, Input.Snapshot, F32 -> { model : Model, actions : List(Program.Action) }
+advance_playing = |model, input, dt| {
 	result = advance_world(
 		model.level,
 		model.world,
 		{
-			raw_dir: input_axis(host),
-			dash_pressed: host.key_pressed(KeySpace),
-			dt: host.frame_time,
+			raw_dir: input_axis(input),
+			dash_pressed: input.key_pressed(KeySpace),
+			dt,
 		},
 	)
 
@@ -1059,9 +1063,9 @@ advance_playing = |model, host| {
 
 ## Space restarts from either end state, restoring the music to the level
 ## `Escaped` ducked it away from.
-restart_on_space : Model, Host -> { model : Model, actions : List(Program.Action) }
-restart_on_space = |model, host|
-	if host.key_pressed(KeySpace) {
+restart_on_space : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+restart_on_space = |model, input|
+	if input.key_pressed(KeySpace) {
 		{
 			model: new_game(model.characters, model.tiles, model.level, model.sounds),
 			actions: [model.sounds.music.set_volume(music_volume)],
@@ -1074,13 +1078,13 @@ restart_on_space = |model, host|
 ## as actions, and the platform applies them in order before `render!`.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
-	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+	input = step.input
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
 
 	next = match model.world.state {
-		Playing => advance_playing(model, host)
-		Won => restart_on_space(model, host)
-		GameOver => restart_on_space(model, host)
+		Playing => advance_playing(model, input, step.time.elapsed_seconds)
+		Won => restart_on_space(model, input)
+		GameOver => restart_on_space(model, input)
 	}
 
 	Ok({

@@ -3,11 +3,10 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Host
 import rr.Program
 import rr.Text
 
-## Everything `render!` needs must live here now: it is handed no `Host`, so
+## Everything `render!` needs must live here now: it is handed no step, so
 ## anything read from input or the clock has to be recorded by `update` first.
 Model : {
 	title : Text.Prepared,
@@ -21,7 +20,7 @@ program = { init!, update, render! }
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120)),
-	|_host|
+	|_startup|
 		Ok({
 			title: Text.from("Roc :heart: Raylib").size(38).prepare!()?,
 			help: Text.from("Move the pointer, click for an accent, ESC exits").size(18).prepare!()?,
@@ -37,10 +36,10 @@ init! = App.init(
 ## it wants done -- here, an `Exit` action on the frame Escape is pressed.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
+	input = step.input
 	Ok({
-		model: { ..model, pointer: host.mouse.position(), accent_on: host.mouse.button_down(Left) },
-		actions: if host.key_pressed(KeyEscape) [Program.exit(0)] else [],
+		model: { ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) },
+		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
 		tasks: [],
 	})
 }

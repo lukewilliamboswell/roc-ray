@@ -4,15 +4,14 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Host
 import rr.Program
 import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
 ##
-## `Capture.set_virtual_mouse!` replaces only what the host reports to
-## `render!`, so the widget code below is ordinary hover and hit-test logic
-## reading `host.mouse` -- it has no idea the pointer is scripted. That is the
+## `Capture.set_virtual_mouse!` replaces only what the host reports on the
+## step, so the widget code below is ordinary hover and hit-test logic
+## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
 ## fake one, so what you see in the GIF is what a real click would do.
 ##
@@ -25,7 +24,7 @@ Model : {
 	pointer : { x : F32, y : F32 },
 	clicking : Bool,
 
-	## What `host.mouse` actually reported this frame, as distinct from the
+	## What `step.input.mouse` actually reported this frame, as distinct from the
 	## scripted `pointer` above. Hover and press styling are drawn from this,
 	## so the recording shows what the app was really told.
 	mouse : { x : F32, y : F32 },
@@ -78,7 +77,7 @@ init! = App.init(
 					.with_cursor(DrawCursor),
 			),
 		),
-	|_host|
+	|_startup|
 		Ok({
 			frame: 0,
 			pointer: { x: 40, y: 300 },
@@ -107,12 +106,12 @@ prepare_counter_labels! = |index, acc|
 
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
+	input = step.input
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
 
 	# Where the pointer is *this* frame: the position commanded on the previous
-	# one, which the model already kept. Reading it back off `host.mouse` would
+	# one, which the model already kept. Reading it back off `input.mouse` would
 	# work -- the host samples the scripted pointer into the step exactly as it
 	# does a hardware one -- but the app is the thing that scripted it, so it
 	# has no reason to ask the host what it already said.
@@ -123,11 +122,11 @@ update = |model, step| {
 	# Ordinary edge-triggered click handling. The virtual pointer
 	# produces real pressed-this-frame bits, so this needs no special
 	# casing.
-	pressed = host.mouse.button_pressed(Left)
+	pressed = input.mouse.button_pressed(Left)
 	clicks = if pressed and over_increment and model.clicks < max_clicks model.clicks + 1 else model.clicks
 	toggled = if pressed and over_toggle !(model.toggled) else model.toggled
 
-	held = host.mouse.button_down(Left)
+	held = input.mouse.button_down(Left)
 	slider =
 		if held and inside_slider(mouse) {
 			clamp_unit((mouse.x - slider_track.x) / slider_track.width)

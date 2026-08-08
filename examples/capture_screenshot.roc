@@ -3,7 +3,6 @@ app [Model, program] { rr: platform "../platform/main.roc" }
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Host
 import rr.Program
 import rr.Text
 
@@ -55,7 +54,7 @@ init! = App.init(
 		.with_title("RocRay Capture: Screenshot")
 		.with_size({ width: 640, height: 360 })
 		.with_output_dir("shots"),
-	|_host|
+	|_startup|
 		{
 			idle = Text.from("no capture yet").size(16).prepare!()?
 			Ok({
@@ -82,15 +81,15 @@ init! = App.init(
 ## so only the report waits.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
+	input = step.input
 
 	escape_id = model.next_id
 	save_id = model.next_id + 1
 
 	# `..` cannot reach outside the output directory, so this comes back as
 	# PathEscapesOutputDir rather than writing beside the example source.
-	escape_requested = host.key_pressed(KeyE)
-	save_requested = host.key_pressed(KeyS) or host.frame_count == 3
+	escape_requested = input.key_pressed(KeyE)
+	save_requested = input.key_pressed(KeyS) or step.time.frame_count == 3
 
 	escape_outcome = screenshot_outcome(step.completed, model.pending_escape)
 	saved_outcome = screenshot_outcome(step.completed, model.pending_save)
@@ -113,7 +112,7 @@ update = |model, step| {
 	# Frame 3 asks, the host writes the file at the end of that frame, frame 4
 	# is handed the outcome and draws it -- so the exit waits until frame 5.
 	actions =
-		if host.key_pressed(KeyEscape) or host.frame_count > 4 {
+		if input.key_pressed(KeyEscape) or step.time.frame_count > 4 {
 			[Program.exit(0)]
 		} else {
 			[]

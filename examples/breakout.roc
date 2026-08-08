@@ -4,7 +4,7 @@ import rr.App
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Program
 import rr.Math
 
@@ -148,7 +148,7 @@ initial_lives = 3
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
 	App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		Ok({
 			game: new_game_state(),
 			sounds: {
@@ -252,10 +252,10 @@ fresh_bricks = List.concat(
 	),
 )
 
-paddle_move_from_host : Host -> PaddleMove
-paddle_move_from_host = |host| {
-	left = host.key_down(KeyLeft) or host.key_down(KeyA)
-	right = host.key_down(KeyRight) or host.key_down(KeyD)
+paddle_move_from_input : Input.Snapshot -> PaddleMove
+paddle_move_from_input = |input| {
+	left = input.key_down(KeyLeft) or input.key_down(KeyA)
+	right = input.key_down(KeyRight) or input.key_down(KeyD)
 
 	if left PaddleLeft else if right PaddleRight else PaddleStill
 }
@@ -268,11 +268,14 @@ paddle_move_dir = |move|
 		PaddleStill => 0
 	}
 
-frame_input : Host -> FrameInput
-frame_input = |host| {
-	paddle_move: paddle_move_from_host(host),
-	action_pressed: host.key_pressed(KeySpace),
-	dt: host.frame_time,
+## The step's own `dt` is a parameter rather than something read off a frame,
+## because the caller decides how much time this step covers -- a fixed step can
+## be handed straight in, which a sampled frame could not express.
+frame_input : Input.Snapshot, F32 -> FrameInput
+frame_input = |input, dt| {
+	paddle_move: paddle_move_from_input(input),
+	action_pressed: input.key_pressed(KeySpace),
+	dt,
 }
 
 paddle_rect : F32 -> Math.Rect
@@ -443,10 +446,11 @@ step_event_actions = |sounds, events|
 ## `play!` is now the same loop building the actions `update` hands back.
 update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
 update = |model, step| {
-	host = step.input
-	exit_actions = if host.key_pressed(KeyEscape) [Program.exit(0)] else []
+	input = step.input
+	dt = step.time.elapsed_seconds
+	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
 
-	result = advance_game(model.game, frame_input(host))
+	result = advance_game(model.game, frame_input(input, dt))
 	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
 
 	Ok({

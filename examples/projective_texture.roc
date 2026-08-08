@@ -4,7 +4,7 @@ import rr.App
 import rr.Assets
 import rr.Color
 import rr.Draw
-import rr.Host
+import rr.Input
 import rr.Math
 import rr.Mouse
 import rr.Program
@@ -33,7 +33,7 @@ initial_corners = {
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 init! = App.init(
 	App.default.with_title("Projective Texture").with_frame_pacing(Capped(120)),
-	|_host| {
+	|_startup| {
 		texture = Assets.Texture.generate_checked!({
 			width: 512,
 			height: 512,
@@ -60,14 +60,14 @@ update = |model, step| {
 ## The cursor shape is a host effect rather than model state, and `update` is
 ## pure, so this hands the change back as an action instead of applying it. The
 ## platform runs it before `render!` draws, which is when it used to happen.
-drag_corner : Model, Host -> { model : Model, actions : List(Program.Action) }
-drag_corner = |model, host| {
-	mouse = host.mouse.position()
+drag_corner : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+drag_corner = |model, input| {
+	mouse = input.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
-	dragging = host.mouse.button_down(Left) and (model.dragging or (host.mouse.button_pressed(Left) and handle_near))
-	actions = [Host.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
+	dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
+	actions = [Mouse.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
 
-	candidate = if host.key_pressed(KeyR) {
+	candidate = if input.key_pressed(KeyR) {
 		initial_corners
 	} else if dragging {
 		{

@@ -34,6 +34,13 @@ Model : {
 	small : LoadState,
 	refused : LoadState,
 	blob : BlobState,
+
+	## The bytes that crossed into Roc, and only these twenty. Filled by a
+	## `ReadBlobSlice` completion rather than copied while drawing: a pure
+	## `update` cannot reach into a blob, and doing it from `render!` means
+	## paying for a copy and a UTF-8 scan every frame for a value that changed
+	## once.
+	preview : PreviewState,
 	elapsed : F32,
 	title : Text.Prepared,
 }
@@ -45,12 +52,20 @@ LoadState : [
 	Failed(Str),
 ]
 
+## A bounded range asked for out of a held blob.
+PreviewState : [
+	NoPreview,
+	Preview(Str),
+	PreviewFailed(Str),
+]
+
 ## A read delivered as a handle.
 ##
-## `Held` is the only state that owns host memory. It lasts exactly one cycle
-## here -- long enough to be drawn once -- so the whole lifecycle fits inside a
-## three-frame headless run. A real app would keep the blob for as long as it
-## needs the bytes, and the only rule is that it says when it is done.
+## `Held` is the only state that owns host memory. It lasts exactly as long as
+## it takes to answer one `ReadBlobSlice` -- one more cycle -- so the whole
+## lifecycle fits inside a three-frame headless run. A real app would keep the
+## blob for as long as it needs the bytes, and the only rule is that it says
+## when it is done.
 BlobState : [
 	Waiting,
 	Held(File.Blob),
@@ -67,6 +82,9 @@ refused_id = 2
 
 blob_id : U64
 blob_id = 3
+
+preview_id : U64
+preview_id = 4
 
 ## A few kilobytes: small enough that copying it into a `Str` is reasonable.
 small_path : Str
@@ -92,6 +110,7 @@ init! = App.init(
 			small: Waiting,
 			refused: Waiting,
 			blob: Waiting,
+			preview: NoPreview,
 			elapsed: 0,
 			title: Text.from("Reading while the frame keeps moving").size(22).prepare!()?,
 		}),
@@ -105,26 +124,39 @@ update = |model, step| {
 	next_small = advance_string_read(model.small, step.completed, small_id)
 	next_refused = advance_string_read(model.refused, step.completed, refused_id)
 
-	# A blob held since the last cycle has been drawn once by now, so this is the
-	# cycle the app is done with it. Releasing is an action: it is applied in
-	# this cycle, before anything is drawn, and reports nothing back.
+	preview = advance_preview(model.preview, step.completed)
+
+	# The preview has landed, so the app is done with the bytes. Releasing is an
+	# action: it is applied in this cycle, before anything is drawn, and reports
+	# nothing back.
 	#
 	# `blob.len()` is read here, from the pure `update`, because a length costs
-	# nothing -- it arrived with the handle. Only the bytes are host-side.
+	# nothing -- it arrived with the handle. Only the bytes are host-side, which
+	# is exactly why getting at them took a task.
+	answered = preview != NoPreview and model.preview == NoPreview
 	releases : List(Program.Action)
 	releases =
 		match model.blob {
-			Held(blob) => [blob.release()]
+			Held(blob) => if answered [blob.release()] else []
 			_ => []
 		}
 
 	settled =
 		match model.blob {
-			Held(blob) => Released(blob.len())
+			Held(blob) => if answered Released(blob.len()) else Held(blob)
 			other => other
 		}
 
 	next_blob = advance_blob_read(settled, step.completed)
+
+	# The cycle the handle arrives is the cycle to ask for the range. Twenty
+	# bytes cross once, here, instead of on every frame that draws them.
+	preview_tasks : List(Program.Task)
+	preview_tasks =
+		match (model.blob, next_blob) {
+			(Waiting, Held(blob)) => [ReadBlobSlice({ id: preview_id, blob, offset: 0, count: preview_bytes })]
+			_ => []
+		}
 
 	# Frame 0 issues all three reads. Returning them as tasks rather than
 	# calling blocking effects is what keeps this frame short.
@@ -145,12 +177,39 @@ update = |model, step| {
 			small: next_small,
 			refused: next_refused,
 			blob: next_blob,
+			preview: preview,
 			elapsed: model.elapsed + step.time.elapsed_seconds,
 		},
 		actions: if step.input.key_pressed(KeyEscape) List.append(releases, Program.exit(0)) else releases,
-		tasks: tasks,
+		tasks: List.concat(tasks, preview_tasks),
 	})
 }
+
+## Fold one cycle's completions into the preview asked for out of the blob.
+advance_preview : PreviewState, List(Program.Completion) -> PreviewState
+advance_preview = |current, completed|
+	match List.first(List.keep_if(completed, answers_preview)) {
+		Ok(BlobSliceRead(finished)) =>
+			match finished.result {
+				Ok(contents) => Preview(contents)
+				Err(NotUtf8) => PreviewFailed("(not text)")
+				Err(TooLarge) => PreviewFailed("(preview too large)")
+				Err(OutOfBounds) => PreviewFailed("(shorter than the preview)")
+				Err(Released) => PreviewFailed("(already released)")
+			}
+
+		# Unreachable: `answers_preview` kept only this app's slice.
+		Ok(_) => current
+		Err(_) => current
+	}
+
+## Whether a completion answers this app's blob-slice request.
+answers_preview : Program.Completion -> Bool
+answers_preview = |completion|
+	match completion {
+		BlobSliceRead(finished) => finished.id == preview_id
+		_ => Bool.False
+	}
 
 ## Fold one cycle's completions into the state of a string-delivered read.
 advance_string_read : LoadState, List(Program.Completion), U64 -> LoadState
@@ -201,10 +260,12 @@ answers_small : Program.Completion, U64 -> Bool
 answers_small = |completion, id|
 	match completion {
 		SmallFileRead(finished) => finished.id == id
-		FileRead(_) => Bool.False
-		DelayElapsed(_) => Bool.False
-		ScreenshotFinished(_) => Bool.False
-		ClipboardRead(_) => Bool.False
+
+		# Every other completion belongs to some other request. A wildcard
+		# rather than a branch each: this asks one question, and enumerating
+		# the platform's whole task list here would break the app every time
+		# a new kind of task existed.
+		_ => Bool.False
 	}
 
 ## Whether a completion answers this app's blob-delivered read.
@@ -212,10 +273,12 @@ answers_blob : Program.Completion -> Bool
 answers_blob = |completion|
 	match completion {
 		FileRead(finished) => finished.id == blob_id
-		SmallFileRead(_) => Bool.False
-		DelayElapsed(_) => Bool.False
-		ScreenshotFinished(_) => Bool.False
-		ClipboardRead(_) => Bool.False
+
+		# Every other completion belongs to some other request. A wildcard
+		# rather than a branch each: this asks one question, and enumerating
+		# the platform's whole task list here would break the app every time
+		# a new kind of task existed.
+		_ => Bool.False
 	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -244,7 +307,7 @@ render! = |model, frame| {
 
 	# The one copy this app makes, and it is bounded and deliberate: twenty
 	# bytes out of a few hundred thousand, only while the blob is held.
-	preview!(model.blob, frame)?
+	draw_preview!(model.preview, frame)?
 
 	# Keeps moving while the reads are outstanding, so a stalled frame would
 	# show as a stutter in this circle rather than as a number nobody reads.
@@ -257,33 +320,29 @@ render! = |model, frame| {
 	Ok({})
 }
 
-## Copy a bounded range out of a held blob and draw it.
+## Draw the range that already crossed. No bytes move here.
 ##
-## This is where the bytes finally cross into Roc, and only these twenty do.
-preview! : BlobState, Draw.Frame => Try({}, [Exit(I64), ..])
-preview! = |state, frame|
+## This is the difference the task makes: `render!` reads a `Str` out of the
+## model, where a completion put it, instead of asking the host for it again on
+## every frame.
+draw_preview! : PreviewState, Draw.Frame => Try({}, [Exit(I64), ..])
+draw_preview! = |state, frame|
 	match state {
-		Held(blob) => {
-			text =
-				match blob.slice_to_str!({ offset: 0, count: preview_bytes }) {
-					Ok(contents) => contents
-					Err(NotUtf8) => "(not text)"
-					Err(TooLarge) => "(preview too large)"
-					Err(OutOfBounds) => "(shorter than the preview)"
-					Err(Released) => "(already released)"
-				}
-
-			frame.text_at!({
-				pos: { x: 40, y: 176 },
-				text: Str.concat("first 20 bytes: ", text),
-				size: 20,
-				color: Color.from_hex_rgb(0xd8dee9),
-			})
-			Ok({})
-		}
-
-		_ => Ok({})
+		NoPreview => Ok({})
+		Preview(text) => draw_preview_text!(frame, text)
+		PreviewFailed(reason) => draw_preview_text!(frame, reason)
 	}
+
+draw_preview_text! : Draw.Frame, Str => Try({}, [Exit(I64), ..])
+draw_preview_text! = |frame, text| {
+	frame.text_at!({
+		pos: { x: 40, y: 176 },
+		text: Str.concat("first 20 bytes: ", text),
+		size: 20,
+		color: Color.from_hex_rgb(0xd8dee9),
+	})
+	Ok({})
+}
 
 ## One line of status for a string-delivered read.
 describe : LoadState -> Str

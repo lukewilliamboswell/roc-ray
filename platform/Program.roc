@@ -125,12 +125,19 @@ Program := [].{
 	## past the host's limit comes back as `TooLarge`. It stays because a config
 	## file wants a string and nothing else.
 	##
-	## `ReadFile` is the same read without that ceiling, because it does not
-	## produce a string: the worker's allocation is installed into a host slot
-	## and the app is handed a `File.Blob` -- a handle, not the bytes. Nothing
-	## proportional to the file happens on the frame thread, so there is nothing
-	## to cap. The app copies out the parts it wants, when it wants them, and
+	## `ReadFile` does not produce a string: the worker's allocation is
+	## installed into a host slot and the app is handed a `File.Blob` -- a
+	## handle, not the bytes. Nothing proportional to the file happens on the
+	## frame thread, so the string ceiling does not apply; the host's own 16 MiB
+	## per-file limit still does. The app copies out the parts it wants, and
 	## releases the blob with `File.Blob.release`.
+	##
+	## `ReadBlobSlice` is how bytes get out of a blob without `render!` doing
+	## it. Every accessor on `File.Blob` is an effect, so a pure `update` cannot
+	## call one, and the obvious workaround -- copy the range while drawing --
+	## puts a copy and a UTF-8 scan inside the frame every frame, for a value
+	## that changed once. As a task the copy happens once, when the read lands,
+	## and `update` puts the string in the model where `render!` just draws it.
 	##
 	## `Screenshot` is a task rather than an action because the write can fail
 	## and apps branch on that. The host reads the framebuffer at the end of the
@@ -142,6 +149,7 @@ Program := [].{
 		Delay({ id : U64, millis : U64 }),
 		Screenshot({ id : U64, path : Str }),
 		ReadClipboard({ id : U64 }),
+		ReadBlobSlice({ id : U64, blob : File.Blob, offset : U64, count : U64 }),
 	]
 
 	## A task that finished, carrying the result its own operation can actually
@@ -156,6 +164,7 @@ Program := [].{
 		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
 		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge]) }),
+		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released]) }),
 	]
 
 	## Why a read produced no contents.
@@ -200,6 +209,13 @@ Program := [].{
 		id : U64,
 		path : Str,
 		millis : U64,
+
+		## `ReadBlobSlice` only. The scalar the host validates, plus the range
+		## asked for. A blob does not fit through `path`, and reusing `millis`
+		## for an offset would make the record smaller and the code worse.
+		blob : U64,
+		offset : U64,
+		count : U64,
 	}
 
 	## The flat record one completion arrives in.
@@ -232,11 +248,20 @@ Program := [].{
 	to_host : Task -> TaskToHost
 	to_host = |task|
 		match task {
-			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0 }
-			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0 }
-			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis }
-			Screenshot(request) => { kind: task_screenshot, id: request.id, path: request.path, millis: 0 }
-			ReadClipboard(request) => { kind: task_read_clipboard, id: request.id, path: "", millis: 0 }
+			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
+			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
+			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis, blob: 0, offset: 0, count: 0 }
+			Screenshot(request) => { kind: task_screenshot, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
+			ReadClipboard(request) => { kind: task_read_clipboard, id: request.id, path: "", millis: 0, blob: 0, offset: 0, count: 0 }
+			ReadBlobSlice(request) => {
+				kind: task_read_blob_slice,
+				id: request.id,
+				path: "",
+				millis: 0,
+				blob: FileHost.Blob.token(File.Blob.to_host(request.blob)),
+				offset: request.offset,
+				count: request.count,
+			}
 		}
 
 	## Rebuild a `Completion` from the host's flat record.
@@ -266,6 +291,11 @@ Program := [].{
 			ScreenshotFinished({
 				id: raw.id,
 				result: if raw.err == 0 Ok({}) else Err(screenshot_error(raw.err)),
+			})
+		} else if raw.kind == completion_blob_slice_read {
+			BlobSliceRead({
+				id: raw.id,
+				result: if raw.err == 0 Ok(raw.contents) else Err(blob_error(raw.err)),
 			})
 		} else if raw.kind == completion_clipboard_read {
 			ClipboardRead({
@@ -343,6 +373,27 @@ task_read_clipboard = 3
 task_read_file : U8
 task_read_file = 4
 
+## `kind` code for a blob-slice task. Mirrored in `src/host_native.zig`.
+task_read_blob_slice : U8
+task_read_blob_slice = 5
+
+## `kind` code for a finished blob slice. Mirrored in `src/host_native.zig`.
+completion_blob_slice_read : U8
+completion_blob_slice_read = 5
+
+## Decode the host's blob-error code. Mirrored in `src/host_native.zig`.
+blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Released]
+blob_error = |code|
+	if code == 1 {
+		Released
+	} else if code == 2 {
+		OutOfBounds
+	} else if code == 4 {
+		TooLarge
+	} else {
+		NotUtf8
+	}
+
 ## `status` code for a running recording. Mirrored in `src/capture.zig`.
 capture_status_active : U8
 capture_status_active = 1
@@ -405,11 +456,11 @@ capture_failure = |code|
 sample_blob_read : Program.CompletionFromHost
 sample_blob_read = { kind: 4, id: 3, err: 0, contents: "", blob: 0x0001_0002_0003, blob_len: 16 * 1024 * 1024 }
 
-expect Program.to_host(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0 }
-expect Program.to_host(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0 }
-expect Program.to_host(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250 }
-expect Program.to_host(Screenshot({ id: 4, path: "scene.png" })) == { kind: 2, id: 4, path: "scene.png", millis: 0 }
-expect Program.to_host(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", millis: 0 }
+expect Program.to_host(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0, blob: 0, offset: 0, count: 0 }
+expect Program.to_host(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0, blob: 0, offset: 0, count: 0 }
+expect Program.to_host(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250, blob: 0, offset: 0, count: 0 }
+expect Program.to_host(Screenshot({ id: 4, path: "scene.png" })) == { kind: 2, id: 4, path: "scene.png", millis: 0, blob: 0, offset: 0, count: 0 }
+expect Program.to_host(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", millis: 0, blob: 0, offset: 0, count: 0 }
 expect Program.completion_from_host({ kind: 0, id: 3, err: 0, contents: "hi", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Ok("hi") })
 expect Program.completion_from_host({ kind: 0, id: 3, err: 1, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(NotFound) })
 expect Program.completion_from_host({ kind: 0, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(Busy) })

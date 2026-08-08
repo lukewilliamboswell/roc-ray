@@ -97,6 +97,7 @@ const COMPLETION_DELAY: u8 = 1;
 const COMPLETION_SCREENSHOT_FINISHED: u8 = 2;
 const COMPLETION_CLIPBOARD_READ: u8 = 3;
 const COMPLETION_FILE_READ: u8 = 4;
+const COMPLETION_BLOB_SLICE_READ: u8 = 5;
 
 /// `kind` codes for a task returned by `update`. Mirrored in `platform/Program.roc`.
 const TASK_READ_SMALL_FILE: u8 = 0;
@@ -104,6 +105,7 @@ const TASK_DELAY: u8 = 1;
 const TASK_SCREENSHOT: u8 = 2;
 const TASK_READ_CLIPBOARD: u8 = 3;
 const TASK_READ_FILE: u8 = 4;
+const TASK_READ_BLOB_SLICE: u8 = 5;
 
 /// Why an operation on a blob produced no bytes. Mirrored in `platform/File.roc`.
 const BLOB_ERR_RELEASED: u8 = 1;
@@ -684,6 +686,19 @@ const CompletionStaging = struct {
 
     fn screenshotFinished(self: *CompletionStaging, id: u64, err: u8) void {
         self.push(plain(COMPLETION_SCREENSHOT_FINISHED, id, err));
+    }
+
+    fn blobSliceRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, contents: []const u8) void {
+        var item = plain(COMPLETION_BLOB_SLICE_READ, id, err);
+        if (contents.len != 0) item.contents = abi.RocStr.fromSlice(contents, roc_host);
+        self.push(item);
+    }
+
+    /// Stage a slice whose string has already been built, taking ownership.
+    fn blobSliceReadOwned(self: *CompletionStaging, id: u64, err: u8, contents: abi.RocStr) void {
+        var item = plain(COMPLETION_BLOB_SLICE_READ, id, err);
+        item.contents = contents;
+        self.push(item);
     }
 
     fn clipboardRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, text: []const u8) void {
@@ -3088,6 +3103,16 @@ fn blobSliceError(err: u8) abi.FileHostBlob_sliceRetRecord {
 /// that looks complete is worse than one that says so.
 fn hostedFileBlobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) callconv(.c) abi.FileHostBlob_sliceRetRecord {
     enforcePhase("File.Blob.slice_to_str!", during_any_callback);
+    return blobSlice(roc_host, args);
+}
+
+/// The copy itself, with no phase guard.
+///
+/// Separate from the hosted effect because the host services a `ReadBlobSlice`
+/// task from the frame loop, outside any app callback -- that is bookkeeping on
+/// the app's behalf, not the app reaching for an effect, and the guard is right
+/// to reject the second while this is the first.
+fn blobSlice(roc_host: *RocHost, args: abi.FileHostBlob_sliceArgs) abi.FileHostBlob_sliceRetRecord {
     const bytes = blobBytes(args.handle) orelse return blobSliceError(BLOB_ERR_RELEASED);
 
     const end = std.math.add(u64, args.offset, args.count) catch return blobSliceError(BLOB_ERR_OUT_OF_BOUNDS);
@@ -4493,6 +4518,10 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) 
             stageClipboardRead(staging, roc_host, task.id);
             break :blk true;
         },
+        TASK_READ_BLOB_SLICE => blk: {
+            stageBlobSlice(staging, roc_host, task);
+            break :blk true;
+        },
         // The host and the platform are built together, so this is not a newer
         // app talking to an older host -- it is transport disagreeing with
         // itself, and every id in this batch is now unaccounted for.
@@ -4511,6 +4540,10 @@ fn refuseTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost)
         TASK_DELAY => staging.delayElapsed(task.id, DELAY_ERR_BUSY),
         TASK_SCREENSHOT => staging.screenshotFinished(task.id, capture.err_already_recording),
         TASK_READ_CLIPBOARD => staging.clipboardRead(roc_host, task.id, READ_ERR_UNAVAILABLE, ""),
+        // A refused slice reports `Released` rather than a new refusal code:
+        // the app asked for bytes and got none, and adding a fifth way for
+        // that to be phrased would not tell it anything it can act on.
+        TASK_READ_BLOB_SLICE => staging.blobSliceRead(roc_host, task.id, BLOB_ERR_RELEASED, ""),
         else => std.debug.panic("roc-ray: unknown task kind {d}", .{task.kind}),
     }
 }
@@ -4606,6 +4639,24 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64) 
         return;
     }
     staging.clipboardRead(roc_host, id, 0, contents);
+}
+
+/// Copy a bounded range out of a blob and stage it as a completion.
+///
+/// The copy itself is the same one `File.Blob.slice_to_str!` makes, and it is
+/// still on this thread -- turning bytes into a `Str` allocates through Roc,
+/// which only this thread may do. What the task buys is *when*: once, on the
+/// step the range was asked for, rather than every frame from inside `render!`
+/// because a pure `update` had no way to reach the bytes.
+fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) void {
+    const result = blobSlice(roc_host, .{
+        .handle = task.blob,
+        .offset = task.offset,
+        .count = task.count,
+    });
+    // The string it built is the one the completion carries; copying it again
+    // to hand it over would double the one cost this whole path is about.
+    staging.blobSliceReadOwned(task.id, result.err, result.contents);
 }
 
 /// Hand one read to the worker, or answer it in this cycle if it was refused.
@@ -5371,7 +5422,7 @@ test "every task in an oversized batch is answered exactly once" {
     const batch_len = MAX_TASKS_IN_FLIGHT + 11;
     var tasks: [batch_len]TaskToHost = undefined;
     for (&tasks, 0..) |*task, index| {
-        task.* = .{ .kind = TASK_DELAY, .id = index, .path = abi.RocStr.empty(), .millis = 1_000 };
+        task.* = .{ .kind = TASK_DELAY, .id = index, .path = abi.RocStr.empty(), .millis = 1_000, .blob = 0, .offset = 0, .count = 0 };
     }
 
     var staging = CompletionStaging.init(std.testing.allocator);

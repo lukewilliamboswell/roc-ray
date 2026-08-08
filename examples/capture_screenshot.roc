@@ -175,10 +175,12 @@ answers : Program.Completion, U64 -> Bool
 answers = |completion, id|
 	match completion {
 		ScreenshotFinished(finished) => finished.id == id
-		SmallFileRead(_) => Bool.False
-		FileRead(_) => Bool.False
-		DelayElapsed(_) => Bool.False
-		ClipboardRead(_) => Bool.False
+
+		# Every other completion belongs to some other request. A wildcard
+		# rather than a branch each: this asks one question, and enumerating
+		# the platform's whole task list here would break the app every time
+		# a new kind of task existed.
+		_ => Bool.False
 	}
 
 ## Carry an outstanding request into the next cycle: a fresh request replaces

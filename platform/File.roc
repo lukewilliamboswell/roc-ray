@@ -11,10 +11,15 @@
 ##
 ## `ReadFile` answers with a `Blob`: a small handle to bytes the *host* owns.
 ## The worker allocated and filled that memory off-thread, and completing the
-## read installs the allocation into a host slot -- no copy, no size limit, and
-## nothing proportional to the file happens during the frame. The bytes stay
-## host-side until the app asks for some of them, which is what makes every copy
-## in this module something the app wrote down.
+## read installs the allocation into a host slot -- no copy, and nothing
+## proportional to the file happens during the frame. The bytes stay host-side
+## until the app asks for some of them, which is what makes every copy in this
+## module something the app wrote down.
+##
+## There is still a ceiling, and it is worth stating rather than implying: the
+## host will not read a file larger than **16 MiB** at all, and a bigger one
+## comes back as `TooLarge`. What a blob removes is the cost of the bytes
+## crossing into Roc, not an unbounded appetite for them.
 ##
 ## A blob is released by hand -- `File.Blob.release` as an action, or
 ## `release!` inside an effectful function. A handle is a plain scalar that Roc
@@ -41,6 +46,14 @@ File := [].{
 		## `FileHost.Blob`, so it cannot invent a blob.
 		from_host : FileHost.Blob -> Blob
 		from_host = |raw| Blob.(raw)
+
+		## Unwrap to the transport handle. Platform-internal, and useless
+		## outside the platform: `FileHost` is not exposed, so an app can hold
+		## the result and do nothing with it. This exists so `Program` can
+		## flatten a blob into a task without the scalar handle appearing in a
+		## public type, which is what stops an app hand-assembling one.
+		to_host : Blob -> FileHost.Blob
+		to_host = |Blob.(raw)| raw
 
 		## Size in bytes. Free: the length arrived with the handle, so this is a
 		## field read and not a call into the host.

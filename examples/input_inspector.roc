@@ -166,10 +166,12 @@ is_our_paste : Program.Completion -> Bool
 is_our_paste = |completion|
 	match completion {
 		ClipboardRead(finished) => finished.id == paste_id
-		SmallFileRead(_) => Bool.False
-		FileRead(_) => Bool.False
-		DelayElapsed(_) => Bool.False
-		ScreenshotFinished(_) => Bool.False
+
+		# Every other completion belongs to some other request. A wildcard
+		# rather than a branch each: this asks one question, and enumerating
+		# the platform's whole task list here would break the app every time
+		# a new kind of task existed.
+		_ => Bool.False
 	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

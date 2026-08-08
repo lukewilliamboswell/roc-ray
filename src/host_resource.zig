@@ -156,6 +156,115 @@ pub fn HostResourceHeap(
     };
 }
 
+/// Fixed-capacity host-owned resources the app releases by hand.
+///
+/// Same slot discipline and same token encoding as `HostResourceHeap`, and
+/// deliberately so -- an index plus a generation plus a kind, so a token from a
+/// released slot can never be mistaken for the resource that replaced it. What
+/// differs is who decides the lifetime. A `HostResourceHeap` slot is pinned by a
+/// live Roc `Box`, and Roc's refcount reaching zero is what destroys it; here
+/// the handle is a plain integer, which Roc copies and drops with no
+/// notification, so nothing in Roc can drive the release. The app asks for it.
+///
+/// The consequence is stated rather than hidden: a resource the app never
+/// releases stays alive until `deinitAll` at shutdown. The host cannot reclaim
+/// it earlier, because a copy of the token may still be sitting in the model,
+/// and freeing memory a live token names is exactly the bug the generation
+/// exists to make impossible. What the host *can* do is bound it -- the table
+/// has a fixed number of slots, so a program that forgets is refused a new
+/// resource rather than growing without limit.
+///
+/// Unsynchronized, for the same reason as `HostResourceHeap`: every insert,
+/// lookup, and release happens on the window thread.
+pub fn HostHandleTable(
+    comptime T: type,
+    comptime capacity: usize,
+    comptime kind: u8,
+    comptime destroy: fn (*T) void,
+) type {
+    comptime {
+        if (capacity == 0) @compileError("host handle table capacity must be non-zero");
+        if (capacity > token_index_mask) @compileError("host handle table exceeds token index space");
+        if (kind == 0) @compileError("host handle table kind must be non-zero");
+    }
+
+    return struct {
+        const Self = @This();
+
+        resources: [capacity]T = undefined,
+        generations: [capacity]u64 = [_]u64{0} ** capacity,
+        live: [capacity]bool = [_]bool{false} ** capacity,
+        active_count: usize = 0,
+        high_water_count: usize = 0,
+
+        /// Take ownership of `resource` and return the token naming it.
+        ///
+        /// Null means every slot is taken. The caller still owns `resource` in
+        /// that case and must destroy it -- there is no half-transferred state.
+        pub fn insert(self: *Self, resource: T) ?u64 {
+            for (&self.live, 0..) |*is_live, index| {
+                if (is_live.*) continue;
+
+                const generation = self.generations[index] +| 1;
+                if (generation == 0 or generation > max_generation) continue;
+
+                self.generations[index] = generation;
+                self.resources[index] = resource;
+                is_live.* = true;
+                self.active_count += 1;
+                self.high_water_count = @max(self.high_water_count, self.active_count);
+                return encodeToken(index, generation, kind);
+            }
+            return null;
+        }
+
+        /// Resolve a token, or null if it names a released or foreign slot.
+        pub fn get(self: *Self, token: u64) ?*T {
+            const index = self.liveIndex(token) orelse return null;
+            return &self.resources[index];
+        }
+
+        /// Destroy the resource a token names. False if it was already gone.
+        ///
+        /// Releasing twice is not an error the app can avoid noticing its way
+        /// out of -- the second call simply finds a stale token, which is the
+        /// same answer any other use of it gets.
+        pub fn release(self: *Self, token: u64) bool {
+            const index = self.liveIndex(token) orelse return false;
+            destroy(&self.resources[index]);
+            self.live[index] = false;
+            self.active_count -= 1;
+            return true;
+        }
+
+        /// Destroy whatever the app still holds. Shutdown only.
+        pub fn deinitAll(self: *Self) void {
+            for (&self.live, 0..) |*is_live, index| {
+                if (!is_live.*) continue;
+                destroy(&self.resources[index]);
+                is_live.* = false;
+            }
+            self.active_count = 0;
+        }
+
+        pub fn active(self: *const Self) usize {
+            return self.active_count;
+        }
+
+        pub fn highWater(self: *const Self) usize {
+            return self.high_water_count;
+        }
+
+        fn liveIndex(self: *const Self, token: u64) ?usize {
+            const decoded = decodeToken(token) orelse return null;
+            if (decoded.kind != kind or decoded.index >= capacity) return null;
+            if (!self.live[decoded.index]) return null;
+            if (self.generations[decoded.index] != decoded.generation) return null;
+            return decoded.index;
+        }
+    };
+}
+
 fn encodeToken(index: usize, generation: u64, comptime kind: u8) u64 {
     return (generation << token_generation_shift) |
         (@as(u64, kind) << token_index_bits) |
@@ -168,6 +277,104 @@ fn decodeToken(token: u64) ?struct { index: usize, kind: u8, generation: u64 } {
     const generation = token >> token_generation_shift;
     if (encoded_index == 0 or encoded_kind == 0 or generation == 0) return null;
     return .{ .index = @intCast(encoded_index - 1), .kind = @intCast(encoded_kind), .generation = generation };
+}
+
+/// A handle-table payload that owns real heap storage.
+///
+/// Deliberately not a plain integer, and deliberately not built with
+/// `std.mem.zeroes`: a resource with nothing to free cannot tell a table that
+/// destroys correctly from one that never destroys at all. Every test below
+/// runs on `std.testing.allocator`, so a missed `destroy` fails the test.
+const OwnedBytes = struct {
+    allocator: std.mem.Allocator,
+    bytes: []u8,
+
+    fn init(allocator: std.mem.Allocator, len: usize, fill: u8) !OwnedBytes {
+        const bytes = try allocator.alloc(u8, len);
+        @memset(bytes, fill);
+        return .{ .allocator = allocator, .bytes = bytes };
+    }
+
+    fn destroy(self: *OwnedBytes) void {
+        self.allocator.free(self.bytes);
+        self.bytes = &.{};
+    }
+};
+
+const OwnedBytesTable = HostHandleTable(OwnedBytes, 2, 9, OwnedBytes.destroy);
+
+test "an explicitly released slot frees its storage and is reused" {
+    var table: OwnedBytesTable = .{};
+    defer table.deinitAll();
+
+    const first = table.insert(try OwnedBytes.init(std.testing.allocator, 32, 'a')).?;
+    try std.testing.expectEqual(@as(usize, 1), table.active());
+    try std.testing.expectEqual(@as(usize, 32), table.get(first).?.bytes.len);
+
+    // The storage is freed here, not at shutdown. `std.testing.allocator` is
+    // the assertion: if `release` forgot to destroy, this test leaks.
+    try std.testing.expect(table.release(first));
+    try std.testing.expectEqual(@as(usize, 0), table.active());
+
+    const second = table.insert(try OwnedBytes.init(std.testing.allocator, 8, 'b')).?;
+    try std.testing.expectEqual(@as(usize, 8), table.get(second).?.bytes.len);
+    try std.testing.expect(table.release(second));
+}
+
+test "a released token stays released once its slot is handed to someone else" {
+    var table: OwnedBytesTable = .{};
+    defer table.deinitAll();
+
+    const stale = table.insert(try OwnedBytes.init(std.testing.allocator, 16, 'a')).?;
+    try std.testing.expect(table.release(stale));
+
+    // Same slot, new generation. Without the generation this token would read
+    // the replacement's bytes, which is precisely the confusion it prevents.
+    const fresh = table.insert(try OwnedBytes.init(std.testing.allocator, 16, 'b')).?;
+    try std.testing.expect(stale != fresh);
+    try std.testing.expect(table.get(stale) == null);
+    try std.testing.expect(!table.release(stale));
+    try std.testing.expectEqual(@as(u8, 'b'), table.get(fresh).?.bytes[0]);
+    try std.testing.expectEqual(@as(usize, 1), table.active());
+}
+
+test "a full table refuses rather than evicting a resource someone may still hold" {
+    var table: OwnedBytesTable = .{};
+    defer table.deinitAll();
+
+    _ = table.insert(try OwnedBytes.init(std.testing.allocator, 4, 'a')).?;
+    _ = table.insert(try OwnedBytes.init(std.testing.allocator, 4, 'b')).?;
+
+    // The caller keeps ownership of a refused resource, so it frees it itself.
+    var refused = try OwnedBytes.init(std.testing.allocator, 4, 'c');
+    try std.testing.expect(table.insert(refused) == null);
+    refused.destroy();
+
+    // Nothing the app never released is lost: shutdown frees both.
+    try std.testing.expectEqual(@as(usize, 2), table.active());
+    try std.testing.expectEqual(@as(usize, 2), table.highWater());
+    table.deinitAll();
+    try std.testing.expectEqual(@as(usize, 0), table.active());
+}
+
+test "a forged or foreign token resolves to nothing instead of to memory" {
+    var table: OwnedBytesTable = .{};
+    defer table.deinitAll();
+
+    const OtherTable = HostHandleTable(OwnedBytes, 2, 10, OwnedBytes.destroy);
+    var other: OtherTable = .{};
+    defer other.deinitAll();
+
+    const mine = table.insert(try OwnedBytes.init(std.testing.allocator, 4, 'a')).?;
+    const theirs = other.insert(try OwnedBytes.init(std.testing.allocator, 4, 'b')).?;
+
+    // Zero is what an uninitialized handle looks like, and it must never
+    // resolve. Nor may a token of a different kind, or one past the table.
+    try std.testing.expect(table.get(0) == null);
+    try std.testing.expect(!table.release(0));
+    try std.testing.expect(table.get(theirs) == null);
+    try std.testing.expect(other.get(mine) == null);
+    try std.testing.expect(table.get(std.math.maxInt(u64)) == null);
 }
 
 test "final Roc deallocation destroys and reuses a resource slot" {

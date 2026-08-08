@@ -126,6 +126,11 @@ const READ_ERR_FAILED: u8 = 2;
 const READ_ERR_BUSY: u8 = 3;
 const READ_ERR_UNAVAILABLE: u8 = 4;
 const READ_ERR_TOO_LARGE: u8 = 5;
+/// The file's bytes are not valid UTF-8, so they cannot become a `Str`.
+///
+/// Only a small read can report this: it is the only read that produces a
+/// string. A blob is bytes, and stays bytes until the app asks for a range.
+const READ_ERR_NOT_UTF8: u8 = 6;
 
 /// The only way a delay fails: the host was already holding as many unanswered
 /// tasks as it will, so it never started this one. Mirrored in `Program.roc`.
@@ -696,7 +701,20 @@ const CompletionStaging = struct {
         };
     }
 
+    /// Report a read the app asked to have delivered as a string.
+    ///
+    /// The validation is here rather than at the call sites because this is the
+    /// one place a file's bytes become a `Str`, and there are two ways in --
+    /// the worker's result and the inline headless read. A `Str` is UTF-8 and a
+    /// file is arbitrary bytes; `RocStr.fromSlice` only copies, so an invalid
+    /// one would be built without complaint and every later string operation on
+    /// it would be undefined. Slicing a blob has always checked this. It is the
+    /// same invariant on the same kind of value.
     fn fileRead(self: *CompletionStaging, roc_host: *RocHost, id: u64, err: u8, contents: []const u8) void {
+        if (err == 0 and !std.unicode.utf8ValidateSlice(contents)) {
+            self.push(plain(COMPLETION_SMALL_FILE_READ, id, READ_ERR_NOT_UTF8));
+            return;
+        }
         var item = plain(COMPLETION_SMALL_FILE_READ, id, err);
         if (contents.len != 0) item.contents = abi.RocStr.fromSlice(contents, roc_host);
         self.push(item);
@@ -5587,6 +5605,30 @@ test "an absurd delay saturates its deadline instead of wrapping to the past" {
     _ = armTimer(1, std.math.maxInt(u64));
     try std.testing.expectEqual(std.math.maxInt(u64), pending_timers[0].due_nanos);
     pending_timer_count = 0;
+}
+
+test "a file that is not text is refused rather than made into a Str" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var staging = CompletionStaging{};
+    defer staging.release(&roc_host);
+
+    // A lone continuation byte: short, well inside every limit, and not UTF-8.
+    // `RocStr.fromSlice` would have copied it without complaint, and every
+    // later string operation on the result would have been undefined.
+    staging.fileRead(&roc_host, 1, 0, "\x80 not text");
+    try std.testing.expectEqual(COMPLETION_SMALL_FILE_READ, staging.items[0].kind);
+    try std.testing.expectEqual(READ_ERR_NOT_UTF8, staging.items[0].err);
+    try std.testing.expectEqual(@as(usize, 0), staging.items[0].contents.asSlice().len);
+
+    // Valid text still arrives as text, including the empty file.
+    staging.fileRead(&roc_host, 2, 0, "caf\u{e9}");
+    try std.testing.expectEqual(@as(u8, 0), staging.items[1].err);
+    try std.testing.expectEqualStrings("caf\u{e9}", staging.items[1].contents.asSlice());
+
+    staging.fileRead(&roc_host, 3, 0, "");
+    try std.testing.expectEqual(@as(u8, 0), staging.items[2].err);
 }
 
 test "a read above the inline cap is refused rather than copied on the frame thread" {

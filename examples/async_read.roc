@@ -243,6 +243,9 @@ advance_string_read = |current, completed, id|
 				# string, so a large file is refused rather than stalling the
 				# frame. `ReadFile` is the operation that does not refuse.
 				Err(TooLarge) => Failed("too large to deliver as a string")
+				# A `Str` is UTF-8 and a file is bytes, so this read can refuse
+				# for a reason `ReadFile` never can. Read it as a blob instead.
+				Err(NotUtf8) => Failed("not text")
 			}
 
 		# Unreachable: `answers_small` kept only this read's completion.

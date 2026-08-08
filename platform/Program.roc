@@ -272,33 +272,50 @@ Program := [].{
 	## payload a timer could never have, and made one error case unreachable in
 	## practice. It gets worse, not better, once HTTP and SQLite exist.
 	Completion : [
-		SmallFileRead({ id : U64, result : Try(Str, ReadError) }),
-		FileRead({ id : U64, result : Try(File.Blob, ReadError) }),
+		SmallFileRead({ id : U64, result : Try(Str, SmallFileError) }),
+		FileRead({ id : U64, result : Try(File.Blob, FileReadError) }),
 		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
 		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge, Busy]) }),
 		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released, Busy]) }),
 	]
 
-	## Why a read produced no contents.
+	## Why a `ReadFile` produced no blob.
 	##
 	## `Busy` and `Unavailable` are refusals rather than failures: the host
 	## declined to start the work, so nothing was read and, importantly, nothing
 	## ran on the frame thread instead. Every accepted task still yields exactly
-	## one completion.
-	##
-	## Both reads report the same failures, because they fail for the same
-	## reasons. `TooLarge` means different sizes for each: for `ReadSmallFile`
-	## it is the string the frame thread declined to build, and for `ReadFile` it
-	## is a file larger than the host will read at all. `Busy` covers a full blob
-	## table as well as a full request queue -- in both cases the host declined
-	## rather than made room by taking something away.
-	ReadError : [
+	## one completion. `TooLarge` is a file bigger than the host will read at
+	## all, and `Busy` covers a full blob table as well as a full request queue
+	## -- in both cases the host declined rather than made room by taking
+	## something away.
+	FileReadError : [
 		NotFound,
 		ReadFailed,
 		Busy,
 		Unavailable,
 		TooLarge,
+	]
+
+	## Why a `ReadSmallFile` produced no string.
+	##
+	## The same refusals, plus the one that only exists because this read
+	## answers with a `Str`. A file is arbitrary bytes and a `Str` is UTF-8, so
+	## a file that is not gets `NotUtf8` rather than a string whose every later
+	## operation would be undefined. `ReadFile` cannot report it: a blob stays
+	## bytes until the app asks for a range, and `ReadBlobSlice` is where that
+	## check belongs for those.
+	##
+	## `TooLarge` also means something different here -- the string the frame
+	## thread declined to build, which is a far smaller number than the file
+	## ceiling `FileReadError.TooLarge` names.
+	SmallFileError : [
+		NotFound,
+		ReadFailed,
+		Busy,
+		Unavailable,
+		TooLarge,
+		NotUtf8,
 	]
 
 	## Why a screenshot was not written, including the sandbox refusing a path
@@ -402,7 +419,7 @@ Program := [].{
 		if raw.kind == completion_small_file_read {
 			SmallFileRead({
 				id: raw.id,
-				result: if raw.err == 0 Ok(raw.contents) else Err(read_error(raw.err)),
+				result: if raw.err == 0 Ok(raw.contents) else Err(small_file_error(raw.err)),
 			})
 		} else if raw.kind == completion_file_read {
 			FileRead({
@@ -620,8 +637,14 @@ read_err_too_large = 5
 read_err_busy : U8
 read_err_busy = 3
 
-## Decode the host's read-error code. Mirrored in `src/host_native.zig`.
-read_error : U8 -> Program.ReadError
+## Error code for bytes that cannot become a `Str`. Mirrored in
+## `src/host_native.zig`.
+read_err_not_utf8 : U8
+read_err_not_utf8 = 6
+
+## Decode the host's read-error code for a blob-delivered read. Mirrored in
+## `src/host_native.zig`.
+read_error : U8 -> Program.FileReadError
 read_error = |code|
 	if code == 1 {
 		NotFound
@@ -633,6 +656,24 @@ read_error = |code|
 		TooLarge
 	} else {
 		ReadFailed
+	}
+
+## Decode the host's read-error code for a string-delivered read.
+##
+## The same codes plus one, rather than a second table: the two reads fail for
+## the same reasons and only differ in what they were asked to produce.
+small_file_error : U8 -> Program.SmallFileError
+small_file_error = |code|
+	if code == read_err_not_utf8 {
+		NotUtf8
+	} else {
+		match read_error(code) {
+			NotFound => NotFound
+			Busy => Busy
+			Unavailable => Unavailable
+			TooLarge => TooLarge
+			ReadFailed => ReadFailed
+		}
 	}
 
 ## Decode the host's capture-error code for a screenshot.
@@ -752,6 +793,11 @@ expect Program.to_host(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", 
 expect Program.completion_from_host({ kind: 0, id: 3, err: 0, contents: "hi", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Ok("hi") })
 expect Program.completion_from_host({ kind: 0, id: 3, err: 1, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(NotFound) })
 expect Program.completion_from_host({ kind: 0, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(Busy) })
+
+## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
+## with a string can report this, which is why the two reads no longer share one
+## error type.
+expect Program.completion_from_host({ kind: 0, id: 3, err: 6, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(NotUtf8) })
 expect Program.completion_from_host(sample_blob_read) == FileRead({ id: 3, result: Ok(blob_from_host(sample_blob_read)) })
 expect blob_from_host(sample_blob_read).len() == 16 * 1024 * 1024
 expect Program.completion_from_host({ kind: 4, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == FileRead({ id: 3, result: Err(Busy) })

@@ -165,6 +165,7 @@ answers = |completion, id|
 	match completion {
 		ScreenshotFinished(finished) => finished.id == id
 		SmallFileRead(_) => Bool.False
+		FileRead(_) => Bool.False
 		DelayElapsed(_) => Bool.False
 		ClipboardRead(_) => Bool.False
 	}

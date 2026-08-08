@@ -22,6 +22,7 @@ roc build examples/snake.roc
 | `breakout.roc` | Structured arcade game | pure game step, explicit events, effect handling at the boundary |
 | `responsive_ui.roc` | Resizable settings screen | startup config, current logical size, prepared labels, cursor feedback, scissoring |
 | `input_inspector.roc` | Input inspector utility | edge/held key state, Unicode input, mouse deltas, gamepad snapshots |
+| `async_read.roc` | File reads that never stall a frame | tasks correlated by id, `ReadSmallFile` vs `ReadFile`, host-owned `File.Blob` released as an action |
 | `capture_screenshot.roc` | Smallest capture example | `Capture.screenshot!`, output-directory sandboxing |
 | `capture_plot.roc` | Visualization rendered to a file | recording declared in startup config, hidden window, fixed-step timing |
 | `capture_ui_demo.roc` | Self-recording UI walkthrough | scripted pointer through the real input path, drawn cursor overlay |
@@ -53,6 +54,10 @@ demonstrate how the same APIs fit into larger state and resource lifecycles.
   values such as scores, dimensions, and timers.
 - Validate fallible geometry and resource setup at the boundary, then retain the
   validated value so the steady-state render path stays simple.
+- Read anything large with `ReadFile` and keep the `File.Blob` handle in the
+  model. `Blob.len` is free, `slice_to_str!` copies only the range asked for,
+  and `Blob.release` hands the memory back. Reserve `ReadSmallFile` for files
+  small enough that copying them into a `Str` mid-frame is reasonable.
 
 Asset licenses and attribution are stored beside third-party assets under
 `examples/assets/`.

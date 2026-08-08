@@ -159,6 +159,7 @@ is_our_paste = |completion|
 	match completion {
 		ClipboardRead(finished) => finished.id == paste_id
 		SmallFileRead(_) => Bool.False
+		FileRead(_) => Bool.False
 		DelayElapsed(_) => Bool.False
 		ScreenshotFinished(_) => Bool.False
 	}

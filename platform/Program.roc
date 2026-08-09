@@ -29,12 +29,23 @@ Program := [].{
 	## order the host observed their completions. Independent asynchronous tasks
 	## may complete in any order; their submission order does not constrain it.
 	## `capture` contains the recording status sampled for this cycle.
-	Step(msg) : {
+	Step(msg) := {
 		input : Input.Snapshot,
 		window : Window.Snapshot,
 		time : Time.Frame,
 		messages : List(msg),
 		capture : Capture.Status,
+	}.{
+
+		## Return the complete structural step for platform-independent libraries.
+		fields : Step(msg) -> {
+			input : Input.Snapshot,
+			window : Window.Snapshot,
+			time : Time.Frame,
+			messages : List(msg),
+			capture : Capture.Status,
+		}
+		fields = |step| step
 	}
 
 	## What `update` returns: the next model, plus work for the platform.

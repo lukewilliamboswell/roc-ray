@@ -145,13 +145,23 @@ const DELAY_ERR_BUSY: u8 = 1;
 /// this limit; `ReadFile` returns a blob handle without this copy.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 
-/// Total main-thread Roc-string-copy work admitted in one frame step.
+/// Total main-thread Roc-string-copy work admitted while dispatching tasks.
 ///
 /// A task count does not describe frame cost: a completed blob slice does.
 /// Blob slices and clipboard reads share this budget. Requests beyond it
 /// receive `Busy` immediately; they are never kept in a private host queue to
-/// surprise a later frame.
+/// surprise a later frame. This does not cover windowed worker completions,
+/// which are independently bounded by their at-most-32 reservations.
 const MAX_SYNC_ROC_STRING_BYTES_PER_STEP: usize = 1024 * 1024;
+
+/// Headless reads run on the frame thread for deterministic test output.
+///
+/// Unlike the windowed worker, they need explicit resource admission: no more
+/// than 32 filesystem operations and 16 MiB of successfully-read bytes start
+/// in a step. A read that would exceed the remaining byte credit receives
+/// `Busy`; it is not held for a later frame.
+const MAX_HEADLESS_READS_PER_STEP: usize = 32;
+const MAX_HEADLESS_READ_BYTES_PER_STEP: usize = MAX_HOST_TEXT_FILE_BYTES;
 
 /// How many host-owned blobs may be live at once.
 ///
@@ -174,7 +184,7 @@ const MAX_LIVE_BLOBS: usize = 32;
 /// thread will build -- `readFileAlloc` refuses at the limit, and one past is
 /// what makes a file of exactly that size succeed.
 fn smallReadLimit(deliver_blob: bool) usize {
-    return if (deliver_blob) MAX_HOST_TEXT_FILE_BYTES else MAX_INLINE_READ_BYTES + 1;
+    return if (deliver_blob) MAX_HOST_TEXT_FILE_BYTES + 1 else MAX_INLINE_READ_BYTES + 1;
 }
 
 fn readErrorCode(err: anyerror) u8 {
@@ -585,6 +595,13 @@ var last_wall_nanos: u64 = 0;
 /// accepted task yields exactly one completion" a property of the code rather
 /// than a hope.
 const MAX_TASKS_IN_FLIGHT: usize = 32;
+
+/// Windowed worker delivery happens before dispatch and has its own bound.
+///
+/// At most one small-file result fits each reservation, so a frame can copy at
+/// most 32 × 64 KiB = 2 MiB from worker buffers into Roc strings. This is
+/// intentionally separate from the 1 MiB synchronous task-dispatch budget.
+const MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_STEP: usize = MAX_TASKS_IN_FLIGHT * MAX_INLINE_READ_BYTES;
 
 /// Commands whose result is due once a deadline passes.
 ///
@@ -4435,6 +4452,22 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
 /// Reservations bound genuinely asynchronous work; tasks without a reservation
 /// are refused, never dropped. Synchronous work has operation-specific byte
 /// limits rather than a hidden task-count queue.
+const HeadlessReadBudget = struct {
+    operations: usize = 0,
+    bytes: usize = 0,
+
+    fn begin(self: *HeadlessReadBudget) bool {
+        if (self.operations == MAX_HEADLESS_READS_PER_STEP) return false;
+        if (self.bytes == MAX_HEADLESS_READ_BYTES_PER_STEP) return false;
+        self.operations += 1;
+        return true;
+    }
+
+    fn remainingBytes(self: *const HeadlessReadBudget) usize {
+        return MAX_HEADLESS_READ_BYTES_PER_STEP - self.bytes;
+    }
+};
+
 fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.RocList(TaskToHost)) void {
     defer {
         if (tasks.hasOneRef()) {
@@ -4444,6 +4477,7 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
     }
 
     var roc_string_bytes: usize = 0;
+    var headless_reads = HeadlessReadBudget{};
     for (tasks.items()) |task| {
         if (!staging.reserve()) {
             refuseTask(staging, roc_host, task);
@@ -4451,15 +4485,15 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
         }
         // The reservation is released here for anything answered in this
         // cycle, and by whichever stage delivers the completion otherwise.
-        if (startTask(staging, roc_host, task, &roc_string_bytes)) staging.finish();
+        if (startTask(staging, roc_host, task, &roc_string_bytes, &headless_reads)) staging.finish();
     }
 }
 
 /// Start one reserved task. Returns true when it was answered in this cycle.
-fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, roc_string_bytes: *usize) bool {
+fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, roc_string_bytes: *usize, headless_reads: *HeadlessReadBudget) bool {
     return switch (task.kind) {
-        TASK_READ_SMALL_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), false),
-        TASK_READ_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), true),
+        TASK_READ_SMALL_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), false, headless_reads),
+        TASK_READ_FILE => submitRead(staging, roc_host, task.id, task.path.asSlice(), true, headless_reads),
         TASK_DELAY => armTimer(task.id, task.millis),
         TASK_SCREENSHOT => blk: {
             const err = beginScreenshotTask(task.id, task.path.asSlice()) orelse break :blk false;
@@ -4642,9 +4676,13 @@ fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToH
 /// refusal has to use the same one: an app waiting on `FileRead` must not be
 /// answered with `SmallFileRead` because the request ring happened to be full.
 /// Returns true when the read was answered in this cycle rather than queued.
-fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool) bool {
+fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool, headless_reads: *HeadlessReadBudget) bool {
     if (headlessMode()) {
-        readFileNow(staging, roc_host, id, path, deliver_blob);
+        if (!headless_reads.begin()) {
+            stageReadError(staging, roc_host, id, READ_ERR_BUSY, deliver_blob);
+            return true;
+        }
+        readFileNow(staging, roc_host, id, path, deliver_blob, headless_reads);
         return true;
     }
     switch (effect_worker.submitReadFile(id, path, deliver_blob)) {
@@ -4690,12 +4728,23 @@ fn stageBlobRead(staging: *CompletionStaging, roc_host: *RocHost, id: u64, alloc
 /// The blob path runs here too, and installs exactly the same way, so a
 /// headless run and a windowed one differ in which thread allocated the buffer
 /// and in nothing else the app can observe.
-fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool) void {
+fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: []const u8, deliver_blob: bool, headless_reads: ?*HeadlessReadBudget) void {
     const allocator = allocatorFromHost(roc_host);
-    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(smallReadLimit(deliver_blob))) catch |err| {
-        stageReadError(staging, roc_host, id, readErrorCode(err), deliver_blob);
+    const operation_limit = smallReadLimit(deliver_blob);
+    const limit = if (headless_reads) |budget|
+        @min(operation_limit, budget.remainingBytes() + 1)
+    else
+        operation_limit;
+    const budget_limited = limit < operation_limit;
+    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(limit)) catch |err| {
+        const code = if (budget_limited) switch (err) {
+            error.StreamTooLong => READ_ERR_BUSY,
+            else => readErrorCode(err),
+        } else readErrorCode(err);
+        stageReadError(staging, roc_host, id, code, deliver_blob);
         return;
     };
+    if (headless_reads) |budget| budget.bytes += bytes.len;
     if (deliver_blob) {
         stageBlobRead(staging, roc_host, id, allocator, bytes);
         return;
@@ -4746,6 +4795,7 @@ fn expireTimers(staging: *CompletionStaging, roc_host: *RocHost, now_nanos: u64)
 /// the worker's allocation into a slot and copies nothing. Only the first is
 /// proportional to the file, which is why only the first is capped.
 fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
+    var small_read_bytes: usize = 0;
     while (true) {
         const result = effect_worker.takeResult() orelse return;
 
@@ -4766,6 +4816,8 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
         }
         // The read stopped at the ceiling, so anything that arrives here fits.
         std.debug.assert(bytes.len <= MAX_INLINE_READ_BYTES);
+        small_read_bytes += bytes.len;
+        std.debug.assert(small_read_bytes <= MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_STEP);
         defer effect_worker.allocator.free(bytes);
         staging.fileRead(roc_host, result.id, 0, bytes);
     }
@@ -5972,7 +6024,7 @@ test "a headless read delivers a blob by the same path a worker result does" {
     const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
 
     var staging = CompletionStaging{};
-    readFileNow(&staging, &roc_host, 3, path, true);
+    readFileNow(&staging, &roc_host, 3, path, true, null);
     try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[0].kind);
     try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
     try std.testing.expectEqual(@as(u64, payload.len), stagedBlob(staging.items.items[0]).resource.byte_len);
@@ -5982,10 +6034,87 @@ test "a headless read delivers a blob by the same path a worker result does" {
 
     // A read that fails still answers on the blob path -- an app waiting for
     // `FileRead` must never be answered with `SmallFileRead`.
-    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true);
+    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true, null);
     try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[1].kind);
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].err);
 
+    staging.release(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "headless reads admit 32 mixed filesystem operations and terminally refuse the rest" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "tiny.txt", .data = "tiny" });
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const present = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/tiny.txt", .{tmp.sub_path});
+    const missing = testing_tmp_prefix ++ "definitely-not-here.txt";
+
+    const task_count = MAX_HEADLESS_READS_PER_STEP + 3;
+    var tasks: [task_count]TaskToHost = undefined;
+    for (&tasks, 0..) |*task, id| {
+        const path = if (id % 3 == 0) present else missing;
+        task.* = .{
+            .kind = if (id % 2 == 0) TASK_READ_FILE else TASK_READ_SMALL_FILE,
+            .id = id,
+            .path = abi.RocStr.fromSlice(path, &roc_host),
+            .millis = 0,
+            .blob = abi.RocList(abi.FileBlob).empty(),
+            .offset = 0,
+            .count = 0,
+        };
+    }
+
+    var staging = CompletionStaging{};
+    dispatchTasks(&staging, &roc_host, abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host));
+    try std.testing.expectEqual(task_count, staging.count());
+    for (staging.items.items[0..MAX_HEADLESS_READS_PER_STEP]) |item| {
+        try std.testing.expect(item.err == 0 or item.err == READ_ERR_NOT_FOUND);
+    }
+    for (staging.items.items[MAX_HEADLESS_READS_PER_STEP..]) |item| {
+        try std.testing.expectEqual(READ_ERR_BUSY, item.err);
+    }
+    staging.release(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "headless read byte credit admits one 16 MiB blob then reports Busy" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const payload = try std.testing.allocator.alloc(u8, MAX_HEADLESS_READ_BYTES_PER_STEP);
+    defer std.testing.allocator.free(payload);
+    @memset(payload, 'b');
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "largest-allowed.bin", .data = payload });
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/largest-allowed.bin", .{tmp.sub_path});
+
+    var budget = HeadlessReadBudget{};
+    try std.testing.expect(budget.begin());
+    var staging = CompletionStaging{};
+    readFileNow(&staging, &roc_host, 1, path, true, &budget);
+    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].err);
+    try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_STEP, budget.bytes);
+
+    // The next request is refused before opening the file. It still gets the
+    // same typed terminal completion the app would receive in a real frame.
+    _ = submitRead(&staging, &roc_host, 2, path, true, &budget);
+    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[1].err);
     staging.release(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
@@ -6118,6 +6247,16 @@ test "a saturated worker refuses with Busy rather than running work inline" {
         try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(accepted, "x", false));
     }
     try std.testing.expectEqual(EffectWorker.Submission.busy, worker.submitReadFile(9999, "x", false));
+}
+
+test "worker small-read delivery is independently bounded by reservations" {
+    // Worker completions are drained before dispatch. The dispatch string-copy
+    // budget must not be used to silently drop them; their separate bound is
+    // the worker/reservation capacity times the per-read string cap.
+    try std.testing.expectEqual(
+        MAX_TASKS_IN_FLIGHT * MAX_INLINE_READ_BYTES,
+        MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_STEP,
+    );
 }
 
 /// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.

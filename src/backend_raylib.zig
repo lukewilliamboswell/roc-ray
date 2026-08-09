@@ -28,6 +28,17 @@ pub const Music = rl.Music;
 /// Native font retained in the host resource heap.
 pub const Font = rl.Font;
 
+/// Scalar data needed to reproduce raylib's glyph advance calculation.
+pub const FontGlyphMetric = struct {
+    codepoint: u32,
+    advance: f32,
+};
+
+/// Return the bundled raylib major version for host invariants.
+pub fn majorVersion() c_int {
+    return rl.RAYLIB_VERSION_MAJOR;
+}
+
 /// Native texture retained in the host resource heap.
 pub const Texture = rl.Texture2D;
 
@@ -304,6 +315,30 @@ pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
 /// Unload a custom font when its host resource slot is released.
 pub fn unloadFont(font: Font) void {
     rl.UnloadFont(font);
+}
+
+/// Return a font's base pixel size for `MeasureTextEx` scaling.
+pub fn fontBaseSize(font: Font) f32 {
+    return @floatFromInt(font.baseSize);
+}
+
+/// Return the number of glyphs available for scalar metric snapshotting.
+pub fn fontGlyphCount(font: Font) usize {
+    if (font.glyphCount <= 0 or font.glyphs == null or font.recs == null) return 0;
+    return @intCast(font.glyphCount);
+}
+
+/// Read the same glyph advance used by raylib's `MeasureTextEx`.
+pub fn fontGlyphMetric(font: Font, index: usize) FontGlyphMetric {
+    const glyph = font.glyphs[index];
+    const advance = if (glyph.advanceX > 0)
+        @as(f32, @floatFromInt(glyph.advanceX))
+    else
+        font.recs[index].width + @as(f32, @floatFromInt(glyph.offsetX));
+    return .{
+        .codepoint = if (glyph.value > 0) @intCast(glyph.value) else 0,
+        .advance = advance,
+    };
 }
 
 /// Load a texture from disk.

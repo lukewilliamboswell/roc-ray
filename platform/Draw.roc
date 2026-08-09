@@ -332,14 +332,6 @@ Draw := [].{
 		color : Color.Rgba,
 	}
 
-	## Text measurement configuration.
-	MeasureText : {
-		text : Str,
-		size : F32,
-		spacing : F32,
-		font : Font,
-	}
-
 	## Font path and base pixel size.
 	LoadFont : {
 		path : Str,
@@ -870,17 +862,6 @@ Draw := [].{
 			NoStroke => {}
 			Stroke(stroke_cfg) => DrawHost.polygon_lines!({ points: cfg.points, color: stroke_cfg.color, thickness: stroke_cfg.thickness })
 		}
-	}
-
-	## Measure text without drawing it, using the selected font and spacing.
-	measure_text! : MeasureText => TextSize
-	measure_text! = |cfg| {
-		DrawHost.measure_text!({
-			text: cfg.text,
-			size: cfg.size,
-			spacing: cfg.spacing,
-			font: cfg.font,
-		})
 	}
 
 	## Load a host-owned font from disk at the requested base size.

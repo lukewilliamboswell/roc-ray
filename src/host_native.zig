@@ -68,6 +68,9 @@ const TILEMAP_ERR_UNSUPPORTED: u8 = 4;
 const RESOURCE_ERR_NONE: u8 = 0;
 const RESOURCE_ERR_FAILED: u8 = 1;
 const RESOURCE_ERR_LIMIT: u8 = 2;
+/// raylib 6's initial textLineSpacing. roc-ray exposes no setter, so a metric
+/// snapshot can retain this scalar instead of a host/global dependency.
+const RAYLIB_DEFAULT_TEXT_LINE_SPACING: f32 = 2;
 const SCOPE_OK: u8 = 0;
 const SCOPE_UNAVAILABLE: u8 = 1;
 const SCOPE_LIMIT: u8 = 2;
@@ -1716,14 +1719,117 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     prepared_text_storage_allocations = 0;
 }
 
-fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) abi.DrawHostMeasure_textRetRecord {
-    const font_size = if (size > 0) size else 1;
-    const glyph_count: f32 = @floatFromInt(text.len);
-    const gap_count: f32 = if (text.len > 1) @floatFromInt(text.len - 1) else 0;
-    return .{
-        .height = font_size,
-        .width = @max(0, glyph_count * font_size * 0.5 + gap_count * spacing),
+const FontMetric = abi.DrawHostFont_metricsGlyphs;
+
+/// The headless font is deliberately small but still proportional. It exercises
+/// the pure snapshot path without pretending to have a GPU font resource.
+const HEADLESS_GLYPHS = [_]FontMetric{
+    .{ .advance = 1, .codepoint = '?' },
+    .{ .advance = 2, .codepoint = 'W' },
+    .{ .advance = 1, .codepoint = 'i' },
+    .{ .advance = 1, .codepoint = 0xE9 },
+};
+const HEADLESS_FONT_BASE_SIZE: f32 = 2;
+
+fn glyphAdvance(glyphs: []const FontMetric, fallback_advance: f32, codepoint: u32) f32 {
+    for (glyphs) |glyph| {
+        if (glyph.codepoint == codepoint) return glyph.advance;
+    }
+    return fallback_advance;
+}
+
+const DecodedCodepoint = struct {
+    codepoint: u32,
+    next: usize,
+};
+
+const TextMeasurement = struct {
+    width: f32,
+    height: f32,
+};
+
+/// Input originated as a Roc `Str`, so all non-NUL bytes form valid UTF-8.
+fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
+    const first: u32 = text[index];
+    if (first < 0x80) return .{ .codepoint = first, .next = index + 1 };
+    if (first < 0xE0) return .{
+        .codepoint = (first - 0xC0) * 64 + @as(u32, text[index + 1]) - 0x80,
+        .next = index + 2,
     };
+    if (first < 0xF0) return .{
+        .codepoint = (first - 0xE0) * 4096 + (@as(u32, text[index + 1]) - 0x80) * 64 + @as(u32, text[index + 2]) - 0x80,
+        .next = index + 3,
+    };
+    return .{
+        .codepoint = (first - 0xF0) * 262144 + (@as(u32, text[index + 1]) - 0x80) * 4096 + (@as(u32, text[index + 2]) - 0x80) * 64 + @as(u32, text[index + 3]) - 0x80,
+        .next = index + 4,
+    };
+}
+
+/// Match raylib 6's `MeasureTextEx` from a scalar metric snapshot.
+fn measureTextWithMetrics(text: []const u8, glyphs: []const FontMetric, base_size: f32, fallback_advance: f32, line_spacing: f32, size: f32, spacing: f32) TextMeasurement {
+    if (text.len == 0 or text[0] == 0) return .{ .height = 0, .width = 0 };
+
+    var index: usize = 0;
+    var line_width: f32 = 0;
+    var widest_width: f32 = 0;
+    var line_codepoints: usize = 0;
+    var widest_codepoints: usize = 0;
+    var height = size;
+    while (index < text.len and text[index] != 0) {
+        const decoded = decodeUtf8(text, index);
+        index = decoded.next;
+        if (decoded.codepoint == '\n') {
+            widest_width = @max(widest_width, line_width);
+            widest_codepoints = @max(widest_codepoints, line_codepoints);
+            line_width = 0;
+            line_codepoints = 0;
+            height += size + line_spacing;
+        } else {
+            line_width += glyphAdvance(glyphs, fallback_advance, decoded.codepoint);
+            line_codepoints += 1;
+        }
+    }
+    const width = @max(widest_width, line_width) * (size / base_size) + (@as(f32, @floatFromInt(@max(widest_codepoints, line_codepoints))) - 1) * spacing;
+    return .{ .height = height, .width = width };
+}
+
+/// Match raylib 6's `MeasureTextEx` for the scalar headless font.
+fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) TextMeasurement {
+    return measureTextWithMetrics(
+        text,
+        &HEADLESS_GLYPHS,
+        HEADLESS_FONT_BASE_SIZE,
+        HEADLESS_GLYPHS[0].advance,
+        RAYLIB_DEFAULT_TEXT_LINE_SPACING,
+        size,
+        spacing,
+    );
+}
+
+test "headless text measurement keeps raylib codepoint, newline, and NUL rules" {
+    try std.testing.expectEqual(@as(c_int, 6), raylib.majorVersion());
+    try std.testing.expectEqual(@as(f32, 2), RAYLIB_DEFAULT_TEXT_LINE_SPACING);
+
+    const iii = headlessMeasureText("iii", 20, 1);
+    try std.testing.expectEqual(@as(f32, 32), iii.width);
+    try std.testing.expectEqual(@as(f32, 20), iii.height);
+
+    const www = headlessMeasureText("WWW", 20, 1);
+    try std.testing.expectEqual(@as(f32, 62), www.width);
+
+    const multibyte = headlessMeasureText("\xC3\xA9", 20, 1);
+    try std.testing.expectEqual(@as(f32, 10), multibyte.width);
+
+    const newline = headlessMeasureText("i\nW", 20, 1);
+    try std.testing.expectEqual(@as(f32, 20), newline.width);
+    try std.testing.expectEqual(@as(f32, 42), newline.height);
+
+    const fallback = headlessMeasureText("\xF0\x9F\x98\x80", 20, 1);
+    try std.testing.expectEqual(@as(f32, 10), fallback.width);
+
+    const nul_terminated = headlessMeasureText("i\x00W", 20, 1);
+    try std.testing.expectEqual(@as(f32, 10), nul_terminated.width);
 }
 
 fn headlessRandomI32(min: i32, max: i32) i32 {
@@ -2076,17 +2182,6 @@ test "last resource references remain live through owning host operations" {
     hostedAssetsSetTextureFilterRaw(.{ .resource = texture }, 1);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
-
-    const font = storeFont(.headless).?;
-    const loaded_font: abi.DefaultFontOrLoadedFont = .{ .payload = .{ .loaded_font = font }, .tag = .LoadedFont };
-    _ = hostedDrawMeasureTextRaw(&roc_host, .{
-        .font = loaded_font,
-        .text = abi.RocStr.empty(),
-        .size = 16,
-        .spacing = 1,
-    });
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
 
     const shader = storeShader(.headless).?;
     hostedDrawSetShaderFloatRaw(.{ .uniform = .{ .shader = shader, .location = 0 }, .value = 1 });
@@ -3021,26 +3116,87 @@ fn fontForValue(font_value: *const abi.DefaultFontOrLoadedFont) raylib.Font {
     };
 }
 
-fn hostedDrawMeasureTextRaw(host: *RocHost, args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
-    enforcePhase("Draw.measure_text!", constant_time_anywhere);
-    defer args.text.decref(host);
-    defer args.font.decref(host);
-    var result: abi.DrawHostMeasure_textRetRecord = .{ .height = 0, .width = 0 };
-
-    const text_slice = args.text.asSlice();
-    if (headlessMode()) return headlessMeasureText(text_slice, args.size, args.spacing);
-
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var text = makeTempCString(allocatorFromHost(host), &stack, text_slice) catch return result;
-    defer text.deinit();
-
-    const measured = raylib.measureTextZ(text.ptr, fontForValue(&args.font), args.size, args.spacing);
-    result = .{ .height = measured.y, .width = measured.x };
-    return result;
+fn headlessFontMetrics(host: *RocHost) abi.DrawHostFont_metricsRetRecord {
+    return .{
+        .glyphs = abi.RocListWith(FontMetric, false).fromSlice(&HEADLESS_GLYPHS, host),
+        .base_size = HEADLESS_FONT_BASE_SIZE,
+        .fallback_advance = HEADLESS_GLYPHS[0].advance,
+        .line_spacing = RAYLIB_DEFAULT_TEXT_LINE_SPACING,
+    };
 }
 
-fn exportedDrawMeasureTextRaw(args: abi.DrawHostMeasure_textArgs) callconv(.c) abi.DrawHostMeasure_textRetRecord {
-    return hostedDrawMeasureTextRaw(activeHost(), args);
+fn glyphMetricLessThan(_: void, left: FontMetric, right: FontMetric) bool {
+    return left.codepoint < right.codepoint;
+}
+
+/// Copy the scalar portion of a raylib font into ordinary Roc memory.
+///
+/// The source font remains entirely owned by FontHeap. The returned list has
+/// primitive elements, so ordinary Roc ARC alone owns and drops this snapshot.
+fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.DrawHostFont_metricsRetRecord {
+    const count = raylib.fontGlyphCount(font);
+    if (count == 0) return headlessFontMetrics(host);
+
+    const glyphs = abi.RocListWith(FontMetric, false).allocate(count, host);
+    const elements = glyphs.elements_ptr.?[0..count];
+    var fallback_advance: f32 = 0;
+    for (elements, 0..) |*element, index| {
+        const metric = raylib.fontGlyphMetric(font, index);
+        element.* = .{ .advance = metric.advance, .codepoint = metric.codepoint };
+        if (index == 0 or metric.codepoint == '?') fallback_advance = metric.advance;
+    }
+    std.sort.pdq(FontMetric, elements, {}, glyphMetricLessThan);
+    return .{
+        .glyphs = glyphs,
+        .base_size = raylib.fontBaseSize(font),
+        .fallback_advance = fallback_advance,
+        .line_spacing = RAYLIB_DEFAULT_TEXT_LINE_SPACING,
+    };
+}
+
+fn hostedDrawFontMetricsRaw(host: *RocHost, font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
+    enforcePhase("Text.metrics!", during_startup);
+    defer font.decref(host);
+    if (headlessMode()) return headlessFontMetrics(host);
+    return snapshotRaylibFontMetrics(host, fontForValue(&font));
+}
+
+fn exportedDrawFontMetricsRaw(font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
+    return hostedDrawFontMetricsRaw(activeHost(), font);
+}
+
+test "font metric snapshots release the source Font and retain only scalar Roc data" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const source = storeFont(.headless).?;
+    const snapshot = hostedDrawFontMetricsRaw(&roc_host, .{
+        .payload = .{ .loaded_font = source },
+        .tag = .LoadedFont,
+    });
+    defer snapshot.glyphs.decref(&roc_host);
+
+    try std.testing.expectEqual(@as(f32, 2), snapshot.base_size);
+    try std.testing.expectEqual(RAYLIB_DEFAULT_TEXT_LINE_SPACING, snapshot.line_spacing);
+    try std.testing.expectEqual(@as(usize, HEADLESS_GLYPHS.len), snapshot.glyphs.len());
+    try std.testing.expect(snapshot.glyphs.hasOneRef());
+
+    // The host call consumed the only loaded-font reference. The snapshot list
+    // itself is independent ordinary Roc ARC data.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+    try std.testing.expectEqualSlices(FontMetric, &HEADLESS_GLYPHS, snapshot.glyphs.items());
 }
 
 fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
@@ -3078,7 +3234,7 @@ fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) 
         headlessMeasureText(text, args.size, args.spacing)
     else blk: {
         const size = raylib.measureTextZ(text.ptr, font.?, args.size, args.spacing);
-        break :blk abi.DrawHostMeasure_textRetRecord{ .height = size.y, .width = size.x };
+        break :blk TextMeasurement{ .height = size.y, .width = size.x };
     };
 
     const font_owner = if (args.font.tag == .LoadedFont) args.font.payload_loaded_font() else null;
@@ -4263,12 +4419,12 @@ comptime {
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
+        @export(&exportedDrawFontMetricsRaw, .{ .name = "roc_draw_font_metrics_raw" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedDrawLoadFontRaw, .{ .name = "roc_draw_load_font_raw" });
         @export(&hostedDrawLoadRenderTextureRaw, .{ .name = "roc_draw_load_render_texture_raw" });
         @export(&exportedDrawLoadShaderRaw, .{ .name = "roc_draw_load_shader_raw" });
         @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
-        @export(&exportedDrawMeasureTextRaw, .{ .name = "roc_draw_measure_text_raw" });
         @export(&exportedDrawPrepareTextRaw, .{ .name = "roc_draw_prepare_text_raw" });
         @export(&exportedDrawPolygonLinesRaw, .{ .name = "roc_draw_polygon_lines_raw" });
         @export(&exportedDrawPolygonRaw, .{ .name = "roc_draw_polygon_raw" });

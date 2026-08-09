@@ -3,7 +3,10 @@
 ## The host calls pure `update` once per cycle with a `Step`. The result contains
 ## the next model, immediate `Action` values, and asynchronous `Task` values.
 ## Actions run in order before rendering. Each submitted task invokes its typed
-## callback exactly once on a later step, contributing one application message.
+## callback exactly once on a later step while the app remains running,
+## contributing one application message. App termination, whether requested or
+## caused by an `update`/`render` failure, drops pending callbacks because there
+## can be no later `Step` to deliver them on.
 ##
 ## `Delay` uses wall time. Animation and physics should use `step.time`.
 import Input
@@ -39,9 +42,11 @@ Program := [].{
 	## What `update` returns: the next model, plus work for the platform.
 	##
 	## `actions` run this cycle, in order, before `render!`. `tasks` go to the
-	## host in list order and answer on a later `Step`. Every submitted task gets
-	## exactly one terminal callback, including `Err(Busy)` when the host refuses
-	## admission; independent asynchronous completions have no specified order.
+	## host in list order and answer on a later `Step`. While the app remains
+	## running, every submitted task gets exactly one terminal callback, including
+	## `Err(Busy)` when the host refuses admission; independent asynchronous
+	## completions have no specified order. App termination drops pending
+	## callbacks because no later step can observe them.
 	##
 	## An app with no messages should still declare `Msg : []`, use
 	## `Program.Step(Msg)` and `Program.Next(Model, Msg)` in `update`, and return

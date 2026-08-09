@@ -122,7 +122,7 @@ pub fn StateList(comptime COUNT: usize) type {
             return elements[index] & flag != 0;
         }
 
-        /// Increment refcount before passing to Roc (prevents Roc from freeing our list).
+        /// Increment the refcount before passing the list to Roc.
         pub fn incref(self: *Self) void {
             self.list.incref(1);
         }

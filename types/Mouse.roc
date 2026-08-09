@@ -1,8 +1,8 @@
-## Mouse module - helpers for working with Host.mouse button state.
+## Mouse helpers for per-frame pointer state.
 ##
 ## The host stores one packed state byte per raylib mouse button code 0-6:
 ## bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
-## Pass `host.mouse` directly to these helpers.
+## Pass `step.input.mouse` directly to these helpers.
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.

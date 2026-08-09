@@ -90,8 +90,8 @@ pub const Encoder = struct {
 
     /// msf_gif hands writes back through an `fwrite`-shaped callback.
     ///
-    /// Backing it with our own `std.Io` file rather than a libc `FILE*` keeps
-    /// GIF output on the same I/O path as the rest of the host, and avoids
+    /// Backing it with a `std.Io` file rather than a libc `FILE*` keeps
+    /// GIF output on the same I/O path as the rest of the host and avoids
     /// depending on stdio from a `-nostdlib` build.
     fn writeCallback(
         buffer: ?*const anyopaque,

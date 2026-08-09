@@ -2,19 +2,9 @@
 ##
 ## Channels are 8-bit sRGB values. Alpha is 0 for transparent and 255 for
 ## fully opaque.
-##
-## The module is a namespace and the value type is `Color.Rgba`. It cannot be
-## `Color.Color`: a nominal sharing its enclosing namespace's name crashes the
-## compiler, and a module whose object *is* its data type cannot be re-exported
-## from a package at all, because a module's own nominal cannot be an alias.
 Color := [].{
 
 	## An 8-bit sRGB color with alpha.
-	##
-	## `with_alpha` is deliberately a module function rather than a receiver on
-	## this type: a receiver that calls its enclosing namespace's same-named
-	## module function crashes the compiler. Every call site is `Color.with_alpha`
-	## anyway, so the surface is unchanged.
 	Rgba := {
 		r : U8,
 		g : U8,

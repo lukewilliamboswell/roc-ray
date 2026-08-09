@@ -2,11 +2,6 @@
 ##
 ## Use `App.init` when startup needs effects such as loading host-owned assets.
 ## The callback runs after the window, renderer, and audio device are ready.
-##
-## `Config` is declared here rather than in the internal transport module so
-## that its receivers appear in the generated API docs -- `roc docs` attaches
-## associated items to the module that declares the nominal, and an alias to an
-## unexposed module documents nothing.
 import HostHost
 import Keys
 import Mouse
@@ -131,7 +126,7 @@ App := [].{
 		## Return a config that starts recording before the first frame.
 		##
 		## The recording finalizes when it reaches its frame cap, when
-		## `Capture.stop!` is called, or when the app exits.
+		## a `Capture.stop` action is applied, or when the app exits.
 		with_recording : Config, Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: value }
 
@@ -181,18 +176,12 @@ App := [].{
 		recording = |cfg| cfg.recording
 	}
 
-	## Opaque, zero-sized authority supplied only while the host is running
-	## `init!`, the way `Draw.Frame` is supplied only during `render!`.
+	## Opaque, zero-sized authority supplied only while the host runs `init!`.
 	##
-	## This is where the platform's one-shot system effects live. It is
-	## deliberately *authority only* and carries no observations: there is no
-	## input, window or timing here, because nothing has been sampled yet when
-	## it is handed over. Seed a model with `Input.empty` and let the first
-	## `Step` supply the rest.
-	##
-	## Once the app is running, a pure `update` cannot call any of these. It
-	## returns a `Program.Action` or a `Program.Task` instead, and the platform
-	## performs the effect on its behalf.
+	## Startup provides one-shot system effects but no input, window, or timing
+	## observations. Seed models that require input with `Input.empty`; the first
+	## `Program.Step` supplies the first sampled values. After initialization,
+	## request effects with `Program.Action` or `Program.Task` values.
 	Startup :: HostHost.Startup.{
 
 		## Wrap the host's startup token. Internal to the platform adapter.

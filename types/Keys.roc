@@ -133,8 +133,8 @@ Keys := [].{
 
 	## Flatten an exit key to the raylib key code the host passes to
 	## `SetExitKey`. `0` is raylib's `KEY_NULL`, which disables the behaviour.
-	## Shared by the startup config and the runtime `Host.set_exit_key!` effect
-	## so the two cannot drift.
+	## Shared by startup configuration and the runtime `SetExitKey` action so the
+	## two encodings cannot drift.
 	exit_key_code : ExitKey -> I32
 	exit_key_code = |value|
 		match value {
@@ -151,7 +151,7 @@ Keys := [].{
 			Err(InvalidKeyCode)
 		}
 
-	## raylib key code for a key (index into the Host key-state lists).
+	## raylib key code for a key (index into the snapshot key-state list).
 	key_code : KeyboardKey -> U64
 	key_code = |key|
 		match key {

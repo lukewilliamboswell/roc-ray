@@ -1,14 +1,14 @@
-## Gamepad module - allocation-free helpers for the per-frame Host snapshot.
+## Gamepad helpers for a per-frame input snapshot.
 ##
 ## The host samples up to four gamepads once per frame. Availability, packed
 ## button state, and axes are stored in three flat persistent lists so queries
 ## do not cross the host boundary or allocate. Button state uses the same bits
 ## as keyboard and mouse input: held = 1, pressed = 2, released = 4.
-## Resolve a pad from the current `Host` each frame; retaining either a snapshot
-## or `ConnectedPad` keeps old lists alive and makes the host copy on update.
+## Resolve a pad from the current input snapshot each frame. Retaining an older
+## snapshot or `ConnectedPad` also retains its sampled lists.
 Gamepad := [].{
 
-	## Fixed-size input snapshot stored on `Host` and sampled once per frame.
+	## Fixed-size gamepad state sampled once per frame.
 	Snapshot := {
 		connected : List(U8),
 		buttons : List(U8),
@@ -57,8 +57,8 @@ Gamepad := [].{
 
 	## A gamepad proven connected in this snapshot. This is a small value holding
 	## references to the existing flat lists; lookup does not allocate or resample.
-	## It is valid as a view of this snapshot only. Do not retain it in app models;
-	## call `host.gamepad(id)` again when the next frame arrives.
+	## It is valid as a view of this snapshot only. Resolve the pad again from the
+	## next frame's `Input.Snapshot` instead of retaining it in the model.
 	ConnectedPad :: { snapshot : Snapshot, gamepad : GamepadId }.{
 
 		## Slot occupied by this connected pad.

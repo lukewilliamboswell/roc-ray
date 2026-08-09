@@ -6,18 +6,11 @@
 ##
 ## For the common "move per frame" case you can use `step.time.elapsed_seconds`
 ## directly (seconds since the previous frame) without touching the helpers.
-##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
 import rrt.Time as RrtTime
 
 Time := [].{
 
 	## When one cycle happened, and how much time it covers.
-	##
-	## This is the only place a cycle's timing lives. It used to be duplicated
-	## between the step and the input snapshot, which meant two values that
-	## could disagree and one of them silently winning.
 	Frame : {
 
 		## How many cycles have been completed before this one, counting from
@@ -29,11 +22,8 @@ Time := [].{
 		## Use it for animation, scheduling and fixed-timestep loops, with
 		## `Time.to_seconds` to convert a nanosecond duration to seconds.
 		##
-		## Simulation, not wall: a fixed-step recording substitutes an exact
-		## delta so the captured animation is smooth and reproducible, and this
-		## clock advances by that delta rather than by however long the frame
-		## really took. That is what makes a recording play back at the rate it
-		## was asked for. `elapsed_seconds` is this clock's delta.
+		## During fixed-step recording, this clock advances by exactly `1/fps`
+		## per captured frame. `elapsed_seconds` is this clock's delta.
 		timestamp_nanos : U64,
 
 		## Real monotonic time in nanoseconds, whatever the simulation clock is
@@ -52,19 +42,6 @@ Time := [].{
 		elapsed_seconds : F32,
 	}
 
-	## Running a simulation on fixed ticks needs no platform support, and
-	## deliberately gets none. Keep an accumulator in the model, add
-	## `elapsed_seconds` to it inside `update`, and run a pure step for each
-	## whole tick it has paid for -- zero, one, or several -- capping the
-	## catch-up so a stalled frame cannot spiral. `examples/snake.roc` is that
-	## loop in about fifteen lines.
-	##
-	## One outer `update` per frame is what makes it cheap: the model crosses
-	## the boundary once however many ticks ran inside. Ticks cannot be run at
-	## exact wall-clock instants while rendering shares this thread -- if a
-	## frame stalls, the ticks catch up afterwards -- and anything stronger
-	## would need a second simulation thread and a different ownership story.
-	##
 	## Convert a nanosecond duration to seconds.
 	##
 	## expect Time.to_seconds(500_000_000) == 0.5

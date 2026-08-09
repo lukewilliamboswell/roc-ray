@@ -1,37 +1,11 @@
-## Program module - the shape of a message-driven application.
+## Message-driven application updates and deferred host work.
 ##
-## The host hands `update` one `Step` per cycle: everything it observed since
-## the last one, gathered into a single value. `update` is a *pure* function --
-## it returns the next model plus the work it wants done, and Roc's effect
-## system structurally forbids it from doing any of that work itself.
+## The host calls pure `update` once per cycle with a `Step`. The result contains
+## the next model, immediate `Action` values, and asynchronous `Task` values.
+## Actions run in order before rendering and produce no completion. Each accepted
+## task produces exactly one `Completion` on a later step.
 ##
-## Work comes in two kinds, and the difference is the whole point:
-##
-## * an `Action` is applied by the platform straight away, in the same cycle,
-##   before anything is drawn. It never reports back. Playing a sound, setting
-##   the cursor, uploading pixels -- things that happen and are then over.
-## * a `Task` is handed to the host, never blocks, and always answers with
-##   exactly one `Completion` on a later `Step`. Reading a file, writing a
-##   screenshot, asking the system for its clipboard.
-##
-## Actions never cross the host boundary: the platform's own `update_for_host!`
-## adapter is effectful, so it interprets them by calling effects that already
-## exist. That is why an `Action` may hold rich values -- a `Audio.Sound`, an
-## `Assets.Texture` -- while a `Task` must flatten to scalars.
-##
-## `Delay` is wall time. An app that asks to hear back in a second means a
-## second, and a fixed-step recording changing what a timeout means would be a
-## surprise nobody asked for. Everything on the simulation clock -- animation,
-## physics -- reads `step.time` instead.
-##
-## One `Step` per cycle, rather than one call per event, is deliberate. Each
-## call crosses the ABI and boxes and unboxes the model, which Roc treats as
-## expensive; batching makes that a fixed cost per rendered frame instead of one
-## that grows with how much happened. It also means a task cannot complete
-## re-entrantly inside the very `update` that issued it.
-##
-## Roc still only ever runs on one thread. The host owns whatever concurrency
-## exists, and `Box(Model)` is never shared.
+## `Delay` uses wall time. Animation and physics should use `step.time`.
 import Input
 import Window
 import Time
@@ -50,21 +24,8 @@ Program := [].{
 
 	## Everything the host observed since the previous cycle.
 	##
-	## The three observations are kept apart on purpose. `input` is what the
-	## devices said, `window` is what the window looked like, `time` is when it
-	## happened -- one value each, sampled together but never merged, so a
-	## helper can ask for exactly the one it needs.
-	##
-	## `completed` is bounded because *acceptance* is bounded, twice over: the
-	## host will only ever hold `max_tasks_per_step` new tasks from one cycle,
-	## and only so many unanswered tasks across all of them, so a burst of
-	## finished work cannot consume a whole frame. Nothing is ever held back,
-	## though -- a completion the host has is a completion this step carries. It
-	## is empty on an ordinary frame, which is the case that has to stay cheap.
-	##
-	## `capture` is sampled rather than asked for: a pure `update` cannot call
-	## `Capture.status!`, and a recording's state is one small record, so the
-	## host fills it in on every step whether or not anything is recording.
+	## `completed` contains all task completions available for this cycle.
+	## `capture` contains the recording status sampled for this cycle.
 	Step : {
 		input : Input.Snapshot,
 		window : Window.Snapshot,
@@ -84,38 +45,18 @@ Program := [].{
 	}
 
 	## The most tasks the host will take from one cycle.
-	##
-	## This is a *separate* budget from how many tasks may be outstanding at
-	## once, and the two bound different things. The in-flight budget bounds how
-	## much deferred work the host is holding; this one bounds how much work a
-	## single cycle can start, and therefore how much of a frame one `update`
-	## can spend. Without it a cycle could hand over a hundred thousand blob
-	## slices, every one of which is serviced in that same frame -- each within
-	## the in-flight budget, because each finishes before the next begins.
-	##
-	## Eight is chosen to be small enough that a full batch of the most
-	## expensive task the host has costs a fraction of a frame, and large enough
-	## that no reasonable cycle notices it. An app with more work than that is
-	## describing a queue rather than a cycle, which is what `fill` is for.
+	## Use `fill` to spread larger queues across cycles.
 	max_tasks_per_step : U64
 	max_tasks_per_step = 8
 
 	## The tasks one cycle is handing over: at most `max_tasks_per_step` of them.
-	##
-	## Opaque, and bounded by construction. A plain `List(Task)` could not be:
-	## the host would have to discover the list was too long *after* the app
-	## built it, and its only remaining move would be to refuse tasks it had
-	## already been given -- which costs a completion each, on the frame that was
-	## already over budget. Refusing to accept the ninth task, purely, before
-	## anything is accepted at all, is both cheaper and easier to act on.
+	## The opaque representation preserves the limit during construction.
 	TaskBatch :: List(Task).{
 
 		## Add one task, or refuse because this cycle is full.
 		##
-		## `Busy` here is a pure fact about the batch, not a report from the
-		## host: nothing has been submitted, nothing has been started, and the
-		## same task offered on the next cycle will be taken. Receiver form:
-		## `batch.add(task)`.
+		## `Busy` means the batch is full; no work has been submitted. The task
+		## can be retried in the next cycle. Receiver form: `batch.add(task)`.
 		add : TaskBatch, Task -> Try(TaskBatch, [Busy])
 		add = |TaskBatch.(tasks), task|
 			if List.len(tasks) >= max_tasks_per_step {
@@ -128,7 +69,7 @@ Program := [].{
 		len : TaskBatch -> U64
 		len = |TaskBatch.(tasks)| List.len(tasks)
 
-		## Whether this cycle is handing over no work at all -- the usual case.
+		## Whether this cycle is handing over no work.
 		is_empty : TaskBatch -> Bool
 		is_empty = |batch| batch.len() == 0
 
@@ -137,24 +78,19 @@ Program := [].{
 		to_host_list = |TaskBatch.(tasks)| List.map(tasks, to_host)
 	}
 
-	## A cycle that wants nothing done. The common case, and free.
+	## An empty task batch.
 	no_tasks : TaskBatch
 	no_tasks = TaskBatch.([])
 
 	## A cycle that wants exactly one thing done.
-	##
-	## Cannot fail: one task always fits, so this is the form to reach for when
-	## the count is written down in the source rather than computed.
+	## One task always fits, so this cannot fail.
 	task : Task -> TaskBatch
 	task = |one| TaskBatch.([one])
 
 	## Take as much of a work list as this cycle will carry, and hand back the
 	## rest.
 	##
-	## The honest shape for work whose size the app does not control -- a queue
-	## of files to load, a directory to walk. `deferred` goes in the model and
-	## comes back to `fill` on the next cycle, so the bound spreads the work over
-	## frames instead of failing on it.
+	## Store `deferred` in the model and pass it to `fill` on the next cycle.
 	fill : List(Task) -> { batch : TaskBatch, deferred : List(Task) }
 	fill = |requested| {
 		batch: TaskBatch.(List.take_first(requested, max_tasks_per_step)),
@@ -163,19 +99,10 @@ Program := [].{
 
 	## Something the platform does on the app's behalf during this cycle.
 	##
-	## An action produces no completion, so nothing has to be correlated back to
-	## it; it is applied and forgotten. Ordering within the list is preserved,
-	## and the whole list is applied before anything is drawn.
+	## Actions run in list order before rendering and produce no completion.
 	##
-	## `PlaySound` deliberately carries volume, pitch, and pan together rather
-	## than being reachable through three separate actions: one atomic value
-	## cannot be got into the wrong order, and it is one action instead of four.
-	##
-	## Shader uniforms are deliberately *not* here. A uniform says how the draws
-	## after it are interpreted, so two draws through one shader may need
-	## different values, and a list applied before `render!` cannot express
-	## that ordering. Keep the value in the model and write it inside
-	## `Frame.with_shader!`, where the ordering is the code.
+	## Set shader uniforms during `Frame.with_shader!`, where their order relative
+	## to draw calls is explicit.
 	Action : [
 		Exit(I64),
 		SetCursor(Mouse.Cursor),
@@ -191,30 +118,16 @@ Program := [].{
 
 		## Arm a recording, or finalize the one that is running.
 		##
-		## Actions rather than effects because finalizing writes a file, and an
-		## effect that does that is reachable from `render!` -- an encode and a
-		## write in the middle of a frame, at a point in the drawing order
-		## nobody can see. As actions they run before anything is drawn, and
-		## the outcome of both arrives on `step.capture`.
+		## The outcome is reported through `step.capture`.
 		StartRecording(Capture.Recording),
 		StopRecording,
 	]
 
 	## Why a cycle's uploads would be refused, or `Ok` if all of them fit.
 	##
-	## Actions are applied in order, so an upload refused partway through the
-	## list would leave the earlier ones already in their textures while the
-	## cycle itself was rejected -- external state mutated by a transition that
-	## did not happen. The platform runs this over every cycle before applying
-	## anything, which is what makes the list all-or-nothing.
-	##
-	## It is public because it is also the *recoverable* form. Everything an
-	## upload can be refused for is knowable without doing it -- the texture's
-	## own size, the region's bounds, and the total bytes against
-	## `Assets.max_upload_bytes_per_step` -- so an app generating pixels can ask
-	## here, in `update`, and defer what does not fit. An app that does not ask
-	## and does not fit is a programming error, and the platform says so by
-	## name rather than exiting with -1.
+	## The platform validates every cycle before applying its actions, so uploads
+	## are all-or-nothing. Apps that generate pixels can call this during `update`
+	## and defer work that exceeds `Assets.max_upload_bytes_per_step`.
 	check_uploads : List(Action) -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
 	check_uploads = |actions| check_uploads_from(actions, 0, 0, Assets.max_upload_bytes_per_step)
 
@@ -232,30 +145,10 @@ Program := [].{
 	## Every task carries an `id` the app chooses and the host echoes back, so a
 	## completion can be matched to the request that caused it.
 	##
-	## `ReadSmallFile` is named for what it is: the answer is delivered as a Roc
-	## string, and the frame thread will not copy an unbounded one, so anything
-	## past the host's limit comes back as `TooLarge`. It stays because a config
-	## file wants a string and nothing else.
-	##
-	## `ReadFile` does not produce a string: the worker's allocation is
-	## installed into a host slot and the app is handed a `File.Blob` -- a
-	## handle, not the bytes. Nothing proportional to the file happens on the
-	## frame thread, so the string ceiling does not apply; the host's own 16 MiB
-	## per-file limit still does. The app copies out the parts it wants, and
-	## drops the blob when it stops needing it -- the host frees the bytes when
-	## the last copy goes, with nothing for the app to call.
-	##
-	## `ReadBlobSlice` is how bytes get out of a blob without `render!` doing
-	## it. Every accessor on `File.Blob` is an effect, so a pure `update` cannot
-	## call one, and the obvious workaround -- copy the range while drawing --
-	## puts a copy and a UTF-8 scan inside the frame every frame, for a value
-	## that changed once. As a task the copy happens once, when the read lands,
-	## and `update` puts the string in the model where `render!` just draws it.
-	##
-	## `Screenshot` is a task rather than an action because the write can fail
-	## and apps branch on that. The host reads the framebuffer at the end of the
-	## frame that asked -- the same instant `Capture.screenshot!` used -- so the
-	## pixels are unchanged and only the report arrives a cycle later.
+	## `ReadSmallFile` returns a UTF-8 `Str` and rejects files above its inline
+	## copy limit. `ReadFile` returns a refcounted `File.Blob` for files up to the
+	## host's 16 MiB per-file limit. Use `ReadBlobSlice` to copy a UTF-8 range from
+	## a blob. `Screenshot` captures the end of the frame that submitted it.
 	Task : [
 		ReadSmallFile({ id : U64, path : Str }),
 		ReadFile({ id : U64, path : Str }),
@@ -265,12 +158,7 @@ Program := [].{
 		ReadBlobSlice({ id : U64, blob : File.Blob, offset : U64, count : U64 }),
 	]
 
-	## A task that finished, carrying the result its own operation can actually
-	## produce.
-	##
-	## Deliberately not a shared bag of possible values: that let a read report a
-	## payload a timer could never have, and made one error case unreachable in
-	## practice. It gets worse, not better, once HTTP and SQLite exist.
+	## A completed task and its operation-specific result.
 	Completion : [
 		SmallFileRead({ id : U64, result : Try(Str, SmallFileError) }),
 		FileRead({ id : U64, result : Try(File.Blob, FileReadError) }),
@@ -282,13 +170,8 @@ Program := [].{
 
 	## Why a `ReadFile` produced no blob.
 	##
-	## `Busy` and `Unavailable` are refusals rather than failures: the host
-	## declined to start the work, so nothing was read and, importantly, nothing
-	## ran on the frame thread instead. Every accepted task still yields exactly
-	## one completion. `TooLarge` is a file bigger than the host will read at
-	## all, and `Busy` covers a full blob table as well as a full request queue
-	## -- in both cases the host declined rather than made room by taking
-	## something away.
+	## `Busy` and `Unavailable` mean the host did not start the read. `TooLarge`
+	## means the file exceeds the host's per-file limit.
 	FileReadError : [
 		NotFound,
 		ReadFailed,
@@ -299,16 +182,8 @@ Program := [].{
 
 	## Why a `ReadSmallFile` produced no string.
 	##
-	## The same refusals, plus the one that only exists because this read
-	## answers with a `Str`. A file is arbitrary bytes and a `Str` is UTF-8, so
-	## a file that is not gets `NotUtf8` rather than a string whose every later
-	## operation would be undefined. `ReadFile` cannot report it: a blob stays
-	## bytes until the app asks for a range, and `ReadBlobSlice` is where that
-	## check belongs for those.
-	##
-	## `TooLarge` also means something different here -- the string the frame
-	## thread declined to build, which is a far smaller number than the file
-	## ceiling `FileReadError.TooLarge` names.
+	## `NotUtf8` means the bytes are not a valid Roc string. `TooLarge` refers to
+	## the inline string-copy limit, which is lower than the `ReadFile` limit.
 	SmallFileError : [
 		NotFound,
 		ReadFailed,
@@ -321,12 +196,8 @@ Program := [].{
 	## Why a screenshot was not written, including the sandbox refusing a path
 	## that escapes the output directory.
 	##
-	## `AlreadyPending` and `Busy` are both refusals and are deliberately not the
-	## same one. `AlreadyPending` is about this app's own outstanding request --
-	## a second screenshot in the frame the first has not been serviced in --
-	## and says the app asked for two things at once. `Busy` is about the host
-	## being at its limit across everything, and says nothing about what this app
-	## did. Only the second is reliably worth retrying unchanged.
+	## `AlreadyPending` means this app already has a screenshot request queued.
+	## `Busy` means the shared host worker is full and the request may be retried.
 	ScreenshotError : [
 		PathInvalid,
 		PathEscapesOutputDir,
@@ -335,9 +206,7 @@ Program := [].{
 		WriteFailed,
 		Busy,
 
-		## This host cannot write a screenshot at all: its effect worker did not
-		## start, and encoding one on the frame thread is the stall the worker
-		## exists to remove. Unlike `Busy`, retrying will not help.
+		## The screenshot worker is unavailable; retrying will not help.
 		Unavailable,
 	]
 
@@ -353,14 +222,9 @@ Program := [].{
 		millis : U64,
 
 		## `ReadBlobSlice` only, and empty for every other kind. Holds the blob
-		## itself rather than its token, because the token alone would not keep
-		## the bytes alive: `to_host` is the last thing that touches the `Task`,
-		## so a scalar copied out of it would name a buffer whose final
-		## reference died with the batch. The list *is* that reference, and the
-		## host holds it until the slice has been read.
+		## itself so the bytes remain alive until the host reads the slice.
 		##
-		## A list rather than the blob directly because the field has to exist
-		## on every task, and there is no empty `Blob` to put in the others.
+		## The list is empty for other task kinds, which have no blob value.
 		blob : List(File.Blob),
 		offset : U64,
 		count : U64,
@@ -368,10 +232,8 @@ Program := [].{
 
 	## The flat record one completion arrives in.
 	##
-	## `blob` is the whole point of the blob path: a finished `ReadFile` puts a
-	## one-word handle here, not a payload, so the record a 16 MiB read arrives
-	## in is exactly as big as the one an elapsed timer arrives in. Empty for
-	## every other kind, and for a read that failed.
+	## A successful `ReadFile` places one blob handle in `blob` without copying
+	## the payload. The list is empty for other kinds and failed reads.
 	CompletionFromHost : {
 		kind : U8,
 		id : U64,
@@ -382,9 +244,8 @@ Program := [].{
 
 	## The flat record a cycle's recording state arrives in.
 	##
-	## The only channel a recording's outcome has, now that starting and
-	## stopping are actions with nowhere to report back to. `bytes` is the size
-	## of a finished file; it is zero while a recording is still running.
+	## `bytes` is the size of a finished file and is zero while a recording is
+	## active. Start and stop outcomes are reported through this record.
 	CaptureFromHost : {
 		status : U8,
 		err : U8,
@@ -415,10 +276,8 @@ Program := [].{
 
 	## Rebuild a `Completion` from the host's flat record.
 	##
-	## The host and the app are built together, so an unrecognised kind is not a
-	## newer host talking to an older app -- it is transport that disagrees with
-	## itself. Reinterpreting it as an elapsed delay would invent a timer nobody
-	## asked for, so this refuses loudly instead.
+	## An unrecognized kind indicates an internal ABI mismatch and causes a
+	## transport failure.
 	completion_from_host : CompletionFromHost -> Completion
 	completion_from_host = |raw|
 		if raw.kind == completion_small_file_read {
@@ -472,14 +331,8 @@ Program := [].{
 ## Walk a cycle's actions, accumulating upload bytes and stopping at the first
 ## upload that would be refused.
 ##
-## By index rather than folded because it carries two things forward -- the
-## running byte total and the first refusal -- and the total is what makes two
-## uploads that each fit, but do not together, a refusal rather than a surprise.
-##
-## `budget` is a parameter rather than a constant read here so the accumulation
-## rule can be exercised against a small one. Charging past four mebibytes for
-## real would mean building a megapixel list at check time, which is not a cost
-## worth paying to assert that addition works.
+## `budget` is a parameter so tests can verify cumulative charging without
+## constructing a four-mebibyte pixel list.
 check_uploads_from : List(Program.Action), U64, U64, U64 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
 check_uploads_from = |actions, index, charged, budget|
 	if index >= List.len(actions) {
@@ -495,8 +348,7 @@ check_uploads_from = |actions, index, charged, budget|
 
 ## Add one action's upload to the running total, or name why it cannot be made.
 ##
-## Actions that are not uploads pass through: they cannot be refused, which is
-## what makes checking only the uploads enough to make the whole list atomic.
+## Actions that are not uploads leave the running total unchanged.
 charge_upload : Program.Action, U64, U64 -> Try(U64, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
 charge_upload = |action, charged, budget|
 	match action {
@@ -529,10 +381,6 @@ charge_upload = |action, charged, budget|
 	}
 
 ## Charge one upload against the frame's budget.
-##
-## The error union is the caller's rather than this function's one case, so a
-## charge can be returned straight out of `charge_upload` alongside the two
-## shape refusals.
 add_upload : U64, List(Color.Rgba), U64 -> Try(U64, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
 add_upload = |charged, pixels, budget| {
 	total = charged + Assets.upload_bytes(pixels)
@@ -541,13 +389,8 @@ add_upload = |charged, pixels, budget| {
 
 ## Take the handle a finished `ReadFile` installed.
 ##
-## Nothing is copied here and nothing can be: the list carries one refcounted
-## handle, and the bytes never left the host.
-##
-## A read the host reported as succeeding always carries one. An empty list
-## means the host said it read a file and then delivered nothing to read, which
-## is transport disagreeing with itself -- the same condition, and the same
-## answer, as an unknown completion kind.
+## This transfers the refcounted handle without copying its payload. A
+## successful read with no handle indicates an internal ABI mismatch.
 blob_from_host : List(File.Blob) -> Try(File.Blob, Program.FileReadError)
 blob_from_host = |delivered|
 	match List.first(delivered) {
@@ -814,19 +657,11 @@ decoded_contents = |raw|
 		_ => ""
 	}
 
-## A handle to sixteen mebibytes the app never sees, built without a host.
-##
-## `from_resource` is platform-internal, so this is a fixture no application
-## could write -- which is the point of the type: a blob is something the host
-## hands over, not something an app can name its way into.
+## Host-free blob fixture with a sixteen-mebibyte reported length.
 sample_blob : File.Blob
 sample_blob = File.Blob.from_host(FileHost.Blob.from_resource(Box.box({ handle: 0x0001_0002_0003, byte_len: 16 * 1024 * 1024 })))
 
 ## A finished blob read, as the host phrases it: one handle, no payload.
-##
-## Sixteen mebibytes of file, and the record carries one refcounted word. That
-## is the property the blob path exists for, so it is asserted rather than
-## described.
 sample_blob_read : {} -> Program.CompletionFromHost
 sample_blob_read = |{}| {
 	kind: 4,
@@ -836,15 +671,11 @@ sample_blob_read = |{}| {
 	blob: [sample_blob],
 }
 
-## A four-by-four texture, for the upload expects below.
-##
-## Built by hand rather than loaded: nothing here reaches the host, because
-## everything an upload can be refused for is knowable without it -- which is
-## the whole claim `check_uploads` makes.
+## Host-free four-by-four texture fixture for upload validation.
 tiny_texture : Assets.Texture
 tiny_texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 0, width: 4, height: 4 })))
 
-## Sixteen pixels: exactly what `tiny_texture` holds.
+## Pixel fixture matching `tiny_texture`.
 sixteen_pixels : List(Color.Rgba)
 sixteen_pixels = List.repeat({ r: 1, g: 2, b: 3, a: 255 }, 16)
 
@@ -852,26 +683,18 @@ expect Program.check_uploads([]) == Ok({})
 expect Program.check_uploads([tiny_texture.update(sixteen_pixels)]) == Ok({})
 expect Program.check_uploads([tiny_texture.update(List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 15))]) == Err(PixelCountMismatch)
 
-## The region has to be inside the texture: the graphics backend does no bounds
-## checking of its own, so a rectangle hanging over the edge would be read past
-## the end of the list rather than refused.
+## Regions must fit entirely within the texture.
 expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Ok({})
 expect Program.check_uploads([tiny_texture.update_region({ x: 3, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Err(RegionOutOfBounds)
 expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 0, height: 2, pixels: [] })]) == Err(RegionOutOfBounds)
 
-## The budget is a total across the cycle, not a per-upload ceiling: two
-## uploads that each fit but do not fit together are refused, and refused
-## before either of them has changed anything.
-##
-## Checked against a small budget rather than the real four mebibytes, which
-## would mean building a megapixel list here to assert that addition works.
+## The budget applies to the cycle's cumulative uploads.
 expect Assets.upload_bytes(sixteen_pixels) == 64
 expect check_uploads_from([tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Ok({})
 expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Err(UploadBudgetExceeded)
 expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 128) == Ok({})
 
-## Actions that are not uploads pass through untouched, which is what makes
-## checking only the uploads enough to make the whole list atomic.
+## Non-upload actions do not affect the upload budget.
 expect Program.check_uploads([Program.exit(0), tiny_texture.update(sixteen_pixels)]) == Ok({})
 
 ## A work list one longer than a cycle will carry, for the batch expects below.

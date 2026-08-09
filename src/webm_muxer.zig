@@ -45,7 +45,7 @@ const id_simple_block: u32 = 0xA3;
 /// One millisecond per timecode unit, in nanoseconds.
 ///
 /// Matroska timecodes are integers scaled by this. A millisecond is the
-/// conventional choice and is finer than any frame rate we record at.
+/// conventional choice and is finer than every supported recording frame rate.
 pub const timecode_scale_ns: u64 = 1_000_000;
 
 /// The only track in the file.

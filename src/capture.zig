@@ -84,21 +84,17 @@ pub const status_active: u8 = 1;
 pub const status_failed: u8 = 2;
 /// A recording ran to its end and its file was written.
 ///
-/// Distinct from `status_idle`, which an app cannot tell apart from never
-/// having recorded at all. A recording that reaches its frame cap finalizes
-/// itself, and this is how the app finds out -- there is no call to make and,
-/// now that starting and stopping are actions, nothing that returns to it.
+/// Distinct from `status_idle` so automatic finalization at the frame cap is
+/// observable through the next step's capture state.
 pub const status_finished: u8 = 3;
 
 /// Largest in-memory footprint a buffering encoder may reach, in bytes.
 ///
-/// No shipped format buffers -- see `formatBuffers` -- so this currently binds
-/// nothing. It exists so that a sink which does have to hold a whole recording
-/// fails at `start!` with a clear error, instead of driving the process into
-/// the OOM killer part-way through a long capture.
+/// Formats that buffer a complete recording must pass this budget before
+/// capture starts. Incremental formats are exempt; see `formatBuffers`.
 pub const default_memory_budget_bytes: u64 = 256 * 1024 * 1024;
 
-/// Longest path we will assemble from the output directory and a request.
+/// Longest path assembled from the output directory and a request.
 pub const path_capacity: usize = 1024;
 
 /// A resolved capture request, flattened from the Roc-side `Recording`.
@@ -268,11 +264,8 @@ pub fn estimateBufferedBytes(width: u32, height: u32, frames: u64) u64 {
 
 /// Does this format accumulate every frame in memory before finalizing?
 ///
-/// None currently do. PNG writes a file per frame, and both GIF and WebM
-/// encode incrementally into an open container, so memory stays bounded by a
-/// single frame however long the recording runs. The budget gate stays because
-/// it is what decides that, and a future buffering sink must opt into it here
-/// rather than silently growing without a limit.
+/// PNG writes each frame separately; GIF and WebM encode incrementally. New
+/// buffering formats must opt in here so `default_memory_budget_bytes` applies.
 pub fn formatBuffers(format: u8) bool {
     _ = format;
     return false;
@@ -280,9 +273,8 @@ pub fn formatBuffers(format: u8) bool {
 
 /// Fold an unrecognized quality code onto the default.
 ///
-/// Roc only ever sends 0-2, so this binds only if the two sides drift or if a
-/// future Roc release adds a level this host predates. Falling back to the
-/// default beats failing a recording over a knob nobody asked to be strict.
+/// The Roc ABI defines codes 0 through 2. Unknown codes use balanced quality so
+/// ABI drift does not prevent capture.
 pub fn normalizeQuality(value: u8) u8 {
     return switch (value) {
         quality_fast, quality_balanced, quality_best => value,
@@ -429,11 +421,9 @@ pub const Session = struct {
 
     /// Latch a start that never happened.
     ///
-    /// Starting is an action, so there is nobody to return a refusal code to;
-    /// the app finds out by looking at the recording state on the next step.
-    /// `failed` rather than `idle` is the honest answer -- the app asked for a
-    /// recording and there is not one -- and `idle` would be indistinguishable
-    /// from never having asked.
+    /// Start actions have no direct result channel, so the next step reports the
+    /// refusal through recording state. `failed` distinguishes a refused start
+    /// from a session that remained idle.
     ///
     /// A refusal while a recording is running says nothing about that
     /// recording, which is still fine, so it is not latched over it.

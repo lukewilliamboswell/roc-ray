@@ -4,11 +4,6 @@
 ## when the host sampled them at the start of a cycle, and nothing else. It
 ## carries no authority to change anything, so it is safe to hold in a model and
 ## safe to hand to a pure function.
-##
-## Window geometry and timing used to travel with these fields. They are
-## `Window.Snapshot` and `Time.Frame` now, because "what the user pressed",
-## "how big the window is" and "when this frame happened" are three different
-## observations that happen to be sampled together.
 import Keys
 import Mouse
 import Gamepad
@@ -29,11 +24,8 @@ Input := [].{
 
 		## Unicode codepoints entered this frame, in input order. This is
 		## distinct from physical key state and respects the active keyboard
-		## layout. The host reuses capacity for empty and non-empty frames while
-		## this snapshot is uniquely owned. Retaining an older snapshot triggers
-		## copy-on-write; growth is needed only if the existing capacity is
-		## insufficient. At most 32 codepoints are delivered; excess queued input
-		## is drained.
+		## layout. At most 32 codepoints are delivered per frame; excess queued
+		## input is discarded.
 		text_input : List(U32),
 
 		## Gamepad input sampled once per frame. Use the `gamepad` receiver, or
@@ -78,15 +70,7 @@ Input := [].{
 	## A snapshot in which nothing is pressed, nothing was typed, the pointer is
 	## at the origin, and no gamepad is connected.
 	##
-	## This is what an app seeds its model with before the first cycle has
-	## happened. `init!` receives an `App.Startup`, which is authority rather
-	## than observation and therefore has no input to hand out -- there is
-	## genuinely nothing to observe before the first frame is sampled.
-	##
-	## Every list is empty rather than zero-filled. The receivers all resolve a
-	## key, button or axis through `List.get`, so an index that is not there
-	## reads as "not pressed" instead of crashing; the `expect`s below hold that
-	## down.
+	## Use this to initialize models before the first `Program.Step` is sampled.
 	empty : Snapshot
 	empty = {
 		keys: [],

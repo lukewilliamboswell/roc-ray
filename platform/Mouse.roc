@@ -1,4 +1,4 @@
-## Mouse module - helpers for working with Host.mouse button state.
+## Mouse helpers for `step.input.mouse`.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.

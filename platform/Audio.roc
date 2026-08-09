@@ -56,9 +56,7 @@ Audio := [].{
 
 	## A sound together with the settings it should be played at.
 	##
-	## One value rather than three separate actions: volume, pitch, and pan are
-	## applied and playback starts, in that order, with no way for a caller to
-	## get the ordering wrong or to leave a pitch behind on the next play.
+	## Volume, pitch, and pan are applied in that order before playback starts.
 	Playback := { sound : Sound, volume : F32, pitch : F32, pan : F32 }.{
 
 		## Volume for this play, clamped by the host to 0 through 1.

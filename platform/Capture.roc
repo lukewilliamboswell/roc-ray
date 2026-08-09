@@ -1,28 +1,20 @@
-## Capture module - screenshots and recordings of the app's own output.
+## Screenshots and recordings of the app's rendered output.
 ##
-## An app can record itself: draw a visualization, start a recording, and get a
-## PNG, GIF, or WebM out the other side. Frames are read back from the
-## framebuffer at the end of each frame, so nothing here draws or needs a
-## `Draw.Frame`.
+## Frames are captured from the framebuffer at the end of each frame. Supported
+## outputs are PNG image sequences, GIF, and WebM.
 ##
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
 ## containing `..` -- is refused rather than rewritten. Capture is the only
 ## file-writing capability the platform grants.
 ##
-## Nothing here is an effect an app can call. Recording starts and stops through
-## actions, a screenshot is a `Program.Task`, and the live state is sampled onto
-## `step.capture` every cycle. That is not tidiness: an effectful `stop!` is
-## reachable from `render!`, where it would finalize a file -- an encode and a
-## write -- in the middle of drawing a frame.
+## Recording starts and stops through actions, screenshots use `Program.Task`,
+## and recording state is available as `step.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Recording` here and in the package are the
-## same nominal type and its receivers are available either way.
-##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
+## same nominal type.
 import rrt.Capture as RrtCapture
 import CaptureHost
 
@@ -48,13 +40,7 @@ Capture := [].{
 
 	## Live recording state, sampled onto every `Program.Step` as `step.capture`.
 	##
-	## There is no effect that asks for this, and that is deliberate: starting
-	## and stopping are actions, so this is the only channel their outcome has.
-	##
-	## `Finished` is separate from `Idle` on purpose. A recording that reaches
-	## its frame cap finalizes itself with nothing to tell the app, and `Idle`
-	## would be indistinguishable from never having recorded at all -- so an app
-	## waiting for its capture to complete would have nothing to wait on.
+	## `Finished` remains observable after automatic finalization at the frame cap.
 	Status : [
 		Idle,
 		Active({ frames : U64, dropped : U64 }),
@@ -64,11 +50,9 @@ Capture := [].{
 
 	## Why a recording is not running.
 	##
-	## The first four are refusals of a `Capture.start` action -- the request
-	## was never armed, and nothing was written. The rest are a running
-	## recording that stopped early. They share one type because they reach the
-	## app the same way, in `Failed`, and an app that just wants to know whether
-	## its capture worked should not have to care which kind it got.
+	## `PathInvalid`, `PathEscapesOutputDir`, `AlreadyRecording`, and
+	## `BudgetExceeded` reject a start request before anything is written. The
+	## remaining reasons may stop an active recording.
 	FailureReason : [
 		PathInvalid,
 		PathEscapesOutputDir,
@@ -106,10 +90,9 @@ Capture := [].{
 
 	## Drive `host.mouse` from a script instead of from the hardware pointer.
 	##
-	## The real operating-system cursor is untouched: this replaces only what
-	## the app is told, so ordinary hover, hit-test, and drag code reacts to it
-	## exactly as it would to a real pointer -- which is what makes a recorded
-	## demo exercise the real input path rather than a parallel fake one.
+	## This changes the pointer state reported to the app without moving the
+	## operating-system cursor. Existing hover, hit-test, and drag code sees the
+	## virtual state through the normal input path.
 	##
 	## Press and release edges are derived from consecutive frames, so
 	## `mouse.button_pressed(Left)` fires on the frame a virtual click starts.
@@ -146,10 +129,8 @@ Capture := [].{
 				})
 			}
 
-	## Drive `host.mouse` from a script, as an action a pure `update` can
-	## return. The platform applies it in the cycle that asked for it, so the
-	## scripted pointer reaches `render!` on the very next draw, exactly as
-	## `Capture.set_virtual_mouse!` did from inside an effectful update.
+	## Drive `host.mouse` from a script, as an action returned by pure `update`.
+	## The virtual pointer is visible to the next `render!` call.
 	set_virtual_mouse : Pointer -> [SetVirtualMouse(Pointer), ..]
 	set_virtual_mouse = |pointer| SetVirtualMouse(pointer)
 
@@ -159,31 +140,21 @@ Capture := [].{
 	## `Capture.stop` action is applied, or the app exits -- all three finalize
 	## the file.
 	##
-	## An action rather than a task because there is nothing to correlate back:
-	## a recording is either running or it is not, and `step.capture` says which
-	## on every cycle. A start the host refuses shows up there as `Failed`
-	## carrying the reason, on the very next step.
-	##
-	## There is deliberately no effectful form. One reachable from `render!`
-	## could finalize a file in the middle of drawing a frame, which is both a
-	## stall nobody asked for and an ordering nobody can see.
+	## A rejected start appears as `Failed` in `step.capture` on the next cycle.
 	start : Recording -> [StartRecording(Recording), ..]
 	start = |recording| StartRecording(recording)
 
 	## Finish the current recording and write its file, as an action.
 	##
-	## Stopping when nothing is recording does nothing and is not an error: the
-	## state the app asked for is the state it already had. The frame count and
-	## the file size arrive on the next step, as `Finished`.
+	## Stopping while idle does nothing. The next step reports the frame count and
+	## file size as `Finished`.
 	stop : [StopRecording, ..]
 	stop = StopRecording
 
 	## Apply a `StartRecording` action. Platform-internal.
 	##
-	## The refusal code is dropped here rather than propagated: an action has
-	## nobody to return it to, so the host latches it and the app reads it off
-	## `step.capture`. Failing the cycle instead would take the app down for a
-	## bad path.
+	## The host latches refusal codes for `step.capture`; actions have no direct
+	## result channel.
 	apply_start! : Recording => {}
 	apply_start! = |recording| {
 		ratio = RrtCapture.scale_ratio(recording.scale())
@@ -204,8 +175,7 @@ Capture := [].{
 
 	## Apply a `StopRecording` action. Platform-internal.
 	##
-	## The frame count and byte count it returns are dropped for the same
-	## reason, and reach the app as `Finished` on the next step instead.
+	## Frame and byte counts reach the app as `Finished` on the next step.
 	apply_stop! : () => {}
 	apply_stop! = || {
 		_finished = CaptureHost.stop_recording!()

@@ -227,9 +227,7 @@ step_from_raw = |raw| {
 
 ## Run the app's startup callback with the platform's startup authority.
 ##
-## It takes no argument: `App.Startup` is authority, not observation, so there
-## is nothing for the host to hand over. Nothing has been sampled yet when this
-## runs, which is exactly why `Input.empty` exists.
+## No input, window, or timing observations have been sampled at this point.
 init_for_host! : () => Try(Box(Model), I64)
 init_for_host! = ||
 	match (program.init!.run!)(App.Startup.from_host(HostHost.Startup.for_host)) {
@@ -240,13 +238,8 @@ init_for_host! = ||
 
 ## Advance the model by one cycle and hand the host back any work it wants done.
 ##
-## Called once per rendered frame rather than once per event, so the model is
-## boxed and unboxed once regardless of how much happened.
-##
-## `program.update` is pure, so the work it asked for is done here instead:
-## actions are applied immediately, before this returns and therefore before
-## anything is drawn, which is exactly where the effects they replace used to
-## run. Only tasks -- the work that answers back -- reach the host.
+## Called once per rendered frame. Applies actions before rendering and returns
+## flattened tasks for asynchronous host execution.
 update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), tasks : List(Program.TaskToHost) }, I64)
 update_for_host! = |boxed_model, raw|
 	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
@@ -270,11 +263,8 @@ update_for_host! = |boxed_model, raw|
 ## Stop the cycle before any of its uploads are applied, if one of them cannot
 ## be.
 ##
-## This is the backstop, not the interface: `Program.check_uploads` is the same
-## check, pure, so an app that generates pixels can ask in `update` and defer
-## what does not fit. Reaching here means it did not ask -- and the alternative
-## to saying so is the cycle dying with exit -1 and no indication which action
-## caused it or what the limit was.
+## Apps can call the same validation through `Program.check_uploads` and defer
+## work that does not fit.
 refuse_unfittable_uploads : List(Program.Action) -> {}
 refuse_unfittable_uploads = |actions|
 	match Program.check_uploads(actions) {
@@ -294,11 +284,7 @@ refuse_unfittable_uploads = |actions|
 
 ## Apply a cycle's actions in order, stopping at the first one that fails.
 ##
-## Walked by index rather than folded because each step is effectful and may
-## fail: `texture.update(pixels)` reports a pixel count that does not match the
-## texture, or an upload the frame's budget would not take, and that has to end
-## the cycle the same way `texture.update!(pixels)?` ended it when `update!` was
-## effectful.
+## Index iteration preserves effect order and propagates the first failure.
 run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
 run_actions! = |actions, index|
 	if index >= List.len(actions) {
@@ -317,9 +303,7 @@ run_actions! = |actions, index|
 
 ## Apply one action through the effect it stands for.
 ##
-## This is the whole reason actions need no wire format: the adapter is itself
-## effectful, so it can call the platform's existing effects directly and an
-## `Action` never has to flatten to scalars or cross the ABI.
+## Actions are interpreted within the platform and do not cross the host ABI.
 run_action! : Program.Action => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
 run_action! = |action|
 	match action {
@@ -353,10 +337,8 @@ run_action! = |action|
 
 ## Draw the current model, then hand the same box back.
 ##
-## `render!` returns `{}` rather than a model: drawing is a view of state, not a
-## step of it, and having it return a model invited the two to be confused.
-## Unboxing borrows rather than consumes, so the box the host passed in is still
-## the live reference and is returned unchanged.
+## Unboxing borrows rather than consumes, so the host's model reference is
+## returned unchanged.
 render_for_host! : Box(Model) => Try(Box(Model), I64)
 render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
@@ -372,8 +354,7 @@ render_for_host! = |boxed_model| {
 ## The host owns the model box returned by init!/render! and must release it.
 ## Box refcounting depends on the Model layout (a box whose payload contains
 ## refcounted fields uses a wider allocation header), which only the compiler
-## knows -- so we let Roc drop the box here rather than hand-rolling it in the
-## host. Roc takes ownership of the unused arg and decrefs it at scope end.
+## knows. Roc therefore owns the unused argument and decrefs it at scope end.
 ## TODO: remove once roc glue emits box refcount helpers (roc#9536).
 drop_model_for_host! : Box(Model) => {}
 drop_model_for_host! = |_boxed_model| {}

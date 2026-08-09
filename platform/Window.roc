@@ -4,9 +4,8 @@
 ## raylib drawing units, and on a HiDPI display it is smaller than the actual
 ## framebuffer in pixels.
 ##
-## `focused` and `minimized` let an app stop doing work nobody can see -- pause
-## a game when the window loses focus, skip an expensive simulation while it is
-## minimized -- without asking the host anything.
+## Use `focused` and `minimized` to pause input or skip expensive work while the
+## window is inactive.
 Window := [].{
 
 	## Window geometry and visibility sampled once for this cycle.

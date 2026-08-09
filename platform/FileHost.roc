@@ -7,11 +7,9 @@ FileHost := [].{
 
 	## A host-owned byte buffer, named by a box the host allocated.
 	##
-	## The box is the point. Its refcount is the blob's lifetime: the host hands
-	## over one reference when a read finishes, Roc copies and drops it like any
-	## other value, and when the last one goes the host's `roc_dealloc` hook
-	## routes the free back to the slot and the bytes are gone. Nothing in the
-	## app says when -- the same way nothing says when a `Str` is freed.
+	## The box refcount owns the blob lifetime. The host installs one reference
+	## when a read finishes, and `roc_dealloc` releases the slot after the final
+	## reference is dropped.
 	##
 	## `handle` inside it packs a slot index, a generation and a resource kind,
 	## so the host can validate a box that reached it through the ABI rather

@@ -110,9 +110,8 @@ const TASK_READ_BLOB_SLICE: u8 = 5;
 /// Why an operation on a blob produced no bytes. Mirrored in
 /// `platform/Program.roc`.
 ///
-/// There is no code for a released blob. Code 1 was one, back when a handle was
-/// a bare scalar the app freed by hand; the handle is refcounted now, so
-/// reaching one of these means holding one, and the bytes cannot have gone.
+/// Code 1 is reserved for ABI compatibility. Blob handles are refcounted, so an
+/// operation that holds a handle cannot observe a released blob.
 const BLOB_ERR_OUT_OF_BOUNDS: u8 = 2;
 const BLOB_ERR_NOT_UTF8: u8 = 3;
 const BLOB_ERR_TOO_LARGE: u8 = 4;
@@ -141,17 +140,9 @@ const DELAY_ERR_BUSY: u8 = 1;
 
 /// The most the host will copy into a Roc string in one operation.
 ///
-/// The worker does the reading off-thread, but turning bytes into a `Str`
-/// happens on the frame thread -- so without a bound a 16 MiB "async" read
-/// still costs a 16 MiB allocation and copy mid-frame, which is most of what
-/// moving the read off-thread was supposed to buy.
-///
-/// One number with one meaning, applied everywhere a copy could be that large:
-/// `ReadSmallFile` reports `TooLarge` above it, and so does any blob-to-string
-/// copy. `ReadFile` has no such limit *because it makes no such copy* -- the
-/// worker's allocation is installed into a blob slot and the app is handed a
-/// handle. Reaching past this limit is therefore not a refusal to do the work;
-/// it is a signal to use the operation that does not copy.
+/// Converting worker-owned bytes into a `Str` allocates and copies on the frame
+/// thread. `ReadSmallFile` and blob-to-string copies report `TooLarge` above
+/// this limit; `ReadFile` returns a blob handle without this copy.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 
 /// How many host-owned blobs may be live at once.
@@ -186,37 +177,19 @@ fn readErrorCode(err: anyerror) u8 {
     };
 }
 
-
-
-
-
-
-/// Blocking effects, run off the main thread.
+/// Blocking effects executed off the main thread.
 ///
-/// The contract that makes this safe is narrow, and stating it plainly is the
-/// point of the whole design: **the worker never calls Roc, never allocates or
-/// frees Roc memory, never reads `active_roc_host`, and never touches a
-/// resource heap.** It takes plain-Zig requests and posts plain-Zig results;
-/// the main thread turns a result into a Roc value while draining the queue.
-///
-/// That is what buys non-blocking I/O without atomic refcounts. `roc_alloc`
-/// and the resource heaps stay exactly as single-threaded as they were.
-///
-/// Two caveats the invariant does not cover, both currently satisfied:
-/// the worker shares the host allocator, so that allocator must be thread-safe
-/// (`std.heap.smp_allocator` is; `DebugAllocator` is unless `thread_safe` is
-/// turned off); and `std.Io.Threaded.init` installs process-wide SIGPIPE and
-/// SIGIO handlers, restoring them on `deinit`.
+/// The worker accepts and returns plain Zig values. It must not call Roc,
+/// allocate or free Roc memory, read `active_roc_host`, or access resource
+/// heaps. The main thread converts results to Roc values while draining the
+/// result queue. The shared host allocator must be thread-safe.
 ///
 /// Both rings are single-producer/single-consumer -- main writes requests and
 /// reads results, the worker does the reverse -- so acquire/release on the
 /// indices is all the *data* transfer needs, and neither ring is ever locked.
 ///
-/// The lock below exists for one thing only: deciding whether the worker may
-/// go to sleep. An idle app must not burn a core polling, so the worker blocks
-/// on a condition variable rather than waking every millisecond; the mutex is
-/// what makes "the ring looked empty, so I will sleep" and "I just filled the
-/// ring" impossible to interleave. See `wake` and `awaitRequest`.
+/// The mutex and condition variable only coordinate sleeping and waking; ring
+/// data transfer remains lock-free. See `wake` and `awaitRequest`.
 const EffectWorker = struct {
     /// Power of two so the index wrap is a mask.
     const capacity: usize = 64;
@@ -438,15 +411,13 @@ const EffectWorker = struct {
 
     /// Publish a finished result, waiting for room if the ring is full.
     ///
-    /// Worker thread only. Waiting is the point: an accepted task has promised
-    /// the app exactly one completion, so there is no version of this that may
-    /// discard one. Blocking the worker is free -- it has nothing else to do,
-    /// and the frame thread is never waiting on it.
+    /// Worker thread only. Accepted tasks guarantee one completion, so a full
+    /// result ring blocks this worker instead of discarding a result. The frame
+    /// thread never waits on this condition.
     ///
-    /// Today the wait is unreachable, because the ring is larger than the
-    /// reservation budget in `MAX_TASKS_IN_FLIGHT` and so cannot fill. It is
-    /// written anyway so that changing either number is a performance decision
-    /// rather than a correctness one.
+    /// The ring is larger than the `MAX_TASKS_IN_FLIGHT` reservation budget, so
+    /// the wait is unreachable under the current capacity invariant. Keeping
+    /// the wait preserves correctness if either capacity changes.
     fn postResult(self: *EffectWorker, io: std.Io, result: Result) void {
         while (true) {
             const write = self.result_write.load(.monotonic);
@@ -547,11 +518,8 @@ const EffectWorker = struct {
 
     /// Encode a framebuffer readback as a PNG and write it. Worker thread only.
     ///
-    /// This is the slow half of a screenshot -- deflate over a few megabytes,
-    /// plus a directory create and a file write -- and it is the whole reason
-    /// the frame thread now only does the readback. Nothing here touches
-    /// raylib: the pixels arrived as a plain byte slice and `png` is
-    /// deliberately backend-free.
+    /// Performs PNG compression and file I/O without accessing raylib. The
+    /// frame thread is responsible only for framebuffer readback.
     fn runWritePng(self: *EffectWorker, io: std.Io, request: Request) void {
         defer self.allocator.free(request.pixels);
         const path = request.path[0..request.path_len];
@@ -647,8 +615,7 @@ var pending_timer_count: usize = 0;
 /// Their sum is the capacity below, so overflowing it is not a load condition
 /// -- it means one of those two budgets was not enforced.
 ///
-/// The consequence worth stating: the step an ordinary frame assembles
-/// allocates nothing at all, and neither does a saturated one.
+/// Step assembly does not allocate in either the empty or saturated case.
 const CompletionStaging = struct {
     const capacity: usize = MAX_TASKS_IN_FLIGHT + MAX_TASKS_PER_STEP;
 
@@ -780,10 +747,9 @@ const CompletionStaging = struct {
 
     /// Hand this step's completions to Roc and empty the staging area.
     ///
-    /// Emptying is the point: the payloads now belong to the list Roc drops, so
-    /// releasing them here too would free them twice. Anything staged after this
-    /// -- a refused task, a screenshot serviced at the end of this frame -- is
-    /// owned by the staging area again and is delivered on the next step.
+    /// The returned list owns its payloads. Clear staging without releasing them
+    /// to avoid a double free. Results staged afterward are owned by staging and
+    /// delivered on the next step.
     fn take(self: *CompletionStaging, roc_host: *RocHost) abi.RocList(CompletionFromHost) {
         const list = self.toRocList(roc_host);
         self.len = 0;
@@ -824,23 +790,14 @@ inline fn headlessMode() bool {
 
 /// Which of the app's callbacks the host is currently inside.
 ///
-/// Roc capabilities outlive the call that produced them -- a `Draw.Frame` is a
-/// value, a texture handle is a value -- and nothing in the type system stops
-/// an app from stashing one and reaching for it a frame later. The phase is how
-/// the host says when an operation is actually meaningful.
+/// Capabilities can be retained beyond the callback that produced them, so the
+/// host validates each operation against the active callback phase.
 const Phase = enum {
     /// Between callbacks: config, host bookkeeping, capture, shutdown.
     idle,
     /// Inside `init_for_host`, and inside the startup config callback.
     startup,
     /// Inside `update_for_host`, applying the actions `update` returned.
-    ///
-    /// Note what this is *not* named. The pure reducer has no phase at all,
-    /// because it cannot reach the host: `update` is annotated `->` rather than
-    /// `=>`, so Roc's effect system rejects any effect call inside it at compile
-    /// time. Every host call in this window is therefore an action being
-    /// applied, which is a different thing from computing the next model and is
-    /// worth a different name.
     commit,
     /// Inside `render_for_host`.
     render,
@@ -856,11 +813,7 @@ const Phase = enum {
     }
 };
 
-/// The phases an operation may be reached from.
-///
-/// A set rather than a single phase, because the honest answer for most
-/// operations is more than one: setting the cursor is meaningful while
-/// starting up and while applying an action, and nonsense in between.
+/// Callback phases in which an operation is valid.
 const PhaseSet = std.EnumSet(Phase);
 
 /// Loading, allocating or generating a resource. Startup only: all of these
@@ -877,25 +830,13 @@ const during_commit = PhaseSet.initMany(&.{ .startup, .commit });
 
 /// Constant-time operations with nothing to allocate and no I/O to do: reading
 /// a font metric, asking whether a sound is still playing, taking a random
-/// number. Reachable from every callback because there is no phase in which the
-/// answer is meaningless and none in which the cost is a problem -- but still
-/// not from outside a callback entirely.
-///
-/// The bar for membership is the cost, and it is worth stating because this set
-/// used to be the place things went when no other phase felt right. It held
-/// texture uploads, blob copies, screenshots and recording start/stop, all of
-/// which are proportional to something, and the comment claiming everything
-/// here was cheap was simply wrong. Anything that copies, allocates, writes a
-/// file or talks to a driver belongs in `during_commit` or nowhere.
+/// number. Valid in every callback, but not outside callbacks. Operations that
+/// copy, allocate, write files, or access a driver do not belong in this set.
 const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .commit, .render });
 
 var active_phase: Phase = .idle;
 
-/// Enter a phase for the duration of one call, restoring the previous one.
-///
-/// Restoring rather than resetting to `idle` keeps nesting honest: the actions
-/// `update` applies run inside the update phase, and nothing has to know
-/// whether it was entered from the frame loop or from somewhere else.
+/// Enter a phase for one call, restoring the prior phase to preserve nesting.
 const PhaseScope = struct {
     previous: Phase,
 
@@ -926,19 +867,11 @@ fn describePhases(allowed: PhaseSet, buffer: []u8) []const u8 {
     return buffer[0..written];
 }
 
-/// Refuse an operation that was reached from the wrong phase.
+/// Refuse an operation reached from the wrong callback phase.
 ///
-/// This aborts, in every build mode, and that is the deliberate part. Both
-/// guarded families are bugs rather than degraded behaviour: a blocking loader
-/// called mid-frame reintroduces exactly the stall the task/worker split exists
-/// to remove, and a draw call outside `render!` reaches raylib outside the
-/// host's `BeginDrawing`/`EndDrawing` scope, where the result is undefined
-/// rather than merely misplaced. Neither has a sensible fallback value --
-/// returning a blank texture or silently dropping the draw would hide the bug
-/// in release while debug shouted about it, which is the worst of both.
-///
-/// No shipped example trips either guard, so nothing that works today starts
-/// aborting; the survey that established this is in the commit message.
+/// A blocking loader during a frame violates the frame-time contract, while a
+/// draw outside `render!` reaches raylib outside its drawing scope. Both are
+/// programming errors and abort in every non-test build.
 ///
 /// Under `zig test` the violation is recorded rather than raised: the unit
 /// tests call hosted effects directly, with no callback entered, and aborting
@@ -977,10 +910,8 @@ var capture_screenshot_path_len: usize = 0;
 var capture_screenshot_pending: bool = false;
 /// Id of the screenshot task that queued the pending request.
 ///
-/// Every screenshot is a task now, so this is set whenever a request is
-/// pending. It exists as an optional because the write happens at the end of a
-/// later part of the frame than the accept, and the two have to agree on
-/// whether there is anything outstanding.
+/// Set for every pending screenshot. The optional spans task acceptance and the
+/// framebuffer readback performed later in the frame.
 var capture_screenshot_task_id: ?u64 = null;
 /// A serviced screenshot task whose completion has not reached Roc yet.
 var capture_screenshot_done: ?ScreenshotOutcome = null;
@@ -1018,10 +949,9 @@ var virtual_mouse_last_y: f32 = 0;
 var virtual_mouse_has_last: bool = false;
 /// Nanoseconds of divergence introduced by fixed-step recordings.
 ///
-/// While a fixed-step recording runs we report exact `1/fps` deltas instead of
-/// raylib's measured ones, so our clock and raylib's drift apart. Carrying the
-/// difference keeps the clock Roc sees monotonic across the start and the end
-/// of a recording, rather than jumping at each boundary.
+/// Fixed-step recording reports exact `1/fps` deltas instead of raylib's
+/// measured values. Carrying the difference keeps Roc's clock monotonic when a
+/// recording starts or stops.
 var capture_clock_offset_ns: i128 = 0;
 var capture_clock_last_real_ns: u64 = 0;
 
@@ -1209,13 +1139,8 @@ fn readBlobToken(payload: *const abi.FileHostBlobResource) u64 {
 
 /// Blobs live on Roc's refcount, the same as every other host resource.
 ///
-/// They did not always. A blob handle used to be a bare scalar, which Roc
-/// copies and drops with no notification, so the app had to say when it was
-/// done -- and a `release` that runs while a copy of the handle is still in
-/// somebody's model is precisely the dangling reference the slot generation had
-/// to exist to survive. A `Box` removes the question: the last reference going
-/// is what frees the bytes, there is nothing to call, and no copy can be
-/// invalidated out from under whoever is holding it.
+/// Each handle is boxed so the last Roc reference releases the slot. The slot
+/// generation still protects the host from stale or malformed tokens.
 const BlobHeap = host_resource.HostResourceHeap(abi.FileHostBlobResource, BlobResource, MAX_LIVE_BLOBS, 8, writeBlobToken, readBlobToken, destroyBlob);
 var blob_heap: BlobHeap = .{};
 
@@ -1237,8 +1162,8 @@ fn releaseResourceBox(host: *RocHost, handle: anytype) void {
 }
 
 /// Captured `envp` for the process. On Linux the host runs with `-nostdlib`, so
-/// glibc never populates an environ global; we capture it from the process stack
-/// in `platform_main`. Other (libc-linked) targets read `std.c.environ` instead.
+/// glibc never populates an environ global; `platform_main` captures it from the
+/// process stack. Other (libc-linked) targets read `std.c.environ` instead.
 var host_environ: []const [*:0]u8 = &.{};
 
 /// Look up an environment variable without `std.posix.getenv` (removed in 0.16).
@@ -2443,11 +2368,8 @@ fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate
 
 /// Charge a texture upload against this frame's budget.
 ///
-/// Startup is not metered: it is not a frame, there is nothing to stall, and
-/// making an app split its initial uploads across imaginary frames would be
-/// pure ceremony. Everywhere else, exceeding the budget is reported rather
-/// than absorbed -- an upload the host performed anyway would show up as a
-/// frame time nobody asked about.
+/// Startup uploads are exempt because no frame is active. During a frame, an
+/// upload that would exceed `MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME` is refused.
 fn chargeTextureUpload(pixels: usize) bool {
     if (active_phase == .startup) return true;
     const bytes = pixels * @sizeOf(abi.ColorRgba);
@@ -3421,10 +3343,8 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
 
 /// Apply a `Capture.start` action.
 ///
-/// The refusal code goes into the session rather than back to Roc: an action
-/// has nobody to report to, and an app reads the outcome off `step.capture` on
-/// the next cycle. The code is still returned so the effect keeps a shape the
-/// ABI can carry, and so a test can assert on it directly.
+/// Refusals are latched in the session for the next `step.capture`. The return
+/// code preserves the hosted ABI and supports direct tests.
 fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
     enforcePhase("Capture.start", during_commit);
     defer args.path.decref(roc_host);
@@ -4471,9 +4391,8 @@ fn takeModel(boxed_model: *RocBox) RocBox {
     return transferred;
 }
 
-/// Retained for the render call site, which reads more clearly with the old name.
+/// Render-specific name for the model ownership-transfer helper.
 const takeModelForRender = takeModel;
-
 
 /// Advance the model by one cycle.
 ///
@@ -4491,33 +4410,20 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
 
 /// Execute the tasks returned by one `update` call and release the list.
 ///
-/// A read goes to the worker and is answered on a later step. If the worker is
-/// absent or its slots are full the task is refused *immediately* with
-/// `Unavailable` or `Busy` rather than run here: the point of the split is that
-/// slow work never touches the frame thread, and an inline fallback puts back
-/// exactly the stall the design exists to avoid.
+/// Reads run on the worker and complete on a later step. An unavailable or full
+/// worker refuses them immediately instead of running slow work on this thread.
 ///
-/// Headless is the one deliberate exception. There is no frame to protect, and
-/// CI compares every example's output across runs, so a completion landing on a
-/// different step from run to run would make that flaky. The read runs
-/// immediately and is still delivered as a completion, so the app takes an
-/// identical code path either way.
+/// Headless mode performs reads synchronously for deterministic completion
+/// ordering, but still reports them through the normal completion path.
 ///
-/// A screenshot and a clipboard read are main-thread work by nature -- one
-/// needs the framebuffer, the other the windowing backend -- so they are
-/// serviced in this cycle and answered on the next. Neither is slow.
+/// Screenshot and clipboard tasks require main-thread APIs. They are serviced
+/// in this cycle and reported on the next step.
 ///
-/// Every task in the list yields exactly one completion -- accepted or not --
-/// so an app never waits forever for an id it will never see. Completions
-/// staged here land on the *next* step, because this step's list has already
-/// been handed to Roc.
+/// Every task yields one completion, including refused tasks. Results staged
+/// here land on the next step because the current completion list is immutable.
 ///
-/// Admission is the whole shape of this loop, and it is bounded twice. The list
-/// itself is at most `MAX_TASKS_PER_STEP` long, which is what stops one cycle
-/// spending a frame on work it services immediately; and within that, a task is
-/// started only once a reservation is in hand, which is what stops the host
-/// holding more deferred work than it can report. A task that cannot get a
-/// reservation is refused rather than silently dropped.
+/// `MAX_TASKS_PER_STEP` bounds per-cycle work. Reservations separately bound
+/// in-flight work; tasks without a reservation are refused, never dropped.
 fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.RocList(TaskToHost)) void {
     defer {
         if (tasks.hasOneRef()) {
@@ -4576,14 +4482,8 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) 
 
 /// Report a task the host would not start, in the completion it asked for.
 ///
-/// Answering with the wrong kind would be worse than not answering at all: an
-/// app waiting on `FileRead` must not have its id retired by a `SmallFileRead`.
-///
-/// Every one of these says `Busy`, and that is the whole content of the report.
-/// Saturation is one condition, and borrowing a nearby error for it -- a live
-/// blob answered `Released`, a working clipboard answered `Unavailable` -- told
-/// the app something that was not true and pointed it away from the one action
-/// that works, which is to ask again next cycle.
+/// Preserve the request kind and id, and report `Busy` so the app can retry on a
+/// later cycle.
 fn refuseTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost) void {
     switch (task.kind) {
         TASK_READ_SMALL_FILE => stageReadError(staging, roc_host, task.id, READ_ERR_BUSY, false),
@@ -4642,10 +4542,8 @@ fn stageCaptureResults(staging: *CompletionStaging) void {
 
 /// Record the outcome of the screenshot just serviced.
 ///
-/// A screenshot is always a task and a task always has somewhere to report to,
-/// so its outcome becomes a completion on the next step. Servicing a screenshot
-/// nobody asked for would mean the pending flag and the id disagree, which is a
-/// host bug rather than a state an app can reach.
+/// The outcome becomes a completion on the next step. A missing task id
+/// indicates inconsistent host state and aborts.
 fn reportScreenshotResult(err: u8) void {
     const id = capture_screenshot_task_id orelse
         @panic("roc-ray: serviced a screenshot with no task to report it to");
@@ -5178,9 +5076,8 @@ const MAX_RESOURCE_RETIREMENTS_PER_FRAME: usize = 16;
 
 /// Destroy resources whose last Roc reference has gone, up to a budget.
 ///
-/// Called at the end of a frame, which is the point of the whole arrangement:
-/// releasing the final reference happens inside the pure `update`, and a GPU
-/// unload there is an effect in a function that is supposed to have none.
+/// Called at frame end so pure `update` only retires references; GPU and audio
+/// destruction remains in the effectful host loop.
 fn drainRetiredResources() void {
     drainRetiredResourcesUpTo(MAX_RESOURCE_RETIREMENTS_PER_FRAME);
 }
@@ -5412,13 +5309,6 @@ test "each update call takes the model afresh so one reference stays live" {
 
     try std.testing.expect(boxed_model != null);
 }
-
-
-
-
-
-
-
 
 test "staged completions become one Roc list, and an idle step allocates none" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
@@ -6412,7 +6302,6 @@ test "an operation called from its own phase is not rejected" {
     try std.testing.expect(last_phase_violation == null);
 }
 
-
 /// Run the app's startup callback.
 ///
 /// It takes no snapshot: `App.Startup` is authority, not observation. Nothing
@@ -6439,7 +6328,6 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // inline so its output stays bit-identical run to run for CI.
     effect_worker.start(allocator);
     defer effect_worker.stop();
-
 
     var input = InputState.init(roc_host);
     defer input.deinit();

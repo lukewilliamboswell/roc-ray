@@ -120,8 +120,7 @@ expect Random.in_range(Random.from_seed(88), 0, 3).value <= 3
 expect Random.in_range(Random.from_seed(3), 4, 4).value == 4
 expect Random.in_range(Random.from_seed(3), 9, 2).value == 9
 
-## The widest range there is stays inside itself. Its span is 2^32, which does
-## not fit in an I32 -- computing it there is what used to overflow.
+## The full I32 span must be computed in a wider integer type.
 expect Random.in_range(Random.from_seed(3), -2147483648, 2147483647).value >= -2147483648
 expect Random.in_range(Random.from_seed(3), -2147483648, 2147483647).value <= 2147483647
 expect Random.in_range(Random.from_seed(1234), -2000000000, 2000000000).value >= -2000000000

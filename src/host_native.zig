@@ -3304,6 +3304,26 @@ fn blobBytes(handle: u64) []const u8 {
     return resource.bytes;
 }
 
+/// Transfer one owned blob-box reference into a seamless `List(U8)`.
+///
+/// The elements remain in the native byte allocation; the tagged allocation
+/// pointer names the blob payload, whose preceding refcount owns that storage.
+/// A zero-length Roc list is canonical and cannot retain an allocation, so it
+/// consumes the transferred box reference before returning the empty list.
+fn takeBlobAsSeamlessBytes(roc_host: *RocHost, blob: abi.FileBlob) abi.RocListWith(u8, false) {
+    const bytes = blobBytes(blob.resource.handle);
+    if (bytes.len == 0) {
+        blob.decref(roc_host);
+        return abi.RocListWith(u8, false).empty();
+    }
+
+    return .{
+        .elements_ptr = @ptrCast(@constCast(bytes.ptr)),
+        .length = bytes.len,
+        .capacity_or_alloc_ptr = @intFromPtr(blob.resource) | 1,
+    };
+}
+
 /// A range of a blob, copied into a Roc string.
 ///
 /// A plain struct rather than a glue type, because there is no longer a hosted
@@ -6348,6 +6368,136 @@ test "a blob's bytes outlive every copy of its handle and no more" {
     handle.decref(&roc_host);
     try std.testing.expectEqual(@as(usize, 1), blob_heap.retiredCount());
 
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "seamless byte lists retain a blob slot through List and Str ARC in every drop order" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    // Four independently-owned aliases exercise the two generated ARC paths:
+    // a whole list, a sublist-shaped list, and a Str converted from the list.
+    // The permutations are deliberately exhaustive because releasing the last
+    // reference through either List or Str must route to the same typed heap.
+    const Drop = enum { whole, alias, sublist, string };
+    const orders = [_][4]Drop{
+        .{ .whole, .alias, .sublist, .string },
+        .{ .whole, .alias, .string, .sublist },
+        .{ .whole, .sublist, .alias, .string },
+        .{ .whole, .sublist, .string, .alias },
+        .{ .whole, .string, .alias, .sublist },
+        .{ .whole, .string, .sublist, .alias },
+        .{ .alias, .whole, .sublist, .string },
+        .{ .alias, .whole, .string, .sublist },
+        .{ .alias, .sublist, .whole, .string },
+        .{ .alias, .sublist, .string, .whole },
+        .{ .alias, .string, .whole, .sublist },
+        .{ .alias, .string, .sublist, .whole },
+        .{ .sublist, .whole, .alias, .string },
+        .{ .sublist, .whole, .string, .alias },
+        .{ .sublist, .alias, .whole, .string },
+        .{ .sublist, .alias, .string, .whole },
+        .{ .sublist, .string, .whole, .alias },
+        .{ .sublist, .string, .alias, .whole },
+        .{ .string, .whole, .alias, .sublist },
+        .{ .string, .whole, .sublist, .alias },
+        .{ .string, .alias, .whole, .sublist },
+        .{ .string, .alias, .sublist, .whole },
+        .{ .string, .sublist, .whole, .alias },
+        .{ .string, .sublist, .alias, .whole },
+    };
+    const payload = "seamless byte-list aliases keep this host allocation alive";
+
+    for (orders) |order| {
+        const owned = try std.testing.allocator.dupe(u8, payload);
+        var staging = CompletionStaging{};
+        stageBlobRead(&staging, &roc_host, 1, std.testing.allocator, owned);
+        const blob = stagedBlob(staging.items.items[0].raw);
+
+        // The staged completion owns the first box reference. Give the list a
+        // second one, then transfer that one to its tagged allocation pointer.
+        blob.incref(1);
+        const whole = takeBlobAsSeamlessBytes(&roc_host, blob);
+        try std.testing.expectEqual(owned.ptr, whole.elements_ptr.?);
+        try std.testing.expect(whole.isSeamlessSlice());
+        try std.testing.expectEqual(@intFromPtr(blob.resource) | 1, whole.capacity_or_alloc_ptr);
+        try std.testing.expectEqualStrings(payload, whole.items());
+
+        // Completing the original read no longer owns the resource. The list
+        // must do so alone from here on.
+        staging.release(&roc_host);
+        try std.testing.expectEqual(@as(usize, 1), blob_heap.active());
+
+        // `List.sublist` produces this exact shape: visible bytes move while
+        // the tagged allocation pointer remains the original backing resource.
+        whole.incref(1);
+        const sublist = abi.RocListWith(u8, false){
+            .elements_ptr = whole.elements_ptr.? + 3,
+            .length = whole.len() - 7,
+            .capacity_or_alloc_ptr = whole.capacity_or_alloc_ptr,
+        };
+        try std.testing.expectEqualStrings(payload[3 .. payload.len - 4], sublist.items());
+
+        whole.incref(1);
+        const alias = whole;
+
+        // `Str.from_utf8` validates first, increfs this backing allocation,
+        // and returns this tagged-string representation. Build that exact
+        // post-validation ownership shape here; the compiler builtin is
+        // separately covered by its seamless-slice tests.
+        whole.incref(1);
+        const string = abi.RocStr{
+            .bytes = @ptrCast(whole.elements_ptr.?),
+            .capacity_or_alloc_ptr = whole.capacity_or_alloc_ptr,
+            .length = whole.len(),
+        };
+        try std.testing.expect(string.isSeamlessSlice());
+        try std.testing.expectEqualStrings(payload, string.asSlice());
+
+        for (order, 0..) |drop, index| {
+            switch (drop) {
+                .whole => whole.decref(&roc_host),
+                .alias => alias.decref(&roc_host),
+                .sublist => sublist.decref(&roc_host),
+                .string => string.decref(&roc_host),
+            }
+            if (index + 1 == order.len) {
+                try std.testing.expectEqual(@as(usize, 1), blob_heap.retiredCount());
+            } else {
+                try std.testing.expectEqual(@as(usize, 1), blob_heap.active());
+            }
+        }
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+    }
+}
+
+test "an empty blob transfers to the canonical empty list without leaking its box" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    const owned = try std.testing.allocator.alloc(u8, 0);
+    var staging = CompletionStaging{};
+    stageBlobRead(&staging, &roc_host, 1, std.testing.allocator, owned);
+    const blob = stagedBlob(staging.items.items[0].raw);
+    blob.incref(1);
+    const empty = takeBlobAsSeamlessBytes(&roc_host, blob);
+    try std.testing.expect(empty.isEmpty());
+    try std.testing.expect(!empty.isSeamlessSlice());
+
+    // One reference was consumed into the canonical empty value and the other
+    // remains in staging, so this release must retire the native slot.
+    staging.release(&roc_host);
+    try std.testing.expectEqual(@as(usize, 1), blob_heap.retiredCount());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
 }

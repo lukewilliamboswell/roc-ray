@@ -159,6 +159,15 @@ const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 /// which are independently bounded by their at-most-32 reservations.
 const MAX_SYNC_ROC_STRING_BYTES_PER_STEP: usize = 1024 * 1024;
 
+/// Main-thread task starts admitted while dispatching one step.
+///
+/// Clipboard reads and blob slices can do meaningful metadata work even when
+/// they copy zero bytes: querying a window backend, validating a blob handle,
+/// and checking bounds/UTF-8 all cost time. Bound that work independently from
+/// the byte budget above. This is a private admission budget, not a public task
+/// list cap; every request beyond it receives its typed `Busy` result now.
+const MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_STEP: usize = 32;
+
 /// Headless reads run on the frame thread for deterministic test output.
 ///
 /// Unlike the windowed worker, they need explicit resource admission: no more
@@ -693,8 +702,19 @@ var pending_callbacks = PendingCallbacks{};
 /// either would leak a Roc capture or let stale work collide with a new app.
 fn beginPendingCallbacks() void {
     std.debug.assert(pending_callbacks.count == 0);
+    std.debug.assert(pending_timer_count == 0);
     std.debug.assert(blob_delivery_reservations.count == 0);
     pending_callbacks.next_ticket = 1;
+    exit_requested = null;
+}
+
+/// End one app lifetime after no worker or frame callback can publish another
+/// completion. Discard timer producer records before dropping their callback
+/// targets, so no retained ticket can ever name a callback as teardown runs or
+/// before a future lifetime resets ticket numbering.
+fn endPendingCallbacks(roc_host: *RocHost) void {
+    pending_timer_count = 0;
+    pending_callbacks.release(roc_host);
 }
 
 /// Completions gathered for the step being assembled.
@@ -4647,6 +4667,7 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
     const unique = tasks.isUnique();
     const mutable_tasks: []TaskToHost = if (unique) @constCast(tasks.items()) else &.{};
     var roc_string_bytes: usize = 0;
+    var synchronous_tasks: usize = 0;
     var headless_reads = HeadlessReadBudget{};
     for (tasks.items(), 0..) |task, index| {
         // A list returned directly from Roc is normally unique. Move the
@@ -4667,8 +4688,14 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
         // Clipboard and blob-slice work always finishes during this dispatch.
         // Keep their callback out of the fixed pending table: that table is a
         // reservation for work which can outlive this frame, while these two
-        // operations are governed by their shared byte-copy budget instead.
+        // operations are governed by private main-thread operation and shared
+        // byte-copy budgets instead.
         if (task.kind == TASK_READ_CLIPBOARD or task.kind == TASK_READ_BLOB_SLICE) {
+            if (synchronous_tasks == MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_STEP) {
+                refuseTask(staging, roc_host, task, ticket, deliver);
+                continue;
+            }
+            synchronous_tasks += 1;
             startSynchronousTask(staging, roc_host, task, ticket, deliver, &roc_string_bytes);
             continue;
         }
@@ -4711,6 +4738,7 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, 
 /// into the completion envelope. This deliberately does not consume one of the
 /// fixed deferred-operation reservations.
 fn startSynchronousTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, deliver: abi.RocErasedCallable, roc_string_bytes: *usize) void {
+    if (builtin.is_test) test_synchronous_task_starts += 1;
     switch (task.kind) {
         TASK_READ_CLIPBOARD => stageClipboardRead(staging, roc_host, ticket, roc_string_bytes, deliver),
         TASK_READ_BLOB_SLICE => stageBlobSlice(staging, roc_host, task, ticket, roc_string_bytes, deliver),
@@ -5651,6 +5679,7 @@ test "each update call takes the model afresh so one reference stays live" {
 }
 
 var test_callback_drops: usize = 0;
+var test_synchronous_task_starts: usize = 0;
 
 fn testCallbackCall(
     roc_host: *RocHost,
@@ -5690,7 +5719,7 @@ fn testTask(roc_host: *RocHost, kind: u8) TaskToHost {
 }
 
 fn resetPendingCallbacksForTest(roc_host: *RocHost) void {
-    pending_callbacks.release(roc_host);
+    endPendingCallbacks(roc_host);
     pending_callbacks.next_ticket = 1;
 }
 
@@ -6034,6 +6063,42 @@ test "pending callbacks are dropped once on shutdown" {
     pending_callbacks.release(&roc_host);
     try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
     try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT, test_callback_drops);
+}
+
+test "ending an app lifetime clears timers before ticket numbering resets" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer resetPendingCallbacksForTest(&roc_host);
+    test_callback_drops = 0;
+    last_wall_nanos = 0;
+
+    // A delayed task from the first lifetime uses the first private ticket.
+    // Ending that lifetime must remove both its timer and callback.
+    exit_requested = 99;
+    beginPendingCallbacks();
+    try std.testing.expectEqual(@as(?i64, null), exit_requested);
+    const first = pending_callbacks.issueTicket();
+    try std.testing.expectEqual(@as(u64, 1), first);
+    try std.testing.expect(pending_callbacks.insert(first, testCallback(&roc_host)));
+    armTimer(first, std.math.maxInt(u64));
+    endPendingCallbacks(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
+    try std.testing.expectEqual(@as(usize, 0), pending_timer_count);
+    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
+
+    // The next lifetime legitimately reuses ticket one. A stale timer would
+    // consume this new callback (or trip the duplicate-ticket assertion) here.
+    beginPendingCallbacks();
+    const second = pending_callbacks.issueTicket();
+    try std.testing.expectEqual(@as(u64, 1), second);
+    try std.testing.expect(pending_callbacks.insert(second, testCallback(&roc_host)));
+    var staging = CompletionStaging{};
+    expireTimers(&staging, &roc_host, std.math.maxInt(u64));
+    try std.testing.expectEqual(@as(usize, 0), staging.count());
+    try std.testing.expectEqual(@as(usize, 1), pending_callbacks.count);
+    endPendingCallbacks(&roc_host);
+    try std.testing.expectEqual(@as(usize, 2), test_callback_drops);
+    staging.release(&roc_host);
 }
 
 test "a delay is a real second even while the simulation clock is fixed-step" {
@@ -6386,6 +6451,80 @@ test "blob slice admission uses a byte budget instead of a task-count cap" {
     for (staging.items.items[0 .. task_count - 1]) |item| try std.testing.expectEqual(@as(u8, 0), item.raw.err);
     try std.testing.expectEqual(BLOB_ERR_BUSY, staging.items.items[task_count - 1].raw.err);
     staging.release(&roc_host);
+}
+
+test "synchronous task starts are bounded before zero-byte main-thread work" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+        headless_clipboard_len = 0;
+        headless_clipboard_set = false;
+    }
+    test_callback_drops = 0;
+    test_synchronous_task_starts = 0;
+
+    // The clipboard is deliberately empty, so reads do no payload copying. The
+    // blob is deliberately sliced with a valid zero-byte range, so it exercises
+    // handle/bounds metadata but allocates no payload. Both still consume an
+    // operation admission before the host looks at their backend or range.
+    const bytes = try std.testing.allocator.dupe(u8, "x");
+    var owner = CompletionStaging{};
+    stageBlobRead(&owner, &roc_host, 0, std.testing.allocator, bytes);
+    const handle = stagedBlob(owner.items.items[0].raw);
+    handle.incref(1);
+    owner.release(&roc_host);
+
+    const task_count = MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_STEP + 5;
+    var tasks: [task_count]TaskToHost = undefined;
+    for (&tasks, 0..) |*task, index| {
+        if (index % 2 == 0) {
+            task.* = testTask(&roc_host, TASK_READ_CLIPBOARD);
+        } else {
+            handle.incref(1);
+            task.* = .{
+                .kind = TASK_READ_BLOB_SLICE,
+                .path = abi.RocStr.empty(),
+                .millis = 0,
+                .blob = abi.RocList(abi.FileBlob).fromSlice(&.{handle}, &roc_host),
+                .offset = 0,
+                .count = 0,
+                .deliver = testCallback(&roc_host),
+            };
+        }
+    }
+
+    var staging = CompletionStaging{};
+    dispatchTasks(&staging, &roc_host, abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host));
+    try std.testing.expectEqual(MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_STEP, test_synchronous_task_starts);
+    try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
+    try std.testing.expectEqual(@as(usize, task_count), staging.count());
+    for (staging.items.items, 0..) |item, index| {
+        if (index < MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_STEP) {
+            if (index % 2 == 0) {
+                try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, item.raw.kind);
+                try std.testing.expectEqual(READ_ERR_UNAVAILABLE, item.raw.err);
+            } else {
+                try std.testing.expectEqual(COMPLETION_BLOB_SLICE_READ, item.raw.kind);
+                try std.testing.expectEqual(@as(u8, 0), item.raw.err);
+            }
+        } else if (index % 2 == 0) {
+            try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, item.raw.kind);
+            try std.testing.expectEqual(READ_ERR_BUSY, item.raw.err);
+        } else {
+            try std.testing.expectEqual(COMPLETION_BLOB_SLICE_READ, item.raw.kind);
+            try std.testing.expectEqual(BLOB_ERR_BUSY, item.raw.err);
+        }
+    }
+    staging.release(&roc_host);
+    try std.testing.expectEqual(@as(usize, task_count), test_callback_drops);
+    // Every task-list blob reference was released by dispatch; only this test's
+    // explicit pin remains, including for rejected-overflow blob tasks.
+    try std.testing.expectEqual(@as(usize, 1), blob_heap.active());
+    handle.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
 }
 
 test "blob delivery reservations bound reads before they can start" {
@@ -7229,7 +7368,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     defer {
         effect_worker.stop();
         blob_delivery_reservations.clearAfterWorkStops();
-        pending_callbacks.release(roc_host);
+        endPendingCallbacks(roc_host);
     }
 
     const init_result = initModel();
@@ -7347,7 +7486,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // the worker path so a failed or early-exiting run cannot poison the
         // next app lifetime.
         blob_delivery_reservations.clearAfterWorkStops();
-        pending_callbacks.release(roc_host);
+        endPendingCallbacks(roc_host);
     }
 
     var input = InputState.init(roc_host);

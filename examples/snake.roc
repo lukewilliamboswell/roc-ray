@@ -34,7 +34,7 @@ Model : {
 
 	## Simulation randomness lives in the model, so food appears on the frame it
 	## was eaten and a run replays exactly from its seed.
-	rng : Random.Generator,
+	rng : Random.State,
 }
 
 ## What a slice of simulation produced: the model it left behind, and the sounds
@@ -94,7 +94,7 @@ init! = App.init(
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.from_seed(I32.to_u64_wrap(startup.random_i32!(0, 2_000_000_000))),
+			rng: Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2_000_000_000))),
 		}
 
 		Ok(new_game(seed))
@@ -106,7 +106,7 @@ new_game = |model| {
 	spawned = spawn_food(model.rng, start_snake)
 	{
 		..model,
-		rng: spawned.next,
+		rng: spawned.state,
 		snake: start_snake,
 		direction: DirRight,
 		pending_direction: DirRight,
@@ -159,11 +159,11 @@ find_open_cell = |seed, snake, attempt| {
 
 # Drawing from the model's generator rather than an effect keeps food placement
 # immediate, and makes a run replay exactly from its seed.
-spawn_food : Random.Generator, List(Cell) -> { cell : Cell, next : Random.Generator }
-spawn_food = |rng, snake| {
-	column = Random.in_range(rng, 0, grid_cols - 1)
-	row = Random.in_range(column.next, 0, grid_rows - 1)
-	{ cell: find_open_cell({ x: column.value, y: row.value }, snake, 0), next: row.next }
+spawn_food : Random.State, List(Cell) -> { cell : Cell, state : Random.State }
+spawn_food = |state, snake| {
+	column = Random.step(state, Random.bounded_i32(0, grid_cols - 1))
+	row = Random.next(column, Random.bounded_i32(0, grid_rows - 1))
+	{ cell: find_open_cell({ x: column.value, y: row.value }, snake, 0), state: row.state }
 }
 
 requested_direction : Model, Input.Snapshot -> Direction
@@ -221,7 +221,7 @@ step_snake = |model| {
 					direction: model.pending_direction,
 					pending_direction: model.pending_direction,
 					food: spawned.cell,
-					rng: spawned.next,
+					rng: spawned.state,
 					score: model.score + 1,
 					accumulator: model.accumulator,
 					state: Playing,

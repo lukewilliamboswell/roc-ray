@@ -45,6 +45,9 @@ demonstrate how the same APIs fit into larger state and resource lifecycles.
   from it; do not retain input snapshot lists in the model.
 - Scale continuous motion by `step.time.elapsed_seconds`. For discrete
   simulation, clamp catch-up time and retain the fixed-step remainder.
+- Seed the exposed `roc-random` package once during `init!`, keep its
+  `Random.State` in the model, and advance it only when the simulation needs a
+  draw. This keeps randomness immediate and makes runs reproducible from a seed.
 - Update game state before drawing, and isolate effectful reactions to game
   events where the example is large enough to benefit from that split.
 - Draw only through the supplied `Draw.Frame`; pass scoped frames into helpers

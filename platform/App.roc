@@ -216,10 +216,13 @@ App := [].{
 			}
 		}
 
-		## Get a random integer in the range [min, max] (both endpoints included).
-		## The generator is seeded once at startup, so sequences differ between runs.
-		## Derive other ranges/floats from this, e.g. a random direction with
-		## `if startup.random_i32!(0, 1) == 0 -1 else 1`.
+		## Get varying startup entropy in the inclusive range `[min, max]`.
+		##
+		## For simulation or gameplay, call this once and initialize the exposed
+		## `roc-random` package with, for example,
+		## `Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2000000000)))`.
+		## Keep that `Random.State` in the model and use pure `Random.Generator`
+		## values during `update`, so draws are reproducible from the initial seed.
 		random_i32! : Startup, I32, I32 => I32
 		random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
 

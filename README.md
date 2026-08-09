@@ -110,7 +110,9 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
 - Loaded or generated textures, spritesheet animation, mutable pixel data, and
   exact projective texture drawing.
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
-- Window and frame timing, random values, and file and environment access.
+- Window and frame timing, startup entropy, the
+  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
+  file and environment access.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.

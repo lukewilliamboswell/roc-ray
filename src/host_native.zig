@@ -3968,7 +3968,7 @@ test "headless clipboard round-trips text and refuses oversized writes" {
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
-    enforcePhase("Random.i32!", constant_time_anywhere);
+    enforcePhase("App.Startup.random_i32!", during_startup);
     if (active_headless) return headlessRandomI32(min, max);
     return raylib.getRandomValue(min, max);
 }

@@ -34,7 +34,7 @@ Model : {
 
 	## Simulation randomness lives in the model, so a serve is drawn on the
 	## frame that needs it and a run replays exactly from its seed.
-	rng : Random.Generator,
+	rng : Random.State,
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
@@ -77,10 +77,10 @@ win_score = 5
 # different angle instead of the same predictable line.
 # Drawing from the model's own generator rather than an effect keeps the serve
 # immediate: the ball leaves on the frame that scored, not the frame after.
-random_serve_vy : Random.Generator -> { value : F32, next : Random.Generator }
-random_serve_vy = |rng| {
-	drawn = Random.in_range(rng, -160, 160)
-	{ value: I32.to_f32(drawn.value), next: drawn.next }
+random_serve_vy : Random.State -> Random.Generation(F32)
+random_serve_vy = |state| {
+	drawn = Random.step(state, Random.bounded_i32(-160, 160))
+	{ value: I32.to_f32(drawn.value), state: drawn.state }
 }
 
 left_paddle : F32 -> Math.Rect
@@ -98,15 +98,15 @@ new_round : Model -> Model
 new_round = |model| {
 	# Direction then speed, drawn in that order from one generator, so the
 	# sequence is the same every time a given seed replays.
-	direction = Random.in_range(model.rng, 0, 1)
-	serve = random_serve_vy(direction.next)
+	direction = Random.step(model.rng, Random.bounded_i32(0, 1))
+	serve = random_serve_vy(direction.state)
 	{
 		..model,
 		ball_x: screen_w * 0.5,
 		ball_y: screen_h * 0.5,
 		ball_vx: if direction.value == 0 (init_vx * -1) else init_vx,
 		ball_vy: serve.value,
-		rng: serve.next,
+		rng: serve.state,
 		left_y: 250,
 		right_y: 250,
 		left_score: 0,
@@ -142,7 +142,7 @@ init! = App.init(
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.from_seed(I32.to_u64_wrap(startup.random_i32!(0, 2_000_000_000))),
+			rng: Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2_000_000_000))),
 		}
 
 		Ok(new_round(seed))
@@ -254,7 +254,7 @@ step_playing = |model, input, dt| {
 	# Draw randomness only when a new serve is actually needed.
 	# The generator only advances when a serve is actually needed, so an idle
 	# rally does not consume draws.
-	serve = if out_left or out_right random_serve_vy(model.rng) else { value: vy, next: model.rng }
+	serve = if out_left or out_right random_serve_vy(model.rng) else { value: vy, state: model.rng }
 
 	final_ball_x = if out_left (screen_w * 0.5) else if out_right (screen_w * 0.5) else nx
 	final_ball_y = if out_left (screen_h * 0.5) else if out_right (screen_h * 0.5) else ny
@@ -274,7 +274,7 @@ step_playing = |model, input, dt| {
 		right_y: right_y,
 		left_score: left_score,
 		right_score: right_score,
-		rng: serve.next,
+		rng: serve.state,
 	}
 
 	# Sound effects for this frame's events, in the order they used to be played.

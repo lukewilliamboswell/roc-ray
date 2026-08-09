@@ -12,6 +12,7 @@ platform ""
 	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, File, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
+		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.0/CwDEAmyUMCsqW6dh4pxYnp7suUZAj5b5gpZuh7udtyE7.tar.zst",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,

@@ -33,24 +33,12 @@ CASES = (
         ("PACKAGE MODULE IS PRIVATE", "`rr.AppConfig`"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "file_host_module.roc",
-        ("PACKAGE MODULE IS PRIVATE", "`rr.FileHost`"),
-    ),
-    (
         ROOT / "test" / "compile_fail" / "texture_view_sampler.roc",
         ("MISSING METHOD", "`set_filter!`", "Assets.TextureView"),
     ),
     (
         ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
         ("DOES NOT EXIST", "`rr.Capture.stop!`"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "blob_slice_effect.roc",
-        ("MISSING METHOD", "`slice_to_str!`", "File.Blob"),
-    ),
-    (
-        ROOT / "test" / "compile_fail" / "blob_release_effect.roc",
-        ("MISSING METHOD", "`release`", "File.Blob"),
     ),
 )
 

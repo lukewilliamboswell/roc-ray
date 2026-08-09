@@ -19,8 +19,6 @@ import Assets
 import Capture
 import Color
 import Draw
-import File
-import FileHost
 import AssetsHost
 
 Program := [].{
@@ -113,19 +111,19 @@ Program := [].{
 	## an entire model for work that may remain pending.
 	##
 	## `ReadSmallFile` returns a UTF-8 `Str` and rejects files above its inline
-	## copy limit. `ReadFile` returns a refcounted `File.Blob` for files up to the
-	## host's 16 MiB per-file limit. Use `ReadBlobSlice` to copy a UTF-8 range from
-	## a blob. `Screenshot` captures the end of the frame that submitted it.
+	## copy limit. `ReadFile` returns ordinary Roc bytes for files up to the
+	## host's 16 MiB per-file limit. The worker allocation becomes a seamless
+	## `List(U8)` view, so delivery allocates and copies no payload bytes.
+	## `Screenshot` captures the end of the frame that submitted it.
 	Task(msg) :: [
 		ReadSmallFile({ path : Str, callback : Try(Str, SmallFileError) -> msg }),
-		ReadFile({ path : Str, callback : Try(File.Blob, FileReadError) -> msg }),
+		ReadFile({ path : Str, callback : Try(List(U8), FileReadError) -> msg }),
 		Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }),
 		Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }),
 		ReadClipboard({ callback : Try(Str, [Unavailable, TooLarge, Busy]) -> msg }),
-		ReadBlobSlice({ blob : File.Blob, offset : U64, count : U64, callback : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg }),
 	]
 
-	## Why a `ReadFile` produced no blob.
+	## Why a `ReadFile` produced no byte list.
 	##
 	## `Busy` and `Unavailable` mean the host did not start the read. `TooLarge`
 	## means the file exceeds the host's per-file limit.
@@ -171,9 +169,14 @@ Program := [].{
 	read_small_file : Str, (Try(Str, SmallFileError) -> msg) -> Task(msg)
 	read_small_file = |path, callback| Task.(ReadSmallFile({ path, callback }))
 
-	## Read a file into a refcounted `File.Blob` and turn its terminal result
+	## Read a file into an ordinary Roc byte list and turn its terminal result
 	## into `msg`.
-	read_file : Str, (Try(File.Blob, FileReadError) -> msg) -> Task(msg)
+	##
+	## The list owns its host-backed storage through Roc ARC. It supports normal
+	## `List` operations; sublists are seamless views, so retaining a small
+	## sublist can retain its whole source file. Compact a value deliberately
+	## when it must outlive the full list but should not pin it.
+	read_file : Str, (Try(List(U8), FileReadError) -> msg) -> Task(msg)
 	read_file = |path, callback| Task.(ReadFile({ path, callback }))
 
 	## Ask for one message after at least `millis` milliseconds have elapsed.
@@ -187,11 +190,6 @@ Program := [].{
 	## Read clipboard text on the frame thread and turn the result into `msg`.
 	read_clipboard : (Try(Str, [Unavailable, TooLarge, Busy]) -> msg) -> Task(msg)
 	read_clipboard = |callback| Task.(ReadClipboard({ callback: callback }))
-
-	## Copy a UTF-8 range out of a blob without exposing the host resource to the
-	## callback bridge.
-	read_blob_slice : File.Blob, U64, U64, (Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg) -> Task(msg)
-	read_blob_slice = |blob, offset, count, callback| Task.(ReadBlobSlice({ blob, offset, count, callback }))
 
 	## The flat record a `Task` becomes on the way out to the host.
 	##
@@ -217,14 +215,6 @@ Program := [].{
 
 		path : Str,
 		millis : U64,
-
-		## `ReadBlobSlice` only, and empty for every other kind. Holds the blob
-		## itself so the bytes remain alive until the host reads the slice.
-		##
-		## The list is empty for other task kinds, which have no blob value.
-		blob : List(File.Blob),
-		offset : U64,
-		count : U64,
 		deliver : Box(CompletionFromHost -> Box(msg)),
 	}
 
@@ -233,14 +223,15 @@ Program := [].{
 	## Platform-internal transport, not supported application API. The host owns
 	## its ticket and pairs this raw result with the continuation it retained.
 	##
-	## A successful `ReadFile` places one blob handle in `blob` without copying
-	## the payload. The list is empty for other kinds and failed reads.
+	## A successful `ReadFile` places its one owning seamless `List(U8)` view in
+	## `bytes` without copying the payload. The list is empty for other kinds and
+	## failed reads.
 	CompletionFromHost : {
 		kind : U8,
 		ticket : U64,
 		err : U8,
 		contents : Str,
-		blob : List(File.Blob),
+		bytes : List(U8),
 	}
 
 	## A host-retained continuation returned to Roc with its terminal result.
@@ -276,14 +267,14 @@ Program := [].{
 				},
 		)
 
-	deliver_file : (Try(File.Blob, FileReadError) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_file : (Try(List(U8), FileReadError) -> msg) -> Box(CompletionFromHost -> Box(msg))
 	deliver_file = |callback|
 		Box.box(
 			|raw|
 				if raw.kind != completion_file_read {
 					crash "roc-ray: file callback received the wrong completion kind"
 				} else {
-					Box.box(callback(if raw.err == 0 blob_from_host(raw.blob) else Err(read_error(raw.err))))
+					Box.box(callback(if raw.err == 0 Ok(raw.bytes) else Err(read_error(raw.err))))
 				},
 		)
 
@@ -320,17 +311,6 @@ Program := [].{
 				},
 		)
 
-	deliver_blob_slice : (Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg) -> Box(CompletionFromHost -> Box(msg))
-	deliver_blob_slice = |callback|
-		Box.box(
-			|raw|
-				if raw.kind != completion_blob_slice_read {
-					crash "roc-ray: blob-slice callback received the wrong completion kind"
-				} else {
-					Box.box(callback(if raw.err == 0 Ok(raw.contents) else Err(blob_error(raw.err))))
-				},
-		)
-
 	## The flat record a cycle's recording state arrives in.
 	##
 	## `bytes` is the size of a finished file and is zero while a recording is
@@ -348,18 +328,14 @@ Program := [].{
 	## a private monotonic ticket while accepting it.
 	## Platform-internal, unsupported application API.
 	##
-	## In particular, `ReadBlobSlice` moves its `File.Blob` to the transport
-	## record; its callback closure captures only the app callback, never the
-	## request blob or model.
 	normalize : Task(msg) -> TaskToHost(msg)
 	normalize = |Task.(task)|
 		match task {
-			ReadSmallFile(request) => { kind: task_read_small_file, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_small_file(request.callback) }
-			ReadFile(request) => { kind: task_read_file, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_file(request.callback) }
-			Delay(request) => { kind: task_delay, path: "", millis: request.millis, blob: [], offset: 0, count: 0, deliver: deliver_delay(request.callback) }
-			Screenshot(request) => { kind: task_screenshot, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_screenshot(request.callback) }
-			ReadClipboard(request) => { kind: task_read_clipboard, path: "", millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_clipboard(request.callback) }
-			ReadBlobSlice(request) => { kind: task_read_blob_slice, path: "", millis: 0, blob: [request.blob], offset: request.offset, count: request.count, deliver: deliver_blob_slice(request.callback) }
+			ReadSmallFile(request) => { kind: task_read_small_file, path: request.path, millis: 0, deliver: deliver_small_file(request.callback) }
+			ReadFile(request) => { kind: task_read_file, path: request.path, millis: 0, deliver: deliver_file(request.callback) }
+			Delay(request) => { kind: task_delay, path: "", millis: request.millis, deliver: deliver_delay(request.callback) }
+			Screenshot(request) => { kind: task_screenshot, path: request.path, millis: 0, deliver: deliver_screenshot(request.callback) }
+			ReadClipboard(request) => { kind: task_read_clipboard, path: "", millis: 0, deliver: deliver_clipboard(request.callback) }
 		}
 
 	## Invoke the continuation returned by the host with its terminal result.
@@ -447,19 +423,6 @@ add_upload = |charged, pixels, budget| {
 	if total > budget Err(UploadBudgetExceeded) else Ok(total)
 }
 
-## Take the handle a finished `ReadFile` installed.
-##
-## This transfers the refcounted handle without copying its payload. A
-## successful read with no handle indicates an internal ABI mismatch.
-blob_from_host : List(File.Blob) -> Try(File.Blob, Program.FileReadError)
-blob_from_host = |delivered|
-	match List.first(delivered) {
-		Ok(blob) => Ok(blob)
-		Err(_) => {
-			crash "roc-ray: host reported a finished file read with no blob"
-		}
-	}
-
 ## `kind` code for a finished small-file read. Mirrored in `src/host_native.zig`.
 completion_small_file_read : U8
 completion_small_file_read = 0
@@ -476,7 +439,7 @@ completion_screenshot_finished = 2
 completion_clipboard_read : U8
 completion_clipboard_read = 3
 
-## `kind` code for a read delivered as a host-owned blob. Mirrored in
+## `kind` code for an ordinary byte-list read. Mirrored in
 ## `src/host_native.zig`.
 completion_file_read : U8
 completion_file_read = 4
@@ -497,34 +460,9 @@ task_screenshot = 2
 task_read_clipboard : U8
 task_read_clipboard = 3
 
-## `kind` code for a blob-delivered read task. Mirrored in `src/host_native.zig`.
+## `kind` code for an ordinary byte-list read task. Mirrored in `src/host_native.zig`.
 task_read_file : U8
 task_read_file = 4
-
-## `kind` code for a blob-slice task. Mirrored in `src/host_native.zig`.
-task_read_blob_slice : U8
-task_read_blob_slice = 5
-
-## `kind` code for a finished blob slice. Mirrored in `src/host_native.zig`.
-completion_blob_slice_read : U8
-completion_blob_slice_read = 5
-
-## Decode the host's blob-error code. Mirrored in `src/host_native.zig`.
-##
-## There is no code for a released blob, because there is no way to release
-## one: the task holds a reference to the blob it is slicing, so the bytes
-## cannot be gone while the host is reading them.
-blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Busy]
-blob_error = |code|
-	if code == 2 {
-		OutOfBounds
-	} else if code == 4 {
-		TooLarge
-	} else if code == 5 {
-		Busy
-	} else {
-		NotUtf8
-	}
 
 ## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
 ##
@@ -568,7 +506,7 @@ read_err_busy = 3
 read_err_not_utf8 : U8
 read_err_not_utf8 = 6
 
-## Decode the host's read-error code for a blob-delivered read. Mirrored in
+## Decode the host's read-error code for a byte-list read. Mirrored in
 ## `src/host_native.zig`.
 read_error : U8 -> Program.FileReadError
 read_error = |code|
@@ -635,22 +573,15 @@ capture_failure = |code|
 		_ => Unknown
 	}
 
-## Host-free blob fixture with a sixteen-mebibyte reported length.
-sample_blob : File.Blob
-sample_blob = File.Blob.from_host(FileHost.Blob.from_resource(Box.box({ handle: 0x0001_0002_0003, byte_len: 16 * 1024 * 1024 })))
-
-## A flattened task with its blob list reduced to a count. Equality cannot walk
-## a boxed host resource in the interpreter, so tests compare the scalar shape.
-task_shape : Program.Task(msg) -> { kind : U8, path : Str, millis : U64, offset : U64, count : U64, blobs : U64 }
+## A flattened task shape used by constructor tests. The host-only callback is
+## deliberately left out because equality cannot inspect an erased callable.
+task_shape : Program.Task(msg) -> { kind : U8, path : Str, millis : U64 }
 task_shape = |task| {
 	raw = Program.normalize(task)
 	{
 		kind: raw.kind,
 		path: raw.path,
 		millis: raw.millis,
-		offset: raw.offset,
-		count: raw.count,
-		blobs: List.len(raw.blob),
 	}
 }
 
@@ -697,15 +628,11 @@ expect Program.check_uploads([Program.exit(0), tiny_texture.update(sixteen_pixel
 ## Task constructors expose no IDs or completion unions. `normalize` moves each
 ## request and its erased callback envelope into the flat ABI record; the host
 ## gives the envelope its private ticket when it takes ownership.
-expect task_shape(Program.read_small_file("data.txt", string_result_message)) == { kind: 0, path: "data.txt", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Program.read_file("data.bin", |_| "file")) == { kind: 4, path: "data.bin", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0, offset: 0, count: 0, blobs: 0 }
-
-## Only the slice request carries a blob reference. The normalized pending
-## callback does not, so the request's native read is its sole extra owner.
-expect task_shape(Program.read_blob_slice(sample_blob, 4, 8, |_| "slice")) == { kind: 5, path: "", millis: 0, offset: 4, count: 8, blobs: 1 }
+expect task_shape(Program.read_small_file("data.txt", string_result_message)) == { kind: 0, path: "data.txt", millis: 0 }
+expect task_shape(Program.read_file("data.bin", |_| "file")) == { kind: 4, path: "data.bin", millis: 0 }
+expect task_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250 }
+expect task_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0 }
+expect task_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0 }
 
 small_task = Program.normalize(Program.read_small_file("data.txt", string_result_message))
 
@@ -720,11 +647,11 @@ clipboard_task = Program.normalize(
 	),
 )
 
-expect Program.complete({ raw: { kind: 0, ticket: 20, err: 0, contents: "hi", blob: [] }, deliver: small_task.deliver }) == "hi"
-expect Program.complete({ raw: { kind: 0, ticket: 20, err: 1, contents: "", blob: [] }, deliver: small_task.deliver }) == "failed"
-expect Program.complete({ raw: { kind: 1, ticket: 21, err: 0, contents: "", blob: [] }, deliver: delay_task.deliver }) == "elapsed"
-expect Program.complete({ raw: { kind: 1, ticket: 21, err: 1, contents: "", blob: [] }, deliver: delay_task.deliver }) == "busy"
-expect Program.complete({ raw: { kind: 3, ticket: 22, err: 0, contents: "pasted", blob: [] }, deliver: clipboard_task.deliver }) == "pasted"
+expect Program.complete({ raw: { kind: 0, ticket: 20, err: 0, contents: "hi", bytes: [] }, deliver: small_task.deliver }) == "hi"
+expect Program.complete({ raw: { kind: 0, ticket: 20, err: 1, contents: "", bytes: [] }, deliver: small_task.deliver }) == "failed"
+expect Program.complete({ raw: { kind: 1, ticket: 21, err: 0, contents: "", bytes: [] }, deliver: delay_task.deliver }) == "elapsed"
+expect Program.complete({ raw: { kind: 1, ticket: 21, err: 1, contents: "", bytes: [] }, deliver: delay_task.deliver }) == "busy"
+expect Program.complete({ raw: { kind: 3, ticket: 22, err: 0, contents: "pasted", bytes: [] }, deliver: clipboard_task.deliver }) == "pasted"
 
 ## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
 ## with a string can report this, which is why the two reads no longer share one
@@ -748,15 +675,13 @@ expect clipboard_error(4) == Unavailable
 expect clipboard_error(read_err_too_large) == TooLarge
 
 ## Saturation is its own answer everywhere it can happen. A clipboard the host
-## would not read yet is not an `Unavailable` one, a slice it would not start
-## yet is not one that ran off the end, and a screenshot it would not start is
-## not one this app already had outstanding. Each of those would send an app
-## looking for a fault that is not there, instead of asking again next cycle.
+## would not read yet is not an `Unavailable` one, and a screenshot it would
+## not start is not one this app already had outstanding. Each of those would
+## send an app looking for a fault that is not there, instead of asking again
+## next cycle.
 expect clipboard_error(read_err_busy) == Busy
 expect small_file_error(read_err_busy) == Busy
 expect read_error(read_err_busy) == Busy
-expect blob_error(5) == Busy
-expect blob_error(2) == OutOfBounds
 expect screenshot_error(10) == Busy
 
 ## A screenshot the worker had no room for is refused rather than encoded on

@@ -2,7 +2,7 @@
 //!
 //! Each live slot starts with Roc's one-word box refcount followed immediately
 //! by its typed payload. That payload includes an opaque lifecycle token and may
-//! also carry immutable metadata such as texture dimensions or blob length.
+//! also carry immutable metadata such as texture dimensions or file-byte length.
 //! When the final reference is released, `roc_dealloc` receives the slot base
 //! and routes it back here so the native value can be destroyed and the slot
 //! reused.

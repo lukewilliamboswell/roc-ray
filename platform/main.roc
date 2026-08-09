@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, File, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
+	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.0/CwDEAmyUMCsqW6dh4pxYnp7suUZAj5b5gpZuh7udtyE7.tar.zst",
@@ -54,7 +54,6 @@ platform ""
 		"roc_audio_music_length_raw": AudioHost.music_length!,
 		"roc_audio_music_time_played_raw": AudioHost.music_time_played!,
 		"roc_audio_set_master_volume_raw": AudioHost.set_master_volume!,
-		"roc_file_blob_byte": FileHost.blob_byte!,
 		"roc_draw_begin_scissor_raw": DrawHost.begin_scissor!,
 		"roc_draw_circle_gradient": DrawHost.circle_gradient!,
 		"roc_draw_circle_lines_raw": DrawHost.circle_lines!,
@@ -145,8 +144,6 @@ import Capture
 import CaptureHost
 import Assets
 import AssetsHost
-import File
-import FileHost
 import Math
 import Camera
 import Sprite

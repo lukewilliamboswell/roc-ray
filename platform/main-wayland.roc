@@ -1,11 +1,11 @@
 platform ""
 	requires {
-		[Model : model] for program : {
+		[Model : model, Msg : msg] for program : {
 			init! : {
 				config : App.Config,
 				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			update : model, Program.Step -> Try(Program.Next(model), [Exit(I64), ..]),
+			update : model, Program.Step(msg) -> Try(Program.Next(model, msg), [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
@@ -184,14 +184,14 @@ InputFromHost : {
 ## cross the boundary unchanged rather than being mirrored by a second copy that
 ## could drift. Only `input` needs reshaping, and only to rename one field.
 ##
-## Unions do not cross this boundary, so completions and the recording state
-## arrive as flat records that `Program` decodes. The completion list is empty
-## on an ordinary frame.
-StepFromHost : {
+## Unions do not cross this boundary, so task results and recording state arrive
+## as flat records. The host owns each pending callback envelope and returns it
+## with its raw terminal result; Roc invokes it before rebuilding `Program.Step`.
+StepFromHost(msg) : {
 	input : InputFromHost,
 	window : Window.Snapshot,
 	time : Time.Frame,
-	completed : List(Program.CompletionFromHost),
+	completed : List(Program.CompletionEnvelope(msg)),
 	capture : Program.CaptureFromHost,
 }
 
@@ -215,14 +215,14 @@ input_from_raw = |raw| {
 	mouse: raw.mouse,
 }
 
-## Rebuild a `Program.Step` from the host's flat cycle record.
-step_from_raw : StepFromHost -> Program.Step
-step_from_raw = |raw| {
-	input: input_from_raw(raw.input),
-	window: raw.window,
-	time: raw.time,
-	completed: List.map(raw.completed, Program.completion_from_host),
-	capture: Program.capture_from_host(raw.capture),
+## Rebuild a public `Program.Step` after resolving private host completions.
+step_from_raw : InputFromHost, Window.Snapshot, Time.Frame, Program.CaptureFromHost, List(msg) -> Program.Step(msg)
+step_from_raw = |input, window, time, capture, messages| {
+	input: input_from_raw(input),
+	window,
+	time,
+	messages,
+	capture: Program.capture_from_host(capture),
 }
 
 ## Run the app's startup callback with the platform's startup authority.
@@ -231,7 +231,7 @@ step_from_raw = |raw| {
 init_for_host! : () => Try(Box(Model), I64)
 init_for_host! = ||
 	match (program.init!.run!)(App.Startup.from_host(HostHost.Startup.for_host)) {
-		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
@@ -239,10 +239,14 @@ init_for_host! = ||
 ## Advance the model by one cycle and hand the host back any work it wants done.
 ##
 ## Called once per rendered frame. Applies actions before rendering and returns
-## flattened tasks for asynchronous host execution.
-update_for_host! : Box(Model), StepFromHost => Try({ model : Box(Model), tasks : List(Program.TaskToHost) }, I64)
-update_for_host! = |boxed_model, raw|
-	match (program.update)(Box.unbox(boxed_model), step_from_raw(raw)) {
+## flattened requests for asynchronous host execution. The host assigns private
+## tickets while it takes each returned callback envelope into its pending set.
+update_for_host! : Box(Model), StepFromHost(Msg) => Try({ model : Box(Model), tasks : List(Program.TaskToHost(Msg)) }, I64)
+update_for_host! = |boxed_model, { input, window, time, completed, capture }| {
+	messages = resolve_completions(completed)
+	step = step_from_raw(input, window, time, capture, messages)
+	model = Box.unbox(boxed_model)
+	match (program.update)(model, step) {
 		Ok(next) => {
 			# Uploads are the only actions that can be refused, and everything
 			# they can be refused for is knowable before any of them run. Check
@@ -250,7 +254,12 @@ update_for_host! = |boxed_model, raw|
 			# uploads have already changed their textures.
 			refuse_unfittable_uploads(next.actions)
 			match run_actions!(next.actions, 0) {
-				Ok({}) => Ok({ model: Box.box(next.model), tasks: next.tasks.to_host_list() })
+				Ok({}) => {
+					Ok({
+						model: Box.box(next.model),
+						tasks: submit_tasks(next.tasks),
+					})
+				}
 				Err(Exit(code)) => Err(code)
 				Err(_) => Err(-1)
 			}
@@ -259,6 +268,33 @@ update_for_host! = |boxed_model, raw|
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
+}
+
+## Invoke every returned completion envelope in the host's observed order.
+##
+## The host removes an accepted envelope before returning it, so its own ticket
+## table detects unknown or duplicate completions. This list is pre-sized and
+## preserves that delivery order without intermediate result lists.
+resolve_completions : List(Program.CompletionEnvelope(msg)) -> List(msg)
+resolve_completions = |completed| {
+	var $messages = List.with_capacity(List.len(completed))
+	for completion in completed {
+		$messages = List.append($messages, Program.complete(completion))
+	}
+	$messages
+}
+
+## Flatten outgoing tasks in one pass. `with_capacity` avoids reallocations;
+## each normalized request moves its callback envelope and request-only data to
+## the host without retaining the application model in Roc.
+submit_tasks : List(Program.Task(msg)) -> List(Program.TaskToHost(msg))
+submit_tasks = |requested| {
+	var $tasks = List.with_capacity(List.len(requested))
+	for task in requested {
+		$tasks = List.append($tasks, Program.normalize(task))
+	}
+	$tasks
+}
 
 ## Stop the cycle before any of its uploads are applied, if one of them cannot
 ## be.
@@ -331,8 +367,6 @@ run_action! = |action|
 		SetVirtualMouse(pointer) => Ok(Capture.apply_virtual_mouse!(pointer))
 		StartRecording(recording) => Ok(Capture.apply_start!(recording))
 		StopRecording => Ok(Capture.apply_stop!())
-		# Frees host memory in this cycle rather than reporting back later, which
-		# is exactly what an action is for.
 	}
 
 ## Draw the current model, then hand the same box back.
@@ -342,7 +376,8 @@ run_action! = |action|
 render_for_host! : Box(Model) => Try(Box(Model), I64)
 render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
-	match (program.render!)(Box.unbox(boxed_model), frame) {
+	model = Box.unbox(boxed_model)
+	match (program.render!)(model, frame) {
 		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
@@ -352,9 +387,8 @@ render_for_host! = |boxed_model| {
 ## Drop the final boxed model at host shutdown.
 ##
 ## The host owns the model box returned by init!/render! and must release it.
-## Box refcounting depends on the Model layout (a box whose payload contains
-## refcounted fields uses a wider allocation header), which only the compiler
-## knows. Roc therefore owns the unused argument and decrefs it at scope end.
+## Box refcounting depends on the Model layout, which only the compiler knows.
+## Roc therefore owns the unused argument and decrefs it at scope end.
 ## TODO: remove once roc glue emits box refcount helpers (roc#9536).
 drop_model_for_host! : Box(Model) => {}
 drop_model_for_host! = |_boxed_model| {}

@@ -2,8 +2,8 @@
 ##
 ## The host calls pure `update` once per cycle with a `Step`. The result contains
 ## the next model, immediate `Action` values, and asynchronous `Task` values.
-## Actions run in order before rendering and produce no completion. Each accepted
-## task produces exactly one `Completion` on a later step.
+## Actions run in order before rendering. Each accepted task invokes its typed
+## callback exactly once on a later step, contributing one application message.
 ##
 ## `Delay` uses wall time. Animation and physics should use `step.time`.
 import Input
@@ -24,13 +24,14 @@ Program := [].{
 
 	## Everything the host observed since the previous cycle.
 	##
-	## `completed` contains all task completions available for this cycle.
+	## `messages` contains all task callbacks completed for this cycle, in the
+	## order the host observed their completions.
 	## `capture` contains the recording status sampled for this cycle.
-	Step : {
+	Step(msg) : {
 		input : Input.Snapshot,
 		window : Window.Snapshot,
 		time : Time.Frame,
-		completed : List(Completion),
+		messages : List(msg),
 		capture : Capture.Status,
 	}
 
@@ -38,63 +39,10 @@ Program := [].{
 	##
 	## `actions` run this cycle, in order, before `render!`. `tasks` go to the
 	## host and answer on a later `Step`.
-	Next(model) : {
+	Next(model, msg) : {
 		model : model,
 		actions : List(Action),
-		tasks : TaskBatch,
-	}
-
-	## The most tasks the host will take from one cycle.
-	## Use `fill` to spread larger queues across cycles.
-	max_tasks_per_step : U64
-	max_tasks_per_step = 8
-
-	## The tasks one cycle is handing over: at most `max_tasks_per_step` of them.
-	## The opaque representation preserves the limit during construction.
-	TaskBatch :: List(Task).{
-
-		## Add one task, or refuse because this cycle is full.
-		##
-		## `Busy` means the batch is full; no work has been submitted. The task
-		## can be retried in the next cycle. Receiver form: `batch.add(task)`.
-		add : TaskBatch, Task -> Try(TaskBatch, [Busy])
-		add = |TaskBatch.(tasks), task|
-			if List.len(tasks) >= max_tasks_per_step {
-				Err(Busy)
-			} else {
-				Ok(TaskBatch.(List.append(tasks, task)))
-			}
-
-		## How many tasks this cycle is handing over.
-		len : TaskBatch -> U64
-		len = |TaskBatch.(tasks)| List.len(tasks)
-
-		## Whether this cycle is handing over no work.
-		is_empty : TaskBatch -> Bool
-		is_empty = |batch| batch.len() == 0
-
-		## Flatten for the host. Platform-internal: `TaskToHost` is transport.
-		to_host_list : TaskBatch -> List(TaskToHost)
-		to_host_list = |TaskBatch.(tasks)| List.map(tasks, to_host)
-	}
-
-	## An empty task batch.
-	no_tasks : TaskBatch
-	no_tasks = TaskBatch.([])
-
-	## A cycle that wants exactly one thing done.
-	## One task always fits, so this cannot fail.
-	task : Task -> TaskBatch
-	task = |one| TaskBatch.([one])
-
-	## Take as much of a work list as this cycle will carry, and hand back the
-	## rest.
-	##
-	## Store `deferred` in the model and pass it to `fill` on the next cycle.
-	fill : List(Task) -> { batch : TaskBatch, deferred : List(Task) }
-	fill = |requested| {
-		batch: TaskBatch.(List.take_first(requested, max_tasks_per_step)),
-		deferred: List.drop_first(requested, max_tasks_per_step),
+		tasks : List(Task(msg)),
 	}
 
 	## Something the platform does on the app's behalf during this cycle.
@@ -142,30 +90,22 @@ Program := [].{
 
 	## Work for the host to do, answered later. Returning one never blocks.
 	##
-	## Every task carries an `id` the app chooses and the host echoes back, so a
-	## completion can be matched to the request that caused it.
+	## A task owns the typed function that turns its one terminal result into the
+	## application's message. The platform retains that function privately until
+	## the matching host completion arrives; task tickets are transport-only and
+	## are never visible to app code.
 	##
 	## `ReadSmallFile` returns a UTF-8 `Str` and rejects files above its inline
 	## copy limit. `ReadFile` returns a refcounted `File.Blob` for files up to the
 	## host's 16 MiB per-file limit. Use `ReadBlobSlice` to copy a UTF-8 range from
 	## a blob. `Screenshot` captures the end of the frame that submitted it.
-	Task : [
-		ReadSmallFile({ id : U64, path : Str }),
-		ReadFile({ id : U64, path : Str }),
-		Delay({ id : U64, millis : U64 }),
-		Screenshot({ id : U64, path : Str }),
-		ReadClipboard({ id : U64 }),
-		ReadBlobSlice({ id : U64, blob : File.Blob, offset : U64, count : U64 }),
-	]
-
-	## A completed task and its operation-specific result.
-	Completion : [
-		SmallFileRead({ id : U64, result : Try(Str, SmallFileError) }),
-		FileRead({ id : U64, result : Try(File.Blob, FileReadError) }),
-		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
-		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
-		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge, Busy]) }),
-		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) }),
+	Task(msg) :: [
+		ReadSmallFile({ path : Str, callback : Try(Str, SmallFileError) -> msg }),
+		ReadFile({ path : Str, callback : Try(File.Blob, FileReadError) -> msg }),
+		Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }),
+		Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }),
+		ReadClipboard({ callback : Try(Str, [Unavailable, TooLarge, Busy]) -> msg }),
+		ReadBlobSlice({ blob : File.Blob, offset : U64, count : U64, callback : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg }),
 	]
 
 	## Why a `ReadFile` produced no blob.
@@ -210,14 +150,42 @@ Program := [].{
 		Unavailable,
 	]
 
+	## Read a UTF-8 file into a `Str` and turn its terminal result into `msg`.
+	read_small_file : Str, (Try(Str, SmallFileError) -> msg) -> Task(msg)
+	read_small_file = |path, callback| Task.(ReadSmallFile({ path, callback }))
+
+	## Read a file into a refcounted `File.Blob` and turn its terminal result
+	## into `msg`.
+	read_file : Str, (Try(File.Blob, FileReadError) -> msg) -> Task(msg)
+	read_file = |path, callback| Task.(ReadFile({ path, callback }))
+
+	## Ask for one message after at least `millis` milliseconds have elapsed.
+	delay : U64, (Try({}, [Busy]) -> msg) -> Task(msg)
+	delay = |millis, callback| Task.(Delay({ millis, callback }))
+
+	## Capture the end of this frame and write it to `path`.
+	screenshot : Str, (Try({}, ScreenshotError) -> msg) -> Task(msg)
+	screenshot = |path, callback| Task.(Screenshot({ path, callback }))
+
+	## Read clipboard text on the frame thread and turn the result into `msg`.
+	read_clipboard : (Try(Str, [Unavailable, TooLarge, Busy]) -> msg) -> Task(msg)
+	read_clipboard = |callback| Task.(ReadClipboard({ callback: callback }))
+
+	## Copy a UTF-8 range out of a blob without exposing the host resource to the
+	## callback bridge.
+	read_blob_slice : File.Blob, U64, U64, (Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg) -> Task(msg)
+	read_blob_slice = |blob, offset, count, callback| Task.(ReadBlobSlice({ blob, offset, count, callback }))
+
 	## The flat record a `Task` becomes on the way out to the host.
 	##
 	## Unions do not cross the host boundary in this platform; every effect
 	## flattens to scalars behind a `U8` tag first. Actions never come here at
-	## all -- they are applied in Roc, by the platform's own adapter.
-	TaskToHost : {
+	## all -- they are applied in Roc, by the platform's own adapter. `deliver`
+	## is an opaque Roc callable to the host: it moves with this request and is
+	## invoked only when Roc receives the matching completion envelope.
+	TaskToHost(msg) : {
 		kind : U8,
-		id : U64,
+
 		path : Str,
 		millis : U64,
 
@@ -228,6 +196,7 @@ Program := [].{
 		blob : List(File.Blob),
 		offset : U64,
 		count : U64,
+		deliver : Box(CompletionFromHost -> Box(msg)),
 	}
 
 	## The flat record one completion arrives in.
@@ -236,11 +205,96 @@ Program := [].{
 	## the payload. The list is empty for other kinds and failed reads.
 	CompletionFromHost : {
 		kind : U8,
-		id : U64,
+		ticket : U64,
 		err : U8,
 		contents : Str,
 		blob : List(File.Blob),
 	}
+
+	## A host-retained continuation returned to Roc with its terminal result.
+	## The host treats `deliver` as an owned, opaque erased callable: it moves
+	## and drops it, but never invokes it. This record is therefore the one
+	## place a generic application message value crosses the ABI.
+	##
+	## The boxed function is necessary rather than an ordinary retained Roc
+	## closure: the generated ABI gives `Box(function)` one fixed erased-callable
+	## layout. Its body validates the expected kind, decodes the raw result, and
+	## boxes the resulting application message for the ABI round trip.
+	##
+	## TODO(roc): `roc glue` currently rejects `Box(Runtime(Model, Msg))` when
+	## its nested pending continuation layout is generic. Once glue can erase
+	## that opaque runtime, retain ordinary continuations there instead: remove
+	## this per-submission erased-callable box and the per-completion `Box(msg)`.
+	CompletionEnvelope(msg) : {
+		raw : CompletionFromHost,
+		deliver : Box(CompletionFromHost -> Box(msg)),
+	}
+
+	deliver_small_file : (Try(Str, SmallFileError) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_small_file = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_small_file_read {
+					crash "roc-ray: small-file callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok(raw.contents) else Err(small_file_error(raw.err))))
+				},
+		)
+
+	deliver_file : (Try(File.Blob, FileReadError) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_file = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_file_read {
+					crash "roc-ray: file callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 blob_from_host(raw.blob) else Err(read_error(raw.err))))
+				},
+		)
+
+	deliver_delay : (Try({}, [Busy]) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_delay = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_delay {
+					crash "roc-ray: delay callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok({}) else Err(Busy)))
+				},
+		)
+
+	deliver_screenshot : (Try({}, ScreenshotError) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_screenshot = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_screenshot_finished {
+					crash "roc-ray: screenshot callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok({}) else Err(screenshot_error(raw.err))))
+				},
+		)
+
+	deliver_clipboard : (Try(Str, [Unavailable, TooLarge, Busy]) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_clipboard = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_clipboard_read {
+					crash "roc-ray: clipboard callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok(raw.contents) else Err(clipboard_error(raw.err))))
+				},
+		)
+
+	deliver_blob_slice : (Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_blob_slice = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_blob_slice_read {
+					crash "roc-ray: blob-slice callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok(raw.contents) else Err(blob_error(raw.err))))
+				},
+		)
 
 	## The flat record a cycle's recording state arrives in.
 	##
@@ -254,65 +308,34 @@ Program := [].{
 		bytes : U64,
 	}
 
-	## Flatten a `Task` for the host.
-	to_host : Task -> TaskToHost
-	to_host = |pending|
-		match pending {
-			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
-			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
-			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis, blob: [], offset: 0, count: 0 }
-			Screenshot(request) => { kind: task_screenshot, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
-			ReadClipboard(request) => { kind: task_read_clipboard, id: request.id, path: "", millis: 0, blob: [], offset: 0, count: 0 }
-			ReadBlobSlice(request) => {
-				kind: task_read_blob_slice,
-				id: request.id,
-				path: "",
-				millis: 0,
-				blob: [request.blob],
-				offset: request.offset,
-				count: request.count,
-			}
+	## Move a task's operation data and its one erased continuation into the
+	## flat host request. The host takes ownership of the continuation and assigns
+	## a private monotonic ticket while accepting it.
+	##
+	## In particular, `ReadBlobSlice` moves its `File.Blob` to the transport
+	## record; its callback closure captures only the app callback, never the
+	## request blob or model.
+	normalize : Task(msg) -> TaskToHost(msg)
+	normalize = |Task.(task)|
+		match task {
+			ReadSmallFile(request) => { kind: task_read_small_file, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_small_file(request.callback) }
+			ReadFile(request) => { kind: task_read_file, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_file(request.callback) }
+			Delay(request) => { kind: task_delay, path: "", millis: request.millis, blob: [], offset: 0, count: 0, deliver: deliver_delay(request.callback) }
+			Screenshot(request) => { kind: task_screenshot, path: request.path, millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_screenshot(request.callback) }
+			ReadClipboard(request) => { kind: task_read_clipboard, path: "", millis: 0, blob: [], offset: 0, count: 0, deliver: deliver_clipboard(request.callback) }
+			ReadBlobSlice(request) => { kind: task_read_blob_slice, path: "", millis: 0, blob: [request.blob], offset: request.offset, count: request.count, deliver: deliver_blob_slice(request.callback) }
 		}
 
-	## Rebuild a `Completion` from the host's flat record.
+	## Invoke the continuation returned by the host with its terminal result.
 	##
-	## An unrecognized kind indicates an internal ABI mismatch and causes a
-	## transport failure.
-	completion_from_host : CompletionFromHost -> Completion
-	completion_from_host = |raw|
-		if raw.kind == completion_small_file_read {
-			SmallFileRead({
-				id: raw.id,
-				result: if raw.err == 0 Ok(raw.contents) else Err(small_file_error(raw.err)),
-			})
-		} else if raw.kind == completion_file_read {
-			FileRead({
-				id: raw.id,
-				result: if raw.err == 0 blob_from_host(raw.blob) else Err(read_error(raw.err)),
-			})
-		} else if raw.kind == completion_delay {
-			DelayElapsed({
-				id: raw.id,
-				result: if raw.err == 0 Ok({}) else Err(Busy),
-			})
-		} else if raw.kind == completion_screenshot_finished {
-			ScreenshotFinished({
-				id: raw.id,
-				result: if raw.err == 0 Ok({}) else Err(screenshot_error(raw.err)),
-			})
-		} else if raw.kind == completion_blob_slice_read {
-			BlobSliceRead({
-				id: raw.id,
-				result: if raw.err == 0 Ok(raw.contents) else Err(blob_error(raw.err)),
-			})
-		} else if raw.kind == completion_clipboard_read {
-			ClipboardRead({
-				id: raw.id,
-				result: if raw.err == 0 Ok(raw.contents) else Err(clipboard_error(raw.err)),
-			})
-		} else {
-			crash "roc-ray: host sent an unknown completion kind"
-		}
+	## Every typed closure validates `raw.kind` before decoding it. The box around
+	## the produced message is solely the generic ABI return envelope and is
+	## immediately unboxed in Roc.
+	complete : CompletionEnvelope(msg) -> msg
+	complete = |completion| {
+		deliver = Box.unbox(completion.deliver)
+		Box.unbox(deliver(completion.raw))
+	}
 
 	## Rebuild the sampled recording state from the host's flat record.
 	capture_from_host : CaptureFromHost -> Capture.Status
@@ -575,19 +598,17 @@ capture_failure = |code|
 		_ => Unknown
 	}
 
-## A flattened task with its blob list reduced to a count.
-##
-## `Program.to_host(task) == { ... }` would say this directly, and cannot: the
-## transport record carries the handle list, a handle is a boxed host resource,
-## and comparing a `Box` crashes the interpreter that runs `expect`. Compiled
-## apps are unaffected. Everything the flattening actually decides is a scalar,
-## so nothing is lost by comparing the scalars.
-task_shape : Program.Task -> { kind : U8, id : U64, path : Str, millis : U64, offset : U64, count : U64, blobs : U64 }
-task_shape = |pending| {
-	raw = Program.to_host(pending)
+## Host-free blob fixture with a sixteen-mebibyte reported length.
+sample_blob : File.Blob
+sample_blob = File.Blob.from_host(FileHost.Blob.from_resource(Box.box({ handle: 0x0001_0002_0003, byte_len: 16 * 1024 * 1024 })))
+
+## A flattened task with its blob list reduced to a count. Equality cannot walk
+## a boxed host resource in the interpreter, so tests compare the scalar shape.
+task_shape : Program.Task(msg) -> { kind : U8, path : Str, millis : U64, offset : U64, count : U64, blobs : U64 }
+task_shape = |task| {
+	raw = Program.normalize(task)
 	{
 		kind: raw.kind,
-		id: raw.id,
 		path: raw.path,
 		millis: raw.millis,
 		offset: raw.offset,
@@ -596,80 +617,19 @@ task_shape = |pending| {
 	}
 }
 
-## What kind of completion a transport record decoded to.
-##
-## `Program.completion_from_host(raw) == SmallFileRead(...)` would say all of
-## this in one line, and cannot be used. A `Completion` may be a `FileRead`, a
-## `FileRead` carries a `File.Blob`, and a blob is a boxed host resource -- so
-## the union's equality has to walk a `Box`, which crashes the interpreter that
-## runs `expect`. Compiled apps are unaffected; the three helpers below check
-## the same decode by naming what came out of it.
-decoded_kind : Program.CompletionFromHost -> Str
-decoded_kind = |raw|
-	match Program.completion_from_host(raw) {
-		SmallFileRead(_) => "small_file_read"
-		FileRead(_) => "file_read"
-		DelayElapsed(_) => "delay"
-		ScreenshotFinished(_) => "screenshot"
-		ClipboardRead(_) => "clipboard"
-		BlobSliceRead(_) => "blob_slice"
+string_result_message : Try(Str, Program.SmallFileError) -> Str
+string_result_message = |result|
+	match result {
+		Ok(contents) => contents
+		Err(_) => "failed"
 	}
 
-## The id a decoded completion carries, whichever kind it turned out to be.
-##
-## The property that matters is that it is the app's own id and not the host's
-## idea of one: an app correlates its outstanding work by this and nothing else.
-decoded_id : Program.CompletionFromHost -> U64
-decoded_id = |raw|
-	match Program.completion_from_host(raw) {
-		SmallFileRead(finished) => finished.id
-		FileRead(finished) => finished.id
-		DelayElapsed(finished) => finished.id
-		ScreenshotFinished(finished) => finished.id
-		ClipboardRead(finished) => finished.id
-		BlobSliceRead(finished) => finished.id
+unit_result_message : Try({}, [Busy]) -> Str
+unit_result_message = |result|
+	match result {
+		Ok({}) => "elapsed"
+		Err(Busy) => "busy"
 	}
-
-## Whether a decoded completion reports a failure rather than an answer.
-decoded_failed : Program.CompletionFromHost -> Bool
-decoded_failed = |raw|
-	match Program.completion_from_host(raw) {
-		SmallFileRead(finished) => finished.result.is_err()
-		FileRead(finished) => finished.result.is_err()
-		DelayElapsed(finished) => finished.result.is_err()
-		ScreenshotFinished(finished) => finished.result.is_err()
-		ClipboardRead(finished) => finished.result.is_err()
-		BlobSliceRead(finished) => finished.result.is_err()
-	}
-
-## The string a decoded read or clipboard completion delivered.
-decoded_contents : Program.CompletionFromHost -> Str
-decoded_contents = |raw|
-	match Program.completion_from_host(raw) {
-		SmallFileRead(finished) => match finished.result {
-			Ok(contents) => contents
-			Err(_) => ""
-		}
-		ClipboardRead(finished) => match finished.result {
-			Ok(contents) => contents
-			Err(_) => ""
-		}
-		_ => ""
-	}
-
-## Host-free blob fixture with a sixteen-mebibyte reported length.
-sample_blob : File.Blob
-sample_blob = File.Blob.from_host(FileHost.Blob.from_resource(Box.box({ handle: 0x0001_0002_0003, byte_len: 16 * 1024 * 1024 })))
-
-## A finished blob read, as the host phrases it: one handle, no payload.
-sample_blob_read : {} -> Program.CompletionFromHost
-sample_blob_read = |{}| {
-	kind: 4,
-	id: 3,
-	err: 0,
-	contents: "",
-	blob: [sample_blob],
-}
 
 ## Host-free four-by-four texture fixture for upload validation.
 tiny_texture : Assets.Texture
@@ -697,78 +657,33 @@ expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.upd
 ## Non-upload actions do not affect the upload budget.
 expect Program.check_uploads([Program.exit(0), tiny_texture.update(sixteen_pixels)]) == Ok({})
 
-## A work list one longer than a cycle will carry, for the batch expects below.
-nine_delays : List(Program.Task)
-nine_delays = [
-	Delay({ id: 1, millis: 1 }),
-	Delay({ id: 2, millis: 1 }),
-	Delay({ id: 3, millis: 1 }),
-	Delay({ id: 4, millis: 1 }),
-	Delay({ id: 5, millis: 1 }),
-	Delay({ id: 6, millis: 1 }),
-	Delay({ id: 7, millis: 1 }),
-	Delay({ id: 8, millis: 1 }),
-	Delay({ id: 9, millis: 1 }),
-]
+## Task constructors expose no IDs or completion unions. `normalize` moves each
+## request and its erased callback envelope into the flat ABI record; the host
+## gives the envelope its private ticket when it takes ownership.
+expect task_shape(Program.read_small_file("data.txt", string_result_message)) == { kind: 0, path: "data.txt", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Program.read_file("data.bin", |_| "file")) == { kind: 4, path: "data.bin", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0, offset: 0, count: 0, blobs: 0 }
 
-expect Program.no_tasks.len() == 0
-expect Program.no_tasks.is_empty()
-expect Program.task(Delay({ id: 1, millis: 5 })).len() == 1
+## Only the slice request carries a blob reference. The normalized pending
+## callback does not, so the request's native read is its sole extra owner.
+expect task_shape(Program.read_blob_slice(sample_blob, 4, 8, |_| "slice")) == { kind: 5, path: "", millis: 0, offset: 4, count: 8, blobs: 1 }
 
-## What a cycle takes of a work list one longer than it will carry.
-filled_nine : { batch : Program.TaskBatch, deferred : List(Program.Task) }
-filled_nine = Program.fill(nine_delays)
+small_task = Program.normalize(Program.read_small_file("data.txt", string_result_message))
 
-expect filled_nine.batch.len() == Program.max_tasks_per_step
-expect List.len(filled_nine.deferred) == 1
+delay_task = Program.normalize(Program.delay(1, unit_result_message))
 
-## The ninth task is refused, and refused *purely*: nothing has been submitted,
-## so an app that gets this can hold the task and offer it again next cycle.
-expect filled_nine.batch.add(Delay({ id: 99, millis: 1 })).is_err()
-expect Program.no_tasks.add(Delay({ id: 99, millis: 1 })).is_ok()
-expect Program.task(Delay({ id: 9, millis: 250 })).to_host_list().len() == 1
-expect task_shape(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250, offset: 0, count: 0, blobs: 0 }
-expect task_shape(Screenshot({ id: 4, path: "scene.png" })) == { kind: 2, id: 4, path: "scene.png", millis: 0, offset: 0, count: 0, blobs: 0 }
-expect task_shape(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", millis: 0, offset: 0, count: 0, blobs: 0 }
+clipboard_task = Program.normalize(Program.read_clipboard(|result| match result {
+	Ok(text) => text
+	Err(_) => "clipboard failed"
+}))
 
-## Only the slice task carries a handle, and it carries exactly one -- which is
-## what keeps the bytes alive from the app naming the range to the host reading
-## it.
-expect task_shape(ReadBlobSlice({ id: 12, blob: sample_blob, offset: 4, count: 8 })) == { kind: 5, id: 12, path: "", millis: 0, offset: 4, count: 8, blobs: 1 }
-## Every kind routes to its own completion, and carries the app's own id
-## through. Answering the wrong kind would retire an id its owner is still
-## waiting on, so this is checked for all six rather than for the interesting
-## ones.
-expect decoded_kind({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == "small_file_read"
-expect decoded_kind({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == "delay"
-expect decoded_kind({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == "screenshot"
-expect decoded_kind({ kind: 3, id: 2, err: 0, contents: "", blob: [] }) == "clipboard"
-expect decoded_kind({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == "file_read"
-expect decoded_kind({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == "blob_slice"
-expect decoded_id({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == 3
-expect decoded_id({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == 5
-expect decoded_id({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == 8
-expect decoded_id({ kind: 3, id: 2, err: 0, contents: "", blob: [] }) == 2
-expect decoded_id({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == 3
-expect decoded_id({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == 2
-
-## `err == 0` is the only thing that makes an answer, and the payload rides
-## along with it.
-expect decoded_failed({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == Bool.False
-expect decoded_contents({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == "hi"
-expect decoded_failed({ kind: 0, id: 3, err: 1, contents: "", blob: [] }) == Bool.True
-expect decoded_failed({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == Bool.False
-expect decoded_failed({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == Bool.False
-expect decoded_failed({ kind: 3, id: 2, err: 0, contents: "pasted", blob: [] }) == Bool.False
-expect decoded_contents({ kind: 3, id: 2, err: 0, contents: "pasted", blob: [] }) == "pasted"
-expect decoded_failed({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == Bool.True
-expect decoded_failed({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == Bool.True
-
-## A delay the host would not start is reported as such rather than as one that
-## elapsed instantly -- the app asked to be told later, and never was.
-expect decoded_failed({ kind: 1, id: 5, err: 1, contents: "", blob: [] }) == Bool.True
+expect Program.complete({ raw: { kind: 0, ticket: 20, err: 0, contents: "hi", blob: [] }, deliver: small_task.deliver }) == "hi"
+expect Program.complete({ raw: { kind: 0, ticket: 20, err: 1, contents: "", blob: [] }, deliver: small_task.deliver }) == "failed"
+expect Program.complete({ raw: { kind: 1, ticket: 21, err: 0, contents: "", blob: [] }, deliver: delay_task.deliver }) == "elapsed"
+expect Program.complete({ raw: { kind: 1, ticket: 21, err: 1, contents: "", blob: [] }, deliver: delay_task.deliver }) == "busy"
+expect Program.complete({ raw: { kind: 3, ticket: 22, err: 0, contents: "pasted", blob: [] }, deliver: clipboard_task.deliver }) == "pasted"
 
 ## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
 ## with a string can report this, which is why the two reads no longer share one

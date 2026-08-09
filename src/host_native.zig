@@ -642,7 +642,10 @@ const PendingCallbacks = struct {
     fn issueTicket(self: *PendingCallbacks) u64 {
         const ticket = self.next_ticket;
         if (ticket == 0) @panic("roc-ray: exhausted private task tickets");
-        self.next_ticket += 1;
+        // Do not let the final valid ticket wrap the counter during the
+        // increment. The following request sees the invalid zero sentinel and
+        // terminates rather than reusing a ticket that could still be live.
+        self.next_ticket = if (ticket == std.math.maxInt(u64)) 0 else ticket + 1;
         return ticket;
     }
 
@@ -733,6 +736,17 @@ const CompletionStaging = struct {
     ) void {
         std.debug.assert(deliver != null);
         self.ensureOne(roc_host);
+        self.appendAssumeCapacity(.{ .raw = raw, .deliver = deliver });
+    }
+
+    /// As `completeDirect`, when the caller already reserved the staging slot
+    /// before constructing an owned Roc payload.
+    fn completeDirectAssumeCapacity(
+        self: *CompletionStaging,
+        raw: CompletionFromHost,
+        deliver: abi.RocErasedCallable,
+    ) void {
+        std.debug.assert(deliver != null);
         self.appendAssumeCapacity(.{ .raw = raw, .deliver = deliver });
     }
 
@@ -836,25 +850,37 @@ const CompletionStaging = struct {
         self.completeTicket(roc_host, plain(COMPLETION_SCREENSHOT_FINISHED, ticket, err));
     }
 
-    fn blobSliceRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, contents: []const u8) void {
+    fn blobSliceRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, contents: []const u8, deliver: ?abi.RocErasedCallable) void {
         self.ensureOne(roc_host);
         var item = plain(COMPLETION_BLOB_SLICE_READ, ticket, err);
         if (contents.len != 0) item.contents = abi.RocStr.fromSlice(contents, roc_host);
-        self.completeTicketAssumeCapacity(roc_host, item);
+        if (deliver) |owned| {
+            self.completeDirectAssumeCapacity(item, owned);
+        } else {
+            self.completeTicketAssumeCapacity(roc_host, item);
+        }
     }
 
     /// Stage a slice whose string has already been built, taking ownership.
-    fn blobSliceReadOwned(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, contents: abi.RocStr) void {
+    fn blobSliceReadOwned(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, contents: abi.RocStr, deliver: ?abi.RocErasedCallable) void {
         var item = plain(COMPLETION_BLOB_SLICE_READ, ticket, err);
         item.contents = contents;
-        self.completeTicketAssumeCapacity(roc_host, item);
+        if (deliver) |owned| {
+            self.completeDirectAssumeCapacity(item, owned);
+        } else {
+            self.completeTicketAssumeCapacity(roc_host, item);
+        }
     }
 
-    fn clipboardRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, text: []const u8) void {
+    fn clipboardRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, text: []const u8, deliver: ?abi.RocErasedCallable) void {
         self.ensureOne(roc_host);
         var item = plain(COMPLETION_CLIPBOARD_READ, ticket, err);
         if (text.len != 0) item.contents = abi.RocStr.fromSlice(text, roc_host);
-        self.completeTicketAssumeCapacity(roc_host, item);
+        if (deliver) |owned| {
+            self.completeDirectAssumeCapacity(item, owned);
+        } else {
+            self.completeTicketAssumeCapacity(roc_host, item);
+        }
     }
 
     /// Hand the staged completions to Roc as one list, transferring ownership.
@@ -4598,6 +4624,14 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
         std.debug.assert(deliver != null);
 
         const ticket = pending_callbacks.issueTicket();
+        // Clipboard and blob-slice work always finishes during this dispatch.
+        // Keep their callback out of the fixed pending table: that table is a
+        // reservation for work which can outlive this frame, while these two
+        // operations are governed by their shared byte-copy budget instead.
+        if (task.kind == TASK_READ_CLIPBOARD or task.kind == TASK_READ_BLOB_SLICE) {
+            startSynchronousTask(staging, roc_host, task, ticket, deliver, &roc_string_bytes);
+            continue;
+        }
         if (!pending_callbacks.insert(ticket, deliver)) {
             // Capacity is a bound on deferred callbacks, not a public task
             // list limit. The callback moves straight into a terminal Busy
@@ -4605,14 +4639,14 @@ fn dispatchTasks(staging: *CompletionStaging, roc_host: *RocHost, tasks: abi.Roc
             refuseTask(staging, roc_host, task, ticket, deliver);
             continue;
         }
-        startTask(staging, roc_host, task, ticket, &roc_string_bytes, &headless_reads);
+        startTask(staging, roc_host, task, ticket, &headless_reads);
     }
 }
 
 /// Start one task whose callback has already been retained in the private
-/// table. Synchronous work removes that callback again while staging its
-/// terminal envelope; deferred work passes only this opaque ticket onward.
-fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, roc_string_bytes: *usize, headless_reads: *HeadlessReadBudget) void {
+/// table. Only work that can outlive this dispatch reaches here; it passes an
+/// opaque ticket onward and returns the callback with its terminal envelope.
+fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, headless_reads: *HeadlessReadBudget) void {
     switch (task.kind) {
         TASK_READ_SMALL_FILE => submitRead(staging, roc_host, ticket, task.path.asSlice(), false, headless_reads),
         TASK_READ_FILE => submitRead(staging, roc_host, ticket, task.path.asSlice(), true, headless_reads),
@@ -4621,8 +4655,7 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, 
             const err = beginScreenshotTask(ticket, task.path.asSlice()) orelse break :blk;
             staging.screenshotFinished(roc_host, ticket, err);
         },
-        TASK_READ_CLIPBOARD => stageClipboardRead(staging, roc_host, ticket, roc_string_bytes),
-        TASK_READ_BLOB_SLICE => stageBlobSlice(staging, roc_host, task, ticket, roc_string_bytes),
+        TASK_READ_CLIPBOARD, TASK_READ_BLOB_SLICE => unreachable,
         // The host and the platform are built together, so this is not a newer
         // app talking to an older host -- it is transport disagreeing with
         // itself. Drop the retained callback before terminating, rather than
@@ -4630,6 +4663,20 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, 
         else => {
             abi.decrefErasedCallable(pending_callbacks.take(ticket) orelse null, roc_host);
             std.debug.panic("roc-ray: unknown task kind {d}", .{task.kind});
+        },
+    }
+}
+
+/// Finish work that cannot outlive this dispatch, moving its callback directly
+/// into the completion envelope. This deliberately does not consume one of the
+/// fixed deferred-operation reservations.
+fn startSynchronousTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, deliver: abi.RocErasedCallable, roc_string_bytes: *usize) void {
+    switch (task.kind) {
+        TASK_READ_CLIPBOARD => stageClipboardRead(staging, roc_host, ticket, roc_string_bytes, deliver),
+        TASK_READ_BLOB_SLICE => stageBlobSlice(staging, roc_host, task, ticket, roc_string_bytes, deliver),
+        else => {
+            abi.decrefErasedCallable(deliver, roc_host);
+            std.debug.panic("roc-ray: task kind {d} cannot finish synchronously", .{task.kind});
         },
     }
 }
@@ -4666,9 +4713,9 @@ fn beginScreenshotTask(ticket: u64, path: []const u8) ?u8 {
     const validation = capture.validateRelativePath(path);
     if (validation != capture.err_none) return validation;
 
-    // Headless runs have no framebuffer to read, so the request is validated
-    // and then reported as done rather than writing a file of zeroes. Answering
-    // in the same cycle also keeps CI output identical between runs.
+    // Headless runs have no framebuffer to read, so the request is completed
+    // synchronously rather than writing a file of zeroes. It is still staged
+    // here and delivered on the next step, like every other task result.
     if (headlessMode()) return capture.err_none;
 
     // A request already queued this frame has not been serviced yet, and there
@@ -4714,18 +4761,18 @@ fn reportScreenshotResult(err: u8) void {
 /// The windowing backend only answers on the thread that owns the window, and
 /// the read is a pointer copy rather than I/O, so there is nothing to move off
 /// the frame thread. One step of latency is the cost of `update` being pure.
-fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, roc_string_bytes: *usize) void {
+fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, roc_string_bytes: *usize, deliver: ?abi.RocErasedCallable) void {
     if (headlessMode()) {
         if (!headless_clipboard_set) {
-            staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "");
+            staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "", deliver);
             return;
         }
         if (headless_clipboard_len > MAX_SYNC_ROC_STRING_BYTES_PER_STEP -| roc_string_bytes.*) {
-            staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "");
+            staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "", deliver);
             return;
         }
         roc_string_bytes.* += headless_clipboard_len;
-        staging.clipboardRead(roc_host, ticket, 0, headless_clipboard[0..headless_clipboard_len]);
+        staging.clipboardRead(roc_host, ticket, 0, headless_clipboard[0..headless_clipboard_len], deliver);
         return;
     }
 
@@ -4733,7 +4780,7 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u
     // clipboard is empty or holds non-text content, must never be freed, and is
     // invalidated by the next clipboard call -- so copy it out now.
     const text = raylib.getClipboardText() orelse {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "");
+        staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "", deliver);
         return;
     };
 
@@ -4743,15 +4790,15 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u
     // read is capped at, and for the same reason.
     const contents = std.mem.span(text);
     if (contents.len > MAX_INLINE_READ_BYTES) {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_TOO_LARGE, "");
+        staging.clipboardRead(roc_host, ticket, READ_ERR_TOO_LARGE, "", deliver);
         return;
     }
     if (contents.len > MAX_SYNC_ROC_STRING_BYTES_PER_STEP -| roc_string_bytes.*) {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "");
+        staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "", deliver);
         return;
     }
     roc_string_bytes.* += contents.len;
-    staging.clipboardRead(roc_host, ticket, 0, contents);
+    staging.clipboardRead(roc_host, ticket, 0, contents, deliver);
 }
 
 /// Copy a bounded range out of a blob and stage it as a completion.
@@ -4764,7 +4811,7 @@ fn stageClipboardRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u
 /// `task.blob` holds the handle rather than its token, and that is what makes
 /// the read safe: the list is still alive here, so the slot cannot have been
 /// reclaimed between the app naming it and the host reading it.
-fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, roc_string_bytes: *usize) void {
+fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, ticket: u64, roc_string_bytes: *usize, deliver: ?abi.RocErasedCallable) void {
     const handles = task.blob.items();
     if (handles.len != 1) std.debug.panic(
         "roc-ray: a blob-slice task carried {d} handles",
@@ -4772,25 +4819,25 @@ fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToH
     );
     const slice = switch (blobSliceBounds(handles[0].resource.handle, task.offset, task.count)) {
         .err => |err| {
-            staging.blobSliceRead(roc_host, ticket, err, "");
+            staging.blobSliceRead(roc_host, ticket, err, "", deliver);
             return;
         },
         .slice => |value| value,
     };
     if (slice.len > MAX_SYNC_ROC_STRING_BYTES_PER_STEP -| roc_string_bytes.*) {
-        staging.blobSliceRead(roc_host, ticket, BLOB_ERR_BUSY, "");
+        staging.blobSliceRead(roc_host, ticket, BLOB_ERR_BUSY, "", deliver);
         return;
     }
     roc_string_bytes.* += slice.len;
     if (!std.unicode.utf8ValidateSlice(slice)) {
-        staging.blobSliceRead(roc_host, ticket, BLOB_ERR_NOT_UTF8, "");
+        staging.blobSliceRead(roc_host, ticket, BLOB_ERR_NOT_UTF8, "", deliver);
         return;
     }
     // Reserve before allocating the one owned result. The string becomes the
     // completion payload directly; copying it again would double this cost.
     staging.ensureOne(roc_host);
     const contents = if (slice.len == 0) abi.RocStr.empty() else abi.RocStr.fromSlice(slice, roc_host);
-    staging.blobSliceReadOwned(roc_host, ticket, 0, contents);
+    staging.blobSliceReadOwned(roc_host, ticket, 0, contents, deliver);
 }
 
 /// Hand one read to the worker, or answer it in this cycle if it was refused.
@@ -5691,6 +5738,28 @@ test "unique task lists move callbacks while shared lists retain them" {
     }
 }
 
+test "a shared synchronous task list retains its callback independently" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    defer resetPendingCallbacksForTest(&roc_host);
+    test_callback_drops = 0;
+
+    var tasks = [_]TaskToHost{testTask(&roc_host, TASK_READ_CLIPBOARD)};
+    const shared = abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host);
+    shared.incref(1);
+    var staging = CompletionStaging{};
+    dispatchTasks(&staging, &roc_host, shared);
+    try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
+    staging.release(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), test_callback_drops);
+
+    // The caller's retained list reference owns the original callback until it
+    // independently releases that list.
+    for (shared.allocationItems()) |task| task.decref(&roc_host);
+    shared.decref(&roc_host);
+    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
+}
+
 test "more than 32 tasks receive terminal envelopes without a public task cap" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
@@ -5721,6 +5790,83 @@ test "more than 32 tasks receive terminal envelopes without a public task cap" {
     try std.testing.expectEqual(task_count, staging.count());
     try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
     staging.release(&roc_host);
+}
+
+test "synchronous clipboard and blob slices bypass a full deferred callback table" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        pending_timer_count = 0;
+        resetPendingCallbacksForTest(&roc_host);
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+    test_callback_drops = 0;
+    last_wall_nanos = 0;
+
+    // Keep every deferred reservation occupied. The two synchronous tasks below
+    // must still be admitted according to their own byte-copy budget.
+    var held: usize = 0;
+    while (held < MAX_TASKS_IN_FLIGHT) : (held += 1) {
+        const ticket = pending_callbacks.issueTicket();
+        try std.testing.expect(pending_callbacks.insert(ticket, testCallback(&roc_host)));
+        armTimer(ticket, 1);
+    }
+
+    const bytes = try std.testing.allocator.dupe(u8, "slice text");
+    var owner = CompletionStaging{};
+    stageBlobRead(&owner, &roc_host, 0, std.testing.allocator, bytes);
+    const handle = stagedBlob(owner.items.items[0].raw);
+    handle.incref(1);
+    owner.release(&roc_host);
+    defer handle.decref(&roc_host);
+
+    const clipboard_text = "clipboard text";
+    @memcpy(headless_clipboard[0..clipboard_text.len], clipboard_text);
+    headless_clipboard_len = clipboard_text.len;
+    headless_clipboard_set = true;
+    defer {
+        headless_clipboard_len = 0;
+        headless_clipboard_set = false;
+    }
+
+    handle.incref(1);
+    var tasks = [_]TaskToHost{
+        testTask(&roc_host, TASK_READ_CLIPBOARD),
+        .{
+            .kind = TASK_READ_BLOB_SLICE,
+            .path = abi.RocStr.empty(),
+            .millis = 0,
+            .blob = abi.RocList(abi.FileBlob).fromSlice(&.{handle}, &roc_host),
+            .offset = 0,
+            .count = "slice text".len,
+            .deliver = testCallback(&roc_host),
+        },
+    };
+
+    var staging = CompletionStaging{};
+    dispatchTasks(&staging, &roc_host, abi.RocList(TaskToHost).fromSlice(&tasks, &roc_host));
+    try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT, pending_callbacks.count);
+    try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT, pending_timer_count);
+    try std.testing.expectEqual(@as(usize, 2), staging.count());
+    try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, staging.items.items[0].raw.kind);
+    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
+    try std.testing.expectEqualStrings(clipboard_text, staging.items.items[0].raw.contents.asSlice());
+    try std.testing.expectEqual(COMPLETION_BLOB_SLICE_READ, staging.items.items[1].raw.kind);
+    try std.testing.expectEqual(@as(u8, 0), staging.items.items[1].raw.err);
+    try std.testing.expectEqualStrings("slice text", staging.items.items[1].raw.contents.asSlice());
+
+    staging.release(&roc_host);
+    try std.testing.expectEqual(@as(usize, 2), test_callback_drops);
+    resetPendingCallbacksForTest(&roc_host);
+    try std.testing.expectEqual(MAX_TASKS_IN_FLIGHT + 2, test_callback_drops);
+}
+
+test "private tickets use their last value without wrapping" {
+    var callbacks = PendingCallbacks{ .next_ticket = std.math.maxInt(u64) - 1 };
+    try std.testing.expectEqual(std.math.maxInt(u64) - 1, callbacks.issueTicket());
+    try std.testing.expectEqual(std.math.maxInt(u64), callbacks.issueTicket());
+    try std.testing.expectEqual(@as(u64, 0), callbacks.next_ticket);
 }
 
 test "a direct busy result moves its callback into staging" {
@@ -6423,7 +6569,7 @@ test "a clipboard read is serviced in the cycle it was dispatched in" {
 
     var empty = CompletionStaging{};
     var roc_string_bytes: usize = 0;
-    stageClipboardRead(&empty, &roc_host, 1, &roc_string_bytes);
+    stageClipboardRead(&empty, &roc_host, 1, &roc_string_bytes, null);
     try std.testing.expectEqual(COMPLETION_CLIPBOARD_READ, empty.items.items[0].raw.kind);
     try std.testing.expectEqual(READ_ERR_UNAVAILABLE, empty.items.items[0].raw.err);
     empty.release(&roc_host);
@@ -6434,7 +6580,7 @@ test "a clipboard read is serviced in the cycle it was dispatched in" {
     headless_clipboard_set = true;
 
     var staging = CompletionStaging{};
-    stageClipboardRead(&staging, &roc_host, 2, &roc_string_bytes);
+    stageClipboardRead(&staging, &roc_host, 2, &roc_string_bytes, null);
     try std.testing.expectEqual(@as(u64, 2), staging.items.items[0].raw.ticket);
     try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
     try std.testing.expectEqualStrings(text, staging.items.items[0].raw.contents.asSlice());
@@ -6444,7 +6590,7 @@ test "a clipboard read is serviced in the cycle it was dispatched in" {
     // budget is spent; it is deferred to the app as Busy, not copied anyway.
     var exhausted = CompletionStaging{};
     roc_string_bytes = MAX_SYNC_ROC_STRING_BYTES_PER_STEP - text.len + 1;
-    stageClipboardRead(&exhausted, &roc_host, 3, &roc_string_bytes);
+    stageClipboardRead(&exhausted, &roc_host, 3, &roc_string_bytes, null);
     try std.testing.expectEqual(READ_ERR_BUSY, exhausted.items.items[0].raw.err);
     exhausted.release(&roc_host);
 }

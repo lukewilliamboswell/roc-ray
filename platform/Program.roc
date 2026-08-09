@@ -99,8 +99,8 @@ Program := [].{
 	##
 	## A task owns the typed function that turns its one terminal result into the
 	## application's message. The platform retains that function privately until
-	## the matching host completion arrives; task tickets are transport-only and
-	## are never visible to app code.
+	## the matching host completion arrives. Task tickets are transport-only and
+	## are not part of the supported application API.
 	##
 	## Platform wrappers capture only the callback supplied here, never the model
 	## or request-only data. The callback itself retains every value it captures,
@@ -202,9 +202,11 @@ Program := [].{
 	## TODO(roc): make `TaskToHost`, `CompletionFromHost`, and
 	## `CompletionEnvelope` opaque custom records once `roc glue` can traverse
 	## them. With the pinned compiler, changing these declarations to `::` makes
-	## `roc glue` crash even though `roc check` succeeds. They are transport
-	## implementation details; app code should use `Task` constructors and
-	## `Step.messages`, never these records or their private `ticket` field.
+	## `roc glue` crash even though `roc check` succeeds. Consequently these
+	## structural records, including `CompletionFromHost.ticket`, are temporarily
+	## nameable through `Program`; they are unsupported transport implementation
+	## details. App code must use `Task` constructors and `Step.messages` and must
+	## not construct, inspect, or depend on these records.
 	TaskToHost(msg) : {
 		kind : U8,
 
@@ -250,8 +252,9 @@ Program := [].{
 	## TODO(roc): make `TaskToHost`, `CompletionFromHost`, and
 	## `CompletionEnvelope` opaque once `roc glue` handles opaque generic
 	## transport records. That same generic opacity limitation rejects
-	## `Box(Runtime(Model, Msg))`; fixing it permits ordinary runtime
-	## continuations and removes this per-task box and per-message `Box(msg)`.
+	## `Box(Runtime(Model, Msg))`; the desired shape retains ordinary runtime
+	## continuations inside an opaque `Runtime(Model, Msg)`, eliminating this
+	## per-task box and per-message `Box(msg)` allocation.
 	CompletionEnvelope(msg) : {
 		raw : CompletionFromHost,
 		deliver : Box(CompletionFromHost -> Box(msg)),

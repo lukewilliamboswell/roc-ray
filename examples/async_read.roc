@@ -17,7 +17,9 @@ import rr.Text
 ## the host moves the worker allocation into List ARC without copying file
 ## bytes. Keep the list in the model for as long as its bytes are useful; when
 ## the final List or seamless sublist goes away, its typed host resource is
-## released automatically. List updates use normal copy-on-write semantics.
+## released automatically. To retain only a small portion, use
+## `List.release_excess_capacity` to deliberately copy that portion instead of
+## pinning the source file. List updates use normal copy-on-write semantics.
 Model : {
 	small : ReadState,
 	large : BytesState,

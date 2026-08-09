@@ -60,13 +60,15 @@ demonstrate how the same APIs fit into larger state and resource lifecycles.
 - Read anything large with `Program.read_file`, which delivers an ordinary
   `List(U8)` without copying its payload at completion. Keep that list (or a
   seamless sublist) in the model only while its bytes are useful: a retained
-  tiny sublist keeps the whole file alive. Reserve `Program.read_small_file`
-  for files small enough to copy into a `Str` mid-frame.
+  tiny sublist keeps the whole file alive. Use `List.release_excess_capacity`
+  to deliberately copy a small retained value instead. Reserve
+  `Program.read_small_file` for files small enough to copy into a `Str`
+  mid-frame.
 - Return normal `List(Program.Task(Msg))` values. Each typed constructor takes
   a callback that creates a `Msg`; later callbacks are supplied in
-  `step.messages` in host-observed order. `Busy` means the host did not admit a
-  task, so retry it deliberately if that suits the interaction. App code never
-  allocates task IDs or filters transport completions.
+  `step.messages` in host-observed order. `Busy` means the host lacks current
+  capacity for a task, so retry it deliberately if that suits the interaction.
+  App code never allocates task IDs or filters transport completions.
 
 Asset licenses and attribution are stored beside third-party assets under
 `examples/assets/`.

@@ -42,8 +42,8 @@ Program := [].{
 	## `actions` run this cycle, in order, before `render!`. `tasks` go to the
 	## host in list order and answer on a later `Step`. While the app remains
 	## running, every submitted task gets exactly one terminal callback, including
-	## `Err(Busy)` when the host refuses admission; independent asynchronous
-	## completions have no specified order. App termination drops pending
+	## `Err(Busy)` when current host capacity cannot complete it; independent
+	## asynchronous completions have no specified order. App termination drops pending
 	## callbacks because no later step can observe them.
 	##
 	## An app with no messages should still declare `Msg : []`, use
@@ -125,8 +125,9 @@ Program := [].{
 
 	## Why a `ReadFile` produced no byte list.
 	##
-	## `Busy` and `Unavailable` mean the host did not start the read. `TooLarge`
-	## means the file exceeds the host's per-file limit.
+	## `Busy` means the host lacks current capacity to complete the read; retry it
+	## explicitly when that suits the app. `Unavailable` means the host did not
+	## start the read. `TooLarge` means the file exceeds the host's per-file limit.
 	FileReadError : [
 		NotFound,
 		ReadFailed,
@@ -172,10 +173,10 @@ Program := [].{
 	## Read a file into an ordinary Roc byte list and turn its terminal result
 	## into `msg`.
 	##
-	## The list owns its host-backed storage through Roc ARC. It supports normal
-	## `List` operations; sublists are seamless views, so retaining a small
-	## sublist can retain its whole source file. Compact a value deliberately
-	## when it must outlive the full list but should not pin it.
+	## The list owns its host-backed storage through Roc ARC. The delivered list
+	## and its sublists are seamless views, so retaining a small portion can keep
+	## the whole source file alive. Use `List.release_excess_capacity` on the
+	## value to retain when that copy is preferable to pinning the source file.
 	read_file : Str, (Try(List(U8), FileReadError) -> msg) -> Task(msg)
 	read_file = |path, callback| Task.(ReadFile({ path, callback }))
 

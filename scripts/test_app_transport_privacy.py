@@ -33,6 +33,10 @@ CASES = (
         ("PACKAGE MODULE IS PRIVATE", "`rr.AppConfig`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "file_module_removed.roc",
+        ("PACKAGE MODULE IS PRIVATE", "`rr.File`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "texture_view_sampler.roc",
         ("MISSING METHOD", "`set_filter!`", "Assets.TextureView"),
     ),

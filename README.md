@@ -74,9 +74,9 @@ tasks = [Program.read_small_file("config.txt", |result| ConfigLoaded({ path: "co
 
 The host owns private transport tickets; apps do not allocate IDs, match
 completions, or maintain a task batch. It preserves the host-observed order of
-messages within a step. A task that cannot be admitted still calls its callback
-with its operation's `Busy` result, so an app may show an error or explicitly
-retry it. See [`async_read.roc`](examples/async_read.roc) for file reads and
+messages within a step. A task that cannot complete with current host capacity
+still calls its callback with its operation's `Busy` result, so an app may show
+an error or explicitly retry it. See [`async_read.roc`](examples/async_read.roc) for file reads and
 [`input_inspector.roc`](examples/input_inspector.roc) for a clipboard task.
 
 ## Start your own project

@@ -517,9 +517,9 @@ const EffectWorker = struct {
     /// Read a file whole. Worker thread only.
     fn runRead(self: *EffectWorker, io: std.Io, request: Request) void {
         const path = request.path[0..request.path_len];
-        // The allocation the blob path hands to Roc is made here, on this
-        // thread, and is filled here. The main thread only ever moves the
-        // slice -- which is the entire claim of the feature.
+        // The native allocation later placed behind Roc's blob handle is made
+        // and filled here. The main thread only moves that slice into its slot;
+        // it still builds the fixed-size Roc list that carries the handle.
         //
         // A small read stops one byte past what it could deliver rather than
         // reading up to the blob ceiling and then rejecting it: refusing a
@@ -689,10 +689,11 @@ const PendingCallbacks = struct {
 var pending_callbacks = PendingCallbacks{};
 
 /// Start a fresh app lifetime. Every previous lifetime must have dropped its
-/// callbacks before this point; resetting a non-empty table would leak Roc
-/// captures and allow stale transport tickets to collide with a new app.
+/// callbacks and abandoned delivery reservations before this point; resetting
+/// either would leak a Roc capture or let stale work collide with a new app.
 fn beginPendingCallbacks() void {
     std.debug.assert(pending_callbacks.count == 0);
+    std.debug.assert(blob_delivery_reservations.count == 0);
     pending_callbacks.next_ticket = 1;
 }
 
@@ -833,8 +834,9 @@ const CompletionStaging = struct {
     ///
     /// A one-element list rather than the handle inline, because the field has
     /// to exist on every completion and there is no empty `Blob` to put in the
-    /// others. The allocation is the only one a completion ever makes, and only
-    /// the read that succeeded makes it.
+    /// others. It is a fixed-size Roc allocation made only for a successful
+    /// blob read; the file bytes stay in their native slot, so no allocation or
+    /// copy is proportional to the file's size.
     fn blobRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, resource: *abi.FileHostBlobResource) void {
         self.ensureOne(roc_host);
         var item = plain(COMPLETION_FILE_READ, ticket, 0);
@@ -1288,6 +1290,41 @@ fn readBlobToken(payload: *const abi.FileHostBlobResource) u64 {
 /// generation still protects the host from stale or malformed tokens.
 const BlobHeap = host_resource.HostResourceHeap(abi.FileHostBlobResource, BlobResource, MAX_LIVE_BLOBS, 8, writeBlobToken, readBlobToken, destroyBlob);
 var blob_heap: BlobHeap = .{};
+
+/// Slots promised to reads which have been admitted but have not yet produced
+/// their terminal completion. A `ReadFile` has to reserve one before it starts
+/// I/O: otherwise a full heap could let up to the worker limit of large buffers
+/// be read only to discard each one when delivery finds no handle slot.
+///
+/// This is deliberately just a count. The worker holds only plain request
+/// data, the frame thread is its sole reader/writer, and the pending-callback
+/// table already bounds the count to 32. No read admission allocates.
+const BlobDeliveryReservations = struct {
+    count: usize = 0,
+
+    fn reserve(self: *BlobDeliveryReservations) bool {
+        const live = blob_heap.active();
+        std.debug.assert(live <= MAX_LIVE_BLOBS);
+        std.debug.assert(self.count <= MAX_LIVE_BLOBS);
+        if (live + self.count >= MAX_LIVE_BLOBS) return false;
+        self.count += 1;
+        return true;
+    }
+
+    fn release(self: *BlobDeliveryReservations) void {
+        std.debug.assert(self.count != 0);
+        self.count -= 1;
+    }
+
+    /// Shutdown has stopped the worker and freed its unreported result
+    /// buffers. Their callbacks will never be invoked, so forget the matching
+    /// delivery promises before another app lifetime can begin.
+    fn clearAfterWorkStops(self: *BlobDeliveryReservations) void {
+        self.count = 0;
+    }
+};
+
+var blob_delivery_reservations = BlobDeliveryReservations{};
 
 var sound_heap: SoundHeap = .{};
 var music_heap: MusicHeap = .{};
@@ -4240,6 +4277,9 @@ fn deinitResources() void {
     std.debug.assert(blend_scope_count == 0);
     std.debug.assert(camera_scope_count == 0);
     std.debug.assert(scissor_scope_count == 0);
+    // Worker shutdown clears delivery promises before resource teardown. A
+    // non-zero value here would make the next app lifetime under-admit reads.
+    std.debug.assert(blob_delivery_reservations.count == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
     std.debug.assert(shader_heap.active() == 0);
@@ -4847,18 +4887,34 @@ fn stageBlobSlice(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToH
 /// answered with `SmallFileRead` because the request ring happened to be full.
 /// Returns true when the read was answered in this cycle rather than queued.
 fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path: []const u8, deliver_blob: bool, headless_reads: *HeadlessReadBudget) void {
+    // Reserve before either branch can start reading or queue a worker request.
+    // A terminal `Busy` here means precisely that no filesystem work started.
+    if (deliver_blob and !blob_delivery_reservations.reserve()) {
+        stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, true);
+        return;
+    }
     if (headlessMode()) {
         if (!headless_reads.begin()) {
-            stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, deliver_blob);
+            if (deliver_blob) {
+                stageReservedReadError(staging, roc_host, ticket, READ_ERR_BUSY);
+            } else {
+                stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, false);
+            }
             return;
         }
-        readFileNow(staging, roc_host, ticket, path, deliver_blob, headless_reads);
+        readFileNow(staging, roc_host, ticket, path, deliver_blob, headless_reads, deliver_blob);
         return;
     }
     switch (effect_worker.submitReadFile(ticket, path, deliver_blob)) {
         .accepted => {},
-        .busy => stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, deliver_blob),
-        .unavailable => stageReadError(staging, roc_host, ticket, READ_ERR_UNAVAILABLE, deliver_blob),
+        .busy => if (deliver_blob)
+            stageReservedReadError(staging, roc_host, ticket, READ_ERR_BUSY)
+        else
+            stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, false),
+        .unavailable => if (deliver_blob)
+            stageReservedReadError(staging, roc_host, ticket, READ_ERR_UNAVAILABLE)
+        else
+            stageReadError(staging, roc_host, ticket, READ_ERR_UNAVAILABLE, false),
     }
 }
 
@@ -4871,11 +4927,20 @@ fn stageReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, 
     }
 }
 
+/// Report an error for an already-admitted blob read, then return its handle
+/// slot promise. Every path after `BlobDeliveryReservations.reserve` goes
+/// through this helper or `stageReservedBlobRead` exactly once.
+fn stageReservedReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8) void {
+    defer blob_delivery_reservations.release();
+    stageReadError(staging, roc_host, ticket, err, true);
+}
+
 /// Install a finished read's buffer as a blob and report the handle.
 ///
 /// This is the operation the whole feature is about, and it is deliberately
-/// this short: a slice moves into a slot. Nothing is copied, nothing is
-/// allocated for Roc, and the cost does not depend on how big the file was.
+/// this short: a slice moves into a slot. The bytes are not copied and no
+/// allocation is proportional to the file; delivery does make the fixed-size
+/// one-element Roc list which owns the boxed handle.
 ///
 /// Takes ownership of `bytes`. With no slot free the buffer is freed here and
 /// the read is refused with `Busy` -- holding memory no handle names would be a
@@ -4892,12 +4957,23 @@ fn stageBlobRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, a
     staging.blobRead(roc_host, ticket, resource);
 }
 
+/// Finish an admitted blob read. Keep the low-level `stageBlobRead` fallback
+/// defensive for direct callers, while this wrapper releases the admission
+/// promise on both its successful install and its impossible-in-normal-use
+/// late `Busy` fallback.
+fn stageReservedBlobRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, allocator: std.mem.Allocator, bytes: []u8) void {
+    std.debug.assert(blob_delivery_reservations.count != 0);
+    defer blob_delivery_reservations.release();
+    stageBlobRead(staging, roc_host, ticket, allocator, bytes);
+}
+
 /// Read on the calling thread and stage the completion. Headless only.
 ///
 /// The blob path runs here too, and installs exactly the same way, so a
 /// headless run and a windowed one differ in which thread allocated the buffer
 /// and in nothing else the app can observe.
-fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path: []const u8, deliver_blob: bool, headless_reads: ?*HeadlessReadBudget) void {
+fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path: []const u8, deliver_blob: bool, headless_reads: ?*HeadlessReadBudget, blob_delivery_reserved: bool) void {
+    std.debug.assert(!blob_delivery_reserved or deliver_blob);
     const allocator = allocatorFromHost(roc_host);
     const operation_limit = smallReadLimit(deliver_blob);
     const limit = if (headless_reads) |budget|
@@ -4916,12 +4992,20 @@ fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, pat
             },
             else => readErrorCode(err),
         } else readErrorCode(err);
-        stageReadError(staging, roc_host, ticket, code, deliver_blob);
+        if (blob_delivery_reserved) {
+            stageReservedReadError(staging, roc_host, ticket, code);
+        } else {
+            stageReadError(staging, roc_host, ticket, code, deliver_blob);
+        }
         return;
     };
     if (headless_reads) |budget| budget.bytes += bytes.len;
     if (deliver_blob) {
-        stageBlobRead(staging, roc_host, ticket, allocator, bytes);
+        if (blob_delivery_reserved) {
+            stageReservedBlobRead(staging, roc_host, ticket, allocator, bytes);
+        } else {
+            stageBlobRead(staging, roc_host, ticket, allocator, bytes);
+        }
         return;
     }
     defer allocator.free(bytes);
@@ -4978,11 +5062,15 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
         }
 
         const bytes = result.bytes orelse {
-            stageReadError(staging, roc_host, result.ticket, result.err, result.deliver_blob);
+            if (result.deliver_blob) {
+                stageReservedReadError(staging, roc_host, result.ticket, result.err);
+            } else {
+                stageReadError(staging, roc_host, result.ticket, result.err, false);
+            }
             continue;
         };
         if (result.deliver_blob) {
-            stageBlobRead(staging, roc_host, result.ticket, effect_worker.allocator, bytes);
+            stageReservedBlobRead(staging, roc_host, result.ticket, effect_worker.allocator, bytes);
             continue;
         }
         // The read stopped at the ceiling, so anything that arrives here fits.
@@ -6091,10 +6179,10 @@ fn stagedBlob(item: CompletionFromHost) abi.FileBlob {
 
 test "completing a large read installs a handle instead of copying the file" {
     // The claim under test, stated as a measurement: finishing a read costs the
-    // frame thread nothing proportional to the file. The one allocation it does
-    // make is the handle itself, so the same number comes out for a 16 MiB file
-    // as for a one-line one -- and, on the same instrument, the small-file path
-    // costs the whole payload.
+    // frame thread nothing proportional to the file. It does allocate the
+    // fixed-size Roc list carrying the handle, so the same number comes out for
+    // a 16 MiB file as for a one-line one -- and, on the same instrument, the
+    // small-file path costs the whole payload.
     const file_bytes: usize = 16 * 1024 * 1024;
 
     var counter = CountingAllocator{ .inner = std.testing.allocator };
@@ -6300,10 +6388,25 @@ test "blob slice admission uses a byte budget instead of a task-count cap" {
     staging.release(&roc_host);
 }
 
-test "a full blob heap refuses the read rather than holding what nothing names" {
+test "blob delivery reservations bound reads before they can start" {
+    defer blob_delivery_reservations.clearAfterWorkStops();
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+
+    var reserved: usize = 0;
+    while (reserved < MAX_LIVE_BLOBS) : (reserved += 1) {
+        try std.testing.expect(blob_delivery_reservations.reserve());
+    }
+    try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_delivery_reservations.count);
+    try std.testing.expect(!blob_delivery_reservations.reserve());
+
+    while (blob_delivery_reservations.count != 0) blob_delivery_reservations.release();
+}
+
+test "a full blob heap refuses ReadFile before it opens the path" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
     defer {
+        blob_delivery_reservations.clearAfterWorkStops();
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         blob_heap.deinitAll();
     }
@@ -6325,8 +6428,18 @@ test "a full blob heap refuses the read rather than holding what nothing names" 
     }
     try std.testing.expectEqual(MAX_LIVE_BLOBS, blob_heap.active());
 
-    // The refused read's buffer is freed here rather than held by nothing:
-    // `std.testing.allocator` is what proves it.
+    // This must report `Busy`, not `NotFound`, and must not consume headless
+    // operation credit: admission happens before either I/O path can begin.
+    var headless_reads = HeadlessReadBudget{};
+    var before_open = CompletionStaging{};
+    submitRead(&before_open, &roc_host, 998, testing_tmp_prefix ++ "definitely-not-here.txt", true, &headless_reads);
+    try std.testing.expectEqual(READ_ERR_BUSY, before_open.items.items[0].raw.err);
+    try std.testing.expectEqual(@as(usize, 0), headless_reads.operations);
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
+    before_open.release(&roc_host);
+
+    // Low-level installation remains defensive for callers which already own
+    // bytes. The normal `submitRead` path above never starts this doomed read.
     const refused = try std.testing.allocator.dupe(u8, "no slot for this");
     var full = CompletionStaging{};
     stageBlobRead(&full, &roc_host, 999, std.testing.allocator, refused);
@@ -6361,7 +6474,7 @@ test "a headless read delivers a blob by the same path a worker result does" {
     const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
 
     var staging = CompletionStaging{};
-    readFileNow(&staging, &roc_host, 3, path, true, null);
+    readFileNow(&staging, &roc_host, 3, path, true, null, false);
     try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[0].raw.kind);
     try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
     try std.testing.expectEqual(@as(u64, payload.len), stagedBlob(staging.items.items[0].raw).resource.byte_len);
@@ -6371,9 +6484,39 @@ test "a headless read delivers a blob by the same path a worker result does" {
 
     // A read that fails still answers on the blob path -- an app waiting for
     // `FileRead` must never be answered with `SmallFileRead`.
-    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true, null);
+    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true, null, false);
     try std.testing.expectEqual(COMPLETION_FILE_READ, staging.items.items[1].raw.kind);
     try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
+
+    staging.release(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "headless ReadFile releases its delivery reservation on success and NotFound" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        blob_delivery_reservations.clearAfterWorkStops();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blob.txt", .data = "inline result" });
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blob.txt", .{tmp.sub_path});
+
+    var budget = HeadlessReadBudget{};
+    var staging = CompletionStaging{};
+    submitRead(&staging, &roc_host, 1, path, true, &budget);
+    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
+
+    submitRead(&staging, &roc_host, 2, testing_tmp_prefix ++ "definitely-not-here.txt", true, &budget);
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
 
     staging.release(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -6445,7 +6588,7 @@ test "headless read byte credit admits one 16 MiB blob then reports Busy" {
     var budget = HeadlessReadBudget{};
     try std.testing.expect(budget.begin());
     var staging = CompletionStaging{};
-    readFileNow(&staging, &roc_host, 1, path, true, &budget);
+    readFileNow(&staging, &roc_host, 1, path, true, &budget, false);
     try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
     try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_STEP, budget.bytes);
 
@@ -6470,7 +6613,7 @@ test "a budget-limited headless read exhausts its credit before later retries" {
     var budget = HeadlessReadBudget{ .bytes = MAX_HEADLESS_READ_BYTES_PER_STEP - 4 };
     try std.testing.expect(budget.begin());
     var staging = CompletionStaging{};
-    readFileNow(&staging, &roc_host, 1, path, false, &budget);
+    readFileNow(&staging, &roc_host, 1, path, false, &budget, false);
     try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[0].raw.err);
     try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_STEP, budget.bytes);
 
@@ -6720,6 +6863,80 @@ test "a submission wakes a blocked worker" {
     try std.testing.expectEqual(@as(u64, 7), result.ticket);
     try std.testing.expectEqual(@as(u8, 0), result.err);
     try std.testing.expectEqualStrings(payload, result.bytes.?);
+}
+
+test "worker blob terminal results release their delivery reservations" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    effect_worker = .{ .allocator = std.testing.allocator, .accepting = true };
+    defer {
+        effect_worker.stop();
+        effect_worker = .{};
+        blob_delivery_reservations.clearAfterWorkStops();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        blob_heap.deinitAll();
+    }
+
+    // One successful worker result moves its buffer into a slot; a failed one
+    // has no buffer. Both were admitted `ReadFile`s, so each has to return one
+    // promised delivery slot when its terminal completion is staged.
+    try std.testing.expect(blob_delivery_reservations.reserve());
+    try std.testing.expect(blob_delivery_reservations.reserve());
+    const bytes = try std.testing.allocator.dupe(u8, "worker-owned blob bytes");
+    effect_worker.results[0] = .{
+        .kind = .read_file,
+        .ticket = 1,
+        .bytes = bytes,
+        .deliver_blob = true,
+    };
+    effect_worker.results[1] = .{
+        .kind = .read_file,
+        .ticket = 2,
+        .err = READ_ERR_NOT_FOUND,
+        .deliver_blob = true,
+    };
+    effect_worker.result_write.store(2, .release);
+
+    var staging = CompletionStaging{};
+    stageWorkerResults(&staging, &roc_host);
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
+    try std.testing.expectEqual(@as(usize, 2), staging.count());
+    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
+
+    // Worker-ring refusal and the exhausted-headless-budget refusal take this
+    // same terminal path after reserving but before a result can exist.
+    try std.testing.expect(blob_delivery_reservations.reserve());
+    stageReservedReadError(&staging, &roc_host, 3, READ_ERR_BUSY);
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
+    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[2].raw.err);
+
+    staging.release(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "worker shutdown clears abandoned blob delivery reservations" {
+    effect_worker = .{ .allocator = std.testing.allocator, .accepting = true };
+    defer {
+        effect_worker.stop();
+        effect_worker = .{};
+        blob_delivery_reservations.clearAfterWorkStops();
+    }
+
+    try std.testing.expect(blob_delivery_reservations.reserve());
+    try std.testing.expectEqual(
+        EffectWorker.Submission.accepted,
+        effect_worker.submitReadFile(1, "a read abandoned at shutdown", true),
+    );
+    try std.testing.expectEqual(@as(usize, 1), blob_delivery_reservations.count);
+
+    // This is the same order as `runNormalApp`: stopping first frees every
+    // unreported result, then the next app lifetime is allowed to start fresh.
+    effect_worker.stop();
+    blob_delivery_reservations.clearAfterWorkStops();
+    try std.testing.expectEqual(@as(usize, 0), blob_delivery_reservations.count);
+    beginPendingCallbacks();
 }
 
 test "a blob read is filled by the worker and installed by the frame thread" {
@@ -7011,6 +7228,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     effect_worker.start(allocator);
     defer {
         effect_worker.stop();
+        blob_delivery_reservations.clearAfterWorkStops();
         pending_callbacks.release(roc_host);
     }
 
@@ -7124,7 +7342,13 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     beginPendingCallbacks();
     resetHeadlessRuntime(app_config);
     defer deinitResources();
-    defer pending_callbacks.release(roc_host);
+    defer {
+        // Headless reads finish inline, but keep the same lifetime cleanup as
+        // the worker path so a failed or early-exiting run cannot poison the
+        // next app lifetime.
+        blob_delivery_reservations.clearAfterWorkStops();
+        pending_callbacks.release(roc_host);
+    }
 
     var input = InputState.init(roc_host);
     defer input.deinit();

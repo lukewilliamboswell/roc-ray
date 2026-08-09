@@ -177,6 +177,8 @@ Program := [].{
 	## and its sublists are seamless views, so retaining a small portion can keep
 	## the whole source file alive. Use `List.release_excess_capacity` on the
 	## value to retain when that copy is preferable to pinning the source file.
+	## `Str.from_utf8` can share the same storage, but validating UTF-8 still scans
+	## the selected bytes on the Roc thread.
 	read_file : Str, (Try(List(U8), FileReadError) -> msg) -> Task(msg)
 	read_file = |path, callback| Task.(ReadFile({ path, callback }))
 

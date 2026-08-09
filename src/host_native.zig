@@ -4738,7 +4738,13 @@ fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, id: u64, path: [
     const budget_limited = limit < operation_limit;
     const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(limit)) catch |err| {
         const code = if (budget_limited) switch (err) {
-            error.StreamTooLong => READ_ERR_BUSY,
+            error.StreamTooLong => blk: {
+                // `readFileAlloc` consumed the remaining credit plus its
+                // overflow byte to discover this. Exhaust it so a hostile
+                // batch cannot repeat that same partial read 32 times.
+                if (headless_reads) |budget| budget.bytes = MAX_HEADLESS_READ_BYTES_PER_STEP;
+                break :blk READ_ERR_BUSY;
+            },
             else => readErrorCode(err),
         } else readErrorCode(err);
         stageReadError(staging, roc_host, id, code, deliver_blob);
@@ -6118,6 +6124,30 @@ test "headless read byte credit admits one 16 MiB blob then reports Busy" {
     staging.release(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), blob_heap.active());
+}
+
+test "a budget-limited headless read exhausts its credit before later retries" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "larger-than-credit.txt", .data = "0123456789" });
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/larger-than-credit.txt", .{tmp.sub_path});
+
+    var budget = HeadlessReadBudget{ .bytes = MAX_HEADLESS_READ_BYTES_PER_STEP - 4 };
+    try std.testing.expect(budget.begin());
+    var staging = CompletionStaging{};
+    readFileNow(&staging, &roc_host, 1, path, false, &budget);
+    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[0].err);
+    try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_STEP, budget.bytes);
+
+    // This cannot perform a second partial read: exhausted byte credit is
+    // admitted as a terminal Busy before the path is opened.
+    _ = submitRead(&staging, &roc_host, 2, path, false, &budget);
+    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[1].err);
+    try std.testing.expectEqual(@as(usize, 1), budget.operations);
+    staging.release(&roc_host);
 }
 
 test "taking a step's completions hands them over and empties the staging area" {

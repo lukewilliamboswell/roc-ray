@@ -30,8 +30,8 @@ import rr.Text
 ##   exactly the range asked for, and dropping the handle gives the memory
 ##   back.
 ##
-## The same code path runs when the host has no worker: the results simply
-## arrive on the frame the tasks were issued instead of a later one.
+## The same code path runs when the host has no worker: it still supplies the
+## results on the next `Step`, never during the `update` that submitted them.
 Model : {
 	small : LoadState,
 	refused : LoadState,
@@ -177,15 +177,11 @@ update = |model, step| {
 	})
 }
 
-## Apply each completed callback in order. This walks the host-owned message
-## buffer directly; unlike the old completion filters it creates no temporary
-## lists and needs no app-visible transport metadata.
+## Apply each callback in host-observed order. `List.fold` traverses the
+## host-owned message buffer once; unlike the old completion filters it creates
+## no temporary lists and needs no app-visible transport metadata.
 apply_messages : { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }, List(Msg) -> { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }
-apply_messages = |state, messages|
-	match List.first(messages) {
-		Ok(message) => apply_messages(apply_message(state, message), List.drop_first(messages, 1))
-		Err(_) => state
-	}
+apply_messages = |state, messages| List.fold(messages, state, apply_message)
 
 ## These are deliberately tiny callback bodies. They capture only the stable
 ## request path for diagnostics; they never retain the model.

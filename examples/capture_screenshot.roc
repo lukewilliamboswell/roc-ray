@@ -105,14 +105,10 @@ update = |model, step| {
 	})
 }
 
-## Apply every callback in order. The loop walks the received message buffer
-## directly and only replaces the model when a task actually answered.
+## Apply every callback in host-observed order with one `List.fold` over the
+## received message buffer.
 apply_messages : Model, List(Msg) -> Model
-apply_messages = |model, messages|
-	match List.first(messages) {
-		Ok(message) => apply_messages(apply_message(model, message), List.drop_first(messages, 1))
-		Err(_) => model
-	}
+apply_messages = |model, messages| List.fold(messages, model, apply_message)
 
 apply_message : Model, Msg -> Model
 apply_message = |model, message|

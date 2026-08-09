@@ -101,23 +101,10 @@ update = |model, step| {
 		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
 	}
 
-	paste = paste_outcome(step.messages)
-	typed = match paste {
-		Pasted(text) => Str.concat(clipboard.typed, text)
-		NoText => clipboard.typed
-		TooMuchText => clipboard.typed
-		HostBusy => clipboard.typed
-		NotYet => clipboard.typed
-	}
-	clipboard_status = match paste {
-		Pasted(_) => "pasted from clipboard"
-		# One error covers an empty clipboard and non-text content alike; the
-		# windowing backend does not tell them apart.
-		NoText => "clipboard has no text"
-		TooMuchText => "clipboard holds too much text to paste"
-		HostBusy => "host was busy -- press Ctrl+V again"
-		NotYet => clipboard.clipboard_status
-	}
+	# Ctrl+V can be pressed again before a slow earlier read answers. Fold every
+	# message in host-observed order so no successful paste is silently lost; the
+	# status describes the last terminal result in that order.
+	pasted = apply_paste_messages({ typed: clipboard.typed, clipboard_status: clipboard.clipboard_status }, step.messages)
 
 	# Applied in order, before anything is drawn, which is where the effects
 	# they replace used to run.
@@ -133,13 +120,13 @@ update = |model, step| {
 		])
 
 	Ok({
-		model: { typed: typed, clipboard_status: clipboard_status, input: input },
+		model: { typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input },
 		actions: actions,
 		tasks: clipboard.tasks,
 	})
 }
 
-## What this step's callback messages say about an outstanding paste.
+## Fold this step's callback messages into the text field.
 ##
 ## `TooLarge` is its own outcome rather than being folded into `NoText`: there
 ## *is* text, the host just would not copy that much of it onto the frame
@@ -149,20 +136,24 @@ update = |model, step| {
 ## `Busy` is separate again, and for the same reason in reverse: the clipboard
 ## is fine and so is this app, the host simply had no room to start the read.
 ## That is the one outcome here worth asking for a second time.
-paste_outcome : List(Msg) -> [NotYet, Pasted(Str), NoText, TooMuchText, HostBusy]
-paste_outcome = |messages|
-	match List.first(messages) {
-		Ok(ClipboardReadFinished(result)) =>
-			match result {
-				Ok(pasted) => Pasted(pasted)
-				Err(Unavailable) => NoText
-				Err(TooLarge) => TooMuchText
-				Err(Busy) => HostBusy
-			}
-		Err(_) => NotYet
+apply_paste_messages : { typed : Str, clipboard_status : Str }, List(Msg) -> { typed : Str, clipboard_status : Str }
+apply_paste_messages = |state, messages| List.fold(messages, state, apply_paste_message)
+
+apply_paste_message : { typed : Str, clipboard_status : Str }, Msg -> { typed : Str, clipboard_status : Str }
+apply_paste_message = |state, message|
+	match message {
+		ClipboardReadFinished(Ok(text)) => { typed: Str.concat(state.typed, text), clipboard_status: "pasted from clipboard" }
+		# One error covers an empty clipboard and non-text content alike; the
+		# windowing backend does not tell them apart.
+		ClipboardReadFinished(Err(Unavailable)) => { ..state, clipboard_status: "clipboard has no text" }
+		ClipboardReadFinished(Err(TooLarge)) => { ..state, clipboard_status: "clipboard holds too much text to paste" }
+		ClipboardReadFinished(Err(Busy)) => { ..state, clipboard_status: "host was busy -- press Ctrl+V again" }
 	}
 
-expect paste_outcome([ClipboardReadFinished(Ok("pasted"))]) == Pasted("pasted")
+expect apply_paste_messages(
+	{ typed: "", clipboard_status: "idle" },
+	[ClipboardReadFinished(Ok("first")), ClipboardReadFinished(Ok(" second"))],
+) == { typed: "first second", clipboard_status: "pasted from clipboard" }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

@@ -188,7 +188,6 @@ Program := [].{
 		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
 		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
 		SetVirtualMouse(Capture.Pointer),
-		ReleaseBlob(File.Blob),
 
 		## Arm a recording, or finalize the one that is running.
 		##
@@ -243,7 +242,8 @@ Program := [].{
 	## handle, not the bytes. Nothing proportional to the file happens on the
 	## frame thread, so the string ceiling does not apply; the host's own 16 MiB
 	## per-file limit still does. The app copies out the parts it wants, and
-	## releases the blob with `File.Blob.release`.
+	## drops the blob when it stops needing it -- the host frees the bytes when
+	## the last copy goes, with nothing for the app to call.
 	##
 	## `ReadBlobSlice` is how bytes get out of a blob without `render!` doing
 	## it. Every accessor on `File.Blob` is an effect, so a pure `update` cannot
@@ -277,7 +277,7 @@ Program := [].{
 		DelayElapsed({ id : U64, result : Try({}, [Busy]) }),
 		ScreenshotFinished({ id : U64, result : Try({}, ScreenshotError) }),
 		ClipboardRead({ id : U64, result : Try(Str, [Unavailable, TooLarge, Busy]) }),
-		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Released, Busy]) }),
+		BlobSliceRead({ id : U64, result : Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy]) }),
 	]
 
 	## Why a `ReadFile` produced no blob.
@@ -352,27 +352,32 @@ Program := [].{
 		path : Str,
 		millis : U64,
 
-		## `ReadBlobSlice` only. The scalar the host validates, plus the range
-		## asked for. A blob does not fit through `path`, and reusing `millis`
-		## for an offset would make the record smaller and the code worse.
-		blob : U64,
+		## `ReadBlobSlice` only, and empty for every other kind. Holds the blob
+		## itself rather than its token, because the token alone would not keep
+		## the bytes alive: `to_host` is the last thing that touches the `Task`,
+		## so a scalar copied out of it would name a buffer whose final
+		## reference died with the batch. The list *is* that reference, and the
+		## host holds it until the slice has been read.
+		##
+		## A list rather than the blob directly because the field has to exist
+		## on every task, and there is no empty `Blob` to put in the others.
+		blob : List(File.Blob),
 		offset : U64,
 		count : U64,
 	}
 
 	## The flat record one completion arrives in.
 	##
-	## `blob` and `blob_len` are the whole point of the blob path: a finished
-	## `ReadFile` puts a slot token and a length here, not a payload, so the
-	## record a 16 MiB read arrives in is exactly as big as the one an elapsed
-	## timer arrives in.
+	## `blob` is the whole point of the blob path: a finished `ReadFile` puts a
+	## one-word handle here, not a payload, so the record a 16 MiB read arrives
+	## in is exactly as big as the one an elapsed timer arrives in. Empty for
+	## every other kind, and for a read that failed.
 	CompletionFromHost : {
 		kind : U8,
 		id : U64,
 		err : U8,
 		contents : Str,
-		blob : U64,
-		blob_len : U64,
+		blob : List(File.Blob),
 	}
 
 	## The flat record a cycle's recording state arrives in.
@@ -392,17 +397,17 @@ Program := [].{
 	to_host : Task -> TaskToHost
 	to_host = |pending|
 		match pending {
-			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
-			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
-			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis, blob: 0, offset: 0, count: 0 }
-			Screenshot(request) => { kind: task_screenshot, id: request.id, path: request.path, millis: 0, blob: 0, offset: 0, count: 0 }
-			ReadClipboard(request) => { kind: task_read_clipboard, id: request.id, path: "", millis: 0, blob: 0, offset: 0, count: 0 }
+			ReadSmallFile(request) => { kind: task_read_small_file, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
+			ReadFile(request) => { kind: task_read_file, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
+			Delay(request) => { kind: task_delay, id: request.id, path: "", millis: request.millis, blob: [], offset: 0, count: 0 }
+			Screenshot(request) => { kind: task_screenshot, id: request.id, path: request.path, millis: 0, blob: [], offset: 0, count: 0 }
+			ReadClipboard(request) => { kind: task_read_clipboard, id: request.id, path: "", millis: 0, blob: [], offset: 0, count: 0 }
 			ReadBlobSlice(request) => {
 				kind: task_read_blob_slice,
 				id: request.id,
 				path: "",
 				millis: 0,
-				blob: FileHost.Blob.token(File.Blob.to_host(request.blob)),
+				blob: [request.blob],
 				offset: request.offset,
 				count: request.count,
 			}
@@ -424,7 +429,7 @@ Program := [].{
 		} else if raw.kind == completion_file_read {
 			FileRead({
 				id: raw.id,
-				result: if raw.err == 0 Ok(blob_from_host(raw)) else Err(read_error(raw.err)),
+				result: if raw.err == 0 blob_from_host(raw.blob) else Err(read_error(raw.err)),
 			})
 		} else if raw.kind == completion_delay {
 			DelayElapsed({
@@ -444,15 +449,7 @@ Program := [].{
 		} else if raw.kind == completion_clipboard_read {
 			ClipboardRead({
 				id: raw.id,
-				result: if raw.err == 0 {
-					Ok(raw.contents)
-				} else if raw.err == read_err_too_large {
-					Err(TooLarge)
-				} else if raw.err == read_err_busy {
-					Err(Busy)
-				} else {
-					Err(Unavailable)
-				},
+				result: if raw.err == 0 Ok(raw.contents) else Err(clipboard_error(raw.err)),
 			})
 		} else {
 			crash "roc-ray: host sent an unknown completion kind"
@@ -542,13 +539,23 @@ add_upload = |charged, pixels, budget| {
 	if total > budget Err(UploadBudgetExceeded) else Ok(total)
 }
 
-## Rebuild the handle a finished `ReadFile` installed.
+## Take the handle a finished `ReadFile` installed.
 ##
-## Nothing is copied here and nothing can be: the record carries a slot token
-## and a length, and the bytes never left the host.
-blob_from_host : Program.CompletionFromHost -> File.Blob
-blob_from_host = |raw|
-	File.Blob.from_host(FileHost.Blob.from_raw({ handle: raw.blob, byte_len: raw.blob_len }))
+## Nothing is copied here and nothing can be: the list carries one refcounted
+## handle, and the bytes never left the host.
+##
+## A read the host reported as succeeding always carries one. An empty list
+## means the host said it read a file and then delivered nothing to read, which
+## is transport disagreeing with itself -- the same condition, and the same
+## answer, as an unknown completion kind.
+blob_from_host : List(File.Blob) -> Try(File.Blob, Program.FileReadError)
+blob_from_host = |delivered|
+	match List.first(delivered) {
+		Ok(blob) => Ok(blob)
+		Err(_) => {
+			crash "roc-ray: host reported a finished file read with no blob"
+		}
+	}
 
 ## `kind` code for a finished small-file read. Mirrored in `src/host_native.zig`.
 completion_small_file_read : U8
@@ -600,11 +607,13 @@ completion_blob_slice_read : U8
 completion_blob_slice_read = 5
 
 ## Decode the host's blob-error code. Mirrored in `src/host_native.zig`.
-blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Released, Busy]
+##
+## There is no code for a released blob, because there is no way to release
+## one: the task holds a reference to the blob it is slicing, so the bytes
+## cannot be gone while the host is reading them.
+blob_error : U8 -> [NotUtf8, TooLarge, OutOfBounds, Busy]
 blob_error = |code|
-	if code == 1 {
-		Released
-	} else if code == 2 {
+	if code == 2 {
 		OutOfBounds
 	} else if code == 4 {
 		TooLarge
@@ -612,6 +621,20 @@ blob_error = |code|
 		Busy
 	} else {
 		NotUtf8
+	}
+
+## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
+##
+## Named rather than spelled inline, so the same code path every other decoder
+## takes is testable the same way they are.
+clipboard_error : U8 -> [Unavailable, TooLarge, Busy]
+clipboard_error = |code|
+	if code == read_err_too_large {
+		TooLarge
+	} else if code == read_err_busy {
+		Busy
+	} else {
+		Unavailable
 	}
 
 ## `status` code for a running recording. Mirrored in `src/capture.zig`.
@@ -709,13 +732,109 @@ capture_failure = |code|
 		_ => Unknown
 	}
 
-## A finished blob read, as the host phrases it: a token, a length, no payload.
+## A flattened task with its blob list reduced to a count.
 ##
-## Sixteen mebibytes of file, and the record is the same handful of words an
-## elapsed timer arrives in. That is the property the blob path exists for, so
-## it is asserted rather than described.
-sample_blob_read : Program.CompletionFromHost
-sample_blob_read = { kind: 4, id: 3, err: 0, contents: "", blob: 0x0001_0002_0003, blob_len: 16 * 1024 * 1024 }
+## `Program.to_host(task) == { ... }` would say this directly, and cannot: the
+## transport record carries the handle list, a handle is a boxed host resource,
+## and comparing a `Box` crashes the interpreter that runs `expect`. Compiled
+## apps are unaffected. Everything the flattening actually decides is a scalar,
+## so nothing is lost by comparing the scalars.
+task_shape : Program.Task -> { kind : U8, id : U64, path : Str, millis : U64, offset : U64, count : U64, blobs : U64 }
+task_shape = |pending| {
+	raw = Program.to_host(pending)
+	{
+		kind: raw.kind,
+		id: raw.id,
+		path: raw.path,
+		millis: raw.millis,
+		offset: raw.offset,
+		count: raw.count,
+		blobs: List.len(raw.blob),
+	}
+}
+
+## What kind of completion a transport record decoded to.
+##
+## `Program.completion_from_host(raw) == SmallFileRead(...)` would say all of
+## this in one line, and cannot be used. A `Completion` may be a `FileRead`, a
+## `FileRead` carries a `File.Blob`, and a blob is a boxed host resource -- so
+## the union's equality has to walk a `Box`, which crashes the interpreter that
+## runs `expect`. Compiled apps are unaffected; the three helpers below check
+## the same decode by naming what came out of it.
+decoded_kind : Program.CompletionFromHost -> Str
+decoded_kind = |raw|
+	match Program.completion_from_host(raw) {
+		SmallFileRead(_) => "small_file_read"
+		FileRead(_) => "file_read"
+		DelayElapsed(_) => "delay"
+		ScreenshotFinished(_) => "screenshot"
+		ClipboardRead(_) => "clipboard"
+		BlobSliceRead(_) => "blob_slice"
+	}
+
+## The id a decoded completion carries, whichever kind it turned out to be.
+##
+## The property that matters is that it is the app's own id and not the host's
+## idea of one: an app correlates its outstanding work by this and nothing else.
+decoded_id : Program.CompletionFromHost -> U64
+decoded_id = |raw|
+	match Program.completion_from_host(raw) {
+		SmallFileRead(finished) => finished.id
+		FileRead(finished) => finished.id
+		DelayElapsed(finished) => finished.id
+		ScreenshotFinished(finished) => finished.id
+		ClipboardRead(finished) => finished.id
+		BlobSliceRead(finished) => finished.id
+	}
+
+## Whether a decoded completion reports a failure rather than an answer.
+decoded_failed : Program.CompletionFromHost -> Bool
+decoded_failed = |raw|
+	match Program.completion_from_host(raw) {
+		SmallFileRead(finished) => finished.result.is_err()
+		FileRead(finished) => finished.result.is_err()
+		DelayElapsed(finished) => finished.result.is_err()
+		ScreenshotFinished(finished) => finished.result.is_err()
+		ClipboardRead(finished) => finished.result.is_err()
+		BlobSliceRead(finished) => finished.result.is_err()
+	}
+
+## The string a decoded read or clipboard completion delivered.
+decoded_contents : Program.CompletionFromHost -> Str
+decoded_contents = |raw|
+	match Program.completion_from_host(raw) {
+		SmallFileRead(finished) => match finished.result {
+			Ok(contents) => contents
+			Err(_) => ""
+		}
+		ClipboardRead(finished) => match finished.result {
+			Ok(contents) => contents
+			Err(_) => ""
+		}
+		_ => ""
+	}
+
+## A handle to sixteen mebibytes the app never sees, built without a host.
+##
+## `from_resource` is platform-internal, so this is a fixture no application
+## could write -- which is the point of the type: a blob is something the host
+## hands over, not something an app can name its way into.
+sample_blob : File.Blob
+sample_blob = File.Blob.from_host(FileHost.Blob.from_resource(Box.box({ handle: 0x0001_0002_0003, byte_len: 16 * 1024 * 1024 })))
+
+## A finished blob read, as the host phrases it: one handle, no payload.
+##
+## Sixteen mebibytes of file, and the record carries one refcounted word. That
+## is the property the blob path exists for, so it is asserted rather than
+## described.
+sample_blob_read : {} -> Program.CompletionFromHost
+sample_blob_read = |{}| {
+	kind: 4,
+	id: 3,
+	err: 0,
+	contents: "",
+	blob: [sample_blob],
+}
 
 ## A four-by-four texture, for the upload expects below.
 ##
@@ -784,54 +903,87 @@ expect List.len(filled_nine.deferred) == 1
 ## so an app that gets this can hold the task and offer it again next cycle.
 expect filled_nine.batch.add(Delay({ id: 99, millis: 1 })).is_err()
 expect Program.no_tasks.add(Delay({ id: 99, millis: 1 })).is_ok()
-expect Program.task(Delay({ id: 9, millis: 250 })).to_host_list() == [{ kind: 1, id: 9, path: "", millis: 250, blob: 0, offset: 0, count: 0 }]
-expect Program.to_host(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0, blob: 0, offset: 0, count: 0 }
-expect Program.to_host(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0, blob: 0, offset: 0, count: 0 }
-expect Program.to_host(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250, blob: 0, offset: 0, count: 0 }
-expect Program.to_host(Screenshot({ id: 4, path: "scene.png" })) == { kind: 2, id: 4, path: "scene.png", millis: 0, blob: 0, offset: 0, count: 0 }
-expect Program.to_host(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", millis: 0, blob: 0, offset: 0, count: 0 }
-expect Program.completion_from_host({ kind: 0, id: 3, err: 0, contents: "hi", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Ok("hi") })
-expect Program.completion_from_host({ kind: 0, id: 3, err: 1, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(NotFound) })
-expect Program.completion_from_host({ kind: 0, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(Busy) })
+expect Program.task(Delay({ id: 9, millis: 250 })).to_host_list().len() == 1
+expect task_shape(ReadSmallFile({ id: 7, path: "data.txt" })) == { kind: 0, id: 7, path: "data.txt", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(ReadFile({ id: 7, path: "data.bin" })) == { kind: 4, id: 7, path: "data.bin", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Delay({ id: 9, millis: 250 })) == { kind: 1, id: 9, path: "", millis: 250, offset: 0, count: 0, blobs: 0 }
+expect task_shape(Screenshot({ id: 4, path: "scene.png" })) == { kind: 2, id: 4, path: "scene.png", millis: 0, offset: 0, count: 0, blobs: 0 }
+expect task_shape(ReadClipboard({ id: 6 })) == { kind: 3, id: 6, path: "", millis: 0, offset: 0, count: 0, blobs: 0 }
+
+## Only the slice task carries a handle, and it carries exactly one -- which is
+## what keeps the bytes alive from the app naming the range to the host reading
+## it.
+expect task_shape(ReadBlobSlice({ id: 12, blob: sample_blob, offset: 4, count: 8 })) == { kind: 5, id: 12, path: "", millis: 0, offset: 4, count: 8, blobs: 1 }
+## Every kind routes to its own completion, and carries the app's own id
+## through. Answering the wrong kind would retire an id its owner is still
+## waiting on, so this is checked for all six rather than for the interesting
+## ones.
+expect decoded_kind({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == "small_file_read"
+expect decoded_kind({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == "delay"
+expect decoded_kind({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == "screenshot"
+expect decoded_kind({ kind: 3, id: 2, err: 0, contents: "", blob: [] }) == "clipboard"
+expect decoded_kind({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == "file_read"
+expect decoded_kind({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == "blob_slice"
+expect decoded_id({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == 3
+expect decoded_id({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == 5
+expect decoded_id({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == 8
+expect decoded_id({ kind: 3, id: 2, err: 0, contents: "", blob: [] }) == 2
+expect decoded_id({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == 3
+expect decoded_id({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == 2
+
+## `err == 0` is the only thing that makes an answer, and the payload rides
+## along with it.
+expect decoded_failed({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == Bool.False
+expect decoded_contents({ kind: 0, id: 3, err: 0, contents: "hi", blob: [] }) == "hi"
+expect decoded_failed({ kind: 0, id: 3, err: 1, contents: "", blob: [] }) == Bool.True
+expect decoded_failed({ kind: 1, id: 5, err: 0, contents: "", blob: [] }) == Bool.False
+expect decoded_failed({ kind: 2, id: 8, err: 0, contents: "", blob: [] }) == Bool.False
+expect decoded_failed({ kind: 3, id: 2, err: 0, contents: "pasted", blob: [] }) == Bool.False
+expect decoded_contents({ kind: 3, id: 2, err: 0, contents: "pasted", blob: [] }) == "pasted"
+expect decoded_failed({ kind: 4, id: 3, err: 3, contents: "", blob: [] }) == Bool.True
+expect decoded_failed({ kind: 5, id: 2, err: 5, contents: "", blob: [] }) == Bool.True
+
+## A delay the host would not start is reported as such rather than as one that
+## elapsed instantly -- the app asked to be told later, and never was.
+expect decoded_failed({ kind: 1, id: 5, err: 1, contents: "", blob: [] }) == Bool.True
 
 ## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
 ## with a string can report this, which is why the two reads no longer share one
 ## error type.
-expect Program.completion_from_host({ kind: 0, id: 3, err: 6, contents: "", blob: 0, blob_len: 0 }) == SmallFileRead({ id: 3, result: Err(NotUtf8) })
-expect Program.completion_from_host(sample_blob_read) == FileRead({ id: 3, result: Ok(blob_from_host(sample_blob_read)) })
-expect blob_from_host(sample_blob_read).len() == 16 * 1024 * 1024
-expect Program.completion_from_host({ kind: 4, id: 3, err: 3, contents: "", blob: 0, blob_len: 0 }) == FileRead({ id: 3, result: Err(Busy) })
-expect Program.completion_from_host({ kind: 4, id: 3, err: 5, contents: "", blob: 0, blob_len: 0 }) == FileRead({ id: 3, result: Err(TooLarge) })
-expect Program.completion_from_host({ kind: 1, id: 5, err: 0, contents: "", blob: 0, blob_len: 0 }) == DelayElapsed({ id: 5, result: Ok({}) })
-
-## A delay the host would not start is reported as such rather than as one that
-## elapsed instantly -- the app asked to be told later, and never was.
-expect Program.completion_from_host({ kind: 1, id: 5, err: 1, contents: "", blob: 0, blob_len: 0 }) == DelayElapsed({ id: 5, result: Err(Busy) })
-expect Program.completion_from_host({ kind: 2, id: 8, err: 0, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Ok({}) })
-expect Program.completion_from_host({ kind: 2, id: 8, err: 2, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(PathEscapesOutputDir) })
-expect Program.completion_from_host({ kind: 2, id: 8, err: 99, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(WriteFailed) })
-expect Program.completion_from_host({ kind: 3, id: 2, err: 0, contents: "pasted", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Ok("pasted") })
-expect Program.completion_from_host({ kind: 3, id: 2, err: 4, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(Unavailable) })
+expect small_file_error(read_err_not_utf8) == NotUtf8
+expect small_file_error(1) == NotFound
+expect small_file_error(2) == ReadFailed
+expect small_file_error(4) == Unavailable
+expect small_file_error(read_err_too_large) == TooLarge
+expect read_error(1) == NotFound
+expect read_error(2) == ReadFailed
+expect read_error(4) == Unavailable
+expect read_error(read_err_too_large) == TooLarge
+expect screenshot_error(2) == PathEscapesOutputDir
+expect screenshot_error(99) == WriteFailed
+expect screenshot_error(3) == AlreadyPending
+expect clipboard_error(4) == Unavailable
 
 ## Another process decides how much text the clipboard holds, so the frame
 ## thread refuses to copy an unbounded one rather than stalling on it.
-expect Program.completion_from_host({ kind: 3, id: 2, err: 5, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(TooLarge) })
+expect clipboard_error(read_err_too_large) == TooLarge
 
 ## Saturation is its own answer everywhere it can happen. A clipboard the host
-## would not read yet is not an `Unavailable` one, a live blob it would not
-## slice yet is not a `Released` one, and a screenshot it would not start is not
-## one this app already had outstanding. Each of those would send an app looking
-## for a fault that is not there, instead of asking again next cycle.
-expect Program.completion_from_host({ kind: 3, id: 2, err: 3, contents: "", blob: 0, blob_len: 0 }) == ClipboardRead({ id: 2, result: Err(Busy) })
-expect Program.completion_from_host({ kind: 5, id: 2, err: 5, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Busy) })
-expect Program.completion_from_host({ kind: 5, id: 2, err: 1, contents: "", blob: 0, blob_len: 0 }) == BlobSliceRead({ id: 2, result: Err(Released) })
-expect Program.completion_from_host({ kind: 2, id: 8, err: 10, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Busy) })
-expect Program.completion_from_host({ kind: 2, id: 8, err: 3, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(AlreadyPending) })
+## would not read yet is not an `Unavailable` one, a slice it would not start
+## yet is not one that ran off the end, and a screenshot it would not start is
+## not one this app already had outstanding. Each of those would send an app
+## looking for a fault that is not there, instead of asking again next cycle.
+expect clipboard_error(read_err_busy) == Busy
+expect small_file_error(read_err_busy) == Busy
+expect read_error(read_err_busy) == Busy
+expect blob_error(5) == Busy
+expect blob_error(2) == OutOfBounds
+expect screenshot_error(10) == Busy
 
 ## A screenshot the worker had no room for is refused rather than encoded on
 ## the frame thread. Both of these mean the file was not written, and the
 ## difference between them is whether asking again is worth anything.
-expect Program.completion_from_host({ kind: 2, id: 8, err: 11, contents: "", blob: 0, blob_len: 0 }) == ScreenshotFinished({ id: 8, result: Err(Unavailable) })
+expect screenshot_error(11) == Unavailable
 expect Program.capture_from_host({ status: 0, err: 0, frames: 0, dropped: 0, bytes: 0 }) == Idle
 expect Program.capture_from_host({ status: 1, err: 0, frames: 12, dropped: 1, bytes: 0 }) == Active({ frames: 12, dropped: 1 })
 expect Program.capture_from_host({ status: 2, err: 8, frames: 3, dropped: 0, bytes: 0 }) == Failed({ frames: 3, reason: WriteFailed })

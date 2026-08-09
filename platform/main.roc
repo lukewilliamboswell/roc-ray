@@ -54,7 +54,6 @@ platform ""
 		"roc_audio_music_time_played_raw": AudioHost.music_time_played!,
 		"roc_audio_set_master_volume_raw": AudioHost.set_master_volume!,
 		"roc_file_blob_byte": FileHost.blob_byte!,
-		"roc_file_release_blob": FileHost.release_blob!,
 		"roc_draw_begin_scissor_raw": DrawHost.begin_scissor!,
 		"roc_draw_circle_gradient": DrawHost.circle_gradient!,
 		"roc_draw_circle_lines_raw": DrawHost.circle_lines!,
@@ -353,7 +352,6 @@ run_action! = |action|
 		StopRecording => Ok(Capture.apply_stop!())
 		# Frees host memory in this cycle rather than reporting back later, which
 		# is exactly what an action is for.
-		ReleaseBlob(blob) => Ok(blob.release!())
 	}
 
 ## Draw the current model, then hand the same box back.

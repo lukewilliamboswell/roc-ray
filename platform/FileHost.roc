@@ -1,29 +1,35 @@
 ## Internal blob transport and hosted effects.
 ##
 ## This module is intentionally not exposed by the platform package. Public
-## applications use `File.Blob`; the handle below is the scalar the host ABI
+## applications use `File.Blob`; the boxed resource below is what the host ABI
 ## actually carries, kept opaque so an app cannot invent one.
 FileHost := [].{
 
-	## A host-owned byte buffer, named by a scalar the host can validate.
+	## A host-owned byte buffer, named by a box the host allocated.
 	##
-	## `handle` packs a slot index, a generation, and a resource kind, so a
-	## handle whose slot has been released and reused resolves to nothing rather
-	## than to whatever took its place. `byte_len` travels beside it so asking a
-	## blob how big it is costs no host call at all.
-	Blob :: { handle : U64, byte_len : U64 }.{
+	## The box is the point. Its refcount is the blob's lifetime: the host hands
+	## over one reference when a read finishes, Roc copies and drops it like any
+	## other value, and when the last one goes the host's `roc_dealloc` hook
+	## routes the free back to the slot and the bytes are gone. Nothing in the
+	## app says when -- the same way nothing says when a `Str` is freed.
+	##
+	## `handle` inside it packs a slot index, a generation and a resource kind,
+	## so the host can validate a box that reached it through the ABI rather
+	## than trusting a pointer. `byte_len` travels beside it so asking a blob
+	## how big it is costs no host call at all.
+	Blob :: { resource : Box({ handle : U64, byte_len : U64 }) }.{
 
 		## Wrap what the host sent. Platform-internal.
-		from_raw : { handle : U64, byte_len : U64 } -> Blob
-		from_raw = |raw| Blob.(raw)
+		from_resource : Box({ handle : U64, byte_len : U64 }) -> Blob
+		from_resource = |resource| { resource: resource }
 
 		## The scalar the host validates.
 		token : Blob -> U64
-		token = |Blob.(raw)| raw.handle
+		token = |blob| (Box.unbox(blob.resource)).handle
 
 		## Size in bytes, as reported when the blob was installed.
 		size : Blob -> U64
-		size = |Blob.(raw)| raw.byte_len
+		size = |blob| (Box.unbox(blob.resource)).byte_len
 	}
 
 	## Outcome of reading one byte of a blob. `err` is `0` when `byte` is it.
@@ -33,9 +39,9 @@ FileHost := [].{
 	}
 
 	## Read a single byte without copying the rest.
-	blob_byte! : { handle : U64, offset : U64 } => ByteResult
-
-	## Free the buffer a handle names. Releasing an already-released handle is
-	## not an error; it finds a stale token, exactly as any other use would.
-	release_blob! : U64 => {}
+	##
+	## Takes the whole blob rather than its token: the argument is what keeps
+	## the box alive across the call, and a bare `U64` would let Roc drop the
+	## last reference before the host had read the bytes it names.
+	blob_byte! : { blob : Blob, offset : U64 } => ByteResult
 }

@@ -48,6 +48,10 @@ CASES = (
         ROOT / "test" / "compile_fail" / "blob_slice_effect.roc",
         ("MISSING METHOD", "`slice_to_str!`", "File.Blob"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "blob_release_effect.roc",
+        ("MISSING METHOD", "`release`", "File.Blob"),
+    ),
 )
 
 ONE_ERROR = re.compile(r"Found 1 error and \d+ warnings?")

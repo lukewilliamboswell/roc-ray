@@ -25,8 +25,9 @@ import rr.Text
 ##   happened elsewhere.
 ## * `ReadFile` on the same large file succeeds, because it copies nothing. The
 ##   worker's allocation is installed into a host slot and the app is handed a
-##   `File.Blob` -- a handle. `Blob.len` is free; `slice_to_str!` copies exactly
-##   the range asked for; `Blob.release` gives the memory back.
+##   `File.Blob` -- a handle. `Blob.len` is free, a `ReadBlobSlice` task copies
+##   exactly the range asked for, and dropping the handle gives the memory
+##   back.
 ##
 ## The same code path runs when the host has no worker: the results simply
 ## arrive on the frame the tasks were issued instead of a later one.
@@ -69,15 +70,16 @@ PreviewState : [
 
 ## A read delivered as a handle.
 ##
-## `Held` is the only state that owns host memory. It lasts exactly as long as
-## it takes to answer one `ReadBlobSlice` -- one more cycle -- so the whole
-## lifecycle fits inside a three-frame headless run. A real app would keep the
-## blob for as long as it needs the bytes, and the only rule is that it says
-## when it is done.
+## `Held` is the only state that owns host memory, and it owns it the way a
+## `Str` field owns its bytes: replacing it with `Dropped` is what frees the
+## file. There is nothing to call and nothing to forget to call. It lasts
+## exactly as long as it takes to answer one `ReadBlobSlice` -- one more cycle
+## -- so the whole lifecycle fits inside a three-frame headless run. A real app
+## would keep the handle for as long as it wanted the bytes.
 BlobState : [
 	Waiting,
 	Held(File.Blob),
-	Released(U64),
+	Dropped(U64),
 	Failed(Str),
 ]
 
@@ -135,24 +137,19 @@ update = |model, step| {
 
 	preview = advance_preview(model.preview, step.completed)
 
-	# The preview has landed, so the app is done with the bytes. Releasing is an
-	# action: it is applied in this cycle, before anything is drawn, and reports
-	# nothing back.
+	# The preview has landed, so the app is done with the bytes. Being done is
+	# the whole of it: the next model does not hold the handle, so the last
+	# reference goes when this cycle's model does and the host frees the file.
+	# No action, no effect, nothing for a later cycle to get wrong.
 	#
 	# `blob.len()` is read here, from the pure `update`, because a length costs
 	# nothing -- it arrived with the handle. Only the bytes are host-side, which
 	# is exactly why getting at them took a task.
 	answered = preview != NoPreview and model.preview == NoPreview
-	releases : List(Program.Action)
-	releases =
-		match model.blob {
-			Held(blob) => if answered [blob.release()] else []
-			_ => []
-		}
 
 	settled =
 		match model.blob {
-			Held(blob) => if answered Released(blob.len()) else Held(blob)
+			Held(blob) => if answered Dropped(blob.len()) else Held(blob)
 			other => other
 		}
 
@@ -194,7 +191,7 @@ update = |model, step| {
 			queued: filled.deferred,
 			elapsed: model.elapsed + step.time.elapsed_seconds,
 		},
-		actions: if step.input.key_pressed(KeyEscape) List.append(releases, Program.exit(0)) else releases,
+		actions: if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [],
 		tasks: filled.batch,
 	})
 }
@@ -209,7 +206,6 @@ advance_preview = |current, completed|
 				Err(NotUtf8) => PreviewFailed("(not text)")
 				Err(TooLarge) => PreviewFailed("(preview too large)")
 				Err(OutOfBounds) => PreviewFailed("(shorter than the preview)")
-				Err(Released) => PreviewFailed("(already released)")
 				# The host was at its limit, not the blob's end: a real app
 				# would ask again next cycle rather than give up.
 				Err(Busy) => PreviewFailed("(host busy, try again)")
@@ -380,6 +376,6 @@ describe_blob = |state|
 	match state {
 		Waiting => "reading..."
 		Held(blob) => Str.concat(U64.to_str(blob.len()), " bytes held by the host")
-		Released(bytes) => Str.concat(U64.to_str(bytes), " bytes read, then released")
+		Dropped(bytes) => Str.concat(U64.to_str(bytes), " bytes read, then dropped")
 		Failed(reason) => reason
 	}

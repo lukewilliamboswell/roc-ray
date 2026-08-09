@@ -28,25 +28,22 @@
 ## comes back as `TooLarge`. What a blob removes is the cost of the bytes
 ## crossing into Roc, not an unbounded appetite for them.
 ##
-## A blob is released by hand -- `File.Blob.release` as an action, or
-## `release!` inside an effectful function. A handle is a plain scalar that Roc
-## copies and drops without telling the host, so nothing else could drive it. A
-## blob the app never releases is freed at shutdown rather than lost, and using
-## a handle after it is released fails with `Released` rather than reading freed
-## memory.
+## A blob is freed when the app stops holding it, and there is nothing to call.
+## It is an ordinary refcounted Roc value that happens to have a file behind it:
+## drop it from the model and the host frees the bytes, keep two copies and the
+## bytes outlive the first one. That is the whole lifetime story -- there is no
+## `release`, so there is no way to invalidate a copy someone else is still
+## using, and no way to leak one by forgetting.
 import FileHost
 
 File := [].{
 
-	## An opaque handle to bytes the host owns.
+	## A refcounted handle to bytes the host owns.
 	##
-	## Deliberately not the bytes. Copying it copies a couple of words no matter
-	## how large the file was, so it can sit in a model, be passed around, and be
-	## matched on without the payload ever moving.
-	##
-	## A handle is not a capability the host trusts: it carries the slot it names
-	## *and* the generation of that slot, so a handle kept past its release
-	## resolves to nothing even after the slot has been handed to another read.
+	## Deliberately not the bytes. Copying it copies one word no matter how
+	## large the file was, so it can sit in a model, be passed around, and be
+	## matched on without the payload ever moving. What it does share with the
+	## bytes is a lifetime: the last copy to go is what frees them.
 	Blob :: FileHost.Blob.{
 
 		## Wrap the transport handle. Platform-internal: an app cannot build a
@@ -56,9 +53,9 @@ File := [].{
 
 		## Unwrap to the transport handle. Platform-internal, and useless
 		## outside the platform: `FileHost` is not exposed, so an app can hold
-		## the result and do nothing with it. This exists so `Program` can
-		## flatten a blob into a task without the scalar handle appearing in a
-		## public type, which is what stops an app hand-assembling one.
+		## the result and do nothing with it. This exists so `Program` can pass
+		## a blob to the host without the boxed resource appearing in a public
+		## type, which is what stops an app hand-assembling one.
 		to_host : Blob -> FileHost.Blob
 		to_host = |Blob.(raw)| raw
 
@@ -72,40 +69,17 @@ File := [].{
 		is_empty = |blob| blob.len() == 0
 
 		## Read one byte, copying nothing else.
-		byte! : Blob, U64 => Try(U8, [OutOfBounds, Released])
-		byte! = |Blob.(raw), offset| {
-			result = FileHost.blob_byte!({ handle: FileHost.Blob.token(raw), offset: offset })
+		##
+		## `OutOfBounds` is the only way this fails. The bytes cannot have gone
+		## anywhere: holding the `Blob` to call this on is what keeps them.
+		byte! : Blob, U64 => Try(U8, [OutOfBounds])
+		byte! = |blob, offset| {
+			result = FileHost.blob_byte!({ blob: blob.to_host(), offset: offset })
 			if result.err == 0 {
 				Ok(result.byte)
-			} else if result.err == err_out_of_bounds {
-				Err(OutOfBounds)
 			} else {
-				Err(Released)
+				Err(OutOfBounds)
 			}
 		}
-
-		## Free the host's copy of these bytes, as an action a pure `update` can
-		## return. Receiver form: `blob.release()`.
-		##
-		## An action rather than a task because there is nothing to report: the
-		## memory is gone by the time the cycle ends, and a completion carrying
-		## "yes, really" would only be something else to correlate.
-		release : Blob -> [ReleaseBlob(Blob), ..]
-		release = |blob| ReleaseBlob(blob)
-
-		## Free the host's copy of these bytes from inside an effectful function.
-		##
-		## Releasing twice is harmless: the second call finds a stale handle,
-		## which is what any other use of it would find too.
-		release! : Blob => {}
-		release! = |Blob.(raw)| FileHost.release_blob!(FileHost.Blob.token(raw))
 	}
 }
-
-## Code for a handle that names no live buffer. Mirrored in `src/host_native.zig`.
-err_released : U8
-err_released = 1
-
-## Code for a range that runs past the end. Mirrored in `src/host_native.zig`.
-err_out_of_bounds : U8
-err_out_of_bounds = 2

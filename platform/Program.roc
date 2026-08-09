@@ -183,6 +183,13 @@ Program := [].{
 	## all -- they are applied in Roc, by the platform's own adapter. `deliver`
 	## is an opaque Roc callable to the host: it moves with this request and is
 	## invoked only when Roc receives the matching completion envelope.
+	##
+	## TODO(roc): make `TaskToHost`, `CompletionFromHost`, and
+	## `CompletionEnvelope` opaque custom records once `roc glue` can traverse
+	## them. With the pinned compiler, changing these declarations to `::` makes
+	## `roc glue` crash even though `roc check` succeeds. They are transport
+	## implementation details; app code should use `Task` constructors and
+	## `Step.messages`, never these records or their private `ticket` field.
 	TaskToHost(msg) : {
 		kind : U8,
 

@@ -6785,13 +6785,18 @@ test "worker shutdown clears abandoned byte-list delivery reservations" {
 
 test "a byte-list read is filled by the worker and installed by the frame thread" {
     // End to end across the thread boundary: the buffer Roc ends up with is
-    // the one the worker allocated, and the frame thread only moved it.
+    // the one the worker allocated, and the frame thread only moves it through
+    // the pending callback and the Roc completion list.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
     defer {
+        endPendingCallbacks(&roc_host);
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         file_bytes_heap.deinitAll();
     }
+    resetPendingCallbacksForTest(&roc_host);
+    beginPendingCallbacks();
+    test_callback_drops = 0;
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -6812,18 +6817,31 @@ test "a byte-list read is filled by the worker and installed by the frame thread
     const worker_ptr = result.bytes.?.ptr;
 
     var staging = CompletionStaging{};
+    try std.testing.expect(pending_callbacks.insert(result.ticket, testCallback(&roc_host)));
     stageByteListRead(&staging, &roc_host, result.ticket, worker.allocator, result.bytes.?);
-    const delivered = stagedBytes(staging.items.items[0].raw);
+    try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
+    try std.testing.expect(staging.items.items[0].deliver != null);
 
-    // This represents the list retained by a delivered Roc message/model. It
-    // owns a distinct ARC reference before staging drops its completion owner.
+    const completions = staging.take(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), staging.count());
+    try std.testing.expectEqual(@as(usize, 1), completions.items().len);
+    const delivered = stagedBytes(completions.items()[0].raw);
+
+    // This is the List a callback retains in the app's model. Give it its own
+    // ARC owner before Roc consumes the returned completion envelope.
     delivered.incref(1);
+
+    // This mirrors the platform adapter: it consumes every completion envelope
+    // and then its containing Roc list. The callback drops exactly once; the
+    // model's retained List remains the sole file-byte owner.
+    for (completions.allocationItems()) |item| item.decref(&roc_host);
+    completions.decref(&roc_host);
     staging.release(&roc_host);
 
-    // The retained owner survives the staging release and still reads the
-    // worker's allocation. The exhaustive alias/drop-order test above covers
-    // sublists and Str conversions; this test verifies the real worker path
-    // creates the initial owning list correctly.
+    // The retained model owner survives the full completion transfer and still
+    // reads the worker's allocation. The exhaustive alias/drop-order test above
+    // covers sublists and Str conversions.
+    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
     try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.active());
     try std.testing.expectEqual(worker_ptr, delivered.elements_ptr.?);
     try std.testing.expect(delivered.isSeamlessSlice());

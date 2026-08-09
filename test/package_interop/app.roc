@@ -48,7 +48,9 @@ label_for = |input|
 ## Every call below hands a value obtained through the RocRay platform to a
 ## package that only ever depended on `roc-ray-types`. This compiles only if the
 ## platform's re-exports and the package's own types are the same nominals.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 
@@ -76,7 +78,7 @@ update = |model, step| {
 			age: Events.age_seconds(started, step.time.timestamp_nanos),
 		},
 		actions: if input.key_pressed(KeyQ) [Program.exit(0)] else [],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

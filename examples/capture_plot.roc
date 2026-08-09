@@ -72,7 +72,9 @@ init! = App.init(
 ## The recording state arrives on the step rather than being asked for. There is
 ## no effect that asks: starting and stopping are actions, so the sampled state
 ## is the only channel a recording's outcome has.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
@@ -87,7 +89,7 @@ update = |model, step| {
 			Active(_) => []
 		}
 
-	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: Program.no_tasks })
+	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: [] })
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

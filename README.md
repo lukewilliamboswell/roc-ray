@@ -60,6 +60,25 @@ to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
+### Deferred tasks
+
+`update` can also return work that finishes later. Give each task constructor a
+typed callback that turns its terminal result into your app's `Msg`, then fold
+the resulting `step.messages` into the model on a later frame:
+
+```roc
+Msg : [ConfigLoaded({ path : Str, result : Try(Str, Program.SmallFileError) })]
+
+tasks = [Program.read_small_file("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
+```
+
+The host owns private transport tickets; apps do not allocate IDs, match
+completions, or maintain a task batch. It preserves the host-observed order of
+messages within a step. A task that cannot be admitted still calls its callback
+with its operation's `Busy` result, so an app may show an error or explicitly
+retry it. See [`async_read.roc`](examples/async_read.roc) for file reads and
+[`input_inspector.roc`](examples/input_inspector.roc) for a clipboard task.
+
 ## Start your own project
 
 The easiest route is to copy one of the examples closest to what you want to

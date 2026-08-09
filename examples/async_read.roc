@@ -11,21 +11,22 @@ import rr.Text
 ##
 ## Both reads are `Task`s, so `update` hands them to the host and returns
 ## immediately; the host does the blocking work on another thread and the answer
-## arrives later as a `Completion` carrying the id the app chose. Nothing here
-## waits, and the animation below keeps running while the reads are outstanding
-## -- which is the whole point.
+## arrives later as an application `Msg`. Nothing here waits, and the animation
+## below keeps running while the reads are outstanding -- which is the whole
+## point. Each task's callback chooses the message variant, so no request IDs or
+## completion filtering leak into the app.
 ##
 ## What the two answers cost is the interesting part, and this app issues all
 ## three cases at once so they can be compared on one screen:
 ##
-## * `ReadSmallFile` on a small file answers with a `Str`. Building that string
+## * `Program.read_small_file` on a small file answers with a `Str`. Building that string
 ##   is a copy on the frame thread, which is fine for a few kilobytes.
-## * `ReadSmallFile` on a large file is *refused* with `TooLarge`. The host will
+## * `Program.read_small_file` on a large file is *refused* with `TooLarge`. The host will
 ##   not spend a frame copying an unbounded payload just because the read itself
 ##   happened elsewhere.
-## * `ReadFile` on the same large file succeeds, because it copies nothing. The
+## * `Program.read_file` on the same large file succeeds, because it copies nothing. The
 ##   worker's allocation is installed into a host slot and the app is handed a
-##   `File.Blob` -- a handle. `Blob.len` is free, a `ReadBlobSlice` task copies
+##   `File.Blob` -- a handle. `Blob.len` is free, a `Program.read_blob_slice` task copies
 ##   exactly the range asked for, and dropping the handle gives the memory
 ##   back.
 ##
@@ -37,19 +38,12 @@ Model : {
 	blob : BlobState,
 
 	## The bytes that crossed into Roc, and only these twenty. Filled by a
-	## `ReadBlobSlice` completion rather than copied while drawing: a pure
+	## `Program.read_blob_slice` message rather than copied while drawing: a pure
 	## `update` cannot reach into a blob, and doing it from `render!` means
 	## paying for a copy and a UTF-8 scan every frame for a value that changed
 	## once.
 	preview : PreviewState,
 
-	## Tasks this app wants started but the cycle would not carry.
-	##
-	## A cycle takes at most `Program.max_tasks_per_step`, so a work list the
-	## app does not control the size of has to live somewhere between frames.
-	## This app never actually overflows -- it asks for four tasks at most --
-	## but carrying the remainder is what the shape looks like when it does.
-	queued : List(Program.Task),
 	elapsed : F32,
 	title : Text.Prepared,
 }
@@ -73,7 +67,7 @@ PreviewState : [
 ## `Held` is the only state that owns host memory, and it owns it the way a
 ## `Str` field owns its bytes: replacing it with `Dropped` is what frees the
 ## file. There is nothing to call and nothing to forget to call. It lasts
-## exactly as long as it takes to answer one `ReadBlobSlice` -- one more cycle
+## exactly as long as it takes to answer one `Program.read_blob_slice` -- one more cycle
 ## -- so the whole lifecycle fits inside a three-frame headless run. A real app
 ## would keep the handle for as long as it wanted the bytes.
 BlobState : [
@@ -83,18 +77,15 @@ BlobState : [
 	Failed(Str),
 ]
 
-## The ids the host echoes back, so each result can be matched to its request.
-small_id : U64
-small_id = 1
-
-refused_id : U64
-refused_id = 2
-
-blob_id : U64
-blob_id = 3
-
-preview_id : U64
-preview_id = 4
+## Results that can arrive on a later step. The tag is the correlation: it is
+## selected by the typed callback at submission time, rather than recovered by
+## scanning opaque completions later.
+Msg : [
+	SmallReadFinished({ path : Str, result : Try(Str, Program.SmallFileError) }),
+	LargeTextReadFinished({ path : Str, result : Try(Str, Program.SmallFileError) }),
+	BlobReadFinished(Try(File.Blob, Program.FileReadError)),
+	PreviewReadFinished(Try(Str, [NotUtf8, TooLarge, OutOfBounds, Busy])),
+]
 
 ## A few kilobytes: small enough that copying it into a `Str` is reasonable.
 small_path : Str
@@ -121,21 +112,17 @@ init! = App.init(
 			refused: Waiting,
 			blob: Waiting,
 			preview: NoPreview,
-			queued: [],
 			elapsed: 0,
 			title: Text.from("Reading while the frame keeps moving").size(22).prepare!()?,
 		}),
 )
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
-	# Whatever finished since the last cycle arrives together. This app has
-	# three requests outstanding, so it picks each one out by id; on an ordinary
-	# frame the list is empty and none of this finds anything.
-	next_small = advance_string_read(model.small, step.completed, small_id)
-	next_refused = advance_string_read(model.refused, step.completed, refused_id)
-
-	preview = advance_preview(model.preview, step.completed)
+	# All completed task callbacks arrive together. Folding the already-typed
+	# messages preserves host observation order without allocating a filtered
+	# completion list or comparing request IDs.
+	resolved = apply_messages({ small: model.small, refused: model.refused, blob: model.blob, preview: model.preview }, step.messages)
 
 	# The preview has landed, so the app is done with the bytes. Being done is
 	# the whole of it: the next model does not hold the handle, so the last
@@ -145,22 +132,21 @@ update = |model, step| {
 	# `blob.len()` is read here, from the pure `update`, because a length costs
 	# nothing -- it arrived with the handle. Only the bytes are host-side, which
 	# is exactly why getting at them took a task.
-	answered = preview != NoPreview and model.preview == NoPreview
+	answered = resolved.preview != NoPreview and model.preview == NoPreview
 
 	settled =
-		match model.blob {
+		match resolved.blob {
 			Held(blob) => if answered Dropped(blob.len()) else Held(blob)
 			other => other
 		}
 
-	next_blob = advance_blob_read(settled, step.completed)
+	next = { ..resolved, blob: settled }
 
 	# The cycle the handle arrives is the cycle to ask for the range. Twenty
 	# bytes cross once, here, instead of on every frame that draws them.
-	preview_tasks : List(Program.Task)
 	preview_tasks =
-		match (model.blob, next_blob) {
-			(Waiting, Held(blob)) => [ReadBlobSlice({ id: preview_id, blob, offset: 0, count: preview_bytes })]
+		match (model.blob, next.blob) {
+			(Waiting, Held(blob)) => [Program.read_blob_slice(blob, 0, preview_bytes, |result| PreviewReadFinished(result))]
 			_ => []
 		}
 
@@ -169,133 +155,107 @@ update = |model, step| {
 	reads =
 		if step.time.frame_count == 0 {
 			[
-				ReadSmallFile({ id: small_id, path: small_path }),
-				ReadSmallFile({ id: refused_id, path: large_path }),
-				ReadFile({ id: blob_id, path: large_path }),
+				Program.read_small_file(small_path, |result| small_read_message(small_path, result)),
+				Program.read_small_file(large_path, |result| large_text_read_message(large_path, result)),
+				Program.read_file(large_path, |result| BlobReadFinished(result)),
 			]
 		} else {
 			[]
 		}
 
-	# Anything a previous cycle could not carry goes first, so a deferred task
-	# is delayed rather than starved.
-	filled = Program.fill(List.join([model.queued, reads, preview_tasks]))
-
 	Ok({
 		model: {
 			..model,
-			small: next_small,
-			refused: next_refused,
-			blob: next_blob,
-			preview: preview,
-			queued: filled.deferred,
+			small: next.small,
+			refused: next.refused,
+			blob: next.blob,
+			preview: next.preview,
 			elapsed: model.elapsed + step.time.elapsed_seconds,
 		},
 		actions: if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: filled.batch,
+		tasks: List.concat(reads, preview_tasks),
 	})
 }
 
-## Fold one cycle's completions into the preview asked for out of the blob.
-advance_preview : PreviewState, List(Program.Completion) -> PreviewState
-advance_preview = |current, completed|
-	match List.first(List.keep_if(completed, answers_preview)) {
-		Ok(BlobSliceRead(finished)) =>
-			match finished.result {
-				Ok(contents) => Preview(contents)
-				Err(NotUtf8) => PreviewFailed("(not text)")
-				Err(TooLarge) => PreviewFailed("(preview too large)")
-				Err(OutOfBounds) => PreviewFailed("(shorter than the preview)")
-				# The host was at its limit, not the blob's end: a real app
-				# would ask again next cycle rather than give up.
-				Err(Busy) => PreviewFailed("(host busy, try again)")
+## Apply each completed callback in order. This walks the host-owned message
+## buffer directly; unlike the old completion filters it creates no temporary
+## lists and needs no app-visible transport metadata.
+apply_messages : { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }, List(Msg) -> { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }
+apply_messages = |state, messages|
+	match List.first(messages) {
+		Ok(message) => apply_messages(apply_message(state, message), List.drop_first(messages, 1))
+		Err(_) => state
+	}
+
+## These are deliberately tiny callback bodies. They capture only the stable
+## request path for diagnostics; they never retain the model.
+small_read_message : Str, Try(Str, Program.SmallFileError) -> Msg
+small_read_message = |path, result| SmallReadFinished({ path, result })
+
+large_text_read_message : Str, Try(Str, Program.SmallFileError) -> Msg
+large_text_read_message = |path, result| LargeTextReadFinished({ path, result })
+
+apply_message : { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }, Msg -> { small : LoadState, refused : LoadState, blob : BlobState, preview : PreviewState }
+apply_message = |state, message|
+	match message {
+		SmallReadFinished(finished) => { ..state, small: string_read_state(finished.result) }
+		LargeTextReadFinished(finished) => { ..state, refused: string_read_state(finished.result) }
+		BlobReadFinished(result) => { ..state, blob: blob_read_state(result) }
+		PreviewReadFinished(result) =>
+			{
+				..state,
+				preview: match result {
+					Ok(contents) => Preview(contents)
+					Err(NotUtf8) => PreviewFailed("(not text)")
+					Err(TooLarge) => PreviewFailed("(preview too large)")
+					Err(OutOfBounds) => PreviewFailed("(shorter than the preview)")
+					Err(Busy) => PreviewFailed("(host busy, try again)")
+				},
 			}
+		}
 
-		# Unreachable: `answers_preview` kept only this app's slice.
-		Ok(_) => current
-		Err(_) => current
+string_read_state : Try(Str, Program.SmallFileError) -> LoadState
+string_read_state = |result|
+	match result {
+		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
+		Err(NotFound) => Failed("not found")
+		Err(ReadFailed) => Failed("read failed")
+		Err(Busy) => Failed("too many reads in flight")
+		Err(Unavailable) => Failed("reads unavailable")
+		# The frame thread will not copy an unbounded payload into a
+		# string, so a large file is refused rather than stalling the
+		# frame. `Program.read_file` is the operation that does not refuse.
+		Err(TooLarge) => Failed("too large to deliver as a string")
+		# A `Str` is UTF-8 and a file is bytes, so this read can refuse
+		# for a reason `Program.read_file` never can. Read it as a blob instead.
+		Err(NotUtf8) => Failed("not text")
 	}
 
-## Whether a completion answers this app's blob-slice request.
-answers_preview : Program.Completion -> Bool
-answers_preview = |completion|
-	match completion {
-		BlobSliceRead(finished) => finished.id == preview_id
-		_ => Bool.False
-	}
-
-## Fold one cycle's completions into the state of a string-delivered read.
-advance_string_read : LoadState, List(Program.Completion), U64 -> LoadState
-advance_string_read = |current, completed, id|
-	match List.first(List.keep_if(completed, |completion| answers_small(completion, id))) {
-		Ok(SmallFileRead(finished)) =>
-			match finished.result {
-				Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
-				Err(NotFound) => Failed("not found")
-				Err(ReadFailed) => Failed("read failed")
-				Err(Busy) => Failed("too many reads in flight")
-				Err(Unavailable) => Failed("reads unavailable")
-				# The frame thread will not copy an unbounded payload into a
-				# string, so a large file is refused rather than stalling the
-				# frame. `ReadFile` is the operation that does not refuse.
-				Err(TooLarge) => Failed("too large to deliver as a string")
-				# A `Str` is UTF-8 and a file is bytes, so this read can refuse
-				# for a reason `ReadFile` never can. Read it as a blob instead.
-				Err(NotUtf8) => Failed("not text")
-			}
-
-		# Unreachable: `answers_small` kept only this read's completion.
-		Ok(_) => current
-		Err(_) => current
-	}
-
-## Fold one cycle's completions into the state of the blob-delivered read.
-##
-## Nothing here touches the file's bytes: a completion carries a handle, and a
+## Nothing here touches the file's bytes: a callback carries a handle, and a
 ## handle is a couple of words whatever the file's size.
-advance_blob_read : BlobState, List(Program.Completion) -> BlobState
-advance_blob_read = |current, completed|
-	match List.first(List.keep_if(completed, answers_blob)) {
-		Ok(FileRead(finished)) =>
-			match finished.result {
-				Ok(blob) => Held(blob)
-				Err(NotFound) => Failed("not found")
-				Err(ReadFailed) => Failed("read failed")
-				Err(Busy) => Failed("no blob slot free")
-				Err(Unavailable) => Failed("reads unavailable")
-				Err(TooLarge) => Failed("larger than the host will read")
-			}
-
-		# Unreachable: `answers_blob` kept only this read's completion.
-		Ok(_) => current
-		Err(_) => current
+blob_read_state : Try(File.Blob, Program.FileReadError) -> BlobState
+blob_read_state = |result|
+	match result {
+		Ok(blob) => Held(blob)
+		Err(NotFound) => Failed("not found")
+		Err(ReadFailed) => Failed("read failed")
+		Err(Busy) => Failed("no blob slot free")
+		Err(Unavailable) => Failed("reads unavailable")
+		Err(TooLarge) => Failed("larger than the host will read")
 	}
 
-## Whether a completion answers the string-delivered read with this id.
-answers_small : Program.Completion, U64 -> Bool
-answers_small = |completion, id|
-	match completion {
-		SmallFileRead(finished) => finished.id == id
+expect match apply_messages(
+	{ small: Waiting, refused: Waiting, blob: Waiting, preview: NoPreview },
+	[small_read_message("small.txt", Ok("ok")), large_text_read_message("large.txt", Err(TooLarge))],
+).small {
+	Loaded(bytes) => bytes == 2
+	_ => Bool.False
+}
 
-		# Every other completion belongs to some other request. A wildcard
-		# rather than a branch each: this asks one question, and enumerating
-		# the platform's whole task list here would break the app every time
-		# a new kind of task existed.
-		_ => Bool.False
-	}
-
-## Whether a completion answers this app's blob-delivered read.
-answers_blob : Program.Completion -> Bool
-answers_blob = |completion|
-	match completion {
-		FileRead(finished) => finished.id == blob_id
-
-		# Every other completion belongs to some other request. A wildcard
-		# rather than a branch each: this asks one question, and enumerating
-		# the platform's whole task list here would break the app every time
-		# a new kind of task existed.
-		_ => Bool.False
-	}
+expect match small_read_message("saved-context.txt", Ok("ok")) {
+	SmallReadFinished(finished) => finished.path == "saved-context.txt"
+	_ => Bool.False
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
@@ -339,7 +299,7 @@ render! = |model, frame| {
 ## Draw the range that already crossed. No bytes move here.
 ##
 ## This is the difference the task makes: `render!` reads a `Str` out of the
-## model, where a completion put it, instead of asking the host for it again on
+## model, where a callback message put it, instead of asking the host for it again on
 ## every frame.
 draw_preview! : PreviewState, Draw.Frame => Try({}, [Exit(I64), ..])
 draw_preview! = |state, frame|

@@ -104,7 +104,9 @@ prepare_counter_labels! = |index, acc|
 		prepare_counter_labels!(index + 1, List.append(acc, label))
 	}
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 	# Drive the pointer for the *next* frame from the script.
@@ -161,7 +163,7 @@ update = |model, step| {
 			slider: slider,
 		},
 		actions: actions,
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

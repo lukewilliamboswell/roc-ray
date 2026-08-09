@@ -32,7 +32,7 @@ Window := [].{
 
 	## Replace the system clipboard contents, as an action.
 	##
-	## Reading it back is a `ReadClipboard` task instead, because a read has an
+	## Reading it back is a `Program.read_clipboard` task instead, because a read has an
 	## answer to deliver.
 	set_clipboard_text : Str -> [SetClipboardText(Str), ..]
 	set_clipboard_text = |text| SetClipboardText(text)

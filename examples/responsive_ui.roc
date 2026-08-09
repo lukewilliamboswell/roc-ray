@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Color
@@ -189,7 +189,9 @@ layout_for = |screen| {
 	}
 }
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 
@@ -218,7 +220,7 @@ update = |model, step| {
 		# With `with_exit_key(NoExitKey)` no key closes the window on its
 		# own, so the app decides. Escape is left free for the UI to use.
 		actions: if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

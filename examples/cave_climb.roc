@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -937,7 +937,9 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 }
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
 update = |model, step| {
 	input = step.input
 
@@ -960,7 +962,7 @@ update = |model, step| {
 	Ok({
 		model: { ..model, world: next_world },
 		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

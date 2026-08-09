@@ -1076,7 +1076,9 @@ restart_on_space = |model, input|
 
 ## No `!`: the sounds this frame plays and the exit Escape asks for are returned
 ## as actions, and the platform applies them in order before `render!`.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
@@ -1090,7 +1092,7 @@ update = |model, step| {
 	Ok({
 		model: next.model,
 		actions: List.concat(exit_actions, next.actions),
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

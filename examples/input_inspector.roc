@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.Draw
 import rr.Color
@@ -28,12 +28,9 @@ Model : {
 
 program = { init!, update, render! }
 
-## The id the host echoes back on a finished clipboard read, so the answer can
-## be matched to the request. Ctrl+V is edge-triggered and the answer arrives on
-## the very next step, so only one read is ever outstanding and a constant id is
-## enough; an app juggling several would allocate them.
-paste_id : U64
-paste_id = 1
+## A clipboard task chooses this message at submission time. The app receives
+## the typed result directly in `step.messages`, with no public task ID.
+Msg : [ClipboardReadFinished(Try(Str, [Unavailable, TooLarge, Busy]))]
 
 init! : App.Init(Model, [])
 init! = App.init(
@@ -77,7 +74,7 @@ ascii_typed = |codepoints|
 ## Everything the host used to be told mid-update is returned instead: settings
 ## that just happen become actions, and reading the clipboard -- which answers
 ## back -- becomes a task.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 
@@ -88,23 +85,23 @@ update = |model, step| {
 	# One chain, as before, so two shortcuts pressed together still resolve in
 	# this order -- it now yields the work to do alongside the new buffer.
 	clipboard = if ctrl_held and input.key_pressed(KeyC) {
-		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: Program.no_tasks }
+		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: [] }
 	} else if ctrl_held and input.key_pressed(KeyV) {
 		# A read answers back, so it is a task: the pasted text is appended on
 		# the step that carries the answer rather than on this one.
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: Program.task(ReadClipboard({ id: paste_id })) }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [Program.read_clipboard(|result| ClipboardReadFinished(result))] }
 	} else if ctrl_held and input.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared", actions: [], tasks: Program.no_tasks }
+		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
 	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: Program.no_tasks }
+		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
 	} else if ctrl_held and input.key_pressed(KeyM) {
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: Program.no_tasks }
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: Program.no_tasks }
+		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
 	}
 
-	paste = paste_outcome(step.completed)
+	paste = paste_outcome(step.messages)
 	typed = match paste {
 		Pasted(text) => Str.concat(clipboard.typed, text)
 		NoText => clipboard.typed
@@ -142,7 +139,7 @@ update = |model, step| {
 	})
 }
 
-## What this step's completions say about an outstanding paste.
+## What this step's callback messages say about an outstanding paste.
 ##
 ## `TooLarge` is its own outcome rather than being folded into `NoText`: there
 ## *is* text, the host just would not copy that much of it onto the frame
@@ -152,34 +149,20 @@ update = |model, step| {
 ## `Busy` is separate again, and for the same reason in reverse: the clipboard
 ## is fine and so is this app, the host simply had no room to start the read.
 ## That is the one outcome here worth asking for a second time.
-paste_outcome : List(Program.Completion) -> [NotYet, Pasted(Str), NoText, TooMuchText, HostBusy]
-paste_outcome = |completed|
-	match List.first(List.keep_if(completed, is_our_paste)) {
-		Ok(ClipboardRead(finished)) =>
-			match finished.result {
+paste_outcome : List(Msg) -> [NotYet, Pasted(Str), NoText, TooMuchText, HostBusy]
+paste_outcome = |messages|
+	match List.first(messages) {
+		Ok(ClipboardReadFinished(result)) =>
+			match result {
 				Ok(pasted) => Pasted(pasted)
 				Err(Unavailable) => NoText
 				Err(TooLarge) => TooMuchText
 				Err(Busy) => HostBusy
 			}
-
-		# Unreachable: `is_our_paste` kept only this app's clipboard read.
-		Ok(_) => NotYet
 		Err(_) => NotYet
 	}
 
-## Whether a completion answers this app's clipboard read.
-is_our_paste : Program.Completion -> Bool
-is_our_paste = |completion|
-	match completion {
-		ClipboardRead(finished) => finished.id == paste_id
-
-		# Every other completion belongs to some other request. A wildcard
-		# rather than a branch each: this asks one question, and enumerating
-		# the platform's whole task list here would break the app every time
-		# a new kind of task existed.
-		_ => Bool.False
-	}
+expect paste_outcome([ClipboardReadFinished(Ok("pasted"))]) == Pasted("pasted")
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

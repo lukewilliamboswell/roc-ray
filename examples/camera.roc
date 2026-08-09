@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Camera
@@ -73,7 +73,9 @@ move_player = |player, input, dt| {
 	}
 }
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 	dt = step.time.elapsed_seconds
@@ -86,7 +88,7 @@ update = |model, step| {
 	Ok({
 		model: { ..model, player, zoom, rotation, mouse: input.mouse.position() },
 		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

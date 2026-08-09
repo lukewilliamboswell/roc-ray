@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Audio
@@ -444,7 +444,9 @@ step_event_actions = |sounds, events|
 ## already interpreted effectfully -- so this split is mostly a matter of moving
 ## the seam that was there all along. What used to be a `for` loop calling
 ## `play!` is now the same loop building the actions `update` hands back.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 	dt = step.time.elapsed_seconds
@@ -459,7 +461,7 @@ update = |model, step| {
 			exit_actions,
 			List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
 		),
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

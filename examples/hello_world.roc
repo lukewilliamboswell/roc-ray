@@ -34,13 +34,15 @@ init! = App.init(
 ## No `!`: this is a pure function, so it cannot read input or exit by itself.
 ## It is handed everything the host saw and returns the next model plus the work
 ## it wants done -- here, an `Exit` action on the frame Escape is pressed.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	input = step.input
 	Ok({
 		model: { ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) },
 		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 }
 

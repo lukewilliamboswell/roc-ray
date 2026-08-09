@@ -1,12 +1,13 @@
 ## Asynchronous file reads and host-owned byte buffers.
 ##
-## `Program.ReadSmallFile` returns a UTF-8 `Str` and is intended for small text
-## files. `Program.ReadFile` returns a `Blob`, avoiding a full payload copy onto
-## the frame thread. The host rejects files larger than 16 MiB with `TooLarge`.
+## `Program.read_small_file` returns a UTF-8 `Str` to its typed callback and is
+## intended for small text files. `Program.read_file` returns a `Blob`, avoiding
+## a full payload copy onto the frame thread. The host rejects files larger than
+## 16 MiB with `TooLarge`.
 ##
-## Use `Program.ReadBlobSlice` to copy and decode a UTF-8 range in `update`, or
-## `Blob.byte!` to inspect one byte from an effectful context. Blob storage is
-## released automatically after the final Roc reference is dropped.
+## Use `Program.read_blob_slice` to copy and decode a UTF-8 range through a task
+## callback, or `Blob.byte!` to inspect one byte from an effectful context. Blob
+## storage is released automatically after the final Roc reference is dropped.
 import FileHost
 
 File := [].{

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Color
@@ -41,12 +41,14 @@ init! = App.init(
 ## carries it, so `update` reads it off the step and stores it. Writing it into
 ## the shader is `render!`'s job: the uniform only means anything relative to
 ## the draws it precedes.
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step|
 	Ok({
 		model: { ..model, seconds: U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000 },
 		actions: [],
-		tasks: Program.no_tasks,
+		tasks: [],
 	})
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])

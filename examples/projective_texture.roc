@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -49,10 +49,12 @@ init! = App.init(
 	},
 )
 
-update : Model, Program.Step -> Try(Program.Next(Model), [Exit(I64), ..])
+Msg : []
+
+update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
 update = |model, step| {
 	dragged = drag_corner(model, step.input)
-	Ok({ model: dragged.model, actions: dragged.actions, tasks: Program.no_tasks })
+	Ok({ model: dragged.model, actions: dragged.actions, tasks: [] })
 }
 
 ## Fold one frame of pointer input into the quad.

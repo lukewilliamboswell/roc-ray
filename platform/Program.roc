@@ -25,7 +25,8 @@ Program := [].{
 	## Everything the host observed since the previous cycle.
 	##
 	## `messages` contains all task callbacks completed for this cycle, in the
-	## order the host observed their completions.
+	## order the host observed their completions. Independent asynchronous tasks
+	## may complete in any order; their submission order does not constrain it.
 	## `capture` contains the recording status sampled for this cycle.
 	Step(msg) : {
 		input : Input.Snapshot,
@@ -38,7 +39,13 @@ Program := [].{
 	## What `update` returns: the next model, plus work for the platform.
 	##
 	## `actions` run this cycle, in order, before `render!`. `tasks` go to the
-	## host and answer on a later `Step`.
+	## host in list order and answer on a later `Step`. Every submitted task gets
+	## exactly one terminal callback, including `Err(Busy)` when the host refuses
+	## admission; independent asynchronous completions have no specified order.
+	##
+	## An app with no messages should still declare `Msg : []`, use
+	## `Program.Step(Msg)` and `Program.Next(Model, Msg)` in `update`, and return
+	## `tasks: []`. This keeps the message type inferable if it adds a task later.
 	Next(model, msg) : {
 		model : model,
 		actions : List(Action),
@@ -94,6 +101,11 @@ Program := [].{
 	## application's message. The platform retains that function privately until
 	## the matching host completion arrives; task tickets are transport-only and
 	## are never visible to app code.
+	##
+	## Platform wrappers capture only the callback supplied here, never the model
+	## or request-only data. The callback itself retains every value it captures,
+	## however, so prefer small stable context or generation values over capturing
+	## an entire model for work that may remain pending.
 	##
 	## `ReadSmallFile` returns a UTF-8 `Str` and rejects files above its inline
 	## copy limit. `ReadFile` returns a refcounted `File.Blob` for files up to the
@@ -178,6 +190,9 @@ Program := [].{
 
 	## The flat record a `Task` becomes on the way out to the host.
 	##
+	## Platform-internal transport, not supported application API. Apps construct
+	## `Task` values only through the typed constructors above.
+	##
 	## Unions do not cross the host boundary in this platform; every effect
 	## flattens to scalars behind a `U8` tag first. Actions never come here at
 	## all -- they are applied in Roc, by the platform's own adapter. `deliver`
@@ -208,6 +223,9 @@ Program := [].{
 
 	## The flat record one completion arrives in.
 	##
+	## Platform-internal transport, not supported application API. The host owns
+	## its ticket and pairs this raw result with the continuation it retained.
+	##
 	## A successful `ReadFile` places one blob handle in `blob` without copying
 	## the payload. The list is empty for other kinds and failed reads.
 	CompletionFromHost : {
@@ -219,6 +237,7 @@ Program := [].{
 	}
 
 	## A host-retained continuation returned to Roc with its terminal result.
+	## Platform-internal transport, not supported application API.
 	## The host treats `deliver` as an owned, opaque erased callable: it moves
 	## and drops it, but never invokes it. This record is therefore the one
 	## place a generic application message value crosses the ABI.
@@ -228,10 +247,11 @@ Program := [].{
 	## layout. Its body validates the expected kind, decodes the raw result, and
 	## boxes the resulting application message for the ABI round trip.
 	##
-	## TODO(roc): `roc glue` currently rejects `Box(Runtime(Model, Msg))` when
-	## its nested pending continuation layout is generic. Once glue can erase
-	## that opaque runtime, retain ordinary continuations there instead: remove
-	## this per-submission erased-callable box and the per-completion `Box(msg)`.
+	## TODO(roc): make `TaskToHost`, `CompletionFromHost`, and
+	## `CompletionEnvelope` opaque once `roc glue` handles opaque generic
+	## transport records. That same generic opacity limitation rejects
+	## `Box(Runtime(Model, Msg))`; fixing it permits ordinary runtime
+	## continuations and removes this per-task box and per-message `Box(msg)`.
 	CompletionEnvelope(msg) : {
 		raw : CompletionFromHost,
 		deliver : Box(CompletionFromHost -> Box(msg)),
@@ -318,6 +338,7 @@ Program := [].{
 	## Move a task's operation data and its one erased continuation into the
 	## flat host request. The host takes ownership of the continuation and assigns
 	## a private monotonic ticket while accepting it.
+	## Platform-internal, unsupported application API.
 	##
 	## In particular, `ReadBlobSlice` moves its `File.Blob` to the transport
 	## record; its callback closure captures only the app callback, never the
@@ -334,6 +355,7 @@ Program := [].{
 		}
 
 	## Invoke the continuation returned by the host with its terminal result.
+	## Platform-internal, unsupported application API.
 	##
 	## Every typed closure validates `raw.kind` before decoding it. The box around
 	## the produced message is solely the generic ABI return envelope and is
@@ -681,10 +703,14 @@ small_task = Program.normalize(Program.read_small_file("data.txt", string_result
 
 delay_task = Program.normalize(Program.delay(1, unit_result_message))
 
-clipboard_task = Program.normalize(Program.read_clipboard(|result| match result {
-	Ok(text) => text
-	Err(_) => "clipboard failed"
-}))
+clipboard_task = Program.normalize(
+	Program.read_clipboard(
+		|result| match result {
+			Ok(text) => text
+			Err(_) => "clipboard failed"
+		},
+	),
+)
 
 expect Program.complete({ raw: { kind: 0, ticket: 20, err: 0, contents: "hi", blob: [] }, deliver: small_task.deliver }) == "hi"
 expect Program.complete({ raw: { kind: 0, ticket: 20, err: 1, contents: "", blob: [] }, deliver: small_task.deliver }) == "failed"

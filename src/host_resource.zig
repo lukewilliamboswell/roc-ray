@@ -1,9 +1,11 @@
-//! Fixed-capacity host-owned resources whose handles use Roc `Box(U64)` ARC.
+//! Fixed-capacity host-owned resources whose handles use Roc `Box(payload)` ARC.
 //!
 //! Each live slot starts with Roc's one-word box refcount followed immediately
-//! by its boxed payload. The payload includes an opaque lifecycle token. When
-//! the final reference is released, `roc_dealloc` receives the slot base and
-//! routes it back here so the native value can be destroyed and the slot reused.
+//! by its typed payload. That payload includes an opaque lifecycle token and may
+//! also carry immutable metadata such as texture dimensions or blob length.
+//! When the final reference is released, `roc_dealloc` receives the slot base
+//! and routes it back here so the native value can be destroyed and the slot
+//! reused.
 
 const std = @import("std");
 

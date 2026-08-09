@@ -2,7 +2,7 @@
 ##
 ## The host calls pure `update` once per cycle with a `Step`. The result contains
 ## the next model, immediate `Action` values, and asynchronous `Task` values.
-## Actions run in order before rendering. Each accepted task invokes its typed
+## Actions run in order before rendering. Each submitted task invokes its typed
 ## callback exactly once on a later step, contributing one application message.
 ##
 ## `Delay` uses wall time. Animation and physics should use `step.time`.

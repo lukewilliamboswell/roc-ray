@@ -4,6 +4,7 @@
 //! `xvfb-run`, to validate real raylib rasterization rather than only ABI calls.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
@@ -23,6 +24,173 @@ const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
 
 const TilemapSmokeContext = struct { texture: backend.Texture };
+
+const MetricSnapshot = struct {
+    base_size: f32,
+    fallback_advance: f32,
+    line_spacing: f32,
+    glyphs: []backend.FontGlyphMetric,
+};
+
+const MetricMeasurement = struct {
+    width: f32,
+    height: f32,
+};
+
+/// Copy precisely the scalar data `Text.metrics!` receives from a live raylib
+/// font. The measurement below deliberately has no access to the font after
+/// this point, matching the pure Roc API's ownership boundary.
+fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !MetricSnapshot {
+    const glyphs = try allocator.alloc(backend.FontGlyphMetric, backend.fontGlyphCount(font));
+    var fallback_advance: f32 = 0;
+    for (glyphs, 0..) |*glyph, index| {
+        glyph.* = backend.fontGlyphMetric(font, index);
+        if (index == 0 or glyph.codepoint == '?') fallback_advance = glyph.advance;
+    }
+    std.sort.pdq(backend.FontGlyphMetric, glyphs, {}, struct {
+        fn lessThan(_: void, left: backend.FontGlyphMetric, right: backend.FontGlyphMetric) bool {
+            return left.codepoint < right.codepoint;
+        }
+    }.lessThan);
+    return .{
+        .base_size = backend.fontBaseSize(font),
+        .fallback_advance = fallback_advance,
+        // roc-ray exposes no text-line-spacing setter; this is raylib 6's
+        // initial value, retained by `Text.metrics!` with the glyph scalars.
+        .line_spacing = 2,
+        .glyphs = glyphs,
+    };
+}
+
+fn snapshotGlyphAdvance(snapshot: MetricSnapshot, codepoint: u32) f32 {
+    var start: usize = 0;
+    var end = snapshot.glyphs.len;
+    while (start < end) {
+        const middle = start + (end - start) / 2;
+        const glyph = snapshot.glyphs[middle];
+        if (glyph.codepoint == codepoint) return glyph.advance;
+        if (codepoint < glyph.codepoint) {
+            end = middle;
+        } else {
+            start = middle + 1;
+        }
+    }
+    return snapshot.fallback_advance;
+}
+
+const DecodedCodepoint = struct {
+    codepoint: u32,
+    next: usize,
+};
+
+/// Every string below is valid UTF-8, exactly as `Str` values are. This is the
+/// same byte-to-codepoint boundary used by `Text.Metrics.measure`.
+fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
+    const first: u32 = text[index];
+    if (first < 0x80) return .{ .codepoint = first, .next = index + 1 };
+    if (first < 0xE0) return .{
+        .codepoint = (first - 0xC0) * 64 + @as(u32, text[index + 1]) - 0x80,
+        .next = index + 2,
+    };
+    if (first < 0xF0) return .{
+        .codepoint = (first - 0xE0) * 4096 + (@as(u32, text[index + 1]) - 0x80) * 64 + @as(u32, text[index + 2]) - 0x80,
+        .next = index + 3,
+    };
+    return .{
+        .codepoint = (first - 0xF0) * 262144 + (@as(u32, text[index + 1]) - 0x80) * 4096 + (@as(u32, text[index + 2]) - 0x80) * 64 + @as(u32, text[index + 3]) - 0x80,
+        .next = index + 4,
+    };
+}
+
+/// Pure equivalent of `Text.Metrics.measure` for a native parity check.
+fn measureSnapshot(snapshot: MetricSnapshot, text: []const u8, size: f32, spacing: f32) MetricMeasurement {
+    if (text.len == 0 or text[0] == 0) return .{ .width = 0, .height = 0 };
+
+    var index: usize = 0;
+    var line_width: f32 = 0;
+    var widest_width: f32 = 0;
+    var line_codepoints: usize = 0;
+    var widest_codepoints: usize = 0;
+    var height = size;
+    while (index < text.len and text[index] != 0) {
+        const decoded = decodeUtf8(text, index);
+        index = decoded.next;
+        if (decoded.codepoint == '\n') {
+            widest_width = @max(widest_width, line_width);
+            widest_codepoints = @max(widest_codepoints, line_codepoints);
+            line_width = 0;
+            line_codepoints = 0;
+            height += size + snapshot.line_spacing;
+        } else {
+            line_width += snapshotGlyphAdvance(snapshot, decoded.codepoint);
+            line_codepoints += 1;
+        }
+    }
+    const widest_codepoint_count = @max(widest_codepoints, line_codepoints);
+    return .{
+        .width = @max(widest_width, line_width) * (size / snapshot.base_size) + (@as(f32, @floatFromInt(widest_codepoint_count)) - 1) * spacing,
+        .height = height,
+    };
+}
+
+fn expectMeasurementEqual(actual: MetricMeasurement, expected: rl.Vector2, label: []const u8) !void {
+    const tolerance: f32 = 0.001;
+    if (!std.math.approxEqAbs(f32, actual.width, expected.x, tolerance) or !std.math.approxEqAbs(f32, actual.height, expected.y, tolerance)) {
+        std.log.err("{s}: scalar snapshot measured ({d:.3}, {d:.3}), raylib MeasureTextEx measured ({d:.3}, {d:.3})", .{
+            label, actual.width, actual.height, expected.x, expected.y,
+        });
+        return error.FontMetricParity;
+    }
+}
+
+/// Compare the host snapshot/pure path with the renderer's own MeasureTextEx.
+/// This is intentionally a real-GL smoke check rather than the headless metric
+/// fixture: it catches a change in raylib's default or loaded-font semantics.
+fn expectFontMetricParity(allocator: std.mem.Allocator, font: backend.Font, label: []const u8) !void {
+    const snapshot = try snapshotFontMetrics(allocator, font);
+    const cases = [_]struct { text: [:0]const u8, size: f32, spacing: f32 }{
+        .{ .text = "iii", .size = 20, .spacing = 1 },
+        .{ .text = "WWW", .size = 20, .spacing = 1 },
+        .{ .text = "A\nWi", .size = 31, .spacing = 2.5 },
+        .{ .text = "café", .size = 17, .spacing = 0 },
+        .{ .text = "i\x00WWW", .size = 20, .spacing = 1 },
+    };
+    for (cases) |case| {
+        const native = backend.measureTextZ(case.text.ptr, font, case.size, case.spacing);
+        try expectMeasurementEqual(measureSnapshot(snapshot, case.text, case.size, case.spacing), native, label);
+    }
+}
+
+fn loadProportionalTestFont() ?backend.Font {
+    // CI's Linux image carries DejaVu. The other candidates make the same
+    // native coverage available to local macOS and Windows contributors
+    // without making a system font a required repository asset.
+    const candidates = switch (builtin.os.tag) {
+        .linux => &.{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"},
+        .macos => &.{"/System/Library/Fonts/Supplemental/Arial.ttf"},
+        .windows => &.{"C:\\Windows\\Fonts\\arial.ttf"},
+        else => &.{},
+    };
+    inline for (candidates) |path| {
+        if (backend.loadFont(path.ptr, 32)) |font| return font;
+    }
+    return null;
+}
+
+fn expectNativeFontMetricParity(allocator: std.mem.Allocator) !void {
+    try expectFontMetricParity(allocator, backend.defaultFont(), "default font");
+
+    if (loadProportionalTestFont()) |font| {
+        defer backend.unloadFont(font);
+        try expectFontMetricParity(allocator, font, "loaded proportional font");
+
+        const iii = backend.measureTextZ("iii", font, 20, 1);
+        const www = backend.measureTextZ("WWW", font, 20, 1);
+        if (std.math.approxEqAbs(f32, iii.x, www.x, 0.001)) return error.FontNotProportional;
+    } else {
+        std.log.warn("no known proportional system font; skipped loaded-font metric parity", .{});
+    }
+}
 
 fn tilemapSmokeTextureToken(tileset: anytype) u64 {
     return tileset.texture_token;
@@ -215,6 +383,10 @@ pub fn main() !void {
     rl.InitWindow(128, 96, "roc-ray graphical smoke");
     if (!rl.IsWindowReady()) return error.WindowUnavailable;
     defer rl.CloseWindow();
+
+    var metric_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer metric_arena.deinit();
+    try expectNativeFontMetricParity(metric_arena.allocator());
 
     var atlas_image = rl.GenImageColor(16, 8, backend.colorToRl(red));
     defer rl.UnloadImage(atlas_image);

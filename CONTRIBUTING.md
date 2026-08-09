@@ -104,8 +104,11 @@ xvfb-run -a zig build graphical-smoke
 ```
 
 Run it when changing primitives, texture coordinates, shaders, blending,
-scissoring, render textures, or paired drawing modes. The ordinary headless app
-runs verify composition and lifecycle behavior, not framebuffer pixels.
+scissoring, render textures, paired drawing modes, or native font metrics. It
+also compares the scalar snapshot behind `Text.metrics!` with raylib's
+`MeasureTextEx` for the default font and, when the system provides one, a
+loaded proportional font. The ordinary headless app runs verify composition
+and lifecycle behavior, not framebuffer pixels.
 
 ## Design principles
 

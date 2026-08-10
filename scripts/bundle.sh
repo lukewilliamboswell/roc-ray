@@ -296,25 +296,34 @@ trap cleanup_stage EXIT
 mkdir -p "$stage_dir/targets"
 copy_shared_roc_files
 
+# Redistribute the vendored libraries' licence texts alongside their binaries.
+copy_vendor_notices() {
+    mkdir -p "$stage_dir/licenses"
+    copy_required "$root_dir/vendor/libvpx/LICENSE" "$stage_dir/licenses/LICENSE.libvpx"
+    copy_required "$root_dir/vendor/libvpx/PATENTS" "$stage_dir/licenses/PATENTS.libvpx"
+    copy_required "$root_dir/vendor/libvpx/AUTHORS" "$stage_dir/licenses/AUTHORS.libvpx"
+}
+
 case "$package" in
     default)
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
         rewrite_types_dep "$stage_dir/main.roc"
 
-        copy_target_files x64mac libhost.a libraylib.a
-        copy_target_files arm64mac libhost.a libraylib.a
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libm.so libX11.so libc.so crtn.o
-        copy_target_files x64win host.lib raylib.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib
+        copy_target_files x64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
+        copy_target_files arm64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
+        copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libm.so libX11.so libc.so crtn.o
+        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib
 
         if [[ -d "$platform_dir/targets/macos-sysroot" ]]; then
             cp -R "$platform_dir/targets/macos-sysroot" "$stage_dir/targets/"
         fi
+        copy_vendor_notices
         ;;
     wayland)
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
         rewrite_types_dep "$stage_dir/main.roc"
 
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libm.so libc.so crtn.o
+        copy_target_files x64glibc Scrt1.o crti.o libhost.a libmsf_gif.a libvpx.a libm.so libc.so crtn.o
 
         wayland_raylib="$root_dir/vendor/raylib/linux-x64-wayland/libraylib.a"
         if [[ ! -f "$wayland_raylib" ]]; then
@@ -327,12 +336,23 @@ EOF
             exit 1
         fi
         copy_required "$wayland_raylib" "$stage_dir/targets/x64glibc/libraylib.a"
+        copy_vendor_notices
         ;;
 esac
 
 cd "$stage_dir"
 
 roc_files=(*.roc)
+# libvpx's BSD-3 licence requires its notice, conditions, and disclaimer to
+# accompany binary redistribution, and the bundle ships compiled VP8 encoder
+# objects. The patent grant travels with it.
+notice_files=()
+for notice in licenses/*; do
+    if [[ -f "$notice" ]]; then
+        notice_files+=("$notice")
+    fi
+done
+
 lib_files=()
 for lib in targets/*/*.a targets/*/*.o targets/*/*.lib targets/*/*.so; do
     if [[ -f "$lib" ]]; then
@@ -357,6 +377,9 @@ if [[ -n "${ROC_RAY_KEEP_BUNDLE_STAGE:-}" ]]; then
 fi
 
 bundle_args=("${roc_files[@]}")
+if ((${#notice_files[@]})); then
+    bundle_args+=("${notice_files[@]}")
+fi
 if [[ "${#lib_files[@]}" -gt 0 ]]; then
     bundle_args+=("${lib_files[@]}")
 fi

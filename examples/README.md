@@ -22,6 +22,9 @@ roc build examples/snake.roc
 | `breakout.roc` | Structured arcade game | pure game step, explicit events, effect handling at the boundary |
 | `responsive_ui.roc` | Resizable settings screen | startup config, current logical size, prepared labels, cursor feedback, scissoring |
 | `input_inspector.roc` | Input inspector utility | edge/held key state, Unicode input, mouse deltas, gamepad snapshots |
+| `capture_screenshot.roc` | Smallest capture example | `Capture.screenshot!`, output-directory sandboxing |
+| `capture_plot.roc` | Visualization rendered to a file | recording declared in startup config, hidden window, fixed-step timing |
+| `capture_ui_demo.roc` | Self-recording UI walkthrough | scripted pointer through the real input path, drawn cursor overlay |
 | `camera.roc` | Navigable world viewer | world/screen conversion, camera scope, screen-space HUD |
 | `generated_assets.roc` | Tiny pixel editor | generated mutable texture, point sampling, palette input, procedural sound |
 | `projective_texture.roc` | Perspective calibration tool | validated homography, interactive quad editing, projected overlays |

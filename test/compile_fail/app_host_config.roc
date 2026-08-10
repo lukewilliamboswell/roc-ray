@@ -19,6 +19,19 @@ transport = {
 	vsync: Bool.False,
 	cursor_visible: Bool.True,
 	exit_key_code: 256,
+	visible: Bool.True,
+	output_dir: ".",
+	record_enabled: Bool.False,
+	record_path: "",
+	record_format: 0,
+	record_fps: 0,
+	record_max_frames: 0,
+	record_scale_numerator: 1,
+	record_scale_denominator: 1,
+	record_every_nth: 1,
+	record_timing: 0,
+	record_cursor: 0,
+	record_quality: 1,
 }
 
 program = { init!, render! }

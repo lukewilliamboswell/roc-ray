@@ -116,3 +116,10 @@ __pycache__/
 
 # winows exectuables
 *.exe
+examples/capture_plot
+examples/capture_screenshot
+examples/capture_ui_demo
+
+# Output written by the capture examples
+captures/
+shots/

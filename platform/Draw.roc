@@ -499,6 +499,7 @@ Draw := [].{
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
 	Shader :: DrawHost.Shader.{
+
 		## Compile shader stages from source strings.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
@@ -1154,7 +1155,6 @@ font_format_code = |format|
 		Ttf => 0
 		Otf => 1
 	}
-
 
 scope_ok : U8
 scope_ok = 0

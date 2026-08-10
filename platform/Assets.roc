@@ -9,6 +9,7 @@ import Color
 import AssetsHost
 
 Assets := [].{
+
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
@@ -91,6 +92,7 @@ Assets := [].{
 
 	## Opaque, host-owned mutable GPU texture with immutable dimensions.
 	Texture :: AssetsHost.Texture.{
+
 		## Decode an authored image embedded with a compile-time file import.
 		## The byte list is borrowed only while the host decodes and uploads it;
 		## no payload-sized Roc copy is made and the result retains only the GPU

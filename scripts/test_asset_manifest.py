@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,14 @@ SPEC.loader.exec_module(assets)
 
 
 class AssetManifestTests(unittest.TestCase):
+    def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("asset_manifest.py")), *arguments],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
     def test_digest_is_sorted_and_manifest_is_excluded(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -44,6 +53,34 @@ class AssetManifestTests(unittest.TestCase):
             (root / "linked.bin").symlink_to(root / "data.bin")
             with self.assertRaisesRegex(assets.ManifestError, "symlinks"):
                 assets.inventory(root)
+
+    def test_cli_detects_stale_file_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            asset = root / "data.bin"
+            asset.write_bytes(b"before")
+            write = self.run_cli(
+                "write", str(root), "--asset-set", "demo", "--schema", "1", "--content-version", "4"
+            )
+            self.assertEqual(0, write.returncode, write.stderr)
+            digest_before = assets.root_sha256(assets.inventory(root))
+
+            asset.write_bytes(b"after")
+            digest_after = assets.root_sha256(assets.inventory(root))
+            self.assertNotEqual(digest_before, digest_after)
+            check = self.run_cli(
+                "check", str(root), "--asset-set", "demo", "--schema", "1", "--content-version", "4"
+            )
+            self.assertEqual(1, check.returncode)
+            self.assertIn("stale", check.stdout)
+
+    def test_cli_rejects_values_outside_u32(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            result = self.run_cli(
+                "write", temporary, "--asset-set", "demo", "--schema", str(assets.MAX_U32 + 1), "--content-version", "0"
+            )
+            self.assertEqual(1, result.returncode)
+            self.assertIn("fit U32", result.stderr)
 
 
 if __name__ == "__main__":

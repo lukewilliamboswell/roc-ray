@@ -20,6 +20,7 @@ from pathlib import Path
 
 MANIFEST = "roc-assets.manifest"
 CHUNK = 1024 * 1024
+MAX_U32 = (1 << 32) - 1
 
 
 class ManifestError(ValueError):
@@ -127,8 +128,8 @@ def main() -> int:
     parser.add_argument("--schema", required=True, type=int)
     parser.add_argument("--content-version", required=True, type=int)
     args = parser.parse_args()
-    if args.schema < 0 or args.content_version < 0:
-        raise ManifestError("schema and content version must be non-negative")
+    if not (0 <= args.schema <= MAX_U32 and 0 <= args.content_version <= MAX_U32):
+        raise ManifestError("schema and content version must fit U32")
     if "\n" in args.asset_set or '"' in args.asset_set:
         raise ManifestError("asset-set must be representable in the manifest string format")
 

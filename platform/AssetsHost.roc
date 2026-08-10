@@ -6,6 +6,7 @@
 import Color
 
 AssetsHost := [].{
+
 	## Opaque directory store. The backing directory handle is owned by a typed
 	## host ARC heap, so a copied Roc value keeps the directory open.
 	Store :: Box(U64)

@@ -48,7 +48,7 @@ IS_LINUX = platform.system() == "Linux"
 
 # Platform references used by examples. Bundle tests temporarily rewrite one of
 # these to the localhost bundle URL.
-LOCAL_PLATFORM_REF = '"../platform/main.roc"'
+LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
@@ -97,14 +97,18 @@ def run_cmd(
 
 
 def find_examples(examples_dir: Path) -> list[Path]:
-    """Find all .roc files in examples directory."""
-    return sorted(examples_dir.glob("*.roc"))
+    """Find each example application's conventional entrypoint."""
+    return sorted(examples_dir.glob("*/main.roc"))
+
+
+def example_name(example: Path) -> str:
+    return example.parent.name
 
 
 def executable_for_example(root: Path, example: Path) -> Path:
-    """Return the executable path produced by `roc build examples/<name>.roc`."""
+    """Return the executable produced beside an example's `main.roc`."""
     suffix = ".exe" if IS_WINDOWS else ""
-    return root / "examples" / f"{example.stem}{suffix}"
+    return example.parent / f"main{suffix}"
 
 
 def run_headless_examples(
@@ -116,10 +120,11 @@ def run_headless_examples(
     print(f"\nRunning built examples headlessly ({frames} frame(s))...")
     for example in examples:
         executable = executable_for_example(root, example)
-        print(f"  Running {example.stem}...", end=" ", flush=True)
+        name = example_name(example)
+        print(f"  Running {name}...", end=" ", flush=True)
         if not executable.is_file():
             print("FAILED (missing executable)")
-            failed.append(f"headless run {example.name} (missing executable)")
+            failed.append(f"headless run {name} (missing executable)")
             continue
 
         ok = run_cmd(
@@ -128,7 +133,7 @@ def run_headless_examples(
                 "--headless",
                 f"--headless-frames={frames}",
             ],
-            f"headless run {example.name}",
+            f"headless run {name}",
             verbose,
             cwd=root,
         )
@@ -136,7 +141,7 @@ def run_headless_examples(
             print("ok")
         else:
             print("FAILED")
-            failed.append(f"headless run {example.name}")
+            failed.append(f"headless run {name}")
 
     return failed
 
@@ -244,7 +249,6 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
     platform reference to the bundle URL -> `roc build`. Examples listed in
     BUNDLE_TEST_SKIP are reported as skipped, not failed.
     """
-    examples_dir = root / "examples"
     failed: list[str] = []
 
     print("\nRunning bundle test (build platform package, host locally, build apps from URL)...")
@@ -291,11 +295,12 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
             return ["bundle URL unavailable"]
 
         for example in examples:
-            if example.name in BUNDLE_TEST_SKIP:
-                print(f"  Building {example.name} (URL)... SKIPPED ({BUNDLE_TEST_SKIP[example.name]})")
+            name = example_name(example)
+            if name in BUNDLE_TEST_SKIP:
+                print(f"  Building {name} (URL)... SKIPPED ({BUNDLE_TEST_SKIP[name]})")
                 continue
 
-            print(f"  Building {example.name} (URL)...", end=" ", flush=True)
+            print(f"  Building {name} (URL)...", end=" ", flush=True)
             original = example.read_text()
             rewritten, did_rewrite = _rewrite_platform_ref(original, url)
             if not did_rewrite:
@@ -305,10 +310,10 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
             example.write_text(rewritten)
             try:
                 ok = run_cmd(
-                    ["roc", "build", example.name],
-                    f"bundle build {example.name}",
+                    ["roc", "build", "main.roc"],
+                    f"bundle build {name}",
                     verbose,
-                    cwd=examples_dir,
+                    cwd=example.parent,
                 )
             finally:
                 example.write_text(original)  # always restore the local platform ref
@@ -317,7 +322,7 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
                 print("ok")
             else:
                 print("FAILED")
-                failed.append(f"bundle build {example.name}")
+                failed.append(f"bundle build {name}")
     finally:
         httpd.shutdown()
         if bundle_path is not None:
@@ -330,7 +335,6 @@ def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str
 
 def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[str]:
     """Build and inspect the Wayland platform package bundle."""
-    examples_dir = root / "examples"
     failed: list[str] = []
 
     print("\nRunning Wayland bundle package test...")
@@ -450,27 +454,27 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
 
             rewritten, did_rewrite = _rewrite_platform_ref(original, url)
             if not did_rewrite:
-                print(f"  Skipping URL import check for {example.name} (no platform ref)")
+                print(f"  Skipping URL import check for {example_name(example)} (no platform ref)")
             else:
                 example.write_text(rewritten)
                 command = "build" if IS_LINUX else "check"
                 ok = run_cmd(
-                    ["roc", command, example.name],
-                    f"wayland bundle {command} {example.name}",
+                    ["roc", command, "main.roc"],
+                    f"wayland bundle {command} {example_name(example)}",
                     verbose,
-                    cwd=examples_dir,
+                    cwd=example.parent,
                 )
                 if ok:
                     print(
-                        f"  {command.capitalize()}ing {example.name} "
+                        f"  {command.capitalize()}ing {example_name(example)} "
                         "against Wayland bundle URL... ok"
                     )
                 else:
                     print(
-                        f"  {command.capitalize()}ing {example.name} "
+                        f"  {command.capitalize()}ing {example_name(example)} "
                         "against Wayland bundle URL... FAILED"
                     )
-                    failed.append(f"wayland bundle {command} {example.name}")
+                    failed.append(f"wayland bundle {command} {example_name(example)}")
         finally:
             example.write_text(original)
             httpd.shutdown()
@@ -546,7 +550,7 @@ def main() -> int:
 
     examples = find_examples(examples_dir)
     if not examples:
-        print("Error: No .roc files found in examples/")
+        print("Error: No examples/*/main.roc entrypoints found")
         return 1
 
     with _temporary_platform_refs(examples, LOCAL_PLATFORM_REF) as rewritten_count:
@@ -556,8 +560,7 @@ def main() -> int:
 
 
 def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> int:
-    examples_dir = root / "examples"
-    print(f"Found {len(examples)} example(s): {', '.join(e.stem for e in examples)}")
+    print(f"Found {len(examples)} example(s): {', '.join(example_name(e) for e in examples)}")
 
     failed = []
 
@@ -593,24 +596,26 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         # roc check
         print("\nRunning roc check...")
         for example in examples:
-            print(f"  Checking {example.name}...", end=" ", flush=True)
-            if run_cmd(["roc", "check", str(example)], f"check {example.name}", args.verbose):
+            name = example_name(example)
+            print(f"  Checking {name}...", end=" ", flush=True)
+            if run_cmd(["roc", "check", str(example)], f"check {name}", args.verbose):
                 print("ok")
             else:
                 print("FAILED")
-                failed.append(f"roc check {example.name}")
+                failed.append(f"roc check {name}")
 
         # roc fmt --check
         print("\nRunning roc fmt --check...")
         for example in examples:
-            print(f"  Formatting {example.name}...", end=" ", flush=True)
+            name = example_name(example)
+            print(f"  Formatting {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "fmt", "--check", str(example)], f"fmt {example.name}", args.verbose
+                ["roc", "fmt", "--check", str(example)], f"fmt {name}", args.verbose
             ):
                 print("ok")
             else:
                 print("FAILED")
-                failed.append(f"roc fmt {example.name}")
+                failed.append(f"roc fmt {name}")
 
         if args.skip_roc_test:
             print("\nSkipping roc test (--skip-roc-test)")
@@ -618,33 +623,35 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
             # roc test
             print("\nRunning roc test...")
             for example in examples:
-                print(f"  Testing {example.name}...", end=" ", flush=True)
-                if run_cmd(["roc", "test", str(example)], f"test {example.name}", args.verbose):
+                name = example_name(example)
+                print(f"  Testing {name}...", end=" ", flush=True)
+                if run_cmd(["roc", "test", str(example)], f"test {name}", args.verbose):
                     print("ok")
                 else:
                     print("FAILED")
-                    failed.append(f"roc test {example.name}")
+                    failed.append(f"roc test {name}")
 
-    # roc build (run from examples dir so executables are created there)
+    # Build from each application directory so its executable sits beside main.roc.
     built_examples: list[Path] = []
     if args.skip_roc_build:
         print("\nSkipping roc build (--skip-roc-build)")
     else:
         print("\nRunning roc build...")
         for example in examples:
-            if example.name in BUILD_RUNTIME_SKIP:
-                print(f"  Building {example.name}... SKIPPED ({BUILD_RUNTIME_SKIP[example.name]})")
+            name = example_name(example)
+            if name in BUILD_RUNTIME_SKIP:
+                print(f"  Building {name}... SKIPPED ({BUILD_RUNTIME_SKIP[name]})")
                 continue
 
-            print(f"  Building {example.name}...", end=" ", flush=True)
+            print(f"  Building {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "build", example.name], f"build {example.name}", args.verbose, cwd=examples_dir
+                ["roc", "build", "main.roc"], f"build {name}", args.verbose, cwd=example.parent
             ):
                 print("ok")
                 built_examples.append(example)
             else:
                 print("FAILED")
-                failed.append(f"roc build {example.name}")
+                failed.append(f"roc build {name}")
 
     if args.skip_runtime:
         print("\nSkipping headless runtime (--skip-runtime)")

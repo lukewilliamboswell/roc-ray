@@ -28,7 +28,7 @@ the smallest example against the local platform:
 git clone https://github.com/lukewilliamboswell/roc-ray.git
 cd roc-ray
 zig build
-roc build examples/hello_world.roc
+roc build examples/hello_world/main.roc --output hello_world
 ./hello_world
 ```
 
@@ -55,7 +55,7 @@ one frame to the next:
   model plus any work for the platform. It is pure.
 - `render!` receives the model and a `Frame` used for drawing.
 
-Read the complete, 44-line [`hello_world.roc`](examples/hello_world.roc) from top
+Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
@@ -86,22 +86,22 @@ The host owns private transport tickets; apps do not allocate IDs, match
 completions, or maintain a task batch. It preserves the host-observed order of
 messages within a step. A task that cannot complete with current host capacity
 still calls its callback with its operation's `Busy` result, so an app may show
-an error or explicitly retry it. See [`async_read.roc`](examples/async_read.roc) for file reads and
-[`input_inspector.roc`](examples/input_inspector.roc) for a clipboard task.
+an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads and
+[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard task.
 
 ## Start your own project
 
 The easiest route is to copy one of the examples closest to what you want to
-make. Hello World, Pong, Snake, and Breakout are self-contained; the larger
-examples also need their files from `examples/assets/`. For a project outside
+make. Hello World, Pong, Snake, and Breakout are self-contained; larger examples
+keep their files in their own `assets/` directory. For a project outside
 this checkout:
 
-1. Copy the example's `.roc` file and any assets it uses.
-2. If its first line refers to `platform "../platform/main.roc"`, replace that
+1. Copy the example directory, including its `assets/` and supporting modules.
+2. If `main.roc` refers to `platform "../../platform/main.roc"`, replace that
    local path with the default `platform` declaration from the
    [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest).
    Examples updated by the release workflow may already contain the bundle URL.
-3. Build it with `roc build your_app.roc`.
+3. Build its `main.roc`.
 
 Release bundles include the native host libraries, so app authors do not need
 to build RocRay or raylib themselves. A bundle is the packaged Roc API plus
@@ -180,8 +180,8 @@ Three things worth knowing:
   it in `xvfb-run` on a machine without one. The host's `--headless` flag swaps
   in a stub backend that draws nothing, so it captures nothing.
 
-See `examples/capture_screenshot.roc`, `examples/capture_plot.roc`, and
-`examples/capture_ui_demo.roc`.
+See `examples/capture_screenshot/main.roc`, `examples/capture_plot/main.roc`, and
+`examples/capture_ui_demo/main.roc`.
 
 Separately, note that raylib's own screen-capture shortcut is compiled into the
 vendored library: pressing **F12** in any RocRay app writes `screenshotNNN.png`
@@ -193,17 +193,17 @@ into the process working directory. That predates this feature, bypasses
 For a small game, start with Pong, Snake, or Breakout:
 
 ```bash
-roc build examples/pong.roc && ./pong
-roc build examples/snake.roc && ./snake
-roc build examples/breakout.roc && ./breakout
+roc build examples/pong/main.roc --output pong && ./pong
+roc build examples/snake/main.roc --output snake && ./snake
+roc build examples/breakout/main.roc --output breakout && ./breakout
 ```
 
 The larger showcase apps combine authored levels, sprites, sound, cameras, and
 collision handling:
 
 ```bash
-roc build examples/top_down.roc && ./top_down
-roc build examples/cave_climb.roc && ./cave_climb
+roc build examples/top_down/main.roc --output top_down && ./top_down
+roc build examples/cave_climb/main.roc --output cave_climb && ./cave_climb
 ```
 
 In Cave Climb, use A/D to move, W, Up, or Space to jump, the left mouse button

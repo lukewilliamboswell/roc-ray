@@ -34,7 +34,7 @@ init! = App.init(
 
 		## This source tree example deliberately opts into CWD-relative assets.
 		## Packaged applications normally use `Assets.beside_executable("assets")`.
-		assets = Assets.Store.open!(Assets.working_directory("examples/assets"))?
+		assets = Assets.Store.open!(Assets.working_directory("examples/post_process/assets"))?
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
 		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
 		time_uniform = shader.uniform_f32!("time")?

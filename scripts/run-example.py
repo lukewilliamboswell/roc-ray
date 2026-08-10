@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-LOCAL_PLATFORM_REF = '"../platform/main.roc"'
+LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
@@ -40,7 +40,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a RocRay example against platform/main.roc"
     )
-    parser.add_argument("example", type=Path, help="Example file, e.g. examples/cave_climb.roc")
+    parser.add_argument("example", type=Path, help="Example directory or entrypoint, e.g. examples/cave_climb")
     parser.add_argument(
         "--skip-platform-build",
         action="store_true",
@@ -56,6 +56,9 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     example = args.example if args.example.is_absolute() else root / args.example
     example = example.resolve()
+
+    if example.is_dir():
+        example = example / "main.roc"
 
     if not example.is_file():
         parser.error(f"example does not exist: {example}")

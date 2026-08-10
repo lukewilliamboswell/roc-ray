@@ -1,43 +1,27 @@
 generated-docs/
 
-# Built example executables (use `git add -f` to add manually if needed)
-examples/hello_world
-examples/keyboard
-examples/keyboard_minimal
-examples/input_inspector
-examples/kitchen_sink
-examples/read_env
-examples/pong
-examples/sprites
-examples/text_ui
-examples/snake
-examples/breakout
-examples/camera
-examples/top_down
-examples/cave_climb
-examples/generated_assets
-examples/post_process
-examples/projective_texture
-examples/responsive_ui
+# Built example executables (each Roc app is examples/<name>/main.roc)
+examples/*/main
+examples/*/main.exe
 
 # Built executables at root
-hello_world
-keyboard
-input_inspector
-kitchen_sink
-read_env
-pong
-sprites
-text_ui
-snake
-breakout
-camera
-top_down
-cave_climb
-generated_assets
-post_process
-projective_texture
-responsive_ui
+/hello_world
+/keyboard
+/input_inspector
+/kitchen_sink
+/read_env
+/pong
+/sprites
+/text_ui
+/snake
+/breakout
+/camera
+/top_down
+/cave_climb
+/generated_assets
+/post_process
+/projective_texture
+/responsive_ui
 
 all_roc_syntax
 
@@ -47,7 +31,6 @@ app
 # Ignore markdown files, except main README
 *.md
 !README.md
-!examples/README.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a

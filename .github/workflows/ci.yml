@@ -111,7 +111,7 @@ jobs:
           import scripts.all_tests as tests
 
           root = Path(".").resolve()
-          failures = tests.run_wayland_bundle_test(root, root / "examples/hello_world.roc", False)
+          failures = tests.run_wayland_bundle_test(root, root / "examples/hello_world/main.roc", False)
           if failures:
               for failure in failures:
                   print(f"FAILED: {failure}")
@@ -160,7 +160,7 @@ jobs:
           from scripts.all_tests import _rewrite_platform_ref
 
           replacement = f'"{os.environ["BUNDLE_URL"]}"'
-          for example in sorted(Path("examples").glob("*.roc")):
+          for example in sorted(Path("examples").glob("*/main.roc")):
               original = example.read_text()
               rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
               if did_rewrite:

@@ -13,121 +13,43 @@ import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
+import Cave
 
-GameState := [Playing, Won, GameOver]
+GameState : Cave.GameState
 
-LaserSegment : {
-	start : Physics.Point,
-	end : Physics.Point,
-}
+LaserSegment : Cave.LaserSegment
 
-LaserState : {
-	active : Bool,
-	segments : List(LaserSegment),
-}
+LaserState : Cave.LaserState
 
-LaserTrace : {
-	segments : List(LaserSegment),
-	killed : List(U64),
-	hit_player : Bool,
-}
+LaserTrace : Cave.LaserTrace
 
-HookProjectile : {
-	pos : Physics.Point,
-	velocity : Physics.Vector,
-	age : F32,
-}
+HookProjectile : Cave.HookProjectile
 
-HookLatch : {
-	anchor : Physics.Point,
-	rest_length : F32,
-}
+HookLatch : Cave.HookLatch
 
-HookState := [HookIdle, HookFlying(HookProjectile), HookLatched(HookLatch)]
+HookState : Cave.HookState
 
-Mirror : {
-	id : U64,
-	pos : Physics.Point,
-	length : F32,
-	base_turn : F32,
-	spin : F32,
-}
+Mirror : Cave.Mirror
 
-MirrorHit : {
-	point : Physics.Point,
-	normal : Physics.Vector,
-}
+MirrorHit : Cave.MirrorHit
 
-LaserHit := [HitSolid(Physics.Point), HitMirror(MirrorHit), HitEnemy({ point : Physics.Point, id : U64 }), HitPlayer(Physics.Point), HitNone(Physics.Point)]
+LaserHit : Cave.LaserHit
 
-ToolInput : {
-	aim : Physics.Point,
-	laser_down : Bool,
-	hook_down : Bool,
-	hook_pressed : Bool,
-}
+ToolInput : Cave.ToolInput
 
-Gem : {
-	id : U64,
-	pos : Physics.Point,
-	taken : Bool,
-}
+Gem : Cave.Gem
 
-Danger : {
-	pos : Physics.Point,
-	radius : F32,
-}
+Danger : Cave.Danger
 
-Enemy : {
-	id : U64,
-	pos : Physics.Point,
-	radius : F32,
-	alive : Bool,
-}
+Enemy : Cave.Enemy
 
-Level : {
-	tilemap : Tilemap,
-	spawn : Physics.Point,
-	goal : Physics.Point,
-	gems : List(Gem),
-	hazards : List(Danger),
-	mirrors : List(Mirror),
-	enemy_spawns : List(Enemy),
-	checkpoints : List(Physics.Point),
-	bounds : Math.Rect,
-}
+Level : Cave.Level
 
-Player : {
-	pos : Physics.Point,
-	velocity : Physics.Vector,
-	grounded : Bool,
-	facing : F32,
-	animation : Sprite.Animation,
-	invuln : F32,
-}
+Player : Cave.Player
 
-World : {
-	player : Player,
-	gems : List(Gem),
-	collected : U64,
-	enemies : List(Enemy),
-	checkpoint : Physics.Point,
-	lives : U64,
-	state : GameState,
-	phase : F32,
-	flash : F32,
-	laser : LaserState,
-	hook : HookState,
-}
+World : Cave.World
 
-Model : {
-	tiles : Assets.Texture,
-	characters : Assets.Texture,
-	enemies_texture : Assets.Texture,
-	background : Assets.Texture,
-	level : Level,
-	world : World,
-}
+Model : Cave.Model
 
 program = { init!, update, render! }
 
@@ -138,7 +60,7 @@ screen_h : F32
 screen_h = 600
 
 map_path : Str
-map_path = "examples/assets/cave_climb.tmx"
+map_path = "examples/cave_climb/assets/cave_climb.tmx"
 
 player_width : F32
 player_width = 42
@@ -228,7 +150,7 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
 	|_startup| {
-		assets = Assets.Store.open!(Assets.working_directory("examples/assets"))?
+		assets = Assets.Store.open!(Assets.working_directory("examples/cave_climb/assets"))?
 		tiles = assets.texture!("kenney-platformer/spritesheet-tiles-default.png")?
 		characters = assets.texture!("kenney-platformer/spritesheet-characters-default.png")?
 		enemies_texture = assets.texture!("kenney-platformer/spritesheet-enemies-default.png")?

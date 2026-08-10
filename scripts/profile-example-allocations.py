@@ -27,12 +27,12 @@ MARKER = "ROC_ALLOC_STATS "
 def find_examples(root: Path, requested: list[str]) -> list[Path]:
     examples_dir = root / "examples"
     if not requested:
-        return sorted(examples_dir.glob("*.roc"))
+        return sorted(examples_dir.glob("*/main.roc"))
 
     examples: list[Path] = []
     for name in requested:
         stem = Path(name).stem
-        example = examples_dir / f"{stem}.roc"
+        example = examples_dir / stem / "main.roc"
         if not example.is_file():
             raise ValueError(f"unknown example: {name}")
         examples.append(example)
@@ -265,7 +265,7 @@ def main() -> int:
             steady = subtract_startup(one_frame, many_frames)
             rows.append(
                 {
-                    "example": example.stem,
+                    "example": example.parent.name,
                     "one_frame": one_frame,
                     "many_frames": many_frames,
                     "steady_state": steady,

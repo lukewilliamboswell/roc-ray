@@ -17,7 +17,7 @@ BUNDLE_SUFFIX = ".tar.zst"
 DEFAULT_TEST_OS = ["ubuntu-latest", "macos-15-intel", "macos-latest", "windows-latest"]
 WAYLAND_TEST_OS = ["ubuntu-latest"]
 PLATFORM_REF_RE = re.compile(
-    r'"(?:\.\./platform/main\.roc|'
+    r'"(?:\.\./\.\./platform/main\.roc|'
     r'https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^\"]+\.tar\.zst)"'
 )
 
@@ -197,7 +197,7 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
         default_url = release_asset_url(repo, release_version, default_file)
 
     examples_dir = Path(args.examples_dir)
-    examples = sorted(examples_dir.glob("*.roc"))
+    examples = sorted(examples_dir.glob("*/main.roc"))
     if not examples:
         raise RuntimeError(f"no Roc examples found in {examples_dir}")
 

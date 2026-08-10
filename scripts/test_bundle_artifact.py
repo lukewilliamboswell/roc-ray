@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 IS_WINDOWS = platform.system() == "Windows"
-LOCAL_PLATFORM_REF = '"../platform/main.roc"'
+LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
@@ -109,11 +109,11 @@ def find_roc(root: Path) -> str | None:
     return chosen
 
 
-def build_example(roc: str, examples_dir: Path, example: Path) -> bool:
+def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
     result = subprocess.run(
-        [roc, "build", example.name],
-        cwd=examples_dir,
+        [roc, "build", "main.roc"],
+        cwd=example.parent,
     )
     return result.returncode == 0
 
@@ -131,7 +131,7 @@ def main() -> int:
         print(f"Missing bundle artifact: {bundle_path}", file=sys.stderr)
         return 1
 
-    examples = sorted(examples_dir.glob("*.roc"))
+    examples = sorted(examples_dir.glob("*/main.roc"))
     if not examples:
         print("No .roc examples found", file=sys.stderr)
         return 1
@@ -163,8 +163,8 @@ def main() -> int:
             example.write_text(rewritten)
 
         for example in examples:
-            if not build_example(roc, examples_dir, example):
-                failures.append(example.name)
+            if not build_example(roc, example):
+                failures.append(example.parent.name)
     finally:
         for example, original in originals.items():
             example.write_text(original)

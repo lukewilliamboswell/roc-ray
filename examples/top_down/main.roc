@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc" }
 
 import rr.App
 import rr.Assets
@@ -330,28 +330,28 @@ spark_total : U64
 spark_total = 10
 
 top_down_map_path : Str
-top_down_map_path = "examples/assets/top_down.tmx"
+top_down_map_path = "examples/top_down/assets/top_down.tmx"
 
 collect_path : Str
-collect_path = "examples/assets/kenney-audio/sfx/collect.ogg"
+collect_path = "examples/top_down/assets/kenney-audio/sfx/collect.ogg"
 
 hurt_path : Str
-hurt_path = "examples/assets/kenney-audio/sfx/hurt.ogg"
+hurt_path = "examples/top_down/assets/kenney-audio/sfx/hurt.ogg"
 
 win_path : Str
-win_path = "examples/assets/kenney-audio/sfx/win.ogg"
+win_path = "examples/top_down/assets/kenney-audio/sfx/win.ogg"
 
 lose_path : Str
-lose_path = "examples/assets/kenney-audio/sfx/lose.ogg"
+lose_path = "examples/top_down/assets/kenney-audio/sfx/lose.ogg"
 
 gate_path : Str
-gate_path = "examples/assets/kenney-audio/sfx/gate.ogg"
+gate_path = "examples/top_down/assets/kenney-audio/sfx/gate.ogg"
 
 dash_path : Str
-dash_path = "examples/assets/kenney-audio/sfx/dash.ogg"
+dash_path = "examples/top_down/assets/kenney-audio/sfx/dash.ogg"
 
 music_path : Str
-music_path = "examples/assets/kenney-audio/music/spark_loop.wav"
+music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 
 ## How loud each effect is mixed.
 ##
@@ -406,7 +406,7 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
 	|_startup| {
-		assets = Assets.Store.open!(Assets.working_directory("examples/assets"))?
+		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = assets.texture!("kenney-topdown/characters.png")?
 		tiles = assets.texture!("kenney-topdown/tiles.png")?
 		raw_map = Tilemap.load_tmx!(top_down_map_path)?

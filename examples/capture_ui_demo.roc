@@ -106,7 +106,7 @@ prepare_counter_labels! = |index, acc|
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	# Drive the pointer for the *next* frame from the script.
@@ -150,21 +150,18 @@ update = |model, step| {
 			[pointer_action]
 		}
 
-	Ok({
-		model: {
-			..model,
-			frame: model.frame + 1,
-			pointer: pointer_step.pos,
-			clicking: pointer_step.clicking,
-			mouse: mouse,
-			held: held,
-			clicks: clicks,
-			toggled: toggled,
-			slider: slider,
-		},
-		actions: actions,
-		tasks: [],
+	Program.static({
+		..model,
+		frame: model.frame + 1,
+		pointer: pointer_step.pos,
+		clicking: pointer_step.clicking,
+		mouse: mouse,
+		held: held,
+		clicks: clicks,
+		toggled: toggled,
+		slider: slider,
 	})
+		.with_actions(actions)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

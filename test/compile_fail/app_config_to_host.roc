@@ -13,10 +13,10 @@ init! = App.init(App.default, |_startup| Ok({}))
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, _step| {
 	_transport = App.default.to_host()
-	Ok({ model, actions: [], tasks: [] })
+	Program.static(model)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

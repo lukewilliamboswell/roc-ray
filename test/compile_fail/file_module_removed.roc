@@ -15,8 +15,8 @@ init! = App.init(App.default, |_startup| Ok({}))
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
-update = |model, _step| Ok({ model, actions: [], tasks: [] })
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
+update = |model, _step| Program.static(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

@@ -51,10 +51,10 @@ init! = App.init(
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	dragged = drag_corner(model, step.input)
-	Ok({ model: dragged.model, actions: dragged.actions, tasks: [] })
+	Program.static(dragged.model).with_actions(dragged.actions)
 }
 
 ## Fold one frame of pointer input into the quad.

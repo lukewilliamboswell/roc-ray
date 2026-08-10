@@ -58,7 +58,7 @@ init! = App.init(
 		}),
 )
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	resolved = List.fold(step.messages, { small: model.small, large: model.large }, apply_message)
 	reads =
@@ -71,11 +71,9 @@ update = |model, step| {
 			[]
 		}
 
-	Ok({
-		model: { ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + step.time.elapsed_seconds },
-		actions: if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: reads,
-	})
+	Program.static({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + step.time.elapsed_seconds })
+		.with_actions(if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+		.with_tasks(reads)
 }
 
 apply_message : { small : ReadState, large : BytesState }, Msg -> { small : ReadState, large : BytesState }

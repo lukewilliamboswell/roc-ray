@@ -928,31 +928,35 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 
 	restart = input.key_pressed(KeySpace)
-	input_camera = camera_for(model.level, model.world.player.pos)?
-	tools = tool_input(input, input_camera)
-	next_world = match model.world.state {
-		Playing => advance_world(
-			model.level,
-			model.world,
-			input_axis(input),
-			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
-			tools,
-			step.time.elapsed_seconds,
-		)
-		Won => if restart new_world(model.level) else model.world
-		GameOver => if restart new_world(model.level) else model.world
-	}
+	match camera_for(model.level, model.world.player.pos) {
+		# Invalid camera inputs are an unrecoverable model invariant violation.
+		# Update itself is total now, so request a normal end-of-frame exit rather
+		# than giving every update an error channel for this exceptional case.
+		Err(_) => Program.static(model).with_action(Program.exit(1))
+		Ok(input_camera) => {
+			tools = tool_input(input, input_camera)
+			next_world = match model.world.state {
+				Playing => advance_world(
+					model.level,
+					model.world,
+					input_axis(input),
+					input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
+					tools,
+					step.time.elapsed_seconds,
+				)
+				Won => if restart new_world(model.level) else model.world
+				GameOver => if restart new_world(model.level) else model.world
+			}
 
-	Ok({
-		model: { ..model, world: next_world },
-		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: [],
-	})
+			Program.static({ ..model, world: next_world })
+				.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+		}
+	}
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

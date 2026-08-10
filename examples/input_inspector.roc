@@ -74,7 +74,7 @@ ascii_typed = |codepoints|
 ## Everything the host used to be told mid-update is returned instead: settings
 ## that just happen become actions, and reading the clipboard -- which answers
 ## back -- becomes a task.
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 
@@ -119,11 +119,9 @@ update = |model, step| {
 			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
 		])
 
-	Ok({
-		model: { typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input },
-		actions: actions,
-		tasks: clipboard.tasks,
-	})
+	Program.static({ typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
+		.with_actions(actions)
+		.with_tasks(clipboard.tasks)
 }
 
 ## Fold this step's callback messages into the text field.

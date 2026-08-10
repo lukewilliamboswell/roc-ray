@@ -5,7 +5,7 @@ platform ""
 				config : App.Config,
 				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			update : model, Program.Step(msg) -> Try(Program.Next(model, msg), [Exit(I64), ..]),
+			update : model, Program.Step(msg) -> Program.Update(model, msg),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
@@ -247,25 +247,20 @@ update_for_host! = |boxed_model, { input, window, time, completed, capture }| {
 	messages = resolve_completions(completed)
 	step = step_from_raw(input, window, time, capture, messages)
 	model = Box.unbox(boxed_model)
-	match (program.update)(model, step) {
-		Ok(next) => {
-			# Uploads are the only actions that can be refused, and everything
-			# they can be refused for is knowable before any of them run. Check
-			# the whole list first so a refusal cannot land after earlier
-			# uploads have already changed their textures.
-			refuse_unfittable_uploads(next.actions)
-			match run_actions!(next.actions, 0) {
-				Ok({}) => {
-					Ok({
-						model: Box.box(next.model),
-						tasks: submit_tasks(next.tasks),
-					})
-				}
-				Err(Exit(code)) => Err(code)
-				Err(_) => Err(-1)
-			}
+	next = (program.update)(model, step)
+	next_fields = next.fields()
+	# Uploads are the only actions that can be refused, and everything
+	# they can be refused for is knowable before any of them run. Check
+	# the whole list first so a refusal cannot land after earlier
+	# uploads have already changed their textures.
+	refuse_unfittable_uploads(next_fields.actions)
+	match run_actions!(next_fields.actions, 0) {
+		Ok({}) => {
+			Ok({
+				model: Box.box(next_fields.value),
+				tasks: submit_tasks(next_fields.tasks),
+			})
 		}
-
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
@@ -346,8 +341,7 @@ run_action! = |action|
 	match action {
 		# Deferred rather than immediate, matching `host.exit!`: the host
 		# finishes this cycle -- including the draw, and including capturing it
-		# -- and shuts down afterwards. `Err(Exit(code))` from `update` is the
-		# immediate form.
+		# -- and shuts down afterwards.
 		Exit(code) => Ok(HostHost.exit!(I64.to_i32_wrap(code)))
 		SetCursor(cursor) => Ok(MouseHost.set_cursor!(Mouse.cursor_code(cursor)))
 		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode)))

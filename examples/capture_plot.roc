@@ -74,7 +74,7 @@ init! = App.init(
 ## is the only channel a recording's outcome has.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
@@ -89,7 +89,7 @@ update = |model, step| {
 			Active(_) => []
 		}
 
-	Ok({ model: { ..model, elapsed: model.elapsed + step.time.elapsed_seconds }, actions: actions, tasks: [] })
+	Program.static({ ..model, elapsed: model.elapsed + step.time.elapsed_seconds }).with_actions(actions)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

@@ -40,14 +40,11 @@ init! = App.init(
 ## it wants done -- here, an `Exit` action on the frame Escape is pressed.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
-	Ok({
-		model: { ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) },
-		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: [],
-	})
+	Program.static({ ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
+		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

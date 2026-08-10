@@ -165,7 +165,7 @@ Stepped : {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 
@@ -176,11 +176,7 @@ update = |model, step| {
 
 	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
 
-	Ok({
-		model: stepped.model,
-		actions: List.concat(exit_actions, stepped.actions),
-		tasks: [],
-	})
+	Program.static(stepped.model).with_actions(List.concat(exit_actions, stepped.actions))
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

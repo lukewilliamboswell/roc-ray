@@ -202,7 +202,7 @@ draw_swatch! = |frame, index, selected| {
 ## used to. So the error type is the same one every other example has.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
@@ -216,11 +216,10 @@ update = |model, step| {
 		},
 	)
 
-	Ok({
-		model: { ..next.model, mouse },
-		actions: List.concat(exit_actions, List.append(next.actions, cursor)),
-		tasks: [],
-	})
+	Program.static({ ..next.model, mouse })
+		.with_actions(exit_actions)
+		.with_actions(next.actions)
+		.with_action(cursor)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

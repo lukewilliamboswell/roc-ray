@@ -4,9 +4,8 @@
 ## the next model, immediate `Action` values, and asynchronous `Task` values.
 ## Actions run in order before rendering. Each submitted task invokes its typed
 ## callback exactly once on a later step while the app remains running,
-## contributing one application message. App termination, whether requested or
-## caused by an `update`/`render` failure, drops pending callbacks because there
-## can be no later `Step` to deliver them on.
+## contributing one application message. App termination drops pending callbacks
+## because there can be no later `Step` to deliver them on.
 ##
 ## `Delay` uses wall time. Animation and physics should use `step.time`.
 import Input
@@ -48,23 +47,120 @@ Program := [].{
 		fields = |step| step
 	}
 
-	## What `update` returns: the next model, plus work for the platform.
+	## A value paired with work for the platform.
 	##
+	## `Update` is the application-facing update result. Use `Program.static` to
+	## start one, then its receiver methods to add work. It is applicative, so a
+	## record whose fields are `Update` values can use the record-builder form:
+	##
+	##     { game: game_update, ui: ui_update }.Program
+	##
+	## This combines fields and appends their work from left to right.
 	## `actions` run this cycle, in order, before `render!`. `tasks` go to the
 	## host in list order and answer on a later `Step`. While the app remains
 	## running, every submitted task gets exactly one terminal callback, including
 	## `Err(Busy)` when current host capacity cannot complete it; independent
 	## asynchronous completions have no specified order. App termination drops pending
 	## callbacks because no later step can observe them.
-	##
-	## An app with no messages should still declare `Msg : []`, use
-	## `Program.Step(Msg)` and `Program.Next(Model, Msg)` in `update`, and return
-	## `tasks: []`. This keeps the message type inferable if it adds a task later.
-	Next(model, msg) : {
-		model : model,
-		actions : List(Action),
-		tasks : List(Task(msg)),
+	Update(value, msg) := [
+		Update(
+			{
+				value : value,
+				actions : List(Action),
+				tasks : List(Task(msg)),
+			},
+		),
+	].{
+
+		## Inspect the value and work. This is for the platform adapter; app code
+		## should prefer `static`, receiver builders, and record builders.
+		fields : Update(value, msg) -> {
+			value : value,
+			actions : List(Action),
+			tasks : List(Task(msg)),
+		}
+		fields = |update|
+			match update {
+				Update(fields) => fields
+			}
+
+		## Start an update with no host work.
+		static : value -> Update(value, msg)
+		static = |value| Update.(Update({ value, actions: [], tasks: [] }))
+
+		## Transform the value while retaining its ordered host work.
+		map : Update(a, msg), (a -> b) -> Update(b, msg)
+		map = |update, transform| {
+			fields = update.fields()
+			Update.(Update({ value: transform(fields.value), actions: fields.actions, tasks: fields.tasks }))
+		}
+
+		## Combine two updates from left to right.
+		##
+		## This is what enables `{ field: update }.Program` record builders.
+		map2 : Update(a, msg), Update(b, msg), (a, b -> c) -> Update(c, msg)
+		map2 = |left, right, combine| {
+			left_fields = left.fields()
+			right_fields = right.fields()
+			Update.(
+				Update({
+					value: combine(left_fields.value, right_fields.value),
+					actions: List.concat(left_fields.actions, right_fields.actions),
+					tasks: List.concat(left_fields.tasks, right_fields.tasks),
+				}),
+			)
+		}
+
+		## Append one action after actions already requested by this update.
+		with_action : Update(value, msg), Action -> Update(value, msg)
+		with_action = |update, action| {
+			fields = update.fields()
+			Program.from_parts(fields.value, List.append(fields.actions, action), fields.tasks)
+		}
+
+		## Append actions after actions already requested by this update.
+		with_actions : Update(value, msg), List(Action) -> Update(value, msg)
+		with_actions = |update, actions| {
+			fields = update.fields()
+			Program.from_parts(fields.value, List.concat(fields.actions, actions), fields.tasks)
+		}
+
+		## Append one deferred task after tasks already requested by this update.
+		with_task : Update(value, msg), Task(msg) -> Update(value, msg)
+		with_task = |update, task| {
+			fields = update.fields()
+			Program.from_parts(fields.value, fields.actions, List.append(fields.tasks, task))
+		}
+
+		## Append deferred tasks after tasks already requested by this update.
+		with_tasks : Update(value, msg), List(Task(msg)) -> Update(value, msg)
+		with_tasks = |update, tasks| {
+			fields = update.fields()
+			Program.from_parts(fields.value, fields.actions, List.concat(fields.tasks, tasks))
+		}
 	}
+
+	## Start an update with no host work.
+	##
+	## This and `map2` live on `Program` so `Update` participates in Roc's
+	## record-builder syntax: `{ field: update }.Program`.
+	static : value -> Update(value, msg)
+	static = Update.static
+
+	## Start an update with all of its ordered host work.
+	##
+	## Most code reads better with `static(...).with_action(...)`; this is useful
+	## when a helper already computes both lists.
+	from_parts : value, List(Action), List(Task(msg)) -> Update(value, msg)
+	from_parts = |value, actions, tasks| Update.(Update({ value, actions, tasks }))
+
+	## Transform an update's value while retaining its ordered host work.
+	map : Update(a, msg), (a -> b) -> Update(b, msg)
+	map = Update.map
+
+	## Combine updates from left to right for record builders and explicit use.
+	map2 : Update(a, msg), Update(b, msg), (a, b -> c) -> Update(c, msg)
+	map2 = Update.map2
 
 	## Something the platform does on the app's behalf during this cycle.
 	##
@@ -104,8 +200,6 @@ Program := [].{
 	##
 	## The exit happens once this cycle is finished, so the frame that asked for
 	## it is still drawn -- and, if a recording is running, still captured.
-	## Returning `Err(Exit(code))` from `update` instead stops immediately,
-	## before anything is drawn.
 	exit : I64 -> [Exit(I64), ..]
 	exit = |code| Exit(code)
 

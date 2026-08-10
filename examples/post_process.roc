@@ -48,13 +48,9 @@ init! = App.init(
 ## the draws it precedes.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step|
-	Ok({
-		model: { ..model, seconds: U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000 },
-		actions: [],
-		tasks: [],
-	})
+	Program.static({ ..model, seconds: U64.to_f32(step.time.timestamp_nanos) / 1_000_000_000 })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {

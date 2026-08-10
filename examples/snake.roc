@@ -282,7 +282,7 @@ advance_playing = |model, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
@@ -301,11 +301,12 @@ update = |model, step| {
 			}
 		}
 
-	Ok({
-		model: stepped.model,
-		actions: List.concat(exit_actions, stepped.actions),
-		tasks: [],
-	})
+	# The two independently-owned updates combine through Program's applicative
+	# instance. Fields combine in source order, preserving exit-before-game sound
+	# ordering while the final map selects the whole game model.
+	exit_update = Program.static({}).with_actions(exit_actions)
+	game_update = Program.static(stepped.model).with_actions(stepped.actions)
+	{ exit: exit_update, game: game_update }.Program.map(|updates| updates.game)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

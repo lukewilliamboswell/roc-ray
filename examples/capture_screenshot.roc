@@ -69,7 +69,7 @@ init! = App.init(
 ## The pixels are still this frame's -- the host reads the framebuffer at the
 ## end of the frame that asked, exactly where `Capture.screenshot!` read it --
 ## so only the report waits.
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	next = apply_messages(model, step.messages)
@@ -98,11 +98,7 @@ update = |model, step| {
 			if save_requested [Program.screenshot("scene.png", |result| SavedScreenshotFinished(result))] else [],
 		)
 
-	Ok({
-		model: next,
-		actions: actions,
-		tasks: tasks,
-	})
+	Program.static(next).with_actions(actions).with_tasks(tasks)
 }
 
 ## Apply every callback in host-observed order with one `List.fold` over the

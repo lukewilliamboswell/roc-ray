@@ -50,7 +50,7 @@ label_for = |input|
 ## platform's re-exports and the package's own types are the same nominals.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 
@@ -69,17 +69,14 @@ update = |model, step| {
 	# `step.time` rather than from the input snapshot.
 	started = if step.time.frame_count == 0 step.time.timestamp_nanos else model.started
 
-	Ok({
-		model: {
-			started,
-			label: label_for(input),
-			clicked,
-			padded,
-			age: Events.age_seconds(started, step.time.timestamp_nanos),
-		},
-		actions: if input.key_pressed(KeyQ) [Program.exit(0)] else [],
-		tasks: [],
+	Program.static({
+		started,
+		label: label_for(input),
+		clicked,
+		padded,
+		age: Events.age_seconds(started, step.time.timestamp_nanos),
 	})
+		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0)] else [])
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

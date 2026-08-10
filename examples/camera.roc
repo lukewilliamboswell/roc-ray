@@ -75,7 +75,7 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	dt = step.time.elapsed_seconds
@@ -85,11 +85,8 @@ update = |model, step| {
 	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
 	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	Ok({
-		model: { ..model, player, zoom, rotation, mouse: input.mouse.position() },
-		actions: if input.key_pressed(KeyEscape) [Program.exit(0)] else [],
-		tasks: [],
-	})
+	Program.static({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
+		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
 }
 
 ## The camera and both mouse projections are derived rather than stored: they

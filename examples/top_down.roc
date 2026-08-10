@@ -1073,7 +1073,7 @@ restart_on_space = |model, input|
 ## as actions, and the platform applies them in order before `render!`.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
@@ -1084,11 +1084,7 @@ update = |model, step| {
 		GameOver => restart_on_space(model, input)
 	}
 
-	Ok({
-		model: next.model,
-		actions: List.concat(exit_actions, next.actions),
-		tasks: [],
-	})
+	Program.static(next.model).with_actions(List.concat(exit_actions, next.actions))
 }
 
 ## The camera follows the (shaken) player position, so it is a pure function of

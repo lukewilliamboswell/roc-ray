@@ -70,7 +70,17 @@ the resulting `step.messages` into the model on a later frame:
 Msg : [ConfigLoaded({ path : Str, result : Try(Str, Program.SmallFileError) })]
 
 tasks = [Program.read_small_file("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
+
+Program.static(model)
+    .with_tasks(tasks)
 ```
+
+`Program.static` starts an update with no work. Its receiver methods append
+actions or tasks in order; use `Program.from_parts(model, actions, tasks)` when
+a helper has already assembled both lists. Independent component updates can
+also be combined with Roc's record-builder form, for example
+`{ game: game_update, ui: ui_update }.Program`; its actions and tasks retain
+that left-to-right field order.
 
 The host owns private transport tickets; apps do not allocate IDs, match
 completions, or maintain a task batch. It preserves the host-observed order of

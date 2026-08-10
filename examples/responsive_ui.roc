@@ -191,7 +191,7 @@ layout_for = |screen| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 
@@ -215,13 +215,10 @@ update = |model, step| {
 		from_keyboard
 	}
 
-	Ok({
-		model: { ..model, selection, screen: step.window.size, mouse, timestamp_nanos: step.time.timestamp_nanos },
-		# With `with_exit_key(NoExitKey)` no key closes the window on its
-		# own, so the app decides. Escape is left free for the UI to use.
-		actions: if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor],
-		tasks: [],
-	})
+	Program.static({ ..model, selection, screen: step.window.size, mouse, timestamp_nanos: step.time.timestamp_nanos })
+	# With `with_exit_key(NoExitKey)` no key closes the window on its
+	# own, so the app decides. Escape is left free for the UI to use.
+		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor])
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])

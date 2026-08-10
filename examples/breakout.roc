@@ -446,7 +446,7 @@ step_event_actions = |sounds, events|
 ## `play!` is now the same loop building the actions `update` hands back.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Try(Program.Next(Model, Msg), [Exit(I64), ..])
+update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	dt = step.time.elapsed_seconds
@@ -455,14 +455,13 @@ update = |model, step| {
 	result = advance_game(model.game, frame_input(input, dt))
 	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
 
-	Ok({
-		model: { ..model, game: result.game },
-		actions: List.concat(
-			exit_actions,
-			List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
-		),
-		tasks: [],
-	})
+	Program.static({ ..model, game: result.game })
+		.with_actions(
+			List.concat(
+				exit_actions,
+				List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
+			),
+		)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

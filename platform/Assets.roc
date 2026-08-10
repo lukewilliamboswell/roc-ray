@@ -13,7 +13,7 @@ Assets := [].{
 	## directory handle, not the process working directory; every relative asset
 	## lookup is made through that handle.
 	Store :: AssetsHost.Store.{
-		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
+		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, InvalidExpectedContentHash, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
 		open! = |cfg| {
 			result = AssetsHost.open_store!(store_open_config(cfg))
 			match result.err {
@@ -22,13 +22,14 @@ Assets := [].{
 				2 => Err(RootNotDirectory)
 				3 => Err(RootUnreadable)
 				4 => Err(InvalidRootPath)
-				5 => Err(ManifestMissing)
-				6 => Err(ManifestUnreadable)
-				7 => Err(ManifestMalformed)
-				8 => Err(AssetSetMismatch)
-				9 => Err(SchemaMismatch)
-				10 => Err(ContentVersionMismatch)
-				11 => Err(ContentHashMismatch)
+				5 => Err(InvalidExpectedContentHash)
+				6 => Err(ManifestMissing)
+				7 => Err(ManifestUnreadable)
+				8 => Err(ManifestMalformed)
+				9 => Err(AssetSetMismatch)
+				10 => Err(SchemaMismatch)
+				11 => Err(ContentVersionMismatch)
+				12 => Err(ContentHashMismatch)
 				_ => Err(ResourceLimit)
 			}
 		}
@@ -61,11 +62,13 @@ Assets := [].{
 	StoreLocation := [BesideExecutable(Str), WorkingDirectory(Str), AbsoluteDirectory(Str)]
 
 	## Optional startup validation for an asset-set manifest named
-	## `roc-assets.manifest`. A non-empty `content_hash` asks the host to compare
-	## this expected SHA-256 with the manifest declaration only; it does not walk
-	## or hash loose files at startup.
+	## `roc-assets.manifest`. `Sha256` asks the host to compare this expected
+	## SHA-256 with the manifest declaration only; it does not walk or hash loose
+	## files at startup. `AnyContent` deliberately leaves the declaration
+	## unconstrained.
 	ManifestPolicy := [IgnoreManifest, RequireManifest(ManifestExpectation)]
-	ManifestExpectation : { asset_set : Str, schema : U32, content_version : U32, content_hash : Str }
+	ContentExpectation := [AnyContent, Sha256(Str)]
+	ManifestExpectation : { asset_set : Str, schema : U32, content_version : U32, content : ContentExpectation }
 	StoreConfig : { root : StoreLocation, manifest : ManifestPolicy }
 
 	## Start from an application/executable-relative asset directory. This is the
@@ -95,13 +98,6 @@ Assets := [].{
 		from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 		from_bytes! = |cfg| {
 			result = AssetsHost.load_texture_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(Texture.(result.texture))
-		}
-
-		## Load an image file into GPU texture memory.
-		load! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-		load! = |path| {
-			result = AssetsHost.load_texture!(path)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(Texture.(result.texture))
 		}
 
@@ -299,11 +295,6 @@ Assets := [].{
 		color_b : Color.Rgba,
 	}
 
-	## Load an image file into GPU texture memory. The returned value owns the
-	## resource and may be safely shared between sprites, uniforms, and models.
-	load_texture! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
-	load_texture! = |path| Texture.load!(path)
-
 	## Load an image through an explicit store rather than process CWD.
 	load_store_texture! : Store, Str => Try(Texture, [AssetPathInvalid, AssetNotFound, AssetReadFailed, TextureLoadFailed, ResourceLimit, ..])
 	load_store_texture! = |store, path| store.texture!(path)
@@ -346,8 +337,14 @@ store_open_config = |cfg| {
 		AbsoluteDirectory(path) => { kind: 2, path }
 	}
 	manifest = match cfg.manifest {
-		IgnoreManifest => { required: Bool.False, asset_set: "", schema: 0, content_version: 0, content_hash: "" }
-		RequireManifest(expected) => { required: Bool.True, asset_set: expected.asset_set, schema: expected.schema, content_version: expected.content_version, content_hash: expected.content_hash }
+		IgnoreManifest => { required: Bool.False, asset_set: "", schema: 0, content_version: 0, content_hash_mode: 0, content_hash: "" }
+		RequireManifest(expected) => {
+			content = match expected.content {
+				AnyContent => { mode: 0, hash: "" }
+				Sha256(hash) => { mode: 1, hash }
+			}
+			{ required: Bool.True, asset_set: expected.asset_set, schema: expected.schema, content_version: expected.content_version, content_hash_mode: content.mode, content_hash: content.hash }
+		}
 	}
 	{
 		location_kind: location.kind,
@@ -356,6 +353,7 @@ store_open_config = |cfg| {
 		asset_set: manifest.asset_set,
 		schema: manifest.schema,
 		content_version: manifest.content_version,
+		content_hash_mode: manifest.content_hash_mode,
 		content_hash: manifest.content_hash,
 	}
 }

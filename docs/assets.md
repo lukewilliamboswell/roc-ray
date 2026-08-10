@@ -10,7 +10,7 @@ assets = Assets.Store.open!(
         asset_set: "screwbot",
         schema: 1,
         content_version: 4,
-        content_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        content: Sha256("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
     }),
 )?
 
@@ -40,9 +40,10 @@ content_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 ```
 
 `asset_set`, `schema`, and `content_version` are required by
-`RequireManifest`. `content_sha256` is optional: an empty expected
-`content_hash` does not require it; a non-empty expected hash must match its
-64-hex-character declared value, case-insensitively.
+`RequireManifest`. Set `content: AnyContent` when the declared digest is not a
+startup requirement, or `content: Sha256(hash)` to require a syntactically
+valid 64-hex-character expected digest. `Sha256` is validated before any I/O;
+the manifest's `content_sha256` must then match case-insensitively.
 
 This comparison is intentionally **not** a verification of loose files. It
 reads only manifest bytes, so startup cost is independent of the number of
@@ -50,25 +51,38 @@ assets. A manifest declaration proves the selected asset-set identity and
 declared content revision, not that every file still matches it after the
 manifest was generated.
 
-Packaging/CI should generate the declared digest from a canonical, sorted
-asset inventory (normalized `/` path, file size, and each file's SHA-256) and
-place the resulting root SHA-256 in `content_sha256`. A future packager can
-emit that inventory and a future store mode can verify each listed file lazily
-when it is read. Full-tree verification is deliberately an offline/package
-operation, not launch work. This first store implementation has no hidden
-resource cache and no per-file integrity promise.
+Packaging/CI generates the declaration with the included streaming tool:
+
+```bash
+python3 scripts/asset_manifest.py write assets/ \
+  --asset-set screwbot --schema 1 --content-version 4
+python3 scripts/asset_manifest.py check assets/ \
+  --asset-set screwbot --schema 1 --content-version 4
+```
+
+It hashes a canonical sorted inventory of normalized `/` paths, file sizes, and
+per-file SHA-256s, excluding `roc-assets.manifest` itself. Each entry is encoded
+as `path + NUL + decimal-size + NUL + raw-file-sha256 + NUL` before the root
+digest is calculated. Symlinks and
+case-colliding/nonportable paths are rejected, and file contents are streamed.
+A future manifest revision can retain that per-file inventory and let a store
+verify an entry lazily when it is read. Full-tree verification is deliberately
+an offline/package operation, not launch work. This first store implementation
+has no hidden resource cache and no per-file integrity promise.
 
 ## Paths, errors, and runtime loading
 
-Store-relative paths reject absolute paths, NUL, backslashes, and lexical `..`
-components. They use `/` on every platform. The root handle prevents accidental
+Store-relative paths reject absolute paths, NUL, backslashes, `.`/`..`, empty
+components, and trailing `/`. They use `/` on every platform, yielding one
+canonical spelling per asset. The root handle prevents accidental
 CWD dependence, but it is not a sandbox: an allowed symlink below the root may
 resolve outside it. Use OS sandboxing or a later no-follow/confining store for
 untrusted content.
 
 Opening reports structured root/manifest errors (`RootNotFound`, `ManifestMissing`,
 `ContentHashMismatch`, and so on) and the native host emits one clear stderr
-diagnostic containing the configured root. Individual loads report
+diagnostic containing the resolved root when it was successfully opened (or the
+configured root otherwise). Individual loads report
 `AssetPathInvalid`, `AssetNotFound`, `AssetReadFailed`, or a resource-specific
 decode error.
 

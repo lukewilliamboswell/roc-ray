@@ -314,16 +314,6 @@ pub fn defaultFont() Font {
     return rl.GetFontDefault();
 }
 
-/// Load a custom font.
-pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
-    const font_size = if (size < 1) 1 else size;
-    const font = rl.LoadFontEx(path, font_size, null, 0);
-    if (!rl.IsFontValid(font)) return null;
-
-    rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
-    return font;
-}
-
 /// Unload a custom font when its host resource slot is released.
 pub fn unloadFont(font: Font) void {
     rl.UnloadFont(font);
@@ -351,13 +341,6 @@ pub fn fontGlyphMetric(font: Font, index: usize) FontGlyphMetric {
         .codepoint = if (glyph.value > 0) @intCast(glyph.value) else 0,
         .advance = advance,
     };
-}
-
-/// Load a texture from disk.
-pub fn loadTexture(path: [*:0]const u8) ?Texture {
-    const texture = rl.LoadTexture(path);
-    if (!rl.IsTextureValid(texture)) return null;
-    return texture;
 }
 
 /// Unload a texture when its host resource slot is released.
@@ -457,13 +440,6 @@ pub fn renderTextureColor(target: RenderTexture) Texture {
     return target.texture;
 }
 
-/// Load a shader, using raylib's default stage when a path pointer is null.
-pub fn loadShader(vertex_path: ?[*:0]const u8, fragment_path: ?[*:0]const u8) ?Shader {
-    const shader = rl.LoadShader(vertex_path, fragment_path);
-    if (!rl.IsShaderValid(shader)) return null;
-    return shader;
-}
-
 /// Load shader source code, using raylib's default stage when a pointer is null.
 pub fn loadShaderFromMemory(vertex_source: ?[*:0]const u8, fragment_source: ?[*:0]const u8) ?Shader {
     const shader = rl.LoadShaderFromMemory(vertex_source, fragment_source);
@@ -477,6 +453,7 @@ pub fn loadFontFromMemory(file_type: [*:0]const u8, bytes: []const u8, size: c_i
     if (bytes.len == 0 or bytes.len > std.math.maxInt(c_int) or size <= 0) return null;
     const font = rl.LoadFontFromMemory(file_type, bytes.ptr, @intCast(bytes.len), size, null, 0);
     if (!rl.IsFontValid(font)) return null;
+    rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
     return font;
 }
 

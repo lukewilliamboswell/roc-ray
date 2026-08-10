@@ -17,6 +17,7 @@ AssetsHost := [].{
 		asset_set : Str,
 		schema : U32,
 		content_version : U32,
+		content_hash_mode : U8,
 		content_hash : Str,
 	}
 
@@ -59,7 +60,6 @@ AssetsHost := [].{
 		pixels : List(Color.Rgba),
 	}
 
-	load_texture! : Str => TextureResult
 	open_store! : StoreOpen => StoreOpenResult
 	load_store_texture! : StoreLoad => TextureResult
 	load_texture_bytes! : TextureBytes => TextureResult

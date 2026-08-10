@@ -329,12 +329,6 @@ spark_radius = 24
 spark_total : U64
 spark_total = 10
 
-characters_path : Str
-characters_path = "examples/assets/kenney-topdown/characters.png"
-
-tiles_path : Str
-tiles_path = "examples/assets/kenney-topdown/tiles.png"
-
 top_down_map_path : Str
 top_down_map_path = "examples/assets/top_down.tmx"
 
@@ -412,8 +406,9 @@ init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
 	|_startup| {
-		characters = Assets.load_texture!(characters_path)?
-		tiles = Assets.load_texture!(tiles_path)?
+		assets = Assets.Store.open!(Assets.working_directory("examples/assets"))?
+		characters = assets.texture!("kenney-topdown/characters.png")?
+		tiles = assets.texture!("kenney-topdown/tiles.png")?
 		raw_map = Tilemap.load_tmx!(top_down_map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)

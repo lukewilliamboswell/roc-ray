@@ -55,11 +55,6 @@ Text := [].{
 		measure = |metrics, cfg| Text.measure_metrics(metrics, cfg)
 	}
 
-	LoadFont : {
-		path : Str,
-		size : I32,
-	}
-
 	Placement : {
 		pos : Math.Vec2,
 		color : Color.Rgba,
@@ -121,9 +116,6 @@ Text := [].{
 		spacing: Text.default_spacing,
 		font: Text.default_font,
 	}
-
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	load_font! = |cfg| Draw.load_font!(cfg)
 
 	## Snapshot a font's immutable scalar metrics during startup.
 	##

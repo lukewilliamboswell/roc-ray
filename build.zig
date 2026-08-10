@@ -251,6 +251,13 @@ pub fn build(b: *std.Build) void {
     app_transport_privacy_tests.setCwd(b.path("."));
     test_step.dependOn(&app_transport_privacy_tests.step);
 
+    const asset_manifest_tests = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test_asset_manifest.py",
+    });
+    asset_manifest_tests.setCwd(b.path("."));
+    test_step.dependOn(&asset_manifest_tests.step);
+
     // The platform's re-export shims for `roc-ray-types` modules are generated,
     // so a hand-edit there would silently diverge from the package.
     const reexport_shims_check = b.addSystemCommand(&.{

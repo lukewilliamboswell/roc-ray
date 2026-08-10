@@ -499,16 +499,6 @@ Draw := [].{
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
 	Shader :: DrawHost.Shader.{
-		from_host : DrawHost.Shader -> Shader
-		from_host = |raw| Shader.(raw)
-
-		## Load shader stages from files.
-		load! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-		load! = |cfg| {
-			result = DrawHost.load_shader!(cfg)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
-		}
-
 		## Compile shader stages from source strings.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
@@ -564,13 +554,14 @@ Draw := [].{
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 	}
 
-	## File paths for shader stages. An empty path selects the default stage.
+	## Shader source strings. An empty string selects the default stage.
+	## Store-relative shader stage names. An empty path selects raylib's default
+	## stage; non-empty paths are resolved only through `Shader.from_store!`.
 	LoadShader : {
 		vertex_path : Str,
 		fragment_path : Str,
 	}
 
-	## Shader source strings. An empty string selects the default stage.
 	LoadShaderSource : {
 		vertex_source : Str,
 		fragment_source : Str,
@@ -888,13 +879,6 @@ Draw := [].{
 		}
 	}
 
-	## Load a host-owned font from disk at the requested base size.
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	load_font! = |cfg| {
-		result = DrawHost.load_font!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
-	}
-
 	## Load a font relative to an explicit asset store.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
@@ -1002,11 +986,6 @@ Draw := [].{
 	## attachment is vertically inverted when sampled on screen.
 	render_texture_source : RenderTexture -> Math.Rect
 	render_texture_source = |target| target.source()
-
-	## Load shader stages from files. Pass an empty string to use raylib's default
-	## vertex or fragment stage.
-	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader! = |cfg| Shader.load!(cfg)
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.

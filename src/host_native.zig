@@ -75,14 +75,15 @@ const STORE_ERR_ROOT_NOT_FOUND: u8 = 1;
 const STORE_ERR_ROOT_NOT_DIRECTORY: u8 = 2;
 const STORE_ERR_ROOT_UNREADABLE: u8 = 3;
 const STORE_ERR_INVALID_ROOT_PATH: u8 = 4;
-const STORE_ERR_MANIFEST_MISSING: u8 = 5;
-const STORE_ERR_MANIFEST_UNREADABLE: u8 = 6;
-const STORE_ERR_MANIFEST_MALFORMED: u8 = 7;
-const STORE_ERR_ASSET_SET_MISMATCH: u8 = 8;
-const STORE_ERR_SCHEMA_MISMATCH: u8 = 9;
-const STORE_ERR_CONTENT_VERSION_MISMATCH: u8 = 10;
-const STORE_ERR_CONTENT_HASH_MISMATCH: u8 = 11;
-const STORE_ERR_LIMIT: u8 = 12;
+const STORE_ERR_INVALID_EXPECTED_CONTENT_HASH: u8 = 5;
+const STORE_ERR_MANIFEST_MISSING: u8 = 6;
+const STORE_ERR_MANIFEST_UNREADABLE: u8 = 7;
+const STORE_ERR_MANIFEST_MALFORMED: u8 = 8;
+const STORE_ERR_ASSET_SET_MISMATCH: u8 = 9;
+const STORE_ERR_SCHEMA_MISMATCH: u8 = 10;
+const STORE_ERR_CONTENT_VERSION_MISMATCH: u8 = 11;
+const STORE_ERR_CONTENT_HASH_MISMATCH: u8 = 12;
+const STORE_ERR_LIMIT: u8 = 13;
 /// Store-loader results.  These remain separate from store-open errors so an
 /// application can say whether its installation or one optional asset failed.
 const STORE_LOAD_ERR_PATH: u8 = 1;
@@ -2414,14 +2415,6 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice("README.md", &roc_host)).err);
     for (music) |item| releaseResourceBox(&roc_host, item);
 
-    var fonts: [32]*u64 = undefined;
-    for (&fonts) |*font| font.* = storeFont(.headless).?;
-    try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawLoadFontRaw(&roc_host, .{
-        .path = abi.RocStr.fromSlice("README.md", &roc_host),
-        .size = 16,
-    }).err);
-    for (fonts) |font| releaseResourceBox(&roc_host, font);
-
     var textures: [128]*abi.AssetsHostTextureResource = undefined;
     for (&textures) |*texture| texture.* = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }, 1, 1).?;
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAssetsGenerateColorTextureRaw(.{
@@ -2547,37 +2540,6 @@ test "texture pixel count validates dimensions" {
     try std.testing.expectEqual(@as(?usize, null), texturePixelCount(4, -1));
 }
 
-fn hostedAssetsLoadTextureRaw(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AssetsHostLoad_textureRetRecord {
-    enforcePhase("Assets.Texture.load!", during_startup);
-    defer path_arg.decref(host);
-
-    const path_slice = path_arg.asSlice();
-    if (headlessMode()) {
-        if (!pathExists(path_slice)) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-        const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE) orelse
-            return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .resource = texture }, .err = RESOURCE_ERR_NONE };
-    }
-
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-    defer path.deinit();
-
-    if (raylib.loadTexture(path.ptr)) |texture| {
-        const height = raylib.textureHeight(texture);
-        const width = raylib.textureWidth(texture);
-        const stored = storeTexture(.{ .native = texture }, width, height) orelse
-            return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
-    }
-
-    return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-}
-
-fn exportedAssetsLoadTextureRaw(path_arg: abi.RocStr) callconv(.c) abi.AssetsHostLoad_textureRetRecord {
-    return hostedAssetsLoadTextureRaw(activeHost(), path_arg);
-}
-
 fn imageFileType(format: u8) ?[*:0]const u8 {
     return switch (format) {
         0 => ".png",
@@ -2605,7 +2567,7 @@ fn isSafeStoreRelativePath(path: []const u8) bool {
     if (path.len == 0 or std.fs.path.isAbsolute(path) or std.mem.indexOfScalar(u8, path, 0) != null or std.mem.indexOfScalar(u8, path, '\\') != null) return false;
     var components = std.mem.splitScalar(u8, path, '/');
     while (components.next()) |component| {
-        if (std.mem.eql(u8, component, "..")) return false;
+        if (component.len == 0 or std.mem.eql(u8, component, ".") or std.mem.eql(u8, component, "..")) return false;
     }
     return true;
 }
@@ -2625,6 +2587,7 @@ fn storeErrorDescription(err: u8) []const u8 {
         STORE_ERR_ROOT_NOT_DIRECTORY => "root is not a directory",
         STORE_ERR_ROOT_UNREADABLE => "root directory is not readable",
         STORE_ERR_INVALID_ROOT_PATH => "invalid root location",
+        STORE_ERR_INVALID_EXPECTED_CONTENT_HASH => "expected SHA-256 is not 64 hexadecimal characters",
         STORE_ERR_MANIFEST_MISSING => "required roc-assets.manifest was not found",
         STORE_ERR_MANIFEST_UNREADABLE => "required roc-assets.manifest could not be read",
         STORE_ERR_MANIFEST_MALFORMED => "roc-assets.manifest is malformed",
@@ -2719,12 +2682,23 @@ fn isSha256Hex(value: []const u8) bool {
     return true;
 }
 
-fn matchAssetManifest(manifest: ParsedAssetManifest, asset_set: []const u8, schema: u32, content_version: u32, expected_hash: []const u8) u8 {
+fn matchAssetManifest(manifest: ParsedAssetManifest, asset_set: []const u8, schema: u32, content_version: u32, expected_hash: ?[]const u8) u8 {
     if (manifest.asset_set == null or !std.mem.eql(u8, manifest.asset_set.?, asset_set)) return STORE_ERR_ASSET_SET_MISMATCH;
     if (manifest.schema == null or manifest.schema.? != schema) return STORE_ERR_SCHEMA_MISMATCH;
     if (manifest.content_version == null or manifest.content_version.? != content_version) return STORE_ERR_CONTENT_VERSION_MISMATCH;
-    if (expected_hash.len != 0 and (manifest.content_hash == null or !std.ascii.eqlIgnoreCase(manifest.content_hash.?, expected_hash))) return STORE_ERR_CONTENT_HASH_MISMATCH;
+    if (expected_hash) |hash| {
+        if (manifest.content_hash == null or !std.ascii.eqlIgnoreCase(manifest.content_hash.?, hash)) return STORE_ERR_CONTENT_HASH_MISMATCH;
+    }
     return STORE_ERR_NONE;
+}
+
+fn expectedManifestHash(args: abi.AssetsHostOpen_storeArgs) union(enum) { any, hash: []const u8, invalid } {
+    const hash = args.content_hash.asSlice();
+    return switch (args.content_hash_mode) {
+        0 => if (hash.len == 0) .any else .invalid,
+        1 => if (isSha256Hex(hash)) .{ .hash = hash } else .invalid,
+        else => .invalid,
+    };
 }
 
 fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.AssetsHostOpen_storeArgs) u8 {
@@ -2737,15 +2711,33 @@ fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: 
     };
     defer allocator.free(bytes);
     const manifest = parseAssetManifest(bytes) orelse return STORE_ERR_MANIFEST_MALFORMED;
-    return matchAssetManifest(manifest, args.asset_set.asSlice(), args.schema, args.content_version, args.content_hash.asSlice());
+    const expected_hash: ?[]const u8 = switch (expectedManifestHash(args)) {
+        .any => null,
+        .hash => |hash| hash,
+        .invalid => return STORE_ERR_INVALID_EXPECTED_CONTENT_HASH,
+    };
+    return matchAssetManifest(manifest, args.asset_set.asSlice(), args.schema, args.content_version, expected_hash);
+}
+
+fn reportStoreOpenFailure(code: u8, configured_root: []const u8, opened_root: ?*const std.Io.Dir) void {
+    if (opened_root) |root| {
+        var resolved: [std.Io.Dir.max_path_bytes]u8 = undefined;
+        if (root.realPath(mainThreadIo(), &resolved)) |length| {
+            std.debug.print("roc-ray: asset store startup validation failed ({s}) at resolved root \"{s}\"\n", .{ storeErrorDescription(code), resolved[0..length] });
+            return;
+        } else |_| {}
+    }
+    std.debug.print("roc-ray: asset store startup validation failed ({s}) at configured root \"{s}\"\n", .{ storeErrorDescription(code), configured_root });
 }
 
 test "asset store paths are portable and cannot lexically escape their root" {
     try std.testing.expect(isSafeStoreRelativePath("textures/floor.png"));
-    try std.testing.expect(isSafeStoreRelativePath("shaders/./floor.fs"));
     try std.testing.expect(!isSafeStoreRelativePath(""));
     try std.testing.expect(!isSafeStoreRelativePath("/etc/passwd"));
     try std.testing.expect(!isSafeStoreRelativePath("textures/../secret.png"));
+    try std.testing.expect(!isSafeStoreRelativePath("textures/./floor.png"));
+    try std.testing.expect(!isSafeStoreRelativePath("textures//floor.png"));
+    try std.testing.expect(!isSafeStoreRelativePath("textures/"));
     try std.testing.expect(!isSafeStoreRelativePath(".."));
     try std.testing.expect(!isSafeStoreRelativePath("textures\\floor.png"));
     try std.testing.expect(!isSafeStoreRelativePath("textures\x00floor.png"));
@@ -2774,7 +2766,7 @@ test "asset manifests compare declared identity without walking loose files" {
             "content_sha256 = \"" ++ hash ++ "\"\n",
     ).?;
     try std.testing.expectEqual(STORE_ERR_NONE, matchAssetManifest(manifest, "screwbot", 1, 4, hash));
-    try std.testing.expectEqual(STORE_ERR_NONE, matchAssetManifest(manifest, "screwbot", 1, 4, ""));
+    try std.testing.expectEqual(STORE_ERR_NONE, matchAssetManifest(manifest, "screwbot", 1, 4, null));
     try std.testing.expectEqual(STORE_ERR_CONTENT_HASH_MISMATCH, matchAssetManifest(manifest, "screwbot", 1, 4, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
     try std.testing.expectEqual(STORE_ERR_SCHEMA_MISMATCH, matchAssetManifest(manifest, "screwbot", 2, 4, hash));
     try std.testing.expect(parseAssetManifest("asset_set = x\nschema = 1\ncontent_version = 4\ncontent_sha256 = invalid\n") == null);
@@ -2804,6 +2796,123 @@ test "asset store owns its directory capability through typed ARC" {
     try std.testing.expectEqual(@as(usize, 0), heap.active());
 }
 
+fn testStoreOpenArgs(host: *RocHost, root: []const u8, manifest_required: bool, content_hash_mode: u8, content_hash: []const u8) abi.AssetsHostOpen_storeArgs {
+    return .{
+        .asset_set = abi.RocStr.fromSlice("test-assets", host),
+        .content_hash = abi.RocStr.fromSlice(content_hash, host),
+        .root = abi.RocStr.fromSlice(root, host),
+        .content_version = 1,
+        .schema = 1,
+        .content_hash_mode = content_hash_mode,
+        .location_kind = 1,
+        .manifest_required = manifest_required,
+    };
+}
+
+test "store startup failures close an untransferred root and successful insertion transfers it once" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), store_heap.active());
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        store_heap.deinitAll();
+    }
+
+    // Invalid expected hashes are rejected before trying to open the root.
+    const invalid_hash = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, "does-not-exist", false, 1, "not-a-sha"));
+    try std.testing.expectEqual(STORE_ERR_INVALID_EXPECTED_CONTENT_HASH, invalid_hash.err);
+    try std.testing.expectEqual(@as(usize, 0), store_heap.active());
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "roc-assets.manifest", .data = "not a manifest" });
+    var root_path: [256]u8 = undefined;
+    const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
+    const malformed = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, true, 0, ""));
+    try std.testing.expectEqual(STORE_ERR_MANIFEST_MALFORMED, malformed.err);
+    // The root was opened to read the manifest, then explicitly closed rather
+    // than leaking because this hosted function returns an ABI record.
+    try std.testing.expectEqual(@as(usize, 0), store_heap.active());
+
+    const opened = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
+    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    try std.testing.expectEqual(@as(usize, 1), store_heap.active());
+    // This is the one transferred reference. Its final release retires, then
+    // closes, exactly one directory resource.
+    const base: *isize = @ptrFromInt(@intFromPtr(opened.store) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(host_resource.DeallocRoute.deallocated, store_heap.routeDealloc(base));
+    try std.testing.expectEqual(@as(usize, 1), store_heap.retiredCount());
+    try std.testing.expectEqual(@as(usize, 1), store_heap.drainRetired(1));
+    try std.testing.expectEqual(@as(usize, 0), store_heap.active());
+
+    // A full heap must reject a newly opened root without retaining that extra
+    // OS directory handle. The observable heap count stays at capacity.
+    var held: [16]*u64 = undefined;
+    for (&held) |*slot| {
+        const dir = try tmp.parent_dir.openDir(std.testing.io, &tmp.sub_path, .{});
+        slot.* = store_heap.insert(0, .{ .root = dir }).?;
+    }
+    const limited = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
+    try std.testing.expectEqual(STORE_ERR_LIMIT, limited.err);
+    try std.testing.expectEqual(@as(usize, 16), store_heap.active());
+    store_heap.deinitAll();
+    try std.testing.expectEqual(@as(usize, 0), store_heap.active());
+}
+
+fn byteListRefcount(list: abi.RocListWith(u8, false)) *isize {
+    return @ptrFromInt(@intFromPtr(list.elements_ptr.?) - @sizeOf(isize));
+}
+
+test "embedded texture and font bytes are consumed exactly once" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        texture_heap.deinitAll();
+        font_heap.deinitAll();
+    }
+
+    const texture_bytes = abi.RocListWith(u8, false).fromSlice("not decoded in headless tests", &roc_host);
+    texture_bytes.incref(1); // caller keeps one reference while host consumes one
+    const texture_rc = byteListRefcount(texture_bytes);
+    try std.testing.expectEqual(@as(isize, 2), texture_rc.*);
+    const texture = hostedAssetsLoadTextureBytesRaw(&roc_host, .{ .bytes = texture_bytes, .format = 0 });
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, texture.err);
+    try std.testing.expectEqual(@as(isize, 1), texture_rc.*);
+    texture.texture.decref(&roc_host);
+    texture_bytes.decref(&roc_host);
+
+    const bad_texture_bytes = abi.RocListWith(u8, false).fromSlice("bad format", &roc_host);
+    bad_texture_bytes.incref(1);
+    const bad_texture_rc = byteListRefcount(bad_texture_bytes);
+    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedAssetsLoadTextureBytesRaw(&roc_host, .{ .bytes = bad_texture_bytes, .format = 99 }).err);
+    try std.testing.expectEqual(@as(isize, 1), bad_texture_rc.*);
+    bad_texture_bytes.decref(&roc_host);
+
+    const font_bytes = abi.RocListWith(u8, false).fromSlice("not decoded in headless tests", &roc_host);
+    font_bytes.incref(1);
+    const font_rc = byteListRefcount(font_bytes);
+    const font = hostedDrawLoadFontBytesRaw(&roc_host, .{ .bytes = font_bytes, .format = 0, .size = 16 });
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, font.err);
+    try std.testing.expectEqual(@as(isize, 1), font_rc.*);
+    releaseResourceBox(&roc_host, font.font);
+    font_bytes.decref(&roc_host);
+
+    const bad_font_bytes = abi.RocListWith(u8, false).fromSlice("bad format", &roc_host);
+    bad_font_bytes.incref(1);
+    const bad_font_rc = byteListRefcount(bad_font_bytes);
+    try std.testing.expectEqual(RESOURCE_ERR_FAILED, hostedDrawLoadFontBytesRaw(&roc_host, .{ .bytes = bad_font_bytes, .format = 99, .size = 16 }).err);
+    try std.testing.expectEqual(@as(isize, 1), bad_font_rc.*);
+    bad_font_bytes.decref(&roc_host);
+}
+
 fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) callconv(.c) abi.AssetsHostOpen_storeRetRecord {
     enforcePhase("Assets.Store.open!", during_startup);
     defer args.root.decref(host);
@@ -2811,24 +2920,33 @@ fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) 
     defer args.content_hash.decref(host);
     const root_path = args.root.asSlice();
     const allocator = allocatorFromHost(host);
+    switch (expectedManifestHash(args)) {
+        .invalid => {
+            reportStoreOpenFailure(STORE_ERR_INVALID_EXPECTED_CONTENT_HASH, root_path, null);
+            return .{ .store = invalidResourceHandle(), .err = STORE_ERR_INVALID_EXPECTED_CONTENT_HASH };
+        },
+        else => {},
+    }
     var root = openStoreDirectory(allocator, args.location_kind, root_path) catch |err| {
         const code: u8 = switch (err) {
             error.InvalidRootPath => STORE_ERR_INVALID_ROOT_PATH,
             else => storeOpenError(err),
         };
-        std.debug.print("roc-ray: asset store startup validation failed ({s}) at \"{s}\"\n", .{ storeErrorDescription(code), root_path });
+        reportStoreOpenFailure(code, root_path, null);
         return .{ .store = invalidResourceHandle(), .err = code };
     };
-    errdefer root.close(mainThreadIo());
+    var root_transferred = false;
+    defer if (!root_transferred) root.close(mainThreadIo());
     const manifest_error = validateStoreManifest(allocator, &root, args);
     if (manifest_error != STORE_ERR_NONE) {
-        std.debug.print("roc-ray: asset store startup validation failed ({s}) at \"{s}\"\n", .{ storeErrorDescription(manifest_error), root_path });
+        reportStoreOpenFailure(manifest_error, root_path, &root);
         return .{ .store = invalidResourceHandle(), .err = manifest_error };
     }
     const stored = store_heap.insert(0, .{ .root = root }) orelse {
-        std.debug.print("roc-ray: asset store startup validation failed ({s}) at \"{s}\"\n", .{ storeErrorDescription(STORE_ERR_LIMIT), root_path });
+        reportStoreOpenFailure(STORE_ERR_LIMIT, root_path, &root);
         return .{ .store = invalidResourceHandle(), .err = STORE_ERR_LIMIT };
     };
+    root_transferred = true;
     return .{ .store = stored, .err = STORE_ERR_NONE };
 }
 
@@ -3064,39 +3182,6 @@ fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) cal
     const stored = storeRenderTexture(.{ .native = target }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
         return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_LIMIT };
     return .{ .target = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
-}
-
-fn shaderPathsExist(vertex: []const u8, fragment: []const u8) bool {
-    if (vertex.len == 0 and fragment.len == 0) return false;
-    return (vertex.len == 0 or pathExists(vertex)) and (fragment.len == 0 or pathExists(fragment));
-}
-
-fn hostedDrawLoadShaderRaw(host: *RocHost, args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi.DrawHostLoad_shaderRetRecord {
-    enforcePhase("Draw.Shader.load!", during_startup);
-    defer args.vertex_path.decref(host);
-    defer args.fragment_path.decref(host);
-    const vertex_slice = args.vertex_path.asSlice();
-    const fragment_slice = args.fragment_path.asSlice();
-    if (!shaderPathsExist(vertex_slice, fragment_slice)) return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    if (headlessMode()) {
-        const shader = storeShader(.headless) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .shader = shader, .err = RESOURCE_ERR_NONE };
-    }
-
-    const allocator = allocatorFromHost(host);
-    var vertex_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var fragment_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var vertex = OptionalTempCString.init(allocator, &vertex_stack, vertex_slice) catch return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer vertex.deinit();
-    var fragment = OptionalTempCString.init(allocator, &fragment_stack, fragment_slice) catch return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer fragment.deinit();
-    const shader = raylib.loadShader(vertex.ptr(), fragment.ptr()) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeShader(.{ .native = shader }) orelse return .{ .shader = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .shader = stored, .err = RESOURCE_ERR_NONE };
-}
-
-fn exportedDrawLoadShaderRaw(args: abi.DrawHostLoad_shaderArgs) callconv(.c) abi.DrawHostLoad_shaderRetRecord {
-    return hostedDrawLoadShaderRaw(activeHost(), args);
 }
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
@@ -3500,30 +3585,6 @@ fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c)
     enforcePhase("Draw.triangle_lines!", during_render);
     if (active_headless) return;
     raylib.drawTriangleLines(args);
-}
-
-fn hostedDrawLoadFontRaw(host: *RocHost, args: abi.DrawHostLoad_fontArgs) callconv(.c) abi.DrawHostLoad_fontRetRecord {
-    enforcePhase("Draw.load_font!", during_startup);
-    defer args.path.decref(host);
-
-    const path_slice = args.path.asSlice();
-    if (headlessMode()) {
-        if (!pathExists(path_slice)) return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-        const font = storeFont(.headless) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .font = font, .err = RESOURCE_ERR_NONE };
-    }
-
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer path.deinit();
-
-    const font = raylib.loadFont(path.ptr, args.size) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeFont(.{ .native = font }) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .font = stored, .err = RESOURCE_ERR_NONE };
-}
-
-fn exportedDrawLoadFontRaw(args: abi.DrawHostLoad_fontArgs) callconv(.c) abi.DrawHostLoad_fontRetRecord {
-    return hostedDrawLoadFontRaw(activeHost(), args);
 }
 
 fn hostedDrawLoadFontBytesRaw(host: *RocHost, args: abi.DrawHostLoad_font_bytesArgs) callconv(.c) abi.DrawHostLoad_font_bytesRetRecord {
@@ -4846,7 +4907,6 @@ comptime {
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
 
         @export(&exportedAssetsOpenStoreRaw, .{ .name = "roc_assets_open_store_raw" });
-        @export(&exportedAssetsLoadTextureRaw, .{ .name = "roc_assets_load_texture_raw" });
         @export(&exportedAssetsLoadStoreTextureRaw, .{ .name = "roc_assets_load_store_texture_raw" });
         @export(&exportedAssetsLoadTextureBytesRaw, .{ .name = "roc_assets_load_texture_bytes_raw" });
         @export(&hostedAssetsGenerateColorTextureRaw, .{ .name = "roc_assets_generate_color_texture_raw" });
@@ -4900,11 +4960,9 @@ comptime {
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&exportedDrawFontMetricsRaw, .{ .name = "roc_draw_font_metrics_raw" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
-        @export(&exportedDrawLoadFontRaw, .{ .name = "roc_draw_load_font_raw" });
         @export(&exportedDrawLoadFontBytesRaw, .{ .name = "roc_draw_load_font_bytes_raw" });
         @export(&exportedDrawLoadStoreFontRaw, .{ .name = "roc_draw_load_store_font_raw" });
         @export(&hostedDrawLoadRenderTextureRaw, .{ .name = "roc_draw_load_render_texture_raw" });
-        @export(&exportedDrawLoadShaderRaw, .{ .name = "roc_draw_load_shader_raw" });
         @export(&exportedDrawLoadShaderSourceRaw, .{ .name = "roc_draw_load_shader_source_raw" });
         @export(&exportedDrawLoadStoreShaderRaw, .{ .name = "roc_draw_load_store_shader_raw" });
         @export(&exportedDrawPrepareTextRaw, .{ .name = "roc_draw_prepare_text_raw" });

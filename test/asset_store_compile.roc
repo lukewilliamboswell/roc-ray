@@ -20,7 +20,7 @@ init! = App.init(
 					asset_set: "test-assets",
 					schema: 1,
 					content_version: 1,
-					content_hash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				content: Sha256("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 				},
 			),
 		)?

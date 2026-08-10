@@ -23,7 +23,6 @@ platform ""
 	}
 	hosted {
 		"roc_assets_open_store_raw": AssetsHost.open_store!,
-		"roc_assets_load_texture_raw": AssetsHost.load_texture!,
 		"roc_assets_load_store_texture_raw": AssetsHost.load_store_texture!,
 		"roc_assets_load_texture_bytes_raw": AssetsHost.load_texture_bytes!,
 		"roc_assets_generate_color_texture_raw": AssetsHost.generate_color_texture!,
@@ -68,7 +67,6 @@ platform ""
 		"roc_draw_fps": DrawHost.fps!,
 		"roc_draw_font_metrics_raw": DrawHost.font_metrics!,
 		"roc_draw_line_raw": DrawHost.line!,
-		"roc_draw_load_font_raw": DrawHost.load_font!,
 		"roc_draw_load_font_bytes_raw": DrawHost.load_font_bytes!,
 		"roc_draw_load_store_font_raw": DrawHost.load_store_font!,
 		"roc_draw_prepare_text_raw": DrawHost.prepare_text!,
@@ -111,7 +109,6 @@ platform ""
 		"roc_draw_end_render_texture_raw": DrawHost.end_render_texture!,
 		"roc_draw_end_shader_raw": DrawHost.end_shader!,
 		"roc_draw_load_render_texture_raw": DrawHost.load_render_texture!,
-		"roc_draw_load_shader_raw": DrawHost.load_shader!,
 		"roc_draw_load_shader_source_raw": DrawHost.load_shader_source!,
 		"roc_draw_load_store_shader_raw": DrawHost.load_store_shader!,
 		"roc_draw_shader_location_raw": DrawHost.shader_location!,

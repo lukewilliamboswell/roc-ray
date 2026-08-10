@@ -1240,7 +1240,7 @@ draw_hud! = |frame, level, world| {
 	}
 }
 
-draw_modal! : Draw.Frame, Str, Str, Color => {}
+draw_modal! : Draw.Frame, Str, Str, Color.Rgba => {}
 draw_modal! = |frame, title, subtitle, accent| {
 	frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.black, 125)) })
 	frame.rounded_rectangle!({ x: 182, y: 226, width: 436, height: 152, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.black, 232), accent, 4) })

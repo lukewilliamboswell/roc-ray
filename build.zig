@@ -53,6 +53,41 @@ const RocTarget = enum {
             else => "libraylib.a",
         };
     }
+
+    /// Get the GIF encoder archive filename for this target
+    fn msfGifFilename(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64win => "msf_gif.lib",
+            else => "libmsf_gif.a",
+        };
+    }
+
+    /// Get the VP8 encoder archive filename for this target
+    fn libvpxFilename(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64win => "vpx.lib",
+            else => "libvpx.a",
+        };
+    }
+
+    /// libvpx is configured per CPU architecture, not per OS: the generated
+    /// headers only vary in which `VPX_ARCH_*`/`HAVE_<simd>` are set, and both
+    /// macOS targets share theirs with the Linux/Windows target of the same
+    /// architecture. See vendor/libvpx/config/README.md.
+    fn libvpxConfigDir(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64mac, .x64win, .x64glibc => "vendor/libvpx/config/x86_64",
+            .arm64mac => "vendor/libvpx/config/arm64",
+        };
+    }
+
+    /// The SIMD sources matching that config.
+    fn libvpxSimdSources(self: RocTarget) []const []const u8 {
+        return switch (self) {
+            .x64mac, .x64win, .x64glibc => &libvpx_x86_64_sources,
+            .arm64mac => &libvpx_arm64_sources,
+        };
+    }
 };
 
 /// All cross-compilation targets for `zig build`
@@ -77,6 +112,12 @@ pub fn build(b: *std.Build) void {
     for (all_native_targets) |roc_target| {
         cleanup_step.dependOn(&CleanupStep.create(b, b.path(
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
+        )).step);
+        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.msfGifFilename() }),
+        )).step);
+        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
         )).step);
     }
     // Clean legacy locations
@@ -122,6 +163,18 @@ pub fn build(b: *std.Build) void {
         copy_all.addCopyFileToSource(
             build_result.raylib_archive,
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.raylibFilename() }),
+        );
+
+        // Copy the GIF encoder archive to platform/targets/{target}/
+        copy_all.addCopyFileToSource(
+            build_result.msf_gif_archive,
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.msfGifFilename() }),
+        );
+
+        // Copy the VP8 encoder archive to platform/targets/{target}/
+        copy_all.addCopyFileToSource(
+            build_result.libvpx_archive,
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
         );
 
         // Copy libc.so stub for Linux targets
@@ -198,6 +251,16 @@ pub fn build(b: *std.Build) void {
     app_transport_privacy_tests.setCwd(b.path("."));
     test_step.dependOn(&app_transport_privacy_tests.step);
 
+    // The platform's re-export shims for `roc-ray-types` modules are generated,
+    // so a hand-edit there would silently diverge from the package.
+    const reexport_shims_check = b.addSystemCommand(&.{
+        "python3",
+        "scripts/generate_reexports.py",
+        "--check",
+    });
+    reexport_shims_check.setCwd(b.path("."));
+    test_step.dependOn(&reexport_shims_check.step);
+
     const native_roc_target = detectNativeRocTarget(native_target.result);
 
     if (native_roc_target) |roc_target| {
@@ -212,6 +275,49 @@ pub fn build(b: *std.Build) void {
         native_tests.root_module.link_libc = true;
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
+
+        // SIMD/C parity for the vendored libvpx. This has to run *on* the
+        // target -- it is the only check that a NEON or SSE2 kernel actually
+        // computes what its C counterpart does, and an arm64 build swaps out
+        // ~200 of them. Native target on purpose: cross-compiling it would
+        // build the kernels without ever executing them.
+        const parity_target_arch: RocTarget = switch (native_target.result.cpu.arch) {
+            .aarch64 => .arm64mac,
+            else => .x64glibc,
+        };
+        const parity_config_dir = parity_target_arch.libvpxConfigDir();
+
+        const parity = b.addExecutable(.{
+            .name = "libvpx-parity",
+            .root_module = b.createModule(.{
+                .target = native_target,
+                .optimize = optimize,
+                .sanitize_c = .off,
+            }),
+        });
+        parity.root_module.addIncludePath(b.path("vendor/libvpx"));
+        parity.root_module.addIncludePath(b.path(parity_config_dir));
+        parity.root_module.addIncludePath(b.path("vendor/libvpx/test"));
+        parity.root_module.addCSourceFiles(.{
+            .root = b.path("vendor/libvpx"),
+            .files = &.{"test/simd_parity.c"},
+            .flags = &libvpx_flags,
+        });
+        parity.root_module.addCSourceFiles(.{
+            .root = b.path(parity_config_dir),
+            .files = &.{"simd_parity_table.c"},
+            .flags = &libvpx_flags,
+        });
+        parity.root_module.linkLibrary(buildLibvpx(b, native_target, optimize, parity_target_arch));
+        parity.root_module.link_libc = true;
+
+        const run_parity = b.addRunArtifact(parity);
+        const parity_step = b.step(
+            "libvpx-parity",
+            "Check the vendored libvpx SIMD kernels against their C references",
+        );
+        parity_step.dependOn(&run_parity.step);
+        test_step.dependOn(&run_parity.step);
 
         // Pixel-level rendering checks need a real graphics context, so keep
         // them opt-in for local/CI runs with a display (for example xvfb-run).
@@ -315,9 +421,169 @@ const CleanupStep = struct {
 const BuildResult = struct {
     host_lib: *std.Build.Step.Compile,
     raylib_archive: std.Build.LazyPath,
+    msf_gif_archive: std.Build.LazyPath,
+    libvpx_archive: std.Build.LazyPath,
     libc_stub: ?std.Build.LazyPath,
     libm_stub: ?std.Build.LazyPath,
     x11_stub: ?std.Build.LazyPath,
+};
+
+/// Compiler flags for the vendored libvpx.
+///
+/// gnu99, not c99: vpx_ports/vpx_timer.h uses clock_gettime and struct
+/// timespec, which strict-ANSI mode hides behind __STRICT_ANSI__.
+///
+/// The stack protector and stack probes are disabled because the Windows
+/// archive is compiled against mingw headers but linked into an MSVC-target
+/// binary: those options emit calls to libgcc-only helpers (__stack_chk_fail,
+/// __stack_chk_guard, ___chkstk_ms) that no MSVC CRT provides, and the link
+/// fails. They cost nothing here -- this is a self-contained encoder fed
+/// fixed-size frames, not a parser handling untrusted input.
+const libvpx_flags = [_][]const u8{
+    "-std=gnu99",
+    "-Wno-unused-function",
+    "-fno-stack-protector",
+    "-mno-stack-arg-probe",
+};
+
+/// Architecture-independent VP8 encoder sources from the vendored libvpx.
+///
+/// This is the set libvpx's own configure selects for a
+/// `--target=generic-gnu --disable-runtime-cpu-detect` VP8-encoder build, which
+/// is every C source it compiles that is not under an architecture directory;
+/// see vendor/libvpx/config/README.md. Each target adds the SIMD list for its
+/// architecture on top, and `vpx_config.c` comes from its config directory.
+const libvpx_sources = [_][]const u8{
+    "vp8/common/alloccommon.c",
+    "vp8/common/blockd.c",
+    "vp8/common/dequantize.c",
+    "vp8/common/entropy.c",
+    "vp8/common/entropymode.c",
+    "vp8/common/entropymv.c",
+    "vp8/common/extend.c",
+    "vp8/common/filter.c",
+    "vp8/common/findnearmv.c",
+    "vp8/common/generic/systemdependent.c",
+    "vp8/common/idct_blk.c",
+    "vp8/common/idctllm.c",
+    "vp8/common/loopfilter_filters.c",
+    "vp8/common/mbpitch.c",
+    "vp8/common/modecont.c",
+    "vp8/common/quant_common.c",
+    "vp8/common/reconinter.c",
+    "vp8/common/reconintra.c",
+    "vp8/common/reconintra4x4.c",
+    "vp8/common/rtcd.c",
+    "vp8/common/setupintrarecon.c",
+    "vp8/common/swapyv12buffer.c",
+    "vp8/common/treecoder.c",
+    "vp8/common/vp8_loopfilter.c",
+    "vp8/common/vp8_skin_detection.c",
+    "vp8/encoder/bitstream.c",
+    "vp8/encoder/boolhuff.c",
+    "vp8/encoder/copy_c.c",
+    "vp8/encoder/dct.c",
+    "vp8/encoder/denoising.c",
+    "vp8/encoder/encodeframe.c",
+    "vp8/encoder/encodeintra.c",
+    "vp8/encoder/encodemb.c",
+    "vp8/encoder/encodemv.c",
+    "vp8/encoder/firstpass.c",
+    "vp8/encoder/lookahead.c",
+    "vp8/encoder/mcomp.c",
+    "vp8/encoder/modecosts.c",
+    "vp8/encoder/onyx_if.c",
+    "vp8/encoder/pickinter.c",
+    "vp8/encoder/picklpf.c",
+    "vp8/encoder/ratectrl.c",
+    "vp8/encoder/rdopt.c",
+    "vp8/encoder/segmentation.c",
+    "vp8/encoder/temporal_filter.c",
+    "vp8/encoder/tokenize.c",
+    "vp8/encoder/treewriter.c",
+    "vp8/encoder/vp8_quantize.c",
+    "vp8/vp8_cx_iface.c",
+    "vpx/src/vpx_codec.c",
+    "vpx/src/vpx_decoder.c",
+    "vpx/src/vpx_encoder.c",
+    "vpx/src/vpx_image.c",
+    "vpx_dsp/bitwriter.c",
+    "vpx_dsp/bitwriter_buffer.c",
+    "vpx_dsp/intrapred.c",
+    "vpx_dsp/prob.c",
+    "vpx_dsp/psnr.c",
+    "vpx_dsp/sad.c",
+    "vpx_dsp/skin_detection.c",
+    "vpx_dsp/sse.c",
+    "vpx_dsp/subtract.c",
+    "vpx_dsp/sum_squares.c",
+    "vpx_dsp/variance.c",
+    "vpx_dsp/vpx_dsp_rtcd.c",
+    "vpx_mem/vpx_mem.c",
+    "vpx_scale/generic/gen_scalers.c",
+    "vpx_scale/generic/vpx_scale.c",
+    "vpx_scale/generic/yv12config.c",
+    "vpx_scale/generic/yv12extend.c",
+    "vpx_scale/vpx_scale_rtcd.c",
+    "vpx_util/vpx_thread.c",
+    "vpx_util/vpx_write_yuv_frame.c",
+};
+
+/// SSE2 sources for the three x86-64 targets.
+///
+/// Short, because most of libvpx's x86 SIMD is NASM-syntax `.asm` that Zig
+/// cannot assemble; these are the encoder kernels it happens to write as
+/// compiler intrinsics. SSE2 is guaranteed by the x86-64 baseline, so no
+/// runtime CPU detection is needed. Everything above SSE2 -- including the AVX2
+/// files, which are also intrinsics -- is left out because nothing here checks
+/// what the CPU supports. `vendor/libvpx/config/prune_rtcd.py` points the
+/// dispatch entries these do *not* cover back at the C versions, so this list
+/// and `config/x86_64/` have to be regenerated together.
+const libvpx_x86_64_sources = [_][]const u8{
+    "vp8/common/x86/bilinear_filter_sse2.c",
+    "vp8/encoder/x86/vp8_quantize_sse2.c",
+    "vpx_dsp/x86/variance_sse2.c",
+};
+
+/// NEON sources for the arm64 target.
+///
+/// Long, because on AArch64 libvpx writes all of it as intrinsics: the `.asm`
+/// beside these files is 32-bit ARM only and `HAVE_NEON_ASM` is 0 for us. This
+/// is the complete set configure selects for an arm64 VP8-encoder build, so
+/// nothing is pruned out of `config/arm64/` and NEON covers the hot path.
+const libvpx_arm64_sources = [_][]const u8{
+    // The generated arm64 rtcd setup calls arm_cpu_caps(), so its definition
+    // has to be compiled in. A static archive does not complain about an
+    // unresolved reference, so leaving this out builds cleanly and then fails
+    // at the final link of every arm64 app.
+    "vpx_ports/aarch64_cpudetect.c",
+    "vp8/common/arm/loopfilter_arm.c",
+    "vp8/common/arm/neon/bilinearpredict_neon.c",
+    "vp8/common/arm/neon/copymem_neon.c",
+    "vp8/common/arm/neon/dc_only_idct_add_neon.c",
+    "vp8/common/arm/neon/dequant_idct_neon.c",
+    "vp8/common/arm/neon/dequantizeb_neon.c",
+    "vp8/common/arm/neon/idct_blk_neon.c",
+    "vp8/common/arm/neon/iwalsh_neon.c",
+    "vp8/common/arm/neon/loopfiltersimplehorizontaledge_neon.c",
+    "vp8/common/arm/neon/loopfiltersimpleverticaledge_neon.c",
+    "vp8/common/arm/neon/mbloopfilter_neon.c",
+    "vp8/common/arm/neon/shortidct4x4llm_neon.c",
+    "vp8/common/arm/neon/sixtappredict_neon.c",
+    "vp8/common/arm/neon/vp8_loopfilter_neon.c",
+    "vp8/encoder/arm/neon/denoising_neon.c",
+    "vp8/encoder/arm/neon/fastquantizeb_neon.c",
+    "vp8/encoder/arm/neon/shortfdct_neon.c",
+    "vp8/encoder/arm/neon/vp8_shortwalsh4x4_neon.c",
+    "vpx_dsp/arm/avg_pred_neon.c",
+    "vpx_dsp/arm/intrapred_neon.c",
+    "vpx_dsp/arm/sad4d_neon.c",
+    "vpx_dsp/arm/sad_neon.c",
+    "vpx_dsp/arm/sse_neon.c",
+    "vpx_dsp/arm/subpel_variance_neon.c",
+    "vpx_dsp/arm/subtract_neon.c",
+    "vpx_dsp/arm/sum_squares_neon.c",
+    "vpx_dsp/arm/variance_neon.c",
 };
 
 /// X11 libraries that raylib depends on (need stubs for cross-compilation)
@@ -477,6 +743,84 @@ fn generateX11SoStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build
     return stub_lib;
 }
 
+/// Build the vendored libvpx for one target.
+///
+/// Factored out so the SIMD/C parity test can build the same library for the
+/// native target: a parity check that ran against a differently-configured
+/// libvpx than the host links would prove nothing.
+fn buildLibvpx(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    roc_target: RocTarget,
+) *std.Build.Step.Compile {
+    // Vendored libvpx, built from source for every target rather than shipped
+    // as a prebuilt archive: it is C all the way down -- portable C plus the
+    // SIMD libvpx writes as compiler intrinsics, never its assembly -- so
+    // `zig build` compiles it directly and there is no configure step and no
+    // per-OS CI runner in the loop. Produces WebM video via src/capture_vp8.zig.
+    // MSVC has no libc headers available when cross-compiling from Linux, and
+    // libvpx needs a dozen of them. It is plain C with no CRT-specific types,
+    // so build this one library against mingw's headers instead; both produce
+    // COFF objects with the same C ABI.
+    const libvpx_target = if (roc_target == .x64win)
+        b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu })
+    else
+        target;
+
+    const libvpx = b.addLibrary(.{
+        .name = "vpx",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = libvpx_target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+            .pic = true,
+            // As with msf_gif: Roc's final link has no UBSan runtime.
+            .sanitize_c = .off,
+            // Unlike msf_gif, libvpx needs real libc headers (stdlib, string,
+            // assert, inttypes, math). Isolating it in its own library keeps
+            // that off the freestanding host module.
+            .link_libc = true,
+        }),
+    });
+    libvpx.root_module.addIncludePath(b.path("vendor/libvpx"));
+    // Exactly one config directory is on the include path, so a source can only
+    // ever see the generated headers for the architecture it is being built
+    // for.
+    const libvpx_config_dir = roc_target.libvpxConfigDir();
+    libvpx.root_module.addIncludePath(b.path(libvpx_config_dir));
+    if (roc_target == .x64win) {
+        // Replaces mingw's <setjmp.h>, whose x64 mapping needs a helper only
+        // mingw's CRT defines. Windows-only: every other target links a real
+        // libc and must use its own header.
+        libvpx.root_module.addIncludePath(b.path("vendor/libvpx/shim/win"));
+    }
+    // The narrow C shim the host actually calls; see src/capture_vp8.zig.
+    libvpx.root_module.addCSourceFile(.{
+        .file = b.path("vendor/libvpx/shim/rocray_vp8.c"),
+        .flags = &libvpx_flags,
+    });
+    libvpx.root_module.addCSourceFile(.{
+        .file = b.path(b.pathJoin(&.{ libvpx_config_dir, "vpx_config.c" })),
+        .flags = &libvpx_flags,
+    });
+    libvpx.root_module.addCSourceFiles(.{
+        .root = b.path("vendor/libvpx"),
+        // gnu99, not c99: vpx_ports/vpx_timer.h uses clock_gettime and
+        // struct timespec, which strict-ANSI mode hides behind __STRICT_ANSI__.
+        .files = &libvpx_sources,
+        .flags = &libvpx_flags,
+    });
+    libvpx.root_module.addCSourceFiles(.{
+        .root = b.path("vendor/libvpx"),
+        .files = roc_target.libvpxSimdSources(),
+        .flags = &libvpx_flags,
+    });
+
+    return libvpx;
+}
+
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -501,6 +845,41 @@ fn buildHostLib(
 
     host_lib.root_module.addIncludePath(raylib_include_path);
     host_lib.root_module.addLibraryPath(raylib_lib_path);
+
+    // Vendored single-header GIF encoder (MIT or public domain), so recordings
+    // need no external encoder. It is its own archive rather than C added to
+    // the host module: a Zig module that compiles C reaches for the system libc
+    // headers, which a freestanding host does not have, while a standalone C
+    // library builds cleanly for all four targets.
+    //
+    // It builds freestanding like the host -- malloc and memcpy resolve at final
+    // link, as raylib's already do -- and the minimal libc headers msf_gif
+    // includes come from vendor/msf_gif/shim. The host calls it through the
+    // primitive-only shim in msf_gif_impl.c, so no C headers reach the Zig side.
+    //
+    // Roc links from an explicit input list, so the archive is copied next to
+    // libraylib.a below and named in the `targets:` block of platform/main.roc.
+    const msf_gif = b.addLibrary(.{
+        .name = "msf_gif",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+            .pic = true,
+            // Debug builds otherwise emit UBSan calls into the vendored C, and
+            // Roc's final link has no UBSan runtime to resolve them against.
+            .sanitize_c = .off,
+        }),
+    });
+    const libvpx = buildLibvpx(b, target, optimize, roc_target);
+
+    msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif"));
+    msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif/shim"));
+    msf_gif.root_module.addCSourceFile(.{
+        .file = b.path("vendor/msf_gif/msf_gif_impl.c"),
+        .flags = &.{"-std=c99"},
+    });
 
     if (target.result.os.tag == .macos) {
         const sysroot_frameworks = b.path("platform/targets/macos-sysroot/System/Library/Frameworks");
@@ -539,6 +918,8 @@ fn buildHostLib(
     return .{
         .host_lib = host_lib,
         .raylib_archive = raylib_archive,
+        .msf_gif_archive = msf_gif.getEmittedBin(),
+        .libvpx_archive = libvpx.getEmittedBin(),
         .libc_stub = libc_stub,
         .libm_stub = libm_stub,
         .x11_stub = x11_stub,

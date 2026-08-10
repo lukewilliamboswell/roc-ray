@@ -16,7 +16,7 @@ PaintState := [Idle, Painted(U64)].{
 
 Model : {
 	texture : Assets.Texture,
-	pixels : List(Color),
+	pixels : List(Color.Rgba),
 	paint_sound : Audio.Sound,
 	palette : U64,
 	last_cell : PaintState,
@@ -43,7 +43,7 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
 
-palette_color : U64 -> Color
+palette_color : U64 -> Color.Rgba
 palette_color = |index|
 	match index {
 		0 => Color.from_hex_rgb(0x17202a)
@@ -52,7 +52,7 @@ palette_color = |index|
 		_ => Color.from_hex_rgb(0xf94144)
 	}
 
-initial_pixels : List(Color)
+initial_pixels : List(Color.Rgba)
 initial_pixels = List.map_with_index(
 	List.repeat(Color.from_hex_rgb(0xf3f0e8), grid_side * grid_side),
 	|_color, index| {

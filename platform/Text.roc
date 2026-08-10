@@ -34,7 +34,7 @@ Text := [].{
 
 	Placement : {
 		pos : Math.Vec2,
-		color : Color,
+		color : Color.Rgba,
 		align : Align,
 	}
 
@@ -184,7 +184,7 @@ Text := [].{
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
-	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color, align : Align } => {}
+	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align } => {}
 	draw_prepared! = |_frame, cfg| {
 		Prepared.(prepared) = cfg.text
 		pos = Text.origin_for(cfg.pos, prepared.measured, cfg.align)

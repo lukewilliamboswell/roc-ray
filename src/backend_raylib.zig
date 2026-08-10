@@ -7,6 +7,11 @@
 const std = @import("std");
 const abi = @import("roc_platform_abi.zig");
 const ffi = @import("roc_ffi.zig");
+/// Capture policy, kept free of raylib so it can be unit tested without a GPU.
+const capture = @import("capture.zig");
+
+/// Roc's `Color.Rgba`, the RGBA record that crosses the host boundary.
+pub const Color = abi.ColorRgba;
 
 /// Raw raylib C bindings.
 pub const rl = @cImport({
@@ -212,6 +217,18 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
 }
 
+/// Advance the packed mouse button state from caller-supplied down flags.
+///
+/// Used by the virtual mouse in place of `updateMouseButtonState`. It runs the
+/// same `nextInputState` edge detection, so a scripted pointer produces real
+/// pressed-this-frame and released-this-frame bits and an app's ordinary click
+/// handling reacts to it exactly as it would to hardware.
+pub fn updateMouseButtonStateFrom(down: *const [ffi.MOUSE_BUTTON_COUNT]bool) void {
+    for (0..ffi.MOUSE_BUTTON_COUNT) |i| {
+        mouse_button_state[i] = nextInputState(mouse_button_state[i], down[i]);
+    }
+}
+
 /// Sample all supported gamepads once for this frame.
 pub fn updateGamepadState() void {
     for (0..ffi.GAMEPAD_COUNT) |gamepad| {
@@ -302,7 +319,7 @@ pub fn unloadTexture(texture: Texture) void {
 }
 
 /// Generate a solid-color texture, releasing the temporary CPU image before return.
-pub fn generateColorTexture(width: i32, height: i32, color: abi.Color) ?Texture {
+pub fn generateColorTexture(width: i32, height: i32, color: Color) ?Texture {
     if (width <= 0 or height <= 0) return null;
     const image = rl.GenImageColor(width, height, colorToRl(color));
     defer rl.UnloadImage(image);
@@ -333,8 +350,8 @@ pub fn generateCheckedTexture(args: anytype) ?Texture {
 }
 
 /// Replace all pixels in a texture from tightly packed RGBA colors.
-pub fn updateTexture(texture: Texture, pixels: []const abi.Color) void {
-    comptime std.debug.assert(@sizeOf(abi.Color) == @sizeOf(rl.Color));
+pub fn updateTexture(texture: Texture, pixels: []const Color) void {
+    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
     rl.UpdateTexture(texture, pixels.ptr);
 }
 
@@ -456,7 +473,7 @@ pub fn colorToRl(color: anytype) rl.Color {
 }
 
 test "colorToRl preserves Roc RGBA channel order" {
-    const black = colorToRl(abi.Color{
+    const black = colorToRl(Color{
         .r = 0,
         .g = 0,
         .b = 0,
@@ -467,7 +484,7 @@ test "colorToRl preserves Roc RGBA channel order" {
     try std.testing.expectEqual(@as(u8, 0), black.b);
     try std.testing.expectEqual(@as(u8, 255), black.a);
 
-    const red = colorToRl(abi.Color{
+    const red = colorToRl(Color{
         .r = 230,
         .g = 41,
         .b = 55,
@@ -516,7 +533,7 @@ fn roundedness(width: f32, height: f32, radius: f32) f32 {
     return @min(1, radius / min_dim);
 }
 
-fn drawSegment(start: anytype, end: anytype, thickness: f32, color: abi.Color) void {
+fn drawSegment(start: anytype, end: anytype, thickness: f32, color: Color) void {
     const thick = positiveThickness(thickness) orelse return;
     rl.DrawLineEx(toVector2(start), toVector2(end), thick, colorToRl(color));
 }
@@ -628,7 +645,7 @@ test "polygonSignedArea detects either boundary order" {
 
 /// Draw a filled convex polygon as an allocation-free triangle fan.
 /// Points must be ordered clockwise or counter-clockwise around the boundary.
-pub fn drawPolygon(points: anytype, color: abi.Color) void {
+pub fn drawPolygon(points: anytype, color: Color) void {
     if (points.len < 3) return;
 
     const reverse = polygonSignedArea(points) > 0;
@@ -643,7 +660,7 @@ pub fn drawPolygon(points: anytype, color: abi.Color) void {
 }
 
 /// Draw a polygon outline from abi args.
-pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void {
+pub fn drawPolygonLines(points: anytype, thickness: f32, color: Color) void {
     if (points.len < 2) return;
     const thick = positiveThickness(thickness) orelse return;
 
@@ -659,13 +676,13 @@ pub fn drawPolygonLines(points: anytype, thickness: f32, color: abi.Color) void 
 }
 
 /// Draw text with a null-terminated string.
-pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color) void {
+pub fn drawTextZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: Color) void {
     rl.DrawTextEx(font, text, pos, size, spacing, colorToRl(color));
 }
 
 /// Draw text anchored at a fractional point within its measured bounds.
 /// Top-left alignment ({ 0, 0 }) skips measurement entirely.
-pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: abi.Color, alignment: rl.Vector2) void {
+pub fn drawTextAlignedZ(text: [*:0]const u8, font: Font, pos: rl.Vector2, size: f32, spacing: f32, color: Color, alignment: rl.Vector2) void {
     const origin = if (alignment.x == 0 and alignment.y == 0) pos else blk: {
         const measured = rl.MeasureTextEx(font, text, size, spacing);
         break :blk textOrigin(pos, measured, alignment);
@@ -967,11 +984,16 @@ pub fn setConfigFlags(flags: c_uint) void {
 }
 
 /// Build raylib window config flags from Roc app config booleans.
-pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool) c_uint {
+pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible: bool) c_uint {
     var flags: c_uint = @as(c_uint, @intCast(rl.FLAG_WINDOW_HIGHDPI));
     if (resizable) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_RESIZABLE));
     if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
     if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
+    // A hidden window still renders on the GPU, so captures work normally.
+    // This is not the same as the `--headless` stub backend, which draws
+    // nothing at all, and it still needs a display server (use xvfb-run on a
+    // machine without one).
+    if (!visible) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_HIDDEN));
     return flags;
 }
 
@@ -1033,6 +1055,36 @@ pub fn enableCursor() void {
 /// Set window size.
 pub fn setWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
+}
+
+/// Set the smallest size the window may be resized to. raylib maps 0 to
+/// GLFW_DONT_CARE, leaving that axis unconstrained. Requires a live window, so
+/// this must be called after initWindow, and only binds on a resizable window.
+pub fn setWindowMinSize(width: c_int, height: c_int) void {
+    rl.SetWindowMinSize(width, height);
+}
+
+/// Set the key that closes the window, or raylib's KEY_NULL (0) to disable it.
+/// InitWindow resets this to KEY_ESCAPE, so this must be called after it.
+pub fn setExitKey(key: c_int) void {
+    rl.SetExitKey(key);
+}
+
+/// Read UTF-8 text from the system clipboard.
+///
+/// The returned pointer is owned by the windowing backend: never free it, and
+/// copy it before the next clipboard call invalidates it. Returns null when the
+/// clipboard is empty or holds non-text content. Requires a live window.
+pub fn getClipboardText() ?[*:0]const u8 {
+    const text = rl.GetClipboardText();
+    if (text == null) return null;
+    return @ptrCast(text);
+}
+
+/// Replace the system clipboard contents. raylib copies the string, so the
+/// caller keeps ownership. Requires a live window.
+pub fn setClipboardText(text: [*:0]const u8) void {
+    rl.SetClipboardText(text);
 }
 
 /// Get frame time (delta time) in seconds since the previous frame.
@@ -1399,4 +1451,290 @@ pub fn getScreenWidth() c_int {
 /// Get screen height.
 pub fn getScreenHeight() c_int {
     return rl.GetScreenHeight();
+}
+
+/// Get framebuffer width in pixels, which exceeds the screen width on HiDPI.
+pub fn getRenderWidth() c_int {
+    return rl.GetRenderWidth();
+}
+
+/// Get framebuffer height in pixels, which exceeds the screen height on HiDPI.
+pub fn getRenderHeight() c_int {
+    return rl.GetRenderHeight();
+}
+
+/// A CPU-side RGBA8 readback of the framebuffer, owned by raylib's allocator.
+///
+/// Every raylib allocation for a capture stays behind this type so the rest of
+/// the host never has to reason about `UnloadImage` pairing.
+pub const CaptureImage = struct {
+    image: rl.Image,
+
+    /// Tightly packed top-down RGBA8 pixels, four bytes each.
+    pub fn pixels(self: CaptureImage) []u8 {
+        const count = @as(usize, @intCast(self.image.width)) *
+            @as(usize, @intCast(self.image.height)) * 4;
+        const bytes: [*]u8 = @ptrCast(self.image.data);
+        return bytes[0..count];
+    }
+
+    /// Width in pixels.
+    pub fn width(self: CaptureImage) u32 {
+        return @intCast(self.image.width);
+    }
+
+    /// Height in pixels.
+    pub fn height(self: CaptureImage) u32 {
+        return @intCast(self.image.height);
+    }
+
+    /// Rescale in place with bicubic filtering, reallocating the pixel buffer.
+    pub fn resize(self: *CaptureImage, new_width: u32, new_height: u32) void {
+        if (new_width == self.width() and new_height == self.height()) return;
+        rl.ImageResize(&self.image, @intCast(new_width), @intCast(new_height));
+    }
+
+    /// Write this image as a PNG, returning false if the write failed.
+    pub fn exportPng(self: CaptureImage, path: [*:0]const u8) bool {
+        return rl.ExportImage(self.image, path);
+    }
+
+    /// Release the pixel buffer.
+    pub fn deinit(self: CaptureImage) void {
+        rl.UnloadImage(self.image);
+    }
+};
+
+/// `GL_COLOR_BUFFER_BIT`, the only attachment a capture blit has to move.
+///
+/// `rlgl.h` exposes `RL_READ_FRAMEBUFFER` and `RL_DRAW_FRAMEBUFFER` but not the
+/// blit masks, and the GL headers are raylib's own -- so the value is spelled
+/// out here rather than reached for through a second OpenGL dependency.
+const gl_color_buffer_bit: c_int = 0x00004000;
+
+/// A reusable GPU pipeline that shrinks the framebuffer before it is read back.
+///
+/// `glReadPixels` cannot scale, so a `Half` or `Quarter` recording that reads
+/// the framebuffer and resizes afterwards transfers, allocates, and filters 4x
+/// or 16x more pixels than it keeps. This does the shrink on the GPU so the
+/// readback is already the size of the finished frame, and reuses its render
+/// targets for the whole recording instead of allocating per frame.
+///
+/// The frame is first blitted 1:1 into a render target, because the default
+/// framebuffer is not a texture and cannot be sampled. raylib's blit is
+/// hardcoded to `GL_NEAREST`, which at 1:1 is exact; the filtering all happens
+/// in the halving steps that follow, where bilinear sampling averages 2x2
+/// blocks. See `capture.planDownscale` for why the chain halves.
+pub const CaptureDownscaler = struct {
+    /// Render targets matching `capture.DownscalePlan.levels`, so `targets[0]`
+    /// is framebuffer-sized and the last is the recording size.
+    targets: [capture.max_downscale_levels]RenderTexture,
+    count: usize,
+
+    /// Build the render-target chain, or null if the GPU refused any of them.
+    ///
+    /// A partially built chain is torn down rather than returned, so a refusal
+    /// never leaks the targets that did load.
+    pub fn init(plan: capture.DownscalePlan) ?CaptureDownscaler {
+        var self = CaptureDownscaler{
+            .targets = undefined,
+            .count = 0,
+        };
+
+        while (self.count < plan.count) {
+            const extent = plan.levels[self.count];
+            const target = rl.LoadRenderTexture(
+                @intCast(extent.width),
+                @intCast(extent.height),
+            );
+            if (!rl.IsRenderTextureValid(target)) {
+                rl.UnloadRenderTexture(target);
+                self.deinit();
+                return null;
+            }
+            // Bilinear is what makes a halving step a 2x2 average instead of a
+            // point sample, and clamping keeps the edge taps from wrapping
+            // around to the opposite side of the frame.
+            rl.SetTextureFilter(target.texture, rl.TEXTURE_FILTER_BILINEAR);
+            rl.SetTextureWrap(target.texture, rl.TEXTURE_WRAP_CLAMP);
+            self.targets[self.count] = target;
+            self.count += 1;
+        }
+        return self;
+    }
+
+    /// Does this chain already produce exactly what `plan` asks for?
+    ///
+    /// Sizes are compared level by level rather than only end to end, so a
+    /// window resize or a second recording at a different scale rebuilds
+    /// instead of quietly encoding frames of the wrong dimensions.
+    pub fn matches(self: CaptureDownscaler, plan: capture.DownscalePlan) bool {
+        if (self.count != plan.count) return false;
+        for (self.targets[0..self.count], plan.levels[0..plan.count]) |target, extent| {
+            if (target.texture.width != @as(c_int, @intCast(extent.width))) return false;
+            if (target.texture.height != @as(c_int, @intCast(extent.height))) return false;
+        }
+        return true;
+    }
+
+    /// Release every render target. Requires a live GL context.
+    pub fn deinit(self: *CaptureDownscaler) void {
+        for (self.targets[0..self.count]) |target| rl.UnloadRenderTexture(target);
+        self.count = 0;
+    }
+
+    /// Shrink the current framebuffer through the chain and read the result.
+    ///
+    /// Carries the same ordering requirement as `captureFramebuffer`: the
+    /// pending draw batch is flushed first, and this must run before
+    /// `endDrawing` swaps the buffers away.
+    pub fn readFrame(self: *CaptureDownscaler) ?CaptureImage {
+        std.debug.assert(self.count >= 2);
+        flushRenderBatch();
+
+        // Restore whatever was bound rather than assuming the default
+        // framebuffer, so a capture cannot silently redirect the app's drawing.
+        const previous_framebuffer = rl.rlGetActiveFramebuffer();
+        const source = self.targets[0];
+
+        // Read from framebuffer 0 explicitly: the presented frame is the one
+        // being recorded, whatever else may be bound.
+        rl.rlBindFramebuffer(rl.RL_READ_FRAMEBUFFER, 0);
+        rl.rlBindFramebuffer(rl.RL_DRAW_FRAMEBUFFER, source.id);
+        rl.rlBlitFramebuffer(
+            0,
+            0,
+            source.texture.width,
+            source.texture.height,
+            0,
+            0,
+            source.texture.width,
+            source.texture.height,
+            gl_color_buffer_bit,
+        );
+        rl.rlEnableFramebuffer(previous_framebuffer);
+
+        // Copy the source colour through verbatim. The default framebuffer's
+        // alpha is whatever the app's clear colour left there, and blending
+        // against it would darken or erase the frame.
+        rl.rlDisableColorBlend();
+        var level: usize = 1;
+        while (level < self.count) : (level += 1) {
+            drawDownscaleLevel(self.targets[level - 1].texture, self.targets[level]);
+        }
+        rl.rlEnableColorBlend();
+
+        // `rlReadScreenPixels` reads whatever framebuffer is bound and flips the
+        // rows, exactly as it does for the default framebuffer -- which is why
+        // every step above preserves the framebuffer's own row order.
+        const last = self.targets[self.count - 1];
+        rl.rlEnableFramebuffer(last.id);
+        const data = rl.rlReadScreenPixels(last.texture.width, last.texture.height);
+        rl.rlEnableFramebuffer(previous_framebuffer);
+        if (data == null) return null;
+
+        return .{ .image = .{
+            .data = @ptrCast(data),
+            .width = last.texture.width,
+            .height = last.texture.height,
+            .mipmaps = 1,
+            .format = rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+        } };
+    }
+};
+
+/// Draw one downscale level into the next, filling it exactly.
+///
+/// The negative source height is raylib's render-target flip. It is not
+/// cosmetic here: drawing a render texture upright would invert the row order,
+/// so an odd-length chain would come out upside down and an even-length one
+/// would not.
+fn drawDownscaleLevel(from: Texture, to: RenderTexture) void {
+    rl.BeginTextureMode(to);
+    rl.DrawTexturePro(
+        from,
+        .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(from.width),
+            .height = -@as(f32, @floatFromInt(from.height)),
+        },
+        .{
+            .x = 0,
+            .y = 0,
+            .width = @floatFromInt(to.texture.width),
+            .height = @floatFromInt(to.texture.height),
+        },
+        .{ .x = 0, .y = 0 },
+        0,
+        rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
+    );
+    // `EndTextureMode` submits the batch, so the level is complete before
+    // the next step samples it.
+    rl.EndTextureMode();
+}
+
+/// Submit raylib's batched geometry so the framebuffer reflects it.
+///
+/// raylib accumulates 2D draw calls in a vertex batch and only submits them on
+/// a texture or shader switch, when the batch fills, or from `EndDrawing`. A
+/// readback is plain `glReadPixels` and does no flushing of its own, so
+/// without this a capture silently misses the tail of the frame.
+pub fn flushRenderBatch() void {
+    rl.rlDrawRenderBatchActive();
+}
+
+/// Read the current framebuffer into a CPU image.
+///
+/// This is raylib's thin wrapper over `rlReadScreenPixels`, not
+/// `TakeScreenshot`: it skips the `basePath` prefixing and 512-byte truncation
+/// that make `TakeScreenshot` unusable for a capture pipeline. The result is
+/// already upright, and alpha is forced opaque by the readback itself.
+///
+/// Must be called before `endDrawing` swaps the buffers -- afterwards the back
+/// buffer's contents are undefined. Flushes the pending batch first.
+pub fn captureFramebuffer() ?CaptureImage {
+    flushRenderBatch();
+    const image = rl.LoadImageFromScreen();
+    if (!rl.IsImageValid(image)) return null;
+    return .{ .image = image };
+}
+
+/// Draw a pointer glyph at a position, for compositing into a recording.
+///
+/// The operating system cursor is not part of the framebuffer, so a capture
+/// never shows a pointer unless something draws one. This runs in the capture
+/// hook rather than in the app's `render!`, so the glyph appears in the file
+/// without the app having to know about it -- and without it appearing twice
+/// alongside a real cursor on screen.
+///
+/// `pressed` draws a ring around the arrow so a click is visible in a silent
+/// recording, where there is otherwise no cue that anything happened.
+pub fn drawCaptureCursor(x: f32, y: f32, pressed: bool, scale: f32) void {
+    const size = @max(scale, 0.1) * 18;
+    const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+    const black = Color{ .r = 0, .g = 0, .b = 0, .a = 220 };
+
+    // A classic arrow: tip at the hotspot, notch on the trailing edge.
+    const points = [_]struct { x: f32, y: f32 }{
+        .{ .x = x, .y = y },
+        .{ .x = x, .y = y + size },
+        .{ .x = x + size * 0.26, .y = y + size * 0.74 },
+        .{ .x = x + size * 0.44, .y = y + size * 1.06 },
+        .{ .x = x + size * 0.60, .y = y + size * 0.98 },
+        .{ .x = x + size * 0.42, .y = y + size * 0.67 },
+        .{ .x = x + size * 0.70, .y = y + size * 0.64 },
+    };
+
+    if (pressed) {
+        drawCircleLines(.{
+            .center = .{ .x = x, .y = y },
+            .radius = size * 0.95,
+            .thickness = @max(size * 0.10, 1),
+            .color = white,
+        });
+    }
+
+    drawPolygon(&points, white);
+    drawPolygonLines(&points, @max(size * 0.09, 1), black);
 }

@@ -61,17 +61,52 @@ def check_bundle_url(url: str) -> None:
     raise RuntimeError(f"Bundle URL was not accessible: {url}") from last_error
 
 
+def roc_version(roc: str) -> str | None:
+    try:
+        result = subprocess.run([roc, "version"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def find_roc(root: Path) -> str | None:
+    """Resolve the compiler, preferring one that matches the pin.
+
+    A local `roc-src` build at a different revision than `.roc-version` used to
+    be picked silently, and produced a run of SIGSEGVs that looked like a fault
+    in the bundle under test. Prefer a matching compiler, and say so loudly when
+    falling back to one that does not match.
+    """
     exe_name = "roc.exe" if IS_WINDOWS else "roc"
     path_roc = shutil.which("roc")
     if os.environ.get("ROC_SKIP_BUILD") == "1":
         return path_roc
 
     built_roc = root / "roc-src" / "zig-out" / "bin" / exe_name
-    if built_roc.is_file():
-        return str(built_roc)
+    candidates = [str(built_roc)] if built_roc.is_file() else []
+    if path_roc:
+        candidates.append(path_roc)
+    if not candidates:
+        return None
 
-    return path_roc
+    try:
+        pinned = (root / ".roc-version").read_text(encoding="utf-8").splitlines()[0].strip()
+    except (OSError, IndexError):
+        return candidates[0]
+
+    for candidate in candidates:
+        version = roc_version(candidate)
+        if version and pinned in version:
+            return candidate
+
+    chosen = candidates[0]
+    print(
+        f"WARNING: no compiler matches .roc-version ({pinned}); using {chosen} "
+        f"({roc_version(chosen) or 'unknown version'}). Failures below may be the "
+        "compiler, not the bundle.",
+        file=sys.stderr,
+    )
+    return chosen
 
 
 def build_example(roc: str, examples_dir: Path, example: Path) -> bool:

@@ -34,35 +34,35 @@ DrawHost := [].{
 		from_shader_location = |shader, location| { shader, location }
 	}
 
-	Rectangle : { x : F32, y : F32, width : F32, height : F32, color : Color }
+	Rectangle : { x : F32, y : F32, width : F32, height : F32, color : Color.Rgba }
 	Scissor : { x : F32, y : F32, width : F32, height : F32 }
-	RectangleLines : { x : F32, y : F32, width : F32, height : F32, color : Color, thickness : F32 }
-	RoundedRectangle : { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : Color }
-	RoundedRectangleLines : { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : Color, thickness : F32 }
-	RectangleGradientV : { x : F32, y : F32, width : F32, height : F32, color_top : Color, color_bottom : Color }
-	RectangleGradientH : { x : F32, y : F32, width : F32, height : F32, color_left : Color, color_right : Color }
-	Circle : { center : Math.Vec2, radius : F32, color : Color }
-	CircleLines : { center : Math.Vec2, radius : F32, color : Color, thickness : F32 }
-	CircleGradient : { center : Math.Vec2, radius : F32, color_inner : Color, color_outer : Color }
-	Line : { start : Math.Vec2, end : Math.Vec2, color : Color, thickness : F32 }
-	Triangle : { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color }
-	TriangleLines : { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color, thickness : F32 }
-	Polygon : { points : List(Math.Vec2), color : Color }
-	PolygonLines : { points : List(Math.Vec2), color : Color, thickness : F32 }
-	Fps : { pos : Math.Vec2, size : F32, color : Color }
-	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : Font }
-	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color, font : Font, align_x : F32, align_y : F32 }
+	RectangleLines : { x : F32, y : F32, width : F32, height : F32, color : Color.Rgba, thickness : F32 }
+	RoundedRectangle : { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : Color.Rgba }
+	RoundedRectangleLines : { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, color : Color.Rgba, thickness : F32 }
+	RectangleGradientV : { x : F32, y : F32, width : F32, height : F32, color_top : Color.Rgba, color_bottom : Color.Rgba }
+	RectangleGradientH : { x : F32, y : F32, width : F32, height : F32, color_left : Color.Rgba, color_right : Color.Rgba }
+	Circle : { center : Math.Vec2, radius : F32, color : Color.Rgba }
+	CircleLines : { center : Math.Vec2, radius : F32, color : Color.Rgba, thickness : F32 }
+	CircleGradient : { center : Math.Vec2, radius : F32, color_inner : Color.Rgba, color_outer : Color.Rgba }
+	Line : { start : Math.Vec2, end : Math.Vec2, color : Color.Rgba, thickness : F32 }
+	Triangle : { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba }
+	TriangleLines : { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba, thickness : F32 }
+	Polygon : { points : List(Math.Vec2), color : Color.Rgba }
+	PolygonLines : { points : List(Math.Vec2), color : Color.Rgba, thickness : F32 }
+	Fps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
+	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font }
+	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align_x : F32, align_y : F32 }
 	MeasureText : { text : Str, size : F32, spacing : F32, font : Font }
 	TextSize : { width : F32, height : F32 }
 	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
-	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color }
+	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }
 	LoadFont : { path : Str, size : I32 }
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
-	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color }
-	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color }
+	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
 	ShaderInt : { uniform : Uniform, value : I32 }
@@ -87,7 +87,7 @@ DrawHost := [].{
 	circle! : Circle => {}
 	circle_gradient! : CircleGradient => {}
 	circle_lines! : CircleLines => {}
-	clear! : Color => {}
+	clear! : Color.Rgba => {}
 	fps! : Fps => {}
 	line! : Line => {}
 	load_font! : LoadFont => FontResult

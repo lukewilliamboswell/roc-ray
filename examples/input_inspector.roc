@@ -8,14 +8,26 @@ import rr.Mouse
 import rr.Gamepad
 import rr.App
 
-Model : {}
+Model : {
+
+	## Text typed since the last clear, and what the clipboard last did with it.
+	typed : Str,
+	clipboard_status : Str,
+}
 
 program = { init!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(
-	App.default.with_title("RocRay Input Inspector").with_frame_pacing(Capped(120)),
-	|_host| Ok({}),
+	App.default
+		.with_title("RocRay Input Inspector")
+		.with_size({ width: 820, height: 700 })
+		.with_resizable(Bool.True)
+	# Without this raylib closes the window on Escape, so the Esc indicator
+	# below could never light up. Q exits instead.
+		.with_exit_key(NoExitKey)
+		.with_frame_pacing(Capped(120)),
+	|_host| Ok({ typed: "", clipboard_status: "clipboard idle" }),
 )
 
 title : Str
@@ -26,6 +38,23 @@ cursor_help_visibility = "Cursor: H hide, J show"
 
 cursor_help_locking : Str
 cursor_help_locking = "K lock, L unlock"
+
+clipboard_help : Str
+clipboard_help = "Type, then Ctrl+C copies and Ctrl+V pastes | Ctrl+X clears"
+
+window_help : Str
+window_help = "Ctrl+E re-arms Esc as the exit key | Ctrl+M sets a 640x480 minimum"
+
+## Decode this frame's codepoints into text. Restricted to printable ASCII so
+## the example stays short -- those codepoints are their own UTF-8 bytes.
+ascii_typed : List(U32) -> Str
+ascii_typed = |codepoints|
+	Str.from_utf8_lossy(
+		List.map(
+			List.keep_if(codepoints, |code| code >= 32 and code < 127),
+			|code| U32.to_u8_wrap(code),
+		),
+	)
 
 render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
 render! = |model, host, frame| {
@@ -44,6 +73,33 @@ render! = |model, host, frame| {
 	}
 	if host.key_pressed(KeyL) {
 		host.set_cursor_mode!(Visible)
+	}
+
+	ctrl_held = host.key_down(KeyLeftControl) or host.key_down(KeyRightControl)
+	typed_this_frame = if ctrl_held "" else ascii_typed(host.text_input)
+	buffered = Str.concat(model.typed, typed_this_frame)
+
+	clipboard = if ctrl_held and host.key_pressed(KeyC) {
+		host.set_clipboard_text!(buffered)
+		{ typed: buffered, clipboard_status: "copied to clipboard" }
+	} else if ctrl_held and host.key_pressed(KeyV) {
+		match host.get_clipboard_text!() {
+			Ok(pasted) => { typed: Str.concat(buffered, pasted), clipboard_status: "pasted from clipboard" }
+			# One error covers an empty clipboard and non-text content alike;
+			# the windowing backend does not tell them apart.
+			Err(Unavailable) => { typed: buffered, clipboard_status: "clipboard has no text" }
+		}
+	} else if ctrl_held and host.key_pressed(KeyX) {
+		{ typed: "", clipboard_status: "cleared" }
+	} else if ctrl_held and host.key_pressed(KeyE) {
+		# The same setting the startup config takes, applied mid-run.
+		host.set_exit_key!(ExitKey(KeyEscape))
+		{ typed: buffered, clipboard_status: "Esc now exits again" }
+	} else if ctrl_held and host.key_pressed(KeyM) {
+		host.set_window_min_size!({ width: 640, height: 480 })
+		{ typed: buffered, clipboard_status: "window minimum set to 640x480" }
+	} else {
+		{ typed: buffered, clipboard_status: model.clipboard_status }
 	}
 
 	w_down = host.key_down(KeyW)
@@ -147,6 +203,10 @@ render! = |model, host, frame| {
 	frame.text_at!({ pos: { x: 30, y: 410 }, text: cursor_help_visibility, size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 238, y: 410 }, text: cursor_help_locking, size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 30, y: 450 }, text: Str.concat("Mouse ", Str.concat(F32.to_str(mouse_position.x), Str.concat(", ", F32.to_str(mouse_position.y)))), size: 18, color: Color.gray })
-	frame.text_at!({ pos: { x: 30, y: 486 }, text: "Hold left mouse for crosshair | Q exits", size: 18, color: Color.gray })
-	Ok(model)
+	frame.text_at!({ pos: { x: 30, y: 486 }, text: clipboard_help, size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 512 }, text: window_help, size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", clipboard.typed), size: 18, color: Color.dark_gray })
+	frame.text_at!({ pos: { x: 30, y: 568 }, text: clipboard.clipboard_status, size: 18, color: Color.gray })
+	frame.text_at!({ pos: { x: 30, y: 594 }, text: "Hold left mouse for crosshair | Q exits | Esc is a normal key", size: 18, color: Color.gray })
+	Ok(clipboard)
 }

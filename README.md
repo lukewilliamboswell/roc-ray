@@ -95,9 +95,63 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   and TMX tilemaps with culled drawing and object queries.
 - Resizable, fullscreen, VSync, capped, or uncapped native windows on macOS,
   Linux, and Windows.
+- Screenshots and recordings an app takes of itself, written as PNG, animated
+  GIF, or VP8 video in a WebM container.
 
 Browse the [API reference](https://lukewilliamboswell.github.io/roc-ray/) for
 individual functions and types.
+
+## Recording an app
+
+An app can capture its own output, which makes it a way to generate
+documentation assets and visualizations rather than only to play them. Declare a
+recording in the startup config and it needs no code in `render!` at all:
+
+```roc
+App.init(
+    App.default
+    .with_output_dir("captures")
+    # Render on the GPU with no window on screen, like a batch job.
+    .with_visible(Bool.False)
+    .with_recording(
+        Record(
+            Capture.default
+            .with_path("demo.gif")
+            .with_format(Gif)
+            .with_fps(25)
+            .with_max_frames(300),
+        ),
+    ),
+    |_host| Ok({}),
+)
+```
+
+`Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
+where the app decides when to capture. `Capture.set_virtual_mouse!` drives a
+scripted pointer through the same input path a real one uses, so a recorded walk
+through a UI exercises the app's ordinary hover and click handling.
+
+Three things worth knowing:
+
+- **Paths are sandboxed.** Every capture path resolves under `with_output_dir`.
+  Absolute paths and paths containing `..` are refused rather than rewritten;
+  this is the only file-writing capability the platform grants an app.
+- **Recordings are reproducible.** `FixedStep` timing (the default) reports an
+  exact `1/fps` frame delta regardless of how long the readback actually took,
+  so a recording plays back smoothly and two runs produce identical output.
+  Choose `RealTime` if you would rather see the true frame pacing.
+- **A hidden window is not the same as `--headless`.** `with_visible(Bool.False)`
+  still renders on the GPU, so captures work; it needs a display server, so wrap
+  it in `xvfb-run` on a machine without one. The host's `--headless` flag swaps
+  in a stub backend that draws nothing, so it captures nothing.
+
+See `examples/capture_screenshot.roc`, `examples/capture_plot.roc`, and
+`examples/capture_ui_demo.roc`.
+
+Separately, note that raylib's own screen-capture shortcut is compiled into the
+vendored library: pressing **F12** in any RocRay app writes `screenshotNNN.png`
+into the process working directory. That predates this feature, bypasses
+`with_output_dir`, and cannot be disabled without rebuilding raylib from source.
 
 ## Examples
 

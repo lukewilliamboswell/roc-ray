@@ -2614,6 +2614,11 @@ fn isSafeRootRelativePath(path: []const u8) bool {
     return isSafeStoreRelativePath(path);
 }
 
+fn openStoreRootRelative(base: std.Io.Dir, root: []const u8) !std.Io.Dir {
+    if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
+    return base.openDir(mainThreadIo(), root, .{});
+}
+
 fn storeErrorDescription(err: u8) []const u8 {
     return switch (err) {
         STORE_ERR_ROOT_NOT_FOUND => "root directory was not found",
@@ -2648,12 +2653,11 @@ fn openStoreDirectory(allocator: std.mem.Allocator, location_kind: u8, root: []c
         // is opened through that handle. This remains CWD-independent even if
         // another library changes CWD later in the process lifetime.
         0 => {
-            if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
             const executable_dir_path = try std.process.executableDirPathAlloc(io, allocator);
             defer allocator.free(executable_dir_path);
             const executable_dir = try std.Io.Dir.openDirAbsolute(io, executable_dir_path, .{});
             defer executable_dir.close(io);
-            return executable_dir.openDir(io, root, .{});
+            return openStoreRootRelative(executable_dir, root);
         },
         1 => {
             if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
@@ -2745,6 +2749,20 @@ test "asset store paths are portable and cannot lexically escape their root" {
     try std.testing.expect(!isSafeStoreRelativePath(".."));
     try std.testing.expect(!isSafeStoreRelativePath("textures\\floor.png"));
     try std.testing.expect(!isSafeStoreRelativePath("textures\x00floor.png"));
+}
+
+test "executable-relative asset roots resolve from the opened executable directory" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "installed/assets");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "installed/assets/sentinel", .data = "not from CWD" });
+    const executable_dir = try tmp.dir.openDir(std.testing.io, "installed", .{});
+    defer executable_dir.close(std.testing.io);
+    var root = try openStoreRootRelative(executable_dir, "assets");
+    defer root.close(std.testing.io);
+    const bytes = try root.readFileAlloc(std.testing.io, "sentinel", std.testing.allocator, .limited(64));
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualStrings("not from CWD", bytes);
 }
 
 test "asset manifests compare declared identity without walking loose files" {

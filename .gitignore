@@ -28,9 +28,10 @@ all_roc_syntax
 build
 app
 
-# Ignore markdown files, except main README
+# Ignore markdown files, except main README and CONTRIBUTING
 *.md
 !README.md
+!CONTRIBUTING.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a
@@ -97,14 +98,10 @@ build-output/
 # Python cache
 __pycache__/
 
-# winows exectuables
+# Windows executables
 *.exe
-examples/capture_plot
-examples/capture_screenshot
-examples/capture_ui_demo
-examples/async_read
-# `roc build examples/x.roc` from the repo root lands the binary here.
-async_read
+# Legacy root-level executable.
+/async_read
 
 # Output written by the capture examples
 captures/

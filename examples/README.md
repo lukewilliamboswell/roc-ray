@@ -5,7 +5,8 @@ has a concrete interaction or game loop, owns long-lived resources in its
 model, and uses frame input to update state before drawing. Platform edge cases
 and exhaustive API coverage belong in tests rather than in this directory.
 
-Build from the repository root so asset paths resolve correctly:
+Build from the repository root for examples that deliberately choose a
+working-directory asset store:
 
 ```bash
 roc build examples/snake.roc
@@ -39,6 +40,10 @@ demonstrate how the same APIs fit into larger state and resource lifecycles.
 ## Practices shown here
 
 - Construct `App.Config` with receiver updates and create assets in `init!`.
+- Use `Assets.Store` for disk assets. Packaged apps should choose
+  `Assets.beside_executable("assets")`; `post_process` demonstrates an explicit
+  development-only working-directory store rather than depending on a hidden
+  current directory.
 - Keep textures, sounds, shaders, fonts, and prepared text in the model instead
   of loading or preparing them inside `render!`.
 - Treat `step.input` as the current frame's snapshot. Derive plain game input

@@ -6,6 +6,23 @@
 import Color
 
 AssetsHost := [].{
+	## Opaque directory store. The backing directory handle is owned by a typed
+	## host ARC heap, so a copied Roc value keeps the directory open.
+	Store :: Box(U64)
+
+	StoreOpen : {
+		location_kind : U8,
+		root : Str,
+		manifest_required : Bool,
+		asset_set : Str,
+		schema : U32,
+		content_version : U32,
+		content_hash : Str,
+	}
+
+	StoreOpenResult : { store : Store, err : U8 }
+	StoreLoad : { store : Store, path : Str }
+
 	Texture :: { resource : Box({ handle : U64, width : F32, height : F32 }) }.{
 		from_resource : Box({ handle : U64, width : F32, height : F32 }) -> Texture
 		from_resource = |resource| { resource: resource }
@@ -18,6 +35,7 @@ AssetsHost := [].{
 	}
 
 	TextureResult : { texture : Texture, err : U8 }
+	TextureBytes : { format : U8, bytes : List(U8) }
 
 	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
 
@@ -42,6 +60,9 @@ AssetsHost := [].{
 	}
 
 	load_texture! : Str => TextureResult
+	open_store! : StoreOpen => StoreOpenResult
+	load_store_texture! : StoreLoad => TextureResult
+	load_texture_bytes! : TextureBytes => TextureResult
 	generate_color_texture! : GenerateColorTexture => TextureResult
 	generate_checked_texture! : GenerateCheckedTexture => TextureResult
 	update_texture! : UpdateTexture => U8

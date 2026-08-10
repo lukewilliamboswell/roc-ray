@@ -1,6 +1,7 @@
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
 
 import rr.App
+import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Math
@@ -26,12 +27,16 @@ screen_w = 800
 screen_h : F32
 screen_h = 600
 
-init! : App.Init(Model, [RenderTextureLoadFailed, ResourceLimit, ShaderLoadFailed, UniformNotFound])
+init! : App.Init(Model, _)
 init! = App.init(
 	App.default.with_title("RocRay Offscreen Post-processing"),
 	|_host| {
+
+		## This source tree example deliberately opts into CWD-relative assets.
+		## Packaged applications normally use `Assets.beside_executable("assets")`.
+		assets = Assets.Store.open!(Assets.working_directory("examples/assets"))?
 		target = Draw.RenderTexture.load!({ width: 800, height: 600 })?
-		shader = Draw.Shader.load!({ vertex_path: "", fragment_path: "examples/assets/post_process.fs" })?
+		shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "post_process.fs" })?
 		time_uniform = shader.uniform_f32!("time")?
 		Ok({ target, shader, time_uniform, seconds: 0 })
 	},

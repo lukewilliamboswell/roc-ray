@@ -9,9 +9,94 @@ import Color
 import AssetsHost
 
 Assets := [].{
+	## An opened, explicitly located disk asset store. The host retains the
+	## directory handle, not the process working directory; every relative asset
+	## lookup is made through that handle.
+	Store :: AssetsHost.Store.{
+		open! : StoreConfig => Try(Store, [RootNotFound, RootNotDirectory, RootUnreadable, InvalidRootPath, ManifestMissing, ManifestUnreadable, ManifestMalformed, AssetSetMismatch, SchemaMismatch, ContentVersionMismatch, ContentHashMismatch, ResourceLimit, ..])
+		open! = |cfg| {
+			result = AssetsHost.open_store!(store_open_config(cfg))
+			match result.err {
+				0 => Ok(Store.(result.store))
+				1 => Err(RootNotFound)
+				2 => Err(RootNotDirectory)
+				3 => Err(RootUnreadable)
+				4 => Err(InvalidRootPath)
+				5 => Err(ManifestMissing)
+				6 => Err(ManifestUnreadable)
+				7 => Err(ManifestMalformed)
+				8 => Err(AssetSetMismatch)
+				9 => Err(SchemaMismatch)
+				10 => Err(ContentVersionMismatch)
+				11 => Err(ContentHashMismatch)
+				_ => Err(ResourceLimit)
+			}
+		}
+
+		## Load an image relative to this opened store. `path` is portable and
+		## must be relative; absolute paths, NUL, and lexical `..` escapes fail
+		## before file I/O. Symlinks are deliberately not confinement boundaries.
+		texture! : Store, Str => Try(Texture, [AssetPathInvalid, AssetNotFound, AssetReadFailed, TextureLoadFailed, ResourceLimit, ..])
+		texture! = |Store.(store), path| {
+			result = AssetsHost.load_store_texture!({ store, path })
+			if result.err == 1 {
+				Err(AssetPathInvalid)
+			} else if result.err == 2 {
+				Err(AssetNotFound)
+			} else if result.err == 3 {
+				Err(AssetReadFailed)
+			} else if result.err == 4 {
+				Err(TextureLoadFailed)
+			} else if result.err != 0 {
+				Err(ResourceLimit)
+			} else {
+				Ok(Texture.(result.texture))
+			}
+		}
+	}
+
+	## How a disk store root is resolved. These choices are explicit so moving an
+	## executable, changing CWD, and selecting a mod directory cannot silently
+	## change one another's meaning. The host never calls `chdir`.
+	StoreLocation := [BesideExecutable(Str), WorkingDirectory(Str), AbsoluteDirectory(Str)]
+
+	## Optional startup validation for an asset-set manifest named
+	## `roc-assets.manifest`. A non-empty `content_hash` asks the host to compare
+	## this expected SHA-256 with the manifest declaration only; it does not walk
+	## or hash loose files at startup.
+	ManifestPolicy := [IgnoreManifest, RequireManifest(ManifestExpectation)]
+	ManifestExpectation : { asset_set : Str, schema : U32, content_version : U32, content_hash : Str }
+	StoreConfig : { root : StoreLocation, manifest : ManifestPolicy }
+
+	## Start from an application/executable-relative asset directory. This is the
+	## normal packaged-app choice.
+	beside_executable : Str -> StoreConfig
+	beside_executable = |root| { root: BesideExecutable(root), manifest: IgnoreManifest }
+
+	working_directory : Str -> StoreConfig
+	working_directory = |root| { root: WorkingDirectory(root), manifest: IgnoreManifest }
+
+	absolute_directory : Str -> StoreConfig
+	absolute_directory = |root| { root: AbsoluteDirectory(root), manifest: IgnoreManifest }
+
+	with_manifest : StoreConfig, ManifestExpectation -> StoreConfig
+	with_manifest = |cfg, expected| { ..cfg, manifest: RequireManifest(expected) }
+
+	## Image bytes accepted by raylib's in-memory image loader.
+	ImageFormat := [Png, Jpeg, Bmp, Tga, Gif, Qoi]
+	TextureBytes : { format : ImageFormat, bytes : List(U8) }
 
 	## Opaque, host-owned mutable GPU texture with immutable dimensions.
 	Texture :: AssetsHost.Texture.{
+		## Decode an authored image embedded with a compile-time file import.
+		## The byte list is borrowed only while the host decodes and uploads it;
+		## no payload-sized Roc copy is made and the result retains only the GPU
+		## texture.
+		from_bytes! : TextureBytes => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
+		from_bytes! = |cfg| {
+			result = AssetsHost.load_texture_bytes!({ format: image_format_code(cfg.format), bytes: cfg.bytes })
+			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(TextureLoadFailed) else Ok(Texture.(result.texture))
+		}
 
 		## Load an image file into GPU texture memory.
 		load! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
@@ -219,6 +304,10 @@ Assets := [].{
 	load_texture! : Str => Try(Texture, [TextureLoadFailed, ResourceLimit, ..])
 	load_texture! = |path| Texture.load!(path)
 
+	## Load an image through an explicit store rather than process CWD.
+	load_store_texture! : Store, Str => Try(Texture, [AssetPathInvalid, AssetNotFound, AssetReadFailed, TextureLoadFailed, ResourceLimit, ..])
+	load_store_texture! = |store, path| store.texture!(path)
+
 	## Generate a solid-color GPU texture. The temporary CPU image is released
 	## inside the host; only the host-owned texture crosses back.
 	generate_color_texture! : GenerateColorTexture => Try(Texture, [TextureGenerationFailed, ResourceLimit, ..])
@@ -248,6 +337,39 @@ Assets := [].{
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3
 }
+
+store_open_config : Assets.StoreConfig -> AssetsHost.StoreOpen
+store_open_config = |cfg| {
+	location = match cfg.root {
+		BesideExecutable(path) => { kind: 0, path }
+		WorkingDirectory(path) => { kind: 1, path }
+		AbsoluteDirectory(path) => { kind: 2, path }
+	}
+	manifest = match cfg.manifest {
+		IgnoreManifest => { required: Bool.False, asset_set: "", schema: 0, content_version: 0, content_hash: "" }
+		RequireManifest(expected) => { required: Bool.True, asset_set: expected.asset_set, schema: expected.schema, content_version: expected.content_version, content_hash: expected.content_hash }
+	}
+	{
+		location_kind: location.kind,
+		root: location.path,
+		manifest_required: manifest.required,
+		asset_set: manifest.asset_set,
+		schema: manifest.schema,
+		content_version: manifest.content_version,
+		content_hash: manifest.content_hash,
+	}
+}
+
+image_format_code : Assets.ImageFormat -> U8
+image_format_code = |format|
+	match format {
+		Png => 0
+		Jpeg => 1
+		Bmp => 2
+		Tga => 3
+		Gif => 4
+		Qoi => 5
+	}
 
 filter_code : Assets.TextureFilter -> U8
 filter_code = |filter|

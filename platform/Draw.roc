@@ -499,6 +499,8 @@ Draw := [].{
 	## Host-owned GPU shader. Empty vertex/fragment strings select raylib's default
 	## stage. Keep this value alive for every cached Uniform derived from it.
 	Shader :: DrawHost.Shader.{
+		from_host : DrawHost.Shader -> Shader
+		from_host = |raw| Shader.(raw)
 
 		## Load shader stages from files.
 		load! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
@@ -512,6 +514,25 @@ Draw := [].{
 		from_source! = |cfg| {
 			result = DrawHost.load_shader_source!(cfg)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
+		}
+
+		## Compile shader stage files resolved through an explicit asset store.
+		from_store! : Assets.Store, LoadShader => Try(Shader, [AssetPathInvalid, AssetNotFound, AssetReadFailed, ShaderLoadFailed, ResourceLimit, ..])
+		from_store! = |store, cfg| {
+			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
+			if result.err == 1 {
+				Err(AssetPathInvalid)
+			} else if result.err == 2 {
+				Err(AssetNotFound)
+			} else if result.err == 3 {
+				Err(AssetReadFailed)
+			} else if result.err == 4 {
+				Err(ShaderLoadFailed)
+			} else if result.err != 0 {
+				Err(ResourceLimit)
+			} else {
+				Ok(Shader.(result.shader))
+			}
 		}
 
 		## Resolve a scalar floating-point uniform once.
@@ -554,6 +575,9 @@ Draw := [].{
 		vertex_source : Str,
 		fragment_source : Str,
 	}
+
+	FontFormat := [Ttf, Otf]
+	FontBytes : { format : FontFormat, bytes : List(U8), size : I32 }
 
 	## Typed uniform handles are zero-cost nominal wrappers over the cached host
 	## location plus its owning shader. Their distinct types prevent using the
@@ -871,6 +895,33 @@ Draw := [].{
 		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
 	}
 
+	## Load a font relative to an explicit asset store.
+	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+	load_store_font! = |store, cfg| {
+		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
+		if result.err == 1 {
+			Err(AssetPathInvalid)
+		} else if result.err == 2 {
+			Err(AssetNotFound)
+		} else if result.err == 3 {
+			Err(AssetReadFailed)
+		} else if result.err == 4 {
+			Err(FontLoadFailed)
+		} else if result.err != 0 {
+			Err(ResourceLimit)
+		} else {
+			Ok(LoadedFont(result.font))
+		}
+	}
+
+	## Decode an authored, compile-time embedded font. Bytes are borrowed while
+	## raylib copies/decodes them; no extra Roc payload-sized buffer is created.
+	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
+	font_from_bytes! = |cfg| {
+		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
+	}
+
 	## Create a draw configuration covering the whole texture at the origin.
 	texture_draw : Assets.Texture -> TextureDraw
 	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture.view())
@@ -1117,6 +1168,14 @@ blend_mode_code = |mode|
 		SubtractColors => 4
 		AlphaPremultiply => 5
 	}
+
+font_format_code : Draw.FontFormat -> U8
+font_format_code = |format|
+	match format {
+		Ttf => 0
+		Otf => 1
+	}
+
 
 scope_ok : U8
 scope_ok = 0

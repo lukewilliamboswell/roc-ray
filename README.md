@@ -109,6 +109,8 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   textures, and shaders.
 - Loaded or generated textures, spritesheet animation, mutable pixel data, and
   exact projective texture drawing.
+- Explicit executable-relative, working-directory, or external disk asset
+  stores with optional manifest identity validation; see [asset stores](docs/assets.md).
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
 - Window and frame timing, startup entropy, the
   [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and

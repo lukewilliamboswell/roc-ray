@@ -2,6 +2,7 @@
 ##
 ## This module is intentionally not exposed by the platform package.
 import Assets
+import AssetsHost
 import Camera
 import Color
 import Math
@@ -58,9 +59,12 @@ DrawHost := [].{
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
 	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }
 	LoadFont : { path : Str, size : I32 }
+	LoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
+	LoadStoreFont : { store : Assets.Store, path : Str, size : I32 }
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
+	LoadStoreShader : { store : Assets.Store, vertex_path : Str, fragment_path : Str }
 	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
 	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
@@ -91,9 +95,12 @@ DrawHost := [].{
 	fps! : Fps => {}
 	line! : Line => {}
 	load_font! : LoadFont => FontResult
+	load_font_bytes! : LoadFontBytes => FontResult
+	load_store_font! : LoadStoreFont => FontResult
 	load_render_texture! : RenderTextureSize => RenderTextureResult
 	load_shader! : LoadShader => ShaderResult
 	load_shader_source! : LoadShaderSource => ShaderResult
+	load_store_shader! : LoadStoreShader => ShaderResult
 	font_metrics! : Font => FontMetrics
 	prepare_text! : PrepareText => PrepareTextResult
 	draw_prepared_text! : PreparedTextDraw => {}

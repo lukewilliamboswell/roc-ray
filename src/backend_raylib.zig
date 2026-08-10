@@ -42,6 +42,18 @@ pub fn majorVersion() c_int {
 /// Native texture retained in the host resource heap.
 pub const Texture = rl.Texture2D;
 
+/// Decode an image in caller-owned memory, upload it, then discard the CPU
+/// image. Raylib consumes the bytes synchronously; it does not retain them.
+pub fn loadTextureFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Texture {
+    if (bytes.len == 0 or bytes.len > std.math.maxInt(c_int)) return null;
+    const image = rl.LoadImageFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
+    if (!rl.IsImageValid(image)) return null;
+    defer rl.UnloadImage(image);
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
+
 /// Native framebuffer-backed texture retained in the host resource heap.
 pub const RenderTexture = rl.RenderTexture2D;
 
@@ -457,6 +469,15 @@ pub fn loadShaderFromMemory(vertex_source: ?[*:0]const u8, fragment_source: ?[*:
     const shader = rl.LoadShaderFromMemory(vertex_source, fragment_source);
     if (!rl.IsShaderValid(shader)) return null;
     return shader;
+}
+
+/// Decode a font from caller-owned bytes. Raylib copies/decodes synchronously
+/// and the returned Font does not retain `bytes`.
+pub fn loadFontFromMemory(file_type: [*:0]const u8, bytes: []const u8, size: c_int) ?Font {
+    if (bytes.len == 0 or bytes.len > std.math.maxInt(c_int) or size <= 0) return null;
+    const font = rl.LoadFontFromMemory(file_type, bytes.ptr, @intCast(bytes.len), size, null, 0);
+    if (!rl.IsFontValid(font)) return null;
+    return font;
 }
 
 /// Release a GPU shader program.

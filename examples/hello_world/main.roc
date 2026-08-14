@@ -12,8 +12,14 @@ Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
 	font : Draw.Font,
+	layout : Layout,
 	pointer : { x : F32, y : F32 },
 	accent_on : Bool,
+}
+
+Layout : {
+	panel : { x : F32, y : F32, width : F32, height : F32 },
+	title_size : Draw.TextSize,
 }
 
 program = { init!, update, render! }
@@ -27,6 +33,7 @@ init! = App.init(
 			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
 			help: Text.from("Move the pointer, click for an accent, ESC exits", font).size(18).prepare!()?,
 			font,
+			layout: solve_layout(font),
 			pointer: { x: 400, y: 300 },
 			accent_on: Bool.False,
 		})
@@ -43,15 +50,24 @@ Msg : []
 update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
-	Program.static({ ..model, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
+	# Solve once for the next model. `render!` consumes this retained layout and
+	# the following update can use it for hit testing without any host calls.
+	layout = solve_layout(model.font)
+	Program.static({ ..model, layout, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
 		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+}
+
+solve_layout : Draw.Font -> Layout
+solve_layout = |font| {
+	panel: { x: 120, y: 150, width: 560, height: 300 },
+	title_size: font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	accent = if model.accent_on Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
-	panel = { x: 120, y: 150, width: 560, height: 300 }
-	title_size = model.font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing })
+	panel = model.layout.panel
+	title_size = model.layout.title_size
 
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
 	frame.circle_gradient!({ center: { x: 620, y: 90 }, radius: 260, color_inner: Color.with_alpha(accent, 100), color_outer: Color.with_alpha(accent, 0) })

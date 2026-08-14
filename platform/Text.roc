@@ -10,10 +10,6 @@ import rrt.Font as RrtFont
 
 Text := [].{
 
-	## Draw owns the host resource lifecycle; prepared text retains loaded fonts
-	## through the same ARC value as all other drawing APIs.
-	Font : Draw.Font
-
 	HAlign : [Left, Center, Right]
 
 	VAlign : [Top, Middle, Bottom]
@@ -24,7 +20,6 @@ Text := [].{
 	}
 
 	Size : RrtFont.Size
-	Measure : RrtFont.Measure
 
 	Placement : {
 		pos : Math.Vec2,
@@ -36,7 +31,7 @@ Text := [].{
 		content : Str,
 		size : F32,
 		spacing : F32,
-		font : Font,
+		font : Draw.Font,
 	}.{
 		size : Builder, F32 -> Builder
 		size = |builder, value| { ..builder, size: value }
@@ -44,7 +39,7 @@ Text := [].{
 		spacing : Builder, F32 -> Builder
 		spacing = |builder, value| { ..builder, spacing: value }
 
-		font : Builder, Font -> Builder
+		font : Builder, Draw.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
 
 		## Cache immutable UTF-8 text, font/style, and measurement in the host.
@@ -77,7 +72,7 @@ Text := [].{
 	default_spacing : F32
 	default_spacing = Draw.default_spacing
 
-	from : Str, Font -> Builder
+	from : Str, Draw.Font -> Builder
 	from = |content, font| {
 		content,
 		size: 20,

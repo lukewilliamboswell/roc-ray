@@ -287,8 +287,7 @@ Draw := [].{
 	## Scalar metrics for one glyph, shared with platform-independent packages.
 	GlyphMetrics : RrtFont.GlyphMetrics
 
-	## Text measurement configuration and result.
-	MeasureText : RrtFont.Measure
+	## Text measurement result.
 	TextSize : RrtFont.Size
 
 	## A native font handle paired with an immutable scalar metric snapshot.

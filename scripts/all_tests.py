@@ -130,8 +130,8 @@ def run_headless_examples(
         ok = run_cmd(
             [
                 str(executable),
-                "--headless",
-                f"--headless-frames={frames}",
+                "--host-headless",
+                f"--host-headless-frames={frames}",
             ],
             f"headless run {name}",
             verbose,
@@ -144,6 +144,32 @@ def run_headless_examples(
             failed.append(f"headless run {name}")
 
     return failed
+
+
+def run_cli_args_integration(root: Path, verbose: bool) -> list[str]:
+    """Build and run the argv bridge probe against the local platform."""
+    fixture = root / "test" / "cli_args" / "main.roc"
+    executable = executable_for_example(root, fixture)
+
+    print("\nRunning CLI argument integration probe...", end=" ", flush=True)
+    if not run_cmd(["roc", "build", "main.roc"], "build CLI argument probe", verbose, cwd=fixture.parent):
+        print("FAILED")
+        return ["build CLI argument probe"]
+
+    ok = run_cmd(
+        [
+            str(executable),
+            "--host-headless",
+            "--host-headless-frames=3",
+            "--cli-args-config",
+            "--headless",
+        ],
+        "run CLI argument probe",
+        verbose,
+        cwd=root,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run CLI argument probe"]
 
 
 def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTTPServer, int]:
@@ -661,6 +687,7 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         failed.extend(
             run_headless_examples(root, built_examples, args.headless_frames, args.verbose)
         )
+        failed.extend(run_cli_args_integration(root, args.verbose))
 
     # Bundle test: build the platform package, host it on localhost, and build
     # each example against the bundle URL (mirrors the platform-template check).

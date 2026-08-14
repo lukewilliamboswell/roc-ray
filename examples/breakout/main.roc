@@ -1,8 +1,9 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Audio
 import rr.Color
+import rr.Capture
 import rr.Draw
 import rr.Input
 import rr.Program
@@ -51,6 +52,7 @@ Sounds : {
 Model : {
 	game : Game,
 	sounds : Sounds,
+	demo : Bool,
 }
 
 FrameInput : {
@@ -145,12 +147,43 @@ brick_band_bottom = 236
 initial_lives : U64
 initial_lives = 3
 
+demo_frames : U64
+demo_frames = 150
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+breakout_config : List(Str) -> App.Config
+breakout_config = |args| {
+	base = App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/breakout")
+			.with_recording(
+				Record(
+					Capture.default
+						.with_path("demo.gif")
+						.with_format(Gif)
+						.with_fps(25)
+						.with_max_frames(demo_frames)
+						.with_scale(Half)
+						.with_timing(FixedStep),
+				),
+			)
+	} else {
+		base
+	}
+}
+
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.default.with_title("RocRay Breakout").with_frame_pacing(Capped(120)),
-	|_startup| {
+	breakout_config,
+	|startup| {
 		Ok({
 			game: new_game_state(),
+			demo: List.contains(startup.args!(), record_demo_flag),
 			sounds: {
 				paddle: Audio.gen_tone!({ freq: 440, ms: 50 })?,
 				brick: Audio.gen_tone!({ freq: 760, ms: 45 })?,
@@ -276,6 +309,21 @@ frame_input = |input, dt| {
 	paddle_move: paddle_move_from_input(input),
 	action_pressed: input.key_pressed(KeySpace),
 	dt,
+}
+
+## A demo follows the ball with the ordinary paddle movement rules. It starts
+## immediately and restarts after a life, while interactive play keeps using
+## the sampled keyboard input above.
+demo_frame_input : Game, F32 -> FrameInput
+demo_frame_input = |game, dt| {
+	paddle_center = game.paddle_x + paddle_w * 0.5
+	delta = game.ball.pos.x - paddle_center
+	paddle_move = if delta < -8 PaddleLeft else if delta > 8 PaddleRight else PaddleStill
+	{
+		paddle_move,
+		action_pressed: game.state != Playing,
+		dt,
+	}
 }
 
 paddle_rect : F32 -> Math.Rect
@@ -450,9 +498,21 @@ update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
 update = |model, step| {
 	input = step.input
 	dt = step.time.elapsed_seconds
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+	exit_actions =
+		if model.demo {
+			match step.capture {
+				Finished(_) => [Program.exit(0)]
+				Failed(_) => [Program.exit(1)]
+				_ => []
+			}
+		} else if input.key_pressed(KeyEscape) {
+			[Program.exit(0)]
+		} else {
+			[]
+		}
 
-	result = advance_game(model.game, frame_input(input, dt))
+	game_input = if model.demo demo_frame_input(model.game, dt) else frame_input(input, dt)
+	result = advance_game(model.game, game_input)
 	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
 
 	Program.static({ ..model, game: result.game })
@@ -467,7 +527,7 @@ update = |model, step| {
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.ray_white)
-	draw_game!(frame, model.game)
+	draw_game!(frame, model.game, model.demo)
 
 	Ok({})
 }
@@ -483,12 +543,12 @@ draw_bricks! = |frame, bricks| {
 	}
 }
 
-draw_game! : Draw.Frame, Game => {}
-draw_game! = |frame, game| {
+draw_game! : Draw.Frame, Game, Bool => {}
+draw_game! = |frame, game, demo| {
 	frame.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
 	frame.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
-	frame.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
+	if demo {} else frame.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
 	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
 
 	draw_bricks!(frame, game.bricks)

@@ -32,13 +32,13 @@ class RocPlatformAbiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_name:
             pin_file = Path(temporary_name) / ".roc-version"
             pin_file.write_text(
-                "nightly-2026-August-03-94cbed3\n", encoding="utf-8"
+                "nightly-2026-08-12-606470f\n", encoding="utf-8"
             )
             self.assertEqual(
                 abi.read_pin(pin_file),
                 abi.RocPin(
-                    nightly="nightly-2026-August-03-94cbed3",
-                    commit="94cbed3",
+                    nightly="nightly-2026-08-12-606470f",
+                    commit="606470f",
                 ),
             )
 

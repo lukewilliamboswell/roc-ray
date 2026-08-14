@@ -91,8 +91,8 @@ Program := [].{
 		## Transform the value while retaining its ordered host work.
 		map : Update(a, msg), (a -> b) -> Update(b, msg)
 		map = |update, transform| {
-			fields = update.fields()
-			Update.(Update({ value: transform(fields.value), actions: fields.actions, tasks: fields.tasks }))
+			update_fields = update.fields()
+			Update.(Update({ value: transform(update_fields.value), actions: update_fields.actions, tasks: update_fields.tasks }))
 		}
 
 		## Combine two updates from left to right.
@@ -114,29 +114,29 @@ Program := [].{
 		## Append one action after actions already requested by this update.
 		with_action : Update(value, msg), Action -> Update(value, msg)
 		with_action = |update, action| {
-			fields = update.fields()
-			Program.from_parts(fields.value, List.append(fields.actions, action), fields.tasks)
+			update_fields = update.fields()
+			Program.from_parts(update_fields.value, List.append(update_fields.actions, action), update_fields.tasks)
 		}
 
 		## Append actions after actions already requested by this update.
 		with_actions : Update(value, msg), List(Action) -> Update(value, msg)
 		with_actions = |update, actions| {
-			fields = update.fields()
-			Program.from_parts(fields.value, List.concat(fields.actions, actions), fields.tasks)
+			update_fields = update.fields()
+			Program.from_parts(update_fields.value, List.concat(update_fields.actions, actions), update_fields.tasks)
 		}
 
 		## Append one deferred task after tasks already requested by this update.
 		with_task : Update(value, msg), Task(msg) -> Update(value, msg)
 		with_task = |update, task| {
-			fields = update.fields()
-			Program.from_parts(fields.value, fields.actions, List.append(fields.tasks, task))
+			update_fields = update.fields()
+			Program.from_parts(update_fields.value, update_fields.actions, List.append(update_fields.tasks, task))
 		}
 
 		## Append deferred tasks after tasks already requested by this update.
 		with_tasks : Update(value, msg), List(Task(msg)) -> Update(value, msg)
 		with_tasks = |update, tasks| {
-			fields = update.fields()
-			Program.from_parts(fields.value, fields.actions, List.concat(fields.tasks, tasks))
+			update_fields = update.fields()
+			Program.from_parts(update_fields.value, update_fields.actions, List.concat(update_fields.tasks, tasks))
 		}
 	}
 

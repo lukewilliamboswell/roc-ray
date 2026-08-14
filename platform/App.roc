@@ -105,7 +105,7 @@ App := [].{
 		## A hidden window still renders on the GPU, so `Capture` works exactly
 		## as it does with a visible one -- useful for rendering a chart or a
 		## short clip to a file without a window appearing. This is not the same
-		## as the host's `--headless` flag, which draws nothing at all, and it
+		## as the host's `--host-headless` flag, which draws nothing at all, and it
 		## still needs a display server (wrap it in `xvfb-run` on a machine
 		## without one).
 		with_visible : Config, Bool -> Config
@@ -192,6 +192,14 @@ App := [].{
 		## The exit happens after startup completes to allow proper cleanup.
 		exit! : Startup, I32 => {}
 		exit! = |_startup, code| HostHost.exit!(code)
+
+		## Return the complete process argument list supplied by the launcher.
+		##
+		## The first element is `argv[0]`, followed by application-owned arguments
+		## in order. The host removes its reserved `--host-*` switches before this
+		## list reaches the app. The value is stable for the process lifetime.
+		args! : Startup => List(Str)
+		args! = |_startup| HostHost.args!()
 
 		## Read an environment variable by key.
 		## Returns Ok with the value if found, or Err NotFound if not set.
@@ -297,9 +305,18 @@ App := [].{
 	## before the first frame, or let other initialization errors propagate.
 	InitCallback(model, errors) : Startup => Try(model, [Exit(I64), ..errors])
 
+	## Pure startup configuration chosen from the complete process argv before
+	## the host creates its native window. This is where an app can opt into a
+	## hidden recording mode based on its own command-line flags.
+	ConfigForArgs : List(Str) -> Config
+
+	## Adapt a static configuration for apps that do not inspect argv.
+	static_config : Config -> ConfigForArgs
+	static_config = |config| |_args| config
+
 	## Startup configuration paired with an effectful model initializer.
 	Init(model, errors) : {
-		config : Config,
+		config : ConfigForArgs,
 		run! : InitCallback(model, errors),
 	}
 
@@ -321,10 +338,12 @@ App := [].{
 		recording: NoRecording,
 	}
 
-	## Build app initialization from pure startup config plus the effectful
-	## callback that creates the first model after raylib/audio are ready.
-	init : Config, InitCallback(model, errors) -> Init(model, errors)
-	init = |cfg, callback!| { config: cfg, run!: callback! }
+	## Build app initialization from an argv-aware startup config plus the
+	## effectful callback that creates the first model after raylib/audio are
+	## ready. Static configurations can ignore the argument list with
+	## `|_args| App.default`.
+	init : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
+	init = |config_for_args, callback!| { config: config_for_args, run!: callback! }
 
 }
 

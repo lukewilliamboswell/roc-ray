@@ -16,6 +16,7 @@ HostHost := [].{
 	}
 
 	exit! : I32 => {}
+	args! : () => List(Str)
 	get_clipboard_text! : () => Try(Str, [Unavailable])
 	read_env! : Str => Try(Str, [NotFound])
 	read_file! : Str => ReadFileResult

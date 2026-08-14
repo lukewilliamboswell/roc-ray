@@ -132,7 +132,7 @@ for symbol in {encoded_boundary_symbols}:
     CountHostBreakpoint(symbol)
 gdb.events.exited.connect(record_exit)
 end
-run --headless --headless-frames={frames}
+run --host-headless --host-headless-frames={frames}
 python print("{MARKER}" + json.dumps(stats, sort_keys=True))
 """
 

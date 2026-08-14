@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 # Sampler state lives on the shared GPU texture object, so setting a filter
 # through a view would change how the owning texture -- and every other view of
@@ -17,7 +17,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [TextureGenerationFailed, ResourceLimit])
 init! = App.init(
-	App.default,
+	App.static_config(App.default),
 	|_startup| {
 		texture = Assets.generate_color_texture!({ width: 8, height: 8, color: { r: 255, g: 0, b: 0, a: 255 } })?
 		Ok({ view: texture.view() })

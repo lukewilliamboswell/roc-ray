@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Audio
@@ -79,7 +79,7 @@ start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120))),
 	|startup| {
 		seed = {
 			snake: start_snake,

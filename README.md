@@ -144,19 +144,20 @@ recording in the startup config and it needs no code in `render!` at all:
 
 ```roc
 App.init(
-    App.default
-    .with_output_dir("captures")
+    |_args|
+        App.default
+        .with_output_dir("captures")
     # Render on the GPU with no window on screen, like a batch job.
-    .with_visible(Bool.False)
-    .with_recording(
-        Record(
-            Capture.default
-            .with_path("demo.gif")
-            .with_format(Gif)
-            .with_fps(25)
-            .with_max_frames(300),
+        .with_visible(Bool.False)
+        .with_recording(
+            Record(
+                Capture.default
+                .with_path("demo.gif")
+                .with_format(Gif)
+                .with_fps(25)
+                .with_max_frames(300),
+            ),
         ),
-    ),
     |_host| Ok({}),
 )
 ```
@@ -175,12 +176,12 @@ Three things worth knowing:
   exact `1/fps` frame delta regardless of how long the readback actually took,
   so a recording plays back smoothly and two runs produce identical output.
   Choose `RealTime` if you would rather see the true frame pacing.
-- **A hidden window is not the same as `--headless`.** `with_visible(Bool.False)`
+- **A hidden window is not the same as `--host-headless`.** `with_visible(Bool.False)`
   still renders on the GPU, so captures work; it needs a display server, so wrap
-  it in `xvfb-run` on a machine without one. The host's `--headless` flag swaps
+  it in `xvfb-run` on a machine without one. The host's `--host-headless` flag swaps
   in a stub backend that draws nothing, so it captures nothing.
 
-See `examples/capture_screenshot/main.roc`, `examples/capture_plot/main.roc`, and
+See `examples/postcard_studio/main.roc`, `examples/capture_plot/main.roc`, and
 `examples/capture_ui_demo/main.roc`.
 
 Separately, note that raylib's own screen-capture shortcut is compiled into the
@@ -189,6 +190,17 @@ into the process working directory. That predates this feature, bypasses
 `with_output_dir`, and cannot be disabled without rebuilding raylib from source.
 
 ## Examples
+
+Breakout can generate a README-ready GIF after building the local host:
+
+```bash
+zig build
+scripts/run-example.py examples/breakout -- --record-demo
+```
+
+The demo uses a hidden GPU window. On Linux without a display server, run the
+last command through `xvfb-run -a`. Commit `examples/breakout/demo.gif`, then
+add it to this section as a linked image card.
 
 For a small game, start with Pong, Snake, or Breakout:
 
@@ -209,9 +221,10 @@ roc build examples/cave_climb/main.roc --output cave_climb && ./cave_climb
 In Cave Climb, use A/D to move, W, Up, or Space to jump, the left mouse button
 to fire the laser, and the right mouse button to use the hook.
 
-The [example guide](examples/README.md) describes every app, what it teaches,
-and a recommended learning path. It includes focused examples for responsive
-UI, input, cameras, generated assets, projective textures, and post-processing.
+The [example gallery](examples/README.md) groups complete starter apps, larger
+showcases, and focused recipes. It also suggests a learning path and calls out
+the reusable patterns in each app, including responsive UI, input, cameras,
+generated assets, projective textures, post-processing, and capture workflows.
 
 ## Supported systems
 

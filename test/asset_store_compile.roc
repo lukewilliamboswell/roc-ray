@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../platform/main.roc" }
+app [Model, program] { rr: platform "../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -11,7 +11,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default,
+	App.static_config(App.default),
 	|_startup| {
 		store = Assets.Store.open!(
 			Assets.with_manifest(

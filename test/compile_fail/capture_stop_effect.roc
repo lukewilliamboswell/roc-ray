@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 # Finalizing a recording is an encode and a file write. As an effect it was
 # reachable from `render!`, which put both in the middle of drawing a frame, at
@@ -14,7 +14,7 @@ Model : {}
 program = { init!, update, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_startup| Ok({}))
+init! = App.init(App.static_config(App.default), |_startup| Ok({}))
 
 Msg : []
 

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -29,7 +29,7 @@ screen_h = 600
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Offscreen Post-processing"),
+	App.static_config(App.default.with_title("RocRay Offscreen Post-processing")),
 	|_host| {
 
 		## This source tree example deliberately opts into CWD-relative assets.

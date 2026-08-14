@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Draw
@@ -37,7 +37,7 @@ transport = {
 program = { init!, update, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_startup| Ok({}))
+init! = App.init(App.static_config(App.default), |_startup| Ok({}))
 
 Msg : []
 

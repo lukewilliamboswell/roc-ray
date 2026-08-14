@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 # Large reads now return `List(U8)` from `Program`; the old module must stay absent.
 import rr.App
@@ -11,7 +11,7 @@ Model : {}
 program = { init!, update, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_startup| Ok({}))
+init! = App.init(App.static_config(App.default), |_startup| Ok({}))
 
 Msg : []
 

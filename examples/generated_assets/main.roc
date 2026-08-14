@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -79,8 +79,9 @@ initial_pixels = List.map_with_index(
 
 init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed, UploadBudgetExceeded])
 init! = App.init(
-	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))),
 	|_startup| {
+		font = Draw.default_font!()
 		texture = Assets.Texture.generate_color!({ width: 16, height: 16, color: Color.white })?
 		texture.update!(initial_pixels)?
 		texture.set_filter!(Point)
@@ -95,9 +96,9 @@ init! = App.init(
 			last_cell: Idle,
 			mouse: { x: 0, y: 0 },
 			ui: Box.box({
-				title: Text.from("Pixel Workshop").size(34).prepare!()?,
-				help: Text.from("Paint with the mouse | 1-4 palette | C restores the design").size(17).prepare!()?,
-				palette: Text.from("Palette").size(22).prepare!()?,
+				title: Text.from("Pixel Workshop", font).size(34).prepare!()?,
+				help: Text.from("Paint with the mouse | 1-4 palette | C restores the design", font).size(17).prepare!()?,
+				palette: Text.from("Palette", font).size(22).prepare!()?,
 			}),
 		})
 	},

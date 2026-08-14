@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.Draw
 import rr.Color
@@ -31,6 +31,7 @@ Model : {
 	hit_sound : Audio.Sound,
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
+	font : Draw.Font,
 
 	## Simulation randomness lives in the model, so a serve is drawn on the
 	## frame that needs it and a run replays exactly from its seed.
@@ -125,7 +126,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.default.with_title("RocRay Pong"),
+	App.static_config(App.default.with_title("RocRay Pong")),
 	|startup| {
 		# Generate the sound effects once; new_round carries the handles forward.
 		seed = {
@@ -140,6 +141,7 @@ init! = App.init(
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
+			font: Draw.default_font!(),
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
 			rng: Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2_000_000_000))),
@@ -186,8 +188,8 @@ render! = |model, frame| {
 
 	if game_over(model) {
 		winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
-		frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: Draw.default_font, align: Draw.align_center })
-		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_center })
+		frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: model.font, align: Draw.align_center })
+		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_center })
 	}
 
 	Ok({})
@@ -299,6 +301,6 @@ draw_field! = |frame, model| {
 	frame.rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, style: Draw.filled(Color.white) })
 	frame.rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, style: Draw.filled(Color.white) })
 	frame.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
-	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
-	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
 }

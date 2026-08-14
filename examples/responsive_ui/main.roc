@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Color
@@ -37,35 +37,39 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Responsive UI")
-		.with_size({ width: 960, height: 640 })
-		.with_resizable(Bool.True)
-	# The layout stops being usable below this, so keep the window manager
-	# out of that range. A minimum only binds on a resizable window.
-		.with_min_size({ width: 480, height: 400 })
-	# Escape is an ordinary key on a settings screen, so take it back from
-	# raylib and own shutdown ourselves.
-		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
-	|_startup|
+	App.static_config(
+		App.default
+			.with_title("RocRay Responsive UI")
+			.with_size({ width: 960, height: 640 })
+			.with_resizable(Bool.True)
+		# The layout stops being usable below this, so keep the window manager
+		# out of that range. A minimum only binds on a resizable window.
+			.with_min_size({ width: 480, height: 400 })
+		# Escape is an ordinary key on a settings screen, so take it back from
+		# raylib and own shutdown ourselves.
+			.with_exit_key(NoExitKey)
+			.with_frame_pacing(Capped(120)),
+	),
+	|_startup| {
+		font = Draw.default_font!()
 		Ok({
 			ui: Box.box({
-				title: Text.from("Settings").size(38).prepare!()?,
-				subtitle: Text.from("A resizable, input-aware application screen").size(18).prepare!()?,
-				display: Text.from("Display").size(22).prepare!()?,
-				audio: Text.from("Audio").size(22).prepare!()?,
-				controls: Text.from("Controls").size(22).prepare!()?,
-				display_body: Text.from("Live layout preview").size(24).prepare!()?,
-				audio_body: Text.from("Mix groups").size(24).prepare!()?,
-				controls_body: Text.from("Keyboard bindings").size(24).prepare!()?,
-				help: Text.from("Arrow keys or click to select | ESC does nothing | Q quits").size(16).prepare!()?,
+				title: Text.from("Settings", font).size(38).prepare!()?,
+				subtitle: Text.from("A resizable, input-aware application screen", font).size(18).prepare!()?,
+				display: Text.from("Display", font).size(22).prepare!()?,
+				audio: Text.from("Audio", font).size(22).prepare!()?,
+				controls: Text.from("Controls", font).size(22).prepare!()?,
+				display_body: Text.from("Live layout preview", font).size(24).prepare!()?,
+				audio_body: Text.from("Mix groups", font).size(24).prepare!()?,
+				controls_body: Text.from("Keyboard bindings", font).size(24).prepare!()?,
+				help: Text.from("Arrow keys or click to select | ESC does nothing | Q quits", font).size(16).prepare!()?,
 			}),
 			selection: Display,
 			screen: { width: 960, height: 640 },
 			mouse: { x: 0, y: 0 },
 			timestamp_nanos: 0,
-		}),
+		})
+	},
 )
 
 previous_selection : Selection -> Selection

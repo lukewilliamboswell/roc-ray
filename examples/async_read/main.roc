@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Color
@@ -48,14 +48,16 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("RocRay Async Read").with_frame_pacing(Capped(120)),
-	|_host|
+	App.static_config(App.default.with_title("RocRay Async Read").with_frame_pacing(Capped(120))),
+	|_host| {
+		font = Draw.default_font!()
 		Ok({
 			small: Waiting,
 			large: Waiting,
 			elapsed: 0,
-			title: Text.from("Reading while the frame keeps moving").size(22).prepare!()?,
-		}),
+			title: Text.from("Reading while the frame keeps moving", font).size(22).prepare!()?,
+		})
+	},
 )
 
 update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)

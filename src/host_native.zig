@@ -1108,7 +1108,7 @@ var capture_clock_last_real_ns: u64 = 0;
 var headless_screen_width: i32 = 800;
 var headless_screen_height: i32 = 600;
 /// A headless run reports a focused, non-minimized window. There is no window
-/// to ask, and a constant keeps `--headless` output reproducible.
+/// to ask, and a constant keeps `--host-headless` output reproducible.
 const HEADLESS_WINDOW_FOCUSED = true;
 const HEADLESS_WINDOW_MINIMIZED = false;
 var headless_random_state: u32 = 0x4d595df4;
@@ -1764,18 +1764,22 @@ const FontMetric = abi.DrawHostFont_metricsGlyphs;
 /// The headless font is deliberately small but still proportional. It exercises
 /// the pure snapshot path without pretending to have a GPU font resource.
 const HEADLESS_GLYPHS = [_]FontMetric{
-    .{ .advance = 1, .codepoint = '?' },
-    .{ .advance = 2, .codepoint = 'W' },
-    .{ .advance = 1, .codepoint = 'i' },
-    .{ .advance = 1, .codepoint = 0xE9 },
+    .{ .advance_x = 1, .codepoint = '?', .height = 2, .offset_x = 0, .offset_y = 0, .width = 1 },
+    .{ .advance_x = 2, .codepoint = 'W', .height = 2, .offset_x = 0, .offset_y = 0, .width = 2 },
+    .{ .advance_x = 1, .codepoint = 'i', .height = 2, .offset_x = 0, .offset_y = 0, .width = 1 },
+    .{ .advance_x = 1, .codepoint = 0xE9, .height = 2, .offset_x = 0, .offset_y = 0, .width = 1 },
 };
 const HEADLESS_FONT_BASE_SIZE: f32 = 2;
 
-fn glyphAdvance(glyphs: []const FontMetric, fallback_advance: f32, codepoint: u32) f32 {
+fn metricAdvance(glyph: FontMetric) f32 {
+    return if (glyph.advance_x > 0) glyph.advance_x else glyph.width + glyph.offset_x;
+}
+
+fn glyphAdvance(glyphs: []const FontMetric, fallback_index: usize, codepoint: u32) f32 {
     for (glyphs) |glyph| {
-        if (glyph.codepoint == codepoint) return glyph.advance;
+        if (glyph.codepoint == codepoint) return metricAdvance(glyph);
     }
-    return fallback_advance;
+    return metricAdvance(glyphs[fallback_index]);
 }
 
 const DecodedCodepoint = struct {
@@ -1807,7 +1811,7 @@ fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
 }
 
 /// Match raylib 6's `MeasureTextEx` from a scalar metric snapshot.
-fn measureTextWithMetrics(text: []const u8, glyphs: []const FontMetric, base_size: f32, fallback_advance: f32, line_spacing: f32, size: f32, spacing: f32) TextMeasurement {
+fn measureTextWithMetrics(text: []const u8, glyphs: []const FontMetric, base_size: f32, fallback_index: usize, line_spacing: f32, size: f32, spacing: f32) TextMeasurement {
     if (text.len == 0 or text[0] == 0) return .{ .height = 0, .width = 0 };
 
     var index: usize = 0;
@@ -1826,7 +1830,7 @@ fn measureTextWithMetrics(text: []const u8, glyphs: []const FontMetric, base_siz
             line_codepoints = 0;
             height += size + line_spacing;
         } else {
-            line_width += glyphAdvance(glyphs, fallback_advance, decoded.codepoint);
+            line_width += glyphAdvance(glyphs, fallback_index, decoded.codepoint);
             line_codepoints += 1;
         }
     }
@@ -1840,7 +1844,7 @@ fn headlessMeasureText(text: []const u8, size: f32, spacing: f32) TextMeasuremen
         text,
         &HEADLESS_GLYPHS,
         HEADLESS_FONT_BASE_SIZE,
-        HEADLESS_GLYPHS[0].advance,
+        0,
         RAYLIB_DEFAULT_TEXT_LINE_SPACING,
         size,
         spacing,
@@ -3655,7 +3659,7 @@ fn headlessFontMetrics(host: *RocHost) abi.DrawHostFont_metricsRetRecord {
     return .{
         .glyphs = abi.RocListWith(FontMetric, false).fromSlice(&HEADLESS_GLYPHS, host),
         .base_size = HEADLESS_FONT_BASE_SIZE,
-        .fallback_advance = HEADLESS_GLYPHS[0].advance,
+        .fallback_index = 0,
         .line_spacing = RAYLIB_DEFAULT_TEXT_LINE_SPACING,
     };
 }
@@ -3674,23 +3678,37 @@ fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.DrawHostFont
 
     const glyphs = abi.RocListWith(FontMetric, false).allocate(count, host);
     const elements = glyphs.elements_ptr.?[0..count];
-    var fallback_advance: f32 = 0;
+    var fallback_codepoint: u32 = 0;
     for (elements, 0..) |*element, index| {
         const metric = raylib.fontGlyphMetric(font, index);
-        element.* = .{ .advance = metric.advance, .codepoint = metric.codepoint };
-        if (index == 0 or metric.codepoint == '?') fallback_advance = metric.advance;
+        element.* = .{
+            .advance_x = metric.advance_x,
+            .codepoint = metric.codepoint,
+            .height = metric.height,
+            .offset_x = metric.offset_x,
+            .offset_y = metric.offset_y,
+            .width = metric.width,
+        };
+        if (index == 0 or metric.codepoint == '?') fallback_codepoint = metric.codepoint;
     }
     std.sort.pdq(FontMetric, elements, {}, glyphMetricLessThan);
+    var fallback_index: u64 = 0;
+    for (elements, 0..) |metric, index| {
+        if (metric.codepoint == fallback_codepoint) {
+            fallback_index = @intCast(index);
+            break;
+        }
+    }
     return .{
         .glyphs = glyphs,
         .base_size = raylib.fontBaseSize(font),
-        .fallback_advance = fallback_advance,
+        .fallback_index = fallback_index,
         .line_spacing = RAYLIB_DEFAULT_TEXT_LINE_SPACING,
     };
 }
 
 fn hostedDrawFontMetricsRaw(host: *RocHost, font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
-    enforcePhase("Text.metrics!", during_startup);
+    enforcePhase("Draw font metric snapshot", during_startup);
     defer font.decref(host);
     if (headlessMode()) return headlessFontMetrics(host);
     return snapshotRaylibFontMetrics(host, fontForValue(&font));
@@ -3724,6 +3742,7 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
 
     try std.testing.expectEqual(@as(f32, 2), snapshot.base_size);
     try std.testing.expectEqual(RAYLIB_DEFAULT_TEXT_LINE_SPACING, snapshot.line_spacing);
+    try std.testing.expectEqual(@as(u64, 0), snapshot.fallback_index);
     try std.testing.expectEqual(@as(usize, HEADLESS_GLYPHS.len), snapshot.glyphs.len());
     try std.testing.expect(snapshot.glyphs.hasOneRef());
 
@@ -3879,6 +3898,35 @@ fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c
 
 /// Global flag for deferred exit request (exit after current frame completes)
 var exit_requested: ?i64 = null;
+
+/// Complete argv as seen by the Roc application. `platform_main` owns the
+/// backing allocation and installs it before the configuration callback runs.
+/// Host switches have already been removed, but argv[0] is deliberately kept.
+var active_app_args: []const [*:0]u8 = &.{};
+
+fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
+    enforcePhase("App.Startup.args!", during_startup);
+
+    const result = abi.RocList(abi.RocStr).allocate(active_app_args.len, roc_host);
+    if (result.elements_ptr) |items| {
+        for (active_app_args, 0..) |arg, index| {
+            const bytes = std.mem.span(arg);
+            // Roc `Str` values must be UTF-8. Native argv is not guaranteed to
+            // be, so preserve valid input and represent an invalid argument by
+            // the standard replacement character rather than constructing an
+            // invalid Roc string.
+            items[index] = abi.RocStr.fromSlice(
+                if (std.unicode.utf8ValidateSlice(bytes)) bytes else "\xEF\xBF\xBD",
+                roc_host,
+            );
+        }
+    }
+    return result;
+}
+
+fn exportedArgs() callconv(.c) abi.RocList(abi.RocStr) {
+    return hostedArgs(activeHost());
+}
 
 fn hostedReadEnvWindows(roc_host: *RocHost, key_arg: abi.RocStr) callconv(.c) ReadEnvResult {
     enforcePhase("Host.read_env!", during_startup);
@@ -4985,6 +5033,7 @@ comptime {
         @export(&exportedDrawTextRaw, .{ .name = "roc_draw_text_raw" });
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
+        @export(&exportedArgs, .{ .name = "roc_host_args" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
@@ -5010,6 +5059,12 @@ const RuntimeOptions = struct {
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
     debug_allocator: bool = false,
     help: bool = false,
+    app_args: []const [*:0]u8 = &.{},
+    app_args_allocation: ?[][*:0]u8 = null,
+
+    fn deinit(self: RuntimeOptions, allocator: std.mem.Allocator) void {
+        if (self.app_args_allocation) |allocation| allocator.free(allocation);
+    }
 };
 
 const InputState = struct {
@@ -5106,7 +5161,7 @@ const InputState = struct {
 /// Sample the window for one cycle: logical drawing size, focus, minimization.
 ///
 /// A headless run never opens a window, so every field is a fixed constant
-/// rather than a raylib query -- `--headless` output has to be reproducible run
+/// rather than a raylib query -- `--host-headless` output has to be reproducible run
 /// to run, and asking a window that does not exist would not be.
 fn windowState() WindowSnapshot {
     if (active_headless) {
@@ -5124,38 +5179,79 @@ fn windowState() WindowSnapshot {
 }
 
 fn printUsage() void {
-    std.debug.print("usage: app [--headless] [--headless-frames=N] [--debug-allocator]\n", .{});
+    std.debug.print("usage: app [--host-headless] [--host-headless-frames=N] [--host-debug-allocator] [app arguments...]\n", .{});
 }
 
-fn parseRuntimeOptions(argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
+fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
     var options = RuntimeOptions{};
+    const app_args = try allocator.alloc([*:0]u8, argc);
+    errdefer allocator.free(app_args);
+
+    var app_arg_count: usize = 0;
+    if (argc > 0) {
+        app_args[app_arg_count] = argv[0];
+        app_arg_count += 1;
+    }
+
     var i: usize = 1;
     while (i < argc) : (i += 1) {
         const arg = std.mem.span(argv[i]);
-        if (std.mem.eql(u8, arg, "--headless")) {
+        if (std.mem.eql(u8, arg, "--host-headless")) {
             options.headless = true;
-        } else if (std.mem.startsWith(u8, arg, "--headless-frames=")) {
+        } else if (std.mem.startsWith(u8, arg, "--host-headless-frames=")) {
             options.headless = true;
-            const value = arg["--headless-frames=".len..];
+            const value = arg["--host-headless-frames=".len..];
             const frames = std.fmt.parseUnsigned(u64, value, 10) catch {
-                std.debug.print("invalid --headless-frames value: {s}\n", .{value});
+                std.debug.print("invalid --host-headless-frames value: {s}\n", .{value});
                 return error.InvalidArgument;
             };
             if (frames == 0) {
-                std.debug.print("--headless-frames must be greater than zero\n", .{});
+                std.debug.print("--host-headless-frames must be greater than zero\n", .{});
                 return error.InvalidArgument;
             }
             options.headless_frames = frames;
-        } else if (std.mem.eql(u8, arg, "--debug-allocator")) {
+        } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
-        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+        } else if (std.mem.eql(u8, arg, "--host-help")) {
             options.help = true;
-        } else {
-            std.debug.print("unknown argument: {s}\n", .{arg});
+        } else if (std.mem.startsWith(u8, arg, "--host-")) {
+            std.debug.print("unknown host argument: {s}\n", .{arg});
             return error.InvalidArgument;
+        } else {
+            app_args[app_arg_count] = argv[i];
+            app_arg_count += 1;
         }
     }
+    options.app_args = app_args[0..app_arg_count];
+    options.app_args_allocation = app_args;
     return options;
+}
+
+test "runtime options reserve host switches and preserve complete app argv" {
+    var argv = [_][*:0]u8{
+        @constCast("breakout"),
+        @constCast("--record-demo"),
+        @constCast("--host-headless"),
+        @constCast("--host-headless-frames=7"),
+        @constCast("--headless"),
+    };
+    const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
+    defer options.deinit(std.testing.allocator);
+
+    try std.testing.expect(options.headless);
+    try std.testing.expectEqual(@as(u64, 7), options.headless_frames);
+    try std.testing.expectEqual(@as(usize, 3), options.app_args.len);
+    try std.testing.expectEqualStrings("breakout", std.mem.span(options.app_args[0]));
+    try std.testing.expectEqualStrings("--record-demo", std.mem.span(options.app_args[1]));
+    try std.testing.expectEqualStrings("--headless", std.mem.span(options.app_args[2]));
+}
+
+test "runtime options reject malformed reserved host switches" {
+    var argv = [_][*:0]u8{ @constCast("app"), @constCast("--host-unknown") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, argv.len, &argv));
+
+    var zero_frames = [_][*:0]u8{ @constCast("app"), @constCast("--host-headless-frames=0") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, zero_frames.len, &zero_frames));
 }
 
 fn finalExitCode(exit_code: i32) c_int {
@@ -6225,12 +6321,14 @@ fn testCallbackCall(
     arg: ?[*]const u8,
     result: ?[*]u8,
     reuse: ?[*]u8,
+    context: *?*const anyopaque,
 ) callconv(.c) void {
     _ = roc_host;
     _ = callback_capture;
     _ = arg;
     _ = result;
     _ = reuse;
+    context.* = null;
     unreachable;
 }
 
@@ -8004,10 +8102,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
-    const options = parseRuntimeOptions(argc, argv) catch {
+    const options = parseRuntimeOptions(std.heap.smp_allocator, argc, argv) catch {
         printUsage();
         return 2;
     };
+    defer options.deinit(std.heap.smp_allocator);
     if (options.help) {
         printUsage();
         return 0;
@@ -8061,6 +8160,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
     active_roc_host = &roc_host;
     active_headless = options.headless;
+    active_app_args = options.app_args;
     exit_requested = null;
     debug_or_expect_called.store(false, .release);
     defer {
@@ -8069,6 +8169,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // protect and anything left behind reads as a leak.
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         active_headless = false;
+        active_app_args = &.{};
         active_roc_host = null;
     }
 

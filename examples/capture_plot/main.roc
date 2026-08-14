@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Capture
@@ -18,7 +18,7 @@ import rr.Text
 ## `with_visible(Bool.False)` keeps the window off screen while still rendering
 ## on the GPU, so this runs like a batch job: start it and collect the frames.
 ## It still needs a display server, so wrap it in `xvfb-run` on a machine
-## without one. That is not the same as the host's `--headless` flag, which
+## without one. That is not the same as the host's `--host-headless` flag, which
 ## swaps in a stub backend that draws nothing and therefore captures nothing.
 ##
 ## Run it, then open `captures/plot.webm`. Swap `.with_format(Gif)` and a
@@ -41,29 +41,33 @@ recorded_frames = 75
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Capture: Plot")
-		.with_size({ width: 640, height: 360 })
-		.with_frame_pacing(Capped(60))
-		.with_visible(Bool.False)
-		.with_output_dir("captures")
-		.with_recording(
-			Record(
-				Capture.default
-					.with_path("plot.webm")
-					.with_format(WebM)
-					.with_fps(25)
-					.with_max_frames(recorded_frames)
-					.with_scale(Half)
-					.with_timing(FixedStep),
+	App.static_config(
+		App.default
+			.with_title("RocRay Capture: Plot")
+			.with_size({ width: 640, height: 360 })
+			.with_frame_pacing(Capped(60))
+			.with_visible(Bool.False)
+			.with_output_dir("captures")
+			.with_recording(
+				Record(
+					Capture.default
+						.with_path("plot.webm")
+						.with_format(WebM)
+						.with_fps(25)
+						.with_max_frames(recorded_frames)
+						.with_scale(Half)
+						.with_timing(FixedStep),
+				),
 			),
-		),
-	|_startup|
+	),
+	|_startup| {
+		font = Draw.default_font!()
 		Ok({
 			elapsed: 0,
-			title: Text.from("Recording a plot").size(28).prepare!()?,
-			status: Text.from("captures/plot.webm").size(16).prepare!()?,
-		}),
+			title: Text.from("Recording a plot", font).size(28).prepare!()?,
+			status: Text.from("captures/plot.webm", font).size(16).prepare!()?,
+		})
+	},
 )
 
 ## Elapsed time advances on the tick rather than inside the draw, so the plot

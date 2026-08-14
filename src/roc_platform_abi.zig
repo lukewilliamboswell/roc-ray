@@ -65,7 +65,7 @@ pub const RocHost = extern struct {
 /// reference to the callee. The caller must not use or decref that ownership
 /// unit after the call. The callee consumes it exactly once, whether or not the
 /// result can reuse the allocation.
-pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8, ?[*]u8) callconv(.c) void;
+pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8, ?[*]u8, *?*const anyopaque) callconv(.c) void;
 
 /// Final-drop callback for inline erased-callable captures.
 pub const RocErasedCallableOnDrop = *const fn (?[*]u8, *RocHost) callconv(.c) void;
@@ -2325,11 +2325,11 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_bf1ab06e133bc784
-pub const __AnonStruct_bf1ab06e133bc784 = if (@sizeOf(usize) == 4) extern struct {
-    glyphs: RocListWith(__AnonStruct_e72f16800e258bed, false),
+/// Element type for __AnonStruct_2bfb89334ad27c35
+pub const __AnonStruct_2bfb89334ad27c35 = if (@sizeOf(usize) == 4) extern struct {
+    fallback_index: u64,
+    glyphs: RocListWith(__AnonStruct_a31979034eec4b2e, false),
     base_size: f32,
-    fallback_advance: f32,
     line_spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -2343,9 +2343,9 @@ pub const __AnonStruct_bf1ab06e133bc784 = if (@sizeOf(usize) == 4) extern struct
         value.glyphs.incref(amount);
     }
 } else extern struct {
-    glyphs: RocListWith(__AnonStruct_e72f16800e258bed, false),
+    fallback_index: u64,
+    glyphs: RocListWith(__AnonStruct_a31979034eec4b2e, false),
     base_size: f32,
-    fallback_advance: f32,
     line_spacing: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -2362,19 +2362,23 @@ pub const __AnonStruct_bf1ab06e133bc784 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_bf1ab06e133bc784) != 40) @compileError("__AnonStruct_bf1ab06e133bc784 size mismatch");
-        if (@alignOf(__AnonStruct_bf1ab06e133bc784) != 8) @compileError("__AnonStruct_bf1ab06e133bc784 alignment mismatch");
+        if (@sizeOf(__AnonStruct_2bfb89334ad27c35) != 40) @compileError("__AnonStruct_2bfb89334ad27c35 size mismatch");
+        if (@alignOf(__AnonStruct_2bfb89334ad27c35) != 8) @compileError("__AnonStruct_2bfb89334ad27c35 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_bf1ab06e133bc784) != 24) @compileError("__AnonStruct_bf1ab06e133bc784 size mismatch");
-        if (@alignOf(__AnonStruct_bf1ab06e133bc784) != 4) @compileError("__AnonStruct_bf1ab06e133bc784 alignment mismatch");
+        if (@sizeOf(__AnonStruct_2bfb89334ad27c35) != 32) @compileError("__AnonStruct_2bfb89334ad27c35 size mismatch");
+        if (@alignOf(__AnonStruct_2bfb89334ad27c35) != 8) @compileError("__AnonStruct_2bfb89334ad27c35 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_e72f16800e258bed
-pub const __AnonStruct_e72f16800e258bed = if (@sizeOf(usize) == 4) extern struct {
-    advance: f32,
+/// Element type for __AnonStruct_a31979034eec4b2e
+pub const __AnonStruct_a31979034eec4b2e = if (@sizeOf(usize) == 4) extern struct {
+    advance_x: f32,
     codepoint: u32,
+    height: f32,
+    offset_x: f32,
+    offset_y: f32,
+    width: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -2389,8 +2393,12 @@ pub const __AnonStruct_e72f16800e258bed = if (@sizeOf(usize) == 4) extern struct
         _ = amount;
     }
 } else extern struct {
-    advance: f32,
+    advance_x: f32,
     codepoint: u32,
+    height: f32,
+    offset_x: f32,
+    offset_y: f32,
+    width: f32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -2408,12 +2416,12 @@ pub const __AnonStruct_e72f16800e258bed = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_e72f16800e258bed) != 8) @compileError("__AnonStruct_e72f16800e258bed size mismatch");
-        if (@alignOf(__AnonStruct_e72f16800e258bed) != 4) @compileError("__AnonStruct_e72f16800e258bed alignment mismatch");
+        if (@sizeOf(__AnonStruct_a31979034eec4b2e) != 24) @compileError("__AnonStruct_a31979034eec4b2e size mismatch");
+        if (@alignOf(__AnonStruct_a31979034eec4b2e) != 4) @compileError("__AnonStruct_a31979034eec4b2e alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_e72f16800e258bed) != 8) @compileError("__AnonStruct_e72f16800e258bed size mismatch");
-        if (@alignOf(__AnonStruct_e72f16800e258bed) != 4) @compileError("__AnonStruct_e72f16800e258bed alignment mismatch");
+        if (@sizeOf(__AnonStruct_a31979034eec4b2e) != 24) @compileError("__AnonStruct_a31979034eec4b2e size mismatch");
+        if (@alignOf(__AnonStruct_a31979034eec4b2e) != 4) @compileError("__AnonStruct_a31979034eec4b2e alignment mismatch");
     }
 }
 
@@ -4719,9 +4727,9 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_983f9b534c0ad6c6
-pub const __AnonStruct_983f9b534c0ad6c6 = if (@sizeOf(usize) == 4) extern struct {
-    @"init!": __AnonStruct_35c485cfe15b01ff,
+/// Element type for __AnonStruct_e8f18f49365cdd33
+pub const __AnonStruct_e8f18f49365cdd33 = if (@sizeOf(usize) == 4) extern struct {
+    @"init!": __AnonStruct_8fd71e3705bdb8b5,
     @"render!": *anyopaque,
     update: *anyopaque,
     /// Recursively decrement Roc-owned fields.
@@ -4736,7 +4744,7 @@ pub const __AnonStruct_983f9b534c0ad6c6 = if (@sizeOf(usize) == 4) extern struct
         value.@"init!".incref(amount);
     }
 } else extern struct {
-    @"init!": __AnonStruct_35c485cfe15b01ff,
+    @"init!": __AnonStruct_8fd71e3705bdb8b5,
     @"render!": *anyopaque,
     update: *anyopaque,
     /// Recursively decrement Roc-owned fields.
@@ -4754,221 +4762,19 @@ pub const __AnonStruct_983f9b534c0ad6c6 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_983f9b534c0ad6c6) != 192) @compileError("__AnonStruct_983f9b534c0ad6c6 size mismatch");
-        if (@alignOf(__AnonStruct_983f9b534c0ad6c6) != 8) @compileError("__AnonStruct_983f9b534c0ad6c6 alignment mismatch");
+        if (@sizeOf(__AnonStruct_e8f18f49365cdd33) != 32) @compileError("__AnonStruct_e8f18f49365cdd33 size mismatch");
+        if (@alignOf(__AnonStruct_e8f18f49365cdd33) != 8) @compileError("__AnonStruct_e8f18f49365cdd33 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_983f9b534c0ad6c6) != 152) @compileError("__AnonStruct_983f9b534c0ad6c6 size mismatch");
-        if (@alignOf(__AnonStruct_983f9b534c0ad6c6) != 8) @compileError("__AnonStruct_983f9b534c0ad6c6 alignment mismatch");
+        if (@sizeOf(__AnonStruct_e8f18f49365cdd33) != 16) @compileError("__AnonStruct_e8f18f49365cdd33 size mismatch");
+        if (@alignOf(__AnonStruct_e8f18f49365cdd33) != 4) @compileError("__AnonStruct_e8f18f49365cdd33 alignment mismatch");
     }
 }
 
-/// Element type for __AnonStruct_35c485cfe15b01ff
-pub const __AnonStruct_35c485cfe15b01ff = if (@sizeOf(usize) == 4) extern struct {
-    config: AppConfig,
+/// Element type for __AnonStruct_8fd71e3705bdb8b5
+pub const __AnonStruct_8fd71e3705bdb8b5 = if (@sizeOf(usize) == 4) extern struct {
+    config: *anyopaque,
     @"run!": *anyopaque,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.config.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.config.incref(amount);
-    }
-} else extern struct {
-    config: AppConfig,
-    @"run!": *anyopaque,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.config.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.config.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_35c485cfe15b01ff) != 176) @compileError("__AnonStruct_35c485cfe15b01ff size mismatch");
-        if (@alignOf(__AnonStruct_35c485cfe15b01ff) != 8) @compileError("__AnonStruct_35c485cfe15b01ff alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_35c485cfe15b01ff) != 144) @compileError("__AnonStruct_35c485cfe15b01ff size mismatch");
-        if (@alignOf(__AnonStruct_35c485cfe15b01ff) != 8) @compileError("__AnonStruct_35c485cfe15b01ff alignment mismatch");
-    }
-}
-
-/// Element type for App.Config
-pub const AppConfig = if (@sizeOf(usize) == 4) extern struct {
-    exit_key: KeysExitKey,
-    recording: AppRecording,
-    title: RocStr,
-    output_dir: RocStr,
-    width: i32,
-    height: i32,
-    min_width: i32,
-    min_height: i32,
-    frame_pacing: AppFramePacing,
-    resizable: bool,
-    fullscreen: bool,
-    cursor: AppCursorMode,
-    visible: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.exit_key.decref(roc_host);
-        value.recording.decref(roc_host);
-        value.title.decref(roc_host);
-        value.output_dir.decref(roc_host);
-        value.frame_pacing.decref(roc_host);
-        value.cursor.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.exit_key.incref(amount);
-        value.recording.incref(amount);
-        value.title.incref(amount);
-        value.output_dir.incref(amount);
-        value.frame_pacing.incref(amount);
-        value.cursor.incref(amount);
-    }
-} else extern struct {
-    exit_key: KeysExitKey,
-    recording: AppRecording,
-    title: RocStr,
-    output_dir: RocStr,
-    width: i32,
-    height: i32,
-    min_width: i32,
-    min_height: i32,
-    frame_pacing: AppFramePacing,
-    resizable: bool,
-    fullscreen: bool,
-    cursor: AppCursorMode,
-    visible: bool,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.exit_key.decref(roc_host);
-        value.recording.decref(roc_host);
-        value.title.decref(roc_host);
-        value.output_dir.decref(roc_host);
-        value.frame_pacing.decref(roc_host);
-        value.cursor.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.exit_key.incref(amount);
-        value.recording.incref(amount);
-        value.title.incref(amount);
-        value.output_dir.incref(amount);
-        value.frame_pacing.incref(amount);
-        value.cursor.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppConfig) != 168) @compileError("AppConfig size mismatch");
-        if (@alignOf(AppConfig) != 8) @compileError("AppConfig alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppConfig) != 136) @compileError("AppConfig size mismatch");
-        if (@alignOf(AppConfig) != 8) @compileError("AppConfig alignment mismatch");
-    }
-}
-
-/// Element type for Capture.Recording
-pub const CaptureRecording = if (@sizeOf(usize) == 4) extern struct {
-    max_frames: u64,
-    path: RocStr,
-    fps: i32,
-    scale: CaptureScale,
-    every_nth: u32,
-    format: CaptureFormat,
-    timing: CaptureTiming,
-    cursor: CaptureCursor,
-    quality: CaptureQuality,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        value.scale.decref(roc_host);
-        value.format.decref(roc_host);
-        value.timing.decref(roc_host);
-        value.cursor.decref(roc_host);
-        value.quality.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        value.scale.incref(amount);
-        value.format.incref(amount);
-        value.timing.incref(amount);
-        value.cursor.incref(amount);
-        value.quality.incref(amount);
-    }
-} else extern struct {
-    max_frames: u64,
-    path: RocStr,
-    fps: i32,
-    scale: CaptureScale,
-    every_nth: u32,
-    format: CaptureFormat,
-    timing: CaptureTiming,
-    cursor: CaptureCursor,
-    quality: CaptureQuality,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.path.decref(roc_host);
-        value.scale.decref(roc_host);
-        value.format.decref(roc_host);
-        value.timing.decref(roc_host);
-        value.cursor.decref(roc_host);
-        value.quality.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.path.incref(amount);
-        value.scale.incref(amount);
-        value.format.incref(amount);
-        value.timing.incref(amount);
-        value.cursor.incref(amount);
-        value.quality.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureRecording) != 56) @compileError("CaptureRecording size mismatch");
-        if (@alignOf(CaptureRecording) != 8) @compileError("CaptureRecording alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureRecording) != 48) @compileError("CaptureRecording size mismatch");
-        if (@alignOf(CaptureRecording) != 8) @compileError("CaptureRecording alignment mismatch");
-    }
-}
-
-/// Element type for __AnonStruct_694805f24bd7d5ca
-pub const __AnonStruct_694805f24bd7d5ca = if (@sizeOf(usize) == 4) extern struct {
-    denominator: u32,
-    numerator: u32,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -4983,8 +4789,8 @@ pub const __AnonStruct_694805f24bd7d5ca = if (@sizeOf(usize) == 4) extern struct
         _ = amount;
     }
 } else extern struct {
-    denominator: u32,
-    numerator: u32,
+    config: *anyopaque,
+    @"run!": *anyopaque,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
@@ -5002,12 +4808,12 @@ pub const __AnonStruct_694805f24bd7d5ca = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_694805f24bd7d5ca) != 8) @compileError("__AnonStruct_694805f24bd7d5ca size mismatch");
-        if (@alignOf(__AnonStruct_694805f24bd7d5ca) != 4) @compileError("__AnonStruct_694805f24bd7d5ca alignment mismatch");
+        if (@sizeOf(__AnonStruct_8fd71e3705bdb8b5) != 16) @compileError("__AnonStruct_8fd71e3705bdb8b5 size mismatch");
+        if (@alignOf(__AnonStruct_8fd71e3705bdb8b5) != 8) @compileError("__AnonStruct_8fd71e3705bdb8b5 alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_694805f24bd7d5ca) != 8) @compileError("__AnonStruct_694805f24bd7d5ca size mismatch");
-        if (@alignOf(__AnonStruct_694805f24bd7d5ca) != 4) @compileError("__AnonStruct_694805f24bd7d5ca alignment mismatch");
+        if (@sizeOf(__AnonStruct_8fd71e3705bdb8b5) != 8) @compileError("__AnonStruct_8fd71e3705bdb8b5 size mismatch");
+        if (@alignOf(__AnonStruct_8fd71e3705bdb8b5) != 4) @compileError("__AnonStruct_8fd71e3705bdb8b5 alignment mismatch");
     }
 }
 
@@ -5916,665 +5722,6 @@ comptime {
     }
 }
 
-/// Tag union: AppCursorMode
-pub const AppCursorMode = enum(u8) {
-    cursor_hidden = 0,
-    cursor_visible = 1,
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        _ = self;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        _ = self;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppCursorMode) != 1) @compileError("AppCursorMode size mismatch");
-        if (@alignOf(AppCursorMode) != 1) @compileError("AppCursorMode alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppCursorMode) != 1) @compileError("AppCursorMode size mismatch");
-        if (@alignOf(AppCursorMode) != 1) @compileError("AppCursorMode alignment mismatch");
-    }
-}
-
-/// Tag discriminant for Keys.ExitKey.
-pub const KeysExitKeyTag = enum(u8) {
-    ExitKey = 0,
-    NoExitKey = 1,
-};
-
-/// Payload union for Keys.ExitKey.
-pub const KeysExitKeyPayload = extern union {
-    exit_key: KeysKeyboardKey,
-    no_exit_key: [0]u8,
-};
-
-/// Tag union: Keys.ExitKey
-pub const KeysExitKey = if (@sizeOf(usize) == 4) extern struct {
-    payload: [16]u8 align(8),
-    tag: KeysExitKeyTag,
-    pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
-        const ptr: *const KeysKeyboardKey = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefKeysExitKey(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfKeysExitKey(self, amount);
-    }
-} else extern struct {
-    payload: KeysExitKeyPayload,
-    tag: KeysExitKeyTag,
-    pub fn payload_exit_key(self: *const @This()) KeysKeyboardKey {
-        return self.payload.exit_key;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefKeysExitKey(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfKeysExitKey(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(KeysExitKey) != 24) @compileError("KeysExitKey size mismatch");
-        if (@alignOf(KeysExitKey) != 8) @compileError("KeysExitKey alignment mismatch");
-        if (@offsetOf(KeysExitKey, "tag") != 16) @compileError("KeysExitKey tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(KeysExitKey) != 24) @compileError("KeysExitKey size mismatch");
-        if (@alignOf(KeysExitKey) != 8) @compileError("KeysExitKey alignment mismatch");
-        if (@offsetOf(KeysExitKey, "tag") != 16) @compileError("KeysExitKey tag offset mismatch");
-    }
-}
-
-/// Tag discriminant for Keys.KeyboardKey.
-pub const KeysKeyboardKeyTag = enum(u8) {
-    Key0 = 0,
-    Key1 = 1,
-    Key2 = 2,
-    Key3 = 3,
-    Key4 = 4,
-    Key5 = 5,
-    Key6 = 6,
-    Key7 = 7,
-    Key8 = 8,
-    Key9 = 9,
-    KeyA = 10,
-    KeyAndroidBack = 11,
-    KeyAndroidMenu = 12,
-    KeyApostrophe = 13,
-    KeyB = 14,
-    KeyBackslash = 15,
-    KeyBackspace = 16,
-    KeyC = 17,
-    KeyCapsLock = 18,
-    KeyComma = 19,
-    KeyD = 20,
-    KeyDelete = 21,
-    KeyDown = 22,
-    KeyE = 23,
-    KeyEnd = 24,
-    KeyEnter = 25,
-    KeyEqual = 26,
-    KeyEscape = 27,
-    KeyF = 28,
-    KeyF1 = 29,
-    KeyF10 = 30,
-    KeyF11 = 31,
-    KeyF12 = 32,
-    KeyF2 = 33,
-    KeyF3 = 34,
-    KeyF4 = 35,
-    KeyF5 = 36,
-    KeyF6 = 37,
-    KeyF7 = 38,
-    KeyF8 = 39,
-    KeyF9 = 40,
-    KeyG = 41,
-    KeyGrave = 42,
-    KeyH = 43,
-    KeyHome = 44,
-    KeyI = 45,
-    KeyInsert = 46,
-    KeyJ = 47,
-    KeyK = 48,
-    KeyKbMenu = 49,
-    KeyKp0 = 50,
-    KeyKp1 = 51,
-    KeyKp2 = 52,
-    KeyKp3 = 53,
-    KeyKp4 = 54,
-    KeyKp5 = 55,
-    KeyKp6 = 56,
-    KeyKp7 = 57,
-    KeyKp8 = 58,
-    KeyKp9 = 59,
-    KeyKpAdd = 60,
-    KeyKpDecimal = 61,
-    KeyKpDivide = 62,
-    KeyKpEnter = 63,
-    KeyKpEqual = 64,
-    KeyKpMultiply = 65,
-    KeyKpSubtract = 66,
-    KeyL = 67,
-    KeyLeft = 68,
-    KeyLeftAlt = 69,
-    KeyLeftBracket = 70,
-    KeyLeftControl = 71,
-    KeyLeftShift = 72,
-    KeyLeftSuper = 73,
-    KeyM = 74,
-    KeyMinus = 75,
-    KeyN = 76,
-    KeyNumLock = 77,
-    KeyO = 78,
-    KeyP = 79,
-    KeyPageDown = 80,
-    KeyPageUp = 81,
-    KeyPause = 82,
-    KeyPeriod = 83,
-    KeyPrintScreen = 84,
-    KeyQ = 85,
-    KeyR = 86,
-    KeyRight = 87,
-    KeyRightAlt = 88,
-    KeyRightBracket = 89,
-    KeyRightControl = 90,
-    KeyRightShift = 91,
-    KeyRightSuper = 92,
-    KeyS = 93,
-    KeyScrollLock = 94,
-    KeySemicolon = 95,
-    KeySlash = 96,
-    KeySpace = 97,
-    KeyT = 98,
-    KeyTab = 99,
-    KeyU = 100,
-    KeyUp = 101,
-    KeyV = 102,
-    KeyVolumeDown = 103,
-    KeyVolumeUp = 104,
-    KeyW = 105,
-    KeyX = 106,
-    KeyY = 107,
-    KeyZ = 108,
-    Raw = 109,
-};
-
-/// Payload union for Keys.KeyboardKey.
-pub const KeysKeyboardKeyPayload = extern union {
-    key0: [0]u8,
-    key1: [0]u8,
-    key2: [0]u8,
-    key3: [0]u8,
-    key4: [0]u8,
-    key5: [0]u8,
-    key6: [0]u8,
-    key7: [0]u8,
-    key8: [0]u8,
-    key9: [0]u8,
-    key_a: [0]u8,
-    key_android_back: [0]u8,
-    key_android_menu: [0]u8,
-    key_apostrophe: [0]u8,
-    key_b: [0]u8,
-    key_backslash: [0]u8,
-    key_backspace: [0]u8,
-    key_c: [0]u8,
-    key_caps_lock: [0]u8,
-    key_comma: [0]u8,
-    key_d: [0]u8,
-    key_delete: [0]u8,
-    key_down: [0]u8,
-    key_e: [0]u8,
-    key_end: [0]u8,
-    key_enter: [0]u8,
-    key_equal: [0]u8,
-    key_escape: [0]u8,
-    key_f: [0]u8,
-    key_f1: [0]u8,
-    key_f10: [0]u8,
-    key_f11: [0]u8,
-    key_f12: [0]u8,
-    key_f2: [0]u8,
-    key_f3: [0]u8,
-    key_f4: [0]u8,
-    key_f5: [0]u8,
-    key_f6: [0]u8,
-    key_f7: [0]u8,
-    key_f8: [0]u8,
-    key_f9: [0]u8,
-    key_g: [0]u8,
-    key_grave: [0]u8,
-    key_h: [0]u8,
-    key_home: [0]u8,
-    key_i: [0]u8,
-    key_insert: [0]u8,
-    key_j: [0]u8,
-    key_k: [0]u8,
-    key_kb_menu: [0]u8,
-    key_kp0: [0]u8,
-    key_kp1: [0]u8,
-    key_kp2: [0]u8,
-    key_kp3: [0]u8,
-    key_kp4: [0]u8,
-    key_kp5: [0]u8,
-    key_kp6: [0]u8,
-    key_kp7: [0]u8,
-    key_kp8: [0]u8,
-    key_kp9: [0]u8,
-    key_kp_add: [0]u8,
-    key_kp_decimal: [0]u8,
-    key_kp_divide: [0]u8,
-    key_kp_enter: [0]u8,
-    key_kp_equal: [0]u8,
-    key_kp_multiply: [0]u8,
-    key_kp_subtract: [0]u8,
-    key_l: [0]u8,
-    key_left: [0]u8,
-    key_left_alt: [0]u8,
-    key_left_bracket: [0]u8,
-    key_left_control: [0]u8,
-    key_left_shift: [0]u8,
-    key_left_super: [0]u8,
-    key_m: [0]u8,
-    key_minus: [0]u8,
-    key_n: [0]u8,
-    key_num_lock: [0]u8,
-    key_o: [0]u8,
-    key_p: [0]u8,
-    key_page_down: [0]u8,
-    key_page_up: [0]u8,
-    key_pause: [0]u8,
-    key_period: [0]u8,
-    key_print_screen: [0]u8,
-    key_q: [0]u8,
-    key_r: [0]u8,
-    key_right: [0]u8,
-    key_right_alt: [0]u8,
-    key_right_bracket: [0]u8,
-    key_right_control: [0]u8,
-    key_right_shift: [0]u8,
-    key_right_super: [0]u8,
-    key_s: [0]u8,
-    key_scroll_lock: [0]u8,
-    key_semicolon: [0]u8,
-    key_slash: [0]u8,
-    key_space: [0]u8,
-    key_t: [0]u8,
-    key_tab: [0]u8,
-    key_u: [0]u8,
-    key_up: [0]u8,
-    key_v: [0]u8,
-    key_volume_down: [0]u8,
-    key_volume_up: [0]u8,
-    key_w: [0]u8,
-    key_x: [0]u8,
-    key_y: [0]u8,
-    key_z: [0]u8,
-    raw: u64,
-};
-
-/// Tag union: Keys.KeyboardKey
-pub const KeysKeyboardKey = if (@sizeOf(usize) == 4) extern struct {
-    payload: [8]u8 align(8),
-    tag: KeysKeyboardKeyTag,
-    pub fn payload_raw(self: *const @This()) u64 {
-        const ptr: *const u64 = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefKeysKeyboardKey(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfKeysKeyboardKey(self, amount);
-    }
-} else extern struct {
-    payload: KeysKeyboardKeyPayload,
-    tag: KeysKeyboardKeyTag,
-    pub fn payload_raw(self: *const @This()) u64 {
-        return self.payload.raw;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefKeysKeyboardKey(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfKeysKeyboardKey(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(KeysKeyboardKey) != 16) @compileError("KeysKeyboardKey size mismatch");
-        if (@alignOf(KeysKeyboardKey) != 8) @compileError("KeysKeyboardKey alignment mismatch");
-        if (@offsetOf(KeysKeyboardKey, "tag") != 8) @compileError("KeysKeyboardKey tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(KeysKeyboardKey) != 16) @compileError("KeysKeyboardKey size mismatch");
-        if (@alignOf(KeysKeyboardKey) != 8) @compileError("KeysKeyboardKey alignment mismatch");
-        if (@offsetOf(KeysKeyboardKey, "tag") != 8) @compileError("KeysKeyboardKey tag offset mismatch");
-    }
-}
-
-/// Tag discriminant for AppFramePacing.
-pub const AppFramePacingTag = enum(u8) {
-    Capped = 0,
-    Uncapped = 1,
-    VSync = 2,
-};
-
-/// Payload union for AppFramePacing.
-pub const AppFramePacingPayload = extern union {
-    capped: i32,
-    uncapped: [0]u8,
-    vsync: [0]u8,
-};
-
-/// Tag union: AppFramePacing
-pub const AppFramePacing = if (@sizeOf(usize) == 4) extern struct {
-    payload: [4]u8 align(4),
-    tag: AppFramePacingTag,
-    pub fn payload_capped(self: *const @This()) i32 {
-        const ptr: *const i32 = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppFramePacing(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfAppFramePacing(self, amount);
-    }
-} else extern struct {
-    payload: AppFramePacingPayload,
-    tag: AppFramePacingTag,
-    pub fn payload_capped(self: *const @This()) i32 {
-        return self.payload.capped;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppFramePacing(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfAppFramePacing(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppFramePacing) != 8) @compileError("AppFramePacing size mismatch");
-        if (@alignOf(AppFramePacing) != 4) @compileError("AppFramePacing alignment mismatch");
-        if (@offsetOf(AppFramePacing, "tag") != 4) @compileError("AppFramePacing tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppFramePacing) != 8) @compileError("AppFramePacing size mismatch");
-        if (@alignOf(AppFramePacing) != 4) @compileError("AppFramePacing alignment mismatch");
-        if (@offsetOf(AppFramePacing, "tag") != 4) @compileError("AppFramePacing tag offset mismatch");
-    }
-}
-
-/// Tag discriminant for AppRecording.
-pub const AppRecordingTag = enum(u8) {
-    NoRecording = 0,
-    Record = 1,
-};
-
-/// Payload union for AppRecording.
-pub const AppRecordingPayload = extern union {
-    no_recording: [0]u8,
-    record: CaptureRecording,
-};
-
-/// Tag union: AppRecording
-pub const AppRecording = if (@sizeOf(usize) == 4) extern struct {
-    payload: [48]u8 align(8),
-    tag: AppRecordingTag,
-    pub fn payload_record(self: *const @This()) CaptureRecording {
-        const ptr: *const CaptureRecording = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppRecording(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfAppRecording(self, amount);
-    }
-} else extern struct {
-    payload: AppRecordingPayload,
-    tag: AppRecordingTag,
-    pub fn payload_record(self: *const @This()) CaptureRecording {
-        return self.payload.record;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefAppRecording(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfAppRecording(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(AppRecording) != 64) @compileError("AppRecording size mismatch");
-        if (@alignOf(AppRecording) != 8) @compileError("AppRecording alignment mismatch");
-        if (@offsetOf(AppRecording, "tag") != 56) @compileError("AppRecording tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(AppRecording) != 56) @compileError("AppRecording size mismatch");
-        if (@alignOf(AppRecording) != 8) @compileError("AppRecording alignment mismatch");
-        if (@offsetOf(AppRecording, "tag") != 48) @compileError("AppRecording tag offset mismatch");
-    }
-}
-
-/// Tag union: CaptureCursor
-pub const CaptureCursor = enum(u8) {
-    draw_cursor = 0,
-    no_cursor = 1,
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        _ = self;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        _ = self;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureCursor) != 1) @compileError("CaptureCursor size mismatch");
-        if (@alignOf(CaptureCursor) != 1) @compileError("CaptureCursor alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureCursor) != 1) @compileError("CaptureCursor size mismatch");
-        if (@alignOf(CaptureCursor) != 1) @compileError("CaptureCursor alignment mismatch");
-    }
-}
-
-/// Tag union: CaptureFormat
-pub const CaptureFormat = enum(u8) {
-    gif = 0,
-    png = 1,
-    web_m = 2,
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        _ = self;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        _ = self;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureFormat) != 1) @compileError("CaptureFormat size mismatch");
-        if (@alignOf(CaptureFormat) != 1) @compileError("CaptureFormat alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureFormat) != 1) @compileError("CaptureFormat size mismatch");
-        if (@alignOf(CaptureFormat) != 1) @compileError("CaptureFormat alignment mismatch");
-    }
-}
-
-/// Tag union: CaptureQuality
-pub const CaptureQuality = enum(u8) {
-    balanced = 0,
-    best = 1,
-    fast = 2,
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        _ = self;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        _ = self;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureQuality) != 1) @compileError("CaptureQuality size mismatch");
-        if (@alignOf(CaptureQuality) != 1) @compileError("CaptureQuality alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureQuality) != 1) @compileError("CaptureQuality size mismatch");
-        if (@alignOf(CaptureQuality) != 1) @compileError("CaptureQuality alignment mismatch");
-    }
-}
-
-/// Tag discriminant for CaptureScale.
-pub const CaptureScaleTag = enum(u8) {
-    Full = 0,
-    Half = 1,
-    Quarter = 2,
-    Ratio = 3,
-};
-
-/// Payload union for CaptureScale.
-pub const CaptureScalePayload = extern union {
-    full: [0]u8,
-    half: [0]u8,
-    quarter: [0]u8,
-    ratio: __AnonStruct_694805f24bd7d5ca,
-};
-
-/// Tag union: CaptureScale
-pub const CaptureScale = if (@sizeOf(usize) == 4) extern struct {
-    payload: [8]u8 align(4),
-    tag: CaptureScaleTag,
-    pub fn payload_ratio(self: *const @This()) __AnonStruct_694805f24bd7d5ca {
-        const ptr: *const __AnonStruct_694805f24bd7d5ca = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefCaptureScale(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfCaptureScale(self, amount);
-    }
-} else extern struct {
-    payload: CaptureScalePayload,
-    tag: CaptureScaleTag,
-    pub fn payload_ratio(self: *const @This()) __AnonStruct_694805f24bd7d5ca {
-        return self.payload.ratio;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefCaptureScale(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfCaptureScale(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureScale) != 12) @compileError("CaptureScale size mismatch");
-        if (@alignOf(CaptureScale) != 4) @compileError("CaptureScale alignment mismatch");
-        if (@offsetOf(CaptureScale, "tag") != 8) @compileError("CaptureScale tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureScale) != 12) @compileError("CaptureScale size mismatch");
-        if (@alignOf(CaptureScale) != 4) @compileError("CaptureScale alignment mismatch");
-        if (@offsetOf(CaptureScale, "tag") != 8) @compileError("CaptureScale tag offset mismatch");
-    }
-}
-
-/// Tag union: CaptureTiming
-pub const CaptureTiming = enum(u8) {
-    fixed_step = 0,
-    real_time = 1,
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        _ = self;
-        _ = roc_host;
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        _ = self;
-        _ = amount;
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(CaptureTiming) != 1) @compileError("CaptureTiming size mismatch");
-        if (@alignOf(CaptureTiming) != 1) @compileError("CaptureTiming alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(CaptureTiming) != 1) @compileError("CaptureTiming size mismatch");
-        if (@alignOf(CaptureTiming) != 1) @compileError("CaptureTiming alignment mismatch");
-    }
-}
-
 /// Tag discriminant for Try.
 pub const Init_for_hostResultTag = enum(u8) {
     Err = 0,
@@ -6988,14 +6135,14 @@ comptime {
 /// Return type record for DrawHost.font_metrics!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const DrawHostFont_metricsRetRecord = if (@sizeOf(usize) == 4) extern struct {
-    glyphs: RocListWith(__AnonStruct_e72f16800e258bed, false),
+    fallback_index: u64,
+    glyphs: RocListWith(__AnonStruct_a31979034eec4b2e, false),
     base_size: f32,
-    fallback_advance: f32,
     line_spacing: f32,
 } else extern struct {
-    glyphs: RocListWith(__AnonStruct_e72f16800e258bed, false),
+    fallback_index: u64,
+    glyphs: RocListWith(__AnonStruct_a31979034eec4b2e, false),
     base_size: f32,
-    fallback_advance: f32,
     line_spacing: f32,
 };
 
@@ -7005,8 +6152,8 @@ comptime {
         if (@alignOf(DrawHostFont_metricsRetRecord) != 8) @compileError("DrawHostFont_metricsRetRecord alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(DrawHostFont_metricsRetRecord) != 24) @compileError("DrawHostFont_metricsRetRecord size mismatch");
-        if (@alignOf(DrawHostFont_metricsRetRecord) != 4) @compileError("DrawHostFont_metricsRetRecord alignment mismatch");
+        if (@sizeOf(DrawHostFont_metricsRetRecord) != 32) @compileError("DrawHostFont_metricsRetRecord size mismatch");
+        if (@alignOf(DrawHostFont_metricsRetRecord) != 8) @compileError("DrawHostFont_metricsRetRecord alignment mismatch");
     }
 }
 
@@ -7966,7 +7113,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_advance : F32, glyphs : List({ advance : F32, codepoint : U32 }), line_spacing : F32 }
+/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostFont_metricsArgs = extern struct {
     arg0: DefaultFontOrLoadedFont,
@@ -8862,8 +8009,8 @@ pub const DrawHostDraw_prepared_textArg0 = __AnonStruct_6bff15fb6a4cb85a;
 pub const DrawHostDraw_textureArg0 = __AnonStruct_938b7ab5f4e322f2;
 pub const AssetsTextureViewResource = __AnonStruct_8b7fc2d8f8794eb4;
 pub const DrawHostDraw_texture_quadArg0 = __AnonStruct_8a3a35de340cd120;
-pub const DrawHostFont_metrics = __AnonStruct_bf1ab06e133bc784;
-pub const DrawHostFont_metricsGlyphs = __AnonStruct_e72f16800e258bed;
+pub const DrawHostFont_metrics = __AnonStruct_2bfb89334ad27c35;
+pub const DrawHostFont_metricsGlyphs = __AnonStruct_a31979034eec4b2e;
 pub const DrawHostFpsArg0 = __AnonStruct_477f59604acc661e;
 pub const DrawHostLineArg0 = __AnonStruct_a3fdb7fbf4ae00b8;
 pub const DrawHostLoad_font_bytesArg0 = __AnonStruct_5cba559c3a07b56a;
@@ -8998,314 +8145,6 @@ fn increfHostHostSet_screen_sizeResult(value: HostHostSet_screen_sizeResult, amo
     switch (value.tag) {
         .Err => {},
         .Ok => {},
-    }
-}
-
-fn decrefKeysExitKey(value: KeysExitKey, roc_host: *RocHost) void {
-    switch (value.tag) {
-        .ExitKey => {
-            value.payload_exit_key().decref(roc_host);
-        },
-        .NoExitKey => {},
-    }
-}
-
-fn increfKeysExitKey(value: KeysExitKey, amount: isize) void {
-    switch (value.tag) {
-        .ExitKey => {
-            value.payload_exit_key().incref(amount);
-        },
-        .NoExitKey => {},
-    }
-}
-
-fn decrefKeysKeyboardKey(value: KeysKeyboardKey, roc_host: *RocHost) void {
-    _ = roc_host;
-    switch (value.tag) {
-        .Key0 => {},
-        .Key1 => {},
-        .Key2 => {},
-        .Key3 => {},
-        .Key4 => {},
-        .Key5 => {},
-        .Key6 => {},
-        .Key7 => {},
-        .Key8 => {},
-        .Key9 => {},
-        .KeyA => {},
-        .KeyAndroidBack => {},
-        .KeyAndroidMenu => {},
-        .KeyApostrophe => {},
-        .KeyB => {},
-        .KeyBackslash => {},
-        .KeyBackspace => {},
-        .KeyC => {},
-        .KeyCapsLock => {},
-        .KeyComma => {},
-        .KeyD => {},
-        .KeyDelete => {},
-        .KeyDown => {},
-        .KeyE => {},
-        .KeyEnd => {},
-        .KeyEnter => {},
-        .KeyEqual => {},
-        .KeyEscape => {},
-        .KeyF => {},
-        .KeyF1 => {},
-        .KeyF10 => {},
-        .KeyF11 => {},
-        .KeyF12 => {},
-        .KeyF2 => {},
-        .KeyF3 => {},
-        .KeyF4 => {},
-        .KeyF5 => {},
-        .KeyF6 => {},
-        .KeyF7 => {},
-        .KeyF8 => {},
-        .KeyF9 => {},
-        .KeyG => {},
-        .KeyGrave => {},
-        .KeyH => {},
-        .KeyHome => {},
-        .KeyI => {},
-        .KeyInsert => {},
-        .KeyJ => {},
-        .KeyK => {},
-        .KeyKbMenu => {},
-        .KeyKp0 => {},
-        .KeyKp1 => {},
-        .KeyKp2 => {},
-        .KeyKp3 => {},
-        .KeyKp4 => {},
-        .KeyKp5 => {},
-        .KeyKp6 => {},
-        .KeyKp7 => {},
-        .KeyKp8 => {},
-        .KeyKp9 => {},
-        .KeyKpAdd => {},
-        .KeyKpDecimal => {},
-        .KeyKpDivide => {},
-        .KeyKpEnter => {},
-        .KeyKpEqual => {},
-        .KeyKpMultiply => {},
-        .KeyKpSubtract => {},
-        .KeyL => {},
-        .KeyLeft => {},
-        .KeyLeftAlt => {},
-        .KeyLeftBracket => {},
-        .KeyLeftControl => {},
-        .KeyLeftShift => {},
-        .KeyLeftSuper => {},
-        .KeyM => {},
-        .KeyMinus => {},
-        .KeyN => {},
-        .KeyNumLock => {},
-        .KeyO => {},
-        .KeyP => {},
-        .KeyPageDown => {},
-        .KeyPageUp => {},
-        .KeyPause => {},
-        .KeyPeriod => {},
-        .KeyPrintScreen => {},
-        .KeyQ => {},
-        .KeyR => {},
-        .KeyRight => {},
-        .KeyRightAlt => {},
-        .KeyRightBracket => {},
-        .KeyRightControl => {},
-        .KeyRightShift => {},
-        .KeyRightSuper => {},
-        .KeyS => {},
-        .KeyScrollLock => {},
-        .KeySemicolon => {},
-        .KeySlash => {},
-        .KeySpace => {},
-        .KeyT => {},
-        .KeyTab => {},
-        .KeyU => {},
-        .KeyUp => {},
-        .KeyV => {},
-        .KeyVolumeDown => {},
-        .KeyVolumeUp => {},
-        .KeyW => {},
-        .KeyX => {},
-        .KeyY => {},
-        .KeyZ => {},
-        .Raw => {},
-    }
-}
-
-fn increfKeysKeyboardKey(value: KeysKeyboardKey, amount: isize) void {
-    _ = amount;
-    switch (value.tag) {
-        .Key0 => {},
-        .Key1 => {},
-        .Key2 => {},
-        .Key3 => {},
-        .Key4 => {},
-        .Key5 => {},
-        .Key6 => {},
-        .Key7 => {},
-        .Key8 => {},
-        .Key9 => {},
-        .KeyA => {},
-        .KeyAndroidBack => {},
-        .KeyAndroidMenu => {},
-        .KeyApostrophe => {},
-        .KeyB => {},
-        .KeyBackslash => {},
-        .KeyBackspace => {},
-        .KeyC => {},
-        .KeyCapsLock => {},
-        .KeyComma => {},
-        .KeyD => {},
-        .KeyDelete => {},
-        .KeyDown => {},
-        .KeyE => {},
-        .KeyEnd => {},
-        .KeyEnter => {},
-        .KeyEqual => {},
-        .KeyEscape => {},
-        .KeyF => {},
-        .KeyF1 => {},
-        .KeyF10 => {},
-        .KeyF11 => {},
-        .KeyF12 => {},
-        .KeyF2 => {},
-        .KeyF3 => {},
-        .KeyF4 => {},
-        .KeyF5 => {},
-        .KeyF6 => {},
-        .KeyF7 => {},
-        .KeyF8 => {},
-        .KeyF9 => {},
-        .KeyG => {},
-        .KeyGrave => {},
-        .KeyH => {},
-        .KeyHome => {},
-        .KeyI => {},
-        .KeyInsert => {},
-        .KeyJ => {},
-        .KeyK => {},
-        .KeyKbMenu => {},
-        .KeyKp0 => {},
-        .KeyKp1 => {},
-        .KeyKp2 => {},
-        .KeyKp3 => {},
-        .KeyKp4 => {},
-        .KeyKp5 => {},
-        .KeyKp6 => {},
-        .KeyKp7 => {},
-        .KeyKp8 => {},
-        .KeyKp9 => {},
-        .KeyKpAdd => {},
-        .KeyKpDecimal => {},
-        .KeyKpDivide => {},
-        .KeyKpEnter => {},
-        .KeyKpEqual => {},
-        .KeyKpMultiply => {},
-        .KeyKpSubtract => {},
-        .KeyL => {},
-        .KeyLeft => {},
-        .KeyLeftAlt => {},
-        .KeyLeftBracket => {},
-        .KeyLeftControl => {},
-        .KeyLeftShift => {},
-        .KeyLeftSuper => {},
-        .KeyM => {},
-        .KeyMinus => {},
-        .KeyN => {},
-        .KeyNumLock => {},
-        .KeyO => {},
-        .KeyP => {},
-        .KeyPageDown => {},
-        .KeyPageUp => {},
-        .KeyPause => {},
-        .KeyPeriod => {},
-        .KeyPrintScreen => {},
-        .KeyQ => {},
-        .KeyR => {},
-        .KeyRight => {},
-        .KeyRightAlt => {},
-        .KeyRightBracket => {},
-        .KeyRightControl => {},
-        .KeyRightShift => {},
-        .KeyRightSuper => {},
-        .KeyS => {},
-        .KeyScrollLock => {},
-        .KeySemicolon => {},
-        .KeySlash => {},
-        .KeySpace => {},
-        .KeyT => {},
-        .KeyTab => {},
-        .KeyU => {},
-        .KeyUp => {},
-        .KeyV => {},
-        .KeyVolumeDown => {},
-        .KeyVolumeUp => {},
-        .KeyW => {},
-        .KeyX => {},
-        .KeyY => {},
-        .KeyZ => {},
-        .Raw => {},
-    }
-}
-
-fn decrefAppFramePacing(value: AppFramePacing, roc_host: *RocHost) void {
-    _ = roc_host;
-    switch (value.tag) {
-        .Capped => {},
-        .Uncapped => {},
-        .VSync => {},
-    }
-}
-
-fn increfAppFramePacing(value: AppFramePacing, amount: isize) void {
-    _ = amount;
-    switch (value.tag) {
-        .Capped => {},
-        .Uncapped => {},
-        .VSync => {},
-    }
-}
-
-fn decrefAppRecording(value: AppRecording, roc_host: *RocHost) void {
-    switch (value.tag) {
-        .NoRecording => {},
-        .Record => {
-            value.payload_record().decref(roc_host);
-        },
-    }
-}
-
-fn increfAppRecording(value: AppRecording, amount: isize) void {
-    switch (value.tag) {
-        .NoRecording => {},
-        .Record => {
-            value.payload_record().incref(amount);
-        },
-    }
-}
-
-fn decrefCaptureScale(value: CaptureScale, roc_host: *RocHost) void {
-    switch (value.tag) {
-        .Full => {},
-        .Half => {},
-        .Quarter => {},
-        .Ratio => {
-            value.payload_ratio().decref(roc_host);
-        },
-    }
-}
-
-fn increfCaptureScale(value: CaptureScale, amount: isize) void {
-    switch (value.tag) {
-        .Full => {},
-        .Half => {},
-        .Quarter => {},
-        .Ratio => {
-            value.payload_ratio().incref(amount);
-        },
     }
 }
 
@@ -9596,8 +8435,8 @@ pub extern fn roc_draw_end_scissor_raw() callconv(.c) void;
 pub extern fn roc_draw_end_shader_raw() callconv(.c) void;
 
 /// Hosted symbol for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_advance : F32, glyphs : List({ advance : F32, codepoint : U32 }), line_spacing : F32 }
-pub extern fn roc_draw_font_metrics_raw(arg0: DefaultFontOrLoadedFont) callconv(.c) __AnonStruct_bf1ab06e133bc784;
+/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
+pub extern fn roc_draw_font_metrics_raw(arg0: DefaultFontOrLoadedFont) callconv(.c) __AnonStruct_2bfb89334ad27c35;
 
 /// Hosted symbol for DrawHost.fps!
 /// Roc signature: { color : Color.Rgba, pos : Math.Vec2, size : F32 } => {}
@@ -9706,6 +8545,10 @@ pub extern fn roc_draw_triangle_raw(arg0: DrawHostTriangleArgs) callconv(.c) voi
 /// Hosted symbol for DrawHost.triangle_lines!
 /// Roc signature: { a : Math.Vec2, b : Math.Vec2, c : Math.Vec2, color : Color.Rgba, thickness : F32 } => {}
 pub extern fn roc_draw_triangle_lines_raw(arg0: DrawHostTriangle_linesArgs) callconv(.c) void;
+
+/// Hosted symbol for HostHost.args!
+/// Roc signature: {} => List(Str)
+pub extern fn roc_host_args() callconv(.c) RocList(RocStr);
 
 /// Hosted symbol for HostHost.exit!
 /// Roc signature: I32 => {}

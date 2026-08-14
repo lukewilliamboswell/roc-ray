@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -281,6 +281,7 @@ Sounds : {
 }
 
 Model : {
+	font : Draw.Font,
 	characters : Assets.Texture,
 	tiles : Assets.Texture,
 	level : Level,
@@ -404,7 +405,7 @@ burst_duration = 0.36
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = assets.texture!("kenney-topdown/characters.png")?
@@ -451,7 +452,7 @@ init! = App.init(
 		level = level_from_tilemap(tilemap)
 		sounds = make_sounds!()?
 		sounds.music.play!()
-		Ok(new_game(characters, tiles, level, sounds))
+		Ok(new_game(Draw.default_font!(), characters, tiles, level, sounds))
 	},
 )
 
@@ -496,8 +497,9 @@ make_sounds! = || {
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
 }
 
-new_game : Assets.Texture, Assets.Texture, Level, Sounds -> Model
-new_game = |characters, tiles, level, sounds| {
+new_game : Draw.Font, Assets.Texture, Assets.Texture, Level, Sounds -> Model
+new_game = |font, characters, tiles, level, sounds| {
+	font,
 	characters,
 	tiles,
 	level,
@@ -1062,7 +1064,7 @@ restart_on_space : Model, Input.Snapshot -> { model : Model, actions : List(Prog
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
 		{
-			model: new_game(model.characters, model.tiles, model.level, model.sounds),
+			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
 			actions: [model.sounds.music.set_volume(music_volume)],
 		}
 	} else {
@@ -1098,11 +1100,11 @@ render! = |model, frame| {
 	frame.with_camera!(
 		camera,
 		|world_frame| {
-			draw_world!(world_frame, model.level, model.characters, model.tiles, model.world, viewport)
+			draw_world!(world_frame, model.level, model.characters, model.tiles, model.world, viewport, model.font)
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, model.level, model.world)
+	draw_hud!(frame, model.level, model.world, model.font)
 
 	Ok({})
 }
@@ -1118,16 +1120,16 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Draw.Frame, Level, Assets.Texture, Assets.Texture, World, Math.Rect => {}
-draw_world! = |frame, level, characters, tiles, world, viewport| {
+draw_world! : Draw.Frame, Level, Assets.Texture, Assets.Texture, World, Math.Rect, Draw.Font => {}
+draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
 	draw_hazard_lanes!(frame, level, world.phase)
 	draw_props!(frame, level, tiles)
 	frame.rectangle!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 6) })
 
-	draw_spawn!(frame, level)
-	draw_exit!(frame, level, world)
+	draw_spawn!(frame, level, font)
+	draw_exit!(frame, level, world, font)
 	draw_obstacles!(frame, level, tiles)
 	draw_sparks!(frame, tiles, world.sparks, world.phase)
 	draw_hazards!(frame, level, characters, world.phase)
@@ -1181,21 +1183,21 @@ draw_tile! = |frame, tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scal
 draw_tile_centered! : Draw.Frame, Assets.Texture, Tile, Math.Vec2, F32, F32 => {}
 draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!(frame)
 
-draw_spawn! : Draw.Frame, Level => {}
-draw_spawn! = |frame, level| {
+draw_spawn! : Draw.Frame, Level, Draw.Font => {}
+draw_spawn! = |frame, level, font| {
 	frame.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
 	frame.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
-	frame.text!({ pos: { x: level.spawn.x, y: level.spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font: Draw.default_font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: level.spawn.x, y: level.spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font, align: Draw.align_top_center })
 }
 
-draw_exit! : Draw.Frame, Level, World => {}
-draw_exit! = |frame, level, world| {
+draw_exit! : Draw.Frame, Level, World, Draw.Font => {}
+draw_exit! = |frame, level, world, font| {
 	is_open = gate_is_open(world.gate)
 	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
 	halo = if is_open Color.with_alpha(color, 95) else Color.with_alpha(Color.black, 70)
 	frame.circle_gradient!({ center: level.exit_center, radius: 82 + world.gate_flash * 28, color_inner: halo, color_outer: Color.with_alpha(color, 0) })
 	frame.circle!({ center: level.exit_center, radius: level.exit_radius, style: Draw.filled_and_outlined(Color.with_alpha(color, 190), Color.white, 4) })
-	frame.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_center })
+	frame.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font, align: Draw.align_top_center })
 }
 
 draw_obstacle! : Draw.Frame, Assets.Texture, World.Obstacle => {}
@@ -1347,19 +1349,19 @@ draw_bar! = |frame, x, y, width, height, amount, color| {
 	frame.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
 }
 
-draw_hud! : Draw.Frame, Level, World => {}
-draw_hud! = |frame, level, world| {
+draw_hud! : Draw.Frame, Level, World, Draw.Font => {}
+draw_hud! = |frame, level, world, font| {
 	is_open = gate_is_open(world.gate)
 
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 125) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 22, y: 16 }, text: "Spark Run", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 195, y: 18 }, text: Str.concat("Sparks ", Str.concat(U64.to_str(world.score), Str.concat("/", U64.to_str(level.spark_total)))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xf9c74f), font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 382, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 510, y: 18 }, text: if is_open "Gate open" else "Collect all sparks", size: 20, spacing: Draw.default_spacing, color: if is_open Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font, align: Draw.align_top_left })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 	draw_bar!(frame, 196, 48, 170, 9, U64.to_f32(world.score) / U64.to_f32(level.spark_total), Color.from_hex_rgb(0xf9c74f))
 	draw_bar!(frame, 510, 48, 120, 9, world.player.dash_charge(), Color.from_hex_rgb(0x43aa8b))
-	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 640, y: 43 }, text: if world.player.dash_ready() "SPACE dash" else "charging", size: 16, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
 
 	if world.flash > 0 {
 		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(Color.red, if world.flash > 0.45 120 else 70)) })

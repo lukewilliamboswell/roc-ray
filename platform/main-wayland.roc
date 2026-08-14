@@ -2,7 +2,7 @@ platform ""
 	requires {
 		[Model : model, Msg : msg] for program : {
 			init! : {
-				config : App.Config,
+				config : List(Str) -> App.Config,
 				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
 			update : model, Program.Step(msg) -> Program.Update(model, msg),
@@ -12,7 +12,7 @@ platform ""
 	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, Random]
 	packages {
 		rrt: "../types/main.roc",
-		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.0/CwDEAmyUMCsqW6dh4pxYnp7suUZAj5b5gpZuh7udtyE7.tar.zst",
+		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.1/4y2ZUECKuLohLfnxRmukt3wHCBMDYwkKDc2jLSmYz8NM.tar.zst",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -87,6 +87,7 @@ platform ""
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
 		"roc_host_exit": HostHost.exit!,
+		"roc_host_args": HostHost.args!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_random_i32": HostHost.random_i32!,
 		"roc_host_read_env": HostHost.read_env!,
@@ -197,7 +198,7 @@ StepFromHost(msg) : {
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
-app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
+app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostHost.args!()))
 
 ## Reshape the flat sampled input into the public `Input.Snapshot` record.
 ##

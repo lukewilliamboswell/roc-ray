@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Capture
@@ -59,25 +59,28 @@ slider_track = { x: 60, y: 260, width: 370, height: 12 }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Capture: UI demo")
-		.with_size({ width: 490, height: 320 })
-		.with_frame_pacing(Capped(60))
-		.with_visible(Bool.False)
-		.with_output_dir("captures")
-		.with_recording(
-			Record(
-				Capture.default
-					.with_path("ui_demo.gif")
-					.with_format(Gif)
-					.with_fps(25)
-					.with_max_frames(recorded_frames)
-					.with_scale(Full)
-					.with_timing(FixedStep)
-					.with_cursor(DrawCursor),
+	App.static_config(
+		App.default
+			.with_title("RocRay Capture: UI demo")
+			.with_size({ width: 490, height: 320 })
+			.with_frame_pacing(Capped(60))
+			.with_visible(Bool.False)
+			.with_output_dir("captures")
+			.with_recording(
+				Record(
+					Capture.default
+						.with_path("ui_demo.gif")
+						.with_format(Gif)
+						.with_fps(25)
+						.with_max_frames(recorded_frames)
+						.with_scale(Full)
+						.with_timing(FixedStep)
+						.with_cursor(DrawCursor),
+				),
 			),
-		),
-	|_startup|
+	),
+	|_startup| {
+		font = Draw.default_font!()
 		Ok({
 			frame: 0,
 			pointer: { x: 40, y: 300 },
@@ -87,21 +90,22 @@ init! = App.init(
 			clicks: 0,
 			toggled: Bool.False,
 			slider: 0,
-			title: Text.from("Scripted pointer").size(24).prepare!()?,
-			increment_label: Text.from("Increment").size(18).prepare!()?,
-			toggle_label: Text.from("Toggle").size(18).prepare!()?,
-			counter_labels: prepare_counter_labels!(0, [])?,
-		}),
+			title: Text.from("Scripted pointer", font).size(24).prepare!()?,
+			increment_label: Text.from("Increment", font).size(18).prepare!()?,
+			toggle_label: Text.from("Toggle", font).size(18).prepare!()?,
+			counter_labels: prepare_counter_labels!(font, 0, [])?,
+		})
+	},
 )
 
 ## Prepare one label per reachable click count, so `render!` never lays out text.
-prepare_counter_labels! : U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
-prepare_counter_labels! = |index, acc|
+prepare_counter_labels! : Draw.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_counter_labels! = |font, index, acc|
 	if index > max_clicks {
 		Ok(acc)
 	} else {
-		label = Text.from("clicks: ${U64.to_str(index)}").size(18).prepare!()?
-		prepare_counter_labels!(index + 1, List.append(acc, label))
+		label = Text.from("clicks: ${U64.to_str(index)}", font).size(18).prepare!()?
+		prepare_counter_labels!(font, index + 1, List.append(acc, label))
 	}
 
 Msg : []

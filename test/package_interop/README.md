@@ -10,7 +10,8 @@ same name, so `exposes` and every existing app are unchanged.
 
 ## What moved, and what cannot
 
-Moved: `Keys`, `Mouse`, `Gamepad`, `Time`, `Math`, `Camera`, `Physics`, `Color`.
+Moved: `Keys`, `Mouse`, `Gamepad`, `Time`, `Math`, `Camera`, `Physics`, `Color`,
+plus the platform-independent `Font` and `Frame` contracts.
 
 `Color` needed reshaping first. A module file must declare a nominal matching
 its filename and that declaration cannot be an alias, so a module whose object
@@ -30,6 +31,8 @@ pure whatever shape it takes.
 - `app.roc` — runs on the platform and passes it the platform's
   `Input.Snapshot`, `input.mouse`, `input.gamepads`, and a re-exported
   `KeyboardKey`, then feeds the returned key back into `rr.Keys.key_code`.
+  It also retains the previous layout for hit testing, measures the next layout
+  once in `update`, stores it in the model, and renders only stored commands.
 
 It compiles only if those are the same nominal types on both sides. Give
 `input_adapter` a look-alike local key type instead and it fails, so this is
@@ -37,7 +40,7 @@ shared identity rather than structural unification.
 
 ```bash
 roc check test/package_interop/app.roc
-roc build test/package_interop/app.roc && ./app --headless
+roc build test/package_interop/app.roc && ./app --host-headless
 ```
 
 `Math` and `Camera` cross the host boundary via `DrawHost`, so moving them was

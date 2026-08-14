@@ -1,6 +1,8 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
 	adapter: "input_adapter/main.roc",
+	rrt: "../../types/main.roc",
+	roc: "nightly-2026-08-12-606470f",
 }
 
 import rr.App
@@ -8,7 +10,9 @@ import rr.Color
 import rr.Draw
 import rr.Input
 import rr.Keys
+import rr.Math
 import rr.Program
+import rrt.Font
 import adapter.Input as Events
 
 ## Everything the view needs, derived in `update` from values that came through
@@ -20,6 +24,9 @@ Model : {
 	clicked : Bool,
 	padded : Bool,
 	age : F32,
+	font : Draw.Font,
+	layout : { label : Draw.TextSize, label_pos : { x : F32, y : F32 } },
+	layout_passes : U64,
 }
 
 program = { init!, update, render! }
@@ -28,9 +35,30 @@ program = { init!, update, render! }
 ## first `Step` supplies the clock, so `started` is latched there.
 init! : App.Init(Model, [])
 init! = App.init(
-	App.default,
-	|_startup| Ok({ started: 0, label: "idle", clicked: Bool.False, padded: Bool.False, age: 0 }),
+	App.static_config(App.default),
+	|_startup| {
+		font = Draw.default_font!()
+		label = "idle"
+		Ok({
+			started: 0,
+			label,
+			clicked: Bool.False,
+			padded: Bool.False,
+			age: 0,
+			font,
+			layout: solve_layout(font, label),
+			layout_passes: 1,
+		})
+	},
 )
+
+## This is the UI package boundary: it needs only the pure measurable-font
+## contract, so layout can run during update without host authority.
+solve_layout : font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } } where [font.base_size : font -> F32, font.line_spacing : font -> F32, font.glyphs : font -> List(Draw.GlyphMetrics), font.get_glyph_index : font, U32 -> U64]
+solve_layout = |font, label| {
+	label_size = Font.measure(font, { text: label, size: 20, spacing: Draw.default_spacing })
+	{ label: label_size, label_pos: { x: 10, y: 10 } }
+}
 
 ## `input` is the platform's nominal `Input.Snapshot`; `KeyW` is the platform's
 ## re-exported `KeyboardKey`. The event comes back carrying that same key type,
@@ -68,13 +96,24 @@ update = |model, step| {
 	# Timing is its own observation now, so the package gets it from
 	# `step.time` rather than from the input snapshot.
 	started = if step.time.frame_count == 0 step.time.timestamp_nanos else model.started
+	label = label_for(input)
+
+	# Interaction resolves against the retained previous layout. The next layout
+	# is then solved exactly once and stored for render and the following update.
+	label_bounds = { x: model.layout.label_pos.x, y: model.layout.label_pos.y, width: model.layout.label.width, height: model.layout.label.height }
+	label_clicked = input.mouse.button_pressed(Left) and Math.contains(label_bounds, input.mouse.position())
+	next_label = if label_clicked "label click" else label
+	layout = solve_layout(model.font, next_label)
 
 	Program.static({
 		started,
-		label: label_for(input),
+		label: next_label,
 		clicked,
 		padded,
 		age: Events.age_seconds(started, step.time.timestamp_nanos),
+		font: model.font,
+		layout,
+		layout_passes: model.layout_passes + 1,
 	})
 		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0)] else [])
 }
@@ -82,7 +121,7 @@ update = |model, step| {
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(if model.clicked Color.blue else Color.ray_white)
-	frame.text_at!({ pos: { x: 10, y: 10 }, text: model.label, size: 20, color: Color.black })
+	frame.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_top_left })
 	frame.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
 	frame.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
 	Ok({})

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -148,7 +148,7 @@ air_drag = 0.35
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120))),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/cave_climb/assets"))?
 		tiles = assets.texture!("kenney-platformer/spritesheet-tiles-default.png")?
@@ -192,7 +192,7 @@ init! = App.init(
 			)
 			.build()?
 		level = level_from_tilemap(tilemap)
-		Ok({ tiles, characters, enemies_texture, background, level, world: new_world(level) })
+		Ok({ font: Draw.default_font!(), tiles, characters, enemies_texture, background, level, world: new_world(level) })
 	},
 )
 
@@ -896,7 +896,7 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, model.level, model.world)
+	draw_hud!(frame, model.level, model.world, model.font)
 
 	Ok({})
 }
@@ -1146,13 +1146,13 @@ draw_player! = |frame, characters, player| {
 	frame.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
 }
 
-draw_hud! : Draw.Frame, Level, World => {}
-draw_hud! = |frame, level, world| {
+draw_hud! : Draw.Frame, Level, World, Draw.Font => {}
+draw_hud! = |frame, level, world, font| {
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
-	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
-	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 220, y: 18 }, text: Str.concat("Gems ", Str.concat(U64.to_str(world.collected), Str.concat("/", U64.to_str(List.len(level.gems))))), size: 20, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x55c7ff), font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 380, y: 18 }, text: Str.concat("Lives ", U64.to_str(world.lives)), size: 20, spacing: Draw.default_spacing, color: Color.light_gray, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 505, y: 18 }, text: if world.collected == List.len(level.gems) "Goal open" else "Collect every gem", size: 20, spacing: Draw.default_spacing, color: if world.collected == List.len(level.gems) Color.from_hex_rgb(0x90be6d) else Color.light_gray, font: font, align: Draw.align_top_left })
 	frame.fps!({ pos: { x: 735, y: 20 }, size: 18, color: Color.gray })
 
 	if world.flash > 0 {

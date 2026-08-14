@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Assets
@@ -32,7 +32,7 @@ initial_corners = {
 
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 init! = App.init(
-	App.default.with_title("Projective Texture").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("Projective Texture").with_frame_pacing(Capped(120))),
 	|_startup| {
 		texture = Assets.Texture.generate_checked!({
 			width: 512,
@@ -44,7 +44,8 @@ init! = App.init(
 		})?
 		texture.set_filter!(Bilinear)
 		quad = Draw.ProjectiveQuad.from_corners(initial_corners)?
-		guide = Text.from("Drag the top-right handle | R resets").size(18).prepare!()?
+		font = Draw.default_font!()
+		guide = Text.from("Drag the top-right handle | R resets", font).size(18).prepare!()?
 		Ok({ texture, quad, corners: initial_corners, guide, dragging: Bool.False })
 	},
 )

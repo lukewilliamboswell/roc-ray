@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Color
@@ -11,7 +11,7 @@ import rr.Text
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
-	metrics : Text.Metrics,
+	font : Draw.Font,
 	pointer : { x : F32, y : F32 },
 	accent_on : Bool,
 }
@@ -20,13 +20,13 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120)),
+	App.static_config(App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120))),
 	|_startup| {
-		metrics = Text.metrics!(Text.default_font)
+		font = Draw.default_font!()
 		Ok({
-			title: Text.from("Roc :heart: Raylib").size(38).prepare!()?,
-			help: Text.from("Move the pointer, click for an accent, ESC exits").size(18).prepare!()?,
-			metrics,
+			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
+			help: Text.from("Move the pointer, click for an accent, ESC exits", font).size(18).prepare!()?,
+			font,
 			pointer: { x: 400, y: 300 },
 			accent_on: Bool.False,
 		})
@@ -51,7 +51,7 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	accent = if model.accent_on Color.from_hex_rgb(0xf94144) else Color.from_hex_rgb(0x2f80ed)
 	panel = { x: 120, y: 150, width: 560, height: 300 }
-	title_size = model.metrics.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing })
+	title_size = model.font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing })
 
 	frame.clear!(Color.from_hex_rgb(0x0d1425))
 	frame.circle_gradient!({ center: { x: 620, y: 90 }, radius: 260, color_inner: Color.with_alpha(accent, 100), color_outer: Color.with_alpha(accent, 0) })

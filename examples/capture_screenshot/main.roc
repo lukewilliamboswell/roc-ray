@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Color
@@ -42,20 +42,23 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default
-		.with_title("RocRay Capture: Screenshot")
-		.with_size({ width: 640, height: 360 })
-		.with_output_dir("shots"),
+	App.static_config(
+		App.default
+			.with_title("RocRay Capture: Screenshot")
+			.with_size({ width: 640, height: 360 })
+			.with_output_dir("shots"),
+	),
 	|_startup|
 		{
-			idle = Text.from("no capture yet").size(16).prepare!()?
+			font = Draw.default_font!()
+			idle = Text.from("no capture yet", font).size(16).prepare!()?
 			Ok({
-				title: Text.from("Screenshot demo").size(28).prepare!()?,
-				help: Text.from("S = save, E = try to escape the sandbox, ESC = quit").size(16).prepare!()?,
+				title: Text.from("Screenshot demo", font).size(28).prepare!()?,
+				help: Text.from("S = save, E = try to escape the sandbox, ESC = quit", font).size(16).prepare!()?,
 				idle: idle,
-				saved: Text.from("saved shots/scene.png").size(16).prepare!()?,
-				save_failed: Text.from("could not write shots/scene.png").size(16).prepare!()?,
-				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)").size(16).prepare!()?,
+				saved: Text.from("saved shots/scene.png", font).size(16).prepare!()?,
+				save_failed: Text.from("could not write shots/scene.png", font).size(16).prepare!()?,
+				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)", font).size(16).prepare!()?,
 				result: idle,
 				settled: Bool.False,
 			})

@@ -27,7 +27,7 @@ const TilemapSmokeContext = struct { texture: backend.Texture };
 
 const MetricSnapshot = struct {
     base_size: f32,
-    fallback_advance: f32,
+    fallback_index: usize,
     line_spacing: f32,
     glyphs: []backend.FontGlyphMetric,
 };
@@ -37,15 +37,15 @@ const MetricMeasurement = struct {
     height: f32,
 };
 
-/// Copy precisely the scalar data `Text.metrics!` receives from a live raylib
+/// Copy precisely the scalar data `Draw.Font` receives from a live raylib
 /// font. The measurement below deliberately has no access to the font after
 /// this point, matching the pure Roc API's ownership boundary.
 fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !MetricSnapshot {
     const glyphs = try allocator.alloc(backend.FontGlyphMetric, backend.fontGlyphCount(font));
-    var fallback_advance: f32 = 0;
+    var fallback_codepoint: u32 = 0;
     for (glyphs, 0..) |*glyph, index| {
         glyph.* = backend.fontGlyphMetric(font, index);
-        if (index == 0 or glyph.codepoint == '?') fallback_advance = glyph.advance;
+        if (index == 0 or glyph.codepoint == '?') fallback_codepoint = glyph.codepoint;
     }
     std.sort.pdq(backend.FontGlyphMetric, glyphs, {}, struct {
         fn lessThan(_: void, left: backend.FontGlyphMetric, right: backend.FontGlyphMetric) bool {
@@ -54,9 +54,11 @@ fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !Metric
     }.lessThan);
     return .{
         .base_size = backend.fontBaseSize(font),
-        .fallback_advance = fallback_advance,
+        .fallback_index = for (glyphs, 0..) |glyph, index| {
+            if (glyph.codepoint == fallback_codepoint) break index;
+        } else 0,
         // roc-ray exposes no text-line-spacing setter; this is raylib 6's
-        // initial value, retained by `Text.metrics!` with the glyph scalars.
+        // initial value, retained by `Draw.Font` with the glyph scalars.
         .line_spacing = 2,
         .glyphs = glyphs,
     };
@@ -68,14 +70,15 @@ fn snapshotGlyphAdvance(snapshot: MetricSnapshot, codepoint: u32) f32 {
     while (start < end) {
         const middle = start + (end - start) / 2;
         const glyph = snapshot.glyphs[middle];
-        if (glyph.codepoint == codepoint) return glyph.advance;
+        if (glyph.codepoint == codepoint) return if (glyph.advance_x > 0) glyph.advance_x else glyph.width + glyph.offset_x;
         if (codepoint < glyph.codepoint) {
             end = middle;
         } else {
             start = middle + 1;
         }
     }
-    return snapshot.fallback_advance;
+    const fallback = snapshot.glyphs[snapshot.fallback_index];
+    return if (fallback.advance_x > 0) fallback.advance_x else fallback.width + fallback.offset_x;
 }
 
 const DecodedCodepoint = struct {
@@ -84,7 +87,7 @@ const DecodedCodepoint = struct {
 };
 
 /// Every string below is valid UTF-8, exactly as `Str` values are. This is the
-/// same byte-to-codepoint boundary used by `Text.Metrics.measure`.
+/// same byte-to-codepoint boundary used by `Draw.Font.measure`.
 fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
     const first: u32 = text[index];
     if (first < 0x80) return .{ .codepoint = first, .next = index + 1 };
@@ -102,7 +105,7 @@ fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
     };
 }
 
-/// Pure equivalent of `Text.Metrics.measure` for a native parity check.
+/// Pure equivalent of `Draw.Font.measure` for a native parity check.
 fn measureSnapshot(snapshot: MetricSnapshot, text: []const u8, size: f32, spacing: f32) MetricMeasurement {
     if (text.len == 0 or text[0] == 0) return .{ .width = 0, .height = 0 };
 

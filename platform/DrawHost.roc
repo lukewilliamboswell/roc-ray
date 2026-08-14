@@ -53,8 +53,8 @@ DrawHost := [].{
 	Fps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font }
 	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align_x : F32, align_y : F32 }
-	GlyphMetric : { codepoint : U32, advance : F32 }
-	FontMetrics : { base_size : F32, line_spacing : F32, fallback_advance : F32, glyphs : List(GlyphMetric) }
+	GlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
+	FontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(GlyphMetric) }
 	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
 	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }

@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.9.0/3sKTYuHvxSV77dDyZrxuUYgfrAarL6ZtasWMPeH32udh.tar.zst" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.App
 import rr.Camera
@@ -19,39 +19,35 @@ Model : {
 
 program = { init!, update, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
-world_left : F32
-world_left = -800
+world_left = -800.F32
 
-world_right : F32
-world_right = 1600
+world_right = 1600.F32
 
-world_top : F32
-world_top = -600
+world_top = -600.F32
 
-world_bottom : F32
-world_bottom = 1200
+world_bottom = 1200.F32
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
-	|_startup|
+	App.static_config(App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120))),
+	|_startup| {
+		font = Draw.default_font!()
 		Ok({
 			player: { x: 400, y: 300 },
 			zoom: 1,
 			rotation: 0,
 			mouse: { x: 0, y: 0 },
 			hud: Box.box({
-				title: Text.from("Camera world").size(24).prepare!()?,
-				subtitle: Text.from("world-space draw + screen-space HUD").size(18).prepare!()?,
-				help: Text.from("WASD move, wheel zoom, Q/E rotate, R reset").size(14).prepare!()?,
+				title: Text.from("Camera world", font).size(24).prepare!()?,
+				subtitle: Text.from("world-space draw + screen-space HUD", font).size(18).prepare!()?,
+				help: Text.from("WASD move, wheel zoom, Q/E rotate, R reset", font).size(14).prepare!()?,
 			}),
-		}),
+		})
+	},
 )
 
 axis : Bool, Bool -> F32

@@ -11,6 +11,7 @@ import Camera
 import Color
 import DrawHost
 import Math
+import rrt.Font as RrtFont
 
 TextureDrawConfig : {
 	texture : Assets.TextureView,
@@ -283,9 +284,54 @@ Draw := [].{
 		color : Color.Rgba,
 	}
 
-	## The built-in font is allocation-free. A loaded font is an opaque host-owned
-	## resource whose final reference unloads its texture automatically.
-	Font : DrawHost.Font
+	## Scalar metrics for one glyph, shared with platform-independent packages.
+	GlyphMetrics : RrtFont.GlyphMetrics
+
+	## Text measurement configuration and result.
+	MeasureText : RrtFont.Measure
+	TextSize : RrtFont.Size
+
+	## A native font handle paired with an immutable scalar metric snapshot.
+	## Loading constructs the snapshot once; every receiver below is pure.
+	Font :: {
+		raw : DrawHost.Font,
+		base_size_value : F32,
+		line_spacing_value : F32,
+		fallback_index : U64,
+		glyph_values : List(RrtFont.GlyphMetrics),
+	}.{
+		from_host! : DrawHost.Font => Font
+		from_host! = |raw| {
+			metrics = DrawHost.font_metrics!(raw)
+			Font.(
+				{
+					raw,
+					base_size_value: metrics.base_size,
+					line_spacing_value: metrics.line_spacing,
+					fallback_index: metrics.fallback_index,
+					glyph_values: metrics.glyphs,
+				},
+			)
+		}
+
+		for_host : Font -> DrawHost.Font
+		for_host = |Font.(font)| font.raw
+
+		base_size : Font -> F32
+		base_size = |Font.(font)| font.base_size_value
+
+		line_spacing : Font -> F32
+		line_spacing = |Font.(font)| font.line_spacing_value
+
+		glyphs : Font -> List(RrtFont.GlyphMetrics)
+		glyphs = |Font.(font)| font.glyph_values
+
+		get_glyph_index : Font, U32 -> U64
+		get_glyph_index = |Font.(font), codepoint| glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
+
+		measure : Font, RrtFont.Measure -> RrtFont.Size
+		measure = |font, cfg| RrtFont.measure(font, cfg)
+	}
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -297,12 +343,6 @@ Draw := [].{
 	TextAlign : {
 		horizontal : HAlign,
 		vertical : VAlign,
-	}
-
-	## Measured text dimensions in logical pixels.
-	TextSize : {
-		width : F32,
-		height : F32,
 	}
 
 	## Fully configured text draw.
@@ -681,9 +721,9 @@ Draw := [].{
 	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
-	## The built-in font, which requires no loading or host-owned resource.
-	default_font : Font
-	default_font = DefaultFont
+	## Snapshot raylib's built-in font during initialization.
+	default_font! : () => Font
+	default_font! = || Font.from_host!(DefaultFont)
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -895,7 +935,7 @@ Draw := [].{
 		} else if result.err != 0 {
 			Err(ResourceLimit)
 		} else {
-			Ok(LoadedFont(result.font))
+			Ok(Font.from_host!(LoadedFont(result.font)))
 		}
 	}
 
@@ -904,7 +944,7 @@ Draw := [].{
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
 		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(Font.from_host!(LoadedFont(result.font)))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
@@ -1091,7 +1131,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: cfg.font,
+			font: cfg.font.for_host(),
 			align_x: align.x,
 			align_y: align.y,
 		})
@@ -1099,43 +1139,65 @@ Draw := [].{
 
 	## Draw top-left aligned text with the built-in font and default spacing.
 	debug_text! : Frame, DebugText => {}
-	debug_text! = |frame, cfg|
-		frame.text!({
+	debug_text! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple top-left aligned text with the built-in font.
 	text_at! : Frame, SimpleText => {}
-	text_at! = |frame, cfg|
-		frame.text!({
+	text_at! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple text centered on its position.
 	text_centered! : Frame, SimpleText => {}
-	text_centered! = |frame, cfg|
-		frame.text!({
+	text_centered! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_center,
+			font: DefaultFont,
+			align_x: 0.5,
+			align_y: 0.5,
 		})
 
+}
+
+glyph_index : List(Draw.GlyphMetrics), U32, U64, U64, U64 -> U64
+glyph_index = |glyphs, codepoint, start, end, fallback| {
+	if start >= end {
+		fallback
+	} else {
+		middle = start + (end - start) / 2
+		match List.get(glyphs, middle) {
+			Err(_) => fallback
+			Ok(glyph) => if glyph.codepoint == codepoint {
+				middle
+			} else if codepoint < glyph.codepoint {
+				glyph_index(glyphs, codepoint, start, middle, fallback)
+			} else {
+				glyph_index(glyphs, codepoint, middle + 1, end, fallback)
+			}
+		}
+	}
 }
 
 blend_mode_code : Draw.BlendMode -> U8

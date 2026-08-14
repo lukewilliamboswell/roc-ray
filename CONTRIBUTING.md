@@ -20,6 +20,14 @@ Install:
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 
+### Temporary compiler tracking
+
+This branch is temporarily tracking
+[roc-lang/roc#10717](https://github.com/roc-lang/roc/pull/10717). Its local
+worktree is `/home/lbw/Documents/Github/roc-worktrees/pr-10717-review`. Remove
+this note and update [`.roc-version`](.roc-version) once a nightly contains the
+change.
+
 Build the native hosts and platform inputs:
 
 ```bash
@@ -29,7 +37,7 @@ zig build
 Run an example against the local platform:
 
 ```bash
-scripts/run-example.py examples/cave_climb.roc
+scripts/run-example.py examples/cave_climb
 ```
 
 The runner builds the host, uses `platform/main.roc` for the run, and restores
@@ -40,7 +48,7 @@ Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
 
 ```bash
-scripts/run-example.py examples/cave_climb.roc -- --debug-allocator
+scripts/run-example.py examples/cave_climb -- --host-debug-allocator
 ```
 
 ## Repository map
@@ -105,7 +113,7 @@ xvfb-run -a zig build graphical-smoke
 
 Run it when changing primitives, texture coordinates, shaders, blending,
 scissoring, render textures, paired drawing modes, or native font metrics. It
-also compares the scalar snapshot behind `Text.metrics!` with raylib's
+also compares the scalar snapshot inside `Draw.Font` with raylib's
 `MeasureTextEx` for the default font and, when the system provides one, a
 loaded proportional font. The ordinary headless app runs verify composition
 and lifecycle behavior, not framebuffer pixels.

@@ -31,7 +31,11 @@ pub const Font = rl.Font;
 /// Scalar data needed to reproduce raylib's glyph advance calculation.
 pub const FontGlyphMetric = struct {
     codepoint: u32,
-    advance: f32,
+    advance_x: f32,
+    offset_x: f32,
+    offset_y: f32,
+    width: f32,
+    height: f32,
 };
 
 /// Return the bundled raylib major version for host invariants.
@@ -333,13 +337,14 @@ pub fn fontGlyphCount(font: Font) usize {
 /// Read the same glyph advance used by raylib's `MeasureTextEx`.
 pub fn fontGlyphMetric(font: Font, index: usize) FontGlyphMetric {
     const glyph = font.glyphs[index];
-    const advance = if (glyph.advanceX > 0)
-        @as(f32, @floatFromInt(glyph.advanceX))
-    else
-        font.recs[index].width + @as(f32, @floatFromInt(glyph.offsetX));
+    const rec = font.recs[index];
     return .{
         .codepoint = if (glyph.value > 0) @intCast(glyph.value) else 0,
-        .advance = advance,
+        .advance_x = @floatFromInt(glyph.advanceX),
+        .offset_x = @floatFromInt(glyph.offsetX),
+        .offset_y = @floatFromInt(glyph.offsetY),
+        .width = rec.width,
+        .height = rec.height,
     };
 }
 
@@ -1035,7 +1040,7 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible
     if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
     if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
     // A hidden window still renders on the GPU, so captures work normally.
-    // This is not the same as the `--headless` stub backend, which draws
+    // This is not the same as the `--host-headless` stub backend, which draws
     // nothing at all, and it still needs a display server (use xvfb-run on a
     // machine without one).
     if (!visible) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_HIDDEN));

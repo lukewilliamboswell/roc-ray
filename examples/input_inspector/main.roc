@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
 
 import rr.Draw
 import rr.Color
@@ -11,6 +11,7 @@ import rr.Gamepad
 import rr.App
 
 Model : {
+	font : Draw.Font,
 
 	## Text typed since the last clear, and what the clipboard last did with it.
 	typed : Str,
@@ -34,15 +35,17 @@ Msg : [ClipboardReadFinished(Try(Str, [Unavailable, TooLarge, Busy]))]
 
 init! : App.Init(Model, [])
 init! = App.init(
-	App.default
-		.with_title("RocRay Input Inspector")
-		.with_size({ width: 820, height: 700 })
-		.with_resizable(Bool.True)
-	# Without this raylib closes the window on Escape, so the Esc indicator
-	# below could never light up. Q exits instead.
-		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
-	|_startup| Ok({ typed: "", clipboard_status: "clipboard idle", input: Input.empty }),
+	App.static_config(
+		App.default
+			.with_title("RocRay Input Inspector")
+			.with_size({ width: 820, height: 700 })
+			.with_resizable(Bool.True)
+		# Without this raylib closes the window on Escape, so the Esc indicator
+		# below could never light up. Q exits instead.
+			.with_exit_key(NoExitKey)
+			.with_frame_pacing(Capped(120)),
+	),
+	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Input.empty }),
 )
 
 title : Str
@@ -119,7 +122,7 @@ update = |model, step| {
 			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
 		])
 
-	Program.static({ typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
+	Program.static({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
 		.with_actions(actions)
 		.with_tasks(clipboard.tasks)
 }
@@ -188,7 +191,7 @@ render! = |model, frame| {
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
 
 	frame.clear!(Color.ray_white)
-	frame.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: Draw.default_font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: model.font, align: Draw.align_top_left })
 
 	w_color = if w_down Color.green else Color.light_gray
 	a_color = if a_down Color.green else Color.light_gray
@@ -196,13 +199,13 @@ render! = |model, frame| {
 	d_color = if d_down Color.green else Color.light_gray
 
 	frame.rectangle!({ x: 70, y: 100, width: 30, height: 30, style: Draw.filled(w_color) })
-	frame.text!({ pos: { x: 85, y: 115 }, text: "W", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 85, y: 115 }, text: "W", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 30, y: 135, width: 30, height: 30, style: Draw.filled(a_color) })
-	frame.text!({ pos: { x: 45, y: 150 }, text: "A", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 45, y: 150 }, text: "A", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 70, y: 135, width: 30, height: 30, style: Draw.filled(s_color) })
-	frame.text!({ pos: { x: 85, y: 150 }, text: "S", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 85, y: 150 }, text: "S", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 110, y: 135, width: 30, height: 30, style: Draw.filled(d_color) })
-	frame.text!({ pos: { x: 125, y: 150 }, text: "D", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 125, y: 150 }, text: "D", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 
 	up_color = if up_down Color.green else Color.light_gray
 	left_color = if left_down Color.green else Color.light_gray
@@ -210,13 +213,13 @@ render! = |model, frame| {
 	right_color = if right_down Color.green else Color.light_gray
 
 	frame.rectangle!({ x: 250, y: 100, width: 30, height: 30, style: Draw.filled(up_color) })
-	frame.text!({ pos: { x: 265, y: 115 }, text: "^", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 265, y: 115 }, text: "^", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 210, y: 135, width: 30, height: 30, style: Draw.filled(left_color) })
-	frame.text!({ pos: { x: 225, y: 150 }, text: "<", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 225, y: 150 }, text: "<", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 250, y: 135, width: 30, height: 30, style: Draw.filled(down_color) })
-	frame.text!({ pos: { x: 265, y: 150 }, text: "v", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 265, y: 150 }, text: "v", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 290, y: 135, width: 30, height: 30, style: Draw.filled(right_color) })
-	frame.text!({ pos: { x: 305, y: 150 }, text: ">", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 305, y: 150 }, text: ">", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 
 	one_color = if one_down Color.green else Color.light_gray
 	shift_color = if shift_down Color.green else Color.light_gray
@@ -227,19 +230,19 @@ render! = |model, frame| {
 	mouse_release_color = if mouse_left_released Color.green else Color.light_gray
 
 	frame.rectangle!({ x: 30, y: 220, width: 50, height: 30, style: Draw.filled(one_color) })
-	frame.text!({ pos: { x: 55, y: 235 }, text: "1", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 55, y: 235 }, text: "1", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 90, y: 220, width: 80, height: 30, style: Draw.filled(shift_color) })
-	frame.text!({ pos: { x: 130, y: 235 }, text: "Shift", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 130, y: 235 }, text: "Shift", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 180, y: 220, width: 70, height: 30, style: Draw.filled(ctrl_color) })
-	frame.text!({ pos: { x: 215, y: 235 }, text: "Ctrl", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 215, y: 235 }, text: "Ctrl", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 260, y: 220, width: 80, height: 30, style: Draw.filled(escape_color) })
-	frame.text!({ pos: { x: 300, y: 235 }, text: "Esc", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 300, y: 235 }, text: "Esc", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 350, y: 220, width: 90, height: 30, style: Draw.filled(space_color) })
-	frame.text!({ pos: { x: 395, y: 235 }, text: "Space", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 395, y: 235 }, text: "Space", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 30, y: 270, width: 130, height: 30, style: Draw.filled(mouse_press_color) })
-	frame.text!({ pos: { x: 95, y: 285 }, text: "Mouse down", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 95, y: 285 }, text: "Mouse down", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 	frame.rectangle!({ x: 170, y: 270, width: 110, height: 30, style: Draw.filled(mouse_release_color) })
-	frame.text!({ pos: { x: 225, y: 285 }, text: "Mouse up", size: 20, spacing: Draw.default_spacing, color: Color.black, font: Draw.default_font, align: Draw.align_center })
+	frame.text!({ pos: { x: 225, y: 285 }, text: "Mouse up", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
 
 	frame.text_at!({ pos: { x: 30, y: 330 }, text: "Typed Unicode", size: 18, color: Color.dark_gray })
 	frame.rectangle!({ x: 175, y: 328, width: 24, height: 24, style: Draw.filled(if text_entered Color.green else Color.light_gray) })

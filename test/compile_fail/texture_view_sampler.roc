@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
 
 # Sampler state lives on the shared GPU texture object, so setting a filter
 # through a view would change how the owning texture -- and every other view of

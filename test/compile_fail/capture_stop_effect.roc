@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-12-606470f" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
 
 # Finalizing a recording is an encode and a file write. As an effect it was
 # reachable from `render!`, which put both in the middle of drawing a frame, at

@@ -20,14 +20,6 @@ Install:
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 
-### Temporary compiler tracking
-
-This branch is temporarily tracking
-[roc-lang/roc#10717](https://github.com/roc-lang/roc/pull/10717). Its local
-worktree is `/home/lbw/Documents/Github/roc-worktrees/pr-10717-review`. Remove
-this note and update [`.roc-version`](.roc-version) once a nightly contains the
-change.
-
 Build the native hosts and platform inputs:
 
 ```bash

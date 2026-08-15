@@ -23,6 +23,7 @@ LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
 RELEASE_PLATFORM_REF_RE = re.compile(
     r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
 )
+SKIPPED_EXAMPLES = {"cave_climb"}
 
 
 def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
@@ -112,7 +113,7 @@ def find_roc(root: Path) -> str | None:
 def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
     result = subprocess.run(
-        [roc, "build", "-j1", "main.roc"],
+        [roc, "build", "main.roc"],
         cwd=example.parent,
     )
     return result.returncode == 0
@@ -131,10 +132,15 @@ def main() -> int:
         print(f"Missing bundle artifact: {bundle_path}", file=sys.stderr)
         return 1
 
-    examples = sorted(examples_dir.glob("*/main.roc"))
+    examples = sorted(
+        example
+        for example in examples_dir.glob("*/main.roc")
+        if example.parent.name not in SKIPPED_EXAMPLES
+    )
     if not examples:
         print("No .roc examples found", file=sys.stderr)
         return 1
+    print(f"Skipping release bundle build: {', '.join(sorted(SKIPPED_EXAMPLES))}")
 
     roc = find_roc(root)
     if roc is None:

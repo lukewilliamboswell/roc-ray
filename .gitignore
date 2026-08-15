@@ -5,6 +5,7 @@ examples/*/main
 examples/*/main.exe
 
 # Built executables at root
+/main
 /hello_world
 /keyboard
 /input_inspector
@@ -102,6 +103,9 @@ __pycache__/
 *.exe
 # Legacy root-level executable.
 /async_read
+
+# Generated CLI integration executable.
+/test/cli_args/main
 
 # Output written by the capture examples
 captures/

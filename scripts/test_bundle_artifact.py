@@ -112,7 +112,7 @@ def find_roc(root: Path) -> str | None:
 def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
     result = subprocess.run(
-        [roc, "build", "main.roc"],
+        [roc, "build", "-j1", "main.roc"],
         cwd=example.parent,
     )
     return result.returncode == 0

@@ -133,6 +133,7 @@ jobs:
           gh release create "$tag" "$BUNDLE_PATH" \
             --title "roc-ray-types $VERSION" \
             --notes-file notes.md \
+            --target "$GITHUB_SHA" \
             --latest=false
 
           echo "Published $url"

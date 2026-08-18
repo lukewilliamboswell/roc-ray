@@ -45,6 +45,10 @@ Program := [].{
 			capture : Capture.Status,
 		}
 		fields = |step| step
+
+		## Construct a static update through the step capability
+		static : Step(msg), value -> Update(value, msg)
+		static = |_step, value| Program.static(value)
 	}
 
 	## A value paired with work for the platform.

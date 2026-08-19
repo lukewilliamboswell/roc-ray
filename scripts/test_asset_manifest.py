@@ -43,6 +43,8 @@ class AssetManifestTests(unittest.TestCase):
             root = Path(temporary)
             (root / "Texture.png").write_bytes(b"one")
             (root / "texture.png").write_bytes(b"two")
+            if (root / "Texture.png").samefile(root / "texture.png"):
+                self.skipTest("filesystem is case-insensitive")
             with self.assertRaisesRegex(assets.ManifestError, "case-colliding"):
                 assets.inventory(root)
 

@@ -1,4 +1,8 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
+app [Model, program] {
+	rr: platform "../../platform/main.roc",
+	rrt: "../../types/main.roc",
+	roc: "nightly-2026-08-19-edec830",
+}
 
 import rr.App
 import rr.Assets
@@ -13,6 +17,7 @@ import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
+import rrt.Texture
 import Cave
 
 GameState : Cave.GameState
@@ -151,10 +156,10 @@ init! = App.init(
 	App.static_config(App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120))),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/cave_climb/assets"))?
-		tiles = assets.texture!("kenney-platformer/spritesheet-tiles-default.png")?
-		characters = assets.texture!("kenney-platformer/spritesheet-characters-default.png")?
-		enemies_texture = assets.texture!("kenney-platformer/spritesheet-enemies-default.png")?
-		background = assets.texture!("kenney-platformer/background_color_hills.png")?
+		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
+		characters = Assets.load_texture!(assets, "kenney-platformer/spritesheet-characters-default.png")?
+		enemies_texture = Assets.load_texture!(assets, "kenney-platformer/spritesheet-enemies-default.png")?
+		background = Assets.load_texture!(assets, "kenney-platformer/background_color_hills.png")?
 		raw_map = Tilemap.load_tmx!(map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
@@ -914,10 +919,10 @@ camera_for = |level, target| {
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
 
-draw_world! : Draw.Frame, Level, Assets.Texture, Assets.Texture, Assets.Texture, Assets.Texture, World, Math.Rect => {}
+draw_world! : Draw.Frame, Level, Texture, Texture, Texture, Texture, World, Math.Rect => {}
 draw_world! = |frame, level, background, tiles, characters, enemies_texture, world, viewport| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
-	frame.texture!({ texture: background.view(), source: background.rect(), dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
+	frame.texture!({ texture: background, source: { x: 0, y: 0, width: background.width, height: background.height }, dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
 	level.tilemap.draw_all_in!(frame, viewport)
 	draw_checkpoints!(frame, tiles, level, world)
 	draw_goal!(frame, tiles, level, world)
@@ -959,7 +964,7 @@ player_walk_a_source = Math.rect(384, 512, 128, 128)
 player_walk_b_source : Math.Rect
 player_walk_b_source = Math.rect(384, 384, 128, 128)
 
-draw_tile_sprite! : Draw.Frame, Assets.Texture, Math.Rect, Math.Vec2, F32, F32 => {}
+draw_tile_sprite! : Draw.Frame, Texture, Math.Rect, Math.Vec2, F32, F32 => {}
 draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 	Sprite.from_texture(texture)
 		.source(
@@ -977,7 +982,7 @@ draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 		)
 		.draw!(frame)
 
-draw_gems! : Draw.Frame, Assets.Texture, List(Gem), F32 => {}
+draw_gems! : Draw.Frame, Texture, List(Gem), F32 => {}
 draw_gems! = |frame, tiles, gems, phase| {
 	for gem in gems {
 		if !(gem.taken) {
@@ -989,7 +994,7 @@ draw_gems! = |frame, tiles, gems, phase| {
 	}
 }
 
-draw_hazard_marks! : Draw.Frame, Assets.Texture, List(Danger), F32 => {}
+draw_hazard_marks! : Draw.Frame, Texture, List(Danger), F32 => {}
 draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	for hazard in hazards {
 		pos = world_to_map(hazard.pos)
@@ -998,7 +1003,7 @@ draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	}
 }
 
-draw_checkpoints! : Draw.Frame, Assets.Texture, Level, World => {}
+draw_checkpoints! : Draw.Frame, Texture, Level, World => {}
 draw_checkpoints! = |frame, tiles, level, world| {
 	for checkpoint in level.checkpoints {
 		checkpoint_pos = world_to_map(checkpoint)
@@ -1022,7 +1027,7 @@ draw_checkpoints! = |frame, tiles, level, world| {
 	}
 }
 
-draw_goal! : Draw.Frame, Assets.Texture, Level, World => {}
+draw_goal! : Draw.Frame, Texture, Level, World => {}
 draw_goal! = |frame, tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
 	pos = world_to_map(level.goal)
@@ -1055,7 +1060,7 @@ enemy_source = |enemy, phase| {
 	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
 }
 
-draw_enemies! : Draw.Frame, Assets.Texture, List(Enemy), F32 => {}
+draw_enemies! : Draw.Frame, Texture, List(Enemy), F32 => {}
 draw_enemies! = |frame, texture, enemies, phase| {
 	for enemy in enemies {
 		if enemy.alive {
@@ -1124,7 +1129,7 @@ player_source = |player| {
 	}
 }
 
-draw_player! : Draw.Frame, Assets.Texture, Player => {}
+draw_player! : Draw.Frame, Texture, Player => {}
 draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
 	pos = world_to_map(player.pos)

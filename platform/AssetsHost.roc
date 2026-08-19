@@ -1,9 +1,8 @@
 ## Internal texture transport and hosted effects.
 ##
-## This module is intentionally not exposed by the platform package. Public
-## applications use `Assets.Texture`; other platform modules use the methods on
-## this opaque nominal value to keep lifecycle tokens off the public API.
+## This module is intentionally not exposed by the platform package.
 import Color
+import rrt.Texture
 
 AssetsHost := [].{
 
@@ -24,17 +23,6 @@ AssetsHost := [].{
 
 	StoreOpenResult : { store : Store, err : U8 }
 	StoreLoad : { store : Store, path : Str }
-
-	Texture :: { resource : Box({ handle : U64, width : F32, height : F32 }) }.{
-		from_resource : Box({ handle : U64, width : F32, height : F32 }) -> Texture
-		from_resource = |resource| { resource: resource }
-
-		width : Texture -> F32
-		width = |texture| (Box.unbox(texture.resource)).width
-
-		height : Texture -> F32
-		height = |texture| (Box.unbox(texture.resource)).height
-	}
 
 	TextureResult : { texture : Texture, err : U8 }
 	TextureBytes : { format : U8, bytes : List(U8) }

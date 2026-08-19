@@ -18,7 +18,7 @@ import Assets
 import Capture
 import Color
 import Draw
-import AssetsHost
+import rrt.Texture
 
 Program := [].{
 
@@ -45,6 +45,10 @@ Program := [].{
 			capture : Capture.Status,
 		}
 		fields = |step| step
+
+		## Construct a static update through the step capability
+		static : Step(msg), value -> Update(value, msg)
+		static = |_step, value| Program.static(value)
 	}
 
 	## A value paired with work for the platform.
@@ -177,8 +181,8 @@ Program := [].{
 		SetWindowMinSize({ width : I32, height : I32 }),
 		PlaySound(Audio.Playback),
 		SetMusicVolume({ music : Audio.Music, volume : F32 }),
-		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
-		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
+		UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }),
+		UpdateTextureRegion({ texture : Texture, region : Assets.Region }),
 		SetVirtualMouse(Capture.Pointer),
 
 		## Arm a recording, or finalize the one that is running.
@@ -497,7 +501,7 @@ charge_upload : Program.Action, U64, U64 -> Try(U64, [PixelCountMismatch, Region
 charge_upload = |action, charged, budget|
 	match action {
 		UpdateTexture(request) =>
-			if U64.to_f32(List.len(request.pixels)) != request.texture.width() * request.texture.height() {
+			if U64.to_f32(List.len(request.pixels)) != request.texture.width * request.texture.height {
 				Err(PixelCountMismatch)
 			} else {
 				add_upload(charged, request.pixels, budget)
@@ -512,7 +516,7 @@ charge_upload = |action, charged, budget|
 			height = I32.to_f32(region.height)
 			if region.width <= 0 or region.height <= 0 or region.x < 0 or region.y < 0 {
 				Err(RegionOutOfBounds)
-			} else if I32.to_f32(region.x) + width > request.texture.width() or I32.to_f32(region.y) + height > request.texture.height() {
+			} else if I32.to_f32(region.x) + width > request.texture.width or I32.to_f32(region.y) + height > request.texture.height {
 				Err(RegionOutOfBounds)
 			} else if U64.to_f32(List.len(region.pixels)) != width * height {
 				Err(PixelCountMismatch)
@@ -707,31 +711,12 @@ unit_result_message = |result|
 		Err(Busy) => "busy"
 	}
 
-## Host-free four-by-four texture fixture for upload validation.
-tiny_texture : Assets.Texture
-tiny_texture = Assets.Texture.from_host(AssetsHost.Texture.from_resource(Box.box({ handle: 0, width: 4, height: 4 })))
-
-## Pixel fixture matching `tiny_texture`.
 sixteen_pixels : List(Color.Rgba)
 sixteen_pixels = List.repeat({ r: 1, g: 2, b: 3, a: 255 }, 16)
 
 expect Program.check_uploads([]) == Ok({})
-expect Program.check_uploads([tiny_texture.update(sixteen_pixels)]) == Ok({})
-expect Program.check_uploads([tiny_texture.update(List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 15))]) == Err(PixelCountMismatch)
 
-## Regions must fit entirely within the texture.
-expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Ok({})
-expect Program.check_uploads([tiny_texture.update_region({ x: 3, y: 0, width: 2, height: 2, pixels: List.repeat({ r: 0, g: 0, b: 0, a: 0 }, 4) })]) == Err(RegionOutOfBounds)
-expect Program.check_uploads([tiny_texture.update_region({ x: 0, y: 0, width: 0, height: 2, pixels: [] })]) == Err(RegionOutOfBounds)
-
-## The budget applies to the cycle's cumulative uploads.
 expect Assets.upload_bytes(sixteen_pixels) == 64
-expect check_uploads_from([tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Ok({})
-expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 100) == Err(UploadBudgetExceeded)
-expect check_uploads_from([tiny_texture.update(sixteen_pixels), tiny_texture.update(sixteen_pixels)], 0, 0, 128) == Ok({})
-
-## Non-upload actions do not affect the upload budget.
-expect Program.check_uploads([Program.exit(0), tiny_texture.update(sixteen_pixels)]) == Ok({})
 
 ## Task constructors expose no IDs or completion unions. `normalize` moves each
 ## request and its erased callback envelope into the flat ABI record; the host

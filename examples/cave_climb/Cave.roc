@@ -1,11 +1,11 @@
 ## Domain data for Cave Climb. Keeping these shapes together makes the world
 ## model readable without mixing it with asset loading, simulation, or drawing.
-import rr.Assets
 import rr.Draw
 import rr.Math
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
+import rrt.Texture
 
 Cave := [].{
 
@@ -93,10 +93,10 @@ Cave := [].{
 
 	Model : {
 		font : Draw.Font,
-		tiles : Assets.Texture,
-		characters : Assets.Texture,
-		enemies_texture : Assets.Texture,
-		background : Assets.Texture,
+		tiles : Texture,
+		characters : Texture,
+		enemies_texture : Texture,
+		background : Texture,
 		level : Level,
 		world : World,
 	}

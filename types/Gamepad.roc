@@ -16,7 +16,9 @@ Gamepad := [].{
 	}
 
 	## One of the four gamepad slots sampled by the platform.
-	GamepadId := [One, Two, Three, Four]
+	GamepadId := [One, Two, Three, Four].{
+		is_eq : _
+	}
 
 	## Validate and wrap a zero-based gamepad index.
 	from_index : U64 -> Try(GamepadId, [InvalidGamepadIndex, ..])

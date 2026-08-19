@@ -1,4 +1,8 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
+app [Model, program] {
+	rr: platform "../../platform/main.roc",
+	rrt: "../../types/main.roc",
+	roc: "nightly-2026-08-19-edec830",
+}
 
 import rr.App
 import rr.Assets
@@ -12,6 +16,7 @@ import rr.Keys
 import rr.Math
 import rr.Sprite
 import rr.Tilemap
+import rrt.Texture
 
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
 	is_eq : _
@@ -282,8 +287,8 @@ Sounds : {
 
 Model : {
 	font : Draw.Font,
-	characters : Assets.Texture,
-	tiles : Assets.Texture,
+	characters : Texture,
+	tiles : Texture,
 	level : Level,
 	sounds : Sounds,
 	world : World,
@@ -408,8 +413,8 @@ init! = App.init(
 	App.static_config(App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
-		characters = assets.texture!("kenney-topdown/characters.png")?
-		tiles = assets.texture!("kenney-topdown/tiles.png")?
+		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
+		tiles = Assets.load_texture!(assets, "kenney-topdown/tiles.png")?
 		raw_map = Tilemap.load_tmx!(top_down_map_path)?
 
 		tilemap = Tilemap.from_raw(raw_map)
@@ -497,7 +502,7 @@ make_sounds! = || {
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
 }
 
-new_game : Draw.Font, Assets.Texture, Assets.Texture, Level, Sounds -> Model
+new_game : Draw.Font, Texture, Texture, Level, Sounds -> Model
 new_game = |font, characters, tiles, level, sounds| {
 	font,
 	characters,
@@ -1120,7 +1125,7 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Draw.Frame, Level, Assets.Texture, Assets.Texture, World, Math.Rect, Draw.Font => {}
+draw_world! : Draw.Frame, Level, Texture, Texture, World, Math.Rect, Draw.Font => {}
 draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
@@ -1164,7 +1169,7 @@ tile_source = |tile| {
 	Sprite.sheet_frame({ frame_size: { x: 64, y: 64 }, row: index // tile_cols, col: index % tile_cols })
 }
 
-tile_sprite : Assets.Texture, Tile, Math.Vec2, F32 -> Sprite.Sprite
+tile_sprite : Texture, Tile, Math.Vec2, F32 -> Sprite.Sprite
 tile_sprite = |tiles, tile, pos, scale|
 	Sprite.from_texture(tiles)
 		.source(
@@ -1177,10 +1182,10 @@ tile_sprite = |tiles, tile, pos, scale|
 			scale,
 		)
 
-draw_tile! : Draw.Frame, Assets.Texture, Tile, Math.Vec2, F32 => {}
+draw_tile! : Draw.Frame, Texture, Tile, Math.Vec2, F32 => {}
 draw_tile! = |frame, tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scale).draw!(frame)
 
-draw_tile_centered! : Draw.Frame, Assets.Texture, Tile, Math.Vec2, F32, F32 => {}
+draw_tile_centered! : Draw.Frame, Texture, Tile, Math.Vec2, F32, F32 => {}
 draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!(frame)
 
 draw_spawn! : Draw.Frame, Level, Draw.Font => {}
@@ -1200,28 +1205,28 @@ draw_exit! = |frame, level, world, font| {
 	frame.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font, align: Draw.align_top_center })
 }
 
-draw_obstacle! : Draw.Frame, Assets.Texture, World.Obstacle => {}
+draw_obstacle! : Draw.Frame, Texture, World.Obstacle => {}
 draw_obstacle! = |frame, tiles, obstacle| {
 	rect = obstacle.rect
 	frame.rounded_rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
 	draw_tile_centered!(frame, tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
 }
 
-draw_obstacles! : Draw.Frame, Level, Assets.Texture => {}
+draw_obstacles! : Draw.Frame, Level, Texture => {}
 draw_obstacles! = |frame, level, tiles| {
 	for obstacle in level.obstacles {
 		draw_obstacle!(frame, tiles, obstacle)
 	}
 }
 
-draw_props! : Draw.Frame, Level, Assets.Texture => {}
+draw_props! : Draw.Frame, Level, Texture => {}
 draw_props! = |frame, level, tiles| {
 	for decoration in level.decorations {
 		draw_tile_centered!(frame, tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
 	}
 }
 
-draw_spark! : Draw.Frame, Assets.Texture, World.Spark, F32 => {}
+draw_spark! : Draw.Frame, Texture, World.Spark, F32 => {}
 draw_spark! = |frame, tiles, spark, phase| {
 	tile = if spark.id % 2 == 0 TileSparkA else TileSparkB
 	rotation = phase * 160 + U64.to_f32(spark.id) * 19
@@ -1231,7 +1236,7 @@ draw_spark! = |frame, tiles, spark, phase| {
 	draw_tile_centered!(frame, tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
-draw_sparks! : Draw.Frame, Assets.Texture, List(World.Spark), F32 => {}
+draw_sparks! : Draw.Frame, Texture, List(World.Spark), F32 => {}
 draw_sparks! = |frame, tiles, sparks, phase| {
 	for spark in sparks {
 		draw_spark!(frame, tiles, spark, phase)
@@ -1250,7 +1255,7 @@ draw_hazard_lanes! = |frame, level, phase| {
 robot_source : Math.Rect
 robot_source = Math.rect(458, 88, 33, 43)
 
-draw_hazard! : Draw.Frame, Assets.Texture, World.Hazard, F32 => {}
+draw_hazard! : Draw.Frame, Texture, World.Hazard, F32 => {}
 draw_hazard! = |frame, characters, hazard, phase| {
 	pos = hazard.pos(phase)
 	sprite = Sprite.from_texture(characters)
@@ -1269,7 +1274,7 @@ draw_hazard! = |frame, characters, hazard, phase| {
 	frame.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
-draw_hazards! : Draw.Frame, Level, Assets.Texture, F32 => {}
+draw_hazards! : Draw.Frame, Level, Texture, F32 => {}
 draw_hazards! = |frame, level, characters, phase| {
 	for hazard in level.hazards {
 		draw_hazard!(frame, characters, hazard, phase)
@@ -1309,7 +1314,7 @@ draw_burst! = |frame, world| draw_burst_particle!(frame, world, 0)
 player_source : Math.Rect
 player_source = Math.rect(0, 0, 52, 43)
 
-draw_player! : Draw.Frame, Assets.Texture, World.Player => {}
+draw_player! : Draw.Frame, Texture, World.Player => {}
 draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
 	scale = if player.dash_active() 1.3 else 1.22

@@ -223,6 +223,42 @@ fn decodeToken(token: u64) ?struct { index: usize, kind: u8, generation: u64 } {
     return .{ .index = @intCast(encoded_index - 1), .kind = @intCast(encoded_kind), .generation = generation };
 }
 
+test "zero is not a resource token" {
+    try std.testing.expect(decodeToken(0) == null);
+}
+
+test "resource heaps never emit or resolve zero, including after slot reuse" {
+    const Token = struct {
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+        fn destroy(_: *u8) void {}
+    };
+    const Heap = HostResourceHeap(u64, u8, 1, 4, Token.write, Token.read, Token.destroy);
+    var heap: Heap = .{};
+
+    try std.testing.expect(heap.get(0) == null);
+
+    const first = heap.insert(0, 1).?;
+    const first_token = first.*;
+    try std.testing.expect(first_token != 0);
+    try std.testing.expect(heap.get(0) == null);
+
+    const base: *isize = @ptrFromInt(@intFromPtr(first) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    try std.testing.expectEqual(@as(usize, 1), heap.drainRetired(1));
+
+    const replacement = heap.insert(0, 2).?;
+    try std.testing.expect(replacement.* != 0);
+    try std.testing.expect(replacement.* != first_token);
+    try std.testing.expect(heap.get(0) == null);
+    heap.deinitAll();
+}
+
 test "final Roc deallocation destroys and reuses a resource slot" {
     const Resource = struct { value: usize };
     const Counter = struct {

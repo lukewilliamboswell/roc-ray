@@ -2,10 +2,10 @@
 ##
 ## This module is intentionally not exposed by the platform package.
 import Assets
-import AssetsHost
 import Camera
 import Color
 import Math
+import rrt.Texture
 
 DrawHost := [].{
 
@@ -20,8 +20,8 @@ DrawHost := [].{
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
-	RenderTexture :: Assets.TextureView.{
-		texture : RenderTexture -> Assets.TextureView
+	RenderTexture :: Texture.{
+		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(texture)| texture
 	}
 
@@ -63,15 +63,15 @@ DrawHost := [].{
 	RenderTextureSize : { width : I32, height : I32 }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
 	LoadStoreShader : { store : Assets.Store, vertex_path : Str, fragment_path : Str }
-	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
-	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
+	TextureDraw : { texture : Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+	TextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
 	ShaderInt : { uniform : Uniform, value : I32 }
 	ShaderVec2 : { uniform : Uniform, value : Math.Vec2 }
 	ShaderVec3 : { uniform : Uniform, value : { x : F32, y : F32, z : F32 } }
 	ShaderVec4 : { uniform : Uniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-	ShaderTexture : { uniform : Uniform, texture : Assets.TextureView }
+	ShaderTexture : { uniform : Uniform, texture : Texture }
 	FontResult : { font : FontResource, err : U8 }
 	RenderTextureResult : { target : RenderTexture, err : U8 }
 	ShaderResult : { shader : Shader, err : U8 }

@@ -1123,7 +1123,7 @@ var headless_clipboard_set: bool = false;
 var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
-var render_texture_leases: [SCOPE_STACK_LIMIT]?*abi.AssetsHostTextureResource = @splat(null);
+var render_texture_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 var headless_tilemap_draw_calls: usize = 0;
 var headless_tilemap_tiles: usize = 0;
 var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
@@ -1146,7 +1146,7 @@ var invalid_resource_box: InvalidResourceBox = .{};
 
 const InvalidTextureBox = extern struct {
     refcount: isize = 0,
-    payload: abi.AssetsHostTextureResource = .{ .handle = 0, .height = 0, .width = 0 },
+    payload: u64 = 0,
 };
 
 var invalid_texture_box: InvalidTextureBox = .{};
@@ -1227,7 +1227,10 @@ fn destroyPreparedText(resource: *PreparedTextResource) void {
     if (resource.font_owner) |owner| releaseResourceBox(activeHost(), owner);
 }
 
+var texture_destroy_count: usize = 0;
+
 fn destroyTexture(resource: *TextureResource) void {
+    if (builtin.is_test) texture_destroy_count += 1;
     switch (resource.*) {
         .headless => {},
         .native => |texture| if (!builtin.is_test) raylib.unloadTexture(texture),
@@ -1260,19 +1263,11 @@ fn readU64Token(payload: *const u64) u64 {
     return payload.*;
 }
 
-fn writeTextureToken(payload: *abi.AssetsHostTextureResource, token: u64) void {
-    payload.handle = token;
-}
-
-fn readTextureToken(payload: *const abi.AssetsHostTextureResource) u64 {
-    return payload.handle;
-}
-
 const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, writeU64Token, readU64Token, destroySound);
 const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
 const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
-const TextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource, TextureResource, 128, 4, writeTextureToken, readTextureToken, destroyTexture);
-const RenderTextureHeap = host_resource.HostResourceHeap(abi.AssetsHostTextureResource, RenderTextureResource, 32, 5, writeTextureToken, readTextureToken, destroyRenderTexture);
+const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, 4, writeU64Token, readU64Token, destroyTexture);
+const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, 5, writeU64Token, readU64Token, destroyRenderTexture);
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
@@ -2034,10 +2029,10 @@ test "nested render and shader scopes lease last references until matching end" 
         active_roc_host = null;
     }
 
-    const outer_target = storeRenderTexture(.headless, 160, 90).?;
-    const inner_target = storeRenderTexture(.headless, 80, 45).?;
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = outer_target }));
-    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = inner_target }));
+    const outer_target = storeRenderTexture(.headless).?;
+    const inner_target = storeRenderTexture(.headless).?;
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = outer_target, .height = 90, .width = 160 }));
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = inner_target, .height = 45, .width = 80 }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 2), render_texture_heap.active());
     try std.testing.expectEqual(@as(u8, 2), headless_render_texture_depth);
@@ -2144,10 +2139,10 @@ test "resource scopes report bounded saturation without leaking transferred owne
         active_roc_host = null;
     }
 
-    const target = storeRenderTexture(.headless, 16, 16).?;
+    const target = storeRenderTexture(.headless).?;
     abi.increfBox(@ptrCast(target), SCOPE_STACK_LIMIT);
-    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
-    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .resource = target }));
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = target, .height = 16, .width = 16 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .handle = target, .height = 16, .width = 16 }));
     for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndRenderTextureRaw();
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
@@ -2177,10 +2172,10 @@ test "scope kind confusion fails and releases transferred owners" {
     }
 
     const shader = storeShader(.headless).?;
-    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{ .resource = @ptrCast(shader) }));
+    try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{ .handle = @ptrCast(shader), .height = 16, .width = 16 }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
-    const target = storeRenderTexture(.headless, 16, 16).?;
+    const target = storeRenderTexture(.headless).?;
     try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = @ptrCast(target) }));
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
@@ -2192,7 +2187,7 @@ test "invalid headless render target dimensions do not consume a heap slot" {
     const before = render_texture_heap.active();
     const target = hostedDrawLoadRenderTextureRaw(.{ .height = 0, .width = 160 });
     try std.testing.expectEqual(RESOURCE_ERR_FAILED, target.err);
-    try std.testing.expectEqual(@as(u64, 0), target.target.resource.handle);
+    try std.testing.expectEqual(@as(u64, 0), target.target.handle.*);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(before, render_texture_heap.active());
 }
@@ -2222,8 +2217,8 @@ test "last resource references remain live through owning host operations" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), music_heap.active());
 
-    const texture = storeTexture(.{ .headless = .{ .width = 2, .height = 2 } }, 2, 2).?;
-    hostedAssetsSetTextureFilterRaw(.{ .resource = texture }, 1);
+    const texture = storeTexture(.{ .headless = .{ .width = 2, .height = 2 } }).?;
+    hostedAssetsSetTextureFilterRaw(.{ .handle = texture, .height = 2, .width = 2 }, 1);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
@@ -2233,9 +2228,9 @@ test "last resource references remain live through owning host operations" {
     try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
 
     const sampler_shader = storeShader(.headless).?;
-    const sampler_texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }, 1, 1).?;
+    const sampler_texture = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
     hostedDrawSetShaderTextureRaw(.{
-        .texture = .{ .resource = sampler_texture },
+        .texture = .{ .handle = sampler_texture, .height = 1, .width = 1 },
         .uniform = .{ .shader = sampler_shader, .location = 0 },
     });
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -2243,9 +2238,9 @@ test "last resource references remain live through owning host operations" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 
-    const target = storeRenderTexture(.headless, 8, 8).?;
+    const target = storeRenderTexture(.headless).?;
     hostedDrawTextureRaw(.{
-        .texture = .{ .resource = target },
+        .texture = .{ .handle = target, .height = 8, .width = 8 },
         .dest = .{ .height = 8, .width = 8, .x = 0, .y = 0 },
         .origin = .{ .x = 0, .y = 0 },
         .rotation = 0,
@@ -2256,9 +2251,146 @@ test "last resource references remain live through owning host operations" {
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
 }
 
+test "copied shared texture destroys its native resource exactly once after the final reference" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const handle = storeTexture(.{ .headless = .{ .width = 7, .height = 5 } }).?;
+    const original = abi.Texture{ .handle = handle, .height = 5, .width = 7 };
+    const copied = original;
+    copied.incref(1);
+    const destroyed_before = texture_destroy_count;
+
+    original.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), texture_heap.active());
+    try std.testing.expectEqual(destroyed_before, texture_destroy_count);
+
+    copied.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    try std.testing.expectEqual(destroyed_before + 1, texture_destroy_count);
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(destroyed_before + 1, texture_destroy_count);
+}
+
+fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture {
+    const handle: *u64 = @ptrCast(@alignCast(abi.allocateBox(@sizeOf(u64), @alignOf(u64), false, host)));
+    handle.* = 0;
+    return .{ .handle = handle, .width = width, .height = height };
+}
+
+test "resource-free texture is safe across hosted operations and ordinary deallocation" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    const previous_upload_bytes = texture_upload_bytes_this_frame;
+    defer {
+        texture_upload_bytes_this_frame = previous_upload_bytes;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const destroyed_before = texture_destroy_count;
+    try std.testing.expect(nativeTextureForToken(0) == null);
+
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+
+        hostedDrawTextureRaw(.{
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .dest = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .source = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+
+        hostedDrawTextureQuadRaw(.{
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .bottom_left = .{ .x = 0, .y = 8 },
+            .bottom_right = .{ .x = 16, .y = 8 },
+            .q_bottom_left = 1,
+            .q_bottom_right = 1,
+            .q_top_left = 1,
+            .q_top_right = 1,
+            .source = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .top_left = .{ .x = 0, .y = 0 },
+            .top_right = .{ .x = 16, .y = 0 },
+            .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+    }
+
+    {
+        const scope = PhaseScope.enter(.commit);
+        defer scope.leave();
+
+        hostedAssetsSetTextureFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+        hostedAssetsSetTextureWrapRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+
+        texture_upload_bytes_this_frame = 128;
+        const whole_err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+            .pixels = abi.RocListWith(Color, false).empty(),
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+        });
+        try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, whole_err);
+        try std.testing.expectEqual(@as(usize, 128), texture_upload_bytes_this_frame);
+
+        const region_err = hostedAssetsUpdateTextureRegionRaw(&roc_host, .{
+            .pixels = abi.RocListWith(Color, false).empty(),
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .height = 1,
+            .width = 1,
+            .x = 0,
+            .y = 0,
+        });
+        try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, region_err);
+        try std.testing.expectEqual(@as(usize, 128), texture_upload_bytes_this_frame);
+    }
+
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+
+        headless_tilemap_draw_calls = 0;
+        headless_tilemap_tiles = 0;
+        headless_tilemap_last_quad = null;
+        const texture = allocateTestTextureStub(&roc_host, 16, 8);
+        hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, texture.handle, TILEMAP_SELECTOR_ALL, 0, true));
+        try std.testing.expectEqual(@as(usize, 1), headless_tilemap_draw_calls);
+        try std.testing.expectEqual(@as(usize, 0), headless_tilemap_tiles);
+        try std.testing.expect(headless_tilemap_last_quad == null);
+    }
+
+    allocateTestTextureStub(&roc_host, 0, 0).decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.retiredCount());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.retiredCount());
+    try std.testing.expectEqual(destroyed_before, texture_destroy_count);
+}
+
 fn headlessTilemapRequest(
     host: *RocHost,
-    texture: *abi.AssetsHostTextureResource,
+    texture: *u64,
     selector_kind: u8,
     selector_value: u64,
     culled: bool,
@@ -2285,7 +2417,7 @@ fn headlessTilemapRequest(
         .{
             .columns = 2,
             .first_gid = 1,
-            .texture = .{ .resource = texture },
+            .texture = .{ .handle = texture, .height = 16, .width = 16 },
             .tile_height = 8,
             .tile_width = 8,
         },
@@ -2326,7 +2458,7 @@ test "one tilemap host call draws a culled batch and releases texture owners" {
         active_roc_host = null;
     }
 
-    const texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    const texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }).?;
     hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, texture, TILEMAP_SELECTOR_ALL, 0, true));
 
     try std.testing.expectEqual(@as(usize, 1), headless_tilemap_draw_calls);
@@ -2358,18 +2490,18 @@ test "role batching cannot select hidden layers but named selection can" {
     }
 
     headless_tilemap_tiles = 0;
-    const rejected_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    const rejected_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }).?;
     hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, rejected_texture, TILEMAP_SELECTOR_ROLE, TILEMAP_ROLE_HIDDEN, false));
     try std.testing.expectEqual(@as(usize, 0), headless_tilemap_tiles);
 
-    const named_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }, 16, 8).?;
+    const named_texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }).?;
     hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, named_texture, TILEMAP_SELECTOR_LAYER, 1, false));
     try std.testing.expectEqual(@as(usize, 6), headless_tilemap_tiles);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
 }
 
-test "render target texture views report not mutable and release ownership" {
+test "render target textures report not mutable and release ownership" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
     roc_host.roc_dealloc = &nativeRocDealloc;
@@ -2384,10 +2516,10 @@ test "render target texture views report not mutable and release ownership" {
         active_roc_host = null;
     }
 
-    const target = storeRenderTexture(.headless, 4, 4).?;
+    const target = storeRenderTexture(.headless).?;
     const err = hostedAssetsUpdateTextureRaw(&roc_host, .{
         .pixels = abi.RocListWith(Color, false).empty(),
-        .texture = .{ .resource = target },
+        .texture = .{ .handle = target, .height = 4, .width = 4 },
     });
     try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, err);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -2419,8 +2551,8 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice("README.md", &roc_host)).err);
     for (music) |item| releaseResourceBox(&roc_host, item);
 
-    var textures: [128]*abi.AssetsHostTextureResource = undefined;
-    for (&textures) |*texture| texture.* = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }, 1, 1).?;
+    var textures: [128]*u64 = undefined;
+    for (&textures) |*texture| texture.* = storeTexture(.{ .headless = .{ .width = 1, .height = 1 } }).?;
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedAssetsGenerateColorTextureRaw(.{
         .height = 1,
         .width = 1,
@@ -2428,8 +2560,8 @@ test "every fixed resource heap reports capacity plus one as ResourceLimit" {
     }).err);
     for (textures) |texture| releaseResourceBox(&roc_host, texture);
 
-    var targets: [32]*abi.AssetsHostTextureResource = undefined;
-    for (&targets) |*target| target.* = storeRenderTexture(.headless, 1, 1).?;
+    var targets: [32]*u64 = undefined;
+    for (&targets) |*target| target.* = storeRenderTexture(.headless).?;
     try std.testing.expectEqual(RESOURCE_ERR_LIMIT, hostedDrawLoadRenderTextureRaw(.{ .height = 1, .width = 1 }).err);
     for (targets) |target| releaseResourceBox(&roc_host, target);
 
@@ -2492,16 +2624,16 @@ fn storePreparedText(resource: PreparedTextResource) ?*u64 {
     };
 }
 
-fn storeTexture(resource: TextureResource, width: f32, height: f32) ?*abi.AssetsHostTextureResource {
-    return texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
+fn storeTexture(resource: TextureResource) ?*u64 {
+    return texture_heap.insert(0, resource) orelse {
         var rejected = resource;
         destroyTexture(&rejected);
         return null;
     };
 }
 
-fn invalidTexture() abi.AssetsHostTexture {
-    return .{ .resource = &invalid_texture_box.payload };
+fn invalidTexture() abi.Texture {
+    return .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 };
 }
 
 fn texturePixelCount(width: i32, height: i32) ?usize {
@@ -2542,6 +2674,40 @@ test "texture pixel count validates dimensions" {
     try std.testing.expectEqual(@as(?usize, 16), texturePixelCount(4, 4));
     try std.testing.expectEqual(@as(?usize, null), texturePixelCount(0, 4));
     try std.testing.expectEqual(@as(?usize, null), texturePixelCount(4, -1));
+}
+
+test "texture updates validate native dimensions instead of public metadata" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    const scope = PhaseScope.enter(.commit);
+    defer {
+        scope.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const pixels = [_]Color{.{ .r = 1, .g = 2, .b = 3, .a = 255 }} ** 6;
+    const whole_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
+    const whole_err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+        .pixels = abi.RocListWith(Color, false).fromSlice(&pixels, &roc_host),
+        .texture = .{ .handle = whole_handle, .height = 99, .width = 99 },
+    });
+    try std.testing.expectEqual(TEXTURE_UPDATE_OK, whole_err);
+
+    const region_handle = storeTexture(.{ .headless = .{ .width = 2, .height = 3 } }).?;
+    const region_err = hostedAssetsUpdateTextureRegionRaw(&roc_host, .{
+        .pixels = abi.RocListWith(Color, false).fromSlice(pixels[0..2], &roc_host),
+        .texture = .{ .handle = region_handle, .height = 99, .width = 99 },
+        .height = 1,
+        .width = 2,
+        .x = 1,
+        .y = 0,
+    });
+    try std.testing.expectEqual(TEXTURE_UPDATE_OUT_OF_BOUNDS, region_err);
 }
 
 fn imageFileType(format: u8) ?[*:0]const u8 {
@@ -2972,7 +3138,7 @@ fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []c
 }
 
 fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.AssetsHostLoad_store_textureArgs) callconv(.c) abi.AssetsHostLoad_store_textureRetRecord {
-    enforcePhase("Assets.Store.texture!", during_startup);
+    enforcePhase("Assets.load_texture!", during_startup);
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     const store = store_heap.get(args.store.*) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ };
@@ -2986,15 +3152,15 @@ fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.AssetsHostLoad_stor
     };
     defer allocator.free(bytes);
     if (headlessMode()) {
-        const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE) orelse
+        const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }) orelse
             return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_LIMIT };
-        return .{ .texture = .{ .resource = texture }, .err = STORE_ERR_NONE };
+        return .{ .texture = .{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE }, .err = STORE_ERR_NONE };
     }
     const file_type = imageFileTypeFromPath(args.path.asSlice()) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_DECODE };
     const texture = raylib.loadTextureFromMemory(file_type, bytes) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_DECODE };
-    const stored = storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture)) orelse
+    const stored = storeTexture(.{ .native = texture }) orelse
         return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_LIMIT };
-    return .{ .texture = .{ .resource = stored }, .err = STORE_ERR_NONE };
+    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = STORE_ERR_NONE };
 }
 
 fn imageFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
@@ -3013,19 +3179,19 @@ fn exportedAssetsLoadStoreTextureRaw(args: abi.AssetsHostLoad_store_textureArgs)
 }
 
 fn hostedAssetsLoadTextureBytesRaw(host: *RocHost, args: abi.AssetsHostLoad_texture_bytesArgs) callconv(.c) abi.AssetsHostLoad_texture_bytesRetRecord {
-    enforcePhase("Assets.Texture.from_bytes!", during_startup);
+    enforcePhase("Assets.texture_from_bytes!", during_startup);
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
     if (bytes.len == 0 or imageFileType(args.format) == null) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
-        const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }, HEADLESS_RESOURCE_SIZE, HEADLESS_RESOURCE_SIZE) orelse
+        const texture = storeTexture(.{ .headless = .{ .width = @intFromFloat(HEADLESS_RESOURCE_SIZE), .height = @intFromFloat(HEADLESS_RESOURCE_SIZE) } }) orelse
             return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .resource = texture }, .err = RESOURCE_ERR_NONE };
+        return .{ .texture = .{ .handle = texture, .height = HEADLESS_RESOURCE_SIZE, .width = HEADLESS_RESOURCE_SIZE }, .err = RESOURCE_ERR_NONE };
     }
     const texture = raylib.loadTextureFromMemory(imageFileType(args.format).?, bytes) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture)) orelse
+    const stored = storeTexture(.{ .native = texture }) orelse
         return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
+    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
 fn exportedAssetsLoadTextureBytesRaw(args: abi.AssetsHostLoad_texture_bytesArgs) callconv(.c) abi.AssetsHostLoad_texture_bytesRetRecord {
@@ -3036,35 +3202,35 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textur
     enforcePhase("Assets.generate_color_texture!", during_startup);
     if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
-        const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
+        const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
             return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .resource = texture }, .err = RESOURCE_ERR_NONE };
+        return .{ .texture = .{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
     }
     const texture = raylib.generateColorTexture(args.width, args.height, args.color) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture)) orelse
+    const stored = storeTexture(.{ .native = texture }) orelse
         return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
+    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
 fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_textureArgs) callconv(.c) abi.AssetsHostGenerate_checked_textureRetRecord {
     enforcePhase("Assets.generate_checked_texture!", during_startup);
     if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (active_headless) {
-        const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
+        const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
             return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-        return .{ .texture = .{ .resource = texture }, .err = RESOURCE_ERR_NONE };
+        return .{ .texture = .{ .handle = texture, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
     }
     const texture = raylib.generateCheckedTexture(args) orelse return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeTexture(.{ .native = texture }, raylib.textureWidth(texture), raylib.textureHeight(texture)) orelse
+    const stored = storeTexture(.{ .native = texture }) orelse
         return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_LIMIT };
-    return .{ .texture = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
+    return .{ .texture = .{ .handle = stored, .height = raylib.textureHeight(texture), .width = raylib.textureWidth(texture) }, .err = RESOURCE_ERR_NONE };
 }
 
 fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
-    enforcePhase("Assets.Texture.update", during_commit);
+    enforcePhase("Assets.update_texture!", during_commit);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
-    const token = args.texture.resource.handle;
+    const token = args.texture.handle.*;
     if (render_texture_heap.get(token) != null) return TEXTURE_UPDATE_NOT_MUTABLE;
     const resource = texture_heap.get(token) orelse return TEXTURE_UPDATE_NOT_MUTABLE;
     const expected: usize = switch (resource.*) {
@@ -3086,13 +3252,13 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
 /// one pixel of an atlas means re-uploading the atlas, and a per-frame budget
 /// on whole-texture uploads is just a smaller ceiling on the same waste.
 fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
-    enforcePhase("Assets.Texture.update_region", during_commit);
+    enforcePhase("Assets.update_texture_region!", during_commit);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
 
     if (args.width <= 0 or args.height <= 0 or args.x < 0 or args.y < 0) return TEXTURE_UPDATE_OUT_OF_BOUNDS;
 
-    const token = args.texture.resource.handle;
+    const token = args.texture.handle.*;
     if (render_texture_heap.get(token) != null) return TEXTURE_UPDATE_NOT_MUTABLE;
     const resource = texture_heap.get(token) orelse return TEXTURE_UPDATE_NOT_MUTABLE;
 
@@ -3141,24 +3307,24 @@ fn exportedAssetsUpdateTextureRegionRaw(args: abi.AssetsHostUpdate_texture_regio
     return hostedAssetsUpdateTextureRegionRaw(activeHost(), args);
 }
 
-fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
-    enforcePhase("Assets.Texture.set_filter!", during_commit);
+fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
+    enforcePhase("Assets.set_texture_filter!", during_commit);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
-    const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
+    const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
     raylib.setTextureFilter(texture, code);
 }
 
-fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.AssetsHostTexture, code: u8) callconv(.c) void {
-    enforcePhase("Assets.Texture.set_wrap!", during_commit);
+fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
+    enforcePhase("Assets.set_texture_wrap!", during_commit);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
-    const texture = nativeTextureForToken(texture_owner.resource.handle) orelse return;
+    const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
     raylib.setTextureWrap(texture, code);
 }
 
-fn storeRenderTexture(resource: RenderTextureResource, width: f32, height: f32) ?*abi.AssetsHostTextureResource {
-    return render_texture_heap.insert(.{ .handle = 0, .height = height, .width = width }, resource) orelse {
+fn storeRenderTexture(resource: RenderTextureResource) ?*u64 {
+    return render_texture_heap.insert(0, resource) orelse {
         var rejected = resource;
         destroyRenderTexture(&rejected);
         return null;
@@ -3175,17 +3341,17 @@ fn storeShader(resource: ShaderResource) ?*u64 {
 
 fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) abi.DrawHostLoad_render_textureRetRecord {
     enforcePhase("Draw.RenderTexture.load!", during_startup);
-    if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_FAILED };
+    if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
-        const target = storeRenderTexture(.headless, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
-            return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_LIMIT };
-        return .{ .target = .{ .resource = target }, .err = RESOURCE_ERR_NONE };
+        const target = storeRenderTexture(.headless) orelse
+            return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_LIMIT };
+        return .{ .target = .{ .handle = target, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
     }
     const target = raylib.loadRenderTexture(args.width, args.height) orelse
-        return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_FAILED };
-    const stored = storeRenderTexture(.{ .native = target }, @floatFromInt(args.width), @floatFromInt(args.height)) orelse
-        return .{ .target = .{ .resource = &invalid_texture_box.payload }, .err = RESOURCE_ERR_LIMIT };
-    return .{ .target = .{ .resource = stored }, .err = RESOURCE_ERR_NONE };
+        return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
+    const stored = storeRenderTexture(.{ .native = target }) orelse
+        return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_LIMIT };
+    return .{ .target = .{ .handle = stored, .height = @floatFromInt(args.height), .width = @floatFromInt(args.width) }, .err = RESOURCE_ERR_NONE };
 }
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
@@ -3283,12 +3449,12 @@ fn nativeTextureForToken(token: u64) ?raylib.Texture {
 fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) callconv(.c) u8 {
     enforcePhase("Draw.with_render_texture!", during_render);
     const host = activeHost();
-    const owner = args.resource;
+    const owner = args.handle;
     if (render_texture_lease_count == SCOPE_STACK_LIMIT) {
         releaseResourceBox(host, owner);
         return SCOPE_LIMIT;
     }
-    const resource = render_texture_heap.get(owner.handle) orelse {
+    const resource = render_texture_heap.get(owner.*) orelse {
         releaseResourceBox(host, owner);
         return SCOPE_UNAVAILABLE;
     };
@@ -3310,7 +3476,7 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     render_texture_leases[render_texture_lease_count] = null;
     if (!headlessMode() and render_texture_lease_count > 0) {
         const outer = render_texture_leases[render_texture_lease_count - 1].?;
-        if (render_texture_heap.get(outer.handle)) |resource| raylib.beginTextureMode(resource.native);
+        if (render_texture_heap.get(outer.*)) |resource| raylib.beginTextureMode(resource.native);
     }
     releaseResourceBox(activeHost(), owner);
 }
@@ -3442,7 +3608,7 @@ fn hostedDrawSetShaderTextureRaw(args: abi.DrawHostSet_shader_textureArgs) callc
     if (builtin.is_test) return;
     const resource = shader_heap.get(args.uniform.shader.*) orelse return;
     if (resource.* == .headless) return;
-    const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
     raylib.setShaderTexture(resource.native, args.uniform.location, texture);
 }
 
@@ -3884,15 +4050,15 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     enforcePhase("Draw.texture!", during_render);
     defer args.texture.decref(activeHost());
     if (headlessMode()) return;
-    const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
     raylib.drawTexture(texture, args);
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
     enforcePhase("Draw.projective_texture!", during_render);
     defer args.texture.decref(activeHost());
-    if (active_headless) return;
-    const texture = nativeTextureForToken(args.texture.resource.handle) orelse return;
+    if (headlessMode()) return;
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
     raylib.drawTextureQuad(texture, args);
 }
 
@@ -4029,7 +4195,7 @@ fn releaseTilemapDrawArgs(host: *RocHost, args: abi.TilemapHostDrawArgs) void {
 }
 
 fn tilemapTextureToken(tileset: abi.TilemapHostDrawArg0Tilesets) u64 {
-    return tileset.texture.resource.handle;
+    return tileset.texture.handle.*;
 }
 
 fn submitTilemapQuad(_: void, quad: TilemapQuadProbe) bool {
@@ -7785,7 +7951,7 @@ test "uploading pixels is refused from render, and taken while committing" {
     {
         const scope = PhaseScope.enter(.render);
         defer scope.leave();
-        enforcePhase("Assets.Texture.update", during_commit);
+        enforcePhase("Assets.update_texture!", during_commit);
         const violation = last_phase_violation orelse return error.UploadWasNotRejected;
         try std.testing.expectEqual(Phase.render, violation.actual);
     }
@@ -7796,7 +7962,7 @@ test "uploading pixels is refused from render, and taken while committing" {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
-        enforcePhase("Assets.Texture.update", during_commit);
+        enforcePhase("Assets.update_texture!", during_commit);
         try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
 }

@@ -12,9 +12,10 @@ import Color
 import DrawHost
 import Math
 import rrt.Font as RrtFont
+import rrt.Texture
 
 TextureDrawConfig : {
-	texture : Assets.TextureView,
+	texture : Texture,
 	source : Math.Rect,
 	dest : Math.Rect,
 	origin : Math.Vec2,
@@ -65,10 +66,10 @@ TextureDrawBuilder(field) := {
 	empty : TextureDrawBuilder({})
 	empty = { value: {}, apply: |options| options }
 
-	run : TextureDrawBuilder(a), Assets.TextureView -> TextureDrawConfig
+	run : TextureDrawBuilder(a), Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else texture.rect()
+		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
 
 		dest = if options.dest_set {
 			options.dest
@@ -488,7 +489,7 @@ Draw := [].{
 
 	## Texture and source region projected exactly onto a validated planar quad.
 	ProjectiveTexture : {
-		texture : Assets.Texture,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
 		tint : Color.Rgba,
@@ -496,7 +497,7 @@ Draw := [].{
 
 	## Sampled texture view projected exactly onto a validated planar quad.
 	ProjectiveTextureView : {
-		texture : Assets.TextureView,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
 		tint : Color.Rgba,
@@ -518,14 +519,14 @@ Draw := [].{
 		}
 
 		## Read-only view of this render target's color attachment.
-		texture : RenderTexture -> Assets.TextureView
+		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(target)| DrawHost.RenderTexture.texture(target)
 
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
 		source = |target| {
 			view = target.texture()
-			{ x: 0, y: 0, width: view.width(), height: 0 - view.height() }
+			{ x: 0, y: 0, width: view.width, height: 0 - view.height }
 		}
 	}
 
@@ -649,15 +650,15 @@ Draw := [].{
 	TextureUniform :: DrawHost.Uniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
-		set! : TextureUniform, Assets.TextureView => {}
+		set! : TextureUniform, Texture => {}
 		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
 			uniform,
 			texture,
 		})
 
 		## Convenience setter for an ordinary mutable texture.
-		set_texture! : TextureUniform, Assets.Texture => {}
-		set_texture! = |uniform, texture| uniform.set!(texture.view())
+		set_texture! : TextureUniform, Texture => {}
+		set_texture! = |uniform, texture| uniform.set!(texture)
 	}
 
 	## Three-component shader uniform value.
@@ -947,19 +948,19 @@ Draw := [].{
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
-	texture_draw : Assets.Texture -> TextureDraw
-	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture.view())
+	texture_draw : Texture -> TextureDraw
+	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a draw configuration covering the whole texture at `pos`.
-	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
-	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture.view())
+	texture_at : Texture, Math.Vec2 -> TextureDraw
+	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Create a draw configuration covering a read-only sampled view.
-	texture_view_draw : Assets.TextureView -> TextureDraw
+	texture_view_draw : Texture -> TextureDraw
 	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a sampled-view draw configuration at `pos`.
-	texture_view_at : Assets.TextureView, Math.Vec2 -> TextureDraw
+	texture_view_at : Texture, Math.Vec2 -> TextureDraw
 	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and tint.
@@ -983,7 +984,7 @@ Draw := [].{
 	## interpolation. This remains one hosted call and preserves active shaders.
 	projective_texture! : Frame, ProjectiveTexture => {}
 	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
-		texture: cfg.texture.view(),
+		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.quad.top_left,
 		bottom_left: cfg.quad.bottom_left,
@@ -1019,7 +1020,7 @@ Draw := [].{
 
 	## View the color attachment as a sampled texture without allocating or copying.
 	## The returned reference keeps the owning framebuffer alive.
-	render_texture : RenderTexture -> Assets.TextureView
+	render_texture : RenderTexture -> Texture
 	render_texture = |target| target.texture()
 
 	## Render textures use OpenGL framebuffer coordinates, so their color

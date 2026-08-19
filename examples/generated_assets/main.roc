@@ -1,4 +1,8 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
+app [Model, program] {
+	rr: platform "../../platform/main.roc",
+	rrt: "../../types/main.roc",
+	roc: "nightly-2026-08-19-edec830",
+}
 
 import rr.App
 import rr.Assets
@@ -10,13 +14,14 @@ import rr.Math
 import rr.Mouse
 import rr.Program
 import rr.Text
+import rrt.Texture
 
 PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
 
 Model : {
-	texture : Assets.Texture,
+	texture : Texture,
 	pixels : List(Color.Rgba),
 	paint_sound : Audio.Sound,
 	palette : U64,
@@ -82,10 +87,10 @@ init! = App.init(
 	App.static_config(App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))),
 	|_startup| {
 		font = Draw.default_font!()
-		texture = Assets.Texture.generate_color!({ width: 16, height: 16, color: Color.white })?
-		texture.update!(initial_pixels)?
-		texture.set_filter!(Point)
-		texture.set_wrap!(Clamp)
+		texture = Assets.generate_color_texture!({ width: 16, height: 16, color: Color.white })?
+		Assets.update_texture!(texture, initial_pixels)?
+		Assets.set_texture_filter!(texture, Point)
+		Assets.set_texture_wrap!(texture, Clamp)
 		paint_sound = Audio.gen_tone!({ freq: 520, ms: 35 })?
 		paint_sound.set_volume!(paint_volume)
 		Ok({
@@ -143,7 +148,7 @@ update_editor = |model, input| {
 		{
 			model: { ..base, pixels: initial_pixels, last_cell: Idle },
 			actions: [
-				base.texture.update(initial_pixels),
+				Assets.update_texture(base.texture, initial_pixels),
 				paint(base.paint_sound, 0.7),
 			],
 		}
@@ -163,13 +168,16 @@ update_editor = |model, input| {
 									# One cell changed, so one cell is uploaded.
 									# Re-uploading the whole canvas would send
 									# 256 pixels to say something about one.
-									base.texture.update_region({
-										x: U64.to_i32_wrap(index % grid_side),
-										y: U64.to_i32_wrap(index // grid_side),
-										width: 1,
-										height: 1,
-										pixels: [palette_color(palette)],
-									}),
+									Assets.update_texture_region(
+										base.texture,
+										{
+											x: U64.to_i32_wrap(index % grid_side),
+											y: U64.to_i32_wrap(index // grid_side),
+											width: 1,
+											height: 1,
+											pixels: [palette_color(palette)],
+										},
+									),
 									paint(base.paint_sound, 0.8 + U64.to_f32(palette) * 0.18),
 								],
 							}
@@ -199,7 +207,8 @@ draw_swatch! = |frame, index, selected| {
 
 ## A mismatched pixel count is no longer this function's problem: the check
 ## happens where the upload does, when the platform applies the `UpdateTexture`
-## action, and a failure ends the cycle exactly as `texture.update!(pixels)?`
+## action, and a failure ends the cycle exactly as
+## `Assets.update_texture!(texture, pixels)?`
 ## used to. So the error type is the same one every other example has.
 Msg : []
 
@@ -230,8 +239,8 @@ render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x0e1625))
 	ui.title.draw!(frame, { pos: { x: canvas_x, y: 24 }, color: Color.white, align: Text.align_top_left })
 	frame.texture!({
-		texture: model.texture.view(),
-		source: model.texture.rect(),
+		texture: model.texture,
+		source: { x: 0, y: 0, width: model.texture.width, height: model.texture.height },
 		dest: canvas_bounds,
 		origin: Math.zero,
 		rotation: 0,

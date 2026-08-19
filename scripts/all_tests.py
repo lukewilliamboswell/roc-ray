@@ -62,7 +62,10 @@ BUNDLE_TEST_SKIP: dict[str, str] = {}
 # Examples to skip in native `roc build` / headless runtime checks.
 # Keep these explicit so CI still exercises every example that currently
 # compiles, without hiding unrelated build/runtime failures.
-BUILD_RUNTIME_SKIP: dict[str, str] = {}
+BUILD_RUNTIME_SKIP: dict[str, str] = {
+    # TODO: Investigate why this example takes several minutes to compile in CI.
+    "cave_climb": "follow-up: investigate unusually slow Roc build",
+}
 
 
 

@@ -15,7 +15,7 @@ assets = Assets.Store.open!(
 )?
 
 font = Draw.load_store_font!(assets, { path: "fonts/Inter-Regular.ttf", size: 32 })?
-floor = assets.texture!("textures/floor.png")?
+floor = Assets.load_texture!(assets, "textures/floor.png")?
 shader = Draw.Shader.from_store!(assets, { vertex_path: "", fragment_path: "shaders/floor.fs" })?
 ```
 
@@ -98,7 +98,7 @@ can be added without replacing this API.
 ## Embedded authored assets
 
 For a small, self-contained executable, compile-time file imports can use
-`Assets.Texture.from_bytes!`, `Draw.font_from_bytes!`, and
+`Assets.texture_from_bytes!`, `Draw.font_from_bytes!`, and
 `Draw.Shader.from_source!`. The host borrows the `List(U8)`/`Str` during the
 synchronous decode or compilation and retains only the resulting typed GPU/font
 resource. Disk stores remain the right choice for large collections, mods,

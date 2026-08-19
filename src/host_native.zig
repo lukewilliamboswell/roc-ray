@@ -2283,6 +2283,111 @@ test "copied shared texture destroys its native resource exactly once after the 
     try std.testing.expectEqual(destroyed_before + 1, texture_destroy_count);
 }
 
+fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture {
+    const handle: *u64 = @ptrCast(@alignCast(abi.allocateBox(@sizeOf(u64), @alignOf(u64), false, host)));
+    handle.* = 0;
+    return .{ .handle = handle, .width = width, .height = height };
+}
+
+test "resource-free texture is safe across hosted operations and ordinary deallocation" {
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    const previous_upload_bytes = texture_upload_bytes_this_frame;
+    defer {
+        texture_upload_bytes_this_frame = previous_upload_bytes;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const destroyed_before = texture_destroy_count;
+    try std.testing.expect(nativeTextureForToken(0) == null);
+
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+
+        hostedDrawTextureRaw(.{
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .dest = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .source = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+
+        hostedDrawTextureQuadRaw(.{
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .bottom_left = .{ .x = 0, .y = 8 },
+            .bottom_right = .{ .x = 16, .y = 8 },
+            .q_bottom_left = 1,
+            .q_bottom_right = 1,
+            .q_top_left = 1,
+            .q_top_right = 1,
+            .source = .{ .height = 8, .width = 16, .x = 0, .y = 0 },
+            .top_left = .{ .x = 0, .y = 0 },
+            .top_right = .{ .x = 16, .y = 0 },
+            .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+    }
+
+    {
+        const scope = PhaseScope.enter(.commit);
+        defer scope.leave();
+
+        hostedAssetsSetTextureFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+        hostedAssetsSetTextureWrapRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
+
+        texture_upload_bytes_this_frame = 128;
+        const whole_err = hostedAssetsUpdateTextureRaw(&roc_host, .{
+            .pixels = abi.RocListWith(Color, false).empty(),
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+        });
+        try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, whole_err);
+        try std.testing.expectEqual(@as(usize, 128), texture_upload_bytes_this_frame);
+
+        const region_err = hostedAssetsUpdateTextureRegionRaw(&roc_host, .{
+            .pixels = abi.RocListWith(Color, false).empty(),
+            .texture = allocateTestTextureStub(&roc_host, 16, 8),
+            .height = 1,
+            .width = 1,
+            .x = 0,
+            .y = 0,
+        });
+        try std.testing.expectEqual(TEXTURE_UPDATE_NOT_MUTABLE, region_err);
+        try std.testing.expectEqual(@as(usize, 128), texture_upload_bytes_this_frame);
+    }
+
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+
+        headless_tilemap_draw_calls = 0;
+        headless_tilemap_tiles = 0;
+        headless_tilemap_last_quad = null;
+        const texture = allocateTestTextureStub(&roc_host, 16, 8);
+        hostedTilemapDrawRaw(&roc_host, headlessTilemapRequest(&roc_host, texture.handle, TILEMAP_SELECTOR_ALL, 0, true));
+        try std.testing.expectEqual(@as(usize, 1), headless_tilemap_draw_calls);
+        try std.testing.expectEqual(@as(usize, 0), headless_tilemap_tiles);
+        try std.testing.expect(headless_tilemap_last_quad == null);
+    }
+
+    allocateTestTextureStub(&roc_host, 0, 0).decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.retiredCount());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.retiredCount());
+    try std.testing.expectEqual(destroyed_before, texture_destroy_count);
+}
+
 fn headlessTilemapRequest(
     host: *RocHost,
     texture: *u64,
@@ -3952,7 +4057,7 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
     enforcePhase("Draw.projective_texture!", during_render);
     defer args.texture.decref(activeHost());
-    if (active_headless) return;
+    if (headlessMode()) return;
     const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
     raylib.drawTextureQuad(texture, args);
 }

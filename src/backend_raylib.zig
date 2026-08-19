@@ -318,6 +318,14 @@ pub fn defaultFont() Font {
     return rl.GetFontDefault();
 }
 
+/// Load a custom font directly from a filesystem path.
+pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
+    const font = rl.LoadFontEx(path, @max(size, 1), null, 0);
+    if (!rl.IsFontValid(font)) return null;
+    rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
+    return font;
+}
+
 /// Unload a custom font when its host resource slot is released.
 pub fn unloadFont(font: Font) void {
     rl.UnloadFont(font);

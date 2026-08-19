@@ -22,11 +22,11 @@ ROOT = Path(__file__).resolve().parent.parent
 CASES = (
     (
         ROOT / "test" / "compile_fail" / "app_config_to_host.roc",
-        ("missing method", "`to_host`"),
+        ("missing method", "to_host method"),
     ),
     (
         ROOT / "test" / "compile_fail" / "app_host_config.roc",
-        ("type not exposed", "`HostConfig`"),
+        ("type not exposed", "The type HostConfig"),
     ),
     (
         ROOT / "test" / "compile_fail" / "app_config_module.roc",
@@ -38,11 +38,11 @@ CASES = (
     ),
     (
         ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
-        ("cannot use opaque nominal type", "`Texture.Handle`"),
+        ("cannot use opaque nominal type", "instance of Texture.Handle"),
     ),
     (
         ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
-        ("does not exist", "`rr.Capture.stop!`"),
+        ("does not exist", "rr.Capture.stop! does not exist"),
     ),
 )
 

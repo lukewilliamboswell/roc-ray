@@ -11,14 +11,16 @@ import Camera
 import Color
 import DrawHost
 import Math
+import rrt.Font as RrtFont
+import rrt.Texture
 
 TextureDrawConfig : {
-	texture : Assets.TextureView,
+	texture : Texture,
 	source : Math.Rect,
 	dest : Math.Rect,
 	origin : Math.Vec2,
 	rotation : F32,
-	tint : Color,
+	tint : Color.Rgba,
 }
 
 TextureDrawOptions : {
@@ -32,7 +34,7 @@ TextureDrawOptions : {
 	origin_center : Bool,
 	rotation : F32,
 	scale : Math.Vec2,
-	tint : Color,
+	tint : Color.Rgba,
 }
 
 TextureDrawBuilder(field) := {
@@ -64,10 +66,10 @@ TextureDrawBuilder(field) := {
 	empty : TextureDrawBuilder({})
 	empty = { value: {}, apply: |options| options }
 
-	run : TextureDrawBuilder(a), Assets.TextureView -> TextureDrawConfig
+	run : TextureDrawBuilder(a), Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else texture.rect()
+		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
 
 		dest = if options.dest_set {
 			options.dest
@@ -139,7 +141,7 @@ TextureDrawBuilder(field) := {
 		apply: |options| { ..options, scale: value },
 	}
 
-	tint : Color -> TextureDrawBuilder(Color)
+	tint : Color.Rgba -> TextureDrawBuilder(Color.Rgba)
 	tint = |value| {
 		value,
 		apply: |options| { ..options, tint: value },
@@ -162,7 +164,7 @@ crosses_have_one_sign = |a, b, c, d| {
 Draw := [].{
 
 	## Convert a structural RGBA value at an adapter boundary into roc-ray's color.
-	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color
+	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color.Rgba
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
 
 	## Opaque, zero-sized authority supplied only while the host is running
@@ -183,10 +185,10 @@ Draw := [].{
 	Camera2D : Camera.Camera2D
 
 	## Optional shape fill.
-	Fill : [NoFill, Fill(Color)]
+	Fill : [NoFill, Fill(Color.Rgba)]
 
 	## Optional shape outline with color and thickness.
-	Stroke : [NoStroke, Stroke({ color : Color, thickness : F32 })]
+	Stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })]
 
 	## Combined fill and outline applied by shape helpers.
 	ShapeStyle : {
@@ -220,8 +222,8 @@ Draw := [].{
 		y : F32,
 		width : F32,
 		height : F32,
-		color_top : Color,
-		color_bottom : Color,
+		color_top : Color.Rgba,
+		color_bottom : Color.Rgba,
 	}
 
 	## Horizontal rectangle gradient from left to right.
@@ -230,8 +232,8 @@ Draw := [].{
 		y : F32,
 		width : F32,
 		height : F32,
-		color_left : Color,
-		color_right : Color,
+		color_left : Color.Rgba,
+		color_right : Color.Rgba,
 	}
 
 	## Circle and its style.
@@ -245,8 +247,8 @@ Draw := [].{
 	CircleGradient : {
 		center : Vector2,
 		radius : F32,
-		color_inner : Color,
-		color_outer : Color,
+		color_inner : Color.Rgba,
+		color_outer : Color.Rgba,
 	}
 
 	## Line segment and stroke.
@@ -280,12 +282,56 @@ Draw := [].{
 	Fps : {
 		pos : Vector2,
 		size : F32,
-		color : Color,
+		color : Color.Rgba,
 	}
 
-	## The built-in font is allocation-free. A loaded font is an opaque host-owned
-	## resource whose final reference unloads its texture automatically.
-	Font : DrawHost.Font
+	## Scalar metrics for one glyph, shared with platform-independent packages.
+	GlyphMetrics : RrtFont.GlyphMetrics
+
+	## Text measurement result.
+	TextSize : RrtFont.Size
+
+	## A native font handle paired with an immutable scalar metric snapshot.
+	## Loading constructs the snapshot once; every receiver below is pure.
+	Font :: {
+		raw : DrawHost.Font,
+		base_size_value : F32,
+		line_spacing_value : F32,
+		fallback_index : U64,
+		glyph_values : List(RrtFont.GlyphMetrics),
+	}.{
+		from_host! : DrawHost.Font => Font
+		from_host! = |raw| {
+			metrics = DrawHost.font_metrics!(raw)
+			Font.(
+				{
+					raw,
+					base_size_value: metrics.base_size,
+					line_spacing_value: metrics.line_spacing,
+					fallback_index: metrics.fallback_index,
+					glyph_values: metrics.glyphs,
+				},
+			)
+		}
+
+		for_host : Font -> DrawHost.Font
+		for_host = |Font.(font)| font.raw
+
+		base_size : Font -> F32
+		base_size = |Font.(font)| font.base_size_value
+
+		line_spacing : Font -> F32
+		line_spacing = |Font.(font)| font.line_spacing_value
+
+		glyphs : Font -> List(RrtFont.GlyphMetrics)
+		glyphs = |Font.(font)| font.glyph_values
+
+		get_glyph_index : Font, U32 -> U64
+		get_glyph_index = |Font.(font), codepoint| glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
+
+		measure : Font, RrtFont.Measure -> RrtFont.Size
+		measure = |font, cfg| RrtFont.measure(font, cfg)
+	}
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -299,19 +345,13 @@ Draw := [].{
 		vertical : VAlign,
 	}
 
-	## Measured text dimensions in logical pixels.
-	TextSize : {
-		width : F32,
-		height : F32,
-	}
-
 	## Fully configured text draw.
 	Text : {
 		pos : Vector2,
 		text : Str,
 		size : F32,
 		spacing : F32,
-		color : Color,
+		color : Color.Rgba,
 		font : Font,
 		align : TextAlign,
 	}
@@ -321,7 +361,7 @@ Draw := [].{
 		pos : Vector2,
 		text : Str,
 		size : F32,
-		color : Color,
+		color : Color.Rgba,
 	}
 
 	## Built-in-font text with default spacing.
@@ -329,15 +369,7 @@ Draw := [].{
 		pos : Vector2,
 		text : Str,
 		size : F32,
-		color : Color,
-	}
-
-	## Text measurement configuration.
-	MeasureText : {
-		text : Str,
-		size : F32,
-		spacing : F32,
-		font : Font,
+		color : Color.Rgba,
 	}
 
 	## Font path and base pixel size.
@@ -457,18 +489,18 @@ Draw := [].{
 
 	## Texture and source region projected exactly onto a validated planar quad.
 	ProjectiveTexture : {
-		texture : Assets.Texture,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
-		tint : Color,
+		tint : Color.Rgba,
 	}
 
 	## Sampled texture view projected exactly onto a validated planar quad.
 	ProjectiveTextureView : {
-		texture : Assets.TextureView,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
-		tint : Color,
+		tint : Color.Rgba,
 	}
 
 	## Camera accepted by scoped 2D drawing.
@@ -487,14 +519,14 @@ Draw := [].{
 		}
 
 		## Read-only view of this render target's color attachment.
-		texture : RenderTexture -> Assets.TextureView
+		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(target)| DrawHost.RenderTexture.texture(target)
 
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
 		source = |target| {
 			view = target.texture()
-			{ x: 0, y: 0, width: view.width(), height: 0 - view.height() }
+			{ x: 0, y: 0, width: view.width, height: 0 - view.height }
 		}
 	}
 
@@ -508,18 +540,30 @@ Draw := [].{
 	## stage. Keep this value alive for every cached Uniform derived from it.
 	Shader :: DrawHost.Shader.{
 
-		## Load shader stages from files.
-		load! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-		load! = |cfg| {
-			result = DrawHost.load_shader!(cfg)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
-		}
-
 		## Compile shader stages from source strings.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
 			result = DrawHost.load_shader_source!(cfg)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
+		}
+
+		## Compile shader stage files resolved through an explicit asset store.
+		from_store! : Assets.Store, LoadShader => Try(Shader, [AssetPathInvalid, AssetNotFound, AssetReadFailed, ShaderLoadFailed, ResourceLimit, ..])
+		from_store! = |store, cfg| {
+			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
+			if result.err == 1 {
+				Err(AssetPathInvalid)
+			} else if result.err == 2 {
+				Err(AssetNotFound)
+			} else if result.err == 3 {
+				Err(AssetReadFailed)
+			} else if result.err == 4 {
+				Err(ShaderLoadFailed)
+			} else if result.err != 0 {
+				Err(ResourceLimit)
+			} else {
+				Ok(Shader.(result.shader))
+			}
 		}
 
 		## Resolve a scalar floating-point uniform once.
@@ -551,17 +595,21 @@ Draw := [].{
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 	}
 
-	## File paths for shader stages. An empty path selects the default stage.
+	## Shader source strings. An empty string selects the default stage.
+	## Store-relative shader stage names. An empty path selects raylib's default
+	## stage; non-empty paths are resolved only through `Shader.from_store!`.
 	LoadShader : {
 		vertex_path : Str,
 		fragment_path : Str,
 	}
 
-	## Shader source strings. An empty string selects the default stage.
 	LoadShaderSource : {
 		vertex_source : Str,
 		fragment_source : Str,
 	}
+
+	FontFormat := [Ttf, Otf]
+	FontBytes : { format : FontFormat, bytes : List(U8), size : I32 }
 
 	## Typed uniform handles are zero-cost nominal wrappers over the cached host
 	## location plus its owning shader. Their distinct types prevent using the
@@ -592,7 +640,7 @@ Draw := [].{
 	}
 
 	ColorUniform :: DrawHost.Uniform.{
-		set! : ColorUniform, Color => {}
+		set! : ColorUniform, Color.Rgba => {}
 		set! = |ColorUniform.(uniform), color| DrawHost.set_shader_vec4!({
 			uniform,
 			value: normalized_color(color),
@@ -602,15 +650,15 @@ Draw := [].{
 	TextureUniform :: DrawHost.Uniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
-		set! : TextureUniform, Assets.TextureView => {}
+		set! : TextureUniform, Texture => {}
 		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
 			uniform,
 			texture,
 		})
 
 		## Convenience setter for an ordinary mutable texture.
-		set_texture! : TextureUniform, Assets.Texture => {}
-		set_texture! = |uniform, texture| uniform.set!(texture.view())
+		set_texture! : TextureUniform, Texture => {}
+		set_texture! = |uniform, texture| uniform.set!(texture)
 	}
 
 	## Three-component shader uniform value.
@@ -658,24 +706,24 @@ Draw := [].{
 	premultiplied_alpha_blend = AlphaPremultiply
 
 	## Create a fill-only shape style.
-	filled : Color -> ShapeStyle
+	filled : Color.Rgba -> ShapeStyle
 	filled = |color| { fill: Fill(color), stroke: NoStroke }
 
 	## Create a stroke with color and thickness in logical pixels.
-	stroke : Color, F32 -> Stroke
+	stroke : Color.Rgba, F32 -> Stroke
 	stroke = |color, thickness| Stroke({ color, thickness })
 
 	## Create a stroke-only shape style.
-	outlined : Color, F32 -> ShapeStyle
+	outlined : Color.Rgba, F32 -> ShapeStyle
 	outlined = |color, thickness| { fill: NoFill, stroke: Draw.stroke(color, thickness) }
 
 	## Create a shape style with both fill and outline.
-	filled_and_outlined : Color, Color, F32 -> ShapeStyle
+	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
-	## The built-in font, which requires no loading or host-owned resource.
-	default_font : Font
-	default_font = DefaultFont
+	## Snapshot raylib's built-in font during initialization.
+	default_font! : () => Font
+	default_font! = || Font.from_host!(DefaultFont)
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -770,7 +818,7 @@ Draw := [].{
 	}
 
 	## Clear the active drawing target to a solid color.
-	clear! : Frame, Color => {}
+	clear! : Frame, Color.Rgba => {}
 	clear! = |_frame, color| DrawHost.clear!(color)
 
 	## Draw a vertical rectangle gradient.
@@ -872,38 +920,47 @@ Draw := [].{
 		}
 	}
 
-	## Measure text without drawing it, using the selected font and spacing.
-	measure_text! : MeasureText => TextSize
-	measure_text! = |cfg| {
-		DrawHost.measure_text!({
-			text: cfg.text,
-			size: cfg.size,
-			spacing: cfg.spacing,
-			font: cfg.font,
-		})
+	## Load a font relative to an explicit asset store.
+	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+	load_store_font! = |store, cfg| {
+		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
+		if result.err == 1 {
+			Err(AssetPathInvalid)
+		} else if result.err == 2 {
+			Err(AssetNotFound)
+		} else if result.err == 3 {
+			Err(AssetReadFailed)
+		} else if result.err == 4 {
+			Err(FontLoadFailed)
+		} else if result.err != 0 {
+			Err(ResourceLimit)
+		} else {
+			Ok(Font.from_host!(LoadedFont(result.font)))
+		}
 	}
 
-	## Load a host-owned font from disk at the requested base size.
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	load_font! = |cfg| {
-		result = DrawHost.load_font!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
+	## Decode an authored, compile-time embedded font. Bytes are borrowed while
+	## raylib copies/decodes them; no extra Roc payload-sized buffer is created.
+	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
+	font_from_bytes! = |cfg| {
+		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(Font.from_host!(LoadedFont(result.font)))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
-	texture_draw : Assets.Texture -> TextureDraw
-	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture.view())
+	texture_draw : Texture -> TextureDraw
+	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a draw configuration covering the whole texture at `pos`.
-	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
-	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture.view())
+	texture_at : Texture, Math.Vec2 -> TextureDraw
+	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Create a draw configuration covering a read-only sampled view.
-	texture_view_draw : Assets.TextureView -> TextureDraw
+	texture_view_draw : Texture -> TextureDraw
 	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a sampled-view draw configuration at `pos`.
-	texture_view_at : Assets.TextureView, Math.Vec2 -> TextureDraw
+	texture_view_at : Texture, Math.Vec2 -> TextureDraw
 	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and tint.
@@ -927,7 +984,7 @@ Draw := [].{
 	## interpolation. This remains one hosted call and preserves active shaders.
 	projective_texture! : Frame, ProjectiveTexture => {}
 	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
-		texture: cfg.texture.view(),
+		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.quad.top_left,
 		bottom_left: cfg.quad.bottom_left,
@@ -963,18 +1020,13 @@ Draw := [].{
 
 	## View the color attachment as a sampled texture without allocating or copying.
 	## The returned reference keeps the owning framebuffer alive.
-	render_texture : RenderTexture -> Assets.TextureView
+	render_texture : RenderTexture -> Texture
 	render_texture = |target| target.texture()
 
 	## Render textures use OpenGL framebuffer coordinates, so their color
 	## attachment is vertically inverted when sampled on screen.
 	render_texture_source : RenderTexture -> Math.Rect
 	render_texture_source = |target| target.source()
-
-	## Load shader stages from files. Pass an empty string to use raylib's default
-	## vertex or fragment stage.
-	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader! = |cfg| Shader.load!(cfg)
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.
@@ -1079,7 +1131,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: cfg.font,
+			font: cfg.font.for_host(),
 			align_x: align.x,
 			align_y: align.y,
 		})
@@ -1087,43 +1139,65 @@ Draw := [].{
 
 	## Draw top-left aligned text with the built-in font and default spacing.
 	debug_text! : Frame, DebugText => {}
-	debug_text! = |frame, cfg|
-		frame.text!({
+	debug_text! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple top-left aligned text with the built-in font.
 	text_at! : Frame, SimpleText => {}
-	text_at! = |frame, cfg|
-		frame.text!({
+	text_at! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple text centered on its position.
 	text_centered! : Frame, SimpleText => {}
-	text_centered! = |frame, cfg|
-		frame.text!({
+	text_centered! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_center,
+			font: DefaultFont,
+			align_x: 0.5,
+			align_y: 0.5,
 		})
 
+}
+
+glyph_index : List(Draw.GlyphMetrics), U32, U64, U64, U64 -> U64
+glyph_index = |glyphs, codepoint, start, end, fallback| {
+	if start >= end {
+		fallback
+	} else {
+		middle = start + (end - start) / 2
+		match List.get(glyphs, middle) {
+			Err(_) => fallback
+			Ok(glyph) => if glyph.codepoint == codepoint {
+				middle
+			} else if codepoint < glyph.codepoint {
+				glyph_index(glyphs, codepoint, start, middle, fallback)
+			} else {
+				glyph_index(glyphs, codepoint, middle + 1, end, fallback)
+			}
+		}
+	}
 }
 
 blend_mode_code : Draw.BlendMode -> U8
@@ -1135,6 +1209,13 @@ blend_mode_code = |mode|
 		AddColors => 3
 		SubtractColors => 4
 		AlphaPremultiply => 5
+	}
+
+font_format_code : Draw.FontFormat -> U8
+font_format_code = |format|
+	match format {
+		Ttf => 0
+		Otf => 1
 	}
 
 scope_ok : U8
@@ -1153,7 +1234,7 @@ uniform_host! = |shader, name| {
 	}
 }
 
-normalized_color : Color -> Draw.Vec4
+normalized_color : Color.Rgba -> Draw.Vec4
 normalized_color = |color| {
 	x: U8.to_f32(color.r) / 255,
 	y: U8.to_f32(color.g) / 255,

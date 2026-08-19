@@ -123,14 +123,14 @@ Prefer operations on values an app already has:
 frame.circle!(config)
 host.key_pressed(KeySpace)
 camera.screen_to_world(point)
-texture.rect()
+Assets.update_texture!(texture, pixels)
 uniform.set!(value)
 ```
 
-Use attached constructors such as `Assets.Texture.load!`,
-`Draw.RenderTexture.load!`, and `Draw.Shader.load!` when creation naturally
-belongs to the result type. A module function is still appropriate for a pure
-helper or when there is no natural receiver.
+Use attached constructors such as `Draw.RenderTexture.load!` and
+`Draw.Shader.from_store!` when creation naturally belongs to the result type.
+Shared textures deliberately use standalone `Assets` functions because their
+authoritative type lives in `roc-ray/types`, which has no host authority.
 
 Keep transport details inside the platform. Flattened ABI records, scalar
 handles, and hosted helpers should not leak into normal application code.
@@ -165,10 +165,10 @@ Fonts, textures, prepared text, sounds, music, render textures, and shaders are
 typed host resources with lifetimes driven by Roc references. A final release
 unloads the native value and makes its bounded slot reusable.
 
-Keep capabilities narrow. For example, an `Assets.Texture` can be updated,
-while an `Assets.TextureView` can only be sampled; a render texture exposes the
-view. Keep typed shader-uniform handles so invalid setter combinations remain a
-compile-time error.
+Keep capabilities narrow. A package depending only on `roc-ray/types` can
+retain a `Texture` and read its dimensions, while mutation requires the
+platform's `Assets` module. Keep typed shader-uniform handles so invalid setter
+combinations remain a compile-time error.
 
 Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation

@@ -3,13 +3,13 @@
 ## Drawing still goes through Draw/Assets. This module provides a compact
 ## game-facing shape for sprites, spritesheet frame rectangles, and animation
 ## state.
-import Assets
 import Color
 import Draw
 import Math
+import rrt.Texture
 
 Sprite := {
-	texture : Assets.Texture,
+	texture : Texture,
 
 	## Return a copy using a new texture source rectangle.
 	source : Math.Rect,
@@ -71,7 +71,7 @@ Sprite := {
 	## Resolve the sprite to a `Draw.TextureDraw` configuration.
 	to_texture_draw : Sprite -> Draw.TextureDraw
 	to_texture_draw = |sprite| {
-		texture: sprite.texture.view(),
+		texture: sprite.texture,
 		source: sprite.source,
 		dest: {
 			x: sprite.pos.x,
@@ -97,10 +97,10 @@ Sprite := {
 	}
 
 	## Create a sprite covering the complete texture with identity transform.
-	from_texture : Assets.Texture -> Sprite
+	from_texture : Texture -> Sprite
 	from_texture = |texture| {
 		texture,
-		source: texture.rect(),
+		source: { x: 0, y: 0, width: texture.width, height: texture.height },
 		pos: Math.zero,
 		origin: Math.zero,
 		rotation: 0,

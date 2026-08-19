@@ -11,7 +11,7 @@ same name, so `exposes` and every existing app are unchanged.
 ## What moved, and what cannot
 
 Moved: `Keys`, `Mouse`, `Gamepad`, `Time`, `Math`, `Camera`, `Physics`, `Color`,
-plus the platform-independent `Font` and `Frame` contracts.
+plus the platform-independent `Font`, `Texture`, and `Frame` contracts.
 
 `Color` needed reshaping first. A module file must declare a nominal matching
 its filename and that declaration cannot be an alias, so a module whose object
@@ -21,8 +21,8 @@ available, because a nominal sharing its enclosing namespace's name crashes the
 compiler. Namespace-shaped modules (`Math := [].{ .. }`) never had the problem,
 since the types inside them are separate nominals.
 
-`Sprite` stays put: it embeds `Assets.Texture` and has `draw!`, so it cannot be
-pure whatever shape it takes.
+`Sprite` stays put because it has `draw!`; its backing texture is now the shared
+`rrt.Texture` value.
 
 ## Layout
 

@@ -361,8 +361,8 @@ run_action! = |action|
 
 		PlaySound(settings) => Ok(settings.play!())
 		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
-		UpdateTexture(request) => request.texture.update!(request.pixels)
-		UpdateTextureRegion(request) => request.texture.update_region!(request.region)
+		UpdateTexture(request) => Assets.update_texture!(request.texture, request.pixels)
+		UpdateTextureRegion(request) => Assets.update_texture_region!(request.texture, request.region)
 		SetVirtualMouse(pointer) => Ok(Capture.apply_virtual_mouse!(pointer))
 		StartRecording(recording) => Ok(Capture.apply_start!(recording))
 		StopRecording => Ok(Capture.apply_stop!())

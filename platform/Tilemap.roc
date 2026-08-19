@@ -1,9 +1,9 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
-import Assets
 import Camera
 import Draw
 import Math
 import TilemapHost
+import rrt.Texture
 
 TilemapRawProperty : TilemapHost.Property
 
@@ -21,7 +21,7 @@ TilemapRawMap : TilemapHost.Map
 
 TilemapTextureBinding : {
 	first_gid : U64,
-	texture : Assets.Texture,
+	texture : Texture,
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
@@ -70,7 +70,7 @@ TilemapResolvedTileset : {
 	tile_width : F32,
 	tile_height : F32,
 	columns : U64,
-	texture : Assets.Texture,
+	texture : Texture,
 }
 
 ## Configuration errors found while preparing a tilemap. These are reported
@@ -100,7 +100,7 @@ TilemapBuilder :: {
 	with_origin : TilemapBuilder, Math.Vec2 -> TilemapBuilder
 	with_origin = |builder, origin| { ..builder, origin }
 
-	with_tileset_texture : TilemapBuilder, U64, Assets.Texture -> TilemapBuilder
+	with_tileset_texture : TilemapBuilder, U64, Texture -> TilemapBuilder
 	with_tileset_texture = |builder, first_gid, texture| {
 		..builder,
 		textures: List.append(builder.textures, { first_gid, texture }),
@@ -989,7 +989,7 @@ transformed_corner = |dest, corner, flip| {
 	{ x: dest.x + x * dest.width, y: dest.y + y * dest.height }
 }
 
-find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, TilemapBindingError)
+find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Texture, TilemapBindingError)
 find_unique_texture = |textures, first_gid| {
 	var $found = Err(MissingTilesetBinding(first_gid))
 	var $count = 0

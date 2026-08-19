@@ -1,4 +1,8 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-14-549b94e" }
+app [Model, program] {
+	rr: platform "../../platform/main.roc",
+	rrt: "../../types/main.roc",
+	roc: "nightly-2026-08-14-549b94e",
+}
 
 import rr.App
 import rr.Assets
@@ -9,11 +13,12 @@ import rr.Math
 import rr.Mouse
 import rr.Program
 import rr.Text
+import rrt.Texture
 
 Corners : Draw.ProjectiveQuadCorners
 
 Model : {
-	texture : Assets.Texture,
+	texture : Texture,
 	quad : Draw.ProjectiveQuad,
 	corners : Corners,
 	guide : Text.Prepared,
@@ -34,7 +39,7 @@ init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, 
 init! = App.init(
 	App.static_config(App.default.with_title("Projective Texture").with_frame_pacing(Capped(120))),
 	|_startup| {
-		texture = Assets.Texture.generate_checked!({
+		texture = Assets.generate_checked_texture!({
 			width: 512,
 			height: 512,
 			checks_x: 10,
@@ -42,7 +47,7 @@ init! = App.init(
 			color_a: Color.from_hex_rgb(0xd9edf7),
 			color_b: Color.from_hex_rgb(0x27445b),
 		})?
-		texture.set_filter!(Bilinear)
+		Assets.set_texture_filter!(texture, Bilinear)
 		quad = Draw.ProjectiveQuad.from_corners(initial_corners)?
 		font = Draw.default_font!()
 		guide = Text.from("Drag the top-right handle | R resets", font).size(18).prepare!()?
@@ -95,7 +100,7 @@ render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101827))
 	frame.projective_texture!({
 		texture: model.texture,
-		source: model.texture.rect(),
+		source: { x: 0, y: 0, width: model.texture.width, height: model.texture.height },
 		quad: model.quad,
 		tint: Color.white,
 	})

@@ -37,8 +37,8 @@ CASES = (
         ("PACKAGE MODULE IS PRIVATE", "`rr.File`"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "texture_view_sampler.roc",
-        ("MISSING METHOD", "`set_filter!`", "Assets.TextureView"),
+        ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
+        ("CANNOT USE OPAQUE NOMINAL TYPE", "`Texture.Handle`"),
     ),
     (
         ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",

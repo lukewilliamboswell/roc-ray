@@ -36,6 +36,9 @@ app
 # `zig build lint` reads this one, so losing it breaks the build rather than
 # quietly dropping a note.
 !docs/action-coverage.md
+# The architecture document. Ignoring it would make the one file a newcomer is
+# pointed at silently uncommittable.
+!design.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a

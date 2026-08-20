@@ -620,9 +620,14 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
 
     Every `.roc` file under the app directory comes along, because an app is a
     directory here: `cave_climb` has a sibling `Cave.roc`, and
-    `test/package_interop` carries a whole `input_adapter` package. Only `.roc`
-    files are copied -- assets stay where they are, and the built executable is
-    run from the repository root so `examples/<name>/assets/...` still resolves.
+    `test/package_interop` carries a whole `input_adapter` package.
+
+    Assets are otherwise left where they are: they are opened at runtime through
+    an `Assets.Store`, and the built executable is run from the repository root
+    so `examples/<name>/assets/...` still resolves. The exception is a file
+    embedded at *compile* time -- `import "assets/fonts/X.ttf" as bytes` -- which
+    the compiler resolves relative to the source file, and so has to exist beside
+    the staged copy. Those are found by `embedded_paths` and copied too.
 
     The entrypoint's `platform "..."` is pointed at the served platform, and
     every `rrt:` entry anywhere in the tree at the served types package. Copies
@@ -636,8 +641,10 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
     for module in sorted(source_dir.rglob("*.roc")):
         target = dest / module.relative_to(source_dir)
         target.parent.mkdir(parents=True, exist_ok=True)
-        text, _ = rewrite_types_dep(module.read_text(encoding="utf-8"), packages.types_url)
+        source_text = module.read_text(encoding="utf-8")
+        text, _ = rewrite_types_dep(source_text, packages.types_url)
         target.write_text(text, encoding="utf-8")
+        stage_embedded(module, source_text, source_dir, dest)
 
     staged_entry = dest / entry.name
     quoted = quote_ref(packages.ref_for(dest))
@@ -648,6 +655,41 @@ def stage_app(entry: Path, packages: "ServedPackages", dest: Path) -> Path:
         raise LocalBundleError(f"no platform reference to rewrite in {entry}")
     staged_entry.write_text(rewritten, encoding="utf-8")
     return staged_entry
+
+
+EMBEDDED_IMPORT = re.compile(r'^\s*import\s+"([^"]+)"', re.MULTILINE)
+
+
+def embedded_paths(text: str) -> list[str]:
+    """The file paths a module embeds at compile time, in source order.
+
+    `import "assets/fonts/X.ttf" as bytes : List(U8)` reads the file while the
+    module is being compiled, so unlike an `Assets.Store` path it is resolved
+    relative to the source file rather than the working directory.
+    """
+    return EMBEDDED_IMPORT.findall(text)
+
+
+def stage_embedded(module: Path, text: str, source_dir: Path, dest: Path) -> None:
+    """Copy whatever `module` embeds at compile time next to its staged copy.
+
+    Paths are resolved relative to the importing module, and refused if they
+    reach outside the app directory: staging is a copy of one directory, and a
+    module that reaches past it would compile here and not from a bundle.
+    """
+    for relative in embedded_paths(text):
+        embedded = (module.parent / relative).resolve()
+        try:
+            within = embedded.relative_to(source_dir.resolve())
+        except ValueError:
+            raise LocalBundleError(
+                f"{module} embeds {relative}, which is outside {source_dir}"
+            ) from None
+        if not embedded.is_file():
+            raise LocalBundleError(f"{module} embeds {relative}, which does not exist")
+        target = dest / within
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(embedded, target)
 
 
 def stage_apps(

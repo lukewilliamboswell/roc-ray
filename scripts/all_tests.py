@@ -11,6 +11,7 @@ This script runs:
 - roc fmt --check - Verify formatting
 - roc test       - Run inline tests
 - roc build      - Build executables
+- model alloc    - Measure what a frame costs a large collection in the model
 - bundle test    - Bundle the platform, host it on localhost, build apps from the URL
 
 Usage:
@@ -173,6 +174,34 @@ def run_cli_args_integration(root: Path, verbose: bool) -> list[str]:
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run CLI argument probe"]
+
+
+def run_model_allocation_check(root: Path, verbose: bool) -> list[str]:
+    """Measure what one frame costs a large collection held in the app's model.
+
+    Writing one element of a million-element list in the model allocates a whole
+    new list, every frame: the model is not uniquely referenced while `update`
+    runs, so the write is copy-on-write rather than in place. That is measured
+    behaviour, and this keeps it measured -- the check fails if a frame starts
+    costing more than one copy, and equally if it starts costing less, which is
+    the day the notes recording this can be replaced with the invariant.
+    """
+    print("\nMeasuring model collection allocation per frame...", end=" ", flush=True)
+    result = subprocess.run(
+        [sys.executable, str(root / "scripts" / "test_model_allocation.py")],
+        capture_output=True,
+        text=True,
+        cwd=root,
+        shell=IS_WINDOWS,
+    )
+    ok = result.returncode == 0
+    print("ok" if ok else "FAILED")
+    # The numbers are the point of this step, so print them either way.
+    for line in (result.stdout or "").splitlines():
+        print(f"  {line}")
+    if not ok or verbose:
+        sys.stderr.write(result.stderr or "")
+    return [] if ok else ["model allocation check"]
 
 
 def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTTPServer, int]:
@@ -691,6 +720,7 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
             run_headless_examples(root, built_examples, args.headless_frames, args.verbose)
         )
         failed.extend(run_cli_args_integration(root, args.verbose))
+        failed.extend(run_model_allocation_check(root, args.verbose))
 
     # Bundle test: build the platform package, host it on localhost, and build
     # each example against the bundle URL (mirrors the platform-template check).

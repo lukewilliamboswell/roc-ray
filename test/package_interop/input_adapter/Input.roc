@@ -8,6 +8,7 @@
 import rrt.Keys
 import rrt.Mouse
 import rrt.Gamepad
+import rrt.Texture
 import rrt.Time
 
 Input := [].{
@@ -32,4 +33,23 @@ Input := [].{
 	## Frame age in seconds, from the platform's monotonic clock.
 	age_seconds : U64, U64 -> F32
 	age_seconds = |started, now| Time.delta_seconds(started, now)
+
+	## A texture the package retains and measures. Reading the dimensions needs
+	## the *type*, not the platform, which is exactly the line the companion
+	## package draws: vocabulary here, capability there. The package can hold
+	## this and describe it; only `rr.Assets` can upload to it.
+	Sized : { texture : Texture, aspect : F32 }
+
+	## Takes a texture the app got from `rr.Assets`. `Texture` here is this
+	## package's `rrt.Texture`; the app names the same value `Draw.Texture`,
+	## which is the platform's re-export. This signature accepts it only if
+	## those are one nominal rather than two look-alike records.
+	describe : Texture -> Sized
+	describe = |texture| { texture, aspect: texture.width / texture.height }
+
+	## Hands the texture back out, so identity has to survive both directions:
+	## the app puts the result straight back into a platform-typed slot and
+	## draws with it.
+	retained : Sized -> Texture
+	retained = |sized| sized.texture
 }

@@ -8022,6 +8022,12 @@ const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
 /// `CountingAllocator` used in the byte-delivery tests: the memory is genuinely
 /// allocated and freed, so what is counted is work that actually happened.
 ///
+/// Only allocations and frees are counted, which is all of them: Roc's
+/// `roc_realloc` always takes a fresh block, copies, and frees the old one, so
+/// growing a Roc collection is an alloc and a free here and never an in-place
+/// resize. `resize`/`remap` are forwarded so host-side Zig containers still
+/// work, and nothing Roc does reaches them.
+///
 /// Counters are plain integers, not atomics. Only the frame thread's allocator
 /// is metered -- the effect worker keeps the unwrapped allocator it was started
 /// with -- and this is a diagnostic, so a skewed count is the worst a stray
@@ -8032,8 +8038,6 @@ const AllocMeter = struct {
     alloc_calls: u64 = 0,
     free_bytes: u64 = 0,
     free_calls: u64 = 0,
-    resize_calls: u64 = 0,
-    remap_calls: u64 = 0,
     update_bytes: u64 = 0,
     update_calls: u64 = 0,
 
@@ -8059,16 +8063,12 @@ const AllocMeter = struct {
 
     fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *AllocMeter = @ptrCast(@alignCast(context));
-        const resized = self.inner.rawResize(memory, alignment, new_len, ret_addr);
-        if (resized) self.resize_calls += 1;
-        return resized;
+        return self.inner.rawResize(memory, alignment, new_len, ret_addr);
     }
 
     fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
         const self: *AllocMeter = @ptrCast(@alignCast(context));
-        const result = self.inner.rawRemap(memory, alignment, new_len, ret_addr);
-        if (result != null) self.remap_calls += 1;
-        return result;
+        return self.inner.rawRemap(memory, alignment, new_len, ret_addr);
     }
 
     fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
@@ -8087,8 +8087,6 @@ const AllocMeter = struct {
         self.alloc_calls = 0;
         self.free_bytes = 0;
         self.free_calls = 0;
-        self.resize_calls = 0;
-        self.remap_calls = 0;
         self.update_bytes = 0;
         self.update_calls = 0;
     }

@@ -99,6 +99,57 @@ Program := [].{
 			Update.(Update({ value: transform(update_fields.value), actions: update_fields.actions, tasks: update_fields.tasks }))
 		}
 
+		## Lift an update's messages into an enclosing application's message type.
+		##
+		## The value and the actions are carried through unchanged; every task is
+		## mapped with `Task.map`, so each task still asks the host for exactly
+		## the same work and only its callback is wrapped. This is the piece that
+		## lets a reusable component own tasks: the component's `update` returns
+		## `Update(ChildModel, ChildMsg)`, and the parent lifts the whole result
+		## in one call rather than unpacking the task list.
+		##
+		##     # The component, which knows nothing about its parent:
+		##     Counter.update : Counter.Model, Program.Step(Counter.Msg) -> Program.Update(Counter.Model, Counter.Msg)
+		##     Counter.update = |model, _step|
+		##         Program.static({ ..model, ticks: model.ticks + 1 })
+		##             .with_task(Program.delay(200, |_| Tick))
+		##
+		##     # The parent, whose `Msg` wraps the component's. `counter_step`
+		##     # is the parent's own helper, narrowing `step.messages` to the
+		##     # ones it wrapped.
+		##     Msg : [Counter(Counter.Msg), Quit]
+		##
+		##     update = |model, step|
+		##         Counter.update(model.counter, counter_step(step))
+		##             .map(|counter| { ..model, counter })
+		##             .map_msg(|inner| Counter(inner))
+		##
+		## A lifted update is an ordinary `Update`, so a parent that owns two
+		## components combines them with the record-builder form:
+		##
+		##     Model : { left : Counter.Model, right : Counter.Model }
+		##     Msg : [Left(Counter.Msg), Right(Counter.Msg)]
+		##
+		##     update = |model, step|
+		##         {
+		##             left: Counter.update(model.left, left_step(step)).map_msg(|inner| Left(inner)),
+		##             right: Counter.update(model.right, right_step(step)).map_msg(|inner| Right(inner)),
+		##         }.Program
+		##
+		## That builds the model from both components' values and appends their
+		## work, left to right, into one `Update(Model, Msg)`.
+		map_msg : Update(value, a), (a -> b) -> Update(value, b)
+		map_msg = |update, transform| {
+			update_fields = update.fields()
+			Update.(
+				Update({
+					value: update_fields.value,
+					actions: update_fields.actions,
+					tasks: List.map(update_fields.tasks, |task| task.map(transform)),
+				}),
+			)
+		}
+
 		## Combine two updates from left to right.
 		##
 		## This is what enables `{ field: update }.Program` record builders.
@@ -166,6 +217,14 @@ Program := [].{
 	map2 : Update(a, msg), Update(b, msg), (a, b -> c) -> Update(c, msg)
 	map2 = Update.map2
 
+	## Lift an update's messages into an enclosing application's message type.
+	##
+	## See `Update.map_msg` for the parent/child recipe. This alias exists for
+	## the same reason `map` and `map2` do: so the whole applicative vocabulary
+	## reads from one place.
+	map_msg : Update(value, a), (a -> b) -> Update(value, b)
+	map_msg = Update.map_msg
+
 	## Something the platform does on the app's behalf during this cycle.
 	##
 	## Actions run in list order before rendering and produce no completion.
@@ -230,7 +289,73 @@ Program := [].{
 		Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }),
 		Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }),
 		ReadClipboard({ callback : Try(Str, [Unavailable, TooLarge, Busy]) -> msg }),
+	].{
+
+		## Lift a task's message into an enclosing application's message type.
+		##
+		## The request is untouched; only the callback is composed, so the task
+		## the host receives asks for exactly the same work and `task_shape` is
+		## unchanged. This is what lets a reusable component own tasks: the
+		## component builds `Task(ChildMsg)` values and the parent wraps them
+		## without knowing which variant it holds.
+		##
+		##     Program.delay(200, |_| Tick).map(|child_msg| Child(child_msg))
+		##
+		## `Update.map_msg` maps every task in an update at once and is usually
+		## the one to reach for.
+		map : Task(a), (a -> b) -> Task(b)
+		map = |Task.(task), transform|
+			match task {
+				ReadSmallFile({ path, callback }) => Task.(ReadSmallFile({ path, callback: |result| transform(callback(result)) }))
+				ReadFile({ path, callback }) => Task.(ReadFile({ path, callback: |result| transform(callback(result)) }))
+				Delay({ millis, callback }) => Task.(Delay({ millis, callback: |result| transform(callback(result)) }))
+				Screenshot({ path, callback }) => Task.(Screenshot({ path, callback: |result| transform(callback(result)) }))
+				ReadClipboard({ callback }) => Task.(ReadClipboard({ callback: |result| transform(callback(result)) }))
+			}
+	}
+
+	## What a `Task` asks for, with its callback left out.
+	##
+	## A `Task` holds a function, so `==` cannot compare two of them and no test
+	## can assert on one directly. `TaskShape` is the same request as ordinary
+	## data -- no functions, no host resources -- so it derives `==` and prints
+	## in a failing `expect`.
+	TaskShape : [
+		ReadSmallFile({ path : Str }),
+		ReadFile({ path : Str }),
+		Delay({ millis : U64 }),
+		Screenshot({ path : Str }),
+		ReadClipboard,
 	]
+
+	## Describe what a task asks the host for, without its callback.
+	##
+	## This is the supported way to assert on the tasks an `update` returned:
+	##
+	##     result = update(model, step)
+	##     expect List.map(result.fields().tasks, Program.task_shape) == [
+	##         Delay({ millis: 200 }),
+	##         ReadSmallFile({ path: "save.json" }),
+	##     ]
+	##
+	## Comparing `Task` values themselves is not possible -- each one owns a
+	## callback function, and equality cannot inspect a function. (Deriving `==`
+	## over a union that reaches a host-resource `Box` is worse than impossible:
+	## with the pinned compiler it crashes `roc test`.) Reducing the task to its
+	## request first sidesteps both.
+	##
+	## `Task.map` and `Update.map_msg` rewrite only the callback, so a mapped
+	## task keeps the shape it had. That is the property to lean on when testing
+	## a component through its parent.
+	task_shape : Task(msg) -> TaskShape
+	task_shape = |Task.(task)|
+		match task {
+			ReadSmallFile({ path, callback: _ }) => ReadSmallFile({ path: path })
+			ReadFile({ path, callback: _ }) => ReadFile({ path: path })
+			Delay({ millis, callback: _ }) => Delay({ millis: millis })
+			Screenshot({ path, callback: _ }) => Screenshot({ path: path })
+			ReadClipboard({ callback: _ }) => ReadClipboard
+		}
 
 	## Why a `ReadFile` produced no byte list.
 	##
@@ -685,10 +810,13 @@ capture_failure = |code|
 		_ => Unknown
 	}
 
-## A flattened task shape used by constructor tests. The host-only callback is
-## deliberately left out because equality cannot inspect an erased callable.
-task_shape : Program.Task(msg) -> { kind : U8, path : Str, millis : U64 }
-task_shape = |task| {
+## The transport view of a task, used by the constructor tests to pin the wire
+## `kind` codes the host reads. The host-only callback is deliberately left out
+## because equality cannot inspect an erased callable.
+##
+## `Program.task_shape` is the supported, kind-code-free counterpart for apps.
+task_transport_shape : Program.Task(msg) -> { kind : U8, path : Str, millis : U64 }
+task_transport_shape = |task| {
 	raw = Program.normalize(task)
 	{
 		kind: raw.kind,
@@ -721,11 +849,11 @@ expect Assets.upload_bytes(sixteen_pixels) == 64
 ## Task constructors expose no IDs or completion unions. `normalize` moves each
 ## request and its erased callback envelope into the flat ABI record; the host
 ## gives the envelope its private ticket when it takes ownership.
-expect task_shape(Program.read_small_file("data.txt", string_result_message)) == { kind: 0, path: "data.txt", millis: 0 }
-expect task_shape(Program.read_file("data.bin", |_| "file")) == { kind: 4, path: "data.bin", millis: 0 }
-expect task_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250 }
-expect task_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0 }
-expect task_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0 }
+expect task_transport_shape(Program.read_small_file("data.txt", string_result_message)) == { kind: 0, path: "data.txt", millis: 0 }
+expect task_transport_shape(Program.read_file("data.bin", |_| "file")) == { kind: 4, path: "data.bin", millis: 0 }
+expect task_transport_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250 }
+expect task_transport_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0 }
+expect task_transport_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0 }
 
 small_task = Program.normalize(Program.read_small_file("data.txt", string_result_message))
 
@@ -745,6 +873,116 @@ expect Program.complete({ raw: { kind: 0, ticket: 20, err: 1, contents: "", byte
 expect Program.complete({ raw: { kind: 1, ticket: 21, err: 0, contents: "", bytes: [] }, deliver: delay_task.deliver }) == "elapsed"
 expect Program.complete({ raw: { kind: 1, ticket: 21, err: 1, contents: "", bytes: [] }, deliver: delay_task.deliver }) == "busy"
 expect Program.complete({ raw: { kind: 3, ticket: 22, err: 0, contents: "pasted", bytes: [] }, deliver: clipboard_task.deliver }) == "pasted"
+
+## A component's own message type, which knows nothing about the application
+## that embeds it.
+ChildMessage : [Loaded(Str), LoadFailed, Elapsed, Overloaded]
+
+## The embedding application's message type, which wraps the component's.
+ParentMessage : [Child(ChildMessage)]
+
+child_small_file_message : Try(Str, Program.SmallFileError) -> ChildMessage
+child_small_file_message = |result|
+	match result {
+		Ok(contents) => Loaded(contents)
+		Err(_) => LoadFailed
+	}
+
+child_delay_message : Try({}, [Busy]) -> ChildMessage
+child_delay_message = |result|
+	match result {
+		Ok({}) => Elapsed
+		Err(Busy) => Overloaded
+	}
+
+mapped_small_task = Program.normalize(
+	Program.read_small_file("child.txt", child_small_file_message).map(|child| Child(child)),
+)
+
+mapped_delay_task = Program.normalize(
+	Program.delay(5, child_delay_message).map(|child| Child(child)),
+)
+
+## Mapping a task composes its callback, so the host's raw completion still
+## reaches the component's decoder and the message that comes back out is the
+## parent's. Nothing about the request travelled differently: these deliver
+## through the same `normalize`/`complete` round trip an unmapped task takes.
+expect Program.complete({ raw: { kind: 0, ticket: 30, err: 0, contents: "hello", bytes: [] }, deliver: mapped_small_task.deliver }) == Child(Loaded("hello"))
+expect Program.complete({ raw: { kind: 0, ticket: 31, err: 1, contents: "", bytes: [] }, deliver: mapped_small_task.deliver }) == Child(LoadFailed)
+expect Program.complete({ raw: { kind: 1, ticket: 32, err: 0, contents: "", bytes: [] }, deliver: mapped_delay_task.deliver }) == Child(Elapsed)
+
+## The terminal `Err(Busy)` a saturated host answers with is a component
+## message like any other, so it survives the lift too.
+expect Program.complete({ raw: { kind: 1, ticket: 33, err: 1, contents: "", bytes: [] }, deliver: mapped_delay_task.deliver }) == Child(Overloaded)
+
+## What a component returns, before its parent knows anything about it.
+child_update : Program.Update(U64, ChildMessage)
+child_update =
+	Program.static(7)
+		.with_action(SetClipboardText("child"))
+		.with_task(Program.delay(9, child_delay_message))
+		.with_task(Program.read_small_file("child.txt", child_small_file_message))
+
+parent_update : Program.Update(U64, ParentMessage)
+parent_update = child_update.map_msg(|child| Child(child))
+
+## `map_msg` touches only the messages. The value, the actions, and the tasks'
+## requests and order are all the component's.
+expect parent_update.fields().value == 7
+expect List.len(parent_update.fields().actions) == 1
+expect List.map(parent_update.fields().tasks, Program.task_shape) == [Delay({ millis: 9 }), ReadSmallFile({ path: "child.txt" })]
+
+## Deliver every task a lifted update carries, from the list the platform
+## adapter would hand the host. `raw` is the completion the host answers with.
+lifted_deliveries : Program.Update(U64, ChildMessage), Program.CompletionFromHost -> List(ParentMessage)
+lifted_deliveries = |update, raw|
+	List.map(
+		update.map_msg(|child| Child(child)).fields().tasks,
+		|task| Program.complete({ raw: raw, deliver: Program.normalize(task).deliver }),
+	)
+
+## A lifted update's tasks still deliver, and deliver the parent's message
+## rather than the component's -- including the terminal `Err` case.
+expect
+	lifted_deliveries(
+		Program.static(7).with_task(Program.delay(9, child_delay_message)),
+		{ kind: 1, ticket: 34, err: 0, contents: "", bytes: [] },
+	)
+		== [Child(Elapsed)]
+
+expect
+	lifted_deliveries(
+		Program.static(7).with_task(Program.read_small_file("child.txt", child_small_file_message)),
+		{ kind: 0, ticket: 35, err: 0, contents: "saved", bytes: [] },
+	)
+		== [Child(Loaded("saved"))]
+
+expect
+	lifted_deliveries(
+		Program.static(7).with_task(Program.read_small_file("child.txt", child_small_file_message)),
+		{ kind: 0, ticket: 36, err: 3, contents: "", bytes: [] },
+	)
+		== [Child(LoadFailed)]
+
+## An update with no tasks has nothing to lift, and lifting it is still legal.
+expect lifted_deliveries(Program.static(7), { kind: 1, ticket: 37, err: 0, contents: "", bytes: [] }) == []
+
+## `TaskShape` is ordinary data, so `==` works on it where it cannot work on a
+## `Task`. This is the assertion an app's own tests are meant to make.
+expect Program.task_shape(Program.read_small_file("save.json", string_result_message)) == ReadSmallFile({ path: "save.json" })
+expect Program.task_shape(Program.read_file("level.bin", |_| "file")) == ReadFile({ path: "level.bin" })
+expect Program.task_shape(Program.delay(250, unit_result_message)) == Delay({ millis: 250 })
+expect Program.task_shape(Program.screenshot("scene.png", |_| "screenshot")) == Screenshot({ path: "scene.png" })
+expect Program.task_shape(Program.read_clipboard(|_| "clipboard")) == ReadClipboard
+
+## The equality discriminates, rather than agreeing with everything.
+expect Program.task_shape(Program.delay(250, unit_result_message)) != Delay({ millis: 251 })
+expect Program.task_shape(Program.read_small_file("a.txt", string_result_message)) != Program.task_shape(Program.read_small_file("b.txt", string_result_message))
+
+## Mapping rewrites the callback and nothing else, so the shape is an identity
+## a parent can assert on without knowing the component's message type.
+expect Program.task_shape(Program.delay(250, unit_result_message).map(|inner| Loaded(inner))) == Delay({ millis: 250 })
+expect Program.task_shape(Program.read_clipboard(|_| "clipboard").map(|inner| Loaded(inner))) == ReadClipboard
 
 ## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
 ## with a string can report this, which is why the two reads no longer share one

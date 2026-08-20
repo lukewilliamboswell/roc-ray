@@ -66,8 +66,8 @@ prose.
 ## The docs cost
 
 Receivers document on the page of the module that *declares* the nominal, so a
-moved module loses them from the platform's reference. `Camera` drops from 18
-entries to 6, `Gamepad` 23 to 15, `Mouse` 17 to 10 -- the aliases re-export the
+moved module loses them from the platform's reference. `Camera` drops from 19
+entries to 7, `Gamepad` 23 to 15, `Mouse` 17 to 10 -- the aliases re-export the
 behaviour but not the documentation.
 
 `roc docs types/main.roc` produces those pages in full, so the fix is to

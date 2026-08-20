@@ -39,7 +39,7 @@ roc build examples/snake/main.roc --output snake
 
 | Example | What it demonstrates |
 | --- | --- |
-| [Live Plot](live_plot/main.roc) | A megabyte of source files streamed in through a paced task queue, parsed incrementally in pure `update`, and drawn as 26,000 points in one batched call under a pan/zoom camera |
+| [Live Plot](live_plot/main.roc) | A whole source tree walked with `Program.list_dir`, read and parsed through a paced task queue, and drawn as a scrolling strip of a quarter of a million lines under a fixed point budget that evicts and re-reads on demand |
 | [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
 | [Cave Climb](cave_climb/main.roc) | Platforming physics, animation, tilemaps, camera tracking, audio, and mouse-driven tools split across modules |
 

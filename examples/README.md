@@ -39,12 +39,13 @@ roc build examples/snake/main.roc --output snake
 
 | Example | What it demonstrates |
 | --- | --- |
+| [Live Plot](live_plot/main.roc) | A megabyte of source files streamed in through a paced task queue, parsed incrementally in pure `update`, and drawn as 26,000 points in one batched call under a pan/zoom camera |
 | [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
 | [Cave Climb](cave_climb/main.roc) | Platforming physics, animation, tilemaps, camera tracking, audio, and mouse-driven tools split across modules |
 
-These are useful references once a project has outgrown one file. They show how
-features fit together, but they are intentionally not the shortest introduction
-to any individual API.
+These are useful references once a project has outgrown its first feature. They
+show how features fit together, but they are intentionally not the shortest
+introduction to any individual API.
 
 ## Focused recipes
 

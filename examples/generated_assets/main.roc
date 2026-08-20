@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -14,14 +13,13 @@ import rr.Math
 import rr.Mouse
 import rr.Program
 import rr.Text
-import rrt.Texture
 
 PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
 
 Model : {
-	texture : Texture,
+	texture : Assets.Texture,
 	pixels : List(Color.Rgba),
 	paint_sound : Audio.Sound,
 	palette : U64,

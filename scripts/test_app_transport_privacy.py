@@ -10,6 +10,7 @@ stops testing what it was written for.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -19,6 +20,12 @@ from roc_platform_abi import GlueError, read_pin, verify_compiler
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# These checks match raw substrings, and roc colours its diagnostics, so an
+# escape sequence landing inside an expected phrase makes every case fail.
+# Whether that happens is the caller's terminal's decision, not this test's, so
+# ask for plain text explicitly rather than inheriting it.
+ROC_ENV = {**os.environ, "NO_COLOR": "1"}
 CASES = (
     (
         ROOT / "test" / "compile_fail" / "app_config_to_host.roc",
@@ -63,6 +70,7 @@ def main() -> int:
             cwd=ROOT,
             capture_output=True,
             text=True,
+            env=ROC_ENV,
         )
         diagnostics = result.stdout + result.stderr
         if result.returncode == 0:

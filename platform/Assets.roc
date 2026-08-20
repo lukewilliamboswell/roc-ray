@@ -1,14 +1,24 @@
 ## Assets module - host-owned textures and other resources.
 ##
-## Textures use the shared `rrt.Texture` representation. Load or generate them
-## during initialization, keep them in the model, then draw or update them
-## through this module. Releasing the final handle reference unloads the native
-## texture automatically.
+## Textures use the shared `rrt.Texture` representation, re-exported here as
+## `Assets.Texture`. Load or generate them during initialization, keep them in
+## the model, then draw or update them through this module. Releasing the final
+## handle reference unloads the native texture automatically.
 import Color
 import AssetsHost
-import rrt.Texture
+import rrt.Texture as RrtTexture
 
 Assets := [].{
+
+	## A host-owned GPU texture: an opaque, reference-counted native handle plus
+	## the pixel width and height, kept on the value so layout and
+	## source-rectangle math stays pure.
+	##
+	## This is the shared texture type from the companion `roc-ray-types`
+	## package, re-exported so an app can name it without depending on that
+	## package as well. `Draw.Texture` is the same type under a second name, and
+	## a package written against `rrt.Texture` unifies with both.
+	Texture : RrtTexture.Texture
 
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset

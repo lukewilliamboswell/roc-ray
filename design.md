@@ -342,6 +342,17 @@ texture's dimensions should not have to pull in a host; mutating that texture
 still requires the platform's `Assets`. That is the whole reason the package
 exists: it is where capability ends and vocabulary begins.
 
+The package is for *packages*. An application never names it: every package
+type the platform's own API mentions is re-exported under a platform name --
+`Assets.Texture` (aliased as `Draw.Texture`), `Math.Vec2`, `Color.Rgba`,
+`Keys.KeyboardKey` -- so an app can hold any of them in its model with only the
+platform in its header. The re-export is a transparent alias
+(`Texture : RrtTexture.Texture` inside the module object), never a wrapper, so
+the platform name and the package name are one nominal: a value an app gets
+from `Assets.load_texture!` passes straight into a package signature written
+against `rrt.Texture`, and back. A wrapper would look the same in the docs and
+break exactly there.
+
 The two release independently. The platform pins a *published* build of the
 package in [`.types-version`](.types-version), never a relative path;
 `scripts/bundle.sh` rewrites the staged platform header to that URL and refuses

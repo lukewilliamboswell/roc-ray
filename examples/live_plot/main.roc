@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -13,7 +12,6 @@ import rr.Math
 import rr.Program
 import rr.TaskQueue
 import rr.Text
-import rrt.Texture
 
 ## Stream a large dataset into a plot that is drawn while it is still arriving.
 ##
@@ -65,7 +63,7 @@ Model : {
 	## The one texture behind every point. A batch draws a single texture, so
 	## fourteen differently coloured lanes come from fourteen tints of this,
 	## not from fourteen textures and fourteen batches.
-	dot : Texture,
+	dot : Draw.Texture,
 
 	## The read backlog. Only `max_in_flight` of these reach the host at once.
 	queue : TaskQueue.TaskQueue(Msg),
@@ -922,7 +920,7 @@ percent = |value|
 # Tests
 # ---------------------------------------------------------------------------
 #
-# `update` cannot be called from an `expect`: a `Model` holds a `Texture` and
+# `update` cannot be called from an `expect`: a `Model` holds a `Draw.Texture` and
 # two `Text.Prepared` values, and those are host resources that only `init!` can
 # produce. So every decision `update` makes lives in a function that does not
 # need one -- `scan_chunk`, `receive`'s queue arithmetic, `read_task`, `zoom_at`

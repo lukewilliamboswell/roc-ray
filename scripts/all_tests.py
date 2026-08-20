@@ -8,9 +8,10 @@ bundles the roc-ray-types package and the platform into a scratch directory,
 *copied* to a scratch directory with its header pointed at the served bundle.
 Three things follow: every app is checked and built in the shape it ships in
 rather than against the platform sources, every reference to roc-ray-types --
-the platform's, the four examples that name it themselves, both halves of
-test/package_interop -- resolves one freshly built artifact, and no tracked file
-is ever rewritten, so an interrupted run cannot leave the working tree dirty.
+the platform's and both halves of test/package_interop, which is all of them
+now that the platform re-exports the types an app needs to name -- resolves one
+freshly built artifact, and no tracked file is ever rewritten, so an
+interrupted run cannot leave the working tree dirty.
 
 This script runs:
 - zig build       - Build the native host libraries

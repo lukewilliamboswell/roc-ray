@@ -18,7 +18,6 @@ import Assets
 import Capture
 import Color
 import Draw
-import rrt.Texture
 
 Program := [].{
 
@@ -282,10 +281,10 @@ Program := [].{
 		## does not fit is skipped, and so is every upload after it in the same
 		## cycle; those textures keep the contents they already had. Nothing
 		## about that is fatal, and `check_uploads` predicts it exactly.
-		UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }),
-		UpdateTextureRegion({ texture : Texture, region : Assets.Region }),
-		SetTextureFilter({ texture : Texture, filter : Assets.TextureFilter }),
-		SetTextureWrap({ texture : Texture, wrap : Assets.TextureWrap }),
+		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
+		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
+		SetTextureFilter({ texture : Assets.Texture, filter : Assets.TextureFilter }),
+		SetTextureWrap({ texture : Assets.Texture, wrap : Assets.TextureWrap }),
 		SetVirtualMouse(Capture.Pointer),
 
 		## Arm a recording, or finalize the one that is running.
@@ -773,7 +772,7 @@ Program := [].{
 }
 
 ## Keep the descriptive half of a texture and drop the resource handle.
-texture_shape : Texture -> Program.TextureShape
+texture_shape : Assets.Texture -> Program.TextureShape
 texture_shape = |texture| { width: texture.width, height: texture.height }
 
 ## Walk a cycle's actions, accumulating upload bytes and stopping at the first
@@ -1241,8 +1240,8 @@ expect Program.capture_from_host({ status: 2, err: 2, frames: 0, dropped: 0, byt
 
 ## A resource-free texture with the dimensions the upload tests need. Its handle
 ## never resolves to a host resource, which is fine: nothing here uploads.
-four_by_four : Texture
-four_by_four = { ..Texture.stub, width: 4, height: 4 }
+four_by_four : Assets.Texture
+four_by_four = { ..Assets.Texture.stub, width: 4, height: 4 }
 
 ## One upload of exactly 64 bytes: sixteen pixels covering a four-by-four
 ## texture, which is what `check_uploads` wants a whole-texture upload to be.

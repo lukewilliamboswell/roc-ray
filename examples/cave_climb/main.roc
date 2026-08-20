@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -17,7 +16,6 @@ import rr.Mouse
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
-import rrt.Texture
 import Cave
 
 GameState : Cave.GameState
@@ -911,7 +909,7 @@ camera_for = |level, target| {
 	Camera.follow(clamped, { screen: { x: screen_w, y: screen_h }, zoom })
 }
 
-draw_world! : Draw.Frame, Level, Texture, Texture, Texture, Texture, World, Math.Rect => {}
+draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, Draw.Texture, Draw.Texture, World, Math.Rect => {}
 draw_world! = |frame, level, background, tiles, characters, enemies_texture, world, viewport| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x27394a), color_bottom: Color.from_hex_rgb(0x141820) })
 	frame.texture!({ texture: background, source: { x: 0, y: 0, width: background.width, height: background.height }, dest: level.bounds, origin: Math.zero, rotation: 0, tint: Color.with_alpha(Color.white, 130) })
@@ -956,7 +954,7 @@ player_walk_a_source = Math.rect(384, 512, 128, 128)
 player_walk_b_source : Math.Rect
 player_walk_b_source = Math.rect(384, 384, 128, 128)
 
-draw_tile_sprite! : Draw.Frame, Texture, Math.Rect, Math.Vec2, F32, F32 => {}
+draw_tile_sprite! : Draw.Frame, Draw.Texture, Math.Rect, Math.Vec2, F32, F32 => {}
 draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 	Sprite.from_texture(texture)
 		.source(
@@ -974,7 +972,7 @@ draw_tile_sprite! = |frame, texture, source, pos, scale, rotation|
 		)
 		.draw!(frame)
 
-draw_gems! : Draw.Frame, Texture, List(Gem), F32 => {}
+draw_gems! : Draw.Frame, Draw.Texture, List(Gem), F32 => {}
 draw_gems! = |frame, tiles, gems, phase| {
 	for gem in gems {
 		if !(gem.taken) {
@@ -986,7 +984,7 @@ draw_gems! = |frame, tiles, gems, phase| {
 	}
 }
 
-draw_hazard_marks! : Draw.Frame, Texture, List(Danger), F32 => {}
+draw_hazard_marks! : Draw.Frame, Draw.Texture, List(Danger), F32 => {}
 draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	for hazard in hazards {
 		pos = world_to_map(hazard.pos)
@@ -995,7 +993,7 @@ draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	}
 }
 
-draw_checkpoints! : Draw.Frame, Texture, Level, World => {}
+draw_checkpoints! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_checkpoints! = |frame, tiles, level, world| {
 	for checkpoint in level.checkpoints {
 		checkpoint_pos = world_to_map(checkpoint)
@@ -1019,7 +1017,7 @@ draw_checkpoints! = |frame, tiles, level, world| {
 	}
 }
 
-draw_goal! : Draw.Frame, Texture, Level, World => {}
+draw_goal! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_goal! = |frame, tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
 	pos = world_to_map(level.goal)
@@ -1052,7 +1050,7 @@ enemy_source = |enemy, phase| {
 	if flutter < 0.5 enemy_fly_a_source else enemy_fly_b_source
 }
 
-draw_enemies! : Draw.Frame, Texture, List(Enemy), F32 => {}
+draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32 => {}
 draw_enemies! = |frame, texture, enemies, phase| {
 	for enemy in enemies {
 		if enemy.alive {
@@ -1121,7 +1119,7 @@ player_source = |player| {
 	}
 }
 
-draw_player! : Draw.Frame, Texture, Player => {}
+draw_player! : Draw.Frame, Draw.Texture, Player => {}
 draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
 	pos = world_to_map(player.pos)

@@ -64,6 +64,11 @@ DrawHost := [].{
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
 	LoadStoreShader : { store : Assets.Store, vertex_path : Str, fragment_path : Str }
 	TextureDraw : { texture : Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+	TextureInstance : { source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+
+	## Borrowed instance batch. One hosted call draws every instance with the same
+	## texture, so a per-sprite crossing becomes a single crossing per batch.
+	TextureInstances : { texture : Texture, instances : List(TextureInstance) }
 	TextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
@@ -111,6 +116,7 @@ DrawHost := [].{
 	text! : Text => {}
 	text_aligned! : TextAligned => {}
 	draw_texture! : TextureDraw => {}
+	draw_texture_instances! : TextureInstances => {}
 	draw_texture_quad! : TextureQuad => {}
 	triangle! : Triangle => {}
 	triangle_lines! : TriangleLines => {}

@@ -9,6 +9,7 @@ import rr.Assets
 import rr.Camera
 import rr.Color
 import rr.Draw
+import rr.Input
 import rr.Math
 import rr.Program
 import rr.TaskQueue
@@ -69,6 +70,19 @@ Model : {
 
 	## The read backlog. Only `max_in_flight` of these reach the host at once.
 	queue : TaskQueue.TaskQueue(Msg),
+
+	## One lane index per task still waiting in `queue`, in the same order.
+	##
+	## A `Task` owns a callback and says nothing about itself, so the queue
+	## cannot report which files it just sent. It does not have to: `release` is
+	## FIFO, so the first `List.len(released.tasks)` entries here name exactly
+	## the tasks it released. That is the whole of how the HUD knows which four
+	## files are being read right now rather than only how many.
+	##
+	## The two lists are only in lockstep because they are written together --
+	## enqueued together on the first cycle, popped together on every release,
+	## and appended together when a refused read goes back on the queue.
+	queued : List(U64),
 
 	## Byte lists the host has delivered but the parser has not started on.
 	##
@@ -143,10 +157,12 @@ Lane : {
 	bytes : U64,
 }
 
-## A file's position in the pipeline. `Pending` covers both waiting in the
-## backlog and being read by the host: `TaskQueue` reports those as counts
-## rather than per task, and the counts are what the status line wants.
-Progress : [Pending, Buffered, Working, Ready, Failed(Str)]
+## A file's position in the pipeline.
+##
+## `Pending` is waiting in the backlog and `Reading` is with the host. The
+## queue reports those two as counts rather than per task, so telling them apart
+## is the app's own bookkeeping -- see `Model.queued`.
+Progress : [Pending, Reading, Buffered, Working, Ready, Failed(Str)]
 
 ## The longest line seen, as a bounded copy of its bytes rather than a view.
 Peak : {
@@ -664,6 +680,7 @@ init! = App.init(
 		Ok({
 			dot: dot,
 			queue: TaskQueue.new(max_in_flight),
+			queued: [],
 			arrivals: [],
 			parsing: Idle,
 			lanes: List.map(sources, |_source| { progress: Pending, lines: 0, bytes: 0 }),
@@ -688,10 +705,16 @@ update = |model, step| {
 	settled_model = List.fold(step.messages, model, receive)
 
 	# 2. Enqueue the whole dataset once. Nothing is submitted here; the queue
-	#    decides how much of it goes out, and when.
+	#    decides how much of it goes out, and when. The lane indices go on in
+	#    the same expression and the same order, which is what puts `queued`
+	#    in lockstep with the backlog.
 	primed =
 		if step.time.frame_count == 0 {
-			{ ..settled_model, queue: settled_model.queue.enqueue_all(List.map_with_index(sources, |_source, lane| read_task(lane))) }
+			{
+				..settled_model,
+				queue: settled_model.queue.enqueue_all(List.map_with_index(sources, |_source, lane| read_task(lane))),
+				queued: List.map_with_index(sources, |_source, lane| lane),
+			}
 		} else {
 			settled_model
 		}
@@ -707,7 +730,17 @@ update = |model, step| {
 	#    no room to send it, this answers with no tasks and the same queue.
 	released = viewed.queue.release()
 
-	Program.static({ ..viewed, queue: released.queue })
+	# 6. `release` is FIFO, so the first `List.len(released.tasks)` lane indices
+	#    name exactly the files that just went to the host -- which is how the
+	#    HUD says *which* four are being read rather than only how many.
+	sent = List.split_at(viewed.queued, List.len(released.tasks))
+
+	Program.static({
+		..viewed,
+		queue: released.queue,
+		queued: sent.others,
+		lanes: List.fold(sent.before, viewed.lanes, |lanes, lane| set_progress(lanes, lane, Reading)),
+	})
 		.with_actions(if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [])
 		.with_tasks(released.tasks)
 }
@@ -727,10 +760,14 @@ receive = |model, message|
 
 		# A refused task still ended, so its slot is free -- and the work goes
 		# back on the queue as a *new* task, because the callback that would
-		# have delivered its result is the one that just delivered this.
+		# have delivered its result is the one that just delivered this. The
+		# task goes to the back of the backlog, so its lane index does too, or
+		# the two lists would stop naming each other.
 		FileRead(lane, Err(Busy)) => {
 			..model,
 			queue: model.queue.completed().enqueue(read_task(lane)),
+			queued: List.append(model.queued, lane),
+			lanes: set_progress(model.lanes, lane, Pending),
 		}
 
 		FileRead(lane, Err(reason)) => {
@@ -905,6 +942,7 @@ describe_progress : Lane -> Str
 describe_progress = |lane|
 	match lane.progress {
 		Pending => "  waiting"
+		Reading => "  reading"
 		Buffered => "  read, to parse"
 		Working => "  parsing"
 		Ready => ""
@@ -954,11 +992,19 @@ percent = |value|
 # Tests
 # ---------------------------------------------------------------------------
 #
-# `update` cannot be called from an `expect`: a `Model` holds a `Texture` and
-# two `Text.Prepared` values, and those are host resources that only `init!` can
-# produce. So every decision `update` makes lives in a function that does not
-# need one -- `scan_chunk`, `receive`'s queue arithmetic, `read_task`, `zoom_at`
-# -- and those are what is tested here.
+# Two layers. Most of what `update` decides lives in a function that needs no
+# model -- `scan_chunk`, `read_task`, `zoom_at`, the lane bookkeeping -- and
+# those are tested directly, on inputs small enough to write down.
+#
+# The whole `update` is tested too, and that is the part worth explaining. A
+# `Model` here holds a `Texture` and two `Text.Prepared` values, which are host
+# resources whose constructors only the platform has. Each of those types
+# publishes a resource-free `stub` for exactly this: a pure value whose handle
+# never resolves to a host resource, so a model can be written down in an
+# `expect`. `Program.Step.for_tests` supplies the other half, the sampled cycle.
+# What comes back is asserted on with `Program.action_shape` and
+# `Program.task_shape` -- an `Update` holds callbacks and host resources, and
+# `==` cannot look inside either.
 
 ## A scan positioned at the start of a byte list.
 scan_of : List(U8) -> Scan
@@ -1241,3 +1287,143 @@ expect lane_baseline(List.len(sources) - 1) < world_bounds.y + world_bounds.heig
 ## The nominal x extent covers the largest file in the list with room to spare,
 ## so the fitted view does not have to move while data is still arriving.
 expect world_bounds.width > 11_500 * line_scale
+
+# --- The whole `update`, driven the way the platform drives it ---------------
+
+## A real `Model`, built entirely from resource-free stubs.
+##
+## `Texture.stub` and `Text.Prepared.stub` are pure values whose handles never
+## resolve to a host resource. Nothing here draws, so nothing here needs one --
+## and with them this app's actual `update` is reachable from an `expect`.
+stub_model : Model
+stub_model = {
+	dot: { ..Texture.stub, width: 8, height: 8 },
+	queue: TaskQueue.new(max_in_flight),
+	queued: [],
+	arrivals: [],
+	parsing: Idle,
+	lanes: List.map(sources, |_source| { progress: Pending, lines: 0, bytes: 0 }),
+	instances: [],
+	peak: { lane: 0, columns: 0, text: "" },
+	camera: Camera.default,
+	fitted: Bool.False,
+	screen: { x: 1100, y: 760 },
+	sweep: 0,
+	title: Text.Prepared.stub,
+	hint: Text.Prepared.stub,
+}
+
+## The very first cycle. `frame_count` is zero, which is what makes this the
+## one cycle that enqueues the dataset.
+first_step : Program.Step(Msg)
+first_step = Program.Step.for_tests({})
+
+## Any cycle after it, one sixtieth of a second later.
+later_step : Program.Step(Msg)
+later_step = first_step.with_time({ ..Program.first_frame, frame_count: 1, elapsed_seconds: 1 / 60 })
+
+## Run a cycle and keep the model it produced.
+stepped : Model, Program.Step(Msg) -> Model
+stepped = |model, step| update(model, step).fields().value
+
+## The model after the first cycle, which is where most of these start.
+primed_model : Model
+primed_model = stepped(stub_model, first_step)
+
+## Escape asks the platform to shut down. This is the app's only action, and
+## this is the assertion that it is really reached through `update` rather than
+## through the helper that builds it.
+expect List.map(update(stub_model, first_step.with_input(Input.none.with_key_pressed(KeyEscape))).fields().actions, Program.action_shape) == [Exit(0)]
+
+## Any other cycle asks for nothing. A key that is merely held is not a press,
+## which is the distinction the packed state bits exist for.
+expect List.is_empty(update(stub_model, first_step).fields().actions)
+expect List.is_empty(update(stub_model, first_step.with_input(Input.none.with_key_down(KeyEscape))).fields().actions)
+
+## The first cycle enqueues all fourteen files and releases the first four, in
+## the order `sources` lists them.
+expect List.map(update(stub_model, first_step).fields().tasks, Program.task_shape)
+	== [
+		ReadFile({ path: "src/backend_raylib.zig" }),
+		ReadFile({ path: "src/capture.zig" }),
+		ReadFile({ path: "src/capture_vp8.zig" }),
+		ReadFile({ path: "src/gif_encoder.zig" }),
+	]
+
+expect primed_model.queue.in_flight() == max_in_flight
+expect primed_model.queue.pending_len() == List.len(sources) - max_in_flight
+
+## Only the first cycle enqueues. The second one finds the budget full and
+## sends nothing -- this is the pacing, observed through `update` itself.
+expect List.is_empty(update(primed_model, later_step).fields().tasks)
+
+## The lockstep half of that: `queued` names the files that have *not* gone out,
+## and the four that have are marked as being read. This is the guarantee
+## `TaskQueue.release` states, used for something.
+expect primed_model.queued == [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+expect List.map(List.sublist(primed_model.lanes, { start: 0, len: 5 }), |lane| lane.progress)
+	== [Reading, Reading, Reading, Reading, Pending]
+
+## A delivered file frees its slot, and the next file goes out in its place --
+## by name, not merely by count.
+expect {
+	next = update(primed_model, later_step.with_message(FileRead(0, Ok([97, 98, 10, 99, 10]))))
+	List.map(next.fields().tasks, Program.task_shape) == [ReadFile({ path: "src/graphical_smoke.zig" })]
+		and next.fields().value.queue.in_flight() == max_in_flight
+			and next.fields().value.queued == [5, 6, 7, 8, 9, 10, 11, 12, 13]
+}
+
+## And the bytes it delivered are parsed in the same cycle: two newline-ended
+## lines become two points in the batch.
+expect {
+	delivered = stepped(primed_model, later_step.with_message(FileRead(0, Ok([97, 98, 10, 99, 10]))))
+	List.len(delivered.instances) == 2 and delivered.parsing == Idle
+}
+
+## Two files delivered on one cycle are both taken, but only one is parsed --
+## `advance` scans exactly one window per cycle whatever arrives.
+expect {
+	delivered = stepped(primed_model, later_step.with_messages([FileRead(0, Ok([97, 10])), FileRead(1, Ok([98, 10]))]))
+	delivered.queue.in_flight() == max_in_flight and List.len(delivered.instances) == 1
+}
+
+## A refused read frees its slot and goes back to the *end* of the backlog, and
+## its lane index goes with it -- otherwise `queued` would name the wrong file
+## from that point on. The lane is waiting again, not being read.
+expect {
+	busy = stepped(primed_model, later_step.with_message(FileRead(0, Err(Busy))))
+	busy.queued == [5, 6, 7, 8, 9, 10, 11, 12, 13, 0]
+		and List.get(busy.lanes, 0) == Ok({ progress: Pending, lines: 0, bytes: 0 })
+			and busy.queue.in_flight() == max_in_flight
+}
+
+## A read that failed for any other reason is not retried, and the lane says so.
+expect {
+	failed = stepped(primed_model, later_step.with_message(FileRead(2, Err(NotFound))))
+	List.get(failed.lanes, 2) == Ok({ progress: Failed("not found"), lines: 0, bytes: 0 })
+		and List.len(failed.queued) == List.len(sources) - max_in_flight - 1
+}
+
+## The window size is sampled in `update`, because `render!` is handed the model
+## and a frame but never the step.
+expect stepped(stub_model, first_step.with_window({ size: { width: 640, height: 480 }, focused: Bool.True, minimized: Bool.False })).screen == { x: 640, y: 480 }
+
+## The view is pure model state, so the wheel really does zoom through the real
+## `update` and not only through `zoom_at`.
+expect stepped(primed_model, later_step.with_input(zooming_input)).camera.zoom() > primed_model.camera.zoom()
+
+## And `R` refits, whatever the view was dragged to first.
+expect {
+	zoomed = stepped(primed_model, later_step.with_input(zooming_input))
+	refit = stepped(zoomed, later_step.with_input(Input.none.with_key_pressed(KeyR)))
+	F32.abs(refit.camera.zoom() - fit_camera(refit.screen).zoom()) < 0.0001
+}
+
+## A wheel spin with the pointer inside the plot.
+zooming_input : Input.Snapshot
+zooming_input = Input.none.with_mouse_position({ x: 600, y: 400 }).with_mouse_wheel({ x: 0, y: 3 })
+
+## The sweep clock advances with the frame, and a long stall is clamped rather
+## than allowed to jump the highlight across the plot.
+expect stepped(stub_model, first_step.with_time({ ..Program.first_frame, elapsed_seconds: 0.02 })).sweep == 0.02
+expect stepped(stub_model, first_step.with_time({ ..Program.first_frame, elapsed_seconds: 30 })).sweep == 0.05

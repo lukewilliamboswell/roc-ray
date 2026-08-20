@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -13,12 +12,11 @@ import rr.Math
 import rr.Mouse
 import rr.Program
 import rr.Text
-import rrt.Texture
 
 Corners : Draw.ProjectiveQuadCorners
 
 Model : {
-	texture : Texture,
+	texture : Draw.Texture,
 	quad : Draw.ProjectiveQuad,
 	corners : Corners,
 	guide : Text.Prepared,

@@ -6,6 +6,7 @@ app [Model, program] {
 }
 
 import rr.App
+import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Input
@@ -27,18 +28,31 @@ Model : {
 	font : Draw.Font,
 	layout : { label : Draw.TextSize, label_pos : { x : F32, y : F32 } },
 	layout_passes : U64,
+
+	## A host-owned texture named through the *platform*, never through `rrt`.
+	## It reaches this field only by passing through `Events.describe` and
+	## `Events.retained`, both of which are typed `rrt.Texture`.
+	swatch : Draw.Texture,
+
+	## What the package measured on the way through.
+	swatch_aspect : F32,
 }
 
 program = { init!, update, render! }
 
 ## `init!` receives an `App.Startup`: authority, with nothing sampled yet. The
 ## first `Step` supplies the clock, so `started` is latched there.
-init! : App.Init(Model, [])
+##
+## The texture is generated here and immediately handed to the package. Only the
+## platform could have produced it and only the platform can upload to it, but
+## the package can hold and measure it -- the whole point of the split.
+init! : App.Init(Model, [TextureGenerationFailed, ResourceLimit])
 init! = App.init(
 	App.static_config(App.default),
 	|_startup| {
 		font = Draw.default_font!()
 		label = "idle"
+		sized = Events.describe(Assets.generate_color_texture!({ width: 8, height: 4, color: Color.blue })?)
 		Ok({
 			started: 0,
 			label,
@@ -48,6 +62,8 @@ init! = App.init(
 			font,
 			layout: solve_layout(font, label),
 			layout_passes: 1,
+			swatch: Events.retained(sized),
+			swatch_aspect: sized.aspect,
 		})
 	},
 )
@@ -105,6 +121,12 @@ update = |model, step| {
 	next_label = if label_clicked "label click" else label
 	layout = solve_layout(model.font, next_label)
 
+	# The texture makes the same round trip in pure code, once per cycle, so the
+	# identity is exercised where a host resource is only being moved rather than
+	# created -- a reference the package took and gave back has to still be the
+	# one the host owns.
+	sized = Events.describe(model.swatch)
+
 	Program.static({
 		started,
 		label: next_label,
@@ -114,6 +136,8 @@ update = |model, step| {
 		font: model.font,
 		layout,
 		layout_passes: model.layout_passes + 1,
+		swatch: Events.retained(sized),
+		swatch_aspect: sized.aspect,
 	})
 		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0)] else [])
 }
@@ -124,5 +148,11 @@ render! = |model, frame| {
 	frame.text!({ pos: model.layout.label_pos, text: model.label, size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_top_left })
 	frame.text_at!({ pos: { x: 10, y: 40 }, text: F32.to_str(model.age), size: 20, color: Color.black })
 	frame.text_at!({ pos: { x: 10, y: 70 }, text: if model.padded "pad" else "no pad", size: 20, color: Color.black })
+
+	# The last step of the round trip: a texture that has been through a
+	# package-typed function every cycle since `init!` goes back to the host,
+	# through a platform call that accepts nothing but the platform's own type.
+	frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
+	frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
 	Ok({})
 }

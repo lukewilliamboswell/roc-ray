@@ -36,7 +36,10 @@ A program is three functions, declared in the `requires` block of
   perform effects: loading, generating, allocating.
 - `update` takes the model and one `Program.Step` and returns the next model
   plus any work for the platform. **It is pure.**
-- `render!` takes the model and a `Draw.Frame`. **It may only draw.**
+- `render!` takes the model and a `Draw.Frame`. **It may only draw.** The frame
+  does answer for the surface it is drawing to -- `frame.size!()` -- because
+  where a coordinate lands is a property of that surface rather than of the
+  model. It observes nothing else.
 
 The purity of `update` is the decision everything else follows from, and it is
 not an aesthetic preference.
@@ -81,9 +84,17 @@ in [`platform/Program.roc`](platform/Program.roc).
 The rule is: **if application logic needs to see it, it is a `Step` field or a
 task completion.** The platform does expose some host-state reads, but they are
 scoped for drawing decisions -- a font metric, whether a sound is still
-playing -- and are not a back door for logic. A read has an answer, and an
-answer needs somewhere to go; the two places that exist are the next step and a
-task callback.
+playing, how big the surface being drawn to is -- and are not a back door for
+logic. A read has an answer, and an answer needs somewhere to go; the two
+places that exist are the next step and a task callback.
+
+`Draw.Frame.size!` is the shape of that exception. Where a drawing coordinate
+goes is a property of the surface it lands on, so `render!` can ask the frame
+how big that surface is: the window's logical drawing size normally, the render
+target's size inside `with_render_texture!`. Nothing is decided with it that
+`update` also has to decide -- which arrangement to use, or what the pointer is
+over, still comes off `step.window`, because those are application logic and
+belong where the rest of it is.
 
 ### 2. Immediate mutation is `Program.Action`
 
@@ -341,6 +352,17 @@ maths -- without depending on the platform. A package that only reads a
 texture's dimensions should not have to pull in a host; mutating that texture
 still requires the platform's `Assets`. That is the whole reason the package
 exists: it is where capability ends and vocabulary begins.
+
+The package is for *packages*. An application never names it: every package
+type the platform's own API mentions is re-exported under a platform name --
+`Assets.Texture` (aliased as `Draw.Texture`), `Math.Vec2`, `Color.Rgba`,
+`Keys.KeyboardKey` -- so an app can hold any of them in its model with only the
+platform in its header. The re-export is a transparent alias
+(`Texture : RrtTexture.Texture` inside the module object), never a wrapper, so
+the platform name and the package name are one nominal: a value an app gets
+from `Assets.load_texture!` passes straight into a package signature written
+against `rrt.Texture`, and back. A wrapper would look the same in the docs and
+break exactly there.
 
 The two release independently. The platform pins a *published* build of the
 package in [`.types-version`](.types-version), never a relative path;

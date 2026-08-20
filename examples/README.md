@@ -68,7 +68,10 @@ recommended starting point for a whole application.
 - Load and prepare long-lived resources once in `init!`, then retain them in the
   model instead of recreating them each frame.
 - Derive layout and view-only values with pure helpers rather than storing
-  duplicate state that can drift out of sync.
+  duplicate state that can drift out of sync. Ask `frame.size!()` for the
+  surface being drawn to instead of copying `step.window.size` into the model:
+  it is current, and inside `with_render_texture!` it is the target's size
+  rather than the window's.
 - Return actions for fire-and-forget work and tasks for work whose typed result
   matters to the application.
 - Keep game or tool rules separate from rendering where that makes them easy to

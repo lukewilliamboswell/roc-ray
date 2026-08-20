@@ -221,11 +221,12 @@ def rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
 def rewrite_types_dep(source: str, url: str) -> tuple[str, bool]:
     """Point every `rrt:` package entry in a header at `url`.
 
-    Apps carry one as well as the platform: `cave_climb`, `generated_assets`,
-    `projective_texture` and `top_down` name the types package directly, and so
-    do both halves of `test/package_interop`. Pointing every one of them at the
-    same served build is what makes "the app and the platform agree about what
-    roc-ray-types is" true by construction rather than by luck.
+    The platform carries one, and so do both halves of `test/package_interop`.
+    No example does: the platform re-exports every package type its own API
+    mentions, so an app names `Assets.Texture` rather than `rrt.Texture`.
+    Pointing every remaining entry at the same served build is what makes "the
+    app and the platform agree about what roc-ray-types is" true by
+    construction rather than by luck.
     """
     rewritten, count = TYPES_DEP_RE.subn(f'rrt: "{url}"', source)
     return rewritten, count > 0

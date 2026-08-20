@@ -210,6 +210,13 @@ retain a `Texture` and read its dimensions, while mutation requires the
 platform's `Assets` module. Keep typed shader-uniform handles so invalid setter
 combinations remain a compile-time error.
 
+An *application* never adds `roc-ray-types` to its header. Name a texture held
+in the model `Assets.Texture` (or `Draw.Texture`, the same type under a second
+name); the platform re-exports it as a transparent alias, so it still unifies
+with a package written against `rrt.Texture`. The same applies to every other
+package type the platform's API mentions. If you find yourself adding an `rrt:`
+entry to an example just to name a type, the platform is missing a re-export.
+
 Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
 when the work can be paid once.

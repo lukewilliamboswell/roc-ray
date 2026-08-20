@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -13,7 +12,6 @@ import rr.Math
 import rr.Program
 import rr.TaskQueue
 import rr.Text
-import rrt.Texture
 
 ## Walk a source tree from the working directory and plot every line of it,
 ## while it is still being walked.
@@ -1356,15 +1354,11 @@ clamp_scroll = |y, lanes, area, zoom| {
 follow_scroll : List(Lane), Math.Rect, F32 -> F32
 follow_scroll = |lanes, area, zoom| clamp_scroll(world_height(lanes) - visible_height(area, zoom) * tail_room, lanes, area, zoom)
 
-## Build the camera for a scroll position. Every field is finite and the zoom is
-## clamped positive, so this cannot actually be refused; answering with the
-## identity camera rather than crashing keeps `update` total.
+## Build the camera for a scroll position. The builders sanitize rather than
+## refuse, so this is a plain expression and `update` stays total.
 camera_at : Math.Rect, F32, F32 -> Camera.Camera2D
 camera_at = |area, zoom, scroll|
-	match Camera.new({ target: { x: world_width / 2, y: scroll }, offset: Math.center(area), rotation: 0, zoom: zoom }) {
-		Ok(camera) => camera
-		Err(_) => Camera.default
-	}
+	Camera.new({ target: { x: world_width / 2, y: scroll }, offset: Math.center(area), rotation: 0, zoom: zoom })
 
 ## Zoom about the pointer, so the point under it stays under it.
 ##
@@ -1381,15 +1375,15 @@ zoom_at = |camera, pointer, wheel|
 		# Clamping the *factor* rather than only the result keeps a violent
 		# wheel spin from flipping its sign and mirroring the plot.
 		factor = Math.clamp(1 + wheel * 0.14, 0.5, 2)
-		zoomed = settled_zoom(camera, Math.clamp(camera.zoom() * factor, min_zoom, max_zoom))
+		zoomed = camera.with_zoom(Math.clamp(camera.zoom() * factor, min_zoom, max_zoom))
 		after = zoomed.screen_to_world(pointer)
-		settled_target(zoomed, zoomed.target().add(before.sub(after)))
+		zoomed.with_target(zoomed.target().add(before.sub(after)))
 	}
 
 ## Drag the world with the pointer: a screen-space delta is a world-space delta
 ## divided by the zoom.
 pan : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-pan = |camera, delta| settled_target(camera, camera.target().sub(delta.scale(1 / camera.zoom())))
+pan = |camera, delta| camera.with_target(camera.target().sub(delta.scale(1 / camera.zoom())))
 
 ## Scroll by a fixed number of screen pixels a notch, whatever the zoom, so the
 ## wheel moves the page rather than the world.
@@ -1401,28 +1395,7 @@ scroll_by = |camera, notches|
 	if notches == 0 {
 		camera
 	} else {
-		settled_target(camera, { x: camera.target().x, y: camera.target().y - notches * scroll_pixels / camera.zoom() })
-	}
-
-settled_zoom : Camera.Camera2D, F32 -> Camera.Camera2D
-settled_zoom = |camera, zoom|
-	match camera.with_zoom(zoom) {
-		Ok(next) => next
-		Err(_) => camera
-	}
-
-settled_target : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-settled_target = |camera, target|
-	match camera.with_target(target) {
-		Ok(next) => next
-		Err(_) => camera
-	}
-
-settled_offset : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-settled_offset = |camera, offset|
-	match camera.with_offset(offset) {
-		Ok(next) => next
-		Err(_) => camera
+		camera.with_target({ x: camera.target().x, y: camera.target().y - notches * scroll_pixels / camera.zoom() })
 	}
 
 ## The lanes the plot area currently covers, as indices into `lanes`.
@@ -1559,7 +1532,7 @@ init! = App.init(
 
 ## The batch's texture: the colour attachment of the sprite buffer, viewed
 ## without copying it. The reference keeps the framebuffer alive.
-sprite_of : Model -> Texture
+sprite_of : Model -> Draw.Texture
 sprite_of = |model| Draw.render_texture(model.glow)
 
 update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
@@ -1698,7 +1671,7 @@ look = |model, step| {
 
 	# Re-centring on every cycle is what makes a resize keep the same world
 	# point in the middle of the plot rather than sliding it.
-	base = settled_offset(model.camera, Math.center(area))
+	base = model.camera.with_offset(Math.center(area))
 	zoomed = if zooming {
 		zoom_at(base, input.mouse.position(), wheel)
 	} else {
@@ -1718,7 +1691,7 @@ look = |model, step| {
 		} else if following {
 			camera_at(area, panned.zoom(), follow_scroll(model.lanes, area, panned.zoom()))
 		} else {
-			settled_target(panned, { x: panned.target().x, y: clamp_scroll(panned.target().y, model.lanes, area, panned.zoom()) })
+			panned.with_target({ x: panned.target().x, y: clamp_scroll(panned.target().y, model.lanes, area, panned.zoom()) })
 		}
 
 	mode = if input.key_pressed(KeyN) {
@@ -3197,8 +3170,8 @@ expect zoom_at(test_camera, { x: 700, y: 500 }, 0).zoom() == test_camera.zoom()
 ## A wheel notch moves the page by the same number of pixels at any zoom, which
 ## is what makes it a scroll rather than a move through the world.
 expect {
-	close = settled_zoom(test_camera, 4)
-	far = settled_zoom(test_camera, 0.5)
+	close = test_camera.with_zoom(4)
+	far = test_camera.with_zoom(0.5)
 	near_delta = (close.target().y - scroll_by(close, 1).target().y) * 4
 	far_delta = (far.target().y - scroll_by(far, 1).target().y) * 0.5
 	F32.abs(near_delta - far_delta) < 0.001 and F32.abs(near_delta - scroll_pixels) < 0.001
@@ -3212,7 +3185,7 @@ expect scroll_by(test_camera, 3).target().x == test_camera.target().x
 ## Dragging right moves the world right, which means the target moves left, by
 ## the screen distance divided by the zoom.
 expect {
-	camera = settled_zoom(test_camera, 2)
+	camera = test_camera.with_zoom(2)
 	moved = pan(camera, { x: 20, y: 0 })
 	F32.abs(moved.target().x - (camera.target().x - 10)) < 0.001
 }

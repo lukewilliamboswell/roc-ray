@@ -21,12 +21,6 @@ Model : {
 
 program = { init!, update, render! }
 
-screen_w : F32
-screen_w = 800
-
-screen_h : F32
-screen_h = 600
-
 init! : App.Init(Model, _)
 init! = App.init(
 	App.static_config(App.default.with_title("RocRay Offscreen Post-processing")),
@@ -57,8 +51,11 @@ render! = |model, frame| {
 	frame.with_render_texture!(
 		model.target,
 		|target_frame| {
+			# `size!` follows the target, not the window: inside this scope it
+			# is the 800x600 framebuffer these coordinates are relative to.
+			offscreen = target_frame.size!()
 			target_frame.clear!(Color.from_hex_rgb(0x10162f))
-			target_frame.text_centered!({ pos: { x: screen_w * 0.5, y: 120 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
+			target_frame.text_centered!({ pos: { x: offscreen.width * 0.5, y: 120 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
 			target_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {
@@ -71,10 +68,13 @@ render! = |model, frame| {
 		},
 	)?
 
+	# Out here the same call answers for the window, which is what the offscreen
+	# pass is being stretched across.
+	window = frame.size!()
 	target_draw = {
 		texture: model.target.texture(),
 		source: model.target.source(),
-		dest: Math.rect(0, 0, screen_w, screen_h),
+		dest: Math.rect(0, 0, window.width, window.height),
 		origin: Math.zero,
 		rotation: 0,
 		tint: Color.white,

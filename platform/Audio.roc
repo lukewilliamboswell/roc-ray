@@ -60,6 +60,17 @@ Audio := [].{
 		## `sound.playback().with_pitch(0.8).play()`.
 		playback : Sound -> Playback
 		playback = |sound| Playback.({ sound: sound, volume: 1, pitch: 1, pan: 0 })
+
+		## Resource-free sound value for pure tests.
+		##
+		## The handle never resolves to a host resource, so every host path it
+		## reaches treats it as an invalid one: playing, stopping, pausing, and
+		## resuming it are all no-ops, and `is_playing!` answers `Bool.False`.
+		## Put it in a model to reach the app's real `update` from an `expect`,
+		## and assert on the returned actions with `Program.action_shape`. Do not
+		## use it to test playback or resource lifetime.
+		stub : Sound
+		stub = { resource: AudioHost.Sound.stub }
 	}
 
 	## A sound together with the settings it should be played at.
@@ -195,6 +206,18 @@ Audio := [].{
 		## clamped to zero. Receiver form: `music.seek(12.5)`.
 		seek : Music, F32 -> [SeekMusic({ music : Music, seconds : F32 }), ..]
 		seek = |music, seconds| SeekMusic({ music: music, seconds: seconds })
+
+		## Resource-free music value for pure tests.
+		##
+		## The handle never resolves to a host resource, so every host path it
+		## reaches treats it as an invalid one: transport and mutation calls are
+		## no-ops, `is_playing!` answers `Bool.False`, and `length!` and
+		## `time_played!` answer zero. Put it in a model to reach the app's real
+		## `update` from an `expect`, and assert on the returned actions with
+		## `Program.action_shape`. Do not use it to test playback or resource
+		## lifetime.
+		stub : Music
+		stub = { resource: AudioHost.Music.stub }
 	}
 
 	## Procedural waveform used by `gen_sound!`.

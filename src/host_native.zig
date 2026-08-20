@@ -1264,6 +1264,16 @@ var headless_render_texture_depth: u8 = 0;
 var headless_shader_depth: u8 = 0;
 const SCOPE_STACK_LIMIT: usize = 64;
 var render_texture_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
+/// Dimensions of each open render-target scope, pushed and popped in step with
+/// `render_texture_leases` so entry `n` describes lease `n`.
+///
+/// This is what makes `Draw.Frame.size!` answer for the *active* target rather
+/// than always for the window: the top of the stack is the surface a draw call
+/// would land on, and an empty stack means that surface is the window. The
+/// numbers are the ones the `RenderTexture` carries -- the dimensions it was
+/// loaded with -- so no raylib query is involved and a headless run reports the
+/// same size a windowed one does.
+var render_target_sizes: [SCOPE_STACK_LIMIT]abi.DrawHostFrame_size = @splat(.{ .height = 0, .width = 0 });
 var headless_tilemap_draw_calls: usize = 0;
 var headless_tilemap_tiles: usize = 0;
 var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
@@ -1887,6 +1897,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     headless_render_texture_depth = 0;
     headless_shader_depth = 0;
     render_texture_lease_count = 0;
+    render_target_sizes = @splat(.{ .height = 0, .width = 0 });
     shader_lease_count = 0;
     blend_scope_count = 0;
     camera_scope_count = 0;
@@ -2262,6 +2273,99 @@ test "nested value scopes restore outer state and report bounded saturation" {
     try std.testing.expectEqual(@as(usize, 0), scissor_scope_count);
 }
 
+test "the frame reports the active render target, and the window again once it closes" {
+    // This is the case a window size carried in the model gets silently wrong.
+    // Inside a render texture the surface being drawn to is the target, so a
+    // HUD laid out against the window lands somewhere else entirely -- and
+    // nothing about the model says so.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    const restore_width = headless_screen_width;
+    const restore_height = headless_screen_height;
+    last_phase_violation = null;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        headless_screen_width = restore_width;
+        headless_screen_height = restore_height;
+        last_phase_violation = null;
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    headless_screen_width = 1100;
+    headless_screen_height = 760;
+
+    const phase = PhaseScope.enter(.render);
+    defer phase.leave();
+
+    const window_size = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 1100), window_size.width);
+    try std.testing.expectEqual(@as(f32, 760), window_size.height);
+
+    // Real heap-backed targets, taken and released exactly as a running app's
+    // are. A zeroed stand-in would make the leases below no-ops and leave the
+    // unwinding this test is about untested.
+    const outer_target = storeRenderTexture(.headless).?;
+    const inner_target = storeRenderTexture(.headless).?;
+
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = outer_target, .height = 90, .width = 160 }));
+    const outer_size = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 160), outer_size.width);
+    try std.testing.expectEqual(@as(f32, 90), outer_size.height);
+
+    try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = inner_target, .height = 45, .width = 80 }));
+    const inner_size = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 80), inner_size.width);
+    try std.testing.expectEqual(@as(f32, 45), inner_size.height);
+
+    // Closing the inner scope reveals the outer target, not the window: the
+    // stack unwinds a level at a time, the same way the native target does.
+    hostedDrawEndRenderTextureRaw();
+    const reverted = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 160), reverted.width);
+    try std.testing.expectEqual(@as(f32, 90), reverted.height);
+
+    hostedDrawEndRenderTextureRaw();
+    const restored = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 1100), restored.width);
+    try std.testing.expectEqual(@as(f32, 760), restored.height);
+
+    // The window is asked, not remembered, so a `Window.set_size` applied
+    // during the commit phase reaches the `render!` of the same cycle -- which
+    // is what that action promises, and one frame sooner than a size sampled
+    // in `update` could report it.
+    headless_screen_width = 640;
+    headless_screen_height = 480;
+    const resized = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 640), resized.width);
+    try std.testing.expectEqual(@as(f32, 480), resized.height);
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+
+    // A refused scope draws nowhere new, so it must not report anywhere new.
+    const saturating = storeRenderTexture(.headless).?;
+    abi.increfBox(@ptrCast(saturating), SCOPE_STACK_LIMIT);
+    for (0..SCOPE_STACK_LIMIT) |_| try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = saturating, .height = 16, .width = 16 }));
+    try std.testing.expectEqual(SCOPE_LIMIT, hostedDrawBeginRenderTextureRaw(.{ .handle = saturating, .height = 999, .width = 999 }));
+    const saturated = hostedDrawFrameSizeRaw();
+    try std.testing.expectEqual(@as(f32, 16), saturated.width);
+    try std.testing.expectEqual(@as(f32, 16), saturated.height);
+    for (0..SCOPE_STACK_LIMIT) |_| hostedDrawEndRenderTextureRaw();
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_lease_count);
+
+    // Every read above was made from `render!`, which is the only phase that
+    // admits one.
+    try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+}
+
 test "resource scopes report bounded saturation without leaking transferred owners" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
@@ -2425,10 +2529,21 @@ test "copied shared texture destroys its native resource exactly once after the 
     try std.testing.expectEqual(destroyed_before + 1, texture_destroy_count);
 }
 
-fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture {
+/// The handle a Roc `stub` value carries: a real `Box(0)`.
+///
+/// Zero is the officialized invalid token -- `decodeToken` rejects it and no
+/// heap ever emits it -- so every resource operation this reaches takes its
+/// unresolvable-handle branch. The box is a genuine Roc allocation rather than
+/// a fake, so the host's decref of it runs the same path it runs at runtime and
+/// the testing allocator reports a leak or a double free either way.
+fn allocateTestResourceStub(host: *RocHost) *u64 {
     const handle: *u64 = @ptrCast(@alignCast(abi.allocateBox(@sizeOf(u64), @alignOf(u64), false, host)));
     handle.* = 0;
-    return .{ .handle = handle, .width = width, .height = height };
+    return handle;
+}
+
+fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture {
+    return .{ .handle = allocateTestResourceStub(host), .width = width, .height = height };
 }
 
 test "resource-free texture is safe across hosted operations and ordinary deallocation" {
@@ -2528,6 +2643,236 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
     try std.testing.expectEqual(@as(usize, 0), render_texture_heap.retiredCount());
     try std.testing.expectEqual(destroyed_before, texture_destroy_count);
+}
+
+test "resource-free draw handles are inert, and leave real resources alone" {
+    // The Roc side publishes a `stub` for every resource an app can hold in its
+    // model -- `Draw.Font.stub`, `Draw.Shader.stub`, `Draw.RenderTexture.stub`,
+    // `Text.Prepared.stub`, `Assets.Store.stub` -- so that a pure test can write
+    // a model down. Each one carries `Box(0)`, and this is the other half of
+    // that promise: the host resolves none of them, refuses the operations they
+    // reach, and releases the box exactly once.
+    //
+    // A real resource of each kind is live throughout, and goes through the
+    // same calls itself. Stub traffic must not disturb it, and the operations
+    // must still consume exactly the reference they were handed -- which is
+    // what a heap built out of zeroed memory could never show.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    // Zero resolves nowhere, in any heap. This is the property every stub rests
+    // on, and the reason `stub` can be a pure value at all.
+    try std.testing.expect(font_heap.get(0) == null);
+    try std.testing.expect(shader_heap.get(0) == null);
+    try std.testing.expect(render_texture_heap.get(0) == null);
+    try std.testing.expect(prepared_text_heap.get(0) == null);
+    try std.testing.expect(store_heap.get(0) == null);
+
+    const real_shader = storeShader(.headless).?;
+    const real_target = storeRenderTexture(.headless).?;
+
+    {
+        const scope = PhaseScope.enter(.startup);
+        defer scope.leave();
+
+        // A stub font has no metrics to snapshot; the headless answer is the
+        // built-in one, and the transferred handle is still released.
+        const snapshot = hostedDrawFontMetricsRaw(&roc_host, .{
+            .payload = .{ .loaded_font = allocateTestResourceStub(&roc_host) },
+            .tag = .LoadedFont,
+        });
+        defer snapshot.glyphs.decref(&roc_host);
+
+        // Preparing text with a stub font is refused rather than silently
+        // prepared against the default font, and consumes no heap slot.
+        const prepared = hostedDrawPrepareTextRaw(&roc_host, .{
+            .font = .{ .payload = .{ .loaded_font = allocateTestResourceStub(&roc_host) }, .tag = .LoadedFont },
+            .text = abi.RocStr.fromSlice("inert", &roc_host),
+            .size = 16,
+            .spacing = 1,
+        });
+        try std.testing.expectEqual(RESOURCE_ERR_FAILED, prepared.err);
+        try std.testing.expectEqual(@as(f32, 0), prepared.width);
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        try std.testing.expectEqual(@as(usize, 0), prepared_text_heap.active());
+
+        // A uniform cannot be resolved on a stub shader.
+        try std.testing.expectEqual(@as(i32, -1), hostedDrawShaderLocationRaw(&roc_host, .{
+            .shader = allocateTestResourceStub(&roc_host),
+            .name = abi.RocStr.fromSlice("uTime", &roc_host),
+        }));
+
+        // Every store-backed loader reports the read it could not make.
+        const store_texture = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .path = abi.RocStr.fromSlice("atlas.png", &roc_host),
+        });
+        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_texture.err);
+
+        const store_font = hostedDrawLoadStoreFontRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
+            .size = 16,
+        });
+        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_font.err);
+
+        const store_shader = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .vertex_path = abi.RocStr.empty(),
+            .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
+        });
+        try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_shader.err);
+
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        try std.testing.expectEqual(@as(usize, 0), font_heap.active());
+        try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+    }
+
+    {
+        const scope = PhaseScope.enter(.render);
+        defer scope.leave();
+
+        // A scope cannot be opened on a stub, and reports the same refusal a
+        // released resource would. Nothing is leased, so there is no end call.
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = allocateTestResourceStub(&roc_host) }));
+        try std.testing.expectEqual(@as(usize, 0), shader_lease_count);
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{
+            .handle = allocateTestResourceStub(&roc_host),
+            .height = 90,
+            .width = 160,
+        }));
+        try std.testing.expectEqual(@as(usize, 0), render_texture_lease_count);
+        try std.testing.expectEqual(@as(u8, 0), headless_render_texture_depth);
+
+        // Drawing stub prepared text is skipped, exactly as drawing a released
+        // one is: no draw is counted and nothing faults.
+        const draws_before = prepared_text_draw_calls;
+        hostedDrawPreparedTextRaw(&roc_host, .{
+            .prepared = allocateTestResourceStub(&roc_host),
+            .pos = .{ .x = 10, .y = 20 },
+            .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        });
+        try std.testing.expectEqual(draws_before, prepared_text_draw_calls);
+
+        // The real shader and target still open their scopes, and still lease
+        // the reference each call was given.
+        for (0..3) |_| {
+            abi.increfBox(@ptrCast(real_shader), 1);
+            try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginShaderRaw(.{ .arg0 = real_shader }));
+        }
+        try std.testing.expectEqual(@as(u8, 3), headless_shader_depth);
+        for (0..3) |_| hostedDrawEndShaderRaw();
+        try std.testing.expectEqual(@as(u8, 0), headless_shader_depth);
+
+        abi.increfBox(@ptrCast(real_target), 1);
+        try std.testing.expectEqual(SCOPE_OK, hostedDrawBeginRenderTextureRaw(.{ .handle = real_target, .height = 90, .width = 160 }));
+        hostedDrawEndRenderTextureRaw();
+    }
+
+    // The stub traffic touched no slot, and the real resources are still there.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), render_texture_heap.active());
+    try std.testing.expect(shader_heap.get(real_shader.*) != null);
+    try std.testing.expect(render_texture_heap.get(real_target.*) != null);
+
+    releaseResourceBox(&roc_host, real_shader);
+    releaseResourceBox(&roc_host, real_target);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+}
+
+test "resource-free audio handles are inert across every sound and music call" {
+    // `Audio.Sound.stub` and `Audio.Music.stub` promise that a model built for
+    // a pure test can be handed to the platform without playing anything. Every
+    // transport call has to reach its unresolvable-handle branch and still
+    // release the reference it was passed.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), sound_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), music_heap.active());
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    try std.testing.expect(sound_heap.get(0) == null);
+    try std.testing.expect(music_heap.get(0) == null);
+
+    const real_sound = storeSound(.headless).?;
+    const real_music = storeMusic(.headless).?;
+
+    {
+        const scope = PhaseScope.enter(.commit);
+        defer scope.leave();
+
+        hostedAudioPlay(allocateTestResourceStub(&roc_host));
+        hostedAudioStop(allocateTestResourceStub(&roc_host));
+        hostedAudioPause(allocateTestResourceStub(&roc_host));
+        hostedAudioResume(allocateTestResourceStub(&roc_host));
+        hostedAudioSetVolume(allocateTestResourceStub(&roc_host), 0.5);
+        hostedAudioSetPitch(allocateTestResourceStub(&roc_host), 1.5);
+        hostedAudioSetPan(allocateTestResourceStub(&roc_host), -0.25);
+        try std.testing.expect(!hostedAudioIsPlaying(allocateTestResourceStub(&roc_host)));
+
+        hostedAudioPlayMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioStopMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioPauseMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioResumeMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioSetMusicVolume(allocateTestResourceStub(&roc_host), 0.5);
+        hostedAudioSetMusicPitch(allocateTestResourceStub(&roc_host), 1.5);
+        hostedAudioSetMusicPan(allocateTestResourceStub(&roc_host), -0.25);
+        hostedAudioSetMusicLooping(allocateTestResourceStub(&roc_host), true);
+        hostedAudioSeekMusic(allocateTestResourceStub(&roc_host), 12.5);
+
+        // A stream that does not exist has no length and has played nothing,
+        // rather than reporting whatever the last real stream did.
+        try std.testing.expect(!hostedAudioIsMusicPlaying(allocateTestResourceStub(&roc_host)));
+        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicLength(allocateTestResourceStub(&roc_host)));
+        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicTimePlayed(allocateTestResourceStub(&roc_host)));
+
+        // The real resources go through the same calls. Each consumes the
+        // reference it was handed, so each call gets its own.
+        for (0..4) |_| {
+            abi.increfBox(@ptrCast(real_sound), 1);
+            hostedAudioStop(real_sound);
+            abi.increfBox(@ptrCast(real_music), 1);
+            hostedAudioPauseMusic(real_music);
+        }
+    }
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 1), sound_heap.active());
+    try std.testing.expectEqual(@as(usize, 1), music_heap.active());
+    try std.testing.expect(sound_heap.get(real_sound.*) != null);
+    try std.testing.expect(music_heap.get(real_music.*) != null);
+
+    releaseResourceBox(&roc_host, real_sound);
+    releaseResourceBox(&roc_host, real_music);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), sound_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), music_heap.active());
 }
 
 fn headlessTilemapRequest(
@@ -3688,6 +4033,7 @@ fn hostedDrawBeginRenderTextureRaw(args: abi.DrawHostBegin_render_textureArgs) c
         .native => |target| if (!builtin.is_test) raylib.beginTextureMode(target),
     }
     render_texture_leases[render_texture_lease_count] = owner;
+    render_target_sizes[render_texture_lease_count] = .{ .height = args.height, .width = args.width };
     render_texture_lease_count += 1;
     return SCOPE_OK;
 }
@@ -3699,11 +4045,28 @@ fn hostedDrawEndRenderTextureRaw() callconv(.c) void {
     render_texture_lease_count -= 1;
     const owner = render_texture_leases[render_texture_lease_count].?;
     render_texture_leases[render_texture_lease_count] = null;
+    render_target_sizes[render_texture_lease_count] = .{ .height = 0, .width = 0 };
     if (!headlessMode() and render_texture_lease_count > 0) {
         const outer = render_texture_leases[render_texture_lease_count - 1].?;
         if (render_texture_heap.get(outer.*)) |resource| raylib.beginTextureMode(resource.native);
     }
     releaseResourceBox(activeHost(), owner);
+}
+
+/// Report the size of the surface the frame is drawing to right now.
+///
+/// Inside `Draw.with_render_texture!` that is the innermost open target, so the
+/// answer changes on the way in and reverts on the way out; with no target open
+/// it is the window's logical drawing size. The window is asked here rather
+/// than read off the step, so a `Window.set_size` applied during the commit
+/// phase is visible to the `render!` of the same cycle -- which is what
+/// `Window.set_size` promises, and what a size carried in the model could not
+/// deliver.
+fn hostedDrawFrameSizeRaw() callconv(.c) abi.DrawHostFrame_size {
+    enforcePhase("Draw.Frame.size!", during_render);
+    if (render_texture_lease_count > 0) return render_target_sizes[render_texture_lease_count - 1];
+    const window = windowState();
+    return .{ .height = @floatFromInt(window.size.height), .width = @floatFromInt(window.size.width) };
 }
 
 fn hostedDrawBeginShaderRaw(args: abi.DrawHostBegin_shaderArgs) callconv(.c) u8 {
@@ -3769,6 +4132,7 @@ fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_location
     switch (resource.*) {
         .headless => return 0,
         .native => |shader| {
+            if (builtin.is_test) return 0;
             var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
             var name = makeTempCString(allocatorFromHost(host), &stack, name_slice) catch return -1;
             defer name.deinit();
@@ -5114,14 +5478,20 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
     return hostedAudioLoadMusic(activeHost(), path_arg);
 }
 
+// The audio entry points below guard their `.native` arm with `builtin.is_test`
+// rather than returning early, the way the scoped drawing operations do. The
+// guard exists only to keep raylib's audio symbols out of the test link -- a
+// unit test never reaches a `.native` resource, since everything it stores is
+// `.headless` -- and keeping it inside the arm leaves the handle lookup itself
+// running, which is the part worth testing: an unresolvable token has to reach
+// the `orelse return` and still release the reference it was handed.
 fn hostedAudioPlay(handle: *u64) callconv(.c) void {
     enforcePhase("Audio.Sound.play!", during_commit);
     defer releaseResourceBox(activeHost(), handle);
-    if (builtin.is_test) return;
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.playSound(sound),
+        .native => |sound| if (!builtin.is_test) raylib.playSound(sound),
     }
 }
 
@@ -5131,7 +5501,7 @@ fn hostedAudioStop(handle: *u64) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.stopSound(sound),
+        .native => |sound| if (!builtin.is_test) raylib.stopSound(sound),
     }
 }
 
@@ -5141,7 +5511,7 @@ fn hostedAudioPause(handle: *u64) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.pauseSound(sound),
+        .native => |sound| if (!builtin.is_test) raylib.pauseSound(sound),
     }
 }
 
@@ -5151,7 +5521,7 @@ fn hostedAudioResume(handle: *u64) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.resumeSound(sound),
+        .native => |sound| if (!builtin.is_test) raylib.resumeSound(sound),
     }
 }
 
@@ -5161,7 +5531,7 @@ fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
     const resource = sound_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
         .headless => false,
-        .native => |sound| raylib.isSoundPlaying(sound),
+        .native => |sound| if (builtin.is_test) false else raylib.isSoundPlaying(sound),
     };
 }
 
@@ -5171,7 +5541,7 @@ fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.setSoundVolume(sound, volume),
+        .native => |sound| if (!builtin.is_test) raylib.setSoundVolume(sound, volume),
     }
 }
 
@@ -5181,7 +5551,7 @@ fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.setSoundPitch(sound, pitch),
+        .native => |sound| if (!builtin.is_test) raylib.setSoundPitch(sound, pitch),
     }
 }
 
@@ -5191,7 +5561,7 @@ fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |sound| raylib.setSoundPan(sound, pan),
+        .native => |sound| if (!builtin.is_test) raylib.setSoundPan(sound, pan),
     }
 }
 
@@ -5201,7 +5571,7 @@ fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.playMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.playMusic(music),
     }
 }
 
@@ -5211,7 +5581,7 @@ fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.stopMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.stopMusic(music),
     }
 }
 
@@ -5221,7 +5591,7 @@ fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.pauseMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.pauseMusic(music),
     }
 }
 
@@ -5231,7 +5601,7 @@ fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.resumeMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.resumeMusic(music),
     }
 }
 
@@ -5241,7 +5611,7 @@ fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.setMusicVolume(music, volume),
+        .native => |music| if (!builtin.is_test) raylib.setMusicVolume(music, volume),
     }
 }
 
@@ -5251,7 +5621,7 @@ fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.setMusicPitch(music, pitch),
+        .native => |music| if (!builtin.is_test) raylib.setMusicPitch(music, pitch),
     }
 }
 
@@ -5261,7 +5631,7 @@ fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.setMusicPan(music, pan),
+        .native => |music| if (!builtin.is_test) raylib.setMusicPan(music, pan),
     }
 }
 
@@ -5281,7 +5651,7 @@ fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
     const resource = music_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
         .headless => false,
-        .native => |music| raylib.isMusicPlaying(music),
+        .native => |music| if (builtin.is_test) false else raylib.isMusicPlaying(music),
     };
 }
 
@@ -5291,18 +5661,17 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| raylib.seekMusic(music, seconds),
+        .native => |music| if (!builtin.is_test) raylib.seekMusic(music, seconds),
     }
 }
 
 fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
     enforcePhase("Audio.Music.length!", constant_time_anywhere);
     defer releaseResourceBox(activeHost(), handle);
-    if (builtin.is_test) return 0;
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
         .headless => 0,
-        .native => |music| raylib.musicLength(music),
+        .native => |music| if (builtin.is_test) 0 else raylib.musicLength(music),
     };
 }
 
@@ -5312,7 +5681,7 @@ fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
         .headless => 0,
-        .native => |music| raylib.musicTimePlayed(music),
+        .native => |music| if (builtin.is_test) 0 else raylib.musicTimePlayed(music),
     };
 }
 
@@ -5434,6 +5803,7 @@ comptime {
         @export(&hostedDrawEndShaderRaw, .{ .name = "roc_draw_end_shader_raw" });
         @export(&hostedDrawFps, .{ .name = "roc_draw_fps" });
         @export(&exportedDrawFontMetricsRaw, .{ .name = "roc_draw_font_metrics_raw" });
+        @export(&hostedDrawFrameSizeRaw, .{ .name = "roc_draw_frame_size" });
         @export(&hostedDrawLineRaw, .{ .name = "roc_draw_line_raw" });
         @export(&exportedDrawLoadFontBytesRaw, .{ .name = "roc_draw_load_font_bytes_raw" });
         @export(&exportedDrawLoadStoreFontRaw, .{ .name = "roc_draw_load_store_font_raw" });
@@ -5591,7 +5961,9 @@ const InputState = struct {
 /// rather than a raylib query -- `--host-headless` output has to be reproducible run
 /// to run, and asking a window that does not exist would not be.
 fn windowState() WindowSnapshot {
-    if (active_headless) {
+    // `headlessMode()`, not `active_headless`: unit tests reach this through
+    // `Draw.Frame.size!`, and the test binary does not link raylib.
+    if (headlessMode()) {
         return .{
             .size = .{ .width = headless_screen_width, .height = headless_screen_height },
             .focused = HEADLESS_WINDOW_FOCUSED,
@@ -8226,6 +8598,25 @@ test "allocating a render texture during a frame is rejected" {
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.RenderTexture.load!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_startup));
+}
+
+test "asking how big the drawing surface is is refused outside the frame" {
+    // The answer is only defined while a surface is open, and admitting the
+    // read anywhere else would make it a back door for `update` to observe the
+    // window off the step.
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    for ([_]Phase{ .idle, .startup, .commit }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        _ = hostedDrawFrameSizeRaw();
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Draw.Frame.size!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_render));
+        try std.testing.expectEqual(phase, violation.actual);
+    }
 }
 
 test "an operation allowed in several phases is accepted in each of them" {

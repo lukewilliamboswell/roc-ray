@@ -2485,6 +2485,52 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_473ae8de77ee164b
+pub const __AnonStruct_473ae8de77ee164b = if (@sizeOf(usize) == 4) extern struct {
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_473ae8de77ee164b) != 8) @compileError("__AnonStruct_473ae8de77ee164b size mismatch");
+        if (@alignOf(__AnonStruct_473ae8de77ee164b) != 4) @compileError("__AnonStruct_473ae8de77ee164b alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_473ae8de77ee164b) != 8) @compileError("__AnonStruct_473ae8de77ee164b size mismatch");
+        if (@alignOf(__AnonStruct_473ae8de77ee164b) != 4) @compileError("__AnonStruct_473ae8de77ee164b alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_2a39039201b5023d
 pub const __AnonStruct_2a39039201b5023d = if (@sizeOf(usize) == 4) extern struct {
     prepared: *u64,
@@ -6108,6 +6154,27 @@ comptime {
     }
 }
 
+/// Return type record for DrawHost.frame_size!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const DrawHostFrame_sizeRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    height: f32,
+    width: f32,
+} else extern struct {
+    height: f32,
+    width: f32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawHostFrame_sizeRetRecord) != 8) @compileError("DrawHostFrame_sizeRetRecord size mismatch");
+        if (@alignOf(DrawHostFrame_sizeRetRecord) != 4) @compileError("DrawHostFrame_sizeRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawHostFrame_sizeRetRecord) != 8) @compileError("DrawHostFrame_sizeRetRecord size mismatch");
+        if (@alignOf(DrawHostFrame_sizeRetRecord) != 4) @compileError("DrawHostFrame_sizeRetRecord alignment mismatch");
+    }
+}
+
 /// Return type record for DrawHost.load_font_bytes!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const DrawHostLoad_font_bytesRetRecord = if (@sizeOf(usize) == 4) extern struct {
@@ -9403,6 +9470,7 @@ pub const DrawHostDraw_texture_quadArg0 = __AnonStruct_81a2561bb748cfff;
 pub const DrawHostFpsArg0 = __AnonStruct_477f59604acc661e;
 pub const DrawHostFont_metrics = __AnonStruct_2bfb89334ad27c35;
 pub const DrawHostFont_metricsGlyphs = __AnonStruct_a31979034eec4b2e;
+pub const DrawHostFrame_size = __AnonStruct_473ae8de77ee164b;
 pub const DrawHostLineArg0 = __AnonStruct_a3fdb7fbf4ae00b8;
 pub const DrawHostLoad_font_bytesArg0 = __AnonStruct_5cba559c3a07b56a;
 pub const DrawHostLoad_font_bytes = __AnonStruct_83bbf23095f15134;
@@ -9714,6 +9782,12 @@ fn increfDefaultFontOrLoadedFont(value: DefaultFontOrLoadedFont, amount: isize) 
 
 pub const DefaultFontOrLoadedFontRelease = struct {
     pub fn release(value: DefaultFontOrLoadedFont, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_473ae8de77ee164bRelease = struct {
+    pub fn release(value: __AnonStruct_473ae8de77ee164b, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -10655,6 +10729,10 @@ pub extern fn roc_draw_fps(arg0: DrawHostFpsArgs) callconv(.c) void;
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_draw_font_metrics_raw(arg0: DefaultFontOrLoadedFont) callconv(.c) __AnonStruct_2bfb89334ad27c35;
+
+/// Hosted symbol for DrawHost.frame_size!
+/// Roc signature: {} => { height : F32, width : F32 }
+pub extern fn roc_draw_frame_size() callconv(.c) __AnonStruct_473ae8de77ee164b;
 
 /// Hosted symbol for DrawHost.line!
 /// Roc signature: { color : Color.Rgba, end : Math.Vec2, start : Math.Vec2, thickness : F32 } => {}

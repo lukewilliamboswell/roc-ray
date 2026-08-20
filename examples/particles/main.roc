@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -11,7 +10,6 @@ import rr.Draw
 import rr.Math
 import rr.Program
 import rr.Text
-import rrt.Texture
 
 ## A sprite fountain that draws every particle in a single hosted call.
 ##
@@ -27,7 +25,7 @@ import rrt.Texture
 ##
 ## Move the pointer to steer the emitter, hold Space for a wider spray, ESC quits.
 Model : {
-	sprite : Texture,
+	sprite : Draw.Texture,
 	particles : List(Particle),
 	instances : List(Draw.TextureInstance),
 	hud : Text.Prepared,

@@ -130,6 +130,7 @@ const COMPLETION_DELAY: u8 = 1;
 const COMPLETION_SCREENSHOT_FINISHED: u8 = 2;
 const COMPLETION_CLIPBOARD_READ: u8 = 3;
 const COMPLETION_FILE_READ: u8 = 4;
+const COMPLETION_DIR_LISTED: u8 = 5;
 
 /// `kind` codes for a task returned by `update`. Mirrored in `platform/Program.roc`.
 const TASK_READ_SMALL_FILE: u8 = 0;
@@ -137,6 +138,7 @@ const TASK_DELAY: u8 = 1;
 const TASK_SCREENSHOT: u8 = 2;
 const TASK_READ_CLIPBOARD: u8 = 3;
 const TASK_READ_FILE: u8 = 4;
+const TASK_LIST_DIR: u8 = 5;
 
 /// Read-error codes. Mirrored in `platform/Program.roc`.
 ///
@@ -152,6 +154,28 @@ const READ_ERR_TOO_LARGE: u8 = 5;
 /// Only a small read can report this: it is the only read that produces a
 /// string. A file read is delivered as bytes and needs no UTF-8 validation.
 const READ_ERR_NOT_UTF8: u8 = 6;
+/// The path exists but is not a directory, so it cannot be listed.
+///
+/// Only a listing can report this. It is kept distinct from `NOT_FOUND`
+/// because an app walking a tree wants to tell "this entry has gone" apart
+/// from "this entry is a file, read it instead".
+const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
+
+/// How many entries one listing may report, and how many bytes it may encode
+/// them into.
+///
+/// A directory is not bounded by anything the host controls, so both ends are
+/// capped and a listing past either is refused as `TooLarge` rather than
+/// allocated. The encoded form is one kind byte, the name, and a NUL per
+/// entry, so the byte cap is the one that binds on realistic trees and the
+/// entry cap is what stops a directory of empty names.
+const MAX_DIR_ENTRIES: usize = 8192;
+const MAX_DIR_LISTING_BYTES: usize = 1024 * 1024;
+
+/// Entry kinds in an encoded listing. Mirrored in `platform/Program.roc`.
+const DIR_ENTRY_FILE: u8 = 1;
+const DIR_ENTRY_DIR: u8 = 2;
+const DIR_ENTRY_OTHER: u8 = 3;
 
 /// The only way a delay fails: the host was already holding as many unanswered
 /// tasks as it will, so it never started this one. Mirrored in `Program.roc`.
@@ -220,6 +244,65 @@ fn readErrorCode(err: anyerror) u8 {
     };
 }
 
+/// Name a failed listing in the app's vocabulary.
+///
+/// `NotDir` is separated out for the reason above; everything else a directory
+/// open can fail with is a plain failure from the app's point of view.
+fn listErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound => READ_ERR_NOT_FOUND,
+        error.NotDir => READ_ERR_NOT_A_DIRECTORY,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// Encode one directory's entries into the byte list the app is handed.
+///
+/// The format is one entry after another, each a kind byte, the name, and a
+/// NUL -- a name cannot contain a NUL on any platform this runs on, so the
+/// terminator is unambiguous and the whole listing is one allocation that
+/// moves into Roc without being copied. `platform/Program.roc` decodes it.
+///
+/// Returns the error code, or zero and the buffer through `out`.
+fn encodeListing(io: std.Io, allocator: std.mem.Allocator, path: []const u8, out: *?[]u8) u8 {
+    return encodeListingIn(std.Io.Dir.cwd(), io, allocator, path, out);
+}
+
+/// `encodeListing` against an explicit base directory, so a test can point it
+/// at a temporary tree without depending on the process working directory.
+fn encodeListingIn(base: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator, path: []const u8, out: *?[]u8) u8 {
+    var dir = base.openDir(io, path, .{ .iterate = true }) catch |err| return listErrorCode(err);
+    defer dir.close(io);
+
+    var encoded: std.ArrayListUnmanaged(u8) = .empty;
+    errdefer encoded.deinit(allocator);
+
+    var entries: usize = 0;
+    var walker = dir.iterate();
+    while (walker.next(io) catch |err| return listErrorCode(err)) |entry| {
+        entries += 1;
+        if (entries > MAX_DIR_ENTRIES) {
+            encoded.deinit(allocator);
+            return READ_ERR_TOO_LARGE;
+        }
+        if (encoded.items.len + entry.name.len + 2 > MAX_DIR_LISTING_BYTES) {
+            encoded.deinit(allocator);
+            return READ_ERR_TOO_LARGE;
+        }
+        const kind: u8 = switch (entry.kind) {
+            .file => DIR_ENTRY_FILE,
+            .directory => DIR_ENTRY_DIR,
+            else => DIR_ENTRY_OTHER,
+        };
+        encoded.append(allocator, kind) catch return READ_ERR_FAILED;
+        encoded.appendSlice(allocator, entry.name) catch return READ_ERR_FAILED;
+        encoded.append(allocator, 0) catch return READ_ERR_FAILED;
+    }
+
+    out.* = encoded.toOwnedSlice(allocator) catch return READ_ERR_FAILED;
+    return 0;
+}
+
 /// Blocking effects executed off the main thread.
 ///
 /// The worker accepts and returns plain Zig values. It must not call Roc,
@@ -243,7 +326,7 @@ const EffectWorker = struct {
     /// The two share a ring because they share the property that matters: a
     /// bounded amount of plain-Zig state goes in, slow work happens on this
     /// thread, and a plain-Zig answer comes back.
-    const Kind = enum(u8) { read_file, write_png };
+    const Kind = enum(u8) { read_file, list_dir, write_png };
 
     const Request = struct {
         kind: Kind,
@@ -259,6 +342,10 @@ const EffectWorker = struct {
         /// the main thread will do with the buffer when it drains the result:
         /// install it into a typed file-byte slot, or copy it into a `RocStr`.
         deliver_bytes: bool = false,
+        /// Which completion the answer belongs in. A read and a listing share
+        /// the byte-delivery path exactly, and differ only in the completion
+        /// the app is waiting on, so that is carried rather than re-derived.
+        completion: u8 = COMPLETION_FILE_READ,
         /// `write_png`: the framebuffer readback, owned by `allocator` and
         /// freed on this thread once it has been encoded.
         pixels: []u8 = &.{},
@@ -275,6 +362,7 @@ const EffectWorker = struct {
         bytes: ?[]u8 = null,
         err: u8 = 0,
         deliver_bytes: bool = false,
+        completion: u8 = COMPLETION_FILE_READ,
     };
 
     requests: [capacity]Request = undefined,
@@ -393,6 +481,33 @@ const EffectWorker = struct {
         self.request_write.store(write +% 1, .release);
         // Only after the request is visible; a refusal wakes nobody, which is
         // what keeps `Busy` and `Unavailable` pure refusals.
+        self.wake();
+        return .accepted;
+    }
+
+    /// Queue a directory listing. Frame thread only.
+    ///
+    /// The same ring, the same refusals and the same ownership as a read: the
+    /// answer is a buffer this thread allocates and the frame thread moves into
+    /// Roc without copying. Only what fills the buffer differs.
+    fn submitListDir(self: *EffectWorker, ticket: u64, path: []const u8) Submission {
+        if (!self.accepting) return .unavailable;
+        if (path.len > capture.path_capacity) return .unavailable;
+
+        const write = self.request_write.load(.monotonic);
+        if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
+
+        const slot = &self.requests[write & mask];
+        slot.* = .{
+            .kind = .list_dir,
+            .ticket = ticket,
+            .path = undefined,
+            .path_len = path.len,
+            .deliver_bytes = true,
+            .completion = COMPLETION_DIR_LISTED,
+        };
+        @memcpy(slot.path[0..path.len], path);
+        self.request_write.store(write +% 1, .release);
         self.wake();
         return .accepted;
     }
@@ -529,6 +644,7 @@ const EffectWorker = struct {
         while (self.awaitRequest(io)) |request| {
             switch (request.kind) {
                 .read_file => self.runRead(io, request),
+                .list_dir => self.runListDir(io, request),
                 .write_png => self.runWritePng(io, request),
             }
         }
@@ -550,6 +666,7 @@ const EffectWorker = struct {
                 .ticket = request.ticket,
                 .err = readErrorCode(err),
                 .deliver_bytes = request.deliver_bytes,
+                .completion = request.completion,
             });
             return;
         };
@@ -558,6 +675,27 @@ const EffectWorker = struct {
             .ticket = request.ticket,
             .bytes = bytes,
             .deliver_bytes = request.deliver_bytes,
+            .completion = request.completion,
+        });
+    }
+
+    /// List one directory into an encoded byte buffer. Worker thread only.
+    ///
+    /// Only one directory, never its children: recursion is the app's to drive,
+    /// because only the app knows which subtrees are worth descending into and
+    /// how fast it wants them. A host-side recursive walk would be one
+    /// unbounded operation that no queue could pace.
+    fn runListDir(self: *EffectWorker, io: std.Io, request: Request) void {
+        const path = request.path[0..request.path_len];
+        var encoded: ?[]u8 = null;
+        const err = encodeListing(io, self.allocator, path, &encoded);
+        self.postResult(io, .{
+            .kind = .list_dir,
+            .ticket = request.ticket,
+            .bytes = if (err == 0) encoded else null,
+            .err = err,
+            .deliver_bytes = true,
+            .completion = COMPLETION_DIR_LISTED,
         });
     }
 
@@ -849,10 +987,12 @@ const CompletionStaging = struct {
         self.completeTicketAssumeCapacity(roc_host, item);
     }
 
-    /// Report a read that produced no byte list.
-    fn byteListReadFailed(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8) void {
+    /// Report a byte-list operation that produced no bytes, in the completion
+    /// it asked for: a read and a listing share this path and differ only in
+    /// which completion the app is waiting on.
+    fn byteListReadFailed(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, err: u8) void {
         std.debug.assert(err != 0);
-        self.completeTicket(roc_host, plain(COMPLETION_FILE_READ, ticket, err));
+        self.completeTicket(roc_host, plain(completion, ticket, err));
     }
 
     /// Report a read by moving its existing typed file-byte heap reference into an owning
@@ -862,9 +1002,9 @@ const CompletionStaging = struct {
     /// but a unique List operation may still mutate visible elements in place.
     /// Safety comes from the complete transfer: the host never reads or shares
     /// these bytes after this move, while sublists retain the one allocation.
-    fn byteListRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, bytes: abi.RocListWith(u8, false)) void {
+    fn byteListRead(self: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, bytes: abi.RocListWith(u8, false)) void {
         self.ensureOne(roc_host);
-        var item = plain(COMPLETION_FILE_READ, ticket, 0);
+        var item = plain(completion, ticket, 0);
         item.bytes = bytes;
         self.completeTicketAssumeCapacity(roc_host, item);
     }
@@ -5682,6 +5822,7 @@ fn startTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost, 
     switch (task.kind) {
         TASK_READ_SMALL_FILE => submitRead(staging, roc_host, ticket, task.path.asSlice(), false, headless_reads),
         TASK_READ_FILE => submitRead(staging, roc_host, ticket, task.path.asSlice(), true, headless_reads),
+        TASK_LIST_DIR => submitListing(staging, roc_host, ticket, task.path.asSlice(), headless_reads),
         TASK_DELAY => armTimer(ticket, task.millis),
         TASK_SCREENSHOT => blk: {
             const err = beginScreenshotTask(ticket, task.path.asSlice()) orelse break :blk;
@@ -5722,6 +5863,7 @@ fn refuseTask(staging: *CompletionStaging, roc_host: *RocHost, task: TaskToHost,
     const raw = switch (task.kind) {
         TASK_READ_SMALL_FILE => CompletionStaging.plain(COMPLETION_SMALL_FILE_READ, ticket, READ_ERR_BUSY),
         TASK_READ_FILE => CompletionStaging.plain(COMPLETION_FILE_READ, ticket, READ_ERR_BUSY),
+        TASK_LIST_DIR => CompletionStaging.plain(COMPLETION_DIR_LISTED, ticket, READ_ERR_BUSY),
         TASK_DELAY => CompletionStaging.plain(COMPLETION_DELAY, ticket, DELAY_ERR_BUSY),
         TASK_SCREENSHOT => CompletionStaging.plain(COMPLETION_SCREENSHOT_FINISHED, ticket, capture.err_busy),
         TASK_READ_CLIPBOARD => CompletionStaging.plain(COMPLETION_CLIPBOARD_READ, ticket, READ_ERR_BUSY),
@@ -5842,15 +5984,15 @@ fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path
     // Reserve before either branch can start reading or queue a worker request.
     // A terminal `Busy` here means precisely that no filesystem work started.
     if (deliver_bytes and !file_bytes_delivery_reservations.reserve()) {
-        stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, true);
+        stageReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_BUSY, true);
         return;
     }
     if (headlessMode()) {
         if (!headless_reads.begin()) {
             if (deliver_bytes) {
-                stageReservedReadError(staging, roc_host, ticket, READ_ERR_BUSY);
+                stageReservedReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_BUSY);
             } else {
-                stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, false);
+                stageReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_BUSY, false);
             }
             return;
         }
@@ -5860,20 +6002,63 @@ fn submitRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path
     switch (effect_worker.submitReadFile(ticket, path, deliver_bytes)) {
         .accepted => {},
         .busy => if (deliver_bytes)
-            stageReservedReadError(staging, roc_host, ticket, READ_ERR_BUSY)
+            stageReservedReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_BUSY)
         else
-            stageReadError(staging, roc_host, ticket, READ_ERR_BUSY, false),
+            stageReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_BUSY, false),
         .unavailable => if (deliver_bytes)
-            stageReservedReadError(staging, roc_host, ticket, READ_ERR_UNAVAILABLE)
+            stageReservedReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_UNAVAILABLE)
         else
-            stageReadError(staging, roc_host, ticket, READ_ERR_UNAVAILABLE, false),
+            stageReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, READ_ERR_UNAVAILABLE, false),
     }
 }
 
+/// Ask for one directory's entries, with exactly the admission a byte-list read
+/// gets: one delivery reservation, taken before any filesystem work starts and
+/// released by whichever staging call answers the ticket.
+///
+/// A listing always delivers bytes, so unlike `submitRead` there is no
+/// string-returning branch to keep straight.
+fn submitListing(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path: []const u8, headless_reads: *HeadlessReadBudget) void {
+    if (!file_bytes_delivery_reservations.reserve()) {
+        stageReadError(staging, roc_host, ticket, COMPLETION_DIR_LISTED, READ_ERR_BUSY, true);
+        return;
+    }
+    if (headlessMode()) {
+        if (!headless_reads.begin()) {
+            stageReservedReadError(staging, roc_host, ticket, COMPLETION_DIR_LISTED, READ_ERR_BUSY);
+            return;
+        }
+        listDirNow(staging, roc_host, ticket, path, headless_reads);
+        return;
+    }
+    switch (effect_worker.submitListDir(ticket, path)) {
+        .accepted => {},
+        .busy => stageReservedReadError(staging, roc_host, ticket, COMPLETION_DIR_LISTED, READ_ERR_BUSY),
+        .unavailable => stageReservedReadError(staging, roc_host, ticket, COMPLETION_DIR_LISTED, READ_ERR_UNAVAILABLE),
+    }
+}
+
+/// List on the calling thread and stage the completion. Headless only.
+///
+/// Installs through the same reserved byte-list path a worker listing does, so
+/// a headless run and a windowed one differ in which thread allocated the
+/// buffer and in nothing the app can observe.
+fn listDirNow(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, path: []const u8, headless_reads: ?*HeadlessReadBudget) void {
+    const allocator = allocatorFromHost(roc_host);
+    var encoded: ?[]u8 = null;
+    const err = encodeListing(mainThreadIo(), allocator, path, &encoded);
+    const bytes = encoded orelse {
+        stageReservedReadError(staging, roc_host, ticket, COMPLETION_DIR_LISTED, if (err == 0) READ_ERR_FAILED else err);
+        return;
+    };
+    if (headless_reads) |budget| budget.bytes += bytes.len;
+    stageReservedByteListRead(staging, roc_host, ticket, COMPLETION_DIR_LISTED, allocator, bytes);
+}
+
 /// Report a read that produced no bytes, in whichever completion it asked for.
-fn stageReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8, deliver_bytes: bool) void {
+fn stageReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, err: u8, deliver_bytes: bool) void {
     if (deliver_bytes) {
-        staging.byteListReadFailed(roc_host, ticket, err);
+        staging.byteListReadFailed(roc_host, ticket, completion, err);
     } else {
         staging.fileRead(roc_host, ticket, err, "");
     }
@@ -5882,19 +6067,19 @@ fn stageReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, 
 /// Report an error for an already-admitted byte-list read, then return its
 /// resource-slot promise. Every path after `FileBytesDeliveryReservations.reserve`
 /// goes through this helper or `stageReservedByteListRead` exactly once.
-fn stageReservedReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, err: u8) void {
+fn stageReservedReadError(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, err: u8) void {
     defer file_bytes_delivery_reservations.release();
-    stageReadError(staging, roc_host, ticket, err, true);
+    stageReadError(staging, roc_host, ticket, completion, err, true);
 }
 
 /// Install a finished read's buffer in the typed ARC heap and transfer its sole
 /// reference to an ordinary seamless `List(U8)`. No byte payload is copied or
 /// allocated here. After this call, the host does not read or retain `bytes`:
 /// it is exclusively Roc-owned until list ARC routes its final drop back here.
-fn stageByteListRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, allocator: std.mem.Allocator, bytes: []u8) void {
+fn stageByteListRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, allocator: std.mem.Allocator, bytes: []u8) void {
     if (bytes.len == 0) {
         allocator.free(bytes);
-        staging.byteListRead(roc_host, ticket, abi.RocListWith(u8, false).empty());
+        staging.byteListRead(roc_host, ticket, completion, abi.RocListWith(u8, false).empty());
         return;
     }
     const resource = file_bytes_heap.insert(
@@ -5902,20 +6087,20 @@ fn stageByteListRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u6
         .{ .allocator = allocator, .bytes = bytes },
     ) orelse {
         allocator.free(bytes);
-        staging.byteListReadFailed(roc_host, ticket, READ_ERR_BUSY);
+        staging.byteListReadFailed(roc_host, ticket, completion, READ_ERR_BUSY);
         return;
     };
-    staging.byteListRead(roc_host, ticket, seamlessByteList(resource, bytes));
+    staging.byteListRead(roc_host, ticket, completion, seamlessByteList(resource, bytes));
 }
 
 /// Finish an admitted byte-list read. Keep the low-level `stageByteListRead` fallback
 /// defensive for direct callers, while this wrapper releases the admission
 /// promise on both its successful install and its impossible-in-normal-use
 /// late `Busy` fallback.
-fn stageReservedByteListRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, allocator: std.mem.Allocator, bytes: []u8) void {
+fn stageReservedByteListRead(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, completion: u8, allocator: std.mem.Allocator, bytes: []u8) void {
     std.debug.assert(file_bytes_delivery_reservations.count != 0);
     defer file_bytes_delivery_reservations.release();
-    stageByteListRead(staging, roc_host, ticket, allocator, bytes);
+    stageByteListRead(staging, roc_host, ticket, completion, allocator, bytes);
 }
 
 /// Read on the calling thread and stage the completion. Headless only.
@@ -5944,18 +6129,18 @@ fn readFileNow(staging: *CompletionStaging, roc_host: *RocHost, ticket: u64, pat
             else => readErrorCode(err),
         } else readErrorCode(err);
         if (byte_list_delivery_reserved) {
-            stageReservedReadError(staging, roc_host, ticket, code);
+            stageReservedReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, code);
         } else {
-            stageReadError(staging, roc_host, ticket, code, deliver_bytes);
+            stageReadError(staging, roc_host, ticket, COMPLETION_FILE_READ, code, deliver_bytes);
         }
         return;
     };
     if (headless_reads) |budget| budget.bytes += bytes.len;
     if (deliver_bytes) {
         if (byte_list_delivery_reserved) {
-            stageReservedByteListRead(staging, roc_host, ticket, allocator, bytes);
+            stageReservedByteListRead(staging, roc_host, ticket, COMPLETION_FILE_READ, allocator, bytes);
         } else {
-            stageByteListRead(staging, roc_host, ticket, allocator, bytes);
+            stageByteListRead(staging, roc_host, ticket, COMPLETION_FILE_READ, allocator, bytes);
         }
         return;
     }
@@ -6014,14 +6199,14 @@ fn stageWorkerResults(staging: *CompletionStaging, roc_host: *RocHost) void {
 
         const bytes = result.bytes orelse {
             if (result.deliver_bytes) {
-                stageReservedReadError(staging, roc_host, result.ticket, result.err);
+                stageReservedReadError(staging, roc_host, result.ticket, result.completion, result.err);
             } else {
-                stageReadError(staging, roc_host, result.ticket, result.err, false);
+                stageReadError(staging, roc_host, result.ticket, result.completion, result.err, false);
             }
             continue;
         };
         if (result.deliver_bytes) {
-            stageReservedByteListRead(staging, roc_host, result.ticket, effect_worker.allocator, bytes);
+            stageReservedByteListRead(staging, roc_host, result.ticket, result.completion, effect_worker.allocator, bytes);
             continue;
         }
         // The read stopped at the ceiling, so anything that arrives here fits.
@@ -7166,7 +7351,7 @@ test "completing a large read transfers the worker allocation without copying" {
     staging.delayElapsed(&roc_host, 0, 0);
     staging.items.clearRetainingCapacity();
     counter.allocated_bytes = 0;
-    stageByteListRead(&staging, &roc_host, 1, std.testing.allocator, worker_bytes);
+    stageByteListRead(&staging, &roc_host, 1, COMPLETION_FILE_READ, std.testing.allocator, worker_bytes);
     const large_cost = counter.allocated_bytes;
 
     try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
@@ -7183,7 +7368,7 @@ test "completing a large read transfers the worker allocation without copying" {
     // thread exactly the same, which is the property being claimed.
     const small_bytes = try std.testing.allocator.dupe(u8, "four bytes worth, near enough");
     counter.allocated_bytes = 0;
-    stageByteListRead(&staging, &roc_host, 2, std.testing.allocator, small_bytes);
+    stageByteListRead(&staging, &roc_host, 2, COMPLETION_FILE_READ, std.testing.allocator, small_bytes);
     try std.testing.expectEqual(large_cost, counter.allocated_bytes);
 
     // The control. A 64 KiB small-file completion moves its payload through
@@ -7244,7 +7429,7 @@ test "seamless byte lists retain their typed slot through List and Str ARC in ev
     for (orders) |order| {
         const owned = try std.testing.allocator.dupe(u8, payload);
         var staging = CompletionStaging{};
-        stageByteListRead(&staging, &roc_host, 1, std.testing.allocator, owned);
+        stageByteListRead(&staging, &roc_host, 1, COMPLETION_FILE_READ, std.testing.allocator, owned);
         const whole = stagedBytes(staging.items.items[0].raw);
 
         // The staged completion owns the first list reference. Give the three
@@ -7310,7 +7495,7 @@ test "an empty file transfers to the canonical empty list without a resource slo
 
     const owned = try std.testing.allocator.alloc(u8, 0);
     var staging = CompletionStaging{};
-    stageByteListRead(&staging, &roc_host, 1, std.testing.allocator, owned);
+    stageByteListRead(&staging, &roc_host, 1, COMPLETION_FILE_READ, std.testing.allocator, owned);
     const empty = stagedBytes(staging.items.items[0].raw);
     try std.testing.expect(empty.isEmpty());
     try std.testing.expect(!empty.isSeamlessSlice());
@@ -7354,7 +7539,7 @@ test "a full byte-list heap refuses ReadFile before it opens the path" {
     while (filled < MAX_LIVE_FILE_BYTE_LISTS) : (filled += 1) {
         const owned = try std.testing.allocator.dupe(u8, "held");
         var staging = CompletionStaging{};
-        stageByteListRead(&staging, &roc_host, filled, std.testing.allocator, owned);
+        stageByteListRead(&staging, &roc_host, filled, COMPLETION_FILE_READ, std.testing.allocator, owned);
         try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
         held[filled] = staging.items.items[0].raw;
         staging.items.clearRetainingCapacity();
@@ -7376,7 +7561,7 @@ test "a full byte-list heap refuses ReadFile before it opens the path" {
     // bytes. The normal `submitRead` path above never starts this doomed read.
     const refused = try std.testing.allocator.dupe(u8, "no slot for this");
     var full = CompletionStaging{};
-    stageByteListRead(&full, &roc_host, 999, std.testing.allocator, refused);
+    stageByteListRead(&full, &roc_host, 999, COMPLETION_FILE_READ, std.testing.allocator, refused);
     try std.testing.expectEqual(COMPLETION_FILE_READ, full.items.items[0].raw.kind);
     try std.testing.expectEqual(READ_ERR_BUSY, full.items.items[0].raw.err);
     try std.testing.expectEqual(@as(usize, 0), full.items.items[0].raw.bytes.len());
@@ -7836,7 +8021,7 @@ test "worker byte-list terminal results release their delivery reservations" {
     // Worker-ring refusal and the exhausted-headless-budget refusal take this
     // same terminal path after reserving but before a result can exist.
     try std.testing.expect(file_bytes_delivery_reservations.reserve());
-    stageReservedReadError(&staging, &roc_host, 3, READ_ERR_BUSY);
+    stageReservedReadError(&staging, &roc_host, 3, COMPLETION_FILE_READ, READ_ERR_BUSY);
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
     try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[2].raw.err);
 
@@ -7903,7 +8088,7 @@ test "a byte-list read is filled by the worker and installed by the frame thread
 
     var staging = CompletionStaging{};
     try std.testing.expect(pending_callbacks.insert(result.ticket, testCallback(&roc_host)));
-    stageByteListRead(&staging, &roc_host, result.ticket, worker.allocator, result.bytes.?);
+    stageByteListRead(&staging, &roc_host, result.ticket, COMPLETION_FILE_READ, worker.allocator, result.bytes.?);
     try std.testing.expectEqual(@as(usize, 0), pending_callbacks.count);
     try std.testing.expect(staging.items.items[0].deliver != null);
 
@@ -8667,4 +8852,112 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     }
 
     return runNormalApp(&roc_host, allocator, app_config);
+}
+
+/// Decode one entry of an encoded listing, returning its kind, its name, and
+/// where the next entry begins. Test-only mirror of `Program.roc`'s decoder.
+fn testNextEntry(encoded: []const u8, at: usize) ?struct { kind: u8, name: []const u8, next: usize } {
+    if (at >= encoded.len) return null;
+    const kind = encoded[at];
+    const end = std.mem.indexOfScalarPos(u8, encoded, at + 1, 0) orelse return null;
+    return .{ .kind = kind, .name = encoded[at + 1 .. end], .next = end + 1 };
+}
+
+fn testFindEntry(encoded: []const u8, name: []const u8) ?u8 {
+    var at: usize = 0;
+    while (testNextEntry(encoded, at)) |entry| : (at = entry.next) {
+        if (std.mem.eql(u8, entry.name, name)) return entry.kind;
+    }
+    return null;
+}
+
+test "a listing encodes one kind byte and one NUL-terminated name per entry" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "alpha.txt", .data = "a" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "beta.txt", .data = "b" });
+    try tmp.dir.createDirPath(std.testing.io, "nested");
+
+    var encoded: ?[]u8 = null;
+    try std.testing.expectEqual(@as(u8, 0), encodeListingIn(tmp.parent_dir, std.testing.io, std.testing.allocator, &tmp.sub_path, &encoded));
+    const bytes = encoded.?;
+    defer std.testing.allocator.free(bytes);
+
+    try std.testing.expectEqual(DIR_ENTRY_FILE, testFindEntry(bytes, "alpha.txt").?);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, testFindEntry(bytes, "beta.txt").?);
+    try std.testing.expectEqual(DIR_ENTRY_DIR, testFindEntry(bytes, "nested").?);
+    try std.testing.expect(testFindEntry(bytes, "absent") == null);
+
+    // Exactly three entries, and nothing trailing: the decoder stops when the
+    // bytes run out rather than on a count it was told.
+    var at: usize = 0;
+    var seen: usize = 0;
+    while (testNextEntry(bytes, at)) |entry| : (at = entry.next) seen += 1;
+    try std.testing.expectEqual(@as(usize, 3), seen);
+    try std.testing.expectEqual(bytes.len, at);
+}
+
+test "an empty directory lists as no bytes rather than as a failure" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    var encoded: ?[]u8 = null;
+    try std.testing.expectEqual(@as(u8, 0), encodeListingIn(tmp.parent_dir, std.testing.io, std.testing.allocator, &tmp.sub_path, &encoded));
+    const bytes = encoded.?;
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqual(@as(usize, 0), bytes.len);
+}
+
+test "listing names what went wrong: a missing path and a file are different" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "plain.txt", .data = "x" });
+
+    var encoded: ?[]u8 = null;
+    try std.testing.expectEqual(
+        READ_ERR_NOT_FOUND,
+        encodeListingIn(tmp.dir, std.testing.io, std.testing.allocator, "absent", &encoded),
+    );
+    try std.testing.expect(encoded == null);
+
+    try std.testing.expectEqual(
+        READ_ERR_NOT_A_DIRECTORY,
+        encodeListingIn(tmp.dir, std.testing.io, std.testing.allocator, "plain.txt", &encoded),
+    );
+    try std.testing.expect(encoded == null);
+}
+
+test "a directory past the entry cap is refused rather than allocated" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // One past the cap, so the refusal is the cap and not the loop ending.
+    var made: usize = 0;
+    while (made <= MAX_DIR_ENTRIES) : (made += 1) {
+        var name: [24]u8 = undefined;
+        const sub_path = std.fmt.bufPrint(&name, "{d}", .{made}) catch unreachable;
+        try tmp.dir.writeFile(std.testing.io, .{ .sub_path = sub_path, .data = "" });
+    }
+
+    var encoded: ?[]u8 = null;
+    try std.testing.expectEqual(
+        READ_ERR_TOO_LARGE,
+        encodeListingIn(tmp.parent_dir, std.testing.io, std.testing.allocator, &tmp.sub_path, &encoded),
+    );
+    try std.testing.expect(encoded == null);
+}
+
+test "a submitted listing carries the completion its answer belongs in" {
+    var worker: EffectWorker = .{ .allocator = std.testing.allocator, .accepting = true };
+    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitListDir(7, "src"));
+
+    // The submission is what is under test here; the request is drained rather
+    // than run, because running it needs the worker thread's own IO. What
+    // matters is that it is queued as a byte-delivering operation whose answer
+    // is routed to `DirListed` rather than to `FileRead`.
+    const request = worker.takeRequest().?;
+    try std.testing.expectEqual(EffectWorker.Kind.list_dir, request.kind);
+    try std.testing.expectEqual(@as(u64, 7), request.ticket);
+    try std.testing.expect(request.deliver_bytes);
+    try std.testing.expectEqual(COMPLETION_DIR_LISTED, request.completion);
 }

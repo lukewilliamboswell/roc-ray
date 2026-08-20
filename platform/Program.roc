@@ -460,6 +460,7 @@ Program := [].{
 		Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }),
 		Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }),
 		ReadClipboard({ callback : Try(Str, [Unavailable, TooLarge, Busy]) -> msg }),
+		ListDir({ path : Str, callback : Try(List(DirEntry), DirListError) -> msg }),
 	].{
 
 		## Lift a task's message into an enclosing application's message type.
@@ -482,6 +483,7 @@ Program := [].{
 				Delay({ millis, callback }) => Task.(Delay({ millis, callback: |result| transform(callback(result)) }))
 				Screenshot({ path, callback }) => Task.(Screenshot({ path, callback: |result| transform(callback(result)) }))
 				ReadClipboard({ callback }) => Task.(ReadClipboard({ callback: |result| transform(callback(result)) }))
+				ListDir({ path, callback }) => Task.(ListDir({ path, callback: |result| transform(callback(result)) }))
 			}
 	}
 
@@ -497,6 +499,7 @@ Program := [].{
 		Delay({ millis : U64 }),
 		Screenshot({ path : Str }),
 		ReadClipboard,
+		ListDir({ path : Str }),
 	]
 
 	## Describe what a task asks the host for, without its callback.
@@ -526,7 +529,40 @@ Program := [].{
 			Delay({ millis, callback: _ }) => Delay({ millis: millis })
 			Screenshot({ path, callback: _ }) => Screenshot({ path: path })
 			ReadClipboard({ callback: _ }) => ReadClipboard
+			ListDir({ path, callback: _ }) => ListDir({ path: path })
 		}
+
+	## One entry of a directory listing.
+	##
+	## `name` is the entry's own name, not a path: joining it to the directory
+	## that was listed is the caller's job, and is what lets a walk carry
+	## whatever path convention it likes.
+	DirEntry : {
+		name : Str,
+		kind : EntryKind,
+	}
+
+	## What one entry is.
+	##
+	## `Other` covers symbolic links, devices, sockets and anything else the
+	## platform reports: this is the subset an app walking a tree acts on, and
+	## everything it should not descend into or read is one case.
+	EntryKind : [File, Dir, Other]
+
+	## Why a `ListDir` produced no entries.
+	##
+	## `NotADirectory` is separate from `NotFound` because a walk wants to tell
+	## an entry that has gone apart from one that turned out to be a file.
+	## `TooLarge` means the directory holds more entries, or longer names, than
+	## the host will encode in one listing.
+	DirListError : [
+		NotFound,
+		NotADirectory,
+		ReadFailed,
+		Busy,
+		Unavailable,
+		TooLarge,
+	]
 
 	## Why a `ReadFile` produced no byte list.
 	##
@@ -586,6 +622,22 @@ Program := [].{
 	## the selected bytes on the Roc thread.
 	read_file : Str, (Try(List(U8), FileReadError) -> msg) -> Task(msg)
 	read_file = |path, callback| Task.(ReadFile({ path, callback }))
+
+	## Ask for the entries of one directory, as an ordinary message.
+	##
+	## `path` is resolved the same way `read_file`'s is: relative to the process
+	## working directory. Only that directory is listed -- never its children --
+	## so walking a tree is the app's own loop, one `list_dir` per directory it
+	## decides to descend into. That is deliberate: a host-side recursive walk
+	## would be a single unbounded operation, and the point of driving it from
+	## the app is that every step of it goes through the same pacing, and the
+	## same `TaskQueue`, as everything else.
+	##
+	##     Program.list_dir("assets", |result| Listed("assets", result))
+	##
+	## Entry order is whatever the filesystem reports, and is not sorted.
+	list_dir : Str, (Try(List(DirEntry), DirListError) -> msg) -> Task(msg)
+	list_dir = |path, callback| Task.(ListDir({ path, callback }))
 
 	## Ask for one message after at least `millis` milliseconds have elapsed.
 	delay : U64, (Try({}, [Busy]) -> msg) -> Task(msg)
@@ -686,6 +738,22 @@ Program := [].{
 				},
 		)
 
+	## A listing arrives in the same byte list a file read does, and is decoded
+	## here rather than in the host: building a `List(DirEntry)` on the host side
+	## would mean host code constructing refcounted Roc strings inside a
+	## completion, and this way the transport stays the one that is already
+	## proven and the decoding stays ordinary Roc that `expect` can cover.
+	deliver_listing : (Try(List(DirEntry), DirListError) -> msg) -> Box(CompletionFromHost -> Box(msg))
+	deliver_listing = |callback|
+		Box.box(
+			|raw|
+				if raw.kind != completion_dir_listed {
+					crash "roc-ray: directory callback received the wrong completion kind"
+				} else {
+					Box.box(callback(if raw.err == 0 Ok(decode_listing(raw.bytes)) else Err(list_error(raw.err))))
+				},
+		)
+
 	deliver_delay : (Try({}, [Busy]) -> msg) -> Box(CompletionFromHost -> Box(msg))
 	deliver_delay = |callback|
 		Box.box(
@@ -744,6 +812,7 @@ Program := [].{
 			Delay(request) => { kind: task_delay, path: "", millis: request.millis, deliver: deliver_delay(request.callback) }
 			Screenshot(request) => { kind: task_screenshot, path: request.path, millis: 0, deliver: deliver_screenshot(request.callback) }
 			ReadClipboard(request) => { kind: task_read_clipboard, path: "", millis: 0, deliver: deliver_clipboard(request.callback) }
+			ListDir(request) => { kind: task_list_dir, path: request.path, millis: 0, deliver: deliver_listing(request.callback) }
 		}
 
 	## Invoke the continuation returned by the host with its terminal result.
@@ -887,6 +956,10 @@ completion_clipboard_read = 3
 completion_file_read : U8
 completion_file_read = 4
 
+## `kind` code for a serviced directory listing. Mirrored in `src/host_native.zig`.
+completion_dir_listed : U8
+completion_dir_listed = 5
+
 ## `kind` code for a small-file read task. Mirrored in `src/host_native.zig`.
 task_read_small_file : U8
 task_read_small_file = 0
@@ -906,6 +979,106 @@ task_read_clipboard = 3
 ## `kind` code for an ordinary byte-list read task. Mirrored in `src/host_native.zig`.
 task_read_file : U8
 task_read_file = 4
+
+## `kind` code for a directory listing task. Mirrored in `src/host_native.zig`.
+task_list_dir : U8
+task_list_dir = 5
+
+## Entry kinds in an encoded listing. Mirrored in `src/host_native.zig`.
+dir_entry_file : U8
+dir_entry_file = 1
+
+dir_entry_dir : U8
+dir_entry_dir = 2
+
+## The host refused to list the path because it is not a directory. Mirrored in
+## `src/host_native.zig`.
+read_err_not_a_directory : U8
+read_err_not_a_directory = 7
+
+## Decode the host's listing-error code. Mirrored in `src/host_native.zig`.
+list_error : U8 -> Program.DirListError
+list_error = |code|
+	if code == 1 {
+		NotFound
+	} else if code == read_err_busy {
+		Busy
+	} else if code == 4 {
+		Unavailable
+	} else if code == read_err_too_large {
+		TooLarge
+	} else if code == read_err_not_a_directory {
+		NotADirectory
+	} else {
+		ReadFailed
+	}
+
+## Decode a listing's bytes into entries.
+##
+## The encoding is one entry after another, each a kind byte, the entry's name,
+## and a NUL. A name cannot contain a NUL on any platform the host runs on, so
+## the terminator is unambiguous and the whole listing is one host allocation
+## that reached Roc without being copied.
+##
+## Truncated input -- a kind byte with no terminator after it -- ends the
+## listing rather than being guessed at. The host writes the terminator, so
+## that cannot happen; answering with the entries that were whole is what keeps
+## this total.
+decode_listing : List(U8) -> List(Program.DirEntry)
+decode_listing = |bytes| decode_entries(bytes, 0, [])
+
+decode_entries : List(U8), U64, List(Program.DirEntry) -> List(Program.DirEntry)
+decode_entries = |bytes, at, found|
+	if at >= List.len(bytes) {
+		found
+	} else {
+		match List.get(bytes, at) {
+			Err(_) => found
+			Ok(code) =>
+				match index_of_nul(bytes, at + 1) {
+					Err(_) => found
+					Ok(end) =>
+						decode_entries(
+							bytes,
+							end + 1,
+							List.append(found, { name: entry_name(bytes, at + 1, end), kind: entry_kind(code) }),
+						)
+					}
+			}
+	}
+
+## Copy one entry's name out of the listing.
+##
+## The copy is the point. A sublist of a host-delivered list is a seamless view
+## onto the host's buffer, so a name retained that way would pin the whole
+## listing for as long as the app held it. `release_excess_capacity` gives the
+## name storage of its own -- and it has to happen before `from_utf8_lossy`,
+## which may share the storage it is given.
+entry_name : List(U8), U64, U64 -> Str
+entry_name = |bytes, start, end|
+	Str.from_utf8_lossy(List.release_excess_capacity(List.sublist(bytes, { start: start, len: end - start })))
+
+entry_kind : U8 -> Program.EntryKind
+entry_kind = |code|
+	if code == dir_entry_file {
+		File
+	} else if code == dir_entry_dir {
+		Dir
+	} else {
+		Other
+	}
+
+index_of_nul : List(U8), U64 -> Try(U64, [NotFound])
+index_of_nul = |bytes, at|
+	match List.get(bytes, at) {
+		Err(_) => Err(NotFound)
+		Ok(byte) =>
+			if byte == 0 {
+				Ok(at)
+			} else {
+				index_of_nul(bytes, at + 1)
+			}
+		}
 
 ## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
 ##
@@ -1060,6 +1233,7 @@ expect task_transport_shape(Program.read_file("data.bin", |_| "file")) == { kind
 expect task_transport_shape(Program.delay(250, unit_result_message)) == { kind: 1, path: "", millis: 250 }
 expect task_transport_shape(Program.screenshot("scene.png", |_| "screenshot")) == { kind: 2, path: "scene.png", millis: 0 }
 expect task_transport_shape(Program.read_clipboard(|_| "clipboard")) == { kind: 3, path: "", millis: 0 }
+expect task_transport_shape(Program.list_dir("assets", |_| "listed")) == { kind: 5, path: "assets", millis: 0 }
 
 small_task = Program.normalize(Program.read_small_file("data.txt", string_result_message))
 
@@ -1180,6 +1354,66 @@ expect Program.task_shape(Program.read_file("level.bin", |_| "file")) == ReadFil
 expect Program.task_shape(Program.delay(250, unit_result_message)) == Delay({ millis: 250 })
 expect Program.task_shape(Program.screenshot("scene.png", |_| "screenshot")) == Screenshot({ path: "scene.png" })
 expect Program.task_shape(Program.read_clipboard(|_| "clipboard")) == ReadClipboard
+expect Program.task_shape(Program.list_dir("assets", |_| "listed")) == ListDir({ path: "assets" })
+
+# --- Directory listings -----------------------------------------------------
+
+## The encoding the host writes, spelled out: a kind byte, a name, a NUL, and
+## the next entry straight after it.
+listing_sample : List(U8)
+listing_sample =
+	List.concat(
+		List.concat([dir_entry_file], List.concat(Str.to_utf8("a.txt"), [0])),
+		List.concat([dir_entry_dir], List.concat(Str.to_utf8("nested"), [0])),
+	)
+
+expect
+	decode_listing(listing_sample)
+		== [
+			{ name: "a.txt", kind: File },
+			{ name: "nested", kind: Dir },
+		]
+
+## An empty directory is no bytes, which is no entries rather than a failure.
+expect decode_listing([]) == []
+
+## An entry kind the host has not defined is `Other` rather than a crash: it is
+## how symbolic links, devices and sockets already arrive.
+expect decode_listing([9, 120, 0]) == [{ name: "x", kind: Other }]
+
+## A name that is not UTF-8 still names something, so it is replaced rather than
+## dropped -- a walk that skipped such entries would silently miss files.
+expect List.len(decode_listing([dir_entry_file, 0xff, 0])) == 1
+
+## A truncated listing ends at the last whole entry. The host always writes the
+## terminator, so this is about `decode_listing` being total, not about input
+## that occurs.
+expect decode_listing(List.concat(listing_sample, [dir_entry_file, 122])) == decode_listing(listing_sample)
+
+## An entry with an empty name is still an entry.
+expect decode_listing([dir_entry_dir, 0]) == [{ name: "", kind: Dir }]
+
+expect list_error(1) == NotFound
+expect list_error(read_err_not_a_directory) == NotADirectory
+expect list_error(read_err_busy) == Busy
+expect list_error(4) == Unavailable
+expect list_error(read_err_too_large) == TooLarge
+expect list_error(2) == ReadFailed
+
+## Every code the host can send decodes to something, and only `0` means success
+## -- which never reaches here.
+expect List.all([1, 2, 3, 4, 5, 6, 7, 8, 200], |code| list_error_is_named(code))
+
+list_error_is_named : U8 -> Bool
+list_error_is_named = |code|
+	match list_error(code) {
+		NotFound => Bool.True
+		NotADirectory => Bool.True
+		Busy => Bool.True
+		Unavailable => Bool.True
+		TooLarge => Bool.True
+		ReadFailed => Bool.True
+	}
 
 ## The equality discriminates, rather than agreeing with everything.
 expect Program.task_shape(Program.delay(250, unit_result_message)) != Delay({ millis: 251 })

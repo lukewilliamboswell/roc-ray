@@ -99,6 +99,13 @@ meaningful inside `render!`. Shader uniforms in particular have to be set where
 their position relative to the draws they affect is visible, which is inside
 `Frame.with_shader!` and nowhere else.
 
+`Draw.Frame.size!` is guarded the same way despite being a read rather than a
+mutation, and for the same reason: its answer is the *active* surface, which is
+the window normally and the render target inside `Frame.with_render_texture!`.
+That is a fact about where the surrounding draw calls are landing, so it has no
+meaning outside the frame -- and admitting it anywhere else would make it a way
+for `update` to observe the window without going through the step.
+
 **Toggling fullscreen at runtime** -- deliberately deferred. There is no hosted
 effect for it yet, and adding one means deciding what fullscreen *means* here:
 real mode switch or borderless window, what happens to the logical drawing size

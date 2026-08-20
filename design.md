@@ -36,7 +36,10 @@ A program is three functions, declared in the `requires` block of
   perform effects: loading, generating, allocating.
 - `update` takes the model and one `Program.Step` and returns the next model
   plus any work for the platform. **It is pure.**
-- `render!` takes the model and a `Draw.Frame`. **It may only draw.**
+- `render!` takes the model and a `Draw.Frame`. **It may only draw.** The frame
+  does answer for the surface it is drawing to -- `frame.size!()` -- because
+  where a coordinate lands is a property of that surface rather than of the
+  model. It observes nothing else.
 
 The purity of `update` is the decision everything else follows from, and it is
 not an aesthetic preference.
@@ -81,9 +84,17 @@ in [`platform/Program.roc`](platform/Program.roc).
 The rule is: **if application logic needs to see it, it is a `Step` field or a
 task completion.** The platform does expose some host-state reads, but they are
 scoped for drawing decisions -- a font metric, whether a sound is still
-playing -- and are not a back door for logic. A read has an answer, and an
-answer needs somewhere to go; the two places that exist are the next step and a
-task callback.
+playing, how big the surface being drawn to is -- and are not a back door for
+logic. A read has an answer, and an answer needs somewhere to go; the two
+places that exist are the next step and a task callback.
+
+`Draw.Frame.size!` is the shape of that exception. Where a drawing coordinate
+goes is a property of the surface it lands on, so `render!` can ask the frame
+how big that surface is: the window's logical drawing size normally, the render
+target's size inside `with_render_texture!`. Nothing is decided with it that
+`update` also has to decide -- which arrangement to use, or what the pointer is
+over, still comes off `step.window`, because those are application logic and
+belong where the rest of it is.
 
 ### 2. Immediate mutation is `Program.Action`
 

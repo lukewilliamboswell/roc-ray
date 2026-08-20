@@ -25,10 +25,12 @@ UiCopy : {
 	help : Text.Prepared,
 }
 
+## The window size is deliberately absent. `update` needs it to decide what the
+## pointer is over, and reads it off the step; `render!` needs it to draw the
+## same layout, and asks the frame. Neither reason is a reason to remember it.
 Model : {
 	ui : Box(UiCopy),
 	selection : Selection,
-	screen : { width : I32, height : I32 },
 	mouse : Math.Vec2,
 	timestamp_nanos : U64,
 }
@@ -65,7 +67,6 @@ init! = App.init(
 				help: Text.from("Arrow keys or click to select | ESC does nothing | Q quits", font).size(16).prepare!()?,
 			}),
 			selection: Display,
-			screen: { width: 960, height: 640 },
 			mouse: { x: 0, y: 0 },
 			timestamp_nanos: 0,
 		})
@@ -118,8 +119,8 @@ draw_key! = |frame, x, y, label| {
 	frame.text_centered!({ pos: { x: x + 34, y: y + 22 }, text: label, size: 18, color: Color.white })
 }
 
-draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, I32, I32, U64 => {}
-draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, timestamp_nanos| {
+draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, Draw.FrameSize, U64 => {}
+draw_preview! = |frame, bounds, selection, ui, screen, timestamp_nanos| {
 	frame.rectangle_gradient_v!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, color_top: Color.from_hex_rgb(0x15213a), color_bottom: Color.from_hex_rgb(0x0d1425) })
 
 	body = match selection {
@@ -131,7 +132,7 @@ draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, time
 
 	match selection {
 		Display => {
-			size_text = Str.concat(I32.to_str(screen_width), Str.concat(" x ", I32.to_str(screen_height)))
+			size_text = Str.concat(I32.to_str(F32.to_i32_wrap(screen.width)), Str.concat(" x ", I32.to_str(F32.to_i32_wrap(screen.height))))
 			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 72 }, text: size_text, size: 20, color: Color.from_hex_rgb(0x8fb4ff) })
 			phase = U64.to_f32(timestamp_nanos % 3_000_000_000) / 3_000_000_000
 			preview_x = bounds.x + bounds.width * phase
@@ -155,9 +156,13 @@ draw_preview! = |frame, bounds, selection, ui, screen_width, screen_height, time
 	}
 }
 
-## Layout is a pure function of the window size, so `update` (deciding what the
+## Layout is a pure function of the surface size, so `update` (deciding what the
 ## pointer is over) and `render!` (drawing it) derive the same value rather than
 ## storing it -- one less thing that can disagree with itself.
+##
+## `update` gets the size from `step.window`, because which arrangement to use
+## is application logic. `render!` gets it from `frame.size!()`, because by then
+## it is a property of what is being drawn to.
 Layout : {
 	margin : F32,
 	screen_h : F32,
@@ -168,10 +173,10 @@ Layout : {
 	controls_bounds : Math.Rect,
 }
 
-layout_for : { width : I32, height : I32 } -> Layout
+layout_for : { width : F32, height : F32 } -> Layout
 layout_for = |screen| {
-	screen_w = F32.max(I32.to_f32(screen.width), 360)
-	screen_h = F32.max(I32.to_f32(screen.height), 360)
+	screen_w = F32.max(screen.width, 360)
+	screen_h = F32.max(screen.height, 360)
 	compact = screen_w < 700
 	margin = if compact 16 else 30
 	content_top = 104
@@ -201,7 +206,7 @@ update = |model, step| {
 
 	# Layout follows the window, pointing follows the mouse, and the preview
 	# animates on the clock -- three separate observations off one step.
-	view = layout_for(step.window.size)
+	view = layout_for({ width: I32.to_f32(step.window.size.width), height: I32.to_f32(step.window.size.height) })
 	mouse = input.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
@@ -219,7 +224,7 @@ update = |model, step| {
 		from_keyboard
 	}
 
-	Program.static({ ..model, selection, screen: step.window.size, mouse, timestamp_nanos: step.time.timestamp_nanos })
+	Program.static({ ..model, selection, mouse, timestamp_nanos: step.time.timestamp_nanos })
 	# With `with_exit_key(NoExitKey)` no key closes the window on its
 	# own, so the app decides. Escape is left free for the UI to use.
 		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0), cursor] else [cursor])
@@ -228,7 +233,11 @@ update = |model, step| {
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
 	ui = Box.unbox(model.ui)
-	view = layout_for(model.screen)
+	# The surface being drawn to, asked for where it is used. A resize is
+	# visible here on the cycle it happens, without a copy in the model that
+	# could be a frame behind it.
+	screen = frame.size!()
+	view = layout_for(screen)
 	hover_display = view.display_bounds.contains(model.mouse)
 	hover_audio = view.audio_bounds.contains(model.mouse)
 	hover_controls = view.controls_bounds.contains(model.mouse)
@@ -243,7 +252,7 @@ render! = |model, frame| {
 	frame.with_scissor!(
 		view.preview,
 		|clipped_frame| {
-			draw_preview!(clipped_frame, view.preview, model.selection, ui, model.screen.width, model.screen.height, model.timestamp_nanos)
+			draw_preview!(clipped_frame, view.preview, model.selection, ui, screen, model.timestamp_nanos)
 			Ok({})
 		},
 	)?

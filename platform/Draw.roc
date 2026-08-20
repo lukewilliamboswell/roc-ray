@@ -23,6 +23,14 @@ TextureDrawConfig : {
 	tint : Color.Rgba,
 }
 
+TextureInstanceConfig : {
+	source : Math.Rect,
+	dest : Math.Rect,
+	origin : Math.Vec2,
+	rotation : F32,
+	tint : Color.Rgba,
+}
+
 TextureDrawOptions : {
 	source : Math.Rect,
 	source_set : Bool,
@@ -380,6 +388,10 @@ Draw := [].{
 
 	## Resolved texture draw configuration.
 	TextureDraw : TextureDrawConfig
+
+	## One instance of a batched texture draw. These are the fields of
+	## `TextureDraw` minus the texture, which the batch supplies once.
+	TextureInstance : TextureInstanceConfig
 
 	## Four ordered corners of a projected planar surface.
 	ProjectiveQuadCorners : {
@@ -979,6 +991,22 @@ Draw := [].{
 	## Compatibility alias for `texture!`.
 	draw_texture! : Frame, TextureDraw => {}
 	draw_texture! = |frame, cfg| frame.texture!(cfg)
+
+	## Draw many instances of one texture, in list order, with a single hosted call.
+	##
+	## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
+	## is what caps how many sprites a frame can afford. This crosses once for the
+	## whole batch and lets the host loop over it, so the cost per instance is the
+	## `DrawTexturePro` call alone. Build the list from application state and pass
+	## it straight through; an empty list does not cross at all.
+	texture_instances! : Frame, Texture, List(TextureInstance) => {}
+	texture_instances! = |_frame, texture, instances| {
+		if List.len(instances) == 0 {
+			{}
+		} else {
+			DrawHost.draw_texture_instances!({ texture, instances })
+		}
+	}
 
 	## Project a texture onto a validated planar quad with exact homogeneous UV
 	## interpolation. This remains one hosted call and preserves active shaders.

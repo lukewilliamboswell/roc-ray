@@ -776,6 +776,23 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
     );
 }
 
+/// Draw one texture once per borrowed instance, in list order.
+///
+/// The batching this buys is on the Roc side, not the GPU side: a per-sprite
+/// `texture!` pays one hosted-effect crossing per sprite, and that crossing --
+/// not `DrawTexturePro` -- is what caps instance counts. `DrawTexturePro` only
+/// appends vertices to rlgl's active batch, which is flushed in bulk, so a
+/// plain loop over the whole list already amortizes well.
+///
+/// The loop is deliberately shaped as "take the shared value once, take a
+/// borrowed slice of per-instance fields, iterate": a future shape-instance
+/// batch (rectangles, circles, or lines for plotting) can follow it by
+/// swapping the shared texture for a shared style and the element accessor
+/// for its own, with no other structure to reproduce.
+pub fn drawTextureInstances(texture: Texture, instances: anytype) void {
+    for (instances) |instance| drawTexture(texture, instance);
+}
+
 fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {
     return .{
         .x = x / @as(f32, @floatFromInt(texture.width)),

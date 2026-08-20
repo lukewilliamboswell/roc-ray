@@ -3283,6 +3283,112 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_a819339c8fa68dd6
+pub const __AnonStruct_a819339c8fa68dd6 = if (@sizeOf(usize) == 4) extern struct {
+    instances: RocListWith(__AnonStruct_1b47e50f7d442c7, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.instances.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.instances.incref(amount);
+        value.texture.incref(amount);
+    }
+} else extern struct {
+    instances: RocListWith(__AnonStruct_1b47e50f7d442c7, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.instances.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.instances.incref(amount);
+        value.texture.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_a819339c8fa68dd6) != 40) @compileError("__AnonStruct_a819339c8fa68dd6 size mismatch");
+        if (@alignOf(__AnonStruct_a819339c8fa68dd6) != 8) @compileError("__AnonStruct_a819339c8fa68dd6 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_a819339c8fa68dd6) != 24) @compileError("__AnonStruct_a819339c8fa68dd6 size mismatch");
+        if (@alignOf(__AnonStruct_a819339c8fa68dd6) != 4) @compileError("__AnonStruct_a819339c8fa68dd6 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_1b47e50f7d442c7
+pub const __AnonStruct_1b47e50f7d442c7 = if (@sizeOf(usize) == 4) extern struct {
+    dest: MathRect,
+    origin: MathVec2,
+    rotation: f32,
+    source: MathRect,
+    tint: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.dest.decref(roc_host);
+        value.origin.decref(roc_host);
+        value.source.decref(roc_host);
+        value.tint.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.dest.incref(amount);
+        value.origin.incref(amount);
+        value.source.incref(amount);
+        value.tint.incref(amount);
+    }
+} else extern struct {
+    dest: MathRect,
+    origin: MathVec2,
+    rotation: f32,
+    source: MathRect,
+    tint: ColorRgba,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.dest.decref(roc_host);
+        value.origin.decref(roc_host);
+        value.source.decref(roc_host);
+        value.tint.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.dest.incref(amount);
+        value.origin.incref(amount);
+        value.source.incref(amount);
+        value.tint.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_1b47e50f7d442c7) != 48) @compileError("__AnonStruct_1b47e50f7d442c7 size mismatch");
+        if (@alignOf(__AnonStruct_1b47e50f7d442c7) != 4) @compileError("__AnonStruct_1b47e50f7d442c7 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_1b47e50f7d442c7) != 48) @compileError("__AnonStruct_1b47e50f7d442c7 size mismatch");
+        if (@alignOf(__AnonStruct_1b47e50f7d442c7) != 4) @compileError("__AnonStruct_1b47e50f7d442c7 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_81a2561bb748cfff
 pub const __AnonStruct_81a2561bb748cfff = if (@sizeOf(usize) == 4) extern struct {
     texture: Texture,
@@ -7188,6 +7294,54 @@ comptime {
     }
 }
 
+/// Arguments for DrawHost.draw_texture_instances!
+/// Roc signature: { instances : List({ dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, tint : Color.Rgba }), texture : Texture } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const DrawHostDraw_texture_instancesArgs = if (@sizeOf(usize) == 4) extern struct {
+    instances: RocListWith(__AnonStruct_1b47e50f7d442c7, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.instances.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.instances.incref(amount);
+        value.texture.incref(amount);
+    }
+} else extern struct {
+    instances: RocListWith(__AnonStruct_1b47e50f7d442c7, false),
+    texture: Texture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.instances.decref(roc_host);
+        value.texture.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.instances.incref(amount);
+        value.texture.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawHostDraw_texture_instancesArgs) != 40) @compileError("DrawHostDraw_texture_instancesArgs size mismatch");
+        if (@alignOf(DrawHostDraw_texture_instancesArgs) != 8) @compileError("DrawHostDraw_texture_instancesArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawHostDraw_texture_instancesArgs) != 24) @compileError("DrawHostDraw_texture_instancesArgs size mismatch");
+        if (@alignOf(DrawHostDraw_texture_instancesArgs) != 4) @compileError("DrawHostDraw_texture_instancesArgs alignment mismatch");
+    }
+}
+
 /// Arguments for DrawHost.draw_texture_quad!
 /// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, q_bottom_left : F32, q_bottom_right : F32, q_top_left : F32, q_top_right : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba, top_left : Math.Vec2, top_right : Math.Vec2 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -9243,6 +9397,8 @@ pub const DrawHostCircle_gradientArg0 = __AnonStruct_f8a458371716c148;
 pub const DrawHostCircle_linesArg0 = __AnonStruct_8b18bd818a3a6ac2;
 pub const DrawHostCircleArg0 = __AnonStruct_e430ec55b5760490;
 pub const DrawHostDraw_textureArg0 = __AnonStruct_f942b11a3b075f2d;
+pub const DrawHostDraw_texture_instancesArg0 = __AnonStruct_a819339c8fa68dd6;
+pub const DrawHostDraw_texture_instancesArg0Instances = __AnonStruct_1b47e50f7d442c7;
 pub const DrawHostDraw_texture_quadArg0 = __AnonStruct_81a2561bb748cfff;
 pub const DrawHostFpsArg0 = __AnonStruct_477f59604acc661e;
 pub const DrawHostFont_metrics = __AnonStruct_2bfb89334ad27c35;
@@ -9648,6 +9804,18 @@ pub const __AnonStruct_f942b11a3b075f2dRelease = struct {
 
 pub const MathRectRelease = struct {
     pub fn release(value: MathRect, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_a819339c8fa68dd6Release = struct {
+    pub fn release(value: __AnonStruct_a819339c8fa68dd6, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_1b47e50f7d442c7Release = struct {
+    pub fn release(value: __AnonStruct_1b47e50f7d442c7, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -10128,6 +10296,8 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_18f9d3b1fa7f9242) return __AnonStruct_18f9d3b1fa7f9242Release;
     if (T == __AnonStruct_f27064a2797f2406) return __AnonStruct_f27064a2797f2406Release;
     if (T == __AnonStruct_f942b11a3b075f2d) return __AnonStruct_f942b11a3b075f2dRelease;
+    if (T == __AnonStruct_a819339c8fa68dd6) return __AnonStruct_a819339c8fa68dd6Release;
+    if (T == RocListWith(__AnonStruct_1b47e50f7d442c7, false)) return RocListSpineRelease(RocListWith(__AnonStruct_1b47e50f7d442c7, false));
     if (T == __AnonStruct_81a2561bb748cfff) return __AnonStruct_81a2561bb748cfffRelease;
     if (T == __AnonStruct_71c7986c66c89ace) return __AnonStruct_71c7986c66c89aceRelease;
     if (T == __AnonStruct_cf14b2ecc2676e3) return __AnonStruct_cf14b2ecc2676e3Release;
@@ -10455,6 +10625,13 @@ pub extern fn roc_draw_clear(arg0: ColorRgba) callconv(.c) void;
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_draw_texture_raw(arg0: DrawHostDraw_textureArgs) callconv(.c) void;
+
+/// Hosted symbol for DrawHost.draw_texture_instances!
+/// Roc signature: { instances : List({ dest : Math.Rect, origin : Math.Vec2, rotation : F32, source : Math.Rect, tint : Color.Rgba }), texture : Texture } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_draw_draw_texture_instances_raw(arg0: DrawHostDraw_texture_instancesArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.draw_texture_quad!
 /// Roc signature: { bottom_left : Math.Vec2, bottom_right : Math.Vec2, q_bottom_left : F32, q_bottom_right : F32, q_top_left : F32, q_top_right : F32, source : Math.Rect, texture : Texture, tint : Color.Rgba, top_left : Math.Vec2, top_right : Math.Vec2 } => {}

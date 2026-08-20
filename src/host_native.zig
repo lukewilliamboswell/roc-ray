@@ -1127,6 +1127,8 @@ var render_texture_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 var headless_tilemap_draw_calls: usize = 0;
 var headless_tilemap_tiles: usize = 0;
 var headless_tilemap_last_quad: ?TilemapQuadProbe = null;
+var headless_texture_instance_batches: usize = 0;
+var headless_texture_instances: usize = 0;
 var render_texture_lease_count: usize = 0;
 var shader_leases: [SCOPE_STACK_LIMIT]?*u64 = @splat(null);
 var shader_lease_count: usize = 0;
@@ -2438,6 +2440,89 @@ fn headlessTilemapRequest(
         .selector_kind = selector_kind,
         .selector_value = selector_value,
     };
+}
+
+fn headlessTextureInstances(host: *RocHost, count: usize) abi.RocListWith(abi.DrawHostDraw_texture_instancesArg0Instances, false) {
+    const list = abi.RocListWith(abi.DrawHostDraw_texture_instancesArg0Instances, false).allocate(count, host);
+    const items = list.elements_ptr.?;
+    for (0..count) |index| {
+        const offset: f32 = @floatFromInt(index);
+        items[index] = .{
+            .source = .{ .x = 0, .y = 0, .width = 16, .height = 8 },
+            .dest = .{ .x = offset * 16, .y = 0, .width = 16, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
+        };
+    }
+    return list;
+}
+
+test "one instance batch crosses once and releases its texture and list" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    headless_texture_instance_batches = 0;
+    headless_texture_instances = 0;
+    const phase = PhaseScope.enter(.render);
+    defer {
+        phase.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }).?;
+    hostedDrawTextureInstancesRaw(&roc_host, .{
+        .texture = .{ .handle = texture, .width = 16, .height = 8 },
+        .instances = headlessTextureInstances(&roc_host, 4),
+    });
+    try std.testing.expectEqual(@as(usize, 1), headless_texture_instance_batches);
+    try std.testing.expectEqual(@as(usize, 4), headless_texture_instances);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
+
+    // A handle of the wrong kind is the same failure an app sees after a
+    // release: nothing is drawn, and both transferred references still go back.
+    const shader = storeShader(.headless).?;
+    hostedDrawTextureInstancesRaw(&roc_host, .{
+        .texture = .{ .handle = shader, .width = 1, .height = 1 },
+        .instances = headlessTextureInstances(&roc_host, 3),
+    });
+    try std.testing.expectEqual(@as(usize, 1), headless_texture_instance_batches);
+    try std.testing.expectEqual(@as(usize, 4), headless_texture_instances);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+}
+
+test "an instance batch called from update is rejected" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    active_headless = true;
+    const phase = PhaseScope.enter(.commit);
+    last_phase_violation = null;
+    defer {
+        last_phase_violation = null;
+        phase.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_headless = false;
+        active_roc_host = null;
+    }
+
+    const texture = storeTexture(.{ .headless = .{ .width = 16, .height = 8 } }).?;
+    hostedDrawTextureInstancesRaw(&roc_host, .{
+        .texture = .{ .handle = texture, .width = 16, .height = 8 },
+        .instances = headlessTextureInstances(&roc_host, 2),
+    });
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Draw.texture_instances!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_render));
+    try std.testing.expectEqual(Phase.commit, violation.actual);
 }
 
 test "one tilemap host call draws a culled batch and releases texture owners" {
@@ -4054,6 +4139,33 @@ fn hostedDrawTextureRaw(args: abi.DrawHostDraw_textureArgs) callconv(.c) void {
     raylib.drawTexture(texture, args);
 }
 
+/// Draw a whole instance batch for one texture from a single hosted call.
+///
+/// Invalid or released handles behave exactly as `hostedDrawTextureRaw` does:
+/// the batch is dropped silently after its references are released. An empty
+/// list never reaches here, because Roc returns before crossing.
+fn hostedDrawTextureInstancesRaw(host: *RocHost, args: abi.DrawHostDraw_texture_instancesArgs) callconv(.c) void {
+    enforcePhase("Draw.texture_instances!", during_render);
+    defer args.decref(host);
+    if (headlessMode()) {
+        // Headless still resolves the handle so a released texture is rejected
+        // the same way it would be with a live GL context.
+        if (texture_heap.get(args.texture.handle.*) != null or
+            render_texture_heap.get(args.texture.handle.*) != null)
+        {
+            headless_texture_instance_batches += 1;
+            headless_texture_instances += args.instances.len();
+        }
+        return;
+    }
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
+    raylib.drawTextureInstances(texture, args.instances.items());
+}
+
+fn exportedDrawTextureInstancesRaw(args: abi.DrawHostDraw_texture_instancesArgs) callconv(.c) void {
+    hostedDrawTextureInstancesRaw(activeHost(), args);
+}
+
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
     enforcePhase("Draw.projective_texture!", during_render);
     defer args.texture.decref(activeHost());
@@ -5173,6 +5285,7 @@ comptime {
         @export(&hostedDrawClear, .{ .name = "roc_draw_clear" });
         @export(&exportedDrawPreparedTextRaw, .{ .name = "roc_draw_draw_prepared_text_raw" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
+        @export(&exportedDrawTextureInstancesRaw, .{ .name = "roc_draw_draw_texture_instances_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
         @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });

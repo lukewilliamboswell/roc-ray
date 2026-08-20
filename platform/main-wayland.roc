@@ -62,6 +62,7 @@ platform ""
 		"roc_draw_circle_raw": DrawHost.circle!,
 		"roc_draw_clear": DrawHost.clear!,
 		"roc_draw_draw_texture_raw": DrawHost.draw_texture!,
+		"roc_draw_draw_texture_instances_raw": DrawHost.draw_texture_instances!,
 		"roc_draw_draw_texture_quad_raw": DrawHost.draw_texture_quad!,
 		"roc_draw_end_scissor_raw": DrawHost.end_scissor!,
 		"roc_draw_fps": DrawHost.fps!,

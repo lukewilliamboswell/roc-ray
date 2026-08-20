@@ -58,10 +58,16 @@ Program := [].{
 		##
 		## TODO(roc): `fields` is annotated to return the structural record but,
 		## being the identity, infers back to `Step(msg)` -- so `from_fields`
-		## accepts a whole `Step` and wraps it a second time. With the pinned
-		## compiler `from_fields(step.fields())` type-checks and then segfaults
-		## `roc test`. Pass a record written out here, not the result of
-		## `fields`; the two do not round-trip until that inference is fixed.
+		## accepts a whole `Step` and wraps it a second time. Pass a record
+		## written out here, not the result of `fields`; the two do not
+		## round-trip until that inference is fixed.
+		##
+		## `from_fields(step.fields())` type-checks and then dies lowering.
+		## Reproduced on the pinned nightly (`edec830`) and on a debug build of
+		## the compiler at `968de6a7`, which names it: "postcheck invariant
+		## violated: related local and request had no exact nominal backing
+		## path", in `lowerLocalAtRequestedNode`
+		## (`src/postcheck/monotype/lower.zig`). Nothing to do with boxes.
 		from_fields : {
 			input : Input.Snapshot,
 			window : Window.Snapshot,
@@ -601,10 +607,10 @@ Program := [].{
 	##     ]
 	##
 	## Comparing `Task` values themselves is not possible -- each one owns a
-	## callback function, and equality cannot inspect a function. (Deriving `==`
-	## over a union that reaches a host-resource `Box` is worse than impossible:
-	## with the pinned compiler it crashes `roc test`.) Reducing the task to its
-	## request first sidesteps both.
+	## callback function, and equality cannot inspect a function. Deriving `==`
+	## over a union that reaches a host-resource `Box` is refused for its own
+	## reason, as a "type does not support equality" error naming every variant.
+	## Reducing the task to its request first sidesteps both.
 	##
 	## `Task.map` and `Update.map_msg` rewrite only the callback, so a mapped
 	## task keeps the shape it had. That is the property to lean on when testing

@@ -32,9 +32,11 @@ Run an example against the local platform:
 scripts/run-example.py examples/cave_climb
 ```
 
-The runner builds the host, uses `platform/main.roc` for the run, and restores
-the example's original platform reference when it exits. Pass
-`--skip-platform-build` to reuse native libraries from an earlier `zig build`.
+The runner builds the host and runs a *copy* of the example pointed at the
+platform sources, so the checked-in files are never rewritten. Pass
+`--skip-platform-build` (before the example) to reuse native libraries from an
+earlier `zig build`, and `--platform-mode=bundle` to run against a bundled
+platform instead of its sources.
 
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
@@ -76,12 +78,50 @@ the examples. The lower-level example driver is also useful while iterating:
 scripts/all_tests.py
 scripts/all_tests.py --skip-platform-build
 scripts/all_tests.py --skip-roc-build
+scripts/all_tests.py --only pong,snake
 ```
 
-It checks formatting and types, runs Roc tests, builds the apps, exercises their
-headless paths, and verifies a locally served platform bundle. The scripts know
-how to handle both local and released platform references; avoid committing an
-incidental reference change made only for local testing.
+It checks formatting and types, runs Roc tests, builds the apps and exercises
+their headless paths. `--only` takes example names (repeatable, or comma
+separated) and is the way to iterate on one example without waiting for the
+other sixteen.
+
+### How the apps reach the platform
+
+Every app stage resolves its packages over localhost. `scripts/bundle.sh`
+bundles the roc-ray-types package and the platform into a scratch directory,
+`scripts/local_bundles.py` serves that directory over HTTP, and each app is
+*copied* to a scratch directory with its header pointed at the served bundle.
+Three things follow:
+
+- Examples are checked and built in the shape they ship in. `roc bundle` drops a
+  relative dependency without complaining, and the app it breaks fails with
+  INVALID PACKAGE DEPENDENCY; that used to surface only in a separate bundle
+  test at the end of a run, and now surfaces in `roc check`.
+- Every reference to roc-ray-types resolves one freshly built artifact: the
+  platform's, the four examples that name the package themselves
+  (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
+  halves of `test/package_interop`. Building an app against a package build
+  nobody produced is no longer expressible. `test/package_interop` is built
+  every run to keep that honest.
+- No tracked file is ever rewritten, so `git status` stays clean however a run
+  ends -- including a `kill -9` part way through a build. There is no longer an
+  incidental platform reference change to avoid committing, and no reason to
+  reach for `git checkout -- examples/` after an interrupted run.
+
+Built executables land in the scratch directory rather than beside each
+`main.roc`; pass `--copy-executables` if you want them in place, and use
+`scripts/run-example.py` to run one interactively.
+
+Roc caches packages by content hash, so re-bundling changed sources produces a
+new hash and a stale reference is not expressible. The port is derived from the
+checkout path so the hashes stay put between runs and the cache is reused; edits
+to `platform/` or `types/` each leave another extracted copy (~90 MB for the
+platform) under `~/.cache/roc/packages`, so delete that directory when it grows.
+
+Run `python3 scripts/local_bundles.py --serve` to hold the bundles up on
+localhost yourself, for instance to build a separate app or package against the
+same URLs.
 
 Enable the repository's pre-commit hook once after cloning:
 
@@ -350,6 +390,17 @@ source checkout with:
 ```bash
 scripts/build-raylib-wayland.sh /path/to/raylib-6.0
 ```
+
+Both bundles need every target's archives under `platform/targets/`, which a
+plain `zig build` produces -- it cross-compiles all four of x64mac, arm64mac,
+x64glibc and x64win. So a local checkout can build a complete bundle, which is
+what `scripts/all_tests.py` relies on. `bundle.sh` names the exact file it is
+missing if some target was never built.
+
+The platform depends on roc-ray-types by relative path, which cannot survive
+bundling, so `bundle.sh` rewrites the staged header to a real URL: the release
+pinned in `.types-version`, or `--types-url-base` when the package is being
+served locally.
 
 ## Vendored encoders
 

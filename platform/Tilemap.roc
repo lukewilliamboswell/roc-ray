@@ -212,6 +212,11 @@ Tilemap :: {
 
 	## Empty configured tilemap, useful when an optional map fails to load.
 	## Unlike building `empty_raw_map`, this value cannot fail validation.
+	##
+	## It is also the resource-free value for pure tests, and needs no separate
+	## `stub`: a tilemap holds its textures in `render_tilesets`, and this one
+	## has none. Put it in a model to reach the app's real `update` from an
+	## `expect`. Drawing it draws nothing, which is what having no layers means.
 	empty : Tilemap
 	empty = {
 		raw: empty_raw_map,

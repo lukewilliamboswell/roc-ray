@@ -35,6 +35,16 @@ Assets := [].{
 			}
 		}
 
+		## Resource-free store value for pure tests.
+		##
+		## The handle never resolves to an open directory, so every load made
+		## through it fails the way a load through a released store does. A store
+		## is only useful during startup -- every loader that takes one is
+		## startup-only -- so this exists for the app that keeps one in its model
+		## anyway, to let a pure `expect` build that model. Do not use it to test
+		## asset resolution or resource lifetime.
+		stub : Store
+		stub = Store.(AssetsHost.Store.stub)
 	}
 
 	## How a disk store root is resolved. These choices are explicit so moving an

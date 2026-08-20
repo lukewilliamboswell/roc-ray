@@ -209,6 +209,10 @@ def build_examples(root: Path) -> None:
             str(root / "scripts" / "all_tests.py"),
             "--runtime-only",
             "--headless-frames=1",
+            # all_tests.py builds into a scratch directory so an interrupted run
+            # cannot dirty the tree; profiling wants the binaries beside each
+            # main.roc, where it looks for them.
+            "--copy-executables",
         ],
         cwd=root,
     )

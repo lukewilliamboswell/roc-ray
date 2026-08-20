@@ -2,61 +2,77 @@
 """
 Run all tests for the roc-ray platform.
 
-Source checks temporarily point checked-in examples at platform/main.roc,
-then restore their release URLs. Roc is always resolved from PATH.
+Every app stage resolves its packages through localhost. `scripts/bundle.sh`
+bundles the roc-ray-types package and the platform into a scratch directory,
+`scripts/local_bundles.py` serves that directory over HTTP, and each app is
+*copied* to a scratch directory with its header pointed at the served bundle.
+Three things follow: every app is checked and built in the shape it ships in
+rather than against the platform sources, every reference to roc-ray-types --
+the platform's, the four examples that name it themselves, both halves of
+test/package_interop -- resolves one freshly built artifact, and no tracked file
+is ever rewritten, so an interrupted run cannot leave the working tree dirty.
 
 This script runs:
-- zig build      - Build the native host libraries
-- roc check      - Type check all examples
-- roc fmt --check - Verify formatting
-- roc test       - Run inline tests
-- roc build      - Build executables
-- bundle test    - Bundle the platform, host it on localhost, build apps from the URL
+- zig build       - Build the native host libraries
+- libvpx check    - Verify the vendored encoder's per-architecture source lists
+- roc check       - Type check all examples against the served platform bundle
+- roc fmt --check - Verify formatting of the checked-in examples
+- roc test        - Run inline tests
+- roc build       - Build executables against the served platform bundle
+- headless runs   - Run each built example for a few frames
+- cli args        - Build and run the argv bridge probe
+- model alloc     - Measure what a frame costs a large collection in the model
+- package interop - Build test/package_interop with the package pinning the
+                    served types URL, which is the case this all exists for
+- wayland bundle  - Bundle, inspect and build the Linux-only Wayland package
 
 Usage:
-    ./scripts/all_tests.py                   # Run all tests
+    ./scripts/all_tests.py                       # Run all tests
+    ./scripts/all_tests.py --only pong,snake     # Restrict to some examples
     ./scripts/all_tests.py --skip-platform-build # Reuse existing host libraries
-    ./scripts/all_tests.py --skip-roc-build  # Skip roc build
-    ./scripts/all_tests.py --skip-runtime    # Skip running built examples
-    ./scripts/all_tests.py --skip-roc-test   # Skip roc test
-    ./scripts/all_tests.py --runtime-only    # Only build and run examples headlessly
-    ./scripts/all_tests.py --skip-bundle-test # Skip the bundle test
-    ./scripts/all_tests.py --verbose         # Show all output
+    ./scripts/all_tests.py --skip-roc-build      # Skip roc build
+    ./scripts/all_tests.py --skip-runtime        # Skip running built examples
+    ./scripts/all_tests.py --skip-roc-test       # Skip roc test
+    ./scripts/all_tests.py --runtime-only        # Only build and run examples headlessly
+    ./scripts/all_tests.py --skip-bundle-test    # Skip the Wayland bundle package test
+    ./scripts/all_tests.py --platform-mode=source # Serve types only; use platform sources
+    ./scripts/all_tests.py --copy-executables    # Also leave binaries beside each main.roc
+    ./scripts/all_tests.py --verbose             # Show all output
+
+Nothing tracked is written at any point, so `git status` stays clean however the
+run ends -- including SIGKILL. Built executables and staged sources live in a
+scratch directory under the system temp directory.
 
 TODO replace me with a Roc script when basic-cli is implemented
 """
 
 import argparse
-import functools
-import http.server
 import io
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
 import tarfile
-import threading
-import time
-import urllib.request
-from contextlib import contextmanager
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import local_bundles  # noqa: E402  (needs the sys.path entry above)
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
 
-# Platform references used by examples. Bundle tests temporarily rewrite one of
-# these to the localhost bundle URL.
-LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
-RELEASE_PLATFORM_REF_RE = re.compile(
-    r'"https://github\.com/lukewilliamboswell/roc-ray/releases/download/[^"]+\.tar\.zst"'
-)
+# Re-exported for callers that import them from here (see .github/workflows).
+LOCAL_PLATFORM_REF = local_bundles.LOCAL_PLATFORM_REF
+RELEASE_PLATFORM_REF_RE = local_bundles.RELEASE_PLATFORM_REF_RE
+_rewrite_platform_ref = local_bundles.rewrite_platform_ref
 
-# Examples to skip in the bundled-platform build test, mapping filename -> reason.
-# Use this when a specific example can't build against the bundled platform yet
-# (e.g. a known upstream issue); it is reported as SKIPPED, not FAILED.
-#   e.g. "example.roc": "blocked on roc-lang/roc#NNNN (record-update lowering)"
+# Examples to skip in the bundled-platform build test, mapping example name ->
+# reason. Use this when a specific example can't build against the bundled
+# platform yet (e.g. a known upstream issue); it is reported as SKIPPED, not
+# FAILED.
+#   e.g. "example": "blocked on roc-lang/roc#NNNN (record-update lowering)"
 BUNDLE_TEST_SKIP: dict[str, str] = {}
 
 # Examples to skip in native `roc build` / headless runtime checks.
@@ -66,7 +82,6 @@ BUILD_RUNTIME_SKIP: dict[str, str] = {
     # TODO: Investigate why this example takes several minutes to compile in CI.
     "cave_climb": "follow-up: investigate unusually slow Roc build",
 }
-
 
 
 def run_cmd(
@@ -108,21 +123,54 @@ def example_name(example: Path) -> str:
     return example.parent.name
 
 
-def executable_for_example(root: Path, example: Path) -> Path:
-    """Return the executable produced beside an example's `main.roc`."""
+def select_examples(examples: list[Path], only: list[str]) -> list[Path]:
+    """Restrict `examples` to the names in `only`."""
+    if not only:
+        return examples
+
+    wanted: list[str] = []
+    for entry in only:
+        wanted.extend(part.strip() for part in entry.split(",") if part.strip())
+
+    by_name = {example_name(example): example for example in examples}
+    selected: list[Path] = []
+    unknown: list[str] = []
+    for name in wanted:
+        example = by_name.get(name.rstrip("/"))
+        if example is None:
+            unknown.append(name)
+        elif example not in selected:
+            selected.append(example)
+
+    if unknown:
+        available = ", ".join(sorted(by_name))
+        raise SystemExit(
+            f"error: unknown example(s): {', '.join(unknown)}\navailable: {available}"
+        )
+    return selected
+
+
+def executable_for(entry: Path) -> Path:
+    """Return the executable `roc build` produces beside an app's `main.roc`."""
     suffix = ".exe" if IS_WINDOWS else ""
-    return example.parent / f"main{suffix}"
+    return entry.with_name(f"{entry.stem}{suffix}")
 
 
 def run_headless_examples(
-    root: Path, examples: list[Path], frames: int, verbose: bool
+    root: Path, built: list[tuple[Path, Path]], frames: int, verbose: bool
 ) -> list[str]:
-    """Run each already-built example executable in bounded headless mode."""
+    """Run each already-built example executable in bounded headless mode.
+
+    `built` pairs the checked-in entrypoint with the staged copy that was built.
+    The executables live in the scratch directory but are run from the
+    repository root, because the examples load their assets from
+    `examples/<name>/assets/...` relative to the working directory.
+    """
     failed: list[str] = []
 
     print(f"\nRunning built examples headlessly ({frames} frame(s))...")
-    for example in examples:
-        executable = executable_for_example(root, example)
+    for example, staged in built:
+        executable = executable_for(staged)
         name = example_name(example)
         print(f"  Running {name}...", end=" ", flush=True)
         if not executable.is_file():
@@ -149,19 +197,25 @@ def run_headless_examples(
     return failed
 
 
-def run_cli_args_integration(root: Path, verbose: bool) -> list[str]:
-    """Build and run the argv bridge probe against the local platform."""
+def run_cli_args_integration(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Build and run the argv bridge probe against the served platform."""
     fixture = root / "test" / "cli_args" / "main.roc"
-    executable = executable_for_example(root, fixture)
+    if not fixture.is_file():
+        return []
 
     print("\nRunning CLI argument integration probe...", end=" ", flush=True)
-    if not run_cmd(["roc", "build", "main.roc"], "build CLI argument probe", verbose, cwd=fixture.parent):
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cli_args")
+    if not run_cmd(
+        ["roc", "build", staged.name], "build CLI argument probe", verbose, cwd=staged.parent
+    ):
         print("FAILED")
         return ["build CLI argument probe"]
 
     ok = run_cmd(
         [
-            str(executable),
+            str(executable_for(staged)),
             "--host-headless",
             "--host-headless-frames=3",
             "--cli-args-config",
@@ -175,82 +229,100 @@ def run_cli_args_integration(root: Path, verbose: bool) -> list[str]:
     return [] if ok else ["run CLI argument probe"]
 
 
-def _serve_dir(directory: Path, verbose: bool) -> tuple[http.server.ThreadingHTTPServer, int]:
-    """Start a background HTTP server rooted at `directory`. Returns (server, port)."""
+def run_model_allocation_check(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Measure what one frame costs a large collection held in the app's model.
 
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def log_message(self, *args):  # silence per-request logging
-            if verbose:
-                super().log_message(*args)
+    Writing one element of a million-element list in the model allocates a whole
+    new list, every frame: the model is not uniquely referenced while `update`
+    runs, so the write is copy-on-write rather than in place. That is measured
+    behaviour, and this keeps it measured -- the check fails if a frame starts
+    costing more than one copy, and equally if it starts costing less.
 
-    handler = functools.partial(Handler, directory=str(directory))
-    # Port 0 -> OS picks a free ephemeral port.
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    port = httpd.server_address[1]
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    return httpd, port
+    The probe is a Roc app like any other, so it is built from a staged copy
+    against the served platform rather than from its committed relative
+    reference. `test_model_allocation.py` looks for the executable beside the
+    checked-in `main.roc`, so the build is copied there (gitignored) and the
+    script is asked to skip its own build.
+    """
+    probe = root / "scripts" / "test_model_allocation.py"
+    entry = root / "test" / "model_inplace" / "main.roc"
+    if not probe.is_file() or not entry.is_file():
+        return []
 
+    print("\nMeasuring model collection allocation per frame...", end=" ", flush=True)
+    staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "model_inplace")
+    if not run_cmd(
+        ["roc", "build", staged.name], "build model allocation probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED (build)")
+        return ["model allocation probe build"]
 
-def _wait_for_url(url: str) -> bool:
-    """Return True once a local test URL is reachable."""
-    last_error: Exception | None = None
-    request = urllib.request.Request(url, method="HEAD")
-    for _ in range(10):
-        try:
-            with urllib.request.urlopen(request, timeout=5) as response:
-                if response.status == 200:
-                    return True
-                last_error = RuntimeError(f"HTTP {response.status}")
-        except Exception as err:
-            last_error = err
-            time.sleep(0.5)
+    destination = executable_for(entry)
+    shutil.copyfile(executable_for(staged), destination)
+    destination.chmod(0o755)
 
-    print(f"  Bundle URL was not accessible: {url}")
-    if last_error is not None:
-        print(f"  Last error: {last_error}")
-    return False
-
-
-def _bundle_name_from_output(output: str) -> str | None:
-    """Extract the generated bundle filename from bundle.sh output."""
-    for line in output.splitlines():
-        if line.startswith("Created:"):
-            return Path(line.split(maxsplit=1)[1].strip()).name
-    return None
-
-
-def _types_bundle_name_from_output(output: str) -> str | None:
-    """Extract the roc-ray-types bundle filename from bundle.sh output."""
-    for line in output.splitlines():
-        if line.startswith("Types package bundle:"):
-            return line.split(":", 1)[1].strip()
-    return None
-
-
-def _rewrite_platform_ref(source: str, replacement: str) -> tuple[str, bool]:
-    """Rewrite an example's recognized local or release platform reference."""
-    if LOCAL_PLATFORM_REF in source:
-        return source.replace(LOCAL_PLATFORM_REF, replacement), True
-
-    rewritten, count = RELEASE_PLATFORM_REF_RE.subn(replacement, source)
-    return rewritten, count > 0
+    result = subprocess.run(
+        [sys.executable, str(probe), "--skip-build"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+        shell=IS_WINDOWS,
+    )
+    ok = result.returncode == 0
+    print("ok" if ok else "FAILED")
+    # The numbers are the point of this step, so print them either way.
+    for line in (result.stdout or "").splitlines():
+        print(f"  {line}")
+    if not ok or verbose:
+        sys.stderr.write(result.stderr or "")
+    return [] if ok else ["model allocation check"]
 
 
-@contextmanager
-def _temporary_platform_refs(examples: list[Path], replacement: str):
-    """Temporarily rewrite example platform references and always restore them."""
-    originals: dict[Path, str] = {}
-    try:
-        for example in examples:
-            original = example.read_text()
-            rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
-            if did_rewrite and rewritten != original:
-                originals[example] = original
-                example.write_text(rewritten)
-        yield len(originals)
-    finally:
-        for example, original in originals.items():
-            example.write_text(original)
+def run_package_interop_test(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Build `test/package_interop` with the *package* pinning types by URL.
+
+    This is the arrangement the served bundles exist for: `input_adapter` is a
+    package depending only on roc-ray-types, and the app depends on both it and
+    the platform, so three separate references have to describe one package.
+    Staging points every `rrt:` entry in the tree at the served URL, and this
+    asserts the result still compiles and runs -- which is the property the
+    README says the whole types-package split rests on.
+    """
+    entry = root / "test" / "package_interop" / "app.roc"
+    if not entry.is_file():
+        print("\nSkipping package interop test (test/package_interop is absent)")
+        return []
+
+    print("\nRunning package interop test (package and platform share a types URL)...")
+    staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "package_interop")
+
+    failed: list[str] = []
+    for command in ("check", "build"):
+        print(f"  {command.capitalize()}ing {entry.name}...", end=" ", flush=True)
+        if run_cmd(["roc", command, staged.name], f"interop {command}", verbose, cwd=staged.parent):
+            print("ok")
+        else:
+            print("FAILED")
+            failed.append(f"package interop roc {command}")
+            return failed
+
+    print(f"  Running {entry.name} headlessly...", end=" ", flush=True)
+    if run_cmd(
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=3"],
+        "interop headless run",
+        verbose,
+        cwd=root,
+    ):
+        print("ok")
+    else:
+        print("FAILED")
+        failed.append("package interop headless run")
+
+    return failed
 
 
 def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
@@ -270,100 +342,14 @@ def _read_tar_zst(bundle_path: Path) -> tarfile.TarFile:
     return tarfile.open(fileobj=io.BytesIO(zstd_proc.stdout), mode="r:")
 
 
-def run_bundle_test(root: Path, examples: list[Path], verbose: bool) -> list[str]:
-    """Bundle the platform, host it on localhost, and build each example against
-    that bundle URL (mirrors the template's release check). Returns failures.
-
-    Steps: `scripts/bundle.sh` -> HTTP server on localhost -> rewrite each example's
-    platform reference to the bundle URL -> `roc build`. Examples listed in
-    BUNDLE_TEST_SKIP are reported as skipped, not failed.
-    """
-    failed: list[str] = []
-
-    print("\nRunning bundle test (build platform package, host locally, build apps from URL)...")
-
-    # The platform depends on the roc-ray-types package by relative path, which
-    # cannot survive bundling, so bundle.sh needs the URL the package bundle
-    # will be served from. Start the server first so that URL is known, then
-    # bundle both into the directory it is already serving.
-    httpd, port = _serve_dir(root, verbose)
-    base_url = f"http://127.0.0.1:{port}"
-    bundle_path: Path | None = None
-    types_path: Path | None = None
-    try:
-        # bundle.sh is a bash script; on Windows (without bash) skip the whole step.
-        bundle_proc = subprocess.run(
-            ["bash", "scripts/bundle.sh", "--types-url-base", base_url],
-            capture_output=True,
-            text=True,
-            cwd=root,
-        )
-        if bundle_proc.returncode != 0:
-            print(bundle_proc.stdout)
-            print(bundle_proc.stderr, file=sys.stderr)
-            print("  bundle.sh FAILED")
-            return ["bundle.sh"]
-
-        # bundle.sh prints "Created: /abs/path/<hash>.tar.zst"
-        bundle_name = _bundle_name_from_output(bundle_proc.stdout)
-        if not bundle_name:
-            print(bundle_proc.stdout)
-            print("  Could not determine bundle filename from bundle.sh output")
-            return ["bundle.sh (no Created: line)"]
-
-        bundle_path = root / bundle_name
-        types_name = _types_bundle_name_from_output(bundle_proc.stdout)
-        if types_name:
-            types_path = root / types_name
-            print(f"  Bundled roc-ray-types: {types_name}")
-        print(f"  Bundled platform: {bundle_name}")
-
-        bundle_url = f"{base_url}/{bundle_name}"
-        url = f'"{bundle_url}"'
-        if not _wait_for_url(bundle_url):
-            return ["bundle URL unavailable"]
-
-        for example in examples:
-            name = example_name(example)
-            if name in BUNDLE_TEST_SKIP:
-                print(f"  Building {name} (URL)... SKIPPED ({BUNDLE_TEST_SKIP[name]})")
-                continue
-
-            print(f"  Building {name} (URL)...", end=" ", flush=True)
-            original = example.read_text()
-            rewritten, did_rewrite = _rewrite_platform_ref(original, url)
-            if not did_rewrite:
-                print("SKIPPED (no platform reference to rewrite)")
-                continue
-
-            example.write_text(rewritten)
-            try:
-                ok = run_cmd(
-                    ["roc", "build", "main.roc"],
-                    f"bundle build {name}",
-                    verbose,
-                    cwd=example.parent,
-                )
-            finally:
-                example.write_text(original)  # always restore the local platform ref
-
-            if ok:
-                print("ok")
-            else:
-                print("FAILED")
-                failed.append(f"bundle build {name}")
-    finally:
-        httpd.shutdown()
-        if bundle_path is not None:
-            bundle_path.unlink(missing_ok=True)
-        if types_path is not None:
-            types_path.unlink(missing_ok=True)
-
-    return failed
-
-
 def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[str]:
-    """Build and inspect the Wayland platform package bundle."""
+    """Build and inspect the Wayland platform package bundle.
+
+    The default package is already exercised by every other stage, which builds
+    the examples straight from its served bundle. This checks the *other*
+    package: that it carries only the Linux target, drops the X11 stub, and
+    still builds an app.
+    """
     failed: list[str] = []
 
     print("\nRunning Wayland bundle package test...")
@@ -386,135 +372,38 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
         shutil.copyfile(fixture_archive, wayland_archive)
         created_archive = True
 
-    bundle_path: Path | None = None
-    types_path: Path | None = None
-    wayland_httpd, wayland_port = _serve_dir(root, verbose)
-    wayland_base_url = f"http://127.0.0.1:{wayland_port}"
     try:
-        bundle_proc = subprocess.run(
-            ["bash", "scripts/bundle.sh", "--platform", "wayland",
-             "--types-url-base", wayland_base_url],
-            capture_output=True,
-            text=True,
-            cwd=root,
-        )
-        if bundle_proc.returncode != 0:
-            print(bundle_proc.stdout)
-            print(bundle_proc.stderr, file=sys.stderr)
-            print("  bundle.sh --platform wayland FAILED")
-            return ["bundle.sh --platform wayland"]
+        with local_bundles.serve_packages(
+            root, package="wayland", mode="bundle", verbose=verbose
+        ) as packages:
+            bundle_path = packages.served_dir / Path(packages.platform_url or "").name
+            print(f"  Bundled Wayland platform: {bundle_path.name}")
 
-        bundle_name = _bundle_name_from_output(bundle_proc.stdout)
-        if not bundle_name:
-            print(bundle_proc.stdout)
-            print("  Could not determine bundle filename from Wayland bundle output")
-            return ["bundle.sh --platform wayland (no Created: line)"]
+            failed.extend(_inspect_wayland_bundle(bundle_path))
+            if failed:
+                return failed
 
-        bundle_path = root / bundle_name
-        types_name = _types_bundle_name_from_output(bundle_proc.stdout)
-        if types_name:
-            types_path = root / types_name
-        print(f"  Bundled Wayland platform: {bundle_name}")
-
-        with _read_tar_zst(bundle_path) as bundle:
-            names = set(bundle.getnames())
-            main_file = bundle.extractfile("main.roc")
-            if main_file is None:
-                print("  Wayland bundle is missing main.roc")
-                failed.append("wayland bundle missing main.roc")
-            else:
-                main_text = main_file.read().decode()
-                forbidden_main_tokens = ["x64mac:", "arm64mac:", "x64win:", "libX11.so"]
-                for token in forbidden_main_tokens:
-                    if token in main_text:
-                        print(f"  Wayland main.roc unexpectedly contains {token}")
-                        failed.append(f"wayland main.roc contains {token}")
-
-                expected_target = (
-                    'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
-                    '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
-                    '"libc.so", "crtn.o"] }'
-                )
-                if expected_target not in main_text:
-                    print("  Wayland main.roc does not contain the expected Linux-only target")
-                    failed.append("wayland main.roc target section")
-
-            expected_files = {
-                "targets/x64glibc/Scrt1.o",
-                "targets/x64glibc/crti.o",
-                "targets/x64glibc/crtn.o",
-                "targets/x64glibc/libhost.a",
-                "targets/x64glibc/libraylib.a",
-                "targets/x64glibc/libmsf_gif.a",
-                "targets/x64glibc/libvpx.a",
-                "targets/x64glibc/libm.so",
-                "targets/x64glibc/libc.so",
-            }
-            for expected_file in expected_files:
-                if expected_file not in names:
-                    print(f"  Wayland bundle is missing {expected_file}")
-                    failed.append(f"wayland bundle missing {expected_file}")
-
-            forbidden_prefixes = (
-                "targets/x64mac/",
-                "targets/arm64mac/",
-                "targets/x64win/",
-                "targets/macos-sysroot/",
+            name = example_name(example)
+            staged = local_bundles.stage_app(
+                example, packages, packages.scratch_dir / "wayland-example"
             )
-            for name in sorted(names):
-                if name == "targets/x64glibc/libX11.so":
-                    print("  Wayland bundle unexpectedly includes libX11.so")
-                    failed.append("wayland bundle includes libX11.so")
-                if name.startswith(forbidden_prefixes):
-                    print(f"  Wayland bundle unexpectedly includes {name}")
-                    failed.append(f"wayland bundle includes {name}")
-                    break
-
-        if failed:
-            return failed
-
-        httpd, port = wayland_httpd, wayland_port
-        bundle_url = f"{wayland_base_url}/{bundle_name}"
-        url = f'"{bundle_url}"'
-        original = example.read_text()
-        try:
-            if not _wait_for_url(bundle_url):
-                return ["wayland bundle URL unavailable"]
-
-            rewritten, did_rewrite = _rewrite_platform_ref(original, url)
-            if not did_rewrite:
-                print(f"  Skipping URL import check for {example_name(example)} (no platform ref)")
+            command = "build" if IS_LINUX else "check"
+            ok = run_cmd(
+                ["roc", command, staged.name],
+                f"wayland bundle {command} {name}",
+                verbose,
+                cwd=staged.parent,
+            )
+            label = f"  {command.capitalize()}ing {name} against Wayland bundle URL..."
+            if ok:
+                print(f"{label} ok")
             else:
-                example.write_text(rewritten)
-                command = "build" if IS_LINUX else "check"
-                ok = run_cmd(
-                    ["roc", command, "main.roc"],
-                    f"wayland bundle {command} {example_name(example)}",
-                    verbose,
-                    cwd=example.parent,
-                )
-                if ok:
-                    print(
-                        f"  {command.capitalize()}ing {example_name(example)} "
-                        "against Wayland bundle URL... ok"
-                    )
-                else:
-                    print(
-                        f"  {command.capitalize()}ing {example_name(example)} "
-                        "against Wayland bundle URL... FAILED"
-                    )
-                    failed.append(f"wayland bundle {command} {example_name(example)}")
-        finally:
-            example.write_text(original)
-            httpd.shutdown()
-
-        return failed
+                print(f"{label} FAILED")
+                failed.append(f"wayland bundle {command} {name}")
+    except local_bundles.LocalBundleError as err:
+        print(f"  Wayland bundle FAILED: {err}")
+        failed.append("wayland bundle")
     finally:
-        wayland_httpd.shutdown()
-        if bundle_path is not None:
-            bundle_path.unlink(missing_ok=True)
-        if types_path is not None:
-            types_path.unlink(missing_ok=True)
         if created_archive:
             wayland_archive.unlink(missing_ok=True)
         for created_dir in created_archive_dirs:
@@ -523,9 +412,79 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
             except OSError:
                 pass
 
+    return failed
+
+
+def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
+    """Assert the Wayland bundle carries the Linux target and nothing else."""
+    failed: list[str] = []
+
+    with _read_tar_zst(bundle_path) as bundle:
+        names = set(bundle.getnames())
+        main_file = bundle.extractfile("main.roc")
+        if main_file is None:
+            print("  Wayland bundle is missing main.roc")
+            failed.append("wayland bundle missing main.roc")
+        else:
+            main_text = main_file.read().decode()
+            forbidden_main_tokens = ["x64mac:", "arm64mac:", "x64win:", "libX11.so"]
+            for token in forbidden_main_tokens:
+                if token in main_text:
+                    print(f"  Wayland main.roc unexpectedly contains {token}")
+                    failed.append(f"wayland main.roc contains {token}")
+
+            expected_target = (
+                'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
+                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
+                '"libc.so", "crtn.o"] }'
+            )
+            if expected_target not in main_text:
+                print("  Wayland main.roc does not contain the expected Linux-only target")
+                failed.append("wayland main.roc target section")
+
+        expected_files = {
+            "targets/x64glibc/Scrt1.o",
+            "targets/x64glibc/crti.o",
+            "targets/x64glibc/crtn.o",
+            "targets/x64glibc/libhost.a",
+            "targets/x64glibc/libraylib.a",
+            "targets/x64glibc/libmsf_gif.a",
+            "targets/x64glibc/libvpx.a",
+            "targets/x64glibc/libm.so",
+            "targets/x64glibc/libc.so",
+        }
+        for expected_file in expected_files:
+            if expected_file not in names:
+                print(f"  Wayland bundle is missing {expected_file}")
+                failed.append(f"wayland bundle missing {expected_file}")
+
+        forbidden_prefixes = (
+            "targets/x64mac/",
+            "targets/arm64mac/",
+            "targets/x64win/",
+            "targets/macos-sysroot/",
+        )
+        for name in sorted(names):
+            if name == "targets/x64glibc/libX11.so":
+                print("  Wayland bundle unexpectedly includes libX11.so")
+                failed.append("wayland bundle includes libX11.so")
+            if name.startswith(forbidden_prefixes):
+                print(f"  Wayland bundle unexpectedly includes {name}")
+                failed.append(f"wayland bundle includes {name}")
+                break
+
+    return failed
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all roc-ray tests")
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Restrict to these examples (repeatable, or comma separated), e.g. --only pong,snake",
+    )
     parser.add_argument(
         "--skip-platform-build",
         action="store_true",
@@ -561,8 +520,49 @@ def main() -> int:
     )
     parser.add_argument(
         "--skip-bundle-test",
+        "--skip-wayland-bundle-test",
+        dest="skip_bundle_test",
         action="store_true",
-        help="Skip the bundle test (build platform package, host locally, build apps from URL)",
+        help=(
+            "Skip the Wayland bundle package test. The default package is served "
+            "and built against by every other stage, so it has no separate test."
+        ),
+    )
+    parser.add_argument(
+        "--skip-interop-test",
+        action="store_true",
+        help=(
+            "Skip building test/package_interop, which checks that a package "
+            "pinning roc-ray-types by URL and the platform agree on one identity"
+        ),
+    )
+    parser.add_argument(
+        "--platform-mode",
+        choices=["auto", "bundle", "source"],
+        default="auto",
+        help=(
+            "How apps reach the platform: 'bundle' serves a platform bundle over "
+            "localhost, 'source' serves only the types package and uses a staged copy "
+            "of platform/ that points at it, 'auto' (default) bundles when it can"
+        ),
+    )
+    parser.add_argument(
+        "--copy-executables",
+        action="store_true",
+        help=(
+            "Copy each built example executable back beside its main.roc. Off by "
+            "default so the working tree is untouched; tools that need the "
+            "binaries in place (scripts/profile-example-allocations.py) ask for it"
+        ),
+    )
+    parser.add_argument(
+        "--ephemeral-port",
+        action="store_true",
+        help=(
+            "Always let the OS pick the HTTP port. The default prefers a port derived "
+            "from this checkout so bundle hashes, and the Roc package cache entries "
+            "behind them, stay stable between runs"
+        ),
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Show all command output"
@@ -577,14 +577,19 @@ def main() -> int:
     root = Path(__file__).resolve().parent.parent
     examples_dir = root / "examples"
 
-    examples = find_examples(examples_dir)
+    examples = select_examples(find_examples(examples_dir), args.only)
     if not examples:
         print("Error: No examples/*/main.roc entrypoints found")
         return 1
 
-    with _temporary_platform_refs(examples, LOCAL_PLATFORM_REF) as rewritten_count:
-        if rewritten_count:
-            print(f"Using local source platform for {rewritten_count} example(s)")
+    warning = local_bundles.check_roc_pin(root)
+    if warning:
+        print(warning, file=sys.stderr)
+
+    # SIGTERM/SIGINT become SystemExit so the server and scratch directory are
+    # released promptly. Repository safety does not depend on this: no tracked
+    # file is ever rewritten, so even SIGKILL leaves the tree clean.
+    with local_bundles.terminating_signals():
         return _run_tests(args, root, examples)
 
 
@@ -597,7 +602,9 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         print("\nReusing existing host libraries (--skip-platform-build)")
     else:
         # Standalone runs build a fresh host. Orchestrators that already chose
-        # an optimization mode must pass --skip-platform-build.
+        # an optimization mode must pass --skip-platform-build. The libraries
+        # this produces are also what the platform bundle is built from, so it
+        # has to happen before anything is served.
         print("\nBuilding platform (zig build)...")
         if not run_cmd(["zig", "build"], "zig build", args.verbose, cwd=root):
             print("  FAILED")
@@ -619,89 +626,59 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         print("  FAILED")
         failed.append("libvpx archive check")
 
+    # roc fmt is purely syntactic and needs no package resolution, so check the
+    # files as committed rather than the rewritten copies.
     if args.runtime_only:
-        print("\nSkipping roc check/fmt/test (--runtime-only)")
+        print("\nSkipping roc fmt (--runtime-only)")
     else:
-        # roc check
-        print("\nRunning roc check...")
-        for example in examples:
-            name = example_name(example)
-            print(f"  Checking {name}...", end=" ", flush=True)
-            if run_cmd(["roc", "check", str(example)], f"check {name}", args.verbose):
-                print("ok")
-            else:
-                print("FAILED")
-                failed.append(f"roc check {name}")
-
-        # roc fmt --check
         print("\nRunning roc fmt --check...")
         for example in examples:
             name = example_name(example)
             print(f"  Formatting {name}...", end=" ", flush=True)
-            if run_cmd(
-                ["roc", "fmt", "--check", str(example)], f"fmt {name}", args.verbose
-            ):
+            if run_cmd(["roc", "fmt", "--check", str(example)], f"fmt {name}", args.verbose):
                 print("ok")
             else:
                 print("FAILED")
                 failed.append(f"roc fmt {name}")
 
-        if args.skip_roc_test:
-            print("\nSkipping roc test (--skip-roc-test)")
-        else:
-            # roc test
-            print("\nRunning roc test...")
-            for example in examples:
-                name = example_name(example)
-                print(f"  Testing {name}...", end=" ", flush=True)
-                if run_cmd(["roc", "test", str(example)], f"test {name}", args.verbose):
-                    print("ok")
-                else:
-                    print("FAILED")
-                    failed.append(f"roc test {name}")
+    try:
+        with local_bundles.serve_packages(
+            root,
+            mode=args.platform_mode,
+            verbose=args.verbose,
+            stable_port=not args.ephemeral_port,
+        ) as packages:
+            print(f"\nServing packages from {packages.base_url}")
+            print(f"  types:    {packages.types_url}")
+            print(f"  platform: {packages.platform_ref}")
+            for note in packages.notes:
+                print(f"  note:     {note}")
 
-    # Build from each application directory so its executable sits beside main.roc.
-    built_examples: list[Path] = []
-    if args.skip_roc_build:
-        print("\nSkipping roc build (--skip-roc-build)")
-    else:
-        print("\nRunning roc build...")
-        for example in examples:
-            name = example_name(example)
-            if name in BUILD_RUNTIME_SKIP:
-                print(f"  Building {name}... SKIPPED ({BUILD_RUNTIME_SKIP[name]})")
-                continue
+            apps_dir = packages.scratch_dir / "examples"
+            staged = local_bundles.stage_apps(examples, packages, apps_dir)
+            print(f"  staged {len(staged)} example(s) in {apps_dir}")
 
-            print(f"  Building {name}...", end=" ", flush=True)
-            if run_cmd(
-                ["roc", "build", "main.roc"], f"build {name}", args.verbose, cwd=example.parent
-            ):
-                print("ok")
-                built_examples.append(example)
+            failed.extend(_run_example_stages(args, root, examples, staged, packages))
+
+            if args.runtime_only:
+                print("\nSkipping package interop test (--runtime-only)")
+            elif args.skip_interop_test:
+                print("\nSkipping package interop test (--skip-interop-test)")
             else:
-                print("FAILED")
-                failed.append(f"roc build {name}")
+                failed.extend(run_package_interop_test(root, packages, args.verbose))
+    except local_bundles.LocalBundleError as err:
+        print(f"\nFAILED to serve the local packages: {err}", file=sys.stderr)
+        failed.append("serve local packages")
 
-    if args.skip_runtime:
-        print("\nSkipping headless runtime (--skip-runtime)")
-    elif args.skip_roc_build:
-        print("\nSkipping headless runtime (--skip-roc-build)")
-    else:
-        failed.extend(
-            run_headless_examples(root, built_examples, args.headless_frames, args.verbose)
-        )
-        failed.extend(run_cli_args_integration(root, args.verbose))
-
-    # Bundle test: build the platform package, host it on localhost, and build
-    # each example against the bundle URL (mirrors the platform-template check).
+    # The default package is covered above; the Wayland package is a separate
+    # artifact with a different target list, so it gets its own check.
     if args.runtime_only:
-        print("\nSkipping bundle test (--runtime-only)")
+        print("\nSkipping Wayland bundle test (--runtime-only)")
     elif args.skip_bundle_test:
-        print("\nSkipping bundle test (--skip-bundle-test)")
+        print("\nSkipping Wayland bundle test (--skip-bundle-test)")
     elif IS_WINDOWS:
-        print("\nSkipping bundle test (requires bash for bundle.sh; not run on Windows)")
+        print("\nSkipping Wayland bundle test (requires bash for bundle.sh; not run on Windows)")
     else:
-        failed.extend(run_bundle_test(root, examples, args.verbose))
         failed.extend(run_wayland_bundle_test(root, examples[0], args.verbose))
 
     # Summary
@@ -714,6 +691,99 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
     else:
         print("All tests passed!")
         return 0
+
+
+def _run_example_stages(
+    args: argparse.Namespace,
+    root: Path,
+    examples: list[Path],
+    staged: dict[Path, Path],
+    packages: local_bundles.ServedPackages,
+) -> list[str]:
+    """Check, test, build and run the staged examples against the served packages."""
+    failed: list[str] = []
+
+    if args.runtime_only:
+        print("\nSkipping roc check/test (--runtime-only)")
+    else:
+        print("\nRunning roc check...")
+        for example in examples:
+            name = example_name(example)
+            print(f"  Checking {name}...", end=" ", flush=True)
+            if run_cmd(
+                ["roc", "check", staged[example].name],
+                f"check {name}",
+                args.verbose,
+                cwd=staged[example].parent,
+            ):
+                print("ok")
+            else:
+                print("FAILED")
+                failed.append(f"roc check {name}")
+
+        if args.skip_roc_test:
+            print("\nSkipping roc test (--skip-roc-test)")
+        else:
+            print("\nRunning roc test...")
+            for example in examples:
+                name = example_name(example)
+                print(f"  Testing {name}...", end=" ", flush=True)
+                if run_cmd(
+                    ["roc", "test", staged[example].name],
+                    f"test {name}",
+                    args.verbose,
+                    cwd=staged[example].parent,
+                ):
+                    print("ok")
+                else:
+                    print("FAILED")
+                    failed.append(f"roc test {name}")
+
+    built: list[tuple[Path, Path]] = []
+    if args.skip_roc_build:
+        print("\nSkipping roc build (--skip-roc-build)")
+    else:
+        print("\nRunning roc build...")
+        for example in examples:
+            name = example_name(example)
+            skip_reason = BUILD_RUNTIME_SKIP.get(name) or BUNDLE_TEST_SKIP.get(name)
+            if skip_reason:
+                print(f"  Building {name}... SKIPPED ({skip_reason})")
+                continue
+
+            print(f"  Building {name}...", end=" ", flush=True)
+            if run_cmd(
+                ["roc", "build", staged[example].name],
+                f"build {name}",
+                args.verbose,
+                cwd=staged[example].parent,
+            ):
+                print("ok")
+                built.append((example, staged[example]))
+            else:
+                print("FAILED")
+                failed.append(f"roc build {name}")
+
+    if args.copy_executables and built:
+        # Executables are built in the scratch directory; some tools expect them
+        # beside the checked-in main.roc. `examples/*/main` is in .gitignore, so
+        # this still leaves `git status` clean.
+        for example, staged_entry in built:
+            destination = executable_for(example)
+            shutil.copyfile(executable_for(staged_entry), destination)
+            destination.chmod(0o755)
+        print(f"\nCopied {len(built)} executable(s) beside their examples")
+
+    if args.skip_runtime:
+        print("\nSkipping headless runtime (--skip-runtime)")
+    elif args.skip_roc_build:
+        print("\nSkipping headless runtime (--skip-roc-build)")
+    else:
+        failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
+        failed.extend(run_cli_args_integration(root, packages, args.verbose))
+        failed.extend(run_model_allocation_check(root, packages, args.verbose))
+
+    return failed
 
 
 if __name__ == "__main__":

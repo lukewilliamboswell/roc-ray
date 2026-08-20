@@ -8,7 +8,12 @@ AssetsHost := [].{
 
 	## Opaque directory store. The backing directory handle is owned by a typed
 	## host ARC heap, so a copied Roc value keeps the directory open.
-	Store :: Box(U64)
+	Store :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Assets.Store.stub`.
+		stub : Store
+		stub = Store.(Box.box(0))
+	}
 
 	StoreOpen : {
 		location_kind : U8,

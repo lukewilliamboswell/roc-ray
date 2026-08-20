@@ -373,6 +373,26 @@ Draw := [].{
 
 		measure : Font, RrtFont.Measure -> RrtFont.Size
 		measure = |font, cfg| RrtFont.measure(font, cfg)
+
+		## Resource-free font value for pure tests.
+		##
+		## The handle never resolves to a host resource, so every host path it
+		## reaches treats it as an invalid one: drawing falls back to raylib's
+		## built-in font, and `Text.prepare!` refuses it. Its metric snapshot is a
+		## fiction rather than a measurement -- no glyphs, no line spacing, and a
+		## `base_size` of 1 so that `measure` stays finite instead of dividing by
+		## zero. Put it in a model to reach the app's real `update` from an
+		## `expect`. Do not use it to test drawing, layout, or resource lifetime.
+		stub : Font
+		stub = Font.(
+			{
+				raw: LoadedFont(DrawHost.FontResource.stub),
+				base_size_value: 1,
+				line_spacing_value: 0,
+				fallback_index: 0,
+				glyph_values: [],
+			},
+		)
 	}
 
 	## Horizontal text anchor.
@@ -574,6 +594,16 @@ Draw := [].{
 			view = target.texture()
 			{ x: 0, y: 0, width: view.width, height: 0 - view.height }
 		}
+
+		## Resource-free render target for pure tests.
+		##
+		## The handle never resolves to a host resource, so entering a scope with
+		## it is refused the way a released target is. Its color attachment is
+		## `rrt.Texture.stub` with zero dimensions; copy it with the dimensions
+		## the test needs. Do not use it to test drawing, offscreen scopes, or
+		## resource lifetime.
+		stub : RenderTexture
+		stub = RenderTexture.(DrawHost.RenderTexture.stub)
 	}
 
 	## Pixel dimensions for a new offscreen render target.
@@ -639,6 +669,16 @@ Draw := [].{
 		## Resolve a sampled-texture uniform once.
 		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
+
+		## Resource-free shader value for pure tests.
+		##
+		## The handle never resolves to a host resource, so entering a scope with
+		## it is refused the way a released shader is, and setting a uniform
+		## derived from it does nothing. Put it in a model to reach the app's
+		## real `update` from an `expect`. Do not use it to test compilation,
+		## uniforms, or resource lifetime.
+		stub : Shader
+		stub = Shader.(DrawHost.Shader.stub)
 	}
 
 	## Shader source strings. An empty string selects the default stage.
@@ -1366,3 +1406,26 @@ expect match Draw.ProjectiveQuad.from_corners({
 	Err(ProjectiveHorizon) => True
 	_ => False
 }
+
+## The resource-free stubs are pure values an app puts in a model to reach its
+## own `update` from an `expect`. What they must never do is pass for a loaded
+## resource, so what is checked here is that they are inert.
+##
+## A `Texture`, a `Shader`, and a `RenderTexture` each hold a `Box` and cannot be
+## compared -- deriving `==` over a host-resource box crashes `roc test` -- so
+## these read the ordinary data beside the handle instead.
+expect Draw.Font.stub.base_size() == 1
+expect Draw.Font.stub.line_spacing() == 0
+expect List.is_empty(Draw.Font.stub.glyphs())
+
+## A font with no glyphs measures every string as zero-wide. The height is the
+## requested size because that is one line of it, and the `base_size` of 1 is
+## what keeps the scale factor finite rather than dividing by zero.
+expect Draw.Font.stub.measure({ text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
+expect Draw.Font.stub.measure({ text: "inert", size: 20, spacing: 0 }) == { width: 0, height: 20 }
+
+## A stub render target's colour attachment is `rrt.Texture.stub`, so it has no
+## area and its vertically flipped source rectangle has none either.
+expect Draw.RenderTexture.stub.texture().width == 0
+expect Draw.RenderTexture.stub.texture().height == 0
+expect Draw.RenderTexture.stub.source().width == 0

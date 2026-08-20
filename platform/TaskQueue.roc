@@ -94,6 +94,41 @@
 ## cannot tell them apart, and an unmatched `completed` frees a slot that is
 ## still occupied. Missing one is the safer mistake: the queue drains more
 ## slowly, but it will never oversubscribe the host.
+##
+## ## Knowing which requests just went out
+##
+## `release` answers with `Task` values, and a `Task` says nothing about itself:
+## it owns a callback, and nothing can be read back off a function. So an app
+## that wants to show "these three files are being read right now" cannot get
+## that from the queue directly.
+##
+## It does not need to. `release` is FIFO -- it returns exactly the first N
+## tasks of the backlog in enqueue order -- so an app that keeps its own list of
+## what each task was for, in the same order, stays in lockstep with the queue
+## by construction. Pop `List.len(released.tasks)` entries off the front of that
+## list and those are the requests now in flight:
+##
+##     Model : {
+##         queue : TaskQueue.TaskQueue(Msg),
+##
+##         # One entry per task waiting in `queue`, in the same order. This is
+##         # the whole trick: the queue holds the work, this holds its name.
+##         queued : List(Str),
+##         reading : List(Str),
+##     }
+##
+##     released = model.queue.release()
+##     split = List.split_at(model.queued, List.len(released.tasks))
+##
+##     # `split.before` names exactly the tasks in `released.tasks`, in order.
+##     next = { ..model, queue: released.queue, queued: split.others, reading: List.concat(model.reading, split.before) }
+##
+## The two lists have to be written together to stay together. Enqueue a task
+## and append its tag in the same expression; re-enqueue a `Busy` retry and
+## append its tag to the back as well, since the task goes to the back. A tag
+## can be anything the app can identify a request by -- a path, a lane index, a
+## message constructor -- and the message that ends the task has to carry it
+## back, which it must do anyway to rebuild a refused request.
 import Program
 
 ## Deferred work an app is releasing to the host a few at a time.
@@ -150,6 +185,19 @@ TaskQueue(msg) := [
 	## Call it on every update. When the backlog is empty or the budget is full
 	## it answers with no tasks and an unchanged queue, so there is no condition
 	## to test before calling it and no step on which a drained queue stalls.
+	##
+	## **Release is FIFO, and that is a guarantee.** `released.tasks` is exactly
+	## the first `List.len(released.tasks)` tasks of the backlog, in the order
+	## they were enqueued; the tasks left behind keep their order too. Nothing is
+	## reordered, skipped, or coalesced, and the count is the smaller of the
+	## remaining budget and the backlog length.
+	##
+	## That is what makes the released tasks identifiable. A `Task` is opaque --
+	## it owns a callback, so nothing can be read back off one -- but an app that
+	## keeps its own list of what each enqueued task was *for*, in the same
+	## order, can pop that many entries off the front of its own list and know
+	## precisely which requests just went out. See the lockstep recipe in this
+	## module's documentation.
 	release : TaskQueue(msg) -> { queue : TaskQueue(msg), tasks : List(Program.Task(msg)) }
 	release = |queue| {
 		state = unwrap(queue)
@@ -289,3 +337,121 @@ expect drained == [
 	Delay({ millis: 4 }),
 	Delay({ millis: 5 }),
 ]
+
+# --- Release is FIFO, and an app can rely on it ------------------------------
+
+## Nine tasks, distinguishable by shape, released three at a time.
+nine : TaskQueue(Str)
+nine = filled(3, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+## A release is a prefix of the backlog, in enqueue order -- not a subset of it
+## and not a reordering of one. This is the guarantee `release` states.
+expect shapes(nine.release().tasks) == [Delay({ millis: 1 }), Delay({ millis: 2 }), Delay({ millis: 3 })]
+
+## And what stays behind is the rest of the backlog, still in order. A release
+## that reordered the remainder would leave the app's parallel list aligned with
+## nothing.
+expect shapes(nine.release().queue.completed().completed().completed().release().tasks)
+	== [Delay({ millis: 4 }), Delay({ millis: 5 }), Delay({ millis: 6 })]
+
+## The count is the smaller of the remaining budget and the backlog length, so
+## the prefix an app pops off its own list is `List.len(released.tasks)` and
+## never the budget.
+expect List.len(filled(3, [1, 2]).release().tasks) == 2
+expect List.len(filled(3, [1, 2, 3, 4]).release().tasks) == 3
+expect List.len(filled(3, []).release().tasks) == 0
+expect List.len(nine.release().queue.release().tasks) == 0
+
+## A partial completion releases exactly the freed slots, still from the front.
+expect shapes(nine.release().queue.completed().release().tasks) == [Delay({ millis: 4 })]
+
+## The lockstep recipe from this module's documentation, run for real: the app
+## keeps a parallel list of tags and pops `List.len(released.tasks)` from the
+## front of it. `Lockstep.tags` are the requests it believes are in flight;
+## `Lockstep.observed` is what the queue actually released, by shape. If the two
+## ever disagreed, the tags would be naming the wrong requests.
+Lockstep : {
+	queue : TaskQueue(Str),
+	queued : List(U64),
+	tags : List(U64),
+	observed : List(Program.TaskShape),
+}
+
+## Start a lockstep with one task per entry of `millis`, tagged by that entry.
+## Enqueueing the task and appending its tag happen together, which is the
+## discipline the recipe asks for.
+lockstep_of : U64, List(U64) -> Lockstep
+lockstep_of = |max_in_flight, millis| {
+	queue: filled(max_in_flight, millis),
+	queued: millis,
+	tags: [],
+	observed: [],
+}
+
+## One cycle: release whatever fits, and move that many tags across with it.
+lockstep_release : Lockstep -> Lockstep
+lockstep_release = |state| {
+	released = state.queue.release()
+	split = List.split_at(state.queued, List.len(released.tasks))
+	{
+		queue: released.queue,
+		queued: split.others,
+		tags: List.concat(state.tags, split.before),
+		observed: List.concat(state.observed, shapes(released.tasks)),
+	}
+}
+
+## Report every released task as completed, freeing its slot.
+lockstep_settle : Lockstep -> Lockstep
+lockstep_settle = |state| {
+	..state,
+	queue: List.fold(state.tags, state.queue, |queue, _tag| queue.completed()),
+}
+
+## Drain a lockstep to the end, releasing and settling one cycle at a time.
+lockstep_drain : Lockstep -> Lockstep
+lockstep_drain = |state| {
+	next = lockstep_release(state)
+	if List.len(next.tags) == List.len(state.tags) {
+		next
+	} else {
+		lockstep_drain(lockstep_settle(next))
+	}
+}
+
+## The tags a cycle pops name exactly the tasks it released, in order.
+expect lockstep_release(lockstep_of(3, [1, 2, 3, 4, 5, 6, 7, 8, 9])).tags == [1, 2, 3]
+expect lockstep_release(lockstep_of(3, [1, 2, 3, 4, 5, 6, 7, 8, 9])).observed
+	== [Delay({ millis: 1 }), Delay({ millis: 2 }), Delay({ millis: 3 })]
+
+## What is left of the app's list still lines up with what is left of the queue.
+expect lockstep_release(lockstep_of(3, [1, 2, 3, 4, 5, 6, 7, 8, 9])).queued == [4, 5, 6, 7, 8, 9]
+
+## Across a whole drain, in several budget-sized rounds, the tags the app
+## believes are in flight are exactly the tasks the queue released -- every
+## time, in the same order. That is the guarantee, checked rather than asserted.
+expect {
+	drained_state = lockstep_drain(lockstep_of(3, [1, 2, 3, 4, 5, 6, 7, 8, 9]))
+	List.map(drained_state.tags, |tag| Delay({ millis: tag })) == drained_state.observed
+		and drained_state.tags == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+			and List.is_empty(drained_state.queued)
+}
+
+## A budget of one makes every round a single task, and the alignment holds
+## there too -- the case where an off-by-one would be loudest.
+expect {
+	single = lockstep_drain(lockstep_of(1, [7, 8, 9]))
+	List.map(single.tags, |tag| Delay({ millis: tag })) == single.observed and single.tags == [7, 8, 9]
+}
+
+## A backlog shorter than the budget is released whole, and nothing is left over
+## for the app's list to be out of step with.
+expect {
+	short = lockstep_release(lockstep_of(8, [4, 5]))
+	short.tags == [4, 5] and List.is_empty(short.queued)
+}
+
+## Releasing an empty queue moves no tags, so a cycle with nothing to send
+## cannot advance the app's list past the queue's.
+expect List.is_empty(lockstep_release(lockstep_of(8, [])).tags)
+expect lockstep_release(lockstep_release(lockstep_of(3, [1, 2, 3, 4]))).tags == [1, 2, 3]

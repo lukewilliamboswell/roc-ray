@@ -67,6 +67,27 @@ Text := [].{
 					align: placement.align,
 				},
 			)
+
+		## Resource-free prepared text for pure tests.
+		##
+		## Prepared text carries more than a handle: the host measured it once
+		## while preparing it, and the value keeps that size. A stub has no
+		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
+		## answers `{ width: 0, height: 0 }` and every alignment therefore
+		## resolves to the placement point itself. Copy this value with the
+		## bounds a test needs, the way `rrt.Texture.stub` is copied with
+		## dimensions.
+		##
+		## The handle never resolves to a host resource, so drawing it is skipped
+		## the way a released one is. Do not use it to test drawing, measurement,
+		## or resource lifetime.
+		stub : Prepared
+		stub = Prepared.(
+			{
+				resource: DrawHost.PreparedText.stub,
+				measured: { width: 0, height: 0 },
+			},
+		)
 	}
 
 	default_spacing : F32
@@ -163,3 +184,13 @@ Text := [].{
 }
 
 expect Text.align_offset({ width: 100, height: 40 }, Text.align_center) == { x: 50, y: 20 }
+
+## Prepared text keeps the size the host measured while preparing it, and the
+## stub has no measurement to keep. Zeroed bounds are the honest answer: they
+## say the value was never measured rather than inventing a size for it.
+expect Text.Prepared.stub.bounds() == { width: 0, height: 0 }
+
+## With no bounds, every alignment resolves to the placement point itself, which
+## is what makes drawing a stub harmless in a layout that does happen to run.
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_center) == { x: 40, y: 12 }
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_bottom_right) == { x: 40, y: 12 }

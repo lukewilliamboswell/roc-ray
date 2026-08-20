@@ -15,19 +15,39 @@ DrawHost := [].{
 		for_host = Frame.({})
 	}
 
-	FontResource :: Box(U64)
-	PreparedText :: Box(U64)
+	FontResource :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Draw.Font.stub`.
+		stub : FontResource
+		stub = FontResource.(Box.box(0))
+	}
+
+	PreparedText :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
+		stub : PreparedText
+		stub = PreparedText.(Box.box(0))
+	}
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
 	RenderTexture :: Texture.{
 		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(texture)| texture
+
+		## The invalid token, as a resource-free handle.
+		## See `Draw.RenderTexture.stub`.
+		stub : RenderTexture
+		stub = RenderTexture.(Texture.stub)
 	}
 
 	Shader :: Box(U64).{
 		from_resource : Box(U64) -> Shader
 		from_resource = |resource| Shader.(resource)
+
+		## The invalid token, as a resource-free handle. See `Draw.Shader.stub`.
+		stub : Shader
+		stub = Shader.(Box.box(0))
 	}
 
 	Uniform :: { shader : Shader, location : I32 }.{

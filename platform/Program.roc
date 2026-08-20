@@ -48,7 +48,98 @@ Program := [].{
 		## Construct a static update through the step capability
 		static : Step(msg), value -> Update(value, msg)
 		static = |_step, value| Program.static(value)
+
+		## Build a step by stating every sampled field at once.
+		##
+		## This is the from-scratch constructor; `for_tests` is the one to reach
+		## for when only a field or two matters, since it supplies neutral values
+		## for the rest.
+		##
+		## TODO(roc): `fields` is annotated to return the structural record but,
+		## being the identity, infers back to `Step(msg)` -- so `from_fields`
+		## accepts a whole `Step` and wraps it a second time. With the pinned
+		## compiler `from_fields(step.fields())` type-checks and then segfaults
+		## `roc test`. Pass a record written out here, not the result of
+		## `fields`; the two do not round-trip until that inference is fixed.
+		from_fields : {
+			input : Input.Snapshot,
+			window : Window.Snapshot,
+			time : Time.Frame,
+			messages : List(msg),
+			capture : Capture.Status,
+		} -> Step(msg)
+		from_fields = |sampled| Step.(sampled)
+
+		## A neutral step for testing an app's real `update` from an `expect`.
+		##
+		## Nothing is pressed, the window is an ordinary focused
+		## `default_test_size`, the clock reads zero on its first cycle, no
+		## messages arrived, and nothing is recording. Customize it with the
+		## `with_*` receivers, which is what makes a test say only the one thing
+		## it is about:
+		##
+		##     expect
+		##         step = Program.Step.for_tests({}).with_input(Input.none.with_key_pressed(KeyEscape))
+		##         List.map(update(model, step).fields().actions, Program.action_shape) == [Exit(0)]
+		##
+		## Building the model this is called with is the other half: every host
+		## resource an app can hold has a resource-free `stub`
+		## (`Draw.Font.stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
+		## `rrt.Texture.stub`, ...), so a `Model` full of assets can be written
+		## down in a pure test.
+		##
+		## Assert on what came back with `Program.action_shape` and
+		## `Program.task_shape`. An `Update` holds callbacks and host resources,
+		## so `==` cannot be used on one directly.
+		for_tests : {} -> Step(msg)
+		for_tests = |{}|
+			Step.(
+				{
+					input: Input.none,
+					window: { size: Program.default_test_size, focused: Bool.True, minimized: Bool.False },
+					time: Program.first_frame,
+					messages: [],
+					capture: Idle,
+				},
+			)
+
+		## Replace this step's sampled input. Build one from `Input.none`.
+		with_input : Step(msg), Input.Snapshot -> Step(msg)
+		with_input = |Step.(sampled), input| Step.({ ..sampled, input: input })
+
+		## Replace this step's sampled window geometry and visibility.
+		with_window : Step(msg), Window.Snapshot -> Step(msg)
+		with_window = |Step.(sampled), window| Step.({ ..sampled, window: window })
+
+		## Replace this step's clock sample. Use it to drive a second cycle:
+		## `step.with_time({ ..Program.first_frame, frame_count: 1 })`.
+		with_time : Step(msg), Time.Frame -> Step(msg)
+		with_time = |Step.(sampled), time| Step.({ ..sampled, time: time })
+
+		## Deliver task completions on this step, in the order the host observed
+		## them. These are the app's own messages, not `Task` values.
+		with_messages : Step(msg), List(msg) -> Step(msg)
+		with_messages = |Step.(sampled), messages| Step.({ ..sampled, messages: messages })
+
+		## Deliver one more task completion on this step, after any already there.
+		with_message : Step(msg), msg -> Step(msg)
+		with_message = |Step.(sampled), message| Step.({ ..sampled, messages: List.append(sampled.messages, message) })
+
+		## Replace this step's sampled recording status.
+		with_capture : Step(msg), Capture.Status -> Step(msg)
+		with_capture = |Step.(sampled), capture| Step.({ ..sampled, capture: capture })
 	}
+
+	## The window size `Step.for_tests` reports. Ordinary rather than special:
+	## a test that depends on the size should say so with `with_window`.
+	default_test_size : { width : I32, height : I32 }
+	default_test_size = { width: 800, height: 600 }
+
+	## The clock as it reads on an app's very first cycle: nothing has elapsed
+	## and no frame has been completed. `Step.for_tests` carries this, and it is
+	## the base to build a later cycle's `Time.Frame` from.
+	first_frame : Time.Frame
+	first_frame = { frame_count: 0, timestamp_nanos: 0, wall_timestamp_nanos: 0, elapsed_seconds: 0 }
 
 	## A value paired with work for the platform.
 	##
@@ -1329,6 +1420,19 @@ expect Program.action_shape(Capture.set_virtual_mouse(Capture.at({ x: 10, y: 20 
 expect Program.action_shape(Capture.stop) == StopRecording
 expect Program.action_shape(Capture.start(Capture.default)) == StartRecording(Capture.default)
 
+## The two halves meet here. An action built from a resource-free `stub` reduces
+## to exactly the shape a loaded resource's would, because a shape says what was
+## asked for and never of what -- which is what lets an app whose model holds
+## sounds and music assert on what its `update` returned.
+expect Program.action_shape(Audio.Sound.stub.play()) == PlaySound({ volume: 1, pitch: 1, pan: 0 })
+expect Program.action_shape(Audio.Sound.stub.playback().with_pitch(0.8).play()) == PlaySound({ volume: 1, pitch: 0.8, pan: 0 })
+expect Program.action_shape(Audio.Sound.stub.stop()) == StopSound
+expect Program.action_shape(Audio.Sound.stub.pause()) == PauseSound
+expect Program.action_shape(Audio.Music.stub.play()) == PlayMusic
+expect Program.action_shape(Audio.Music.stub.set_volume(0.5)) == SetMusicVolume(0.5)
+expect Program.action_shape(Audio.Music.stub.set_looping(Bool.True)) == SetMusicLooping(Bool.True)
+expect Program.action_shape(Audio.Music.stub.seek(12.5)) == SeekMusic(12.5)
+
 ## A texture keeps its dimensions and loses its handle, and the pixels become
 ## the one number a pure test can check them by.
 expect Program.action_shape(sixty_four_byte_upload) == UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 })
@@ -1396,3 +1500,85 @@ expect
 			SetTargetFps(30),
 			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
 		]
+
+# --- Constructing a Step, so a pure test can call an app's real `update` ------
+
+## A component's model and message, so the recipe `Step.for_tests` documents is
+## exercised here rather than only described. Nothing about this app is special:
+## it is a pure `update` of the shape the platform requires.
+CounterModel : { ticks : U64, quitting : Bool }
+
+CounterMessage : [Tick]
+
+fresh_counter : CounterModel
+fresh_counter = { ticks: 0, quitting: Bool.False }
+
+counter_update : CounterModel, Program.Step(CounterMessage) -> Program.Update(CounterModel, CounterMessage)
+counter_update = |model, step| {
+	ticked = List.fold(step.messages, model, |acc, _message| { ..acc, ticks: acc.ticks + 1 })
+	if step.input.key_pressed(KeyEscape) {
+		Program.static({ ..ticked, quitting: Bool.True }).with_action(Program.exit(0))
+	} else {
+		Program.static(ticked).with_task(Program.delay(16, |_result| Tick))
+	}
+}
+
+## The neutral step, named once so the assertions below read as differences
+## from it rather than as a dozen separate constructions.
+neutral_step : Program.Step(CounterMessage)
+neutral_step = Program.Step.for_tests({})
+
+## Every field of the neutral step, stated. A default nobody can see is a
+## default nobody can rely on.
+expect neutral_step.messages == []
+expect neutral_step.capture == Idle
+expect neutral_step.time == Program.first_frame
+expect neutral_step.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False }
+expect !(neutral_step.input.key_pressed(KeyEscape))
+expect !(neutral_step.input.mouse.button_down(Left))
+expect neutral_step.input.gamepad(One) == Disconnected
+
+## The neutral input is `Input.none`, so it is writable: this is the property
+## that makes "SPACE was pressed this step" expressible at all.
+expect neutral_step.with_input(Input.none.with_key_pressed(KeySpace)).input.key_pressed(KeySpace)
+
+## Each `with_*` replaces one field and leaves the rest of the sample alone.
+expect neutral_step.with_messages([Tick, Tick]).messages == [Tick, Tick]
+expect neutral_step.with_message(Tick).with_message(Tick).messages == [Tick, Tick]
+expect neutral_step.with_time({ ..Program.first_frame, frame_count: 7, elapsed_seconds: 0.25 }).time.frame_count == 7
+expect neutral_step.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True }).window.size == { width: 320, height: 240 }
+expect neutral_step.with_capture(Active({ frames: 3, dropped: 0 })).capture == Active({ frames: 3, dropped: 0 })
+expect neutral_step.with_messages([Tick]).window == neutral_step.window
+expect neutral_step.with_capture(Finished({ frames: 30, bytes: 4096 })).time == neutral_step.time
+
+## `from_fields` states the whole sample at once, for a test that would rather
+## write every field down than start from `for_tests` and override.
+expect
+	Program.Step.from_fields({
+		input: Input.none.with_key_pressed(KeyEscape),
+		window: { size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True },
+		time: Program.first_frame,
+		messages: [Tick],
+		capture: Idle,
+	})
+		.messages
+		== [Tick]
+
+## Escape asks the platform to shut down, and asks for no further work.
+expect {
+	escaped = counter_update(fresh_counter, neutral_step.with_input(Input.none.with_key_pressed(KeyEscape)))
+	List.map(escaped.fields().actions, Program.action_shape) == [Exit(0)]
+		and List.is_empty(escaped.fields().tasks)
+			and escaped.fields().value.quitting
+}
+
+## An ordinary step asks for one delay and no actions.
+expect {
+	idle = counter_update(fresh_counter, neutral_step)
+	List.map(idle.fields().tasks, Program.task_shape) == [Delay({ millis: 16 })]
+		and List.is_empty(idle.fields().actions)
+}
+
+## Delivered messages are folded in, in the order the step carries them.
+expect counter_update(fresh_counter, neutral_step.with_messages([Tick, Tick, Tick])).fields().value.ticks == 3
+expect counter_update(fresh_counter, neutral_step).fields().value.ticks == 0

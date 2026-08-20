@@ -1269,7 +1269,6 @@ stub_model = {
 	peak: { lane: 0, columns: 0, text: "" },
 	camera: Camera.default,
 	fitted: Bool.False,
-	screen: { x: 1100, y: 760 },
 	sweep: 0,
 	title: Text.Prepared.stub,
 	hint: Text.Prepared.stub,
@@ -1366,10 +1365,6 @@ expect {
 		and List.len(failed.queued) == List.len(sources) - max_in_flight - 1
 }
 
-## The window size is sampled in `update`, because `render!` is handed the model
-## and a frame but never the step.
-expect stepped(stub_model, first_step.with_window({ size: { width: 640, height: 480 }, focused: Bool.True, minimized: Bool.False })).screen == { x: 640, y: 480 }
-
 ## The view is pure model state, so the wheel really does zoom through the real
 ## `update` and not only through `zoom_at`.
 expect stepped(primed_model, later_step.with_input(zooming_input)).camera.zoom() > primed_model.camera.zoom()
@@ -1378,7 +1373,9 @@ expect stepped(primed_model, later_step.with_input(zooming_input)).camera.zoom()
 expect {
 	zoomed = stepped(primed_model, later_step.with_input(zooming_input))
 	refit = stepped(zoomed, later_step.with_input(Input.none.with_key_pressed(KeyR)))
-	F32.abs(refit.camera.zoom() - fit_camera(refit.screen).zoom()) < 0.0001
+	# The step's window is `Step.for_tests`'s 800x600 default, and that is the
+	# size the refit fits to -- the model no longer carries a screen size.
+	F32.abs(refit.camera.zoom() - fit_camera({ x: 800, y: 600 }).zoom()) < 0.0001
 }
 
 ## A wheel spin with the pointer inside the plot.

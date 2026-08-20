@@ -1412,8 +1412,8 @@ expect match Draw.ProjectiveQuad.from_corners({
 ## resource, so what is checked here is that they are inert.
 ##
 ## A `Texture`, a `Shader`, and a `RenderTexture` each hold a `Box` and cannot be
-## compared -- deriving `==` over a host-resource box crashes `roc test` -- so
-## these read the ordinary data beside the handle instead.
+## compared -- a type reaching a host-resource box does not support equality --
+## so these read the ordinary data beside the handle instead.
 expect Draw.Font.stub.base_size() == 1
 expect Draw.Font.stub.line_spacing() == 0
 expect List.is_empty(Draw.Font.stub.glyphs())

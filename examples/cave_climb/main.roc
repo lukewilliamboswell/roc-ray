@@ -860,37 +860,29 @@ update = |model, step| {
 	input = step.input
 
 	restart = input.key_pressed(KeySpace)
-	match camera_for(model.level, model.world.player.pos) {
-		# Invalid camera inputs are an unrecoverable model invariant violation.
-		# Update itself is total now, so request a normal end-of-frame exit rather
-		# than giving every update an error channel for this exceptional case.
-		Err(_) => Program.static(model).with_action(Program.exit(1))
-		Ok(input_camera) => {
-			tools = tool_input(input, input_camera)
-			next_world = match model.world.state {
-				Playing => advance_world(
-					model.level,
-					model.world,
-					input_axis(input),
-					input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
-					tools,
-					step.time.elapsed_seconds,
-				)
-				Won => if restart new_world(model.level) else model.world
-				GameOver => if restart new_world(model.level) else model.world
-			}
-
-			Program.static({ ..model, world: next_world })
-				.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
-		}
+	tools = tool_input(input, camera_for(model.level, model.world.player.pos))
+	next_world = match model.world.state {
+		Playing => advance_world(
+			model.level,
+			model.world,
+			input_axis(input),
+			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
+			tools,
+			step.time.elapsed_seconds,
+		)
+		Won => if restart new_world(model.level) else model.world
+		GameOver => if restart new_world(model.level) else model.world
 	}
+
+	Program.static({ ..model, world: next_world })
+		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
 }
 
 ## The camera follows the player, so it is a pure function of the model and is
 ## derived here rather than stored.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	camera = camera_for(model.level, model.world.player.pos)?
+	camera = camera_for(model.level, model.world.player.pos)
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x101820))
@@ -906,7 +898,7 @@ render! = |model, frame| {
 	Ok({})
 }
 
-camera_for : Level, Physics.Point -> Try(Camera.Camera2D, [ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+camera_for : Level, Physics.Point -> Camera.Camera2D
 camera_for = |level, target| {
 	map_target = world_to_map(target)
 	zoom = 0.96
@@ -1185,10 +1177,8 @@ expect player_rect_at(map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, play
 expect tick_timer(0.1, 0.2) == 0
 expect F32.abs(wrap_unit(1.2) - 0.2) < 0.0001
 expect {
-	match Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, y: screen_h }, zoom: 2 }) {
-		Ok(camera) => screen_to_map(camera, { x: screen_w * 0.5, y: screen_h * 0.5 }) == { x: 100, y: 200 }
-		Err(_) => Bool.False
-	}
+	camera = Camera.follow({ x: 100, y: 200 }, { screen: { x: screen_w, y: screen_h }, zoom: 2 })
+	screen_to_map(camera, { x: screen_w * 0.5, y: screen_h * 0.5 }) == { x: 100, y: 200 }
 }
 expect Physics.components(direction_to(Physics.point_xy(0, 0), Physics.point_xy(3, 4), 1)) == { x: 0.6, y: 0.8, z: 0 }
 expect steered_x_velocity(0, 1, Bool.True, 1) == move_speed

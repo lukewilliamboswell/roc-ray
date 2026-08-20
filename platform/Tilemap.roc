@@ -1133,25 +1133,14 @@ expect match Tilemap.from_raw(test_raw).object_role("spawn", Spawn).object_role(
 expect {
 	settings : Camera.Settings
 	settings = { target: Math.vec2(100, 50), offset: Math.vec2(20, 10), rotation: 0, zoom: 2 }
-	result = Camera.new(settings)
-	match result {
-		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
-		Err(_) => False
-	}
+	Tilemap.viewport_for_camera(Camera.new(settings), { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
 }
 expect {
 	settings : Camera.Settings
 	settings = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: -2 }
-	result = Camera.new(settings)
-	match result {
-		Ok(camera) => camera.viewport({ x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
-		Err(_) => False
-	}
+	Camera.new(settings).viewport({ x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
 }
 expect {
-	result = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
-	match result {
-		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
-		Err(_) => False
-	}
+	camera = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
+	Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
 }

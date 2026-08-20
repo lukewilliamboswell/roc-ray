@@ -576,14 +576,7 @@ fit_camera : Math.Vec2 -> Camera.Camera2D
 fit_camera = |screen| {
 	area = plot_area(screen)
 	zoom = Math.clamp(F32.min(area.width / world_bounds.width, area.height / world_bounds.height), min_zoom, max_zoom)
-	# The zoom is clamped positive and every other field is a finite constant,
-	# so this cannot actually be refused. Answering with the identity camera
-	# rather than crashing keeps `update` total, which is the property that
-	# lets a test drive it with anything.
-	match Camera.new({ target: Math.center(world_bounds), offset: Math.center(area), rotation: 0, zoom: zoom }) {
-		Ok(camera) => camera
-		Err(_) => Camera.default
-	}
+	Camera.new({ target: Math.center(world_bounds), offset: Math.center(area), rotation: 0, zoom: zoom })
 }
 
 ## Zoom about the pointer, so the point under it stays under it.
@@ -601,40 +594,15 @@ zoom_at = |camera, pointer, wheel|
 		# Clamping the *factor* rather than only the result keeps a violent
 		# wheel spin from flipping its sign and mirroring the plot.
 		factor = Math.clamp(1 + wheel * 0.12, 0.5, 2)
-		zoomed = settled_zoom(camera, Math.clamp(camera.zoom() * factor, min_zoom, max_zoom))
+		zoomed = camera.with_zoom(Math.clamp(camera.zoom() * factor, min_zoom, max_zoom))
 		after = zoomed.screen_to_world(pointer)
-		settled_target(zoomed, zoomed.target().add(before.sub(after)))
+		zoomed.with_target(zoomed.target().add(before.sub(after)))
 	}
 
 ## Drag the world with the pointer: a screen-space delta is a world-space delta
 ## divided by the zoom.
 pan : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-pan = |camera, delta| settled_target(camera, camera.target().sub(delta.scale(1 / camera.zoom())))
-
-## Every camera this app builds is finite with a positive zoom, because the
-## zoom is clamped and the target comes from finite arithmetic on it. So the
-## refusals below cannot happen; keeping the camera we already had is how they
-## are handled anyway, so that no path through `update` can fail.
-settled_zoom : Camera.Camera2D, F32 -> Camera.Camera2D
-settled_zoom = |camera, zoom|
-	match camera.with_zoom(zoom) {
-		Ok(next) => next
-		Err(_) => camera
-	}
-
-settled_target : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-settled_target = |camera, target|
-	match camera.with_target(target) {
-		Ok(next) => next
-		Err(_) => camera
-	}
-
-settled_offset : Camera.Camera2D, Math.Vec2 -> Camera.Camera2D
-settled_offset = |camera, offset|
-	match camera.with_offset(offset) {
-		Ok(next) => next
-		Err(_) => camera
-	}
+pan = |camera, delta| camera.with_target(camera.target().sub(delta.scale(1 / camera.zoom())))
 
 ## How long the sweep takes to cross the plot, in seconds.
 sweep_period : F32
@@ -751,7 +719,7 @@ look = |model, step| {
 	# point in the middle of the plot rather than sliding it.
 	base =
 		if model.fitted {
-			settled_offset(model.camera, Math.center(plot_area(screen)))
+			model.camera.with_offset(Math.center(plot_area(screen)))
 		} else {
 			fitted_camera
 		}
@@ -1196,7 +1164,7 @@ expect zoom_at(fit_camera({ x: 1100, y: 760 }), { x: 300, y: 500 }, 0 - 400).zoo
 ## Dragging right moves the world right, which means the target moves left, by
 ## the screen distance divided by the zoom.
 expect {
-	camera = settled_zoom(fit_camera({ x: 1100, y: 760 }), 2)
+	camera = fit_camera({ x: 1100, y: 760 }).with_zoom(2)
 	moved = pan(camera, { x: 20, y: 0 })
 	F32.abs(moved.target().x - (camera.target().x - 10)) < 0.001
 }
@@ -1204,7 +1172,7 @@ expect {
 ## Re-centring on a resize keeps the offset at the middle of the new plot area,
 ## which is what stops a resize sliding the view.
 expect {
-	resized = settled_offset(fit_camera({ x: 1100, y: 760 }), Math.center(plot_area({ x: 700, y: 500 })))
+	resized = fit_camera({ x: 1100, y: 760 }).with_offset(Math.center(plot_area({ x: 700, y: 500 })))
 	resized.offset() == Math.center(plot_area({ x: 700, y: 500 }))
 }
 

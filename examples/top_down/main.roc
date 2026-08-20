@@ -1096,9 +1096,9 @@ update = |model, step| {
 
 ## The camera follows the (shaken) player position, so it is a pure function of
 ## the model and is derived here rather than stored.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
+	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x071018))

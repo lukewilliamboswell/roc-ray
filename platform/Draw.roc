@@ -181,6 +181,34 @@ Draw := [].{
 	Frame :: DrawHost.Frame.{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)
+
+		## How big the surface being drawn to right now is.
+		##
+		## Normally this is the window's logical drawing size -- the same value
+		## `Window.Snapshot.size` reports, in the same coordinate space as mouse
+		## input and every drawing call. Inside `with_render_texture!` it is the
+		## render target's size instead, because that is what the callback's
+		## coordinates are relative to.
+		##
+		## This is the size of a *drawing surface*, so it is `F32` where
+		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
+		## centre points directly, and a render target's dimensions are already
+		## `F32` on `Texture`. `Window.Snapshot.size` stays `I32` because it is
+		## also the thing `Window.set_size` sets.
+		##
+		## Reach for this when laying something out against the surface -- a HUD
+		## in a corner, a title centred across the top. Layout decisions that
+		## `update` also has to make, such as which arrangement to use or what
+		## the pointer is over, belong on `step.window` where the rest of
+		## application logic can see them.
+		size! : Frame => FrameSize
+		size! = |_frame| DrawHost.frame_size!()
+	}
+
+	## Dimensions of the surface `render!` is currently drawing to.
+	FrameSize : {
+		width : F32,
+		height : F32,
 	}
 
 	## Two-dimensional vector used by drawing records.

@@ -99,11 +99,6 @@ Model : {
 	## point at which the fit can be computed.
 	fitted : Bool,
 
-	## The logical window size this cycle. `render!` is handed the model and a
-	## frame but not the step, so laying the HUD out means sampling the size in
-	## `update`, where the step is.
-	screen : Math.Vec2,
-
 	## Wrapped animation clock for the sweep, in seconds.
 	sweep : F32,
 
@@ -671,9 +666,6 @@ init! = App.init(
 			peak: { lane: 0, columns: 0, text: "" },
 			camera: Camera.default,
 			fitted: Bool.False,
-			# The configured size, replaced by the sampled one on the first
-			# cycle. `render!` never sees this value: a cycle updates first.
-			screen: { x: 1100, y: 760 },
 			sweep: 0,
 			title: title,
 			hint: hint,
@@ -768,7 +760,6 @@ look = |model, step| {
 		..model,
 		camera: if input.key_pressed(KeyR) fitted_camera else panned,
 		fitted: Bool.True,
-		screen: screen,
 		sweep: if advanced >= sweep_period advanced - sweep_period else advanced,
 	}
 }
@@ -777,10 +768,14 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x0c1118))
 
+	# The surface being drawn to, asked for where it is used. Nothing about the
+	# window is carried through the model to get here.
+	screen = frame.size!()
+
 	# The plot is clipped to its own area so twenty-six thousand points cannot
 	# scribble over the status line when the view is dragged.
 	frame.with_scissor!(
-		plot_area(model.screen),
+		plot_area({ x: screen.width, y: screen.height }),
 		|clipped|
 			clipped.with_camera!(
 				model.camera,
@@ -849,7 +844,8 @@ draw_sweep! = |frame, sweep| {
 
 draw_hud! : Draw.Frame, Model => {}
 draw_hud! = |frame, model| {
-	area = plot_area(model.screen)
+	screen = frame.size!()
+	area = plot_area({ x: screen.width, y: screen.height })
 
 	# No backing bars: `render!` scissors the plot to `area`, so the cleared
 	# background is still untouched everywhere the HUD writes.

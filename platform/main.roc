@@ -67,6 +67,7 @@ platform ""
 		"roc_draw_end_scissor_raw": DrawHost.end_scissor!,
 		"roc_draw_fps": DrawHost.fps!,
 		"roc_draw_font_metrics_raw": DrawHost.font_metrics!,
+		"roc_draw_frame_size": DrawHost.frame_size!,
 		"roc_draw_line_raw": DrawHost.line!,
 		"roc_draw_load_font_bytes_raw": DrawHost.load_font_bytes!,
 		"roc_draw_load_store_font_raw": DrawHost.load_store_font!,

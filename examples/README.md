@@ -57,6 +57,7 @@ recommended starting point for a whole application.
 | [Async Read](async_read/main.roc) | Non-blocking text and byte reads with typed completion messages |
 | [Projective Texture](projective_texture/main.roc) | A draggable perspective-correct quad and projected overlay points |
 | [Post Process](post_process/main.roc) | Render textures, blend scopes, shaders, and cached uniform locations |
+| [Particles](particles/main.roc) | Thousands of sprites drawn as one batched instance list rather than one call each |
 | [Capture Plot](capture_plot/main.roc) | A deterministic hidden-window WebM batch render |
 | [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real input path |
 

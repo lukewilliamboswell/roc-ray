@@ -22,6 +22,9 @@ const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
+/// `red` modulated by a pure-blue instance tint: the two zeroed channels and
+/// the untouched one are all exact, so this stays an equality assertion.
+const instance_tinted = Color{ .r = 0, .g = 0, .b = red.b, .a = 255 };
 
 const TilemapSmokeContext = struct { texture: backend.Texture };
 
@@ -508,6 +511,42 @@ pub fn main() !void {
     }, TilemapSmokeContext{ .texture = atlas }, submitTilemapSmokeQuad, tilemapSmokeTextureToken);
     if (tilemap_submitted != 1) return error.TilemapBatchCount;
 
+    // One batched call has to be indistinguishable from the same instances
+    // drawn one at a time, so each instance below varies a different field:
+    // source region, destination size, tint, and list order. Instance 3
+    // overlaps instance 0 and must win, because the loop draws in list order.
+    const instances = [_]abi.DrawHostDraw_texture_instancesArg0Instances{
+        .{
+            .source = .{ .x = 0, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 4, .y = 52, .width = 8, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+        .{
+            .source = .{ .x = 8, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 20, .y = 52, .width = 8, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+        .{
+            .source = .{ .x = 0, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 36, .y = 52, .width = 16, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = Color{ .r = 0, .g = 0, .b = 255, .a = 255 },
+        },
+        .{
+            .source = .{ .x = 8, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 4, .y = 52, .width = 4, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+    };
+    backend.drawTextureInstances(atlas, &instances);
+
     backend.beginShaderMode(projective_shader);
     backend.drawTextureQuad(projective_texture, .{
         .source = .{ .x = 0, .y = 0, .width = 16, .height = 16 },
@@ -533,6 +572,11 @@ pub fn main() !void {
     try expectPixel(screen, 52, 10, blue);
     try expectPixel(screen, 48, 36, blue);
     try expectPixel(screen, 56, 36, red);
+    try expectPixel(screen, 5, 56, blue);
+    try expectPixel(screen, 10, 56, red);
+    try expectPixel(screen, 24, 56, blue);
+    try expectPixel(screen, 34, 56, black);
+    try expectPixel(screen, 44, 56, instance_tinted);
     // This point is texture v=0.6 under the exact homography, but v<0.5
     // under the old two-triangle affine mapping. The custom green channel also
     // proves projective drawing preserved the caller's fragment shader.

@@ -66,6 +66,16 @@ Program := [].{
 	## `Err(Busy)` when current host capacity cannot complete it; independent
 	## asynchronous completions have no specified order. App termination drops pending
 	## callbacks because no later step can observe them.
+	##
+	## Changing a collection in the model costs a copy of it. The model reaches
+	## `update` still referenced by the box it arrived in, so the first write to
+	## one of its lists allocates a new one rather than mutating in place:
+	## measured at 4,000,000 bytes per frame for a one-million-element
+	## `List(F32)` (`test/model_inplace`, checked by
+	## `scripts/test_model_allocation.py`). Later writes to that same collection
+	## within one cycle are in place, so batching a cycle's changes into one
+	## `update` costs one copy rather than several. A collection that changes
+	## every frame is worth keeping small until this is fixed.
 	Update(value, msg) := [
 		Update(
 			{

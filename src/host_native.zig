@@ -5463,6 +5463,9 @@ fn updateOnce(boxed_model: *RocBox, step: StepFromHost) UpdateResult {
     // action's effect is checked against the update phase and not against idle.
     const phase = PhaseScope.enter(.commit);
     defer phase.leave();
+    // Off unless ROC_RAY_ALLOC_STATS asked for metering; one branch per frame.
+    const metered = allocMeterMark();
+    defer allocMeterRecordUpdate(metered);
     return update_for_host(takeModel(boxed_model), step);
 }
 
@@ -8002,6 +8005,151 @@ fn initModel() RocResult {
     return init_result;
 }
 
+/// Environment variable that turns per-frame Roc allocator metering on.
+const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
+
+/// Per-frame Roc allocator traffic, reported when `ROC_RAY_ALLOC_STATS=1`.
+///
+/// A frame that mutates a uniquely referenced collection in the model pays
+/// nothing proportional to that collection; a frame that copies it pays for
+/// every element. That difference is a number, and this is the instrument that
+/// reads it. The meter wraps the allocator the Roc environment hands to
+/// `roc_alloc`/`roc_realloc`/`roc_dealloc`, so every byte Roc asks for is
+/// counted, and a phase mark attributes the `update` call's share separately
+/// from the rest of the frame.
+///
+/// It wraps a real allocator rather than standing in for one, exactly like the
+/// `CountingAllocator` used in the byte-delivery tests: the memory is genuinely
+/// allocated and freed, so what is counted is work that actually happened.
+///
+/// Only allocations and frees are counted, which is all of them: Roc's
+/// `roc_realloc` always takes a fresh block, copies, and frees the old one, so
+/// growing a Roc collection is an alloc and a free here and never an in-place
+/// resize. `resize`/`remap` are forwarded so host-side Zig containers still
+/// work, and nothing Roc does reaches them.
+///
+/// Counters are plain integers, not atomics. Only the frame thread's allocator
+/// is metered -- the effect worker keeps the unwrapped allocator it was started
+/// with -- and this is a diagnostic, so a skewed count is the worst a stray
+/// cross-thread allocation could cost.
+const AllocMeter = struct {
+    inner: std.mem.Allocator,
+    alloc_bytes: u64 = 0,
+    alloc_calls: u64 = 0,
+    free_bytes: u64 = 0,
+    free_calls: u64 = 0,
+    update_bytes: u64 = 0,
+    update_calls: u64 = 0,
+
+    /// Counter snapshot used to attribute one call's allocations to a phase.
+    const Mark = struct { bytes: u64, calls: u64 };
+
+    fn allocator(self: *AllocMeter) std.mem.Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free },
+        };
+    }
+
+    fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        const self: *AllocMeter = @ptrCast(@alignCast(context));
+        const result = self.inner.rawAlloc(len, alignment, ret_addr);
+        if (result != null) {
+            self.alloc_bytes += len;
+            self.alloc_calls += 1;
+        }
+        return result;
+    }
+
+    fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
+        const self: *AllocMeter = @ptrCast(@alignCast(context));
+        return self.inner.rawResize(memory, alignment, new_len, ret_addr);
+    }
+
+    fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *AllocMeter = @ptrCast(@alignCast(context));
+        return self.inner.rawRemap(memory, alignment, new_len, ret_addr);
+    }
+
+    fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+        const self: *AllocMeter = @ptrCast(@alignCast(context));
+        self.free_bytes += memory.len;
+        self.free_calls += 1;
+        self.inner.rawFree(memory, alignment, ret_addr);
+    }
+
+    fn mark(self: *const AllocMeter) Mark {
+        return .{ .bytes = self.alloc_bytes, .calls = self.alloc_calls };
+    }
+
+    fn clearFrame(self: *AllocMeter) void {
+        self.alloc_bytes = 0;
+        self.alloc_calls = 0;
+        self.free_bytes = 0;
+        self.free_calls = 0;
+        self.update_bytes = 0;
+        self.update_calls = 0;
+    }
+};
+
+/// Storage for the frame-thread meter. Only read when `alloc_meter_enabled`.
+var alloc_meter: AllocMeter = .{ .inner = undefined };
+/// Whether `ROC_RAY_ALLOC_STATS` asked for metering on this run.
+var alloc_meter_enabled: bool = false;
+
+/// Wrap `inner` in the meter when the environment asks for it, else pass it
+/// through untouched so an unmetered run keeps its original allocator vtable.
+fn meteredAllocator(inner: std.mem.Allocator) std.mem.Allocator {
+    const requested = hostGetEnv(ALLOC_STATS_ENV) orelse return inner;
+    if (requested.len == 0 or std.mem.eql(u8, requested, "0")) return inner;
+    alloc_meter = .{ .inner = inner };
+    alloc_meter_enabled = true;
+    return alloc_meter.allocator();
+}
+
+/// Snapshot the meter before a phase whose allocations are attributed on their own.
+fn allocMeterMark() AllocMeter.Mark {
+    if (!alloc_meter_enabled) return .{ .bytes = 0, .calls = 0 };
+    return alloc_meter.mark();
+}
+
+/// Attribute everything allocated since `since` to this frame's `update` call.
+fn allocMeterRecordUpdate(since: AllocMeter.Mark) void {
+    if (!alloc_meter_enabled) return;
+    alloc_meter.update_bytes += alloc_meter.alloc_bytes - since.bytes;
+    alloc_meter.update_calls += alloc_meter.alloc_calls - since.calls;
+}
+
+/// Report and clear everything allocated before the first frame, so the
+/// per-frame lines are not polluted by config and `init!`.
+fn reportStartupAllocStats() void {
+    if (!alloc_meter_enabled) return;
+    std.debug.print(
+        "[roc-ray-alloc] startup alloc_bytes={d} allocs={d} frees={d} free_bytes={d}\n",
+        .{ alloc_meter.alloc_bytes, alloc_meter.alloc_calls, alloc_meter.free_calls, alloc_meter.free_bytes },
+    );
+    alloc_meter.clearFrame();
+}
+
+/// Report and clear one frame's metered traffic. Called at the frame boundary,
+/// after `render!` has returned, so it covers the whole cycle.
+fn reportFrameAllocStats(frame_index: u64) void {
+    if (!alloc_meter_enabled) return;
+    std.debug.print(
+        "[roc-ray-alloc] frame={d} alloc_bytes={d} allocs={d} frees={d} free_bytes={d} update_bytes={d} update_allocs={d}\n",
+        .{
+            frame_index,
+            alloc_meter.alloc_bytes,
+            alloc_meter.alloc_calls,
+            alloc_meter.free_calls,
+            alloc_meter.free_bytes,
+            alloc_meter.update_bytes,
+            alloc_meter.update_calls,
+        },
+    );
+    alloc_meter.clearFrame();
+}
+
 fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: AppConfig) c_int {
     beginPendingCallbacks();
     var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
@@ -8081,6 +8229,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     var staging = CompletionStaging{};
     defer staging.release(roc_host);
 
+    reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
         // Sample raylib's monotonic clock (seconds since window init) at the
         // start of the frame and expose it as nanoseconds. frame_time is
@@ -8159,6 +8308,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
         boxed_model = render_result.getOk();
         drainRetiredResources();
+        reportFrameAllocStats(frame_count);
         frame_count += 1;
 
         if (exit_requested) |code| {
@@ -8202,6 +8352,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var staging = CompletionStaging{};
     defer staging.release(roc_host);
 
+    reportStartupAllocStats();
     while (frame_count < frames) : (frame_count += 1) {
         const frame_time: f32 = if (frame_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = frame_count * HEADLESS_FRAME_NANOS;
@@ -8256,6 +8407,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
         boxed_model = render_result.getOk();
         drainRetiredResources();
+        reportFrameAllocStats(frame_count);
         if (exit_requested) |code| {
             exit_code = @intCast(code);
             break;
@@ -8308,8 +8460,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // The Roc runtime environment: allocator + I/O backend. We supply our own
     // dbg/expect/crashed handlers below, so the I/O backend (only used by the
     // generated DefaultHandlers) is left as a no-op freestanding implementation.
+    // Metering is opt-in: with ROC_RAY_ALLOC_STATS unset this returns the same
+    // allocator, so a normal run has no wrapper and no counters. The effect
+    // worker keeps the unwrapped `allocator`, so only frame-thread traffic is
+    // counted.
     var roc_env = abi.RocEnv{
-        .allocator = allocator,
+        .allocator = meteredAllocator(allocator),
         .roc_io = abi.RocIo.freestanding(),
     };
 

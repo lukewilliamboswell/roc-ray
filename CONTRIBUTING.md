@@ -306,6 +306,29 @@ It sees Roc allocation ABI calls, not internal allocations made by raylib or
 Zig. Use the native lifecycle and allocation tests when optimizing inside a
 hosted effect.
 
+Any built app can report its own per-frame allocation instead, without GDB:
+
+```bash
+ROC_RAY_ALLOC_STATS=1 examples/pong/main --host-headless --host-headless-frames=120
+```
+
+Each frame prints one line to stderr with the bytes and calls that frame
+allocated and freed, and how much of it belonged to `update`. Unset, the host
+does not install the meter at all.
+
+That is how the cost of holding a collection in the model was measured:
+
+```bash
+scripts/test_model_allocation.py --report
+```
+
+Changing one element of a list in the model allocates a whole new list, every
+frame -- the model is still referenced by the box it arrived in, so the write
+is copy-on-write rather than in place. `test/model_inplace` is the probe,
+`scripts/test_model_allocation.py` runs in `all_tests.py` to keep the number
+from drifting in either direction, and its `--require-in-place` mode is the
+invariant we want and do not have.
+
 ## Bundles and targets
 
 Build the default release bundle:

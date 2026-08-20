@@ -362,9 +362,9 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 ## How loud each effect is mixed.
 ##
 ## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
-## so every action has to name its sound's level -- there is no longer a
-## `set_volume!` in `init!` for it to inherit. These constants are the one place
-## the levels live, so an action cannot drift away from what the mix intends.
+## so every action has to name its sound's level -- a `Sound` has no volume of
+## its own to set in `init!` and inherit. These constants are the one place the
+## levels live, so an action cannot drift away from what the mix intends.
 collect_volume : F32
 collect_volume = 0.58
 

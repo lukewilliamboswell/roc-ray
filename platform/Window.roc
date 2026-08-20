@@ -22,6 +22,15 @@ Window := [].{
 		minimized : Bool,
 	}
 
+	## Resize the window, as an action.
+	##
+	## The size is the logical drawing size, the same one `Snapshot.size`
+	## reports. Non-positive dimensions are ignored, because a window with no
+	## area has no drawing space to report back. The new size is visible to the
+	## `render!` that follows in the same cycle.
+	set_size : { width : I32, height : I32 } -> [SetWindowSize({ width : I32, height : I32 }), ..]
+	set_size = |size| SetWindowSize(size)
+
 	## Set the smallest size the window can be dragged down to, as an action.
 	##
 	## Each negative dimension is clamped to `0`, leaving that axis
@@ -29,6 +38,13 @@ Window := [].{
 	## with `App.default.with_resizable(Bool.True)`.
 	set_window_min_size : { width : I32, height : I32 } -> [SetWindowMinSize({ width : I32, height : I32 }), ..]
 	set_window_min_size = |size| SetWindowMinSize(size)
+
+	## Set raylib's CPU-side frame-rate cap, as an action.
+	##
+	## Values at or below zero render uncapped. This neither selects a software
+	## renderer nor controls VSync.
+	set_target_fps : I32 -> [SetTargetFps(I32), ..]
+	set_target_fps = |fps| SetTargetFps(fps)
 
 	## Replace the system clipboard contents, as an action.
 	##

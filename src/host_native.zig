@@ -4252,9 +4252,17 @@ fn hostedExit(code: i32) callconv(.c) void {
     exit_requested = @as(i64, code);
 }
 
+/// Resize the window. Named for the action, like every other commit-phase
+/// operation, because `startup.set_screen_size!` and `Window.set_size` are two
+/// spellings of this one call. raylib resizes a live window as readily as one
+/// that has not drawn yet, so restricting it to startup only cost apps the
+/// ability to react to their own layout.
 fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
-    enforcePhase("App.Startup.set_screen_size!", during_startup);
-    if (active_headless) {
+    enforcePhase("Window.set_size", during_commit);
+    // `headlessMode()` rather than `active_headless`: it folds to true at
+    // comptime under `zig test`, which keeps the raylib call out of the test
+    // binary's link so the phase guard here is testable at all.
+    if (headlessMode()) {
         headless_screen_width = positiveI32(args.width, headless_screen_width);
         headless_screen_height = positiveI32(args.height, headless_screen_height);
     } else {
@@ -4264,8 +4272,8 @@ fn hostedSetScreenSize(args: abi.HostHostSet_screen_sizeArgs) callconv(.c) u8 {
 }
 
 fn hostedSetTargetFps(fps: i32) callconv(.c) void {
-    enforcePhase("App.Startup.set_target_fps!", during_startup);
-    if (active_headless) return;
+    enforcePhase("Window.set_target_fps", during_commit);
+    if (headlessMode()) return;
     raylib.setTargetFps(fps);
 }
 
@@ -7965,6 +7973,42 @@ test "uploading pixels is refused from render, and taken while committing" {
         enforcePhase("Assets.update_texture!", during_commit);
         try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
+}
+
+test "resizing the window and capping the frame rate are taken while committing" {
+    // Both of these used to be startup-only, so an app could neither resize
+    // itself in response to its own layout nor drop its frame cap while
+    // running. raylib resizes a live window and re-caps a running loop as
+    // readily as it does before the first frame, so the restriction bought
+    // nothing and cost two actions. Headless keeps the calls off raylib while
+    // still exercising the guard and the size bookkeeping.
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+    const restore_width = headless_screen_width;
+    const restore_height = headless_screen_height;
+    defer headless_screen_width = restore_width;
+    defer headless_screen_height = restore_height;
+
+    for ([_]Phase{ .startup, .commit }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        try std.testing.expectEqual(TRY_TAG_OK, hostedSetScreenSize(.{ .width = 321, .height = 123 }));
+        hostedSetTargetFps(45);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+        try std.testing.expectEqual(@as(i32, 321), headless_screen_width);
+        try std.testing.expectEqual(@as(i32, 123), headless_screen_height);
+    }
+
+    // Widening them stops at the frame: a resize mid-draw would move the
+    // coordinate space the frame is already drawing into.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    last_phase_violation = null;
+    hostedSetTargetFps(45);
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.set_target_fps", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_commit));
 }
 
 test "a rejection names every phase the operation was allowed in" {

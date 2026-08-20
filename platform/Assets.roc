@@ -86,9 +86,16 @@ Assets := [].{
 	## driver synchronously and a driver call is not free. `init!` is exempt:
 	## startup is not a frame, and an app builds its atlases there.
 	##
+	## Going over is not fatal. Actions apply in order, and the first upload that
+	## does not fit is skipped along with every upload after it in the same
+	## cycle; those textures keep the contents they already had, and every action
+	## that is not an upload still runs. So an app that guesses wrong loses a
+	## frame of pixels rather than the process.
+	##
 	## Exposed so an app that generates pixels can stay inside the budget rather
-	## than discover it. `Program.check_uploads` does that check over a whole
-	## cycle's actions, which is the form worth reaching for.
+	## than discover it a frame late. `Program.check_uploads` answers the same
+	## question over a whole cycle's actions and stops exactly where the platform
+	## stops, which is the form worth reaching for.
 	##
 	## Mirrors `MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME` in `src/host_native.zig`.
 	max_upload_bytes_per_step : U64
@@ -99,10 +106,14 @@ Assets := [].{
 	upload_bytes = |pixels| List.len(pixels) * 4
 
 	## Texture sampling filter used when an image is scaled.
-	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x]
+	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x].{
+		is_eq : _
+	}
 
 	## Texture-coordinate behavior outside the normal 0-to-1 range.
-	TextureWrap := [Repeat, Clamp, MirrorRepeat, MirrorClamp]
+	TextureWrap := [Repeat, Clamp, MirrorRepeat, MirrorClamp].{
+		is_eq : _
+	}
 
 	## Configuration for a solid-color generated texture.
 	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
@@ -191,9 +202,19 @@ Assets := [].{
 	set_texture_filter! : Texture, TextureFilter => {}
 	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
+	## Change how this texture is sampled when scaled, as an action a pure
+	## `update` can return.
+	set_texture_filter : Texture, TextureFilter -> [SetTextureFilter({ texture : Texture, filter : TextureFilter }), ..]
+	set_texture_filter = |texture, filter| SetTextureFilter({ texture, filter })
+
 	## Change how out-of-range texture coordinates are wrapped.
 	set_texture_wrap! : Texture, TextureWrap => {}
 	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+
+	## Change how out-of-range texture coordinates are wrapped, as an action a
+	## pure `update` can return.
+	set_texture_wrap : Texture, TextureWrap -> [SetTextureWrap({ texture : Texture, wrap : TextureWrap }), ..]
+	set_texture_wrap = |texture, wrap| SetTextureWrap({ texture, wrap })
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

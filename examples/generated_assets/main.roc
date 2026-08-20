@@ -92,7 +92,6 @@ init! = App.init(
 		Assets.set_texture_filter!(texture, Point)
 		Assets.set_texture_wrap!(texture, Clamp)
 		paint_sound = Audio.gen_tone!({ freq: 520, ms: 35 })?
-		paint_sound.set_volume!(paint_volume)
 		Ok({
 			texture,
 			pixels: initial_pixels,

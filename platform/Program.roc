@@ -169,6 +169,10 @@ Program := [].{
 	## Something the platform does on the app's behalf during this cycle.
 	##
 	## Actions run in list order before rendering and produce no completion.
+	## Because `update` is pure and `render!` may only draw, this union is the
+	## whole of what a running app can change about host state: every hosted
+	## effect reachable after `init!` has a variant here, or a documented reason
+	## in `docs/action-coverage.md` for why it does not.
 	##
 	## Set shader uniforms during `Frame.with_shader!`, where their order relative
 	## to draw calls is explicit.
@@ -178,11 +182,41 @@ Program := [].{
 		SetCursorMode(Mouse.CursorMode),
 		SetClipboardText(Str),
 		SetExitKey(Keys.ExitKey),
+		SetWindowSize({ width : I32, height : I32 }),
 		SetWindowMinSize({ width : I32, height : I32 }),
+		SetTargetFps(I32),
+
+		## Play a sound at a stated volume, pitch, and pan.
+		##
+		## There is deliberately no action that sets one of those on a `Sound`
+		## and leaves it there: raylib holds them on the sound resource, so a
+		## later play by anyone would inherit them.
 		PlaySound(Audio.Playback),
+		StopSound(Audio.Sound),
+		PauseSound(Audio.Sound),
+		ResumeSound(Audio.Sound),
+		PlayMusic(Audio.Music),
+		StopMusic(Audio.Music),
+		PauseMusic(Audio.Music),
+		ResumeMusic(Audio.Music),
 		SetMusicVolume({ music : Audio.Music, volume : F32 }),
+		SetMusicPitch({ music : Audio.Music, pitch : F32 }),
+		SetMusicPan({ music : Audio.Music, pan : F32 }),
+		SetMusicLooping({ music : Audio.Music, looping : Bool }),
+		SeekMusic({ music : Audio.Music, seconds : F32 }),
+		SetMasterVolume(F32),
+
+		## Replace a texture's pixels.
+		##
+		## Uploads are the only actions with a runtime limit: a cycle may upload
+		## `Assets.max_upload_bytes_per_step` in total. The first upload that
+		## does not fit is skipped, and so is every upload after it in the same
+		## cycle; those textures keep the contents they already had. Nothing
+		## about that is fatal, and `check_uploads` predicts it exactly.
 		UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }),
 		UpdateTextureRegion({ texture : Texture, region : Assets.Region }),
+		SetTextureFilter({ texture : Texture, filter : Assets.TextureFilter }),
+		SetTextureWrap({ texture : Texture, wrap : Assets.TextureWrap }),
 		SetVirtualMouse(Capture.Pointer),
 
 		## Arm a recording, or finalize the one that is running.
@@ -192,13 +226,140 @@ Program := [].{
 		StopRecording,
 	]
 
+	## The dimensions a shape keeps for a texture. The handle is left out: it is
+	## an opaque host resource, and nothing pure can say anything about it.
+	TextureShape : { width : F32, height : F32 }
+
+	## What an `Action` says, with its host resources left out.
+	##
+	## An `Action` can carry a live host resource -- a texture handle, a sound, a
+	## music stream -- and those are opaque boxed values that structural equality
+	## cannot look inside. So an app cannot compare the actions its `update`
+	## returned against expected ones directly. `action_shape` drops the
+	## resources and keeps the parameters, which is what a test wants to assert
+	## on anyway. This is the supported way to test `update`:
+	##
+	##     expect
+	##         List.map(update(model, step).fields().actions, Program.action_shape)
+	##             == [PlaySound({ volume: 1, pitch: 0.8, pan: 0 })]
+	##
+	## A shape deliberately does not say *which* resource an action names,
+	## because a resource has no identity a pure test could name it by. Two
+	## different sounds paused in the same cycle have the same shape. A texture
+	## keeps its dimensions, because those are ordinary data on the value.
+	##
+	## `SetCursor` carries the flattened raylib cursor code that
+	## `Mouse.cursor_code` produces, rather than the `Mouse.Cursor` itself: that
+	## type is declared in the companion types package and does not derive
+	## equality, and a shape that cannot be compared would be pointless.
+	ActionShape : [
+		Exit(I64),
+		SetCursor(U8),
+		SetCursorMode(Mouse.CursorMode),
+		SetClipboardText(Str),
+		SetExitKey(Keys.ExitKey),
+		SetWindowSize({ width : I32, height : I32 }),
+		SetWindowMinSize({ width : I32, height : I32 }),
+		SetTargetFps(I32),
+		PlaySound({ volume : F32, pitch : F32, pan : F32 }),
+		StopSound,
+		PauseSound,
+		ResumeSound,
+		PlayMusic,
+		StopMusic,
+		PauseMusic,
+		ResumeMusic,
+		SetMusicVolume(F32),
+		SetMusicPitch(F32),
+		SetMusicPan(F32),
+		SetMusicLooping(Bool),
+		SeekMusic(F32),
+		SetMasterVolume(F32),
+		UpdateTexture({ texture : TextureShape, pixel_count : U64 }),
+		UpdateTextureRegion({ texture : TextureShape, x : I32, y : I32, width : I32, height : I32, pixel_count : U64 }),
+		SetTextureFilter({ texture : TextureShape, filter : Assets.TextureFilter }),
+		SetTextureWrap({ texture : TextureShape, wrap : Assets.TextureWrap }),
+		SetVirtualMouse(Capture.Pointer),
+		StartRecording(Capture.Recording),
+		StopRecording,
+	]
+
+	## Reduce one action to comparable data. See `ActionShape`.
+	action_shape : Action -> ActionShape
+	action_shape = |action|
+		match action {
+			Exit(code) => Exit(code)
+			SetCursor(cursor) => SetCursor(Mouse.cursor_code(cursor))
+			SetCursorMode(mode) => SetCursorMode(mode)
+			SetClipboardText(text) => SetClipboardText(text)
+			SetExitKey(key) => SetExitKey(key)
+			SetWindowSize(size) => SetWindowSize(size)
+			SetWindowMinSize(size) => SetWindowMinSize(size)
+			SetTargetFps(fps) => SetTargetFps(fps)
+			PlaySound(settings) => PlaySound({ volume: settings.volume, pitch: settings.pitch, pan: settings.pan })
+			StopSound(_sound) => StopSound
+			PauseSound(_sound) => PauseSound
+			ResumeSound(_sound) => ResumeSound
+			PlayMusic(_music) => PlayMusic
+			StopMusic(_music) => StopMusic
+			PauseMusic(_music) => PauseMusic
+			ResumeMusic(_music) => ResumeMusic
+			SetMusicVolume(request) => SetMusicVolume(request.volume)
+			SetMusicPitch(request) => SetMusicPitch(request.pitch)
+			SetMusicPan(request) => SetMusicPan(request.pan)
+			SetMusicLooping(request) => SetMusicLooping(request.looping)
+			SeekMusic(request) => SeekMusic(request.seconds)
+			SetMasterVolume(volume) => SetMasterVolume(volume)
+			UpdateTexture(request) =>
+				UpdateTexture({
+					texture: texture_shape(request.texture),
+					pixel_count: List.len(request.pixels),
+				})
+
+			UpdateTextureRegion(request) =>
+				UpdateTextureRegion({
+					texture: texture_shape(request.texture),
+					x: request.region.x,
+					y: request.region.y,
+					width: request.region.width,
+					height: request.region.height,
+					pixel_count: List.len(request.region.pixels),
+				})
+
+			SetTextureFilter(request) => SetTextureFilter({ texture: texture_shape(request.texture), filter: request.filter })
+			SetTextureWrap(request) => SetTextureWrap({ texture: texture_shape(request.texture), wrap: request.wrap })
+			SetVirtualMouse(pointer) => SetVirtualMouse(pointer)
+			StartRecording(recording) => StartRecording(recording)
+			StopRecording => StopRecording
+		}
+
 	## Why a cycle's uploads would be refused, or `Ok` if all of them fit.
 	##
-	## The platform validates every cycle before applying its actions, so uploads
-	## are all-or-nothing. Apps that generate pixels can call this during `update`
-	## and defer work that exceeds `Assets.max_upload_bytes_per_step`.
+	## This stops at the first refusal, which is exactly what the platform does:
+	## `PixelCountMismatch` and `RegionOutOfBounds` are programmer errors and stop
+	## the app, while `UploadBudgetExceeded` names the first upload that does not
+	## fit in `Assets.max_upload_bytes_per_step` -- that upload and every upload
+	## after it in the same cycle are skipped, and the rest of the actions still
+	## run. Calling this during `update` therefore tells an app exactly which of
+	## its uploads will land, so it can defer the rest itself instead of losing
+	## them.
 	check_uploads : List(Action) -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded])
 	check_uploads = |actions| check_uploads_from(actions, 0, 0, Assets.max_upload_bytes_per_step)
+
+	## What a step's upload budget does with one action, and what it carries on.
+	##
+	## `apply` is whether the action runs at all; only an upload is ever refused.
+	## `charged` is the upload bytes accounted for once this action has been
+	## placed, and is what the next action must be placed against.
+	UploadPlacement : { apply : Bool, charged : U64 }
+
+	## Place one action against what a step has already charged for uploads.
+	##
+	## Platform-internal: `main.roc`'s adapter calls this while applying actions
+	## in order. Apps ask the same question about a whole cycle with
+	## `check_uploads`, which is the form worth reaching for.
+	place_upload : Action, U64 -> UploadPlacement
+	place_upload = |action, charged| place_upload_within(action, charged, Assets.max_upload_bytes_per_step)
 
 	## Ask the host to shut down with an exit code.
 	##
@@ -476,6 +637,10 @@ Program := [].{
 		}
 }
 
+## Keep the descriptive half of a texture and drop the resource handle.
+texture_shape : Texture -> Program.TextureShape
+texture_shape = |texture| { width: texture.width, height: texture.height }
+
 ## Walk a cycle's actions, accumulating upload bytes and stopping at the first
 ## upload that would be refused.
 ##
@@ -533,6 +698,37 @@ add_upload : U64, List(Color.Rgba), U64 -> Try(U64, [PixelCountMismatch, RegionO
 add_upload = |charged, pixels, budget| {
 	total = charged + Assets.upload_bytes(pixels)
 	if total > budget Err(UploadBudgetExceeded) else Ok(total)
+}
+
+## Place one action against a stated budget.
+##
+## `budget` is a parameter for the same reason `check_uploads_from` takes one:
+## so the cumulative behaviour is testable without a four-mebibyte pixel list.
+place_upload_within : Program.Action, U64, U64 -> Program.UploadPlacement
+place_upload_within = |action, charged, budget|
+	match action {
+		UpdateTexture(request) => place_bytes(charged, Assets.upload_bytes(request.pixels), budget)
+		UpdateTextureRegion(request) => place_bytes(charged, Assets.upload_bytes(request.region.pixels), budget)
+
+		# Only an upload is charged for, and only an upload can be refused.
+		_ => { apply: Bool.True, charged: charged }
+	}
+
+## Fit one upload into what is left of the budget, or exhaust the budget.
+##
+## A refusal does not merely decline this upload: it carries a total that no
+## later upload can fit under, so every upload after it in the same step is
+## skipped too. That is what makes `check_uploads`, which stops at its first
+## refusal, an exact prediction of what the platform will do rather than an
+## approximation of it.
+place_bytes : U64, U64, U64 -> Program.UploadPlacement
+place_bytes = |charged, bytes, budget| {
+	total = charged + bytes
+	if total > budget {
+		{ apply: Bool.False, charged: budget + 1 }
+	} else {
+		{ apply: Bool.True, charged: total }
+	}
 }
 
 ## `kind` code for a finished small-file read. Mirrored in `src/host_native.zig`.
@@ -794,3 +990,162 @@ expect Program.capture_from_host({ status: 3, err: 0, frames: 300, dropped: 4, b
 ## A start the host would not arm is reported too, because an action has no
 ## other way to say so.
 expect Program.capture_from_host({ status: 2, err: 2, frames: 0, dropped: 0, bytes: 0 }) == Failed({ frames: 0, reason: PathEscapesOutputDir })
+
+## A resource-free texture with the dimensions the upload tests need. Its handle
+## never resolves to a host resource, which is fine: nothing here uploads.
+four_by_four : Texture
+four_by_four = { ..Texture.stub, width: 4, height: 4 }
+
+## One upload of exactly 64 bytes: sixteen pixels covering a four-by-four
+## texture, which is what `check_uploads` wants a whole-texture upload to be.
+sixty_four_byte_upload : Program.Action
+sixty_four_byte_upload = Assets.update_texture(four_by_four, sixteen_pixels)
+
+## Apply the platform's placement rule over a whole list the way `main.roc`
+## does, and report which action indices ran.
+applied_indices : List(Program.Action), U64 -> List(U64)
+applied_indices = |actions, budget| {
+	var $charged = 0
+	var $applied = []
+	var $index = 0
+	for action in actions {
+		placement = place_upload_within(action, $charged, budget)
+		$charged = placement.charged
+		if placement.apply {
+			$applied = List.append($applied, $index)
+		}
+		$index = $index + 1
+	}
+	$applied
+}
+
+## An upload, two more that no longer fit, and non-uploads interleaved with all
+## three so the order is observable.
+mixed_actions : List(Program.Action)
+mixed_actions = [
+	Program.exit(0),
+	sixty_four_byte_upload,
+	sixty_four_byte_upload,
+	Window.set_target_fps(30),
+	sixty_four_byte_upload,
+]
+
+## An upload is charged for what its pixels cost and carries the total on.
+expect place_upload_within(sixty_four_byte_upload, 0, 128) == { apply: Bool.True, charged: 64 }
+expect place_upload_within(sixty_four_byte_upload, 64, 128) == { apply: Bool.True, charged: 128 }
+
+## Exactly the budget still fits; one byte past it does not.
+expect place_upload_within(sixty_four_byte_upload, 65, 128) == { apply: Bool.False, charged: 129 }
+
+## A refused upload does not just decline itself. It carries a total no later
+## upload can fit under, so a cycle cannot upload its small textures and drop
+## its big one -- what an app gets is a prefix of what it asked for, which is
+## the only version of this an app can reason about.
+expect place_upload_within(sixty_four_byte_upload, 129, 128) == { apply: Bool.False, charged: 129 }
+
+## Actions that are not uploads run whatever the budget has done, and never
+## change the running total. An exhausted budget must not silently stop an app
+## from exiting, pausing its music, or moving its cursor.
+expect place_upload_within(Program.exit(2), 129, 128) == { apply: Bool.True, charged: 129 }
+expect place_upload_within(Capture.stop, 0, 128) == { apply: Bool.True, charged: 0 }
+
+## With room for one upload, the first lands, the second and third are skipped,
+## and both non-uploads still run in their original positions.
+expect applied_indices(mixed_actions, 64) == [0, 1, 3]
+
+## With room for all three, every action runs.
+expect applied_indices(mixed_actions, 192) == [0, 1, 2, 3, 4]
+
+## `check_uploads` is an exact prediction of that, not an approximation: it
+## stops at the same first refusal the platform stops uploading at.
+expect check_uploads_from(mixed_actions, 0, 0, 64) == Err(UploadBudgetExceeded)
+expect check_uploads_from(mixed_actions, 0, 0, 192) == Ok({})
+
+## A whole-texture upload whose pixel list does not match its texture is a
+## programmer error rather than a budget problem, and is reported as one no
+## matter how much budget is left.
+expect check_uploads_from([Assets.update_texture(four_by_four, [])], 0, 0, 4096) == Err(PixelCountMismatch)
+
+## Shapes are what an app asserts `update` returned. Every one of these is
+## plain data, so `==` works on them; the equivalent `Action` values cannot be
+## compared at all, because equality would have to look inside a host resource.
+expect Program.action_shape(Program.exit(3)) == Exit(3)
+expect Program.action_shape(Mouse.set_cursor(PointingHand)) == SetCursor(4)
+expect Program.action_shape(Mouse.set_cursor_mode(Locked)) == SetCursorMode(Locked)
+expect Program.action_shape(Window.set_clipboard_text("copied")) == SetClipboardText("copied")
+expect Program.action_shape(Keys.set_exit_key(NoExitKey)) == SetExitKey(NoExitKey)
+expect Program.action_shape(Window.set_size({ width: 640, height: 480 })) == SetWindowSize({ width: 640, height: 480 })
+expect Program.action_shape(Window.set_window_min_size({ width: 320, height: 240 })) == SetWindowMinSize({ width: 320, height: 240 })
+expect Program.action_shape(Window.set_target_fps(30)) == SetTargetFps(30)
+expect Program.action_shape(Audio.set_master_volume(0.25)) == SetMasterVolume(0.25)
+expect Program.action_shape(Capture.set_virtual_mouse(Capture.at({ x: 10, y: 20 }))) == SetVirtualMouse(Virtual({ x: 10, y: 20, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 }))
+expect Program.action_shape(Capture.stop) == StopRecording
+expect Program.action_shape(Capture.start(Capture.default)) == StartRecording(Capture.default)
+
+## A texture keeps its dimensions and loses its handle, and the pixels become
+## the one number a pure test can check them by.
+expect Program.action_shape(sixty_four_byte_upload) == UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 })
+expect
+	Program.action_shape(Assets.update_texture_region(four_by_four, { x: 1, y: 2, width: 2, height: 1, pixels: [] }))
+		== UpdateTextureRegion({ texture: { width: 4, height: 4 }, x: 1, y: 2, width: 2, height: 1, pixel_count: 0 })
+
+expect Program.action_shape(Assets.set_texture_filter(four_by_four, Bilinear)) == SetTextureFilter({ texture: { width: 4, height: 4 }, filter: Bilinear })
+expect Program.action_shape(Assets.set_texture_wrap(four_by_four, MirrorClamp)) == SetTextureWrap({ texture: { width: 4, height: 4 }, wrap: MirrorClamp })
+
+## Every `ActionShape` variant, written as data. The variants that carry a
+## sound or a music stream in `Action` reach here with nothing left to carry,
+## which is the trade: a shape says what was asked for, never of what.
+every_shape : List(Program.ActionShape)
+every_shape = [
+	Exit(0),
+	SetCursor(4),
+	SetCursorMode(Hidden),
+	SetClipboardText("copied"),
+	SetExitKey(NoExitKey),
+	SetWindowSize({ width: 640, height: 480 }),
+	SetWindowMinSize({ width: 320, height: 240 }),
+	SetTargetFps(30),
+	PlaySound({ volume: 1, pitch: 0.8, pan: 0 }),
+	StopSound,
+	PauseSound,
+	ResumeSound,
+	PlayMusic,
+	StopMusic,
+	PauseMusic,
+	ResumeMusic,
+	SetMusicVolume(0.5),
+	SetMusicPitch(1.25),
+	SetMusicPan(-0.25),
+	SetMusicLooping(Bool.True),
+	SeekMusic(12.5),
+	SetMasterVolume(0.8),
+	UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
+	UpdateTextureRegion({ texture: { width: 4, height: 4 }, x: 1, y: 2, width: 2, height: 1, pixel_count: 2 }),
+	SetTextureFilter({ texture: { width: 4, height: 4 }, filter: Bilinear }),
+	SetTextureWrap({ texture: { width: 4, height: 4 }, wrap: MirrorClamp }),
+	SetVirtualMouse(Real),
+	StartRecording(Capture.default),
+	StopRecording,
+]
+
+## Derived equality reaches every variant, including the ones whose `Action`
+## counterpart holds a host resource. This is the acceptance test for shapes:
+## if this compiles and passes, an app can assert on what its `update` returned.
+expect every_shape == every_shape
+
+## One variant per `Action` variant, and no equality that quietly says yes.
+expect List.len(every_shape) == 29
+expect (every_shape == List.append(every_shape, StopRecording)) == Bool.False
+
+## A whole cycle's actions, reduced and compared in one expression -- the form
+## the `ActionShape` documentation recommends, checked here so the
+## recommendation cannot go stale.
+expect
+	List.map(mixed_actions, Program.action_shape)
+		== [
+			Exit(0),
+			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
+			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
+			SetTargetFps(30),
+			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
+		]

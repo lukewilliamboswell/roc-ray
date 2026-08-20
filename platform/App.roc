@@ -237,6 +237,9 @@ App := [].{
 		## Set the window/screen size to positive integer dimensions.
 		## Returns Err NotSupported on platforms that don't support window resizing.
 		## Receiver form: `startup.set_screen_size!(size)`.
+		##
+		## A running app resizes itself with the `Window.set_size` action, which
+		## reaches the same host call; only this spelling can report a refusal.
 		set_screen_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 		set_screen_size! = |_startup, size|
 			if size.width <= 0 or size.height <= 0 {
@@ -263,6 +266,8 @@ App := [].{
 		## Set raylib's CPU-side frame-rate cap. Values at or below zero render
 		## uncapped. This neither selects a software renderer nor controls VSync.
 		## Receiver form: `startup.set_target_fps!(fps)`.
+		##
+		## A running app changes the cap with the `Window.set_target_fps` action.
 		set_target_fps! : Startup, I32 => {}
 		set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
 

@@ -253,21 +253,16 @@ update_for_host! = |boxed_model, { input, window, time, completed, capture }| {
 	model = Box.unbox(boxed_model)
 	next = (program.update)(model, step)
 	next_fields = next.fields()
-	# Uploads are the only actions that can be refused, and everything
-	# they can be refused for is knowable before any of them run. Check
-	# the whole list first so a refusal cannot land after earlier
-	# uploads have already changed their textures.
+	# A malformed upload is a programmer error, and every one of them is
+	# knowable before any action runs. Check the whole list first so the app
+	# stops without having applied half a cycle. Running out of upload budget
+	# is not one of these: that is a runtime limit, handled in order below.
 	refuse_unfittable_uploads(next_fields.actions)
-	match run_actions!(next_fields.actions, 0) {
-		Ok({}) => {
-			Ok({
-				model: Box.box(next_fields.value),
-				tasks: submit_tasks(next_fields.tasks),
-			})
-		}
-		Err(Exit(code)) => Err(code)
-		Err(_) => Err(-1)
-	}
+	run_actions!(next_fields.actions, 0, 0)
+	Ok({
+		model: Box.box(next_fields.value),
+		tasks: submit_tasks(next_fields.tasks),
+	})
 }
 
 ## Invoke every returned completion envelope in the host's observed order.
@@ -296,76 +291,145 @@ submit_tasks = |requested| {
 	$tasks
 }
 
-## Stop the cycle before any of its uploads are applied, if one of them cannot
-## be.
+## Stop the cycle before any action runs if one of its uploads is malformed.
 ##
-## Apps can call the same validation through `Program.check_uploads` and defer
-## work that does not fit.
+## Only the two programmer errors stop the app. An upload that does not fit in
+## the cycle's byte budget is skipped in order by `run_actions!`, along with
+## every upload after it, so `Program.check_uploads` stopping at that same first
+## refusal reports exactly what the app will get.
 refuse_unfittable_uploads : List(Program.Action) -> {}
 refuse_unfittable_uploads = |actions|
 	match Program.check_uploads(actions) {
 		Ok({}) => {}
-		Err(PixelCountMismatch) => {
+		Err(PixelCountMismatch) => refuse_upload(PixelCountMismatch)
+		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
+		Err(UploadBudgetExceeded) => {}
+	}
+
+## Name the programmer error an upload was refused for, and stop.
+##
+## These are cheap to find before returning the action -- `Program.check_uploads`
+## reports both -- and there is no sensible way to carry on past one: the app
+## asked to write pixels somewhere they do not fit.
+refuse_upload : [PixelCountMismatch, RegionOutOfBounds] -> {}
+refuse_upload = |reason|
+	match reason {
+		PixelCountMismatch => {
 			crash "roc-ray: an UpdateTexture action carried a pixel list that is not exactly width * height for its texture. Check it with Program.check_uploads before returning it."
 		}
 
-		Err(RegionOutOfBounds) => {
+		RegionOutOfBounds => {
 			crash "roc-ray: an UpdateTextureRegion action named a rectangle that is not inside its texture. Check it with Program.check_uploads before returning it."
-		}
-
-		Err(UploadBudgetExceeded) => {
-			crash "roc-ray: one cycle's actions ask to upload more than Assets.max_upload_bytes_per_step. Split the work across frames, or check it with Program.check_uploads and defer what does not fit."
 		}
 	}
 
-## Apply a cycle's actions in order, stopping at the first one that fails.
+## Apply a cycle's actions in order, skipping uploads that do not fit.
 ##
-## Index iteration preserves effect order and propagates the first failure.
-run_actions! : List(Program.Action), U64 => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
-run_actions! = |actions, index|
+## Index iteration preserves effect order. `charged` is the upload bytes this
+## cycle has already spent; `Program.place_upload` decides whether the next
+## action fits and carries the running total on. Once an upload has been
+## refused the total is past the budget, so every later upload is skipped too
+## and its texture keeps the contents it had. Actions that are not uploads run
+## regardless, before, between, and after.
+run_actions! : List(Program.Action), U64, U64 => {}
+run_actions! = |actions, index, charged|
 	if index >= List.len(actions) {
-		Ok({})
+		{}
 	} else {
 		match List.get(actions, index) {
 			Ok(action) => {
-				run_action!(action)?
-				run_actions!(actions, index + 1)
+				placement = Program.place_upload(action, charged)
+				if placement.apply {
+					run_action!(action)
+				} else {
+					{}
+				}
+				run_actions!(actions, index + 1, placement.charged)
 			}
 
 			# Unreachable: the index is bounded above.
-			Err(_) => Ok({})
+			Err(_) => {}
 		}
 	}
 
 ## Apply one action through the effect it stands for.
 ##
-## Actions are interpreted within the platform and do not cross the host ABI.
-run_action! : Program.Action => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+## Actions are interpreted within the platform and do not cross the host ABI,
+## and none of them reports anything back: an action that could fail either
+## stops the app (a malformed upload, refused above) or is silently skipped (an
+## upload with no budget left). Outcomes an app needs to observe arrive on a
+## later `Step` instead -- `step.capture` for recordings, a task for reads.
+run_action! : Program.Action => {}
 run_action! = |action|
 	match action {
 		# Deferred rather than immediate, matching `host.exit!`: the host
 		# finishes this cycle -- including the draw, and including capturing it
 		# -- and shuts down afterwards.
-		Exit(code) => Ok(HostHost.exit!(I64.to_i32_wrap(code)))
-		SetCursor(cursor) => Ok(MouseHost.set_cursor!(Mouse.cursor_code(cursor)))
-		SetCursorMode(mode) => Ok(MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode)))
-		SetClipboardText(text) => Ok(HostHost.set_clipboard_text!(text))
-		SetExitKey(key) => Ok(HostHost.set_exit_key!(Keys.exit_key_code(key)))
-		SetWindowMinSize(size) =>
-			Ok(
-				HostHost.set_window_min_size!({
-					width: if size.width > 0 size.width else 0,
-					height: if size.height > 0 size.height else 0,
-				}),
-			)
+		Exit(code) => HostHost.exit!(I64.to_i32_wrap(code))
+		SetCursor(cursor) => MouseHost.set_cursor!(Mouse.cursor_code(cursor))
+		SetCursorMode(mode) => MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
+		SetClipboardText(text) => HostHost.set_clipboard_text!(text)
+		SetExitKey(key) => HostHost.set_exit_key!(Keys.exit_key_code(key))
+		# A window with no area has no drawing space to report back, so a
+		# non-positive dimension is ignored rather than passed on.
+		SetWindowSize(size) =>
+			if size.width > 0 and size.height > 0 {
+				match HostHost.set_screen_size!(size) {
+					Ok({}) => {}
+					Err(NotSupported) => {}
+				}
+			} else {
+				{}
+			}
 
-		PlaySound(settings) => Ok(settings.play!())
-		SetMusicVolume(request) => Ok(request.music.set_volume!(request.volume))
-		UpdateTexture(request) => Assets.update_texture!(request.texture, request.pixels)
-		UpdateTextureRegion(request) => Assets.update_texture_region!(request.texture, request.region)
-		SetVirtualMouse(pointer) => Ok(Capture.apply_virtual_mouse!(pointer))
-		StartRecording(recording) => Ok(Capture.apply_start!(recording))
-		StopRecording => Ok(Capture.apply_stop!())
+		SetWindowMinSize(size) =>
+			HostHost.set_window_min_size!({
+				width: if size.width > 0 size.width else 0,
+				height: if size.height > 0 size.height else 0,
+			})
+
+		SetTargetFps(fps) => HostHost.set_target_fps!(fps)
+		PlaySound(settings) => settings.play!()
+		StopSound(sound) => sound.stop!()
+		PauseSound(sound) => sound.pause!()
+		ResumeSound(sound) => sound.resume!()
+		PlayMusic(music) => music.play!()
+		StopMusic(music) => music.stop!()
+		PauseMusic(music) => music.pause!()
+		ResumeMusic(music) => music.resume!()
+		SetMusicVolume(request) => request.music.set_volume!(request.volume)
+		SetMusicPitch(request) => request.music.set_pitch!(request.pitch)
+		SetMusicPan(request) => request.music.set_pan!(request.pan)
+		SetMusicLooping(request) => request.music.set_looping!(request.looping)
+		SeekMusic(request) => request.music.seek!(request.seconds)
+		SetMasterVolume(volume) => Audio.set_master_volume!(volume)
+		UpdateTexture(request) => settle_upload(Assets.update_texture!(request.texture, request.pixels))
+		UpdateTextureRegion(request) => settle_upload(Assets.update_texture_region!(request.texture, request.region))
+		SetTextureFilter(request) => Assets.set_texture_filter!(request.texture, request.filter)
+		SetTextureWrap(request) => Assets.set_texture_wrap!(request.texture, request.wrap)
+		SetVirtualMouse(pointer) => Capture.apply_virtual_mouse!(pointer)
+		StartRecording(recording) => Capture.apply_start!(recording)
+		StopRecording => Capture.apply_stop!()
+	}
+
+## Take the host's answer to an upload that was already cleared to run.
+##
+## The host refuses an over-budget upload rather than aborting on one, and this
+## cycle's budget gate has already skipped the ones that do not fit, so a
+## refusal for budget here means the host's accounting and Roc's disagree by a
+## byte somewhere. Skipping is still the answer: a lost upload is never a reason
+## to stop the app.
+##
+## The other two are the programmer errors `refuse_unfittable_uploads` reports.
+## Reaching one here means the texture's real dimensions are not the ones the
+## `Texture` value carries -- an upload aimed at something that cannot take it.
+settle_upload : Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..]) -> {}
+settle_upload = |result|
+	match result {
+		Ok({}) => {}
+		Err(UploadBudgetExceeded) => {}
+		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
+		Err(_) => refuse_upload(PixelCountMismatch)
 	}
 
 ## Draw the current model, then hand the same box back.

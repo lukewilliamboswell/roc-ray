@@ -12,10 +12,9 @@ import Color
 import DrawHost
 import Math
 import rrt.Font as RrtFont
-import rrt.Texture
 
 TextureDrawConfig : {
-	texture : Texture,
+	texture : Assets.Texture,
 	source : Math.Rect,
 	dest : Math.Rect,
 	origin : Math.Vec2,
@@ -74,7 +73,7 @@ TextureDrawBuilder(field) := {
 	empty : TextureDrawBuilder({})
 	empty = { value: {}, apply: |options| options }
 
-	run : TextureDrawBuilder(a), Texture -> TextureDrawConfig
+	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
 		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
@@ -182,6 +181,13 @@ Draw := [].{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)
 	}
+
+	## Host-owned GPU texture, the same type `Assets` loads and generates.
+	##
+	## Named here as well so drawing code can keep a texture in its model
+	## without importing `Assets`; `Draw.Texture`, `Assets.Texture` and the
+	## companion package's `rrt.Texture` are one type, not three.
+	Texture : Assets.Texture
 
 	## Two-dimensional vector used by drawing records.
 	Vector2 : Math.Vec2

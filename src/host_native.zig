@@ -1518,6 +1518,13 @@ var host_environ: []const [*:0]u8 = &.{};
 /// Look up an environment variable without `std.posix.getenv` (removed in 0.16).
 /// Scans `host_environ`, which is captured once in `platform_main`.
 fn hostGetEnv(key: []const u8) ?[]const u8 {
+    if (comptime builtin.os.tag == .windows) {
+        // Windows does not expose a stable `environ` pointer: the PEB-owned
+        // block can move when the process environment changes. Copy the few
+        // host options we query into process-lifetime storage instead.
+        const environ: std.process.Environ = .{ .block = .global };
+        return environ.getAlloc(std.heap.page_allocator, key) catch null;
+    }
     for (host_environ) |entry| {
         if (matchEnvEntry(std.mem.span(entry), key)) |value| return value;
     }

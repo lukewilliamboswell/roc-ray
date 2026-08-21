@@ -469,15 +469,14 @@ App := [].{
 	## asynchronous responses have no specified order. App termination drops pending
 	## response mappers because no later input can observe them.
 	##
-	## Changing a collection in the model costs a copy of it. The model reaches
-	## `update` still referenced by the box it arrived in, so the first write to
-	## one of its lists allocates a new one rather than mutating in place:
-	## measured at 4,000,000 bytes per frame for a one-million-element
+	## Changing a collection in the model is an in-place write. The model reaches
+	## `update` uniquely referenced -- the box it arrived in is consumed -- so
+	## writing to one of its lists mutates it rather than allocating a new one:
+	## measured at under a hundred bytes per frame for a one-million-element
 	## `List(F32)` (`test/model_inplace`, checked by
-	## `scripts/test_model_allocation.py`). Later writes to that same collection
-	## within one cycle are in place, so batching a cycle's changes into one
-	## `update` costs one copy rather than several. A collection that changes
-	## every frame is worth keeping small until this is fixed.
+	## `scripts/test_model_allocation.py`). A collection held in the model can
+	## therefore change every frame without a size-proportional cost. Earlier
+	## compiler pins copied it once per frame instead.
 	Transition(model, msg) := [
 		Transition(
 			{

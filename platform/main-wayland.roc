@@ -252,14 +252,14 @@ init_for_host! = ||
 ## invoked, receives this resulting model. The host assigns private
 ## tickets while it takes each returned callback envelope into its pending set.
 ##
-## Writing to a collection held in the model copies it. The box arrives holding
-## the model's only reference -- measured at refcount 1 on entry -- but
-## unboxing borrows rather than consumes and the box lives until this scope
-## ends, so `update` runs with the model's lists referenced more than once and
-## the first write to one allocates a whole new list. Measured at exactly one
-## copy per frame for a million-element `List(F32)`, 4,000,000 bytes, by
-## `test/model_inplace` under `scripts/test_model_allocation.py`. Writes after
-## the first, within the same cycle, are in place: the copy is unique.
+## Writing to a collection held in the model is an in-place write. The box
+## arrives holding the model's only reference -- measured at refcount 1 on entry
+## -- and unboxing here consumes it, so `update` runs with the model's lists
+## uniquely referenced and mutates them rather than copying. Measured on
+## `nightly-2026-08-21-90da19f` at under a hundred bytes per frame for a
+## million-element `List(F32)` by `test/model_inplace` under
+## `scripts/test_model_allocation.py`, which checks that budget. Earlier pins
+## copied the whole list every frame; `--characterize` describes that behaviour.
 update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)) }, I64)
 update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
 	messages = receive_responses(responses)

@@ -1,6 +1,6 @@
 app [Model, program] {
 	rr: platform "../platform/main.roc",
-	roc: "nightly-2026-08-19-edec830",
+	roc: "nightly-2026-08-21-90da19f",
 }
 
 import rr.App

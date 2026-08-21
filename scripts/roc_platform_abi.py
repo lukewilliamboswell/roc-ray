@@ -82,8 +82,8 @@ def compiler_matches_pin(observed: str, pin: RocPin) -> bool:
     """Is `observed` (a `roc version` line) the compiler `pin` names?
 
     The published nightly reports the whole tag. A compiler built from the same
-    revision reports its build mode and commit instead -- `release-fast-edec8304`
-    for `nightly-2026-08-19-edec830` -- which is the same compiler and should be
+    revision reports its build mode and commit instead -- `release-fast-90da19f4`
+    for `nightly-2026-08-21-90da19f` -- which is the same compiler and should be
     allowed. Match on the commit, taking the shorter of the two hashes so either
     abbreviation is accepted.
     """

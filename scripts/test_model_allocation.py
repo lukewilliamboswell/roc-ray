@@ -2,48 +2,29 @@
 """Measure what one frame costs a large collection held in the app's model.
 
 The host consumes its model box on every `update_for_host` call and the platform
-adapter boxes the returned model again. If nothing else referenced the old model
-while `update` ran, writing to a list in it would be an in-place write and a
-frame would cost nothing proportional to the list. It is not, and it does:
-`test/model_inplace` writes one element of a one-million-`F32` list and the
-frame allocates a whole new list, every frame.
+adapter boxes the returned model again. If nothing else references the old model
+while `update` runs, writing to a list in it is an in-place write and a frame
+costs nothing proportional to the list. As of the `nightly-2026-08-21-90da19f`
+pin that is what happens: `test/model_inplace` writes one element of a
+one-million-`F32` list and the frame allocates only the model box.
 
 That result is measured, not assumed, and this script is how it stays measured.
 It builds the probe app, runs it headless under `ROC_RAY_ALLOC_STATS=1`, and
-checks the steady-state per-frame numbers against what was observed:
+checks that steady-state per-frame allocation stays under a small fixed budget
+for both the `set` and `append` patterns.
 
-    set     one full copy of the list per frame (4,000,000 bytes for 1M F32)
-    append  a copy sized to the exact new length, so the per-frame cost grows
-            by one element a frame -- growth is not amortized, because an
-            amortized grow needs a uniquely referenced list and this is not one
-
-Both assertions are two-sided on purpose. A frame that costs more than one copy
-is a regression. A frame that costs less means somebody made the model's
-collections unique again: that is the outcome everyone wants, and the fix for
-this failure is to switch this check to `--require-in-place`, delete the
-characterization numbers, and update the notes in `platform/main.roc` and
-`platform/App.roc` that record the copying behaviour.
-
-`--require-in-place` asserts the invariant that copying denies: steady-state
-per-frame allocation under a small fixed budget. It is expected to FAIL today.
-It is here so the goal is executable rather than described.
-
-TODO: make `--require-in-place` the checked mode once the copy is gone. It is
-not a platform bug to fix here. The host hands over its only box reference and
-clears its own slot first, and the list's refcount at `update_for_host` entry
-measures 1; it measures 3 by the time the copy is allocated, both increfs
-coming from Roc-compiled code. `Box.unbox` is specified as retaining its result
-and borrowing its argument, never consuming the box, so the box and the
-unboxed model are both live while `update` runs and `List.set` takes its
-copy-on-write path. The compiler can consume the box instead -- its `box_reuse`
-rewrite does exactly that for a straight-line `unbox -> produce -> box -> ret`
--- but the adapter branches and runs effects between those points. Weighing
-mutation points when choosing between a borrow and an owned move is named as
-future work in the compiler's design notes.
+It did not always hold. Under earlier pins each frame copied the whole list:
+`Box.unbox` is specified as retaining its result and borrowing its argument, so
+the box and the unboxed model were both live while `update` ran and `List.set`
+took its copy-on-write path. The compiler now consumes the box instead, and the
+list's refcount at the mutation point is 1. `--characterize` re-runs the old
+two-sided copying assertions; it is expected to FAIL now, and is kept so a
+regression back to copying can be identified rather than just measured as "more
+than the budget".
 
 Usage:
-    scripts/test_model_allocation.py                # characterize (CI default)
-    scripts/test_model_allocation.py --require-in-place   # the goal; fails today
+    scripts/test_model_allocation.py                # check in-place (CI default)
+    scripts/test_model_allocation.py --characterize # the old copying numbers
     scripts/test_model_allocation.py --report       # print every pattern's cost
 """
 
@@ -178,9 +159,9 @@ def check_copies_once(rows: list[dict[str, int]], pattern: str) -> list[str]:
     if measured < one_copy // 2:
         return [
             f"{pattern}: {measured} bytes per frame is less than one copy of the list "
-            f"({one_copy}). The model's collections may be unique again -- if so, "
-            "rerun with --require-in-place, make that the checked contract, and "
-            "update the notes in platform/main.roc and platform/App.roc"
+            f"({one_copy}); the model's collections are unique. This is the wanted "
+            "outcome and the default mode checks it -- --characterize only "
+            "describes the copying behaviour that preceded it"
         ]
     return []
 
@@ -241,10 +222,10 @@ def main() -> int:
         "--skip-build", action="store_true", help="Reuse the probe executable already built"
     )
     parser.add_argument(
-        "--require-in-place",
+        "--characterize",
         action="store_true",
-        help="Assert the invariant this repo does not currently hold: steady-state "
-        f"per-frame allocation under {IN_PLACE_BUDGET_BYTES} bytes. Expected to FAIL.",
+        help="Assert the copying behaviour that preceded the compiler fix: one full "
+        "copy of the list per frame. Expected to FAIL on the current pin.",
     )
     parser.add_argument("--report", action="store_true", help="Print every pattern's cost")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show build output")
@@ -277,18 +258,13 @@ def main() -> int:
         f"append={append_bytes} bytes/frame"
     )
 
-    if args.require_in_place:
-        failures = check_in_place(set_rows, "set") + check_in_place(append_rows, "append")
-    else:
+    if args.characterize:
         failures = (
             check_copies_once(set_rows, "set")
             + check_append_regrows_exactly(append_rows)
         )
-        # Always say where the invariant stands, so the gap between what is
-        # checked and what is wanted never has to be rediscovered.
-        outstanding = check_in_place(set_rows, "set")
-        if outstanding:
-            print(f"XFAIL (known, not a regression): {outstanding[0]}")
+    else:
+        failures = check_in_place(set_rows, "set") + check_in_place(append_rows, "append")
 
     for failure in failures:
         print(f"FAILED: {failure}", file=sys.stderr)

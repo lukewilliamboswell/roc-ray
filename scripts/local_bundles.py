@@ -242,14 +242,18 @@ def quote_ref(ref: str) -> str:
 # --------------------------------------------------------------------------
 
 
-def _prune_stale_scratch() -> None:
+def _prune_stale_scratch(extra_root: Path | None = None) -> None:
     """Remove scratch directories left behind by a SIGKILLed run."""
-    tmp = Path(tempfile.gettempdir())
     cutoff = time.time() - STALE_SCRATCH_SECONDS
-    try:
-        candidates = list(tmp.glob(f"{SCRATCH_PREFIX}*"))
-    except OSError:
-        return
+    candidates: list[Path] = []
+    roots = [Path(tempfile.gettempdir())]
+    if extra_root is not None and extra_root not in roots:
+        roots.append(extra_root)
+    for scratch_root in roots:
+        try:
+            candidates.extend(scratch_root.glob(f"{SCRATCH_PREFIX}*"))
+        except OSError:
+            pass
     for candidate in candidates:
         try:
             if candidate.is_dir() and candidate.stat().st_mtime < cutoff:
@@ -560,8 +564,13 @@ def serve_packages(
     if mode not in ("auto", "bundle", "source"):
         raise LocalBundleError(f"unknown platform mode: {mode!r}")
 
-    _prune_stale_scratch()
-    scratch = Path(tempfile.mkdtemp(prefix=SCRATCH_PREFIX))
+    windows_scratch_root = root.parent if IS_WINDOWS else None
+    _prune_stale_scratch(windows_scratch_root)
+    # Roc's Windows bundler currently creates its internal temporary archive on
+    # the source volume even when TEMP/TMP/TMPDIR point elsewhere. Put our
+    # scratch output beside (but outside) the checkout so its final atomic
+    # rename cannot cross from the runner's D: workspace to its C: system temp.
+    scratch = Path(tempfile.mkdtemp(prefix=SCRATCH_PREFIX, dir=windows_scratch_root))
 
     # A last-ditch cleanup for exits that skip the finally block below. Register
     # a closure so unregistering removes this one rather than every rmtree any

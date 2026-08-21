@@ -29,18 +29,20 @@ zig build
 Run an example against the local platform:
 
 ```bash
-scripts/run-example.py examples/cave_climb.roc
+scripts/run-example.py examples/cave_climb
 ```
 
-The runner builds the host, uses `platform/main.roc` for the run, and restores
-the example's original platform reference when it exits. Pass
-`--skip-platform-build` to reuse native libraries from an earlier `zig build`.
+The runner builds the host and runs a *copy* of the example pointed at the
+platform sources, so the checked-in files are never rewritten. Pass
+`--skip-platform-build` (before the example) to reuse native libraries from an
+earlier `zig build`, and `--platform-mode=bundle` to run against a bundled
+platform instead of its sources.
 
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
 
 ```bash
-scripts/run-example.py examples/cave_climb.roc -- --debug-allocator
+scripts/run-example.py examples/cave_climb -- --host-debug-allocator
 ```
 
 ## Repository map
@@ -76,12 +78,50 @@ the examples. The lower-level example driver is also useful while iterating:
 scripts/all_tests.py
 scripts/all_tests.py --skip-platform-build
 scripts/all_tests.py --skip-roc-build
+scripts/all_tests.py --only pong,snake
 ```
 
-It checks formatting and types, runs Roc tests, builds the apps, exercises their
-headless paths, and verifies a locally served platform bundle. The scripts know
-how to handle both local and released platform references; avoid committing an
-incidental reference change made only for local testing.
+It checks formatting and types, runs Roc tests, builds the apps and exercises
+their headless paths. `--only` takes example names (repeatable, or comma
+separated) and is the way to iterate on one example without waiting for the
+other sixteen.
+
+### How the apps reach the platform
+
+Every app stage resolves its packages over localhost. `scripts/bundle.sh`
+bundles the roc-ray-types package and the platform into a scratch directory,
+`scripts/local_bundles.py` serves that directory over HTTP, and each app is
+*copied* to a scratch directory with its header pointed at the served bundle.
+Three things follow:
+
+- Examples are checked and built in the shape they ship in. `roc bundle` drops a
+  relative dependency without complaining, and the app it breaks fails with
+  INVALID PACKAGE DEPENDENCY; that used to surface only in a separate bundle
+  test at the end of a run, and now surfaces in `roc check`.
+- Every reference to roc-ray-types resolves one freshly built artifact: the
+  platform's, the four examples that name the package themselves
+  (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
+  halves of `test/package_interop`. Building an app against a package build
+  nobody produced is no longer expressible. `test/package_interop` is built
+  every run to keep that honest.
+- No tracked file is ever rewritten, so `git status` stays clean however a run
+  ends -- including a `kill -9` part way through a build. There is no longer an
+  incidental platform reference change to avoid committing, and no reason to
+  reach for `git checkout -- examples/` after an interrupted run.
+
+Built executables land in the scratch directory rather than beside each
+`main.roc`; pass `--copy-executables` if you want them in place, and use
+`scripts/run-example.py` to run one interactively.
+
+Roc caches packages by content hash, so re-bundling changed sources produces a
+new hash and a stale reference is not expressible. The port is derived from the
+checkout path so the hashes stay put between runs and the cache is reused; edits
+to `platform/` or `types/` each leave another extracted copy (~90 MB for the
+platform) under `~/.cache/roc/packages`, so delete that directory when it grows.
+
+Run `python3 scripts/local_bundles.py --serve` to hold the bundles up on
+localhost yourself, for instance to build a separate app or package against the
+same URLs.
 
 Enable the repository's pre-commit hook once after cloning:
 
@@ -104,8 +144,11 @@ xvfb-run -a zig build graphical-smoke
 ```
 
 Run it when changing primitives, texture coordinates, shaders, blending,
-scissoring, render textures, or paired drawing modes. The ordinary headless app
-runs verify composition and lifecycle behavior, not framebuffer pixels.
+scissoring, render textures, paired drawing modes, or native font metrics. It
+also compares the scalar snapshot inside `Draw.Font` with raylib's
+`MeasureTextEx` for the default font and, when the system provides one, a
+loaded proportional font. The ordinary headless app runs verify composition
+and lifecycle behavior, not framebuffer pixels.
 
 ## Design principles
 
@@ -120,14 +163,14 @@ Prefer operations on values an app already has:
 frame.circle!(config)
 host.key_pressed(KeySpace)
 camera.screen_to_world(point)
-texture.rect()
+Assets.update_texture!(texture, pixels)
 uniform.set!(value)
 ```
 
-Use attached constructors such as `Assets.Texture.load!`,
-`Draw.RenderTexture.load!`, and `Draw.Shader.load!` when creation naturally
-belongs to the result type. A module function is still appropriate for a pure
-helper or when there is no natural receiver.
+Use attached constructors such as `Draw.RenderTexture.load!` and
+`Draw.Shader.from_store!` when creation naturally belongs to the result type.
+Shared textures deliberately use standalone `Assets` functions because their
+authoritative type lives in `roc-ray/types`, which has no host authority.
 
 Keep transport details inside the platform. Flattened ABI records, scalar
 handles, and hosted helpers should not leak into normal application code.
@@ -144,15 +187,16 @@ returns `Err`. Scopes can nest and restore their outer state. Preserve
 `ScopeLimit`, and preserve `ScopeUnavailable` for scopes backed by transferred
 resources.
 
-### Snapshot input once per frame
+### Snapshot devices once per host cycle
 
-Keyboard, mouse, gamepad, text, timing, and screen information are sampled into
-`Host`. Prefer pure queries over repeated host calls. Views such as a connected
-gamepad belong to that snapshot and should be queried immediately rather than
-stored in the model.
+Keyboard, mouse, gamepad and text state is sampled into `Devices.Snapshot`,
+window geometry into `Window.Snapshot`, and timing into `Time.Cycle`; one
+`App.Input` carries all three. Prefer pure queries over repeated host calls. Views such as a
+connected gamepad belong to that snapshot and should be queried immediately
+rather than stored in the model.
 
 Snapshot lists are designed for in-place reuse while uniquely owned. Retaining
-an old snapshot can trigger copy-on-write on the next frame, so derive ordinary
+an old snapshot can trigger copy-on-write on the next host cycle, so derive ordinary
 app state from input instead of preserving host storage.
 
 ### Make ownership explicit
@@ -161,10 +205,17 @@ Fonts, textures, prepared text, sounds, music, render textures, and shaders are
 typed host resources with lifetimes driven by Roc references. A final release
 unloads the native value and makes its bounded slot reusable.
 
-Keep capabilities narrow. For example, an `Assets.Texture` can be updated,
-while an `Assets.TextureView` can only be sampled; a render texture exposes the
-view. Keep typed shader-uniform handles so invalid setter combinations remain a
-compile-time error.
+Keep capabilities narrow. A package depending only on `roc-ray/types` can
+retain a `Texture` and read its dimensions, while mutation requires the
+platform's `Assets` module. Keep typed shader-uniform handles so invalid setter
+combinations remain a compile-time error.
+
+An *application* never adds `roc-ray-types` to its header. Name a texture held
+in the model `Assets.Texture` (or `Draw.Texture`, the same type under a second
+name); the platform re-exports it as a transparent alias, so it still unifies
+with a package written against `rrt.Texture`. The same applies to every other
+package type the platform's API mentions. If you find yourself adding an `rrt:`
+entry to an example just to name a type, the platform is missing a re-export.
 
 Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
@@ -248,6 +299,16 @@ to both. `zig build lint` enforces this and points at the first line that
 drifted; without it a missing entry only surfaces when someone links against the
 Wayland bundle.
 
+A hosted effect the host admits during the apply phase --
+`enforcePhase(name, during_apply)` in `src/host_native.zig` -- needs a
+`App.Command` that reaches it, because `update` is pure and `render!` only
+draws, so a command is the whole of what a running app can change about host
+state. Add the variant, its `run_command!` arm, and a receiver-form constructor
+on the owning type; none of that crosses the ABI. If the effect deliberately has
+no command, write down why. Either way the name goes in
+[`docs/command-coverage.md`](docs/command-coverage.md), and `zig build lint` fails
+until it does.
+
 The Zig ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`.
 After changing hosted functions in `platform/main.roc`, regenerate them with a
 local checkout of the Roc repository:
@@ -302,6 +363,29 @@ It sees Roc allocation ABI calls, not internal allocations made by raylib or
 Zig. Use the native lifecycle and allocation tests when optimizing inside a
 hosted effect.
 
+Any built app can report its own per-frame allocation instead, without GDB:
+
+```bash
+ROC_RAY_ALLOC_STATS=1 examples/pong/main --host-headless --host-headless-frames=120
+```
+
+Each frame prints one line to stderr with the bytes and calls that frame
+allocated and freed, and how much of it belonged to `update`. Unset, the host
+does not install the meter at all.
+
+That is how the cost of holding a collection in the model was measured:
+
+```bash
+scripts/test_model_allocation.py --report
+```
+
+Changing one element of a list in the model allocates a whole new list, every
+frame -- the model is still referenced by the box it arrived in, so the write
+is copy-on-write rather than in place. `test/model_inplace` is the probe,
+`scripts/test_model_allocation.py` runs in `all_tests.py` to keep the number
+from drifting in either direction, and its `--require-in-place` mode is the
+invariant we want and do not have.
+
 ## Bundles and targets
 
 Build the default release bundle:
@@ -323,6 +407,17 @@ source checkout with:
 ```bash
 scripts/build-raylib-wayland.sh /path/to/raylib-6.0
 ```
+
+Both bundles need every target's archives under `platform/targets/`, which a
+plain `zig build` produces -- it cross-compiles all four of x64mac, arm64mac,
+x64glibc and x64win. So a local checkout can build a complete bundle, which is
+what `scripts/all_tests.py` relies on. `bundle.sh` names the exact file it is
+missing if some target was never built.
+
+The platform depends on roc-ray-types by relative path, which cannot survive
+bundling, so `bundle.sh` rewrites the staged header to a real URL: the release
+pinned in `.types-version`, or `--types-url-base` when the package is being
+served locally.
 
 ## Vendored encoders
 

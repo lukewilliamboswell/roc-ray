@@ -11,9 +11,18 @@ import Camera
 import Color
 import DrawHost
 import Math
+import rrt.Font as RrtFont
 
 TextureDrawConfig : {
-	texture : Assets.TextureView,
+	texture : Assets.Texture,
+	source : Math.Rect,
+	dest : Math.Rect,
+	origin : Math.Vec2,
+	rotation : F32,
+	tint : Color.Rgba,
+}
+
+TextureInstanceConfig : {
 	source : Math.Rect,
 	dest : Math.Rect,
 	origin : Math.Vec2,
@@ -64,10 +73,10 @@ TextureDrawBuilder(field) := {
 	empty : TextureDrawBuilder({})
 	empty = { value: {}, apply: |options| options }
 
-	run : TextureDrawBuilder(a), Assets.TextureView -> TextureDrawConfig
+	run : TextureDrawBuilder(a), Assets.Texture -> TextureDrawConfig
 	run = |builder, texture| {
 		options = (builder.apply)(TextureDrawBuilder.default_options)
-		source = if options.source_set options.source else texture.rect()
+		source = if options.source_set options.source else Math.rect(0, 0, texture.width, texture.height)
 
 		dest = if options.dest_set {
 			options.dest
@@ -171,7 +180,42 @@ Draw := [].{
 	Frame :: DrawHost.Frame.{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)
+
+		## How big the surface being drawn to right now is.
+		##
+		## Normally this is the window's logical drawing size -- the same value
+		## `Window.Snapshot.size` reports, in the same coordinate space as mouse
+		## input and every drawing call. Inside `with_render_texture!` it is the
+		## render target's size instead, because that is what the callback's
+		## coordinates are relative to.
+		##
+		## This is the size of a *drawing surface*, so it is `F32` where
+		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
+		## centre points directly, and a render target's dimensions are already
+		## `F32` on `Texture`. `Window.Snapshot.size` stays `I32` because it is
+		## also the thing `Window.suggest_size` sets.
+		##
+		## Reach for this when laying something out against the surface -- a HUD
+		## in a corner, a title centred across the top. Layout decisions that
+		## `update` also has to make, such as which arrangement to use or what
+		## the pointer is over, belong on `input.window` where the rest of
+		## application logic can see them.
+		size! : Frame => FrameSize
+		size! = |_frame| DrawHost.frame_size!()
 	}
+
+	## Dimensions of the surface `render!` is currently drawing to.
+	FrameSize : {
+		width : F32,
+		height : F32,
+	}
+
+	## Host-owned GPU texture, the same type `Assets` loads and generates.
+	##
+	## Named here as well so drawing code can keep a texture in its model
+	## without importing `Assets`; `Draw.Texture`, `Assets.Texture` and the
+	## companion package's `rrt.Texture` are one type, not three.
+	Texture : Assets.Texture
 
 	## Two-dimensional vector used by drawing records.
 	Vector2 : Math.Vec2
@@ -283,9 +327,73 @@ Draw := [].{
 		color : Color.Rgba,
 	}
 
-	## The built-in font is allocation-free. A loaded font is an opaque host-owned
-	## resource whose final reference unloads its texture automatically.
-	Font : DrawHost.Font
+	## Scalar metrics for one glyph, shared with platform-independent packages.
+	GlyphMetrics : RrtFont.GlyphMetrics
+
+	## Text measurement result.
+	TextSize : RrtFont.Size
+
+	## A native font handle paired with an immutable scalar metric snapshot.
+	## Loading constructs the snapshot once; every receiver below is pure.
+	Font :: {
+		raw : DrawHost.Font,
+		base_size_value : F32,
+		line_spacing_value : F32,
+		fallback_index : U64,
+		glyph_values : List(RrtFont.GlyphMetrics),
+	}.{
+		from_host! : DrawHost.Font => Font
+		from_host! = |raw| {
+			metrics = DrawHost.font_metrics!(raw)
+			Font.(
+				{
+					raw,
+					base_size_value: metrics.base_size,
+					line_spacing_value: metrics.line_spacing,
+					fallback_index: metrics.fallback_index,
+					glyph_values: metrics.glyphs,
+				},
+			)
+		}
+
+		for_host : Font -> DrawHost.Font
+		for_host = |Font.(font)| font.raw
+
+		base_size : Font -> F32
+		base_size = |Font.(font)| font.base_size_value
+
+		line_spacing : Font -> F32
+		line_spacing = |Font.(font)| font.line_spacing_value
+
+		glyphs : Font -> List(RrtFont.GlyphMetrics)
+		glyphs = |Font.(font)| font.glyph_values
+
+		get_glyph_index : Font, U32 -> U64
+		get_glyph_index = |Font.(font), codepoint| glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
+
+		measure : Font, RrtFont.Measure -> RrtFont.Size
+		measure = |font, cfg| RrtFont.measure(font, cfg)
+
+		## Resource-free font value for pure tests.
+		##
+		## The handle never resolves to a host resource, so every host path it
+		## reaches treats it as an invalid one: drawing falls back to raylib's
+		## built-in font, and `Text.prepare!` refuses it. Its metric snapshot is a
+		## fiction rather than a measurement -- no glyphs, no line spacing, and a
+		## `base_size` of 1 so that `measure` stays finite instead of dividing by
+		## zero. Put it in a model to reach the app's real `update` from an
+		## `expect`. Do not use it to test drawing, layout, or resource lifetime.
+		stub : Font
+		stub = Font.(
+			{
+				raw: LoadedFont(DrawHost.FontResource.stub),
+				base_size_value: 1,
+				line_spacing_value: 0,
+				fallback_index: 0,
+				glyph_values: [],
+			},
+		)
+	}
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -297,12 +405,6 @@ Draw := [].{
 	TextAlign : {
 		horizontal : HAlign,
 		vertical : VAlign,
-	}
-
-	## Measured text dimensions in logical pixels.
-	TextSize : {
-		width : F32,
-		height : F32,
 	}
 
 	## Fully configured text draw.
@@ -332,14 +434,6 @@ Draw := [].{
 		color : Color.Rgba,
 	}
 
-	## Text measurement configuration.
-	MeasureText : {
-		text : Str,
-		size : F32,
-		spacing : F32,
-		font : Font,
-	}
-
 	## Font path and base pixel size.
 	LoadFont : {
 		path : Str,
@@ -348,6 +442,10 @@ Draw := [].{
 
 	## Resolved texture draw configuration.
 	TextureDraw : TextureDrawConfig
+
+	## One instance of a batched texture draw. These are the fields of
+	## `TextureDraw` minus the texture, which the batch supplies once.
+	TextureInstance : TextureInstanceConfig
 
 	## Four ordered corners of a projected planar surface.
 	ProjectiveQuadCorners : {
@@ -457,7 +555,7 @@ Draw := [].{
 
 	## Texture and source region projected exactly onto a validated planar quad.
 	ProjectiveTexture : {
-		texture : Assets.Texture,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
 		tint : Color.Rgba,
@@ -465,7 +563,7 @@ Draw := [].{
 
 	## Sampled texture view projected exactly onto a validated planar quad.
 	ProjectiveTextureView : {
-		texture : Assets.TextureView,
+		texture : Texture,
 		source : Math.Rect,
 		quad : ProjectiveQuad,
 		tint : Color.Rgba,
@@ -487,15 +585,25 @@ Draw := [].{
 		}
 
 		## Read-only view of this render target's color attachment.
-		texture : RenderTexture -> Assets.TextureView
+		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(target)| DrawHost.RenderTexture.texture(target)
 
 		## Vertically inverted full-source rectangle for drawing the color attachment.
 		source : RenderTexture -> Math.Rect
 		source = |target| {
 			view = target.texture()
-			{ x: 0, y: 0, width: view.width(), height: 0 - view.height() }
+			{ x: 0, y: 0, width: view.width, height: 0 - view.height }
 		}
+
+		## Resource-free render target for pure tests.
+		##
+		## The handle never resolves to a host resource, so entering a scope with
+		## it is refused the way a released target is. Its color attachment is
+		## `rrt.Texture.stub` with zero dimensions; copy it with the dimensions
+		## the test needs. Do not use it to test drawing, offscreen scopes, or
+		## resource lifetime.
+		stub : RenderTexture
+		stub = RenderTexture.(DrawHost.RenderTexture.stub)
 	}
 
 	## Pixel dimensions for a new offscreen render target.
@@ -508,18 +616,30 @@ Draw := [].{
 	## stage. Keep this value alive for every cached Uniform derived from it.
 	Shader :: DrawHost.Shader.{
 
-		## Load shader stages from files.
-		load! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-		load! = |cfg| {
-			result = DrawHost.load_shader!(cfg)
-			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
-		}
-
 		## Compile shader stages from source strings.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
 			result = DrawHost.load_shader_source!(cfg)
 			if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(ShaderLoadFailed) else Ok(Shader.(result.shader))
+		}
+
+		## Compile shader stage files resolved through an explicit asset store.
+		from_store! : Assets.Store, LoadShader => Try(Shader, [AssetPathInvalid, AssetNotFound, AssetReadFailed, ShaderLoadFailed, ResourceLimit, ..])
+		from_store! = |store, cfg| {
+			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
+			if result.err == 1 {
+				Err(AssetPathInvalid)
+			} else if result.err == 2 {
+				Err(AssetNotFound)
+			} else if result.err == 3 {
+				Err(AssetReadFailed)
+			} else if result.err == 4 {
+				Err(ShaderLoadFailed)
+			} else if result.err != 0 {
+				Err(ResourceLimit)
+			} else {
+				Ok(Shader.(result.shader))
+			}
 		}
 
 		## Resolve a scalar floating-point uniform once.
@@ -549,19 +669,33 @@ Draw := [].{
 		## Resolve a sampled-texture uniform once.
 		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
+
+		## Resource-free shader value for pure tests.
+		##
+		## The handle never resolves to a host resource, so entering a scope with
+		## it is refused the way a released shader is, and setting a uniform
+		## derived from it does nothing. Put it in a model to reach the app's
+		## real `update` from an `expect`. Do not use it to test compilation,
+		## uniforms, or resource lifetime.
+		stub : Shader
+		stub = Shader.(DrawHost.Shader.stub)
 	}
 
-	## File paths for shader stages. An empty path selects the default stage.
+	## Shader source strings. An empty string selects the default stage.
+	## Store-relative shader stage names. An empty path selects raylib's default
+	## stage; non-empty paths are resolved only through `Shader.from_store!`.
 	LoadShader : {
 		vertex_path : Str,
 		fragment_path : Str,
 	}
 
-	## Shader source strings. An empty string selects the default stage.
 	LoadShaderSource : {
 		vertex_source : Str,
 		fragment_source : Str,
 	}
+
+	FontFormat := [Ttf, Otf]
+	FontBytes : { format : FontFormat, bytes : List(U8), size : I32 }
 
 	## Typed uniform handles are zero-cost nominal wrappers over the cached host
 	## location plus its owning shader. Their distinct types prevent using the
@@ -602,15 +736,15 @@ Draw := [].{
 	TextureUniform :: DrawHost.Uniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
-		set! : TextureUniform, Assets.TextureView => {}
+		set! : TextureUniform, Texture => {}
 		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
 			uniform,
 			texture,
 		})
 
 		## Convenience setter for an ordinary mutable texture.
-		set_texture! : TextureUniform, Assets.Texture => {}
-		set_texture! = |uniform, texture| uniform.set!(texture.view())
+		set_texture! : TextureUniform, Texture => {}
+		set_texture! = |uniform, texture| uniform.set!(texture)
 	}
 
 	## Three-component shader uniform value.
@@ -673,9 +807,9 @@ Draw := [].{
 	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
-	## The built-in font, which requires no loading or host-owned resource.
-	default_font : Font
-	default_font = DefaultFont
+	## Snapshot raylib's built-in font during initialization.
+	default_font! : () => Font
+	default_font! = || Font.from_host!(DefaultFont)
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -872,38 +1006,47 @@ Draw := [].{
 		}
 	}
 
-	## Measure text without drawing it, using the selected font and spacing.
-	measure_text! : MeasureText => TextSize
-	measure_text! = |cfg| {
-		DrawHost.measure_text!({
-			text: cfg.text,
-			size: cfg.size,
-			spacing: cfg.spacing,
-			font: cfg.font,
-		})
+	## Load a font relative to an explicit asset store.
+	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+	load_store_font! = |store, cfg| {
+		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
+		if result.err == 1 {
+			Err(AssetPathInvalid)
+		} else if result.err == 2 {
+			Err(AssetNotFound)
+		} else if result.err == 3 {
+			Err(AssetReadFailed)
+		} else if result.err == 4 {
+			Err(FontLoadFailed)
+		} else if result.err != 0 {
+			Err(ResourceLimit)
+		} else {
+			Ok(Font.from_host!(LoadedFont(result.font)))
+		}
 	}
 
-	## Load a host-owned font from disk at the requested base size.
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	load_font! = |cfg| {
-		result = DrawHost.load_font!(cfg)
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(LoadedFont(result.font))
+	## Decode an authored, compile-time embedded font. Bytes are borrowed while
+	## raylib copies/decodes them; no extra Roc payload-sized buffer is created.
+	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
+	font_from_bytes! = |cfg| {
+		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(Font.from_host!(LoadedFont(result.font)))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
-	texture_draw : Assets.Texture -> TextureDraw
-	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture.view())
+	texture_draw : Texture -> TextureDraw
+	texture_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a draw configuration covering the whole texture at `pos`.
-	texture_at : Assets.Texture, Math.Vec2 -> TextureDraw
-	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture.view())
+	texture_at : Texture, Math.Vec2 -> TextureDraw
+	texture_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Create a draw configuration covering a read-only sampled view.
-	texture_view_draw : Assets.TextureView -> TextureDraw
+	texture_view_draw : Texture -> TextureDraw
 	texture_view_draw = |texture| TextureDrawBuilder.run(TextureDrawBuilder.empty, texture)
 
 	## Create a sampled-view draw configuration at `pos`.
-	texture_view_at : Assets.TextureView, Math.Vec2 -> TextureDraw
+	texture_view_at : Texture, Math.Vec2 -> TextureDraw
 	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
 	## Draw a texture with explicit source, destination, origin, rotation, and tint.
@@ -923,11 +1066,27 @@ Draw := [].{
 	draw_texture! : Frame, TextureDraw => {}
 	draw_texture! = |frame, cfg| frame.texture!(cfg)
 
+	## Draw many instances of one texture, in list order, with a single hosted call.
+	##
+	## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
+	## is what caps how many sprites a frame can afford. This crosses once for the
+	## whole batch and lets the host loop over it, so the cost per instance is the
+	## `DrawTexturePro` call alone. Build the list from application state and pass
+	## it straight through; an empty list does not cross at all.
+	texture_instances! : Frame, Texture, List(TextureInstance) => {}
+	texture_instances! = |_frame, texture, instances| {
+		if List.len(instances) == 0 {
+			{}
+		} else {
+			DrawHost.draw_texture_instances!({ texture, instances })
+		}
+	}
+
 	## Project a texture onto a validated planar quad with exact homogeneous UV
 	## interpolation. This remains one hosted call and preserves active shaders.
 	projective_texture! : Frame, ProjectiveTexture => {}
 	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
-		texture: cfg.texture.view(),
+		texture: cfg.texture,
 		source: cfg.source,
 		top_left: cfg.quad.top_left,
 		bottom_left: cfg.quad.bottom_left,
@@ -963,18 +1122,13 @@ Draw := [].{
 
 	## View the color attachment as a sampled texture without allocating or copying.
 	## The returned reference keeps the owning framebuffer alive.
-	render_texture : RenderTexture -> Assets.TextureView
+	render_texture : RenderTexture -> Texture
 	render_texture = |target| target.texture()
 
 	## Render textures use OpenGL framebuffer coordinates, so their color
 	## attachment is vertically inverted when sampled on screen.
 	render_texture_source : RenderTexture -> Math.Rect
 	render_texture_source = |target| target.source()
-
-	## Load shader stages from files. Pass an empty string to use raylib's default
-	## vertex or fragment stage.
-	load_shader! : LoadShader => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
-	load_shader! = |cfg| Shader.load!(cfg)
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.
@@ -1079,7 +1233,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: cfg.font,
+			font: cfg.font.for_host(),
 			align_x: align.x,
 			align_y: align.y,
 		})
@@ -1087,43 +1241,65 @@ Draw := [].{
 
 	## Draw top-left aligned text with the built-in font and default spacing.
 	debug_text! : Frame, DebugText => {}
-	debug_text! = |frame, cfg|
-		frame.text!({
+	debug_text! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple top-left aligned text with the built-in font.
 	text_at! : Frame, SimpleText => {}
-	text_at! = |frame, cfg|
-		frame.text!({
+	text_at! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_top_left,
+			font: DefaultFont,
+			align_x: 0,
+			align_y: 0,
 		})
 
 	## Draw simple text centered on its position.
 	text_centered! : Frame, SimpleText => {}
-	text_centered! = |frame, cfg|
-		frame.text!({
+	text_centered! = |_frame, cfg|
+		DrawHost.text_aligned!({
 			pos: cfg.pos,
 			text: cfg.text,
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: Draw.default_font,
-			align: Draw.align_center,
+			font: DefaultFont,
+			align_x: 0.5,
+			align_y: 0.5,
 		})
 
+}
+
+glyph_index : List(Draw.GlyphMetrics), U32, U64, U64, U64 -> U64
+glyph_index = |glyphs, codepoint, start, end, fallback| {
+	if start >= end {
+		fallback
+	} else {
+		middle = start + (end - start) / 2
+		match List.get(glyphs, middle) {
+			Err(_) => fallback
+			Ok(glyph) => if glyph.codepoint == codepoint {
+				middle
+			} else if codepoint < glyph.codepoint {
+				glyph_index(glyphs, codepoint, start, middle, fallback)
+			} else {
+				glyph_index(glyphs, codepoint, middle + 1, end, fallback)
+			}
+		}
+	}
 }
 
 blend_mode_code : Draw.BlendMode -> U8
@@ -1135,6 +1311,13 @@ blend_mode_code = |mode|
 		AddColors => 3
 		SubtractColors => 4
 		AlphaPremultiply => 5
+	}
+
+font_format_code : Draw.FontFormat -> U8
+font_format_code = |format|
+	match format {
+		Ttf => 0
+		Otf => 1
 	}
 
 scope_ok : U8
@@ -1223,3 +1406,26 @@ expect match Draw.ProjectiveQuad.from_corners({
 	Err(ProjectiveHorizon) => True
 	_ => False
 }
+
+## The resource-free stubs are pure values an app puts in a model to reach its
+## own `update` from an `expect`. What they must never do is pass for a loaded
+## resource, so what is checked here is that they are inert.
+##
+## A `Texture`, a `Shader`, and a `RenderTexture` each hold a `Box` and cannot be
+## compared -- a type reaching a host-resource box does not support equality --
+## so these read the ordinary data beside the handle instead.
+expect Draw.Font.stub.base_size() == 1
+expect Draw.Font.stub.line_spacing() == 0
+expect List.is_empty(Draw.Font.stub.glyphs())
+
+## A font with no glyphs measures every string as zero-wide. The height is the
+## requested size because that is one line of it, and the `base_size` of 1 is
+## what keeps the scale factor finite rather than dividing by zero.
+expect Draw.Font.stub.measure({ text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
+expect Draw.Font.stub.measure({ text: "inert", size: 20, spacing: 0 }) == { width: 0, height: 20 }
+
+## A stub render target's colour attachment is `rrt.Texture.stub`, so it has no
+## area and its vertically flipped source rectangle has none either.
+expect Draw.RenderTexture.stub.texture().width == 0
+expect Draw.RenderTexture.stub.texture().height == 0
+expect Draw.RenderTexture.stub.source().width == 0

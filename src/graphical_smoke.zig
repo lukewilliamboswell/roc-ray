@@ -4,6 +4,7 @@
 //! `xvfb-run`, to validate real raylib rasterization rather than only ABI calls.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
@@ -21,8 +22,181 @@ const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
+/// `red` modulated by a pure-blue instance tint: the two zeroed channels and
+/// the untouched one are all exact, so this stays an equality assertion.
+const instance_tinted = Color{ .r = 0, .g = 0, .b = red.b, .a = 255 };
 
 const TilemapSmokeContext = struct { texture: backend.Texture };
+
+const MetricSnapshot = struct {
+    base_size: f32,
+    fallback_index: usize,
+    line_spacing: f32,
+    glyphs: []backend.FontGlyphMetric,
+};
+
+const MetricMeasurement = struct {
+    width: f32,
+    height: f32,
+};
+
+/// Copy precisely the scalar data `Draw.Font` receives from a live raylib
+/// font. The measurement below deliberately has no access to the font after
+/// this point, matching the pure Roc API's ownership boundary.
+fn snapshotFontMetrics(allocator: std.mem.Allocator, font: backend.Font) !MetricSnapshot {
+    const glyphs = try allocator.alloc(backend.FontGlyphMetric, backend.fontGlyphCount(font));
+    var fallback_codepoint: u32 = 0;
+    for (glyphs, 0..) |*glyph, index| {
+        glyph.* = backend.fontGlyphMetric(font, index);
+        if (index == 0 or glyph.codepoint == '?') fallback_codepoint = glyph.codepoint;
+    }
+    std.sort.pdq(backend.FontGlyphMetric, glyphs, {}, struct {
+        fn lessThan(_: void, left: backend.FontGlyphMetric, right: backend.FontGlyphMetric) bool {
+            return left.codepoint < right.codepoint;
+        }
+    }.lessThan);
+    return .{
+        .base_size = backend.fontBaseSize(font),
+        .fallback_index = for (glyphs, 0..) |glyph, index| {
+            if (glyph.codepoint == fallback_codepoint) break index;
+        } else 0,
+        // roc-ray exposes no text-line-spacing setter; this is raylib 6's
+        // initial value, retained by `Draw.Font` with the glyph scalars.
+        .line_spacing = 2,
+        .glyphs = glyphs,
+    };
+}
+
+fn snapshotGlyphAdvance(snapshot: MetricSnapshot, codepoint: u32) f32 {
+    var start: usize = 0;
+    var end = snapshot.glyphs.len;
+    while (start < end) {
+        const middle = start + (end - start) / 2;
+        const glyph = snapshot.glyphs[middle];
+        if (glyph.codepoint == codepoint) return if (glyph.advance_x > 0) glyph.advance_x else glyph.width + glyph.offset_x;
+        if (codepoint < glyph.codepoint) {
+            end = middle;
+        } else {
+            start = middle + 1;
+        }
+    }
+    const fallback = snapshot.glyphs[snapshot.fallback_index];
+    return if (fallback.advance_x > 0) fallback.advance_x else fallback.width + fallback.offset_x;
+}
+
+const DecodedCodepoint = struct {
+    codepoint: u32,
+    next: usize,
+};
+
+/// Every string below is valid UTF-8, exactly as `Str` values are. This is the
+/// same byte-to-codepoint boundary used by `Draw.Font.measure`.
+fn decodeUtf8(text: []const u8, index: usize) DecodedCodepoint {
+    const first: u32 = text[index];
+    if (first < 0x80) return .{ .codepoint = first, .next = index + 1 };
+    if (first < 0xE0) return .{
+        .codepoint = (first - 0xC0) * 64 + @as(u32, text[index + 1]) - 0x80,
+        .next = index + 2,
+    };
+    if (first < 0xF0) return .{
+        .codepoint = (first - 0xE0) * 4096 + (@as(u32, text[index + 1]) - 0x80) * 64 + @as(u32, text[index + 2]) - 0x80,
+        .next = index + 3,
+    };
+    return .{
+        .codepoint = (first - 0xF0) * 262144 + (@as(u32, text[index + 1]) - 0x80) * 4096 + (@as(u32, text[index + 2]) - 0x80) * 64 + @as(u32, text[index + 3]) - 0x80,
+        .next = index + 4,
+    };
+}
+
+/// Pure equivalent of `Draw.Font.measure` for a native parity check.
+fn measureSnapshot(snapshot: MetricSnapshot, text: []const u8, size: f32, spacing: f32) MetricMeasurement {
+    if (text.len == 0 or text[0] == 0) return .{ .width = 0, .height = 0 };
+
+    var index: usize = 0;
+    var line_width: f32 = 0;
+    var widest_width: f32 = 0;
+    var line_codepoints: usize = 0;
+    var widest_codepoints: usize = 0;
+    var height = size;
+    while (index < text.len and text[index] != 0) {
+        const decoded = decodeUtf8(text, index);
+        index = decoded.next;
+        if (decoded.codepoint == '\n') {
+            widest_width = @max(widest_width, line_width);
+            widest_codepoints = @max(widest_codepoints, line_codepoints);
+            line_width = 0;
+            line_codepoints = 0;
+            height += size + snapshot.line_spacing;
+        } else {
+            line_width += snapshotGlyphAdvance(snapshot, decoded.codepoint);
+            line_codepoints += 1;
+        }
+    }
+    const widest_codepoint_count = @max(widest_codepoints, line_codepoints);
+    return .{
+        .width = @max(widest_width, line_width) * (size / snapshot.base_size) + (@as(f32, @floatFromInt(widest_codepoint_count)) - 1) * spacing,
+        .height = height,
+    };
+}
+
+fn expectMeasurementEqual(actual: MetricMeasurement, expected: rl.Vector2, label: []const u8) !void {
+    const tolerance: f32 = 0.001;
+    if (!std.math.approxEqAbs(f32, actual.width, expected.x, tolerance) or !std.math.approxEqAbs(f32, actual.height, expected.y, tolerance)) {
+        std.log.err("{s}: scalar snapshot measured ({d:.3}, {d:.3}), raylib MeasureTextEx measured ({d:.3}, {d:.3})", .{
+            label, actual.width, actual.height, expected.x, expected.y,
+        });
+        return error.FontMetricParity;
+    }
+}
+
+/// Compare the host snapshot/pure path with the renderer's own MeasureTextEx.
+/// This is intentionally a real-GL smoke check rather than the headless metric
+/// fixture: it catches a change in raylib's default or loaded-font semantics.
+fn expectFontMetricParity(allocator: std.mem.Allocator, font: backend.Font, label: []const u8) !void {
+    const snapshot = try snapshotFontMetrics(allocator, font);
+    const cases = [_]struct { text: [:0]const u8, size: f32, spacing: f32 }{
+        .{ .text = "iii", .size = 20, .spacing = 1 },
+        .{ .text = "WWW", .size = 20, .spacing = 1 },
+        .{ .text = "A\nWi", .size = 31, .spacing = 2.5 },
+        .{ .text = "café", .size = 17, .spacing = 0 },
+        .{ .text = "i\x00WWW", .size = 20, .spacing = 1 },
+    };
+    for (cases) |case| {
+        const native = backend.measureTextZ(case.text.ptr, font, case.size, case.spacing);
+        try expectMeasurementEqual(measureSnapshot(snapshot, case.text, case.size, case.spacing), native, label);
+    }
+}
+
+fn loadProportionalTestFont() ?backend.Font {
+    // CI's Linux image carries DejaVu. The other candidates make the same
+    // native coverage available to local macOS and Windows contributors
+    // without making a system font a required repository asset.
+    const candidates = switch (builtin.os.tag) {
+        .linux => &.{"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"},
+        .macos => &.{"/System/Library/Fonts/Supplemental/Arial.ttf"},
+        .windows => &.{"C:\\Windows\\Fonts\\arial.ttf"},
+        else => &.{},
+    };
+    inline for (candidates) |path| {
+        if (backend.loadFont(path.ptr, 32)) |font| return font;
+    }
+    return null;
+}
+
+fn expectNativeFontMetricParity(allocator: std.mem.Allocator) !void {
+    try expectFontMetricParity(allocator, backend.defaultFont(), "default font");
+
+    if (loadProportionalTestFont()) |font| {
+        defer backend.unloadFont(font);
+        try expectFontMetricParity(allocator, font, "loaded proportional font");
+
+        const iii = backend.measureTextZ("iii", font, 20, 1);
+        const www = backend.measureTextZ("WWW", font, 20, 1);
+        if (std.math.approxEqAbs(f32, iii.x, www.x, 0.001)) return error.FontNotProportional;
+    } else {
+        std.log.warn("no known proportional system font; skipped loaded-font metric parity", .{});
+    }
+}
 
 fn tilemapSmokeTextureToken(tileset: anytype) u64 {
     return tileset.texture_token;
@@ -216,6 +390,10 @@ pub fn main() !void {
     if (!rl.IsWindowReady()) return error.WindowUnavailable;
     defer rl.CloseWindow();
 
+    var metric_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer metric_arena.deinit();
+    try expectNativeFontMetricParity(metric_arena.allocator());
+
     var atlas_image = rl.GenImageColor(16, 8, backend.colorToRl(red));
     defer rl.UnloadImage(atlas_image);
     rl.ImageDrawRectangle(&atlas_image, 8, 0, 8, 8, backend.colorToRl(blue));
@@ -333,6 +511,42 @@ pub fn main() !void {
     }, TilemapSmokeContext{ .texture = atlas }, submitTilemapSmokeQuad, tilemapSmokeTextureToken);
     if (tilemap_submitted != 1) return error.TilemapBatchCount;
 
+    // One batched call has to be indistinguishable from the same instances
+    // drawn one at a time, so each instance below varies a different field:
+    // source region, destination size, tint, and list order. Instance 3
+    // overlaps instance 0 and must win, because the loop draws in list order.
+    const instances = [_]abi.DrawHostDraw_texture_instancesArg0Instances{
+        .{
+            .source = .{ .x = 0, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 4, .y = 52, .width = 8, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+        .{
+            .source = .{ .x = 8, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 20, .y = 52, .width = 8, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+        .{
+            .source = .{ .x = 0, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 36, .y = 52, .width = 16, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = Color{ .r = 0, .g = 0, .b = 255, .a = 255 },
+        },
+        .{
+            .source = .{ .x = 8, .y = 0, .width = 8, .height = 8 },
+            .dest = .{ .x = 4, .y = 52, .width = 4, .height = 8 },
+            .origin = .{ .x = 0, .y = 0 },
+            .rotation = 0,
+            .tint = white,
+        },
+    };
+    backend.drawTextureInstances(atlas, &instances);
+
     backend.beginShaderMode(projective_shader);
     backend.drawTextureQuad(projective_texture, .{
         .source = .{ .x = 0, .y = 0, .width = 16, .height = 16 },
@@ -358,6 +572,11 @@ pub fn main() !void {
     try expectPixel(screen, 52, 10, blue);
     try expectPixel(screen, 48, 36, blue);
     try expectPixel(screen, 56, 36, red);
+    try expectPixel(screen, 5, 56, blue);
+    try expectPixel(screen, 10, 56, red);
+    try expectPixel(screen, 24, 56, blue);
+    try expectPixel(screen, 34, 56, black);
+    try expectPixel(screen, 44, 56, instance_tinted);
     // This point is texture v=0.6 under the exact homography, but v<0.5
     // under the old two-triangle affine mapping. The custom green channel also
     // proves projective drawing preserved the caller's fragment shader.

@@ -27,12 +27,12 @@ MARKER = "ROC_ALLOC_STATS "
 def find_examples(root: Path, requested: list[str]) -> list[Path]:
     examples_dir = root / "examples"
     if not requested:
-        return sorted(examples_dir.glob("*.roc"))
+        return sorted(examples_dir.glob("*/main.roc"))
 
     examples: list[Path] = []
     for name in requested:
         stem = Path(name).stem
-        example = examples_dir / f"{stem}.roc"
+        example = examples_dir / stem / "main.roc"
         if not example.is_file():
             raise ValueError(f"unknown example: {name}")
         examples.append(example)
@@ -132,7 +132,7 @@ for symbol in {encoded_boundary_symbols}:
     CountHostBreakpoint(symbol)
 gdb.events.exited.connect(record_exit)
 end
-run --headless --headless-frames={frames}
+run --host-headless --host-headless-frames={frames}
 python print("{MARKER}" + json.dumps(stats, sort_keys=True))
 """
 
@@ -209,6 +209,10 @@ def build_examples(root: Path) -> None:
             str(root / "scripts" / "all_tests.py"),
             "--runtime-only",
             "--headless-frames=1",
+            # all_tests.py builds into a scratch directory so an interrupted run
+            # cannot dirty the tree; profiling wants the binaries beside each
+            # main.roc, where it looks for them.
+            "--copy-executables",
         ],
         cwd=root,
     )
@@ -265,7 +269,7 @@ def main() -> int:
             steady = subtract_startup(one_frame, many_frames)
             rows.append(
                 {
-                    "example": example.stem,
+                    "example": example.parent.name,
                     "one_frame": one_frame,
                     "many_frames": many_frames,
                     "steady_state": steady,

@@ -1,53 +1,45 @@
 generated-docs/
 
-# Built example executables (use `git add -f` to add manually if needed)
-examples/hello_world
-examples/keyboard
-examples/keyboard_minimal
-examples/input_inspector
-examples/kitchen_sink
-examples/read_env
-examples/pong
-examples/sprites
-examples/text_ui
-examples/snake
-examples/breakout
-examples/camera
-examples/top_down
-examples/cave_climb
-examples/generated_assets
-examples/post_process
-examples/projective_texture
-examples/responsive_ui
+# Built example executables (each Roc app is examples/<name>/main.roc)
+examples/*/main
+examples/*/main.exe
 
 # Built executables at root
-hello_world
-keyboard
-input_inspector
-kitchen_sink
-read_env
-pong
-sprites
-text_ui
-snake
-breakout
-camera
-top_down
-cave_climb
-generated_assets
-post_process
-projective_texture
-responsive_ui
+/main
+/hello_world
+/keyboard
+/input_inspector
+/kitchen_sink
+/read_env
+/pong
+/sprites
+/text_ui
+/snake
+/breakout
+/camera
+/top_down
+/cave_climb
+/generated_assets
+/post_process
+/projective_texture
+/responsive_ui
 
 all_roc_syntax
 
 build
 app
 
-# Ignore markdown files, except main README
+# Ignore markdown files except selected repository documents.
 *.md
 !README.md
-!examples/README.md
+!CONTRIBUTING.md
+!AGENTS.md
+# `zig build lint` reads this one, so losing it breaks the build rather than
+# quietly dropping a note.
+!docs/action-coverage.md
+# The architecture document. Ignoring it would make the one file a newcomer is
+# pointed at silently uncommittable.
+!design.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a
@@ -114,11 +106,16 @@ build-output/
 # Python cache
 __pycache__/
 
-# winows exectuables
+# Windows executables
 *.exe
-examples/capture_plot
-examples/capture_screenshot
-examples/capture_ui_demo
+# Legacy root-level executable.
+/async_read
+
+# Generated CLI integration executable.
+/test/cli_args/main
+
+# Generated model-allocation probe executable.
+/test/model_inplace/main
 
 # Output written by the capture examples
 captures/

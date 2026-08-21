@@ -28,8 +28,35 @@ pub const Music = rl.Music;
 /// Native font retained in the host resource heap.
 pub const Font = rl.Font;
 
+/// Scalar data needed to reproduce raylib's glyph advance calculation.
+pub const FontGlyphMetric = struct {
+    codepoint: u32,
+    advance_x: f32,
+    offset_x: f32,
+    offset_y: f32,
+    width: f32,
+    height: f32,
+};
+
+/// Return the bundled raylib major version for host invariants.
+pub fn majorVersion() c_int {
+    return rl.RAYLIB_VERSION_MAJOR;
+}
+
 /// Native texture retained in the host resource heap.
 pub const Texture = rl.Texture2D;
+
+/// Decode an image in caller-owned memory, upload it, then discard the CPU
+/// image. Raylib consumes the bytes synchronously; it does not retain them.
+pub fn loadTextureFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Texture {
+    if (bytes.len == 0 or bytes.len > std.math.maxInt(c_int)) return null;
+    const image = rl.LoadImageFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
+    if (!rl.IsImageValid(image)) return null;
+    defer rl.UnloadImage(image);
+    const texture = rl.LoadTextureFromImage(image);
+    if (!rl.IsTextureValid(texture)) return null;
+    return texture;
+}
 
 /// Native framebuffer-backed texture retained in the host resource heap.
 pub const RenderTexture = rl.RenderTexture2D;
@@ -291,12 +318,10 @@ pub fn defaultFont() Font {
     return rl.GetFontDefault();
 }
 
-/// Load a custom font.
+/// Load a custom font directly from a filesystem path.
 pub fn loadFont(path: [*:0]const u8, size: c_int) ?Font {
-    const font_size = if (size < 1) 1 else size;
-    const font = rl.LoadFontEx(path, font_size, null, 0);
+    const font = rl.LoadFontEx(path, @max(size, 1), null, 0);
     if (!rl.IsFontValid(font)) return null;
-
     rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
     return font;
 }
@@ -306,11 +331,29 @@ pub fn unloadFont(font: Font) void {
     rl.UnloadFont(font);
 }
 
-/// Load a texture from disk.
-pub fn loadTexture(path: [*:0]const u8) ?Texture {
-    const texture = rl.LoadTexture(path);
-    if (!rl.IsTextureValid(texture)) return null;
-    return texture;
+/// Return a font's base pixel size for `MeasureTextEx` scaling.
+pub fn fontBaseSize(font: Font) f32 {
+    return @floatFromInt(font.baseSize);
+}
+
+/// Return the number of glyphs available for scalar metric snapshotting.
+pub fn fontGlyphCount(font: Font) usize {
+    if (font.glyphCount <= 0 or font.glyphs == null or font.recs == null) return 0;
+    return @intCast(font.glyphCount);
+}
+
+/// Read the same glyph advance used by raylib's `MeasureTextEx`.
+pub fn fontGlyphMetric(font: Font, index: usize) FontGlyphMetric {
+    const glyph = font.glyphs[index];
+    const rec = font.recs[index];
+    return .{
+        .codepoint = if (glyph.value > 0) @intCast(glyph.value) else 0,
+        .advance_x = @floatFromInt(glyph.advanceX),
+        .offset_x = @floatFromInt(glyph.offsetX),
+        .offset_y = @floatFromInt(glyph.offsetY),
+        .width = rec.width,
+        .height = rec.height,
+    };
 }
 
 /// Unload a texture when its host resource slot is released.
@@ -353,6 +396,18 @@ pub fn generateCheckedTexture(args: anytype) ?Texture {
 pub fn updateTexture(texture: Texture, pixels: []const Color) void {
     comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
     rl.UpdateTexture(texture, pixels.ptr);
+}
+
+/// One rectangle of a texture. `area` is in pixels and must lie inside it;
+/// raylib does no bounds checking of its own, so the caller does.
+pub fn updateTextureRegion(texture: Texture, area: struct { x: i32, y: i32, width: i32, height: i32 }, pixels: []const Color) void {
+    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
+    rl.UpdateTextureRec(texture, .{
+        .x = @floatFromInt(area.x),
+        .y = @floatFromInt(area.y),
+        .width = @floatFromInt(area.width),
+        .height = @floatFromInt(area.height),
+    }, pixels.ptr);
 }
 
 /// Set a texture's scaling filter from the Roc enum code.
@@ -398,18 +453,21 @@ pub fn renderTextureColor(target: RenderTexture) Texture {
     return target.texture;
 }
 
-/// Load a shader, using raylib's default stage when a path pointer is null.
-pub fn loadShader(vertex_path: ?[*:0]const u8, fragment_path: ?[*:0]const u8) ?Shader {
-    const shader = rl.LoadShader(vertex_path, fragment_path);
-    if (!rl.IsShaderValid(shader)) return null;
-    return shader;
-}
-
 /// Load shader source code, using raylib's default stage when a pointer is null.
 pub fn loadShaderFromMemory(vertex_source: ?[*:0]const u8, fragment_source: ?[*:0]const u8) ?Shader {
     const shader = rl.LoadShaderFromMemory(vertex_source, fragment_source);
     if (!rl.IsShaderValid(shader)) return null;
     return shader;
+}
+
+/// Decode a font from caller-owned bytes. Raylib copies/decodes synchronously
+/// and the returned Font does not retain `bytes`.
+pub fn loadFontFromMemory(file_type: [*:0]const u8, bytes: []const u8, size: c_int) ?Font {
+    if (bytes.len == 0 or bytes.len > std.math.maxInt(c_int) or size <= 0) return null;
+    const font = rl.LoadFontFromMemory(file_type, bytes.ptr, @intCast(bytes.len), size, null, 0);
+    if (!rl.IsFontValid(font)) return null;
+    rl.SetTextureFilter(font.texture, rl.TEXTURE_FILTER_BILINEAR);
+    return font;
 }
 
 /// Release a GPU shader program.
@@ -718,6 +776,23 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
     );
 }
 
+/// Draw one texture once per borrowed instance, in list order.
+///
+/// The batching this buys is on the Roc side, not the GPU side: a per-sprite
+/// `texture!` pays one hosted-effect crossing per sprite, and that crossing --
+/// not `DrawTexturePro` -- is what caps instance counts. `DrawTexturePro` only
+/// appends vertices to rlgl's active batch, which is flushed in bulk, so a
+/// plain loop over the whole list already amortizes well.
+///
+/// The loop is deliberately shaped as "take the shared value once, take a
+/// borrowed slice of per-instance fields, iterate": a future shape-instance
+/// batch (rectangles, circles, or lines for plotting) can follow it by
+/// swapping the shared texture for a shared style and the element accessor
+/// for its own, with no other structure to reproduce.
+pub fn drawTextureInstances(texture: Texture, instances: anytype) void {
+    for (instances) |instance| drawTexture(texture, instance);
+}
+
 fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {
     return .{
         .x = x / @as(f32, @floatFromInt(texture.width)),
@@ -990,7 +1065,7 @@ pub fn windowConfigFlags(resizable: bool, fullscreen: bool, vsync: bool, visible
     if (fullscreen) flags |= @as(c_uint, @intCast(rl.FLAG_FULLSCREEN_MODE));
     if (vsync) flags |= @as(c_uint, @intCast(rl.FLAG_VSYNC_HINT));
     // A hidden window still renders on the GPU, so captures work normally.
-    // This is not the same as the `--headless` stub backend, which draws
+    // This is not the same as the `--host-headless` stub backend, which draws
     // nothing at all, and it still needs a display server (use xvfb-run on a
     // machine without one).
     if (!visible) flags |= @as(c_uint, @intCast(rl.FLAG_WINDOW_HIDDEN));
@@ -1052,15 +1127,17 @@ pub fn enableCursor() void {
     rl.EnableCursor();
 }
 
-/// Set window size.
-pub fn setWindowSize(width: c_int, height: c_int) void {
+/// Suggest a window size to the native window manager.
+///
+/// The dimensions observed from the window afterward are authoritative.
+pub fn suggestWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
 }
 
-/// Set the smallest size the window may be resized to. raylib maps 0 to
-/// GLFW_DONT_CARE, leaving that axis unconstrained. Requires a live window, so
-/// this must be called after initWindow, and only binds on a resizable window.
-pub fn setWindowMinSize(width: c_int, height: c_int) void {
+/// Suggest the smallest size to which the window manager should resize.
+/// raylib maps 0 to GLFW_DONT_CARE, leaving that axis unconstrained. Requires
+/// a live window, and only binds where a resizable-window backend honors it.
+pub fn suggestWindowMinSize(width: c_int, height: c_int) void {
     rl.SetWindowMinSize(width, height);
 }
 
@@ -1453,6 +1530,16 @@ pub fn getScreenHeight() c_int {
     return rl.GetScreenHeight();
 }
 
+/// Whether the window currently has keyboard input focus.
+pub fn isWindowFocused() bool {
+    return rl.IsWindowFocused();
+}
+
+/// Whether the window is currently minimized.
+pub fn isWindowMinimized() bool {
+    return rl.IsWindowMinimized();
+}
+
 /// Get framebuffer width in pixels, which exceeds the screen width on HiDPI.
 pub fn getRenderWidth() c_int {
     return rl.GetRenderWidth();
@@ -1670,7 +1757,7 @@ fn drawDownscaleLevel(from: Texture, to: RenderTexture) void {
         rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     );
     // `EndTextureMode` submits the batch, so the level is complete before
-    // the next step samples it.
+    // the next input samples it.
     rl.EndTextureMode();
 }
 

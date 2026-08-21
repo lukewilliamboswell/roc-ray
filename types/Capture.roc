@@ -3,10 +3,6 @@
 ## These types are pure data: they say what to capture and how, and carry no
 ## effects. The effects that act on them live in the platform's `Capture`
 ## module, which re-exports everything declared here.
-##
-## `Recording` is declared here rather than in the platform so that its
-## receivers appear in the generated API docs -- `roc docs` attaches associated
-## items to the module that declares the nominal.
 
 CaptureFormat := [Png, Gif, WebM].{
 	is_eq : _
@@ -61,16 +57,11 @@ Capture := [].{
 
 	## How hard the encoder works to choose colours for each frame.
 	##
-	## Only the palette-quantized formats have anything to spend this on, so
-	## today it changes `Gif` and is ignored by `Png` and `WebM`.
+	## This setting affects `Gif` and is ignored by `Png` and `WebM`.
 	##
-	## `Best` searches the full colour depth, and is what this platform always
-	## did before this knob existed. `Balanced` is the default: it produces the
-	## same bytes as `Best` on frames colourful enough that the encoder has to
-	## reduce its palette anyway, and on flat UI output it trades a colour error
-	## of at most 16/255 for a slightly smaller and faster encode. `Fast` keeps
-	## a coarse palette -- roughly half the file size and a fifth less encode
-	## time on gradient-heavy frames, but with banding you will notice.
+	## `Best` searches the full colour depth. `Balanced` is the default and
+	## trades at most 16/255 channel error for faster encoding on flat-colour
+	## frames. `Fast` uses a coarser palette and may show visible banding.
 	Quality : CaptureQuality
 
 	## A validated recording request. Its fields cannot be updated directly;
@@ -105,7 +96,7 @@ Capture := [].{
 		with_fps = |rec, value| { ..rec, fps: normalize_fps(value) }
 
 		## Return a recording that stops after this many captured frames. `0`
-		## records until `Capture.stop!` is called or the app exits.
+		## records until a `Capture.stop` command is applied or the app exits.
 		with_max_frames : Recording, U64 -> Recording
 		with_max_frames = |rec, value| { ..rec, max_frames: value }
 

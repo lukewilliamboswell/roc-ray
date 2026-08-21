@@ -71,7 +71,7 @@ Sprite := {
 	## Resolve the sprite to a `Draw.TextureDraw` configuration.
 	to_texture_draw : Sprite -> Draw.TextureDraw
 	to_texture_draw = |sprite| {
-		texture: sprite.texture.view(),
+		texture: sprite.texture,
 		source: sprite.source,
 		dest: {
 			x: sprite.pos.x,
@@ -100,7 +100,7 @@ Sprite := {
 	from_texture : Assets.Texture -> Sprite
 	from_texture = |texture| {
 		texture,
-		source: texture.rect(),
+		source: { x: 0, y: 0, width: texture.width, height: texture.height },
 		pos: Math.zero,
 		origin: Math.zero,
 		rotation: 0,

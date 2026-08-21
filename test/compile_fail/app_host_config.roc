@@ -1,8 +1,7 @@
-app [Model, program] { rr: platform "../../platform/main.roc" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
 import rr.Draw
-import rr.Host
 
 Model : {}
 
@@ -34,10 +33,15 @@ transport = {
 	record_quality: 1,
 }
 
-program = { init!, render! }
+program = { init!, update, render! }
 
 init! : App.Init(Model, [])
-init! = App.init(App.default, |_host| Ok({}))
+init! = App.init(App.default, |_startup| Ok({}))
 
-render! : Model, Host, Draw.Frame => Try(Model, [Exit(I64), ..])
-render! = |model, _host, _frame| Ok(model)
+Msg : []
+
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, _input| App.next(model)
+
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! = |_model, _frame| Ok({})

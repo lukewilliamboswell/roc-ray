@@ -5,6 +5,7 @@ import Assets
 import Camera
 import Color
 import Math
+import rrt.Texture
 
 DrawHost := [].{
 
@@ -14,19 +15,39 @@ DrawHost := [].{
 		for_host = Frame.({})
 	}
 
-	FontResource :: Box(U64)
-	PreparedText :: Box(U64)
+	FontResource :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Draw.Font.stub`.
+		stub : FontResource
+		stub = FontResource.(Box.box(0))
+	}
+
+	PreparedText :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
+		stub : PreparedText
+		stub = PreparedText.(Box.box(0))
+	}
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
-	RenderTexture :: Assets.TextureView.{
-		texture : RenderTexture -> Assets.TextureView
+	RenderTexture :: Texture.{
+		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(texture)| texture
+
+		## The invalid token, as a resource-free handle.
+		## See `Draw.RenderTexture.stub`.
+		stub : RenderTexture
+		stub = RenderTexture.(Texture.stub)
 	}
 
 	Shader :: Box(U64).{
 		from_resource : Box(U64) -> Shader
 		from_resource = |resource| Shader.(resource)
+
+		## The invalid token, as a resource-free handle. See `Draw.Shader.stub`.
+		stub : Shader
+		stub = Shader.(Box.box(0))
 	}
 
 	Uniform :: { shader : Shader, location : I32 }.{
@@ -52,24 +73,31 @@ DrawHost := [].{
 	Fps : { pos : Math.Vec2, size : F32, color : Color.Rgba }
 	Text : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font }
 	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align_x : F32, align_y : F32 }
-	MeasureText : { text : Str, size : F32, spacing : F32, font : Font }
-	TextSize : { width : F32, height : F32 }
+	GlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
+	FontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(GlyphMetric) }
+	FrameSize : { width : F32, height : F32 }
 	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
 	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }
-	LoadFont : { path : Str, size : I32 }
+	LoadFontBytes : { format : U8, bytes : List(U8), size : I32 }
+	LoadStoreFont : { store : Assets.Store, path : Str, size : I32 }
 	RenderTextureSize : { width : I32, height : I32 }
-	LoadShader : { vertex_path : Str, fragment_path : Str }
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
-	TextureDraw : { texture : Assets.TextureView, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
-	TextureQuad : { texture : Assets.TextureView, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
+	LoadStoreShader : { store : Assets.Store, vertex_path : Str, fragment_path : Str }
+	TextureDraw : { texture : Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+	TextureInstance : { source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+
+	## Borrowed instance batch. One hosted call draws every instance with the same
+	## texture, so a per-sprite crossing becomes a single crossing per batch.
+	TextureInstances : { texture : Texture, instances : List(TextureInstance) }
+	TextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
 	ShaderInt : { uniform : Uniform, value : I32 }
 	ShaderVec2 : { uniform : Uniform, value : Math.Vec2 }
 	ShaderVec3 : { uniform : Uniform, value : { x : F32, y : F32, z : F32 } }
 	ShaderVec4 : { uniform : Uniform, value : { x : F32, y : F32, z : F32, w : F32 } }
-	ShaderTexture : { uniform : Uniform, texture : Assets.TextureView }
+	ShaderTexture : { uniform : Uniform, texture : Texture }
 	FontResult : { font : FontResource, err : U8 }
 	RenderTextureResult : { target : RenderTexture, err : U8 }
 	ShaderResult : { shader : Shader, err : U8 }
@@ -90,11 +118,13 @@ DrawHost := [].{
 	clear! : Color.Rgba => {}
 	fps! : Fps => {}
 	line! : Line => {}
-	load_font! : LoadFont => FontResult
+	load_font_bytes! : LoadFontBytes => FontResult
+	load_store_font! : LoadStoreFont => FontResult
 	load_render_texture! : RenderTextureSize => RenderTextureResult
-	load_shader! : LoadShader => ShaderResult
 	load_shader_source! : LoadShaderSource => ShaderResult
-	measure_text! : MeasureText => TextSize
+	load_store_shader! : LoadStoreShader => ShaderResult
+	font_metrics! : Font => FontMetrics
+	frame_size! : () => FrameSize
 	prepare_text! : PrepareText => PrepareTextResult
 	draw_prepared_text! : PreparedTextDraw => {}
 	polygon! : Polygon => {}
@@ -108,6 +138,7 @@ DrawHost := [].{
 	text! : Text => {}
 	text_aligned! : TextAligned => {}
 	draw_texture! : TextureDraw => {}
+	draw_texture_instances! : TextureInstances => {}
 	draw_texture_quad! : TextureQuad => {}
 	triangle! : Triangle => {}
 	triangle_lines! : TriangleLines => {}

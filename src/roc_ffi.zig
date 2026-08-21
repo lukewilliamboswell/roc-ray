@@ -64,7 +64,7 @@ pub const KEY_COUNT: usize = 349;
 /// Number of mouse buttons to track (raylib mouse button codes 0-6)
 pub const MOUSE_BUTTON_COUNT: usize = 7;
 
-/// Number of gamepads sampled into each Host snapshot.
+/// Number of gamepads sampled into each input snapshot.
 pub const GAMEPAD_COUNT: usize = 4;
 
 /// Number of raylib gamepad button codes (0-17).
@@ -122,7 +122,7 @@ pub fn StateList(comptime COUNT: usize) type {
             return elements[index] & flag != 0;
         }
 
-        /// Increment refcount before passing to Roc (prevents Roc from freeing our list).
+        /// Increment the refcount before passing the list to Roc.
         pub fn incref(self: *Self) void {
             self.list.incref(1);
         }
@@ -297,6 +297,14 @@ test "dynamic input lists reuse capacity and preserve retained snapshots" {
     try std.testing.expect(input.capacity() >= 40);
 }
 
-/// Flat state for init_for_host!/render_for_host!.
-/// This is not the public nested `Host` record exposed to Roc apps.
-pub const HostState = abi.Init_for_hostArg0;
+/// Flat sampled input for one cycle.
+/// This is not the public `Devices.Snapshot` record exposed to Roc apps.
+pub const InputSnapshot = abi.Update_for_hostArg1Devices;
+
+/// Window geometry and visibility sampled for one cycle. This crosses the
+/// boundary unchanged as the public `Window.Snapshot`.
+pub const WindowSnapshot = abi.Update_for_hostArg1Window;
+
+/// When one cycle happened. This crosses the boundary unchanged as the public
+/// `Time.Cycle`.
+pub const TimeFrame = abi.Update_for_hostArg1Time;

@@ -1,58 +1,83 @@
-# RocRay examples
+# Example gallery
 
-These examples are applications first and API demonstrations second. Each one
-has a concrete interaction or game loop, owns long-lived resources in its
-model, and uses frame input to update state before drawing. Platform edge cases
-and exhaustive API coverage belong in tests rather than in this directory.
+These examples are small applications first and API demonstrations second.
+Choose one that resembles what you want to build, copy its directory, and keep
+the model/update/render shape as the project grows.
 
-Build from the repository root so asset paths resolve correctly:
+Build from the repository root so asset paths resolve consistently:
 
 ```bash
-roc build examples/snake.roc
+roc build examples/snake/main.roc --output snake
 ./snake
 ```
 
-## Learning path
+## A good first hour
 
-| Example | Why it exists | Patterns to reuse |
+1. Start with [Hello World](hello_world/main.roc) to see the complete app loop
+   without asset loading or game rules.
+2. Change [Pong](pong/main.roc) to learn time-based movement, collision, input,
+   scoring, and generated sound in one approachable file.
+3. Pick a direction: [Pixel Workshop](generated_assets/main.roc) for an
+   interactive tool, [Responsive Settings](responsive_ui/main.roc) for an app
+   interface, or [Snake](snake/main.roc) for a state-driven game.
+4. Reach for a focused recipe only when your app needs that feature.
+
+## Small apps worth copying
+
+| Example | What it is | Patterns to reuse |
 | --- | --- | --- |
-| `hello_world.roc` | Smallest visual starting point | `App.init`, prepared immutable text, frame-scoped drawing |
-| `pong.roc` | Small continuous-motion game | delta-time movement, collision helpers, random serves, generated sound |
-| `snake.roc` | Small discrete simulation | bounded fixed-step updates, list-backed state, input buffering |
-| `breakout.roc` | Structured arcade game | pure game step, explicit events, effect handling at the boundary |
-| `responsive_ui.roc` | Resizable settings screen | startup config, current logical size, prepared labels, cursor feedback, scissoring |
-| `input_inspector.roc` | Input inspector utility | edge/held key state, Unicode input, mouse deltas, gamepad snapshots |
-| `capture_screenshot.roc` | Smallest capture example | `Capture.screenshot!`, output-directory sandboxing |
-| `capture_plot.roc` | Visualization rendered to a file | recording declared in startup config, hidden window, fixed-step timing |
-| `capture_ui_demo.roc` | Self-recording UI walkthrough | scripted pointer through the real input path, drawn cursor overlay |
-| `camera.roc` | Navigable world viewer | world/screen conversion, camera scope, screen-space HUD |
-| `generated_assets.roc` | Tiny pixel editor | generated mutable texture, point sampling, palette input, procedural sound |
-| `projective_texture.roc` | Perspective calibration tool | validated homography, interactive quad editing, projected overlays |
-| `post_process.roc` | Post-processing scene | render texture ownership, nested blend scope, cached shader uniform |
-| `top_down.roc` | Complete top-down game | TMX objects, culled tilemap drawing, sprites, music, camera, collision |
-| `cave_climb.roc` | Complete platform game | authored levels, role-based tilemap queries, sprites, camera, 2D PGA physics |
+| [Hello World](hello_world/main.roc) | A polished minimal interactive scene | App lifecycle, prepared text, pointer input, exit commands |
+| [Pong](pong/main.roc) | A complete two-player arcade game | Delta-time movement, collision, scoring, generated audio |
+| [Snake](snake/main.roc) | A grid-based game with restartable state | Discrete simulation, keyboard control, deterministic updates |
+| [Breakout](breakout/main.roc) | A complete game that can record its own demo | Separating game rules from effects, event-driven sound, CLI modes, capture |
+| [Pixel Workshop](generated_assets/main.roc) | A tiny paint program with a mutable GPU texture | Generated assets, palette tools, texture updates, feedback sounds |
+| [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout, mouse and keyboard navigation, minimum window size |
+| [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor and PNG exporter | Screenshot requests, output directories, async success feedback |
+| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, typed messages, window commands, clipboard requests |
 
-The focused examples deliberately stop at one subsystem. The showcase games
-demonstrate how the same APIs fit into larger state and resource lifecycles.
+## Larger showcases
 
-## Practices shown here
+| Example | What it demonstrates |
+| --- | --- |
+| [Live Plot](live_plot/main.roc) | A whole source tree walked with `Files.list`, read and parsed through a paced request queue, and drawn as a scrolling strip of a quarter of a million lines under a fixed point budget that evicts and re-reads on demand |
+| [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
+| [Cave Climb](cave_climb/main.roc) | Platforming physics, animation, tilemaps, camera tracking, audio, and mouse-driven tools split across modules |
 
-- Construct `App.Config` with receiver updates and create assets in `init!`.
-- Keep textures, sounds, shaders, fonts, and prepared text in the model instead
-  of loading or preparing them inside `render!`.
-- Treat `Host` as the current frame's snapshot. Derive plain game input from it;
-  do not retain input snapshot lists in the model.
-- Scale continuous motion by `host.frame_time`. For discrete simulation, clamp
-  catch-up time and retain the fixed-step remainder.
-- Update game state before drawing, and isolate effectful reactions to game
-  events where the example is large enough to benefit from that split.
-- Draw only through the supplied `Draw.Frame`; pass scoped frames into helpers
-  and let fallible camera, scissor, shader, blend, and render-target scopes close
-  before propagating errors.
-- Prepare immutable labels once. Use direct text drawing for genuinely changing
-  values such as scores, dimensions, and timers.
-- Validate fallible geometry and resource setup at the boundary, then retain the
-  validated value so the steady-state render path stays simple.
+These are useful references once a project has outgrown its first feature. They
+show how features fit together, but they are intentionally not the shortest
+introduction to any individual API.
 
-Asset licenses and attribution are stored beside third-party assets under
-`examples/assets/`.
+## Focused recipes
+
+The recipes stay narrow so their unusual API is easy to find. They are not the
+recommended starting point for a whole application.
+
+| Example | Reach for it when you need... |
+| --- | --- |
+| [Camera World](camera/main.roc) | World/screen coordinate conversion, follow cameras, zoom, and rotation |
+| [Async Read](async_read/main.roc) | Non-blocking text and byte reads with typed completion messages |
+| [Projective Texture](projective_texture/main.roc) | A draggable perspective-correct quad and projected overlay points |
+| [Post Process](post_process/main.roc) | Render textures, blend scopes, shaders, and cached uniform locations |
+| [Particles](particles/main.roc) | Thousands of sprites drawn as one batched instance list rather than one call each |
+| [Capture Plot](capture_plot/main.roc) | A deterministic hidden-window WebM batch render |
+| [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real input path |
+
+## What these examples consider good practice
+
+- Keep application state in `Model`; update it purely from `App.Input`.
+- Load and prepare long-lived resources once in `init!`, then retain them in the
+  model instead of recreating them each frame.
+- Derive layout and view-only values with pure helpers rather than storing
+  duplicate state that can drift out of sync. Ask `frame.size!()` for the
+  surface being drawn to instead of copying `input.window.size` into the model:
+  it is current, and inside `with_render_texture!` it is the target's size
+  rather than the window's.
+- Return commands for ordered response-free work and requests for work whose typed result
+  matters to the application.
+- Keep game or tool rules separate from rendering where that makes them easy to
+  test, as Breakout does.
+- Treat capture, scripted input, and headless execution as useful app modes,
+  not as branches inside ordinary interaction logic.
+
+Exhaustive API probes and invalid-input cases belong in [`../test/`](../test/),
+where they can be explicit without making an example harder to understand.

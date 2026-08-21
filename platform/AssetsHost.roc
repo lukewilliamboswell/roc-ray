@@ -1,23 +1,36 @@
 ## Internal texture transport and hosted effects.
 ##
-## This module is intentionally not exposed by the platform package. Public
-## applications use `Assets.Texture`; other platform modules use the methods on
-## this opaque nominal value to keep lifecycle tokens off the public API.
+## This module is intentionally not exposed by the platform package.
 import Color
+import rrt.Texture
 
 AssetsHost := [].{
-	Texture :: { resource : Box({ handle : U64, width : F32, height : F32 }) }.{
-		from_resource : Box({ handle : U64, width : F32, height : F32 }) -> Texture
-		from_resource = |resource| { resource: resource }
 
-		width : Texture -> F32
-		width = |texture| (Box.unbox(texture.resource)).width
+	## Opaque directory store. The backing directory handle is owned by a typed
+	## host ARC heap, so a copied Roc value keeps the directory open.
+	Store :: Box(U64).{
 
-		height : Texture -> F32
-		height = |texture| (Box.unbox(texture.resource)).height
+		## The invalid token, as a resource-free handle. See `Assets.Store.stub`.
+		stub : Store
+		stub = Store.(Box.box(0))
 	}
 
+	StoreOpen : {
+		location_kind : U8,
+		root : Str,
+		manifest_required : Bool,
+		asset_set : Str,
+		schema : U32,
+		content_version : U32,
+		content_hash_mode : U8,
+		content_hash : Str,
+	}
+
+	StoreOpenResult : { store : Store, err : U8 }
+	StoreLoad : { store : Store, path : Str }
+
 	TextureResult : { texture : Texture, err : U8 }
+	TextureBytes : { format : U8, bytes : List(U8) }
 
 	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
 
@@ -32,10 +45,22 @@ AssetsHost := [].{
 
 	UpdateTexture : { texture : Texture, pixels : List(Color.Rgba) }
 
-	load_texture! : Str => TextureResult
+	UpdateTextureRegion : {
+		texture : Texture,
+		x : I32,
+		y : I32,
+		width : I32,
+		height : I32,
+		pixels : List(Color.Rgba),
+	}
+
+	open_store! : StoreOpen => StoreOpenResult
+	load_store_texture! : StoreLoad => TextureResult
+	load_texture_bytes! : TextureBytes => TextureResult
 	generate_color_texture! : GenerateColorTexture => TextureResult
 	generate_checked_texture! : GenerateCheckedTexture => TextureResult
 	update_texture! : UpdateTexture => U8
+	update_texture_region! : UpdateTextureRegion => U8
 	set_texture_filter! : Texture, U8 => {}
 	set_texture_wrap! : Texture, U8 => {}
 }

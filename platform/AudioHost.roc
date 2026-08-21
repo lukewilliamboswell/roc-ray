@@ -4,9 +4,19 @@
 ## resource operation transfers an owning nominal Box to the host so ARC keeps
 ## the native resource live through the complete call.
 AudioHost := [].{
-	Sound :: Box(U64)
+	Sound :: Box(U64).{
 
-	Music :: Box(U64)
+		## The invalid token, as a resource-free handle. See `Audio.Sound.stub`.
+		stub : Sound
+		stub = Sound.(Box.box(0))
+	}
+
+	Music :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Audio.Music.stub`.
+		stub : Music
+		stub = Music.(Box.box(0))
+	}
 
 	SoundResult : { sound : Sound, err : U8 }
 

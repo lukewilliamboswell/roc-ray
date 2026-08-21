@@ -4,14 +4,20 @@
 ## packages can depend on them without depending on this platform. This module
 ## re-exports them.
 ##
-## For the common "move per frame" case you can use `Host.frame_time` directly
-## (seconds since the previous frame) without touching this module.
-##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
+## For the common "move per cycle" case you can use `input.time.elapsed_seconds`
+## directly (simulation seconds since the previous input) without touching the helpers.
 import rrt.Time as RrtTime
 
 Time := [].{
+
+	## When one cycle happened, and how much time it covers.
+	Cycle : RrtTime.Cycle
+
+	first_cycle : Cycle
+	first_cycle = RrtTime.first_cycle
+
+	delay : U64, (Try({}, [Busy]) -> msg) -> [Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }), ..]
+	delay = |millis, callback| Delay({ millis, callback })
 
 	## Convert a nanosecond duration to seconds.
 	##
@@ -20,9 +26,9 @@ Time := [].{
 	to_seconds = RrtTime.to_seconds
 
 	## Seconds elapsed between two clock samples (`current` must be >= `previous`).
-	## Handy for deriving your own delta from `Host.timestamp_nanos`:
+	## Handy for deriving your own delta from `Time.Cycle.simulation_nanos`:
 	##
-	##     dt = Time.delta_seconds(model.last_tick, host.timestamp_nanos)
+	##     dt = Time.delta_seconds(model.last_tick, input.time.timestamp_nanos)
 	delta_seconds : U64, U64 -> F32
 	delta_seconds = RrtTime.delta_seconds
 }

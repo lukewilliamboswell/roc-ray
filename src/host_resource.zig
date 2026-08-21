@@ -1,9 +1,11 @@
-//! Fixed-capacity host-owned resources whose handles use Roc `Box(U64)` ARC.
+//! Fixed-capacity host-owned resources whose handles use Roc `Box(payload)` ARC.
 //!
 //! Each live slot starts with Roc's one-word box refcount followed immediately
-//! by its boxed payload. The payload includes an opaque lifecycle token. When
-//! the final reference is released, `roc_dealloc` receives the slot base and
-//! routes it back here so the native value can be destroyed and the slot reused.
+//! by its typed payload. That payload includes an opaque lifecycle token and may
+//! also carry immutable metadata such as texture dimensions or file-byte length.
+//! When the final reference is released, `roc_dealloc` receives the slot base
+//! and routes it back here so the native value can be destroyed and the slot
+//! reused.
 
 const std = @import("std");
 
@@ -53,6 +55,11 @@ pub fn HostResourceHeap(
         slots: [capacity]Slot = undefined,
         generations: [capacity]u64 = [_]u64{0} ** capacity,
         live: [capacity]bool = [_]bool{false} ** capacity,
+        /// Slots whose last Roc reference is gone but whose native resource is
+        /// still alive. They stay `live` so the slot cannot be handed out
+        /// again before the resource behind it has been destroyed.
+        retired: [capacity]bool = [_]bool{false} ** capacity,
+        retired_count: usize = 0,
         active_count: usize = 0,
         high_water_count: usize = 0,
 
@@ -63,6 +70,15 @@ pub fn HostResourceHeap(
         }
 
         pub fn insert(self: *Self, payload: Payload, resource: T) ?*Payload {
+            // A retired slot is not free until its resource is gone. Rather
+            // than report a limit the app has already released its way out of,
+            // finish the outstanding destruction first -- the budget is there
+            // to keep destruction off a frame's critical path, not to make
+            // released resources unrecoverable.
+            if (self.retired_count != 0 and self.active_count == capacity) {
+                _ = self.drainRetired(self.retired_count);
+            }
+
             for (&self.live, 0..) |*is_live, index| {
                 if (is_live.*) continue;
 
@@ -108,20 +124,57 @@ pub fn HostResourceHeap(
             const decoded = decodeToken(read_token(&slot.payload)) orelse return .corrupt;
             if (decoded.kind != kind or decoded.index != index or decoded.generation != self.generations[index]) return .corrupt;
 
-            destroy(&slot.resource);
-            self.live[index] = false;
-            self.active_count -= 1;
+            // Retire rather than destroy. The final reference is dropped
+            // wherever the value stopped being reachable, and for a model
+            // field that is inside the *pure* `update` -- so destroying here
+            // would put a GPU or audio-device call inside a transition whose
+            // whole contract is that it does not make any.
+            //
+            // Roc's allocation is finished with either way; only the native
+            // resource behind it outlives this call.
+            self.retired[index] = true;
+            self.retired_count += 1;
             return .deallocated;
+        }
+
+        /// Destroy up to `budget` retired resources. Returns how many went.
+        ///
+        /// Constant-time per resource and called where a stall is expected --
+        /// the end of a frame -- rather than wherever a refcount happened to
+        /// reach zero.
+        pub fn drainRetired(self: *Self, budget: usize) usize {
+            if (self.retired_count == 0 or budget == 0) return 0;
+            var destroyed: usize = 0;
+            for (&self.retired, 0..) |*is_retired, index| {
+                if (destroyed == budget) break;
+                if (!is_retired.*) continue;
+                destroy(&self.slots[index].resource);
+                is_retired.* = false;
+                self.live[index] = false;
+                self.retired_count -= 1;
+                self.active_count -= 1;
+                destroyed += 1;
+            }
+            return destroyed;
+        }
+
+        /// How many resources are waiting to be destroyed.
+        pub fn retiredCount(self: *const Self) usize {
+            return self.retired_count;
         }
 
         /// Destroy any resources still live after Roc can no longer run.
         pub fn deinitAll(self: *Self) void {
+            // Retired slots are still `live`, so this covers both the resources
+            // the app still holds and the ones waiting on the retirement queue.
             for (&self.live, 0..) |*is_live, index| {
                 if (!is_live.*) continue;
                 destroy(&self.slots[index].resource);
                 is_live.* = false;
+                self.retired[index] = false;
             }
             self.active_count = 0;
+            self.retired_count = 0;
         }
 
         pub fn forEach(self: *Self, callback: anytype) void {
@@ -170,6 +223,42 @@ fn decodeToken(token: u64) ?struct { index: usize, kind: u8, generation: u64 } {
     return .{ .index = @intCast(encoded_index - 1), .kind = @intCast(encoded_kind), .generation = generation };
 }
 
+test "zero is not a resource token" {
+    try std.testing.expect(decodeToken(0) == null);
+}
+
+test "resource heaps never emit or resolve zero, including after slot reuse" {
+    const Token = struct {
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+        fn destroy(_: *u8) void {}
+    };
+    const Heap = HostResourceHeap(u64, u8, 1, 4, Token.write, Token.read, Token.destroy);
+    var heap: Heap = .{};
+
+    try std.testing.expect(heap.get(0) == null);
+
+    const first = heap.insert(0, 1).?;
+    const first_token = first.*;
+    try std.testing.expect(first_token != 0);
+    try std.testing.expect(heap.get(0) == null);
+
+    const base: *isize = @ptrFromInt(@intFromPtr(first) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    try std.testing.expectEqual(@as(usize, 1), heap.drainRetired(1));
+
+    const replacement = heap.insert(0, 2).?;
+    try std.testing.expect(replacement.* != 0);
+    try std.testing.expect(replacement.* != first_token);
+    try std.testing.expect(heap.get(0) == null);
+    heap.deinitAll();
+}
+
 test "final Roc deallocation destroys and reuses a resource slot" {
     const Resource = struct { value: usize };
     const Counter = struct {
@@ -197,14 +286,131 @@ test "final Roc deallocation destroys and reuses a resource slot" {
     const base: *isize = @ptrFromInt(@intFromPtr(first) - @sizeOf(isize));
     base.* = 0;
     try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
-    try std.testing.expectEqual(@as(usize, 2), Counter.total);
+    // Roc's allocation is finished with, and the handle is dead...
     try std.testing.expect(heap.get(token) == null);
+    // ...but the native resource is not destroyed here. Releasing the final
+    // reference happens inside the pure `update`, which may make no effects.
+    try std.testing.expectEqual(@as(usize, 0), Counter.total);
+    try std.testing.expectEqual(@as(usize, 1), heap.retiredCount());
+
+    try std.testing.expectEqual(@as(usize, 1), heap.drainRetired(4));
+    try std.testing.expectEqual(@as(usize, 2), Counter.total);
+    try std.testing.expectEqual(@as(usize, 0), heap.retiredCount());
 
     const replacement = heap.insert(0, .{ .value = 3 }).?;
     try std.testing.expectEqual(first, replacement);
     try std.testing.expect(replacement.* != token);
     heap.deinitAll();
     try std.testing.expectEqual(@as(usize, 5), Counter.total);
+}
+
+test "a slot the app released is reusable before the budget gets to it" {
+    // The budget exists to keep destruction off a frame's critical path, not
+    // to make a released resource unavailable until the next frame. An app
+    // that releases a texture and immediately loads another must not be told
+    // it is out of textures.
+    const Resource = struct { value: usize };
+    const Counter = struct {
+        var destroyed: usize = 0;
+        fn destroy(_: *Resource) void {
+            destroyed += 1;
+        }
+    };
+    const Token = struct {
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+    };
+    const Heap = HostResourceHeap(u64, Resource, 1, 1, Token.write, Token.read, Counter.destroy);
+    var heap: Heap = .{};
+    Counter.destroyed = 0;
+
+    const first = heap.insert(0, .{ .value = 1 }).?;
+    const base: *isize = @ptrFromInt(@intFromPtr(first) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    try std.testing.expectEqual(@as(usize, 1), heap.retiredCount());
+
+    // No frame has ended, so nothing has been drained -- and the insert still
+    // succeeds, by finishing the outstanding destruction itself.
+    try std.testing.expect(heap.insert(0, .{ .value = 2 }) != null);
+    try std.testing.expectEqual(@as(usize, 1), Counter.destroyed);
+    try std.testing.expectEqual(@as(usize, 0), heap.retiredCount());
+    heap.deinitAll();
+}
+
+test "a retirement queue longer than the budget drains across frames" {
+    const Resource = struct { value: usize };
+    const Counter = struct {
+        var destroyed: usize = 0;
+        fn destroy(_: *Resource) void {
+            destroyed += 1;
+        }
+    };
+    const Token = struct {
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+    };
+    const Heap = HostResourceHeap(u64, Resource, 8, 1, Token.write, Token.read, Counter.destroy);
+    var heap: Heap = .{};
+    Counter.destroyed = 0;
+
+    var payloads: [8]*u64 = undefined;
+    for (&payloads, 0..) |*slot, index| slot.* = heap.insert(0, .{ .value = index }).?;
+    for (payloads) |payload| {
+        const base: *isize = @ptrFromInt(@intFromPtr(payload) - @sizeOf(isize));
+        base.* = 0;
+        try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+    }
+    try std.testing.expectEqual(@as(usize, 8), heap.retiredCount());
+
+    // A frame destroys its budget and no more; the rest wait for the next one.
+    try std.testing.expectEqual(@as(usize, 3), heap.drainRetired(3));
+    try std.testing.expectEqual(@as(usize, 5), heap.retiredCount());
+    try std.testing.expectEqual(@as(usize, 3), heap.drainRetired(3));
+    try std.testing.expectEqual(@as(usize, 2), heap.drainRetired(3));
+    try std.testing.expectEqual(@as(usize, 8), Counter.destroyed);
+    try std.testing.expectEqual(@as(usize, 0), heap.active());
+    heap.deinitAll();
+}
+
+test "shutdown destroys resources still waiting on the retirement queue" {
+    const Resource = struct { value: usize };
+    const Counter = struct {
+        var destroyed: usize = 0;
+        fn destroy(_: *Resource) void {
+            destroyed += 1;
+        }
+    };
+    const Token = struct {
+        fn write(payload: *u64, token: u64) void {
+            payload.* = token;
+        }
+        fn read(payload: *const u64) u64 {
+            return payload.*;
+        }
+    };
+    const Heap = HostResourceHeap(u64, Resource, 2, 1, Token.write, Token.read, Counter.destroy);
+    var heap: Heap = .{};
+    Counter.destroyed = 0;
+
+    const retired_payload = heap.insert(0, .{ .value = 1 }).?;
+    _ = heap.insert(0, .{ .value = 2 }).?;
+    const base: *isize = @ptrFromInt(@intFromPtr(retired_payload) - @sizeOf(isize));
+    base.* = 0;
+    try std.testing.expectEqual(DeallocRoute.deallocated, heap.routeDealloc(base));
+
+    // One retired, one still held. Exit must not leak either.
+    heap.deinitAll();
+    try std.testing.expectEqual(@as(usize, 2), Counter.destroyed);
+    try std.testing.expectEqual(@as(usize, 0), heap.retiredCount());
 }
 
 test "deallocation routing rejects foreign and misaligned pointers" {

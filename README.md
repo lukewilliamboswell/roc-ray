@@ -28,7 +28,7 @@ the smallest example against the local platform:
 git clone https://github.com/lukewilliamboswell/roc-ray.git
 cd roc-ray
 zig build
-roc build examples/hello_world.roc
+roc build examples/hello_world/main.roc --output hello_world
 ./hello_world
 ```
 
@@ -46,31 +46,62 @@ itself.
 
 ## The app loop
 
-A RocRay program has two parts. The model is the app state that survives from
-one frame to the next:
+A RocRay program has three callbacks. The model is the app state that survives
+from one host cycle to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
-- `render!` receives that model, a read-only `Host` snapshot of input and window
-  state, and a `Frame` used for drawing. It returns the next model.
+- `update` receives that model and a read-only `App.Input` -- this cycle's
+  device snapshot, window snapshot, timing, interval events, and request
+  response messages -- and returns a `App.Transition`. It is pure.
+- `render!` receives the model and a `Frame` used for drawing.
 
-Read the complete, 44-line [`hello_world.roc`](examples/hello_world.roc) from top
+Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
+### Deferred requests
+
+`update` can also return work that finishes later. Give each request constructor a
+typed callback that turns its terminal result into your app's `Msg`, then fold
+the resulting `input.messages` into the model on a later host cycle:
+
+```roc
+Msg : [ConfigLoaded({ path : Str, result : Try(Str, Files.ReadTextError) })]
+
+requests = [Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
+
+App.next(model)
+    .with_requests(requests)
+```
+
+`App.next` starts a transition with no work. Its receiver methods append
+commands or requests in order; use `App.from_parts(model, commands, requests)` when
+a helper has already assembled both lists. Independent component updates can
+also be combined with Roc's record-builder form, for example
+`{ game: game_transition, ui: ui_transition }.App`; its commands and requests retain
+that left-to-right field order.
+
+The host owns private transport tickets; apps do not allocate IDs, match
+raw responses, or maintain a request batch. It preserves the host-observed order of
+messages within an input. A request that cannot complete with current host capacity
+still calls its callback with its operation's `Busy` result, so an app may show
+an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads and
+[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request.
+
 ## Start your own project
 
 The easiest route is to copy one of the examples closest to what you want to
-make. Hello World, Pong, Snake, and Breakout are self-contained; the larger
-examples also need their files from `examples/assets/`. For a project outside
+make. Hello World, Pong, Snake, and Breakout are self-contained; larger examples
+keep their files in their own `assets/` directory. For a project outside
 this checkout:
 
-1. Copy the example's `.roc` file and any assets it uses.
-2. If its first line refers to `platform "../platform/main.roc"`, replace that
+1. Copy the example directory, including its `assets/` and supporting modules.
+2. If `main.roc` refers to `platform "../../platform/main.roc"`, replace that
    local path with the default `platform` declaration from the
    [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest).
    Examples updated by the release workflow may already contain the bundle URL.
-3. Build it with `roc build your_app.roc`.
+3. Build its `main.roc`.
 
 Release bundles include the native host libraries, so app authors do not need
 to build RocRay or raylib themselves. A bundle is the packaged Roc API plus
@@ -88,8 +119,12 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   textures, and shaders.
 - Loaded or generated textures, spritesheet animation, mutable pixel data, and
   exact projective texture drawing.
+- Explicit executable-relative, working-directory, or external disk asset
+  stores with optional manifest identity validation; see [asset stores](docs/assets.md).
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
-- Window and frame timing, random values, and file and environment access.
+- Window and frame timing, startup entropy, the
+  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
+  file and environment access.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.
@@ -110,24 +145,22 @@ recording in the startup config and it needs no code in `render!` at all:
 ```roc
 App.init(
     App.default
-    .with_output_dir("captures")
+        .with_output_dir("captures")
     # Render on the GPU with no window on screen, like a batch job.
-    .with_visible(Bool.False)
-    .with_recording(
-        Record(
+        .with_visible(Bool.False)
+        .with_recording(
             Capture.default
-            .with_path("demo.gif")
-            .with_format(Gif)
-            .with_fps(25)
-            .with_max_frames(300),
+                .with_path("demo.gif")
+                .with_format(Gif)
+                .with_fps(25)
+                .with_max_frames(300),
         ),
-    ),
     |_host| Ok({}),
 )
 ```
 
 `Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
-where the app decides when to capture. `Capture.set_virtual_mouse!` drives a
+where the app decides when to capture. `Mouse.set_source` drives a
 scripted pointer through the same input path a real one uses, so a recorded walk
 through a UI exercises the app's ordinary hover and click handling.
 
@@ -140,13 +173,13 @@ Three things worth knowing:
   exact `1/fps` frame delta regardless of how long the readback actually took,
   so a recording plays back smoothly and two runs produce identical output.
   Choose `RealTime` if you would rather see the true frame pacing.
-- **A hidden window is not the same as `--headless`.** `with_visible(Bool.False)`
+- **A hidden window is not the same as `--host-headless`.** `with_visible(Bool.False)`
   still renders on the GPU, so captures work; it needs a display server, so wrap
-  it in `xvfb-run` on a machine without one. The host's `--headless` flag swaps
+  it in `xvfb-run` on a machine without one. The host's `--host-headless` flag swaps
   in a stub backend that draws nothing, so it captures nothing.
 
-See `examples/capture_screenshot.roc`, `examples/capture_plot.roc`, and
-`examples/capture_ui_demo.roc`.
+See `examples/postcard_studio/main.roc`, `examples/capture_plot/main.roc`, and
+`examples/capture_ui_demo/main.roc`.
 
 Separately, note that raylib's own screen-capture shortcut is compiled into the
 vendored library: pressing **F12** in any RocRay app writes `screenshotNNN.png`
@@ -155,28 +188,40 @@ into the process working directory. That predates this feature, bypasses
 
 ## Examples
 
+Breakout can generate a README-ready GIF after building the local host:
+
+```bash
+zig build
+scripts/run-example.py examples/breakout -- --record-demo
+```
+
+The demo uses a hidden GPU window. On Linux without a display server, run the
+last command through `xvfb-run -a`. Commit `examples/breakout/demo.gif`, then
+add it to this section as a linked image card.
+
 For a small game, start with Pong, Snake, or Breakout:
 
 ```bash
-roc build examples/pong.roc && ./pong
-roc build examples/snake.roc && ./snake
-roc build examples/breakout.roc && ./breakout
+roc build examples/pong/main.roc --output pong && ./pong
+roc build examples/snake/main.roc --output snake && ./snake
+roc build examples/breakout/main.roc --output breakout && ./breakout
 ```
 
 The larger showcase apps combine authored levels, sprites, sound, cameras, and
 collision handling:
 
 ```bash
-roc build examples/top_down.roc && ./top_down
-roc build examples/cave_climb.roc && ./cave_climb
+roc build examples/top_down/main.roc --output top_down && ./top_down
+roc build examples/cave_climb/main.roc --output cave_climb && ./cave_climb
 ```
 
 In Cave Climb, use A/D to move, W, Up, or Space to jump, the left mouse button
 to fire the laser, and the right mouse button to use the hook.
 
-The [example guide](examples/README.md) describes every app, what it teaches,
-and a recommended learning path. It includes focused examples for responsive
-UI, input, cameras, generated assets, projective textures, and post-processing.
+The [example gallery](examples/README.md) groups complete starter apps, larger
+showcases, and focused recipes. It also suggests a learning path and calls out
+the reusable patterns in each app, including responsive UI, input, cameras,
+generated assets, projective textures, post-processing, and capture workflows.
 
 ## Supported systems
 

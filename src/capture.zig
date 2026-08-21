@@ -60,6 +60,21 @@ pub const err_out_of_memory: u8 = 7;
 pub const err_write_failed: u8 = 8;
 /// The encoder rejected a frame or failed to finalize.
 pub const err_encode_failed: u8 = 9;
+/// The host declined to start the work, and nothing was captured or written.
+///
+/// Distinct from `err_already_recording`, which says a specific request is
+/// still outstanding. This one says the host is at its limit across all
+/// requests -- the same operation offered on a later frame may well be taken,
+/// which is exactly the difference an app needs to decide whether to retry.
+pub const err_busy: u8 = 10;
+/// The host cannot do this work at all in this run.
+///
+/// Distinct from `err_busy`, which is about right now: this one says retrying
+/// will not help, because the facility the work needs is not there. A host that
+/// could not start its effect worker cannot write a screenshot off the frame
+/// thread, and doing it on the frame thread is the stall the worker exists to
+/// remove.
+pub const err_unavailable: u8 = 11;
 
 /// No recording is active.
 pub const status_idle: u8 = 0;
@@ -67,16 +82,19 @@ pub const status_idle: u8 = 0;
 pub const status_active: u8 = 1;
 /// A recording stopped early; `Session.failure` holds the reason.
 pub const status_failed: u8 = 2;
+/// A recording ran to its end and its file was written.
+///
+/// Distinct from `status_idle` so automatic finalization at the frame cap is
+/// observable through the next input's capture state.
+pub const status_finished: u8 = 3;
 
 /// Largest in-memory footprint a buffering encoder may reach, in bytes.
 ///
-/// No shipped format buffers -- see `formatBuffers` -- so this currently binds
-/// nothing. It exists so that a sink which does have to hold a whole recording
-/// fails at `start!` with a clear error, instead of driving the process into
-/// the OOM killer part-way through a long capture.
+/// Formats that buffer a complete recording must pass this budget before
+/// capture starts. Incremental formats are exempt; see `formatBuffers`.
 pub const default_memory_budget_bytes: u64 = 256 * 1024 * 1024;
 
-/// Longest path we will assemble from the output directory and a request.
+/// Longest path assembled from the output directory and a request.
 pub const path_capacity: usize = 1024;
 
 /// A resolved capture request, flattened from the Roc-side `Recording`.
@@ -246,11 +264,8 @@ pub fn estimateBufferedBytes(width: u32, height: u32, frames: u64) u64 {
 
 /// Does this format accumulate every frame in memory before finalizing?
 ///
-/// None currently do. PNG writes a file per frame, and both GIF and WebM
-/// encode incrementally into an open container, so memory stays bounded by a
-/// single frame however long the recording runs. The budget gate stays because
-/// it is what decides that, and a future buffering sink must opt into it here
-/// rather than silently growing without a limit.
+/// PNG writes each frame separately; GIF and WebM encode incrementally. New
+/// buffering formats must opt in here so `default_memory_budget_bytes` applies.
 pub fn formatBuffers(format: u8) bool {
     _ = format;
     return false;
@@ -258,9 +273,8 @@ pub fn formatBuffers(format: u8) bool {
 
 /// Fold an unrecognized quality code onto the default.
 ///
-/// Roc only ever sends 0-2, so this binds only if the two sides drift or if a
-/// future Roc release adds a level this host predates. Falling back to the
-/// default beats failing a recording over a knob nobody asked to be strict.
+/// The Roc ABI defines codes 0 through 2. Unknown codes use balanced quality so
+/// ABI drift does not prevent capture.
 pub fn normalizeQuality(value: u8) u8 {
     return switch (value) {
         quality_fast, quality_balanced, quality_best => value,
@@ -405,6 +419,29 @@ pub const Session = struct {
         self.failure = reason;
     }
 
+    /// Latch a start that never happened.
+    ///
+    /// Start commands have no direct result channel, so the next input reports the
+    /// refusal through recording state. `failed` distinguishes a refused start
+    /// from a session that remained idle.
+    ///
+    /// A refusal while a recording is running says nothing about that
+    /// recording, which is still fine, so it is not latched over it.
+    pub fn refuse(self: *Session, reason: Failure) void {
+        if (self.status == status_active) return;
+        self.status = status_failed;
+        self.failure = reason;
+    }
+
+    /// Undo a start that could not be completed, leaving no trace of it.
+    ///
+    /// Not `stop`: nothing was recorded and no file exists, so reporting the
+    /// session as finished would be a claim about an artifact that is not there.
+    pub fn abandon(self: *Session) void {
+        self.status = status_idle;
+        self.failure = err_none;
+    }
+
     /// Leave the active state, returning the code Roc should observe.
     ///
     /// A recording that already failed reports its latched reason rather than
@@ -412,7 +449,7 @@ pub const Session = struct {
     pub fn stop(self: *Session) u8 {
         switch (self.status) {
             status_active => {
-                self.status = status_idle;
+                self.status = status_finished;
                 return err_none;
             },
             status_failed => {
@@ -736,11 +773,48 @@ test "a failure latches, halts capture, and surfaces on stop" {
     try std.testing.expectEqual(err_none, session.failure);
 }
 
+test "a stopped recording is finished rather than idle" {
+    var session = Session{};
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    try std.testing.expectEqual(err_none, session.stop());
+
+    // The distinction the app needs: this is not the state it was in before it
+    // ever recorded anything, and it captures no further frames either.
+    try std.testing.expectEqual(status_finished, session.status);
+    try std.testing.expect(!session.isActive());
+    try std.testing.expect(!session.shouldCaptureFrame());
+
+    // Stopping again is not stopping anything, and starting again is allowed.
+    try std.testing.expectEqual(err_not_recording, session.stop());
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    try std.testing.expectEqual(status_active, session.status);
+}
+
 test "failing an idle session changes nothing" {
     var session = Session{};
     session.fail(err_out_of_memory);
     try std.testing.expectEqual(status_idle, session.status);
     try std.testing.expectEqual(err_none, session.failure);
+}
+
+test "a refused start is reported even though nothing was recording" {
+    var session = Session{};
+    session.refuse(err_path_escapes);
+    try std.testing.expectEqual(status_failed, session.status);
+    try std.testing.expectEqual(err_path_escapes, session.failure);
+
+    // Observing it clears it, and the next start is unaffected.
+    try std.testing.expectEqual(err_path_escapes, session.stop());
+    try std.testing.expectEqual(status_idle, session.status);
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+}
+
+test "a refusal never overwrites a running recording's state" {
+    var session = Session{};
+    try std.testing.expectEqual(err_none, session.start(testRequest(format_gif), 64, 64));
+    session.refuse(err_already_recording);
+    try std.testing.expectEqual(status_active, session.status);
+    try std.testing.expect(session.isActive());
 }
 
 test "reset returns a used session to its startup state" {

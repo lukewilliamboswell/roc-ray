@@ -16,7 +16,7 @@ Environment:
   PERCENT_LIMIT   perf report percentage cutoff (default: 5)
 
 Example:
-  scripts/profile-roc-build.sh examples/cave_climb.roc 20
+  scripts/profile-roc-build.sh examples/cave_climb/main.roc 20
 USAGE
 }
 

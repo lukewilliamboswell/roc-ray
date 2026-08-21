@@ -16,7 +16,10 @@ import roc_platform_abi as abi
 
 def run_git(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["git", "-C", str(repo), *args],
+        # Signing off: this repository is a scratch fixture, and a developer
+        # whose global config signs every commit would otherwise fail here on
+        # a pinentry prompt that has no terminal to appear on.
+        ["git", "-C", str(repo), "-c", "commit.gpgsign=false", *args],
         check=True,
         capture_output=True,
         text=True,
@@ -29,13 +32,13 @@ class RocPlatformAbiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_name:
             pin_file = Path(temporary_name) / ".roc-version"
             pin_file.write_text(
-                "nightly-2026-August-03-94cbed3\n", encoding="utf-8"
+                "nightly-2026-08-12-606470f\n", encoding="utf-8"
             )
             self.assertEqual(
                 abi.read_pin(pin_file),
                 abi.RocPin(
-                    nightly="nightly-2026-August-03-94cbed3",
-                    commit="94cbed3",
+                    nightly="nightly-2026-08-12-606470f",
+                    commit="606470f",
                 ),
             )
 

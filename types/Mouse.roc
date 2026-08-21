@@ -1,12 +1,12 @@
-## Mouse module - helpers for working with Host.mouse button state.
+## Mouse helpers for pointer state sampled into one host-cycle input.
 ##
 ## The host stores one packed state byte per raylib mouse button code 0-6:
-## bit 0 is held, bit 1 is pressed this frame, and bit 2 is released this frame.
-## Pass `host.mouse` directly to these helpers.
+## bit 0 is held, bit 1 is pressed during the input interval, and bit 2 is released during it.
+## Pass `input.devices.mouse` directly to these helpers.
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.
-	State := {
+	Snapshot := {
 		buttons : List(U8),
 		left : Bool,
 		middle : Bool,
@@ -19,31 +19,31 @@ Mouse := [].{
 		x : F32,
 		y : F32,
 	}.{
-		button_down : State, MouseButton -> Bool
+		button_down : Snapshot, Button -> Bool
 		button_down = |mouse, button| Mouse.button_down(mouse, button)
 
 		## Whether a button is currently up.
-		button_up : State, MouseButton -> Bool
+		button_up : Snapshot, Button -> Bool
 		button_up = |mouse, button| Mouse.button_up(mouse, button)
 
-		## Whether a button was first pressed this frame.
-		button_pressed : State, MouseButton -> Bool
+		## Whether a button was pressed during this input interval.
+		button_pressed : Snapshot, Button -> Bool
 		button_pressed = |mouse, button| Mouse.button_pressed(mouse, button)
 
-		## Whether a button was released this frame.
-		button_released : State, MouseButton -> Bool
+		## Whether a button was released during this input interval.
+		button_released : Snapshot, Button -> Bool
 		button_released = |mouse, button| Mouse.button_released(mouse, button)
 
 		## Current cursor position in logical drawing coordinates.
-		position : State -> { x : F32, y : F32 }
+		position : Snapshot -> { x : F32, y : F32 }
 		position = |mouse| Mouse.position(mouse)
 
 		## Cursor movement since the previous frame.
-		delta : State -> { x : F32, y : F32 }
+		delta : Snapshot -> { x : F32, y : F32 }
 		delta = |mouse| Mouse.delta(mouse)
 
-		## Horizontal and vertical wheel movement for this frame.
-		wheel_delta : State -> { x : F32, y : F32 }
+		## Horizontal and vertical wheel movement for this input interval.
+		wheel_delta : Snapshot -> { x : F32, y : F32 }
 		wheel_delta = |mouse| Mouse.wheel_delta(mouse)
 	}
 
@@ -60,7 +60,9 @@ Mouse := [].{
 		ResizeNortheastSouthwest,
 		ResizeAll,
 		NotAllowed,
-	]
+	].{
+		is_eq : _
+	}
 
 	## Current cursor position in logical drawing coordinates.
 	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }
@@ -70,27 +72,36 @@ Mouse := [].{
 	delta : { delta_x : F32, delta_y : F32, ..state } -> { x : F32, y : F32 }
 	delta = |mouse| { x: mouse.delta_x, y: mouse.delta_y }
 
-	## Horizontal and vertical wheel movement sampled for this frame.
+	## Horizontal and vertical wheel movement retained for this input interval.
 	wheel_delta : { wheel_x : F32, wheel_y : F32, ..state } -> { x : F32, y : F32 }
 	wheel_delta = |mouse| { x: mouse.wheel_x, y: mouse.wheel_y }
 
 	## Standard mouse buttons sampled by the platform.
-	MouseButton := [Left, Right, Middle, Side, Extra, Forward, Back]
+	Button := [Left, Right, Middle, Side, Extra, Forward, Back]
+
+	## Select hardware pointer samples or deterministic application-provided samples.
+	Source := [Hardware, Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 })]
+
+	virtual_at : { x : F32, y : F32 } -> Source
+	virtual_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
+
+	virtual_click_at : { x : F32, y : F32 } -> Source
+	virtual_click_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
 
 	## Check if a mouse button is currently held down.
-	button_down : { buttons : List(U8), ..state }, MouseButton -> Bool
+	button_down : { buttons : List(U8), ..state }, Button -> Bool
 	button_down = |mouse, button| button_state(mouse.buttons, button, 1)
 
 	## Check if a mouse button is currently up.
-	button_up : { buttons : List(U8), ..state }, MouseButton -> Bool
+	button_up : { buttons : List(U8), ..state }, Button -> Bool
 	button_up = |mouse, button| !(button_down(mouse, button))
 
-	## Check if a mouse button was first pressed this frame.
-	button_pressed : { buttons : List(U8), ..state }, MouseButton -> Bool
+	## Check if a mouse button was pressed during this input interval.
+	button_pressed : { buttons : List(U8), ..state }, Button -> Bool
 	button_pressed = |mouse, button| button_state(mouse.buttons, button, 2)
 
-	## Check if a mouse button was released this frame.
-	button_released : { buttons : List(U8), ..state }, MouseButton -> Bool
+	## Check if a mouse button was released during this input interval.
+	button_released : { buttons : List(U8), ..state }, Button -> Bool
 	button_released = |mouse, button| button_state(mouse.buttons, button, 4)
 
 	expect button_code(Left) == 0
@@ -98,7 +109,7 @@ Mouse := [].{
 	expect cursor_code(PointingHand) == 4
 	expect button_state([7], Left, 1) and button_state([7], Left, 2) and button_state([7], Left, 4)
 	expect {
-		mouse : State
+		mouse : Snapshot
 		mouse = { buttons: [7], left: True, middle: False, right: False, wheel: -2, wheel_x: 1, wheel_y: -2, delta_x: 3, delta_y: 4, x: 10, y: 20 }
 		mouse.position() == { x: 10, y: 20 }
 			and mouse.delta() == { x: 3, y: 4 }
@@ -124,7 +135,7 @@ cursor_code = |cursor|
 		NotAllowed => 10
 	}
 
-button_code : Mouse.MouseButton -> U64
+button_code : Mouse.Button -> U64
 button_code = |button|
 	match button {
 		Left => 0
@@ -136,7 +147,7 @@ button_code = |button|
 		Back => 6
 	}
 
-button_state : List(U8), Mouse.MouseButton, U8 -> Bool
+button_state : List(U8), Mouse.Button, U8 -> Bool
 button_state = |states, button, mask|
 	match List.get(states, button_code(button)) {
 		Ok(state) => U8.bitwise_and(state, mask) != 0

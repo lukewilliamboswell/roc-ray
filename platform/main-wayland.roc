@@ -1,28 +1,34 @@
 platform ""
 	requires {
-		[Model : model] for program : {
+		[Model : model, Msg : msg] for program : {
 			init! : {
-				config : App.Config,
-				run! : Host => Try(model, [Exit(I64), ..]),
+				config : List(Str) -> App.Config,
+				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			render! : model, Host, Draw.Frame => Try(model, [Exit(I64), ..]),
+			update : model, App.Input(msg) -> App.Transition(model, msg),
+			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Host, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random]
 	packages {
 		rrt: "../types/main.roc",
+		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
 		"init_for_host": init_for_host!,
+		"update_for_host": update_for_host!,
 		"render_for_host": render_for_host!,
 		"drop_model_for_host": drop_model_for_host!,
 	}
 	hosted {
-		"roc_assets_load_texture_raw": AssetsHost.load_texture!,
+		"roc_assets_open_store_raw": AssetsHost.open_store!,
+		"roc_assets_load_store_texture_raw": AssetsHost.load_store_texture!,
+		"roc_assets_load_texture_bytes_raw": AssetsHost.load_texture_bytes!,
 		"roc_assets_generate_color_texture_raw": AssetsHost.generate_color_texture!,
 		"roc_assets_generate_checked_texture_raw": AssetsHost.generate_checked_texture!,
 		"roc_assets_update_texture_raw": AssetsHost.update_texture!,
+		"roc_assets_update_texture_region_raw": AssetsHost.update_texture_region!,
 		"roc_assets_set_texture_filter_raw": AssetsHost.set_texture_filter!,
 		"roc_assets_set_texture_wrap_raw": AssetsHost.set_texture_wrap!,
 		"roc_audio_gen_tone_raw": AudioHost.gen_tone!,
@@ -56,12 +62,15 @@ platform ""
 		"roc_draw_circle_raw": DrawHost.circle!,
 		"roc_draw_clear": DrawHost.clear!,
 		"roc_draw_draw_texture_raw": DrawHost.draw_texture!,
+		"roc_draw_draw_texture_instances_raw": DrawHost.draw_texture_instances!,
 		"roc_draw_draw_texture_quad_raw": DrawHost.draw_texture_quad!,
 		"roc_draw_end_scissor_raw": DrawHost.end_scissor!,
 		"roc_draw_fps": DrawHost.fps!,
+		"roc_draw_font_metrics_raw": DrawHost.font_metrics!,
+		"roc_draw_frame_size": DrawHost.frame_size!,
 		"roc_draw_line_raw": DrawHost.line!,
-		"roc_draw_load_font_raw": DrawHost.load_font!,
-		"roc_draw_measure_text_raw": DrawHost.measure_text!,
+		"roc_draw_load_font_bytes_raw": DrawHost.load_font_bytes!,
+		"roc_draw_load_store_font_raw": DrawHost.load_store_font!,
 		"roc_draw_prepare_text_raw": DrawHost.prepare_text!,
 		"roc_draw_draw_prepared_text_raw": DrawHost.draw_prepared_text!,
 		"roc_draw_polygon_lines_raw": DrawHost.polygon_lines!,
@@ -76,21 +85,20 @@ platform ""
 		"roc_draw_text_raw": DrawHost.text!,
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,
-		"roc_capture_screenshot": CaptureHost.screenshot!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
-		"roc_capture_recording_status": CaptureHost.recording_status!,
 		"roc_host_exit": HostHost.exit!,
+		"roc_host_args": HostHost.args!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_random_i32": HostHost.random_i32!,
 		"roc_host_read_env": HostHost.read_env!,
 		"roc_host_read_file_raw": HostHost.read_file!,
 		"roc_host_set_clipboard_text": HostHost.set_clipboard_text!,
 		"roc_host_set_exit_key": HostHost.set_exit_key!,
-		"roc_host_set_screen_size": HostHost.set_screen_size!,
+		"roc_host_suggest_window_size": HostHost.suggest_window_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
-		"roc_host_set_window_min_size": HostHost.set_window_min_size!,
+		"roc_host_suggest_window_min_size": HostHost.suggest_window_min_size!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
@@ -104,8 +112,8 @@ platform ""
 		"roc_draw_end_render_texture_raw": DrawHost.end_render_texture!,
 		"roc_draw_end_shader_raw": DrawHost.end_shader!,
 		"roc_draw_load_render_texture_raw": DrawHost.load_render_texture!,
-		"roc_draw_load_shader_raw": DrawHost.load_shader!,
 		"roc_draw_load_shader_source_raw": DrawHost.load_shader_source!,
+		"roc_draw_load_store_shader_raw": DrawHost.load_store_shader!,
 		"roc_draw_shader_location_raw": DrawHost.shader_location!,
 		"roc_draw_set_shader_float_raw": DrawHost.set_shader_float!,
 		"roc_draw_set_shader_int_raw": DrawHost.set_shader_int!,
@@ -123,7 +131,9 @@ import Draw
 import DrawHost
 import Text
 import Color
-import Host
+import Devices
+import Files
+import Window
 import HostHost
 import Keys
 import Mouse
@@ -136,6 +146,7 @@ import App
 import AppConfig
 import Capture
 import CaptureHost
+import CommandApply
 import Assets
 import AssetsHost
 import Math
@@ -144,15 +155,15 @@ import Sprite
 import Tilemap
 import TilemapHost
 import Physics
+import AppHost
+import AppTransport
+import RequestQueue
+import Random
 
-## Internal type for host boundary.
-## Keep this layout-compatible with the public Host record; the compiler may
-## optimize the reshaping below into a direct pass-through.
-HostStateFromHost : {
-	frame_count : U64,
-	timestamp_nanos : U64, ## monotonic clock, nanoseconds since window init
-	frame_time : F32, ## seconds since previous frame (0 on first frame)
-	screen : { width : I32, height : I32 }, ## logical drawing size for this frame
+## Internal type for the host boundary, carrying one cycle of sampled input.
+## Keep this layout-compatible with the public `Devices.Snapshot` record; the
+## compiler may optimize the reshaping below into a direct pass-through.
+InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
 	text_input : List(U32), ## Unicode codepoints entered this frame
 	gamepads : {
@@ -175,51 +186,250 @@ HostStateFromHost : {
 	},
 }
 
-app_config_for_host! : () => AppConfig.HostConfig
-app_config_for_host! = || AppConfig.to_host({}, program.init!.config)
+## Internal type for the host boundary, carrying one cycle of observations.
+##
+## `window` and `time` are already flat records of scalars, so the public types
+## cross the boundary unchanged rather than being mirrored by a second copy that
+## could drift. Only `input` needs reshaping, and only to rename one field.
+##
+## Unions do not cross this boundary, so request results and recording state arrive
+## as flat records. The host owns each pending callback envelope and returns it
+## with its raw terminal result; Roc invokes it before rebuilding `App.Input`.
+InputFromHostCycle(msg) : {
+	devices : InputFromHost,
+	window : Window.Snapshot,
+	time : Time.Cycle,
+	responses : List(AppHost.PendingResponse(msg)),
+	capture : AppHost.RawCaptureStatus,
+}
 
-init_for_host! : HostStateFromHost => Try(Box(Model), I64)
-init_for_host! = |host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
-	}
-	match (program.init!.run!)(host) {
-		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+app_config_for_host! : () => AppConfig.HostConfig
+app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostHost.args!()))
+
+## Reshape the flat sampled input into the public `Devices.Snapshot` record.
+##
+## Only `gamepads.available` is renamed; the compiler may optimize the rest of
+## this into a direct pass-through, which is why the two layouts are kept
+## deliberately compatible.
+input_from_raw : InputFromHost -> Devices.Snapshot
+input_from_raw = |raw| {
+	keys: raw.keys,
+	text_input: raw.text_input,
+	gamepads: {
+		connected: raw.gamepads.available,
+		buttons: raw.gamepads.buttons,
+		axes: raw.gamepads.axes,
+	},
+	mouse: raw.mouse,
+}
+
+## Rebuild a public `App.Input` after resolving private host responses.
+app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg) -> App.Input(msg)
+app_input_from_raw = |devices, window, time, capture, messages| {
+	devices: input_from_raw(devices),
+	window,
+	time,
+	messages,
+	capture: AppTransport.capture_status(capture),
+}
+
+## Run the app's startup callback with the platform's startup authority.
+##
+## No input, window, or timing observations have been sampled at this point.
+init_for_host! : () => Try(Box(Model), I64)
+init_for_host! = ||
+	match (program.init!.run!)(HostHost.Startup.for_host) {
+		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
+
+## Advance the model by one cycle and hand the host back any work it wants done.
+##
+## Called once per fresh host-cycle input, whether or not that cycle presents.
+## Applies commands before returning flattened requests for host submission.
+## The separate `render_for_host!` callback is optional for the cycle and, when
+## invoked, receives this resulting model. The host assigns private
+## tickets while it takes each returned callback envelope into its pending set.
+##
+## Writing to a collection held in the model copies it. The box arrives holding
+## the model's only reference -- measured at refcount 1 on entry -- but
+## unboxing borrows rather than consumes and the box lives until this scope
+## ends, so `update` runs with the model's lists referenced more than once and
+## the first write to one allocates a whole new list. Measured at exactly one
+## copy per frame for a million-element `List(F32)`, 4,000,000 bytes, by
+## `test/model_inplace` under `scripts/test_model_allocation.py`. Writes after
+## the first, within the same cycle, are in place: the copy is unique.
+update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)) }, I64)
+update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
+	messages = receive_responses(responses)
+	input = app_input_from_raw(devices, window, time, capture, messages)
+	model = Box.unbox(boxed_model)
+	next = (program.update)(model, input)
+	next_fields = next.fields()
+	# A malformed upload is a programmer error, and every one of them is
+	# knowable before any command runs. Check the whole list first so the app
+	# stops without having applied half a cycle.
+	validate_commands(next_fields.commands)
+	apply_commands!(next_fields.commands, 0)
+	Ok({
+		model: Box.box(next_fields.model),
+		requests: submit_requests(next_fields.requests),
+	})
 }
 
-render_for_host! : Box(Model), HostStateFromHost => Try(Box(Model), I64)
-render_for_host! = |boxed_model, host_state| {
-	host = {
-		frame_count: host_state.frame_count,
-		timestamp_nanos: host_state.timestamp_nanos,
-		frame_time: host_state.frame_time,
-		screen: host_state.screen,
-		keys: host_state.keys,
-		text_input: host_state.text_input,
-		gamepads: {
-			connected: host_state.gamepads.available,
-			buttons: host_state.gamepads.buttons,
-			axes: host_state.gamepads.axes,
-		},
-		mouse: host_state.mouse,
+## Invoke every returned response envelope in the host's observed order.
+##
+## The host removes an accepted envelope before returning it, so its own ticket
+## table detects unknown or duplicate responses. This list is pre-sized and
+## preserves that delivery order without intermediate result lists.
+receive_responses : List(AppHost.PendingResponse(msg)) -> List(msg)
+receive_responses = |responses| {
+	var $messages = List.with_capacity(List.len(responses))
+	for response in responses {
+		$messages = List.append($messages, AppTransport.receive_response(response))
 	}
+	$messages
+}
+
+## Flatten outgoing requests in one pass. `with_capacity` avoids reallocations;
+## each normalized request moves its callback envelope and request-only data to
+## the host without retaining the application model in Roc.
+submit_requests : List(App.Request(msg)) -> List(AppHost.SubmittedRequest(msg))
+submit_requests = |requested| {
+	var $requests = List.with_capacity(List.len(requested))
+	for request in requested {
+		$requests = List.append($requests, AppTransport.normalize(request))
+	}
+	$requests
+}
+
+## Stop the cycle before any command runs if one of its uploads is malformed.
+##
+validate_commands : List(App.Command) -> {}
+validate_commands = |commands|
+	match AppTransport.validate_commands(commands) {
+		Ok({}) => {}
+		Err(PixelCountMismatch) => refuse_upload(PixelCountMismatch)
+		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
+	}
+
+## Name the programmer error an upload was refused for, and stop.
+##
+## These are cheap to find before returning the command -- `AppTransport.validate_commands`
+## reports both -- and there is no sensible way to carry on past one: the app
+## asked to write pixels somewhere they do not fit.
+refuse_upload : [PixelCountMismatch, RegionOutOfBounds] -> {}
+refuse_upload = |reason|
+	match reason {
+		PixelCountMismatch => {
+			crash "roc-ray: an UpdateTexture command carried a pixel list that is not exactly width * height for its texture."
+		}
+
+		RegionOutOfBounds => {
+			crash "roc-ray: an UpdateTextureRegion command named a rectangle that is not inside its texture."
+		}
+	}
+
+## Apply every command exactly once in list order.
+apply_commands! : List(App.Command), U64 => {}
+apply_commands! = |commands, index|
+	if index >= List.len(commands) {
+		{}
+	} else {
+		match List.get(commands, index) {
+			Ok(command) => {
+				apply_command!(command)
+				apply_commands!(commands, index + 1)
+			}
+
+			# Unreachable: the index is bounded above.
+			Err(_) => {}
+		}
+	}
+
+## Apply one command through the effect it stands for.
+##
+## Commands are interpreted within the platform and do not cross the host ABI,
+## and none of them reports anything back: a command that could fail either
+## stops the app (a malformed upload, refused above). Outcomes an app needs to observe arrive on a
+## later `Input` instead -- `input.capture` for recordings, a request for reads.
+apply_command! : App.Command => {}
+apply_command! = |command|
+	match command {
+		# Deferred rather than immediate, matching `host.exit!`: the host
+		# finishes this cycle -- including the draw, and including capturing it
+		# -- and shuts down afterwards.
+		Exit(code) => HostHost.exit!(I64.to_i32_wrap(code))
+		SetCursor(cursor) => MouseHost.set_cursor!(Mouse.cursor_code(cursor))
+		SetCursorMode(mode) => MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
+		SetClipboardText(text) => HostHost.set_clipboard_text!(text)
+		SetExitKey(key) => HostHost.set_exit_key!(Keys.exit_key_code(key))
+		# A window with no area has no drawing space to report back, so a
+		# non-positive dimension is ignored rather than passed on.
+		SuggestWindowSize(size) =>
+			if size.width > 0 and size.height > 0 {
+				match HostHost.suggest_window_size!(size) {
+					Ok({}) => {}
+					Err(NotSupported) => {}
+				}
+			} else {
+				{}
+			}
+
+		SuggestWindowMinSize(size) =>
+			HostHost.suggest_window_min_size!({
+				width: if size.width > 0 size.width else 0,
+				height: if size.height > 0 size.height else 0,
+			})
+
+		SetTargetFps(fps) => HostHost.set_target_fps!(fps)
+		PlaySound(settings) => settings.play!()
+		StopSound(sound) => sound.stop!()
+		PauseSound(sound) => sound.pause!()
+		ResumeSound(sound) => sound.resume!()
+		PlayMusic(music) => music.play!()
+		StopMusic(music) => music.stop!()
+		PauseMusic(music) => music.pause!()
+		ResumeMusic(music) => music.resume!()
+		SetMusicVolume(request) => request.music.set_volume!(request.volume)
+		SetMusicPitch(request) => request.music.set_pitch!(request.pitch)
+		SetMusicPan(request) => request.music.set_pan!(request.pan)
+		SetMusicLooping(request) => request.music.set_looping!(request.looping)
+		SeekMusic(request) => request.music.seek!(request.seconds)
+		SetMasterVolume(volume) => Audio.set_master_volume!(volume)
+		UpdateTexture(request) => settle_upload(Assets.update_texture!(request.texture, request.pixels))
+		UpdateTextureRegion(request) => settle_upload(Assets.update_texture_region!(request.texture, request.region))
+		SetTextureFilter(request) => Assets.set_texture_filter!(request.texture, request.filter)
+		SetTextureWrap(request) => Assets.set_texture_wrap!(request.texture, request.wrap)
+		SetMouseSource(source) => CommandApply.set_mouse_source!(source)
+		StartRecording(recording) => CommandApply.start_recording!(recording)
+		StopRecording => CommandApply.stop_recording!()
+	}
+
+## Take the host's answer to an upload that was already cleared to run.
+## Structural errors should have been rejected by complete prevalidation.
+## Capacity refusal is never converted into a silent command no-op.
+## Reaching one here means the texture's real dimensions are not the ones the
+## `Texture` value carries -- an upload aimed at something that cannot take it.
+settle_upload : Try({}, [PixelCountMismatch, RegionOutOfBounds, ..]) -> {}
+settle_upload = |result|
+	match result {
+		Ok({}) => {}
+		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
+		Err(_) => refuse_upload(PixelCountMismatch)
+	}
+
+## Optionally present the current model, then hand the same box back.
+##
+## Unboxing borrows rather than consumes, so the host's model reference is
+## returned unchanged.
+render_for_host! : Box(Model) => Try(Box(Model), I64)
+render_for_host! = |boxed_model| {
 	frame = Draw.Frame.from_host(DrawHost.Frame.for_host)
-	match (program.render!)(Box.unbox(boxed_model), host, frame) {
-		Ok(unboxed_model) => Ok(Box.box(unboxed_model))
+	model = Box.unbox(boxed_model)
+	match (program.render!)(model, frame) {
+		Ok({}) => Ok(boxed_model)
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
 	}
@@ -228,10 +438,8 @@ render_for_host! = |boxed_model, host_state| {
 ## Drop the final boxed model at host shutdown.
 ##
 ## The host owns the model box returned by init!/render! and must release it.
-## Box refcounting depends on the Model layout (a box whose payload contains
-## refcounted fields uses a wider allocation header), which only the compiler
-## knows -- so we let Roc drop the box here rather than hand-rolling it in the
-## host. Roc takes ownership of the unused arg and decrefs it at scope end.
+## Box refcounting depends on the Model layout, which only the compiler knows.
+## Roc therefore owns the unused argument and decrefs it at scope end.
 ## TODO: remove once roc glue emits box refcount helpers (roc#9536).
 drop_model_for_host! : Box(Model) => {}
 drop_model_for_host! = |_boxed_model| {}

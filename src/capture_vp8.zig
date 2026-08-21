@@ -44,8 +44,8 @@ pub const Error = error{
     OutOfMemory,
     /// libvpx rejected a frame, or the muxer refused one.
     EncodeFailed,
-    /// A previous encoder was never closed. libvpx's state here is a single
-    /// static instance, so this is a host bug rather than anything an app did.
+    /// The process-global libvpx encoder is already open. This indicates a host
+    /// lifecycle error, not an invalid app request.
     AlreadyOpen,
 };
 
@@ -176,26 +176,15 @@ inline fn chromaVec(
 ///
 /// The frame is walked once, in 2x2 blocks: each block's four pixels are loaded
 /// together, produce four luma samples, and are averaged for the one U and V
-/// sample that covers them. Luma and chroma used to be two separate passes,
-/// which read the whole 8MB of a 1080p frame twice and left the second pass
-/// gathering four strided pixels per output sample. Fusing them halves the read
-/// traffic and, more importantly, puts the four pixels in registers for both
-/// uses, which is what lets the hot rows run as `vector_pixels`-wide SIMD.
-///
-/// Measured on a 1920x1080 frame against the two-pass version it replaced:
-/// 2.41ms -> 0.87ms for baseline x86_64 at ReleaseFast, which is what releases
-/// ship. A `Debug` build is the one case that gets slower, 46ms -> 60ms, because
-/// unoptimized vector code lowers lane by lane. That is the right way round:
-/// `zig test` runs in Debug, so the path releases actually use is the one the
-/// tests cover, and capture at Debug speeds was never real-time anyway.
+/// sample that covers them. The fused pass reuses loaded pixels for both luma
+/// and chroma and processes hot rows in `vector_pixels`-wide SIMD chunks.
 ///
 /// Chroma is averaged over each 2x2 block, so an odd width or height reuses the
 /// last row or column rather than reading past the frame.
 ///
-/// The three destination planes must not overlap each other or `rgba`. That was
-/// true of the two-pass version by accident and is true here by requirement:
-/// stores from one block are now visible to the next block's loads. libvpx
-/// allocates the planes separately from the frame buffer, so this holds.
+/// The three destination planes must not overlap each other or `rgba`, because
+/// stores from one block may otherwise affect later loads. libvpx allocates the
+/// planes separately from the frame buffer.
 pub fn rgbaToI420(
     rgba: []const u8,
     width: u32,
@@ -546,12 +535,11 @@ test "rgbaToI420 honours a plane stride wider than the frame" {
     try std.testing.expectEqual(@as(u8, 0xAA), y_plane[stride + 2]);
 }
 
-/// The two-pass conversion `rgbaToI420` replaced, kept as a test oracle.
+/// Scalar two-pass I420 conversion used as an independent test oracle.
 ///
-/// Deliberately the naive shape: one pass for luma, a second gathering four
-/// strided pixels per chroma sample. Obviously correct and independent of the
-/// fused vector code, so a byte-for-byte match against it is real evidence that
-/// the rewrite changed only the speed.
+/// One pass computes luma and a second gathers four pixels per chroma sample.
+/// Its structure is independent of the fused vector implementation, enabling
+/// byte-for-byte parity checks.
 fn rgbaToI420TwoPass(
     rgba: []const u8,
     width: u32,

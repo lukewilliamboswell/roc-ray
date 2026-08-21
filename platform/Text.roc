@@ -1,17 +1,14 @@
 ## Text module - fonts, text measurement, and prepared text drawing.
 ##
-## Measurement is a hosted effect. Prepare text once when content/style changes,
-## then draw the prepared value without measuring again.
+## `Draw.Font` enables pure layout measurement. Prepare text when rendering
+## needs host-owned cached bytes and bounds.
 import Color
 import Draw
 import DrawHost
 import Math
+import rrt.Font as RrtFont
 
 Text := [].{
-
-	## Draw owns the host resource lifecycle; prepared text retains loaded fonts
-	## through the same ARC value as all other drawing APIs.
-	Font : Draw.Font
 
 	HAlign : [Left, Center, Right]
 
@@ -22,15 +19,7 @@ Text := [].{
 		vertical : VAlign,
 	}
 
-	Size : {
-		width : F32,
-		height : F32,
-	}
-
-	LoadFont : {
-		path : Str,
-		size : I32,
-	}
+	Size : RrtFont.Size
 
 	Placement : {
 		pos : Math.Vec2,
@@ -42,7 +31,7 @@ Text := [].{
 		content : Str,
 		size : F32,
 		spacing : F32,
-		font : Font,
+		font : Draw.Font,
 	}.{
 		size : Builder, F32 -> Builder
 		size = |builder, value| { ..builder, size: value }
@@ -50,11 +39,8 @@ Text := [].{
 		spacing : Builder, F32 -> Builder
 		spacing = |builder, value| { ..builder, spacing: value }
 
-		font : Builder, Font -> Builder
+		font : Builder, Draw.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
-
-		measure! : Builder => Size
-		measure! = |builder| Text.measure_builder!(builder)
 
 		## Cache immutable UTF-8 text, font/style, and measurement in the host.
 		prepare! : Builder => Try(Prepared, [ResourceLimit, ..])
@@ -81,33 +67,38 @@ Text := [].{
 					align: placement.align,
 				},
 			)
-	}
 
-	default_font : Font
-	default_font = Draw.default_font
+		## Resource-free prepared text for pure tests.
+		##
+		## Prepared text carries more than a handle: the host measured it once
+		## while preparing it, and the value keeps that size. A stub has no
+		## measurement to keep, so its `measured` bounds are zeroed -- `bounds()`
+		## answers `{ width: 0, height: 0 }` and every alignment therefore
+		## resolves to the placement point itself. Copy this value with the
+		## bounds a test needs, the way `rrt.Texture.stub` is copied with
+		## dimensions.
+		##
+		## The handle never resolves to a host resource, so drawing it is skipped
+		## the way a released one is. Do not use it to test drawing, measurement,
+		## or resource lifetime.
+		stub : Prepared
+		stub = Prepared.(
+			{
+				resource: DrawHost.PreparedText.stub,
+				measured: { width: 0, height: 0 },
+			},
+		)
+	}
 
 	default_spacing : F32
 	default_spacing = Draw.default_spacing
 
-	from : Str -> Builder
-	from = |content| {
+	from : Str, Draw.Font -> Builder
+	from = |content, font| {
 		content,
 		size: 20,
 		spacing: Text.default_spacing,
-		font: Text.default_font,
-	}
-
-	load_font! : LoadFont => Try(Font, [FontLoadFailed, ResourceLimit, ..])
-	load_font! = |cfg| Draw.load_font!(cfg)
-
-	measure_builder! : Builder => Size
-	measure_builder! = |builder| {
-		Draw.measure_text!({
-			text: builder.content,
-			size: builder.size,
-			spacing: builder.spacing,
-			font: builder.font,
-		})
+		font,
 	}
 
 	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
@@ -116,7 +107,7 @@ Text := [].{
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
-			font: builder.font,
+			font: builder.font.for_host(),
 		})
 		if result.err == 2 {
 			Err(ResourceLimit)
@@ -192,9 +183,14 @@ Text := [].{
 	}
 }
 
-expect {
-	builder = Text.from("Hello").size(32).spacing(2)
-	builder.size == 32 and builder.spacing == 2
-}
-
 expect Text.align_offset({ width: 100, height: 40 }, Text.align_center) == { x: 50, y: 20 }
+
+## Prepared text keeps the size the host measured while preparing it, and the
+## stub has no measurement to keep. Zeroed bounds are the honest answer: they
+## say the value was never measured rather than inventing a size for it.
+expect Text.Prepared.stub.bounds() == { width: 0, height: 0 }
+
+## With no bounds, every alignment resolves to the placement point itself, which
+## is what makes drawing a stub harmless in a layout that does happen to run.
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_center) == { x: 40, y: 12 }
+expect Text.origin_for({ x: 40, y: 12 }, Text.Prepared.stub.bounds(), Text.align_bottom_right) == { x: 40, y: 12 }

@@ -134,7 +134,10 @@ def measure(root: Path, pattern: str, frames: int, warmup: int) -> list[dict[str
         capture_output=True,
         text=True,
         env=env,
-        shell=IS_WINDOWS,
+        # This is an explicit executable path, so no Windows shell lookup is
+        # needed. Going through cmd.exe changes sequence-argument handling and
+        # can prevent the host from receiving the headless probe flags.
+        shell=False,
     )
     if result.returncode != 0:
         sys.stderr.write(result.stderr or "")

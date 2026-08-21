@@ -15,19 +15,39 @@ DrawHost := [].{
 		for_host = Frame.({})
 	}
 
-	FontResource :: Box(U64)
-	PreparedText :: Box(U64)
+	FontResource :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Draw.Font.stub`.
+		stub : FontResource
+		stub = FontResource.(Box.box(0))
+	}
+
+	PreparedText :: Box(U64).{
+
+		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
+		stub : PreparedText
+		stub = PreparedText.(Box.box(0))
+	}
 
 	Font : [DefaultFont, LoadedFont(FontResource)]
 
 	RenderTexture :: Texture.{
 		texture : RenderTexture -> Texture
 		texture = |RenderTexture.(texture)| texture
+
+		## The invalid token, as a resource-free handle.
+		## See `Draw.RenderTexture.stub`.
+		stub : RenderTexture
+		stub = RenderTexture.(Texture.stub)
 	}
 
 	Shader :: Box(U64).{
 		from_resource : Box(U64) -> Shader
 		from_resource = |resource| Shader.(resource)
+
+		## The invalid token, as a resource-free handle. See `Draw.Shader.stub`.
+		stub : Shader
+		stub = Shader.(Box.box(0))
 	}
 
 	Uniform :: { shader : Shader, location : I32 }.{
@@ -55,6 +75,7 @@ DrawHost := [].{
 	TextAligned : { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : Font, align_x : F32, align_y : F32 }
 	GlyphMetric : { codepoint : U32, advance_x : F32, offset_x : F32, offset_y : F32, width : F32, height : F32 }
 	FontMetrics : { base_size : F32, line_spacing : F32, fallback_index : U64, glyphs : List(GlyphMetric) }
+	FrameSize : { width : F32, height : F32 }
 	PrepareText : { text : Str, size : F32, spacing : F32, font : Font }
 	PrepareTextResult : { prepared : PreparedText, width : F32, height : F32, err : U8 }
 	PreparedTextDraw : { prepared : PreparedText, pos : Math.Vec2, color : Color.Rgba }
@@ -64,6 +85,11 @@ DrawHost := [].{
 	LoadShaderSource : { vertex_source : Str, fragment_source : Str }
 	LoadStoreShader : { store : Assets.Store, vertex_path : Str, fragment_path : Str }
 	TextureDraw : { texture : Texture, source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+	TextureInstance : { source : Math.Rect, dest : Math.Rect, origin : Math.Vec2, rotation : F32, tint : Color.Rgba }
+
+	## Borrowed instance batch. One hosted call draws every instance with the same
+	## texture, so a per-sprite crossing becomes a single crossing per batch.
+	TextureInstances : { texture : Texture, instances : List(TextureInstance) }
 	TextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
@@ -98,6 +124,7 @@ DrawHost := [].{
 	load_shader_source! : LoadShaderSource => ShaderResult
 	load_store_shader! : LoadStoreShader => ShaderResult
 	font_metrics! : Font => FontMetrics
+	frame_size! : () => FrameSize
 	prepare_text! : PrepareText => PrepareTextResult
 	draw_prepared_text! : PreparedTextDraw => {}
 	polygon! : Polygon => {}
@@ -111,6 +138,7 @@ DrawHost := [].{
 	text! : Text => {}
 	text_aligned! : TextAligned => {}
 	draw_texture! : TextureDraw => {}
+	draw_texture_instances! : TextureInstances => {}
 	draw_texture_quad! : TextureQuad => {}
 	triangle! : Triangle => {}
 	triangle_lines! : TriangleLines => {}

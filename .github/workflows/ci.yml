@@ -86,22 +86,6 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build libvpx-parity
 
-      - name: Bundle platform
-        run: |
-          # The platform depends on roc-ray-types by relative path, which cannot
-          # survive bundling, so pass the URL the package will be served from
-          # below. Port 8000 matches the HTTP server step.
-          output="$(scripts/bundle.sh --types-url-base http://127.0.0.1:8000)"
-          echo "$output"
-          # Basename of the `Created:` path; Git Bash on Windows reports
-          # backslash separators, so strip either.
-          platform_bundle="$(printf '%s\n' "$output" | sed -n 's|^Created: ||p' | tail -1 | sed 's|.*[/\\]||')"
-          if [ -z "$platform_bundle" ]; then
-            echo "Error: could not determine the platform bundle filename"
-            exit 1
-          fi
-          echo "PLATFORM_BUNDLE=$platform_bundle" >> "$GITHUB_ENV"
-
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
         run: |
@@ -118,62 +102,17 @@ jobs:
               raise SystemExit(1)
           PY
 
-      - name: Start HTTP server for bundle
-        run: |
-          # Two archives are produced now (platform and roc-ray-types), so use
-          # the name captured at bundle time rather than picking one by glob.
-          BUNDLE_FILE="$PLATFORM_BUNDLE"
-          if [ -z "$BUNDLE_FILE" ] || [ ! -f "$BUNDLE_FILE" ]; then
-            echo "Error: platform bundle '$BUNDLE_FILE' not found"
-            exit 1
-          fi
-
-          BUNDLE_URL="http://127.0.0.1:8000/$BUNDLE_FILE"
-          python3 -m http.server --bind 127.0.0.1 8000 &
-          SERVER_PID=$!
-
-          for attempt in {1..30}; do
-            if curl -sf "$BUNDLE_URL" -o /dev/null; then
-              echo "Bundle accessible at $BUNDLE_URL"
-              echo "BUNDLE_URL=$BUNDLE_URL" >> "$GITHUB_ENV"
-              exit 0
-            fi
-
-            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-              echo "Error: HTTP server exited before serving $BUNDLE_FILE"
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          echo "Error: Bundle not accessible at $BUNDLE_URL"
-          curl -v "$BUNDLE_URL" -o /dev/null || true
-          exit 1
-
-      - name: Update examples to use bundled platform
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          from scripts.all_tests import _rewrite_platform_ref
-
-          replacement = f'"{os.environ["BUNDLE_URL"]}"'
-          for example in sorted(Path("examples").glob("*/main.roc")):
-              original = example.read_text()
-              rewritten, did_rewrite = _rewrite_platform_ref(original, replacement)
-              if did_rewrite:
-                  print(f"Updating: {example}")
-                  example.write_text(rewritten)
-              else:
-                  print(f"Skipping: {example} (no platform reference)")
-          PY
-
+      # all_tests.py bundles the types package and the platform itself, serves
+      # them on a loopback port, and builds copies of the examples that point at
+      # the served URLs. It used to take three steps here to bundle, serve on a
+      # fixed port 8000, and rewrite the checked-in example headers in place.
+      # --platform-mode=bundle makes bundling mandatory, so a host that cannot
+      # bundle fails loudly instead of quietly falling back to building the
+      # examples against the platform sources.
       - name: Run Roc check/fmt/test
         # Skip on Windows - roc executable PATH issues and MSVC requirements
         if: runner.os != 'Windows'
-        run: scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
+        run: scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test --platform-mode=bundle
 
       # Headless mode exists so every platform can build and run its examples
       # without a display, so run it on every platform. Linking is also what
@@ -185,4 +124,4 @@ jobs:
       # six-hour job limit.
       - name: Build and run examples headlessly
         timeout-minutes: 20
-        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test
+        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle

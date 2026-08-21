@@ -4,9 +4,8 @@ import rr.App
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Input
+import rr.Devices
 import rr.Math
-import rr.Program
 import rr.Text
 
 Model : {
@@ -33,7 +32,7 @@ world_bottom = 1200.F32
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Camera").with_frame_pacing(Capped(120)),
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
@@ -55,7 +54,7 @@ axis = |negative, positive| if negative -1 else if positive 1 else 0
 
 ## Movement is input plus a duration, so that is exactly what it asks for: the
 ## sampled devices, and the seconds the caller wants integrated over.
-move_player : Math.Vec2, Input.Snapshot, F32 -> Math.Vec2
+move_player : Math.Vec2, Devices.Snapshot, F32 -> Math.Vec2
 move_player = |player, input, dt| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
@@ -71,26 +70,26 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	dt = step.time.elapsed_seconds
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	dt = program_input.time.elapsed_seconds
 
 	player = move_player(model.player, input, dt)
 	zoom = Math.clamp(model.zoom + input.mouse.wheel * 0.1, 0.5, 2.5)
 	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
 	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	Program.static({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
-		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+	App.next({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
+		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
 }
 
 ## The camera and both mouse projections are derived rather than stored: they
 ## are a pure function of the model, so keeping them out of it means there is
 ## one less thing that can disagree with itself.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, NonFiniteRotation, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	camera = (Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom })?).with_rotation(model.rotation)?
+	camera = Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom }).with_rotation(model.rotation)
 	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
 

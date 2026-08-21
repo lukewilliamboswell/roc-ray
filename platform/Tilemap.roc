@@ -1,9 +1,9 @@
 ## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
+import Assets
 import Camera
 import Draw
 import Math
 import TilemapHost
-import rrt.Texture
 
 TilemapRawProperty : TilemapHost.Property
 
@@ -21,7 +21,7 @@ TilemapRawMap : TilemapHost.Map
 
 TilemapTextureBinding : {
 	first_gid : U64,
-	texture : Texture,
+	texture : Assets.Texture,
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
@@ -70,7 +70,7 @@ TilemapResolvedTileset : {
 	tile_width : F32,
 	tile_height : F32,
 	columns : U64,
-	texture : Texture,
+	texture : Assets.Texture,
 }
 
 ## Configuration errors found while preparing a tilemap. These are reported
@@ -100,7 +100,7 @@ TilemapBuilder :: {
 	with_origin : TilemapBuilder, Math.Vec2 -> TilemapBuilder
 	with_origin = |builder, origin| { ..builder, origin }
 
-	with_tileset_texture : TilemapBuilder, U64, Texture -> TilemapBuilder
+	with_tileset_texture : TilemapBuilder, U64, Assets.Texture -> TilemapBuilder
 	with_tileset_texture = |builder, first_gid, texture| {
 		..builder,
 		textures: List.append(builder.textures, { first_gid, texture }),
@@ -212,6 +212,11 @@ Tilemap :: {
 
 	## Empty configured tilemap, useful when an optional map fails to load.
 	## Unlike building `empty_raw_map`, this value cannot fail validation.
+	##
+	## It is also the resource-free value for pure tests, and needs no separate
+	## `stub`: a tilemap holds its textures in `render_tilesets`, and this one
+	## has none. Put it in a model to reach the app's real `update` from an
+	## `expect`. Drawing it draws nothing, which is what having no layers means.
 	empty : Tilemap
 	empty = {
 		raw: empty_raw_map,
@@ -989,7 +994,7 @@ transformed_corner = |dest, corner, flip| {
 	{ x: dest.x + x * dest.width, y: dest.y + y * dest.height }
 }
 
-find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Texture, TilemapBindingError)
+find_unique_texture : List(TilemapTextureBinding), U64 -> Try(Assets.Texture, TilemapBindingError)
 find_unique_texture = |textures, first_gid| {
 	var $found = Err(MissingTilesetBinding(first_gid))
 	var $count = 0
@@ -1133,25 +1138,14 @@ expect match Tilemap.from_raw(test_raw).object_role("spawn", Spawn).object_role(
 expect {
 	settings : Camera.Settings
 	settings = { target: Math.vec2(100, 50), offset: Math.vec2(20, 10), rotation: 0, zoom: 2 }
-	result = Camera.new(settings)
-	match result {
-		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
-		Err(_) => False
-	}
+	Tilemap.viewport_for_camera(Camera.new(settings), { x: 80, y: 40 }) == Math.rect(90, 45, 40, 20)
 }
 expect {
 	settings : Camera.Settings
 	settings = { target: Math.zero, offset: Math.zero, rotation: 0, zoom: -2 }
-	result = Camera.new(settings)
-	match result {
-		Ok(camera) => camera.viewport({ x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
-		Err(_) => False
-	}
+	Camera.new(settings).viewport({ x: 80, y: 40 }) == Math.rect(-40, -20, 40, 20)
 }
 expect {
-	result = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
-	match result {
-		Ok(camera) => Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
-		Err(_) => False
-	}
+	camera = Camera.follow({ x: 100, y: 200 }, { screen: { x: 800, y: 600 }, zoom: 2 })
+	Tilemap.viewport_for_camera(camera, { x: 800, y: 600 }) == Math.rect(-100, 50, 400, 300)
 }

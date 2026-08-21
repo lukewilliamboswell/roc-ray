@@ -776,6 +776,23 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
     );
 }
 
+/// Draw one texture once per borrowed instance, in list order.
+///
+/// The batching this buys is on the Roc side, not the GPU side: a per-sprite
+/// `texture!` pays one hosted-effect crossing per sprite, and that crossing --
+/// not `DrawTexturePro` -- is what caps instance counts. `DrawTexturePro` only
+/// appends vertices to rlgl's active batch, which is flushed in bulk, so a
+/// plain loop over the whole list already amortizes well.
+///
+/// The loop is deliberately shaped as "take the shared value once, take a
+/// borrowed slice of per-instance fields, iterate": a future shape-instance
+/// batch (rectangles, circles, or lines for plotting) can follow it by
+/// swapping the shared texture for a shared style and the element accessor
+/// for its own, with no other structure to reproduce.
+pub fn drawTextureInstances(texture: Texture, instances: anytype) void {
+    for (instances) |instance| drawTexture(texture, instance);
+}
+
 fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {
     return .{
         .x = x / @as(f32, @floatFromInt(texture.width)),
@@ -1110,15 +1127,17 @@ pub fn enableCursor() void {
     rl.EnableCursor();
 }
 
-/// Set window size.
-pub fn setWindowSize(width: c_int, height: c_int) void {
+/// Suggest a window size to the native window manager.
+///
+/// The dimensions observed from the window afterward are authoritative.
+pub fn suggestWindowSize(width: c_int, height: c_int) void {
     rl.SetWindowSize(width, height);
 }
 
-/// Set the smallest size the window may be resized to. raylib maps 0 to
-/// GLFW_DONT_CARE, leaving that axis unconstrained. Requires a live window, so
-/// this must be called after initWindow, and only binds on a resizable window.
-pub fn setWindowMinSize(width: c_int, height: c_int) void {
+/// Suggest the smallest size to which the window manager should resize.
+/// raylib maps 0 to GLFW_DONT_CARE, leaving that axis unconstrained. Requires
+/// a live window, and only binds where a resizable-window backend honors it.
+pub fn suggestWindowMinSize(width: c_int, height: c_int) void {
     rl.SetWindowMinSize(width, height);
 }
 
@@ -1738,7 +1757,7 @@ fn drawDownscaleLevel(from: Texture, to: RenderTexture) void {
         rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 },
     );
     // `EndTextureMode` submits the batch, so the level is complete before
-    // the next step samples it.
+    // the next input samples it.
     rl.EndTextureMode();
 }
 

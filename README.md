@@ -46,13 +46,13 @@ itself.
 
 ## The app loop
 
-A RocRay program has two parts. The model is the app state that survives from
-one frame to the next:
+A RocRay program has three callbacks. The model is the app state that survives
+from one host cycle to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
-- `update` receives that model and a read-only `Step` -- this cycle's
-  `Input.Snapshot`, `Window.Snapshot` and `Time.Frame` -- and returns the next
-  model plus any work for the platform. It is pure.
+- `update` receives that model and a read-only `App.Input` -- this cycle's
+  device snapshot, window snapshot, timing, interval events, and request
+  response messages -- and returns a `App.Transition`. It is pure.
 - `render!` receives the model and a `Frame` used for drawing.
 
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
@@ -60,34 +60,34 @@ to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
-### Deferred tasks
+### Deferred requests
 
-`update` can also return work that finishes later. Give each task constructor a
+`update` can also return work that finishes later. Give each request constructor a
 typed callback that turns its terminal result into your app's `Msg`, then fold
-the resulting `step.messages` into the model on a later frame:
+the resulting `input.messages` into the model on a later host cycle:
 
 ```roc
-Msg : [ConfigLoaded({ path : Str, result : Try(Str, Program.SmallFileError) })]
+Msg : [ConfigLoaded({ path : Str, result : Try(Str, Files.ReadTextError) })]
 
-tasks = [Program.read_small_file("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
+requests = [Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
 
-Program.static(model)
-    .with_tasks(tasks)
+App.next(model)
+    .with_requests(requests)
 ```
 
-`Program.static` starts an update with no work. Its receiver methods append
-actions or tasks in order; use `Program.from_parts(model, actions, tasks)` when
+`App.next` starts a transition with no work. Its receiver methods append
+commands or requests in order; use `App.from_parts(model, commands, requests)` when
 a helper has already assembled both lists. Independent component updates can
 also be combined with Roc's record-builder form, for example
-`{ game: game_update, ui: ui_update }.Program`; its actions and tasks retain
+`{ game: game_transition, ui: ui_transition }.App`; its commands and requests retain
 that left-to-right field order.
 
 The host owns private transport tickets; apps do not allocate IDs, match
-completions, or maintain a task batch. It preserves the host-observed order of
-messages within a step. A task that cannot complete with current host capacity
+raw responses, or maintain a request batch. It preserves the host-observed order of
+messages within an input. A request that cannot complete with current host capacity
 still calls its callback with its operation's `Busy` result, so an app may show
 an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads and
-[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard task.
+[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request.
 
 ## Start your own project
 
@@ -144,26 +144,23 @@ recording in the startup config and it needs no code in `render!` at all:
 
 ```roc
 App.init(
-    |_args|
-        App.default
+    App.default
         .with_output_dir("captures")
     # Render on the GPU with no window on screen, like a batch job.
         .with_visible(Bool.False)
         .with_recording(
-            Record(
-                Capture.default
+            Capture.default
                 .with_path("demo.gif")
                 .with_format(Gif)
                 .with_fps(25)
                 .with_max_frames(300),
-            ),
         ),
     |_host| Ok({}),
 )
 ```
 
 `Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
-where the app decides when to capture. `Capture.set_virtual_mouse!` drives a
+where the app decides when to capture. `Mouse.set_source` drives a
 scripted pointer through the same input path a real one uses, so a recorded walk
 through a UI exercises the app's ordinary hover and click handling.
 

@@ -8,15 +8,14 @@
 ## containing `..` -- is refused rather than rewritten. Capture is the only
 ## file-writing capability the platform grants.
 ##
-## Recording starts and stops through actions, screenshots use `Program.Task`,
-## and recording state is available as `step.capture` each cycle.
+## Recording starts and stops through commands, screenshots use `App.Request`,
+## and recording state is available as `input.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Recording` here and in the package are the
 ## same nominal type.
 import rrt.Capture as RrtCapture
-import CaptureHost
 
 Capture := [].{
 
@@ -38,7 +37,7 @@ Capture := [].{
 	## A validated recording request. Update it through its receivers.
 	Recording : RrtCapture.Recording
 
-	## Live recording state, sampled onto every `Program.Step` as `step.capture`.
+	## Live recording state, sampled onto every `App.Input` as `input.capture`.
 	##
 	## `Finished` remains observable after automatic finalization at the frame cap.
 	Status : [
@@ -65,122 +64,33 @@ Capture := [].{
 		Unknown,
 	]
 
-	## Where pointer input comes from.
-	##
-	## `Virtual` makes the host report a scripted pointer to `render!` instead
-	## of the hardware one. Positions are in the same logical drawing
-	## coordinates as `host.mouse`.
-	Pointer : [
-		Real,
-		Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 }),
-	]
+	ScreenshotError : [PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
 
-	## A `Virtual` pointer at a position, with no buttons held.
-	at : { x : F32, y : F32 } -> Pointer
-	at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
+	screenshot : Str, (Try({}, ScreenshotError) -> msg) -> [Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }), ..]
+	screenshot = |path, callback| Screenshot({ path, callback })
 
-	## A `Virtual` pointer at a position with the left button held.
-	clicking_at : { x : F32, y : F32 } -> Pointer
-	clicking_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
-
-	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
+	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-input timing
 	## and balanced encoder quality.
 	default : Recording
 	default = RrtCapture.default
 
-	## Drive `host.mouse` from a script instead of from the hardware pointer.
-	##
-	## This changes the pointer state reported to the app without moving the
-	## operating-system cursor. Existing hover, hit-test, and drag code sees the
-	## virtual state through the normal input path.
-	##
-	## Press and release edges are derived from consecutive frames, so
-	## `mouse.button_pressed(Left)` fires on the frame a virtual click starts.
-	## Pass `Real` to hand control back to the hardware.
-	##
-	## The pointer is invisible in a recording unless the recording also asks
-	## for `DrawCursor`, because the system cursor is not part of the
-	## framebuffer that gets captured.
-	## Apply a `SetVirtualMouse` action. Platform-internal: `main.roc`'s adapter
-	## calls this, and an app reaches it through `Capture.set_virtual_mouse`.
-	apply_virtual_mouse! : Pointer => {}
-	apply_virtual_mouse! = |pointer|
-		match pointer {
-			Real =>
-				CaptureHost.set_virtual_mouse!({
-					active: Bool.False,
-					x: 0,
-					y: 0,
-					left: Bool.False,
-					middle: Bool.False,
-					right: Bool.False,
-					wheel: 0,
-				})
-
-			Virtual(state) =>
-				CaptureHost.set_virtual_mouse!({
-					active: Bool.True,
-					x: state.x,
-					y: state.y,
-					left: state.left,
-					middle: state.middle,
-					right: state.right,
-					wheel: state.wheel,
-				})
-			}
-
-	## Drive `host.mouse` from a script, as an action returned by pure `update`.
-	## The virtual pointer is visible to the next `render!` call.
-	set_virtual_mouse : Pointer -> [SetVirtualMouse(Pointer), ..]
-	set_virtual_mouse = |pointer| SetVirtualMouse(pointer)
-
-	## Begin recording, as an action a pure `update` can return.
+	## Begin recording, as a command a pure `update` can return.
 	##
 	## Frames accumulate until the recording hits its frame cap, a
-	## `Capture.stop` action is applied, or the app exits -- all three finalize
+	## `Capture.stop` command is applied, or the app exits -- all three finalize
 	## the file.
 	##
-	## A rejected start appears as `Failed` in `step.capture` on the next cycle.
+	## A rejected start appears as `Failed` in `input.capture` on the next cycle.
 	start : Recording -> [StartRecording(Recording), ..]
 	start = |recording| StartRecording(recording)
 
-	## Finish the current recording and write its file, as an action.
+	## Finish the current recording and write its file, as a command.
 	##
-	## Stopping while idle does nothing. The next step reports the frame count and
+	## Stopping while idle does nothing. The next input reports the frame count and
 	## file size as `Finished`.
 	stop : [StopRecording, ..]
 	stop = StopRecording
 
-	## Apply a `StartRecording` action. Platform-internal.
-	##
-	## The host latches refusal codes for `step.capture`; actions have no direct
-	## result channel.
-	apply_start! : Recording => {}
-	apply_start! = |recording| {
-		ratio = RrtCapture.scale_ratio(recording.scale())
-		_refusal = CaptureHost.start_recording!({
-			path: recording.path(),
-			format: RrtCapture.format_code(recording.format()),
-			fps: recording.fps(),
-			max_frames: recording.max_frames(),
-			scale_numerator: ratio.numerator,
-			scale_denominator: ratio.denominator,
-			every_nth: recording.every_nth(),
-			timing: RrtCapture.timing_code(recording.timing()),
-			cursor: RrtCapture.cursor_code(recording.cursor()),
-			quality: RrtCapture.quality_code(recording.quality()),
-		})
-		{}
-	}
-
-	## Apply a `StopRecording` action. Platform-internal.
-	##
-	## Frame and byte counts reach the app as `Finished` on the next step.
-	apply_stop! : () => {}
-	apply_stop! = || {
-		_finished = CaptureHost.stop_recording!()
-		{}
-	}
 }
 
 ## Name every failure code the host can latch, whether it refused a start or

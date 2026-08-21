@@ -40,8 +40,8 @@ CaptureHost := [].{
 	set_virtual_mouse! : VirtualMouse => {}
 
 	## Arm a recording. The refusal code is latched by the host rather than
-	## acted on here: starting is an action, and an action has nowhere to report
-	## to. An app reads the outcome off `step.capture` on the next cycle.
+	## acted on here: starting is a command, and a command has nowhere to report
+	## to. An app reads the outcome off `input.capture` on the next cycle.
 	start_recording! : StartRecording => U8
 
 	## Finalize the running recording and write its file.

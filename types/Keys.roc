@@ -2,16 +2,16 @@
 ##
 ## Key state encoding uses one byte per key:
 ## - bit 0 = currently held
-## - bit 1 = pressed this frame
-## - bit 2 = released this frame
+## - bit 1 = pressed during the input interval
+## - bit 2 = released during the input interval
 ##
 ## The host stores fixed-size state lists with one byte per raylib key code
-## 0-348. Named keys cover the full raylib KeyboardKey enum. Use Raw(code)
+## 0-348. Named keys cover the full raylib keyboard-key enum. Use Raw(code)
 ## through `from_code` when you need a backend-specific escape hatch.
 Keys := [].{
 
 	## Named raylib keyboard keys plus a validated backend-specific escape hatch.
-	KeyboardKey := [
+	Key := [
 		KeyAndroidBack,
 		KeyAndroidMenu,
 		KeyVolumeUp,
@@ -127,13 +127,13 @@ Keys := [].{
 	}
 
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
-	ExitKey := [NoExitKey, ExitKey(KeyboardKey)].{
+	ExitKey := [NoExitKey, ExitKey(Key)].{
 		is_eq : _
 	}
 
 	## Flatten an exit key to the raylib key code the host passes to
 	## `SetExitKey`. `0` is raylib's `KEY_NULL`, which disables the behaviour.
-	## Shared by startup configuration and the runtime `SetExitKey` action so the
+	## Shared by startup configuration and the runtime `SetExitKey` command so the
 	## two encodings cannot drift.
 	exit_key_code : ExitKey -> I32
 	exit_key_code = |value|
@@ -143,7 +143,7 @@ Keys := [].{
 		}
 
 	## Validate and wrap a raw raylib key code.
-	from_code : U64 -> Try(KeyboardKey, [InvalidKeyCode, ..])
+	from_code : U64 -> Try(Key, [InvalidKeyCode, ..])
 	from_code = |code|
 		if code < key_count {
 			Ok(Raw(code))
@@ -152,7 +152,7 @@ Keys := [].{
 		}
 
 	## raylib key code for a key (index into the snapshot key-state list).
-	key_code : KeyboardKey -> U64
+	key_code : Key -> U64
 	key_code = |key|
 		match key {
 			KeyAndroidBack => 4
@@ -268,19 +268,19 @@ Keys := [].{
 		}
 
 	## Check if a specific key is currently held down. Pass `host` directly.
-	key_down : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_down : { keys : List(U8), ..state }, Key -> Bool
 	key_down = |host, key| key_state(host.keys, key, 1)
 
 	## Check if a specific key is currently not pressed (up). Pass `host` directly.
-	key_up : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	key_up : { keys : List(U8), ..state }, Key -> Bool
 	key_up = |host, key| !(key_down(host, key))
 
-	## Check if a key was first pressed this frame. Pass `host` directly.
-	key_pressed : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	## Check if a key was pressed during this input interval. Pass `host` directly.
+	key_pressed : { keys : List(U8), ..state }, Key -> Bool
 	key_pressed = |host, key| key_state(host.keys, key, 2)
 
-	## Check if a key was released this frame. Pass `host` directly.
-	key_released : { keys : List(U8), ..state }, KeyboardKey -> Bool
+	## Check if a key was released during this input interval. Pass `host` directly.
+	key_released : { keys : List(U8), ..state }, Key -> Bool
 	key_released = |host, key| key_state(host.keys, key, 4)
 
 	expect key_code(KeyA) == 65
@@ -295,7 +295,7 @@ Keys := [].{
 key_count : U64
 key_count = 349
 
-key_state : List(U8), Keys.KeyboardKey, U8 -> Bool
+key_state : List(U8), Keys.Key, U8 -> Bool
 key_state = |states, key, mask|
 	match List.get(states, Keys.key_code(key)) {
 		Ok(state) => U8.bitwise_and(state, mask) != 0

@@ -1,6 +1,5 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
@@ -8,17 +7,15 @@ import rr.App
 import rr.Assets
 import rr.Color
 import rr.Draw
-import rr.Input
+import rr.Devices
 import rr.Math
 import rr.Mouse
-import rr.Program
 import rr.Text
-import rrt.Texture
 
 Corners : Draw.ProjectiveQuadCorners
 
 Model : {
-	texture : Texture,
+	texture : Draw.Texture,
 	quad : Draw.ProjectiveQuad,
 	corners : Corners,
 	guide : Text.Prepared,
@@ -37,7 +34,7 @@ initial_corners = {
 
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed, NonFiniteQuad, DegenerateQuad, NonConvexQuad, ProjectiveHorizon])
 init! = App.init(
-	App.static_config(App.default.with_title("Projective Texture").with_frame_pacing(Capped(120))),
+	App.default.with_title("Projective Texture").with_frame_pacing(Capped(120)),
 	|_startup| {
 		texture = Assets.generate_checked_texture!({
 			width: 512,
@@ -57,23 +54,23 @@ init! = App.init(
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	dragged = drag_corner(model, step.input)
-	Program.static(dragged.model).with_actions(dragged.actions)
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	dragged = drag_corner(model, program_input.devices)
+	App.next(dragged.model).with_commands(dragged.commands)
 }
 
 ## Fold one frame of pointer input into the quad.
 ##
 ## The cursor shape is a host effect rather than model state, and `update` is
-## pure, so this hands the change back as an action instead of applying it. The
+## pure, so this hands the change back as an command instead of applying it. The
 ## platform runs it before `render!` draws, which is when it used to happen.
-drag_corner : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+drag_corner : Model, Devices.Snapshot -> { model : Model, commands : List(App.Command) }
 drag_corner = |model, input| {
 	mouse = input.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
-	actions = [Mouse.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
+	commands = [Mouse.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
 
 	candidate = if input.key_pressed(KeyR) {
 		initial_corners
@@ -90,8 +87,8 @@ drag_corner = |model, input| {
 	}
 
 	match Draw.ProjectiveQuad.from_corners(candidate) {
-		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, actions }
-		Err(_) => { model: { ..model, dragging }, actions }
+		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, commands }
+		Err(_) => { model: { ..model, dragging }, commands }
 	}
 }
 

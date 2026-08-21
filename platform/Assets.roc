@@ -1,14 +1,24 @@
 ## Assets module - host-owned textures and other resources.
 ##
-## Textures use the shared `rrt.Texture` representation. Load or generate them
-## during initialization, keep them in the model, then draw or update them
-## through this module. Releasing the final handle reference unloads the native
-## texture automatically.
+## Textures use the shared `rrt.Texture` representation, re-exported here as
+## `Assets.Texture`. Load or generate them during initialization, keep them in
+## the model, then draw or update them through this module. Releasing the final
+## handle reference unloads the native texture automatically.
 import Color
 import AssetsHost
-import rrt.Texture
+import rrt.Texture as RrtTexture
 
 Assets := [].{
+
+	## A host-owned GPU texture: an opaque, reference-counted native handle plus
+	## the pixel width and height, kept on the value so layout and
+	## source-rectangle math stays pure.
+	##
+	## This is the shared texture type from the companion `roc-ray-types`
+	## package, re-exported so an app can name it without depending on that
+	## package as well. `Draw.Texture` is the same type under a second name, and
+	## a package written against `rrt.Texture` unifies with both.
+	Texture : RrtTexture.Texture
 
 	## An opened, explicitly located disk asset store. The host retains the
 	## directory handle, not the process working directory; every relative asset
@@ -35,6 +45,16 @@ Assets := [].{
 			}
 		}
 
+		## Resource-free store value for pure tests.
+		##
+		## The handle never resolves to an open directory, so every load made
+		## through it fails the way a load through a released store does. A store
+		## is only useful during startup -- every loader that takes one is
+		## startup-only -- so this exists for the app that keeps one in its model
+		## anyway, to let a pure `expect` build that model. Do not use it to test
+		## asset resolution or resource lifetime.
+		stub : Store
+		stub = Store.(AssetsHost.Store.stub)
 	}
 
 	## How a disk store root is resolved. These choices are explicit so moving an
@@ -80,29 +100,19 @@ Assets := [].{
 		pixels : List(Color.Rgba),
 	}
 
-	## How many bytes of texture upload one cycle may ask for.
-	##
-	## A frame has a fixed upload budget because an upload enters the graphics
-	## driver synchronously and a driver call is not free. `init!` is exempt:
-	## startup is not a frame, and an app builds its atlases there.
-	##
-	## Exposed so an app that generates pixels can stay inside the budget rather
-	## than discover it. `Program.check_uploads` does that check over a whole
-	## cycle's actions, which is the form worth reaching for.
-	##
-	## Mirrors `MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME` in `src/host_native.zig`.
-	max_upload_bytes_per_step : U64
-	max_upload_bytes_per_step = 4 * 1024 * 1024
-
-	## What uploading these pixels costs against the budget: four bytes each.
+	## The byte size of an RGBA pixel list: four bytes per pixel.
 	upload_bytes : List(Color.Rgba) -> U64
 	upload_bytes = |pixels| List.len(pixels) * 4
 
 	## Texture sampling filter used when an image is scaled.
-	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x]
+	TextureFilter := [Point, Bilinear, Trilinear, Anisotropic4x, Anisotropic8x, Anisotropic16x].{
+		is_eq : _
+	}
 
 	## Texture-coordinate behavior outside the normal 0-to-1 range.
-	TextureWrap := [Repeat, Clamp, MirrorRepeat, MirrorClamp]
+	TextureWrap := [Repeat, Clamp, MirrorRepeat, MirrorClamp].{
+		is_eq : _
+	}
 
 	## Configuration for a solid-color generated texture.
 	GenerateColorTexture : { width : I32, height : I32, color : Color.Rgba }
@@ -161,16 +171,16 @@ Assets := [].{
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, UploadBudgetExceeded, ..])
+	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels|
 		whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
 
-	## Replace every pixel, as an action a pure `update` can return.
+	## Replace every pixel, as a command a pure `update` can return.
 	update_texture : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
 	update_texture = |texture, pixels| UpdateTexture({ texture, pixels })
 
 	## Replace one rectangle of a texture, paying only for that rectangle.
-	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
 		region_result(
 			AssetsHost.update_texture_region!({
@@ -183,7 +193,7 @@ Assets := [].{
 			}),
 		)
 
-	## Replace one rectangle, as an action a pure `update` can return.
+	## Replace one rectangle, as a command a pure `update` can return.
 	update_texture_region : Texture, Region -> [UpdateTextureRegion({ texture : Texture, region : Region }), ..]
 	update_texture_region = |texture, region| UpdateTextureRegion({ texture, region })
 
@@ -191,9 +201,19 @@ Assets := [].{
 	set_texture_filter! : Texture, TextureFilter => {}
 	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
+	## Change how this texture is sampled when scaled, as a command a pure
+	## `update` can return.
+	set_texture_filter : Texture, TextureFilter -> [SetTextureFilter({ texture : Texture, filter : TextureFilter }), ..]
+	set_texture_filter = |texture, filter| SetTextureFilter({ texture, filter })
+
 	## Change how out-of-range texture coordinates are wrapped.
 	set_texture_wrap! : Texture, TextureWrap => {}
 	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
+
+	## Change how out-of-range texture coordinates are wrapped, as a command a
+	## pure `update` can return.
+	set_texture_wrap : Texture, TextureWrap -> [SetTextureWrap({ texture : Texture, wrap : TextureWrap }), ..]
+	set_texture_wrap = |texture, wrap| SetTextureWrap({ texture, wrap })
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3
@@ -261,9 +281,6 @@ wrap_code = |wrap|
 
 ## Code the host returns when an upload exceeded the frame's budget.
 ## Mirrored in `src/host_native.zig`.
-upload_err_budget : U8
-upload_err_budget = 4
-
 ## Code the host returns for a region that hangs over the texture's edge.
 ## Mirrored in `src/host_native.zig`.
 upload_err_out_of_bounds : U8
@@ -271,25 +288,21 @@ upload_err_out_of_bounds = 3
 
 ## Decode the host's code for a whole-texture upload, which has no region to
 ## be out of bounds.
-whole_texture_result : U8 -> Try({}, [PixelCountMismatch, UploadBudgetExceeded, ..])
+whole_texture_result : U8 -> Try({}, [PixelCountMismatch, ..])
 whole_texture_result = |code|
 	if code == 0 {
 		Ok({})
-	} else if code == upload_err_budget {
-		Err(UploadBudgetExceeded)
 	} else {
 		Err(PixelCountMismatch)
 	}
 
 ## Decode the host's code for a region upload.
-region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 region_result = |code|
 	if code == 0 {
 		Ok({})
 	} else if code == upload_err_out_of_bounds {
 		Err(RegionOutOfBounds)
-	} else if code == upload_err_budget {
-		Err(UploadBudgetExceeded)
 	} else {
 		Err(PixelCountMismatch)
 	}

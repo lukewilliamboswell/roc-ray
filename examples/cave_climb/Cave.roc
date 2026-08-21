@@ -5,7 +5,6 @@ import rr.Math
 import rr.Physics
 import rr.Sprite
 import rr.Tilemap
-import rrt.Texture
 
 Cave := [].{
 
@@ -93,10 +92,10 @@ Cave := [].{
 
 	Model : {
 		font : Draw.Font,
-		tiles : Texture,
-		characters : Texture,
-		enemies_texture : Texture,
-		background : Texture,
+		tiles : Draw.Texture,
+		characters : Draw.Texture,
+		enemies_texture : Draw.Texture,
+		background : Draw.Texture,
 		level : Level,
 		world : World,
 	}

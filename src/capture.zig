@@ -85,7 +85,7 @@ pub const status_failed: u8 = 2;
 /// A recording ran to its end and its file was written.
 ///
 /// Distinct from `status_idle` so automatic finalization at the frame cap is
-/// observable through the next step's capture state.
+/// observable through the next input's capture state.
 pub const status_finished: u8 = 3;
 
 /// Largest in-memory footprint a buffering encoder may reach, in bytes.
@@ -421,7 +421,7 @@ pub const Session = struct {
 
     /// Latch a start that never happened.
     ///
-    /// Start actions have no direct result channel, so the next step reports the
+    /// Start commands have no direct result channel, so the next input reports the
     /// refusal through recording state. `failed` distinguishes a refused start
     /// from a session that remained idle.
     ///

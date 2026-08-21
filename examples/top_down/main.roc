@@ -1,22 +1,20 @@
 app [Model, program] {
 	rr: platform "../../platform/main.roc",
-	rrt: "../../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
 import rr.App
+import rr.Time
 import rr.Assets
 import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Keys
 import rr.Math
 import rr.Sprite
 import rr.Tilemap
-import rrt.Texture
 
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
 	is_eq : _
@@ -287,8 +285,8 @@ Sounds : {
 
 Model : {
 	font : Draw.Font,
-	characters : Texture,
-	tiles : Texture,
+	characters : Draw.Texture,
+	tiles : Draw.Texture,
 	level : Level,
 	sounds : Sounds,
 	world : World,
@@ -362,9 +360,9 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 ## How loud each effect is mixed.
 ##
 ## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
-## so every action has to name its sound's level -- there is no longer a
-## `set_volume!` in `init!` for it to inherit. These constants are the one place
-## the levels live, so an action cannot drift away from what the mix intends.
+## so every command has to name its sound's level -- a `Sound` has no volume of
+## its own to set in `init!` and inherit. These constants are the one place the
+## levels live, so an command cannot drift away from what the mix intends.
 collect_volume : F32
 collect_volume = 0.58
 
@@ -410,7 +408,7 @@ burst_duration = 0.36
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
@@ -495,14 +493,14 @@ make_sounds! = || {
 
 	# Only the music sets a volume here. Every effect is played through a
 	# `Playback` that states its own, so setting one now would be a second
-	# source of truth that the next action overwrites anyway.
+	# source of truth that the next command overwrites anyway.
 	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
 }
 
-new_game : Draw.Font, Texture, Texture, Level, Sounds -> Model
+new_game : Draw.Font, Draw.Texture, Draw.Texture, Level, Sounds -> Model
 new_game = |font, characters, tiles, level, sounds| {
 	font,
 	characters,
@@ -713,7 +711,7 @@ hazard_color = |id|
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Input.Snapshot -> Math.Vec2
+input_axis : Devices.Snapshot -> Math.Vec2
 input_axis = |input| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
@@ -994,20 +992,20 @@ advance_world = |level, world, input| {
 	}
 }
 
-## Turn a cycle's world events into the sound actions they ask for.
+## Turn a cycle's world events into the sound commands they ask for.
 ##
 ## Pure, because `update` is: nothing is played here, each event just names the
 ## playback it wants. The pan and pitch that used to be written immediately
 ## before a `play!` become that same sound's `Playback` parameters, so a
 ## parameter can no longer be left behind on the wrong sound -- note that a
 ## collected spark pans `collect` but pitches `sparkle`.
-play_step_events : Model, World.StepResult -> List(Program.Action)
+play_step_events : Model, World.StepResult -> List(App.Command)
 play_step_events = |model, result| {
 	sounds = model.sounds
 
-	var $actions = []
+	var $commands = []
 	for event in result.events {
-		event_actions =
+		event_commands =
 			match event {
 				DashStarted(pos) => [
 					sounds.dash
@@ -1032,20 +1030,20 @@ play_step_events = |model, result| {
 					}
 				}
 
-		$actions = List.concat($actions, event_actions)
+		$commands = List.concat($commands, event_commands)
 	}
-	$actions
+	$commands
 }
 
-## One cycle of play: the next model together with the actions it wants run.
+## One cycle of play: the next model together with the commands it wants run.
 ##
-## The actions travel back with the model rather than being fired here, and the
+## The commands travel back with the model rather than being fired here, and the
 ## caller concatenates them as it unwinds.
 ##
 ## The seconds to advance by are a plain parameter rather than a whole
-## `Time.Frame`: only the elapsed time is used, so the caller stays free to pass
+## `Time.Cycle`: only the elapsed time is used, so the caller stays free to pass
 ## a fixed step instead of whatever the last frame happened to take.
-advance_playing : Model, Input.Snapshot, F32 -> { model : Model, actions : List(Program.Action) }
+advance_playing : Model, Devices.Snapshot, F32 -> { model : Model, commands : List(App.Command) }
 advance_playing = |model, input, dt| {
 	result = advance_world(
 		model.level,
@@ -1059,46 +1057,46 @@ advance_playing = |model, input, dt| {
 
 	{
 		model: { ..model, world: result.world },
-		actions: play_step_events(model, result),
+		commands: play_step_events(model, result),
 	}
 }
 
 ## Space restarts from either end state, restoring the music to the level
 ## `Escaped` ducked it away from.
-restart_on_space : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+restart_on_space : Model, Devices.Snapshot -> { model : Model, commands : List(App.Command) }
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
 		{
 			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
-			actions: [model.sounds.music.set_volume(music_volume)],
+			commands: [model.sounds.music.set_volume(music_volume)],
 		}
 	} else {
-		{ model, actions: [] }
+		{ model, commands: [] }
 	}
 
 ## No `!`: the sounds this frame plays and the exit Escape asks for are returned
-## as actions, and the platform applies them in order before `render!`.
+## as commands, and the platform applies them in order before `render!`.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	next = match model.world.state {
-		Playing => advance_playing(model, input, step.time.elapsed_seconds)
+		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
 		Won => restart_on_space(model, input)
 		GameOver => restart_on_space(model, input)
 	}
 
-	Program.static(next.model).with_actions(List.concat(exit_actions, next.actions))
+	App.next(next.model).with_commands(List.concat(exit_commands, next.commands))
 }
 
 ## The camera follows the (shaken) player position, so it is a pure function of
 ## the model and is derived here rather than stored.
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ZeroZoom, NonFiniteZoom, NonFiniteTarget, NonFiniteOffset, ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })?
+	camera = Camera.follow(shaken_target(model.world), { screen: { x: screen_w, y: screen_h }, zoom: 0.82 })
 	viewport = camera.viewport({ x: screen_w, y: screen_h })
 
 	frame.clear!(Color.from_hex_rgb(0x071018))
@@ -1125,7 +1123,7 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Draw.Frame, Level, Texture, Texture, World, Math.Rect, Draw.Font => {}
+draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, World, Math.Rect, Draw.Font => {}
 draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
@@ -1169,7 +1167,7 @@ tile_source = |tile| {
 	Sprite.sheet_frame({ frame_size: { x: 64, y: 64 }, row: index // tile_cols, col: index % tile_cols })
 }
 
-tile_sprite : Texture, Tile, Math.Vec2, F32 -> Sprite.Sprite
+tile_sprite : Draw.Texture, Tile, Math.Vec2, F32 -> Sprite.Sprite
 tile_sprite = |tiles, tile, pos, scale|
 	Sprite.from_texture(tiles)
 		.source(
@@ -1182,10 +1180,10 @@ tile_sprite = |tiles, tile, pos, scale|
 			scale,
 		)
 
-draw_tile! : Draw.Frame, Texture, Tile, Math.Vec2, F32 => {}
+draw_tile! : Draw.Frame, Draw.Texture, Tile, Math.Vec2, F32 => {}
 draw_tile! = |frame, tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scale).draw!(frame)
 
-draw_tile_centered! : Draw.Frame, Texture, Tile, Math.Vec2, F32, F32 => {}
+draw_tile_centered! : Draw.Frame, Draw.Texture, Tile, Math.Vec2, F32, F32 => {}
 draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!(frame)
 
 draw_spawn! : Draw.Frame, Level, Draw.Font => {}
@@ -1205,28 +1203,28 @@ draw_exit! = |frame, level, world, font| {
 	frame.text!({ pos: { x: level.exit_center.x, y: level.exit_center.y + 74 }, text: if is_open "EXIT OPEN" else "LOCKED EXIT", size: 19, spacing: Draw.default_spacing, color: Color.white, font, align: Draw.align_top_center })
 }
 
-draw_obstacle! : Draw.Frame, Texture, World.Obstacle => {}
+draw_obstacle! : Draw.Frame, Draw.Texture, World.Obstacle => {}
 draw_obstacle! = |frame, tiles, obstacle| {
 	rect = obstacle.rect
 	frame.rounded_rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x23342d), 235), Color.from_hex_rgb(0xa3b18a), 4) })
 	draw_tile_centered!(frame, tiles, obstacle.tile, obstacle.center(), 1.25, obstacle.rotation)
 }
 
-draw_obstacles! : Draw.Frame, Level, Texture => {}
+draw_obstacles! : Draw.Frame, Level, Draw.Texture => {}
 draw_obstacles! = |frame, level, tiles| {
 	for obstacle in level.obstacles {
 		draw_obstacle!(frame, tiles, obstacle)
 	}
 }
 
-draw_props! : Draw.Frame, Level, Texture => {}
+draw_props! : Draw.Frame, Level, Draw.Texture => {}
 draw_props! = |frame, level, tiles| {
 	for decoration in level.decorations {
 		draw_tile_centered!(frame, tiles, decoration.tile, decoration.pos, decoration.scale, decoration.rotation)
 	}
 }
 
-draw_spark! : Draw.Frame, Texture, World.Spark, F32 => {}
+draw_spark! : Draw.Frame, Draw.Texture, World.Spark, F32 => {}
 draw_spark! = |frame, tiles, spark, phase| {
 	tile = if spark.id % 2 == 0 TileSparkA else TileSparkB
 	rotation = phase * 160 + U64.to_f32(spark.id) * 19
@@ -1236,7 +1234,7 @@ draw_spark! = |frame, tiles, spark, phase| {
 	draw_tile_centered!(frame, tiles, tile, spark.pos, 0.72 * pulse, rotation)
 }
 
-draw_sparks! : Draw.Frame, Texture, List(World.Spark), F32 => {}
+draw_sparks! : Draw.Frame, Draw.Texture, List(World.Spark), F32 => {}
 draw_sparks! = |frame, tiles, sparks, phase| {
 	for spark in sparks {
 		draw_spark!(frame, tiles, spark, phase)
@@ -1255,7 +1253,7 @@ draw_hazard_lanes! = |frame, level, phase| {
 robot_source : Math.Rect
 robot_source = Math.rect(458, 88, 33, 43)
 
-draw_hazard! : Draw.Frame, Texture, World.Hazard, F32 => {}
+draw_hazard! : Draw.Frame, Draw.Texture, World.Hazard, F32 => {}
 draw_hazard! = |frame, characters, hazard, phase| {
 	pos = hazard.pos(phase)
 	sprite = Sprite.from_texture(characters)
@@ -1274,7 +1272,7 @@ draw_hazard! = |frame, characters, hazard, phase| {
 	frame.circle!({ center: pos, radius: hazard.radius, style: Draw.outlined(Color.with_alpha(Color.white, 170), 3) })
 }
 
-draw_hazards! : Draw.Frame, Level, Texture, F32 => {}
+draw_hazards! : Draw.Frame, Level, Draw.Texture, F32 => {}
 draw_hazards! = |frame, level, characters, phase| {
 	for hazard in level.hazards {
 		draw_hazard!(frame, characters, hazard, phase)
@@ -1314,7 +1312,7 @@ draw_burst! = |frame, world| draw_burst_particle!(frame, world, 0)
 player_source : Math.Rect
 player_source = Math.rect(0, 0, 52, 43)
 
-draw_player! : Draw.Frame, Texture, World.Player => {}
+draw_player! : Draw.Frame, Draw.Texture, World.Player => {}
 draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 150) else Color.white
 	scale = if player.dash_active() 1.3 else 1.22

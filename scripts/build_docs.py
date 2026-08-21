@@ -4,7 +4,7 @@
 The platform and the `roc-ray-types` package are documented separately, because
 `roc docs` attaches a nominal's receivers to the module that *declares* it. The
 platform re-exports those types by alias, so its pages carry the signatures but
-not the receivers -- `Camera2D.with_zoom`, `Mouse.State.position` and friends
+not the receivers -- `Camera2D.with_zoom`, `Mouse.Snapshot.position` and friends
 only exist on the package's pages.
 
 Layout, matching the existing versioned scheme:
@@ -31,6 +31,35 @@ ROOT = Path(__file__).resolve().parent.parent
 PLATFORM_ENTRY = ROOT / "platform" / "main.roc"
 PACKAGE_ENTRY = ROOT / "types" / "main.roc"
 TYPES_SUBDIR = "types"
+PRIVATE_ENTRIES = {
+    "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host"),
+    "Keys": ("exit_key_code",),
+    "Mouse": ("cursor_code", "cursor_mode_code"),
+}
+APP_INTERNAL_TYPES = (
+    "SubmittedRequest",
+    "RawResponse",
+    "PendingResponse",
+    "RawCaptureStatus",
+    "AppHost",
+    "AppTransport",
+    "CommandApply",
+)
+
+REEXPORT_LINKS = {
+    "Color": "Color",
+    "Devices": "Devices",
+    "Window": "Window",
+    "Keys": "Keys",
+    "Mouse": "Mouse",
+    "Gamepad": "Gamepad",
+    "Time": "Time",
+    "Math": "Math",
+    "Camera": "Camera",
+    "Physics": "Physics",
+    "Capture": "Capture",
+    "Draw": "Drawing",
+}
 
 
 class DocsError(RuntimeError):
@@ -51,6 +80,46 @@ def run_roc_docs(roc: str, entry: Path, output: Path) -> None:
         raise DocsError(
             f"roc docs failed for {entry.relative_to(ROOT)}:\n{result.stdout}{result.stderr}"
         )
+
+
+def polish_platform_docs(platform_root: Path) -> None:
+    """Hide compiler-required private bridges and link re-exported pure types."""
+    pages = [platform_root / "index.html"] + [
+        page
+        for page in platform_root.glob("*/index.html")
+        if page.parent.name != TYPES_SUBDIR
+    ]
+    for module, names in PRIVATE_ENTRIES.items():
+        defining_page = platform_root / module / "index.html"
+        source = defining_page.read_text(encoding="utf-8")
+        for name in names:
+            entry_id = f"{module}.{name}"
+            source = re.sub(
+                rf'\s*<article class="entry[^"]*" id="{re.escape(entry_id)}">.*?</article>',
+                "",
+                source,
+                flags=re.S,
+            )
+        defining_page.write_text(source, encoding="utf-8")
+
+        for page in pages:
+            source = page.read_text(encoding="utf-8")
+            for name in names:
+                entry_id = f"{module}.{name}"
+                source = re.sub(
+                    rf'\s*<li[^>]*>\s*<a[^>]*href="(?:\.\./)?{module}/\#{re.escape(entry_id)}".*?</li>',
+                    "",
+                    source,
+                    flags=re.S,
+                )
+            page.write_text(source, encoding="utf-8")
+
+    for module, types_module in REEXPORT_LINKS.items():
+        page = platform_root / module / "index.html"
+        source = page.read_text(encoding="utf-8")
+        link = f'<p class="types-package-link">Pure types and receivers: <a href="../types/{types_module}/">roc-ray-types {types_module}</a></p>'
+        source = source.replace("</main>", f"{link}</main>", 1)
+        page.write_text(source, encoding="utf-8")
 
 
 def exposed_modules(entry: Path) -> list[str]:
@@ -88,36 +157,35 @@ def check_receivers_documented(types_root: Path) -> list[str]:
 
 
 def check_cross_links(platform_root: Path, types_root: Path) -> list[str]:
-    """Every relative link in the platform docs must resolve, and at least one
-    module must point at the package docs.
+    """Every relative link resolves and each re-export links to its pure page.
 
     Checking only links that mention `types` would miss the failure that
     matters most -- a typo'd path resolves to nothing and mentions nothing.
     """
     problems: list[str] = []
-    linked = 0
-    types_resolved = types_root.resolve()
+    linked: dict[str, set[Path]] = {}
     for page in sorted(platform_root.glob("*/index.html")):
         for raw in re.findall(r'<a href="([^"]+)"', page.read_text(encoding="utf-8")):
             href = html.unescape(raw).split("#", 1)[0].split("?", 1)[0]
             if not href or href.startswith(("http:", "https:", "mailto:", "//", "/")):
                 continue
             target = (page.parent / href).resolve()
-            if target == types_resolved:
-                linked += 1
+            linked.setdefault(page.parent.name, set()).add(target)
             if not target.is_file() and not (target / "index.html").is_file():
                 problems.append(f"{page.parent.name}: broken link {raw}")
-    if linked == 0:
-        problems.append(
-            "no module links to the package docs; re-export modules should point "
-            f"at ../{TYPES_SUBDIR}/ so readers can find the receivers"
-        )
+    for platform_module, types_module in REEXPORT_LINKS.items():
+        expected = (types_root / types_module).resolve()
+        if expected not in linked.get(platform_module, set()):
+            problems.append(
+                f"{platform_module}: no link to corresponding types page {types_module}"
+            )
     return problems
 
 
 def build(roc: str, version_root: Path) -> None:
     run_roc_docs(roc, PLATFORM_ENTRY, version_root)
     run_roc_docs(roc, PACKAGE_ENTRY, version_root / TYPES_SUBDIR)
+    polish_platform_docs(version_root)
 
 
 def validate(version_root: Path) -> list[str]:
@@ -125,6 +193,21 @@ def validate(version_root: Path) -> list[str]:
     problems += check_modules(version_root / TYPES_SUBDIR, PACKAGE_ENTRY, TYPES_SUBDIR)
     problems += check_receivers_documented(version_root / TYPES_SUBDIR)
     problems += check_cross_links(version_root, version_root / TYPES_SUBDIR)
+    app_page = (version_root / "App" / "index.html").read_text(encoding="utf-8")
+    for forbidden in (*APP_INTERNAL_TYPES, "Transport"):
+        if forbidden in app_page:
+            problems.append(f"App: private boundary term leaked into docs: {forbidden}")
+    platform_pages = [version_root / "index.html"] + [
+        page
+        for page in version_root.glob("*/index.html")
+        if page.parent.name != TYPES_SUBDIR
+    ]
+    platform_html = "".join(page.read_text(encoding="utf-8") for page in platform_pages)
+    for module, names in PRIVATE_ENTRIES.items():
+        for name in names:
+            entry_id = f"{module}.{name}"
+            if entry_id in platform_html:
+                problems.append(f"platform: private adapter entry leaked into docs: {entry_id}")
     return problems
 
 

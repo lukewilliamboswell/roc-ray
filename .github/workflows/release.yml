@@ -77,7 +77,10 @@ jobs:
 
       - name: Validate Roc examples and docs
         run: |
-          scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test
+          # The examples are checked against a locally bundled and served
+          # platform, which is the shape they will be released in; bundle mode
+          # is mandatory here rather than falling back to the platform sources.
+          scripts/all_tests.py --skip-platform-build --skip-roc-build --skip-bundle-test --platform-mode=bundle
           python3 scripts/build_docs.py --check
 
       - name: Verify release hosts

@@ -1,22 +1,19 @@
 app [Model, program] {
 	rr: platform "../platform/main.roc",
-	rrt: "../types/main.roc",
 	roc: "nightly-2026-08-19-edec830",
 }
 
 import rr.App
 import rr.Assets
 import rr.Draw
-import rr.Program
-import rrt.Texture
 
-Model : { store : Assets.Store, texture : Texture, font : Draw.Font, shader : Draw.Shader }
+Model : { store : Assets.Store, texture : Assets.Texture, font : Draw.Font, shader : Draw.Shader }
 
 program = { init!, update, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.static_config(App.default),
+	App.default,
 	|_startup| {
 		store = Assets.Store.open!(
 			Assets.with_manifest(
@@ -38,8 +35,8 @@ init! = App.init(
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, _step| Program.static(model)
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, _input| App.next(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

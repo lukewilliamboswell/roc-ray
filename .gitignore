@@ -29,10 +29,17 @@ all_roc_syntax
 build
 app
 
-# Ignore markdown files, except main README and CONTRIBUTING
+# Ignore markdown files except selected repository documents.
 *.md
 !README.md
 !CONTRIBUTING.md
+!AGENTS.md
+# `zig build lint` reads this one, so losing it breaks the build rather than
+# quietly dropping a note.
+!docs/action-coverage.md
+# The architecture document. Ignoring it would make the one file a newcomer is
+# pointed at silently uncommittable.
+!design.md
 
 # Build artifacts (but NOT vendored libraries)
 *.a
@@ -106,6 +113,9 @@ __pycache__/
 
 # Generated CLI integration executable.
 /test/cli_args/main
+
+# Generated model-allocation probe executable.
+/test/model_inplace/main
 
 # Output written by the capture examples
 captures/

@@ -5,8 +5,7 @@ import rr.Audio
 import rr.Color
 import rr.Capture
 import rr.Draw
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Math
 
 Brick : {
@@ -162,15 +161,13 @@ breakout_config = |args| {
 			.with_visible(Bool.False)
 			.with_output_dir("examples/breakout")
 			.with_recording(
-				Record(
-					Capture.default
-						.with_path("demo.gif")
-						.with_format(Gif)
-						.with_fps(25)
-						.with_max_frames(demo_frames)
-						.with_scale(Half)
-						.with_timing(FixedStep),
-				),
+				Capture.default
+					.with_path("demo.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
 			)
 	} else {
 		base
@@ -178,12 +175,12 @@ breakout_config = |args| {
 }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
-init! = App.init(
+init! = App.init_for_args(
 	breakout_config,
 	|startup| {
 		Ok({
 			game: new_game_state(),
-			demo: List.contains(startup.args!(), record_demo_flag),
+			demo: List.contains(App.args!(startup), record_demo_flag),
 			sounds: {
 				paddle: Audio.gen_tone!({ freq: 440, ms: 50 })?,
 				brick: Audio.gen_tone!({ freq: 760, ms: 45 })?,
@@ -285,7 +282,7 @@ fresh_bricks = List.concat(
 	),
 )
 
-paddle_move_from_input : Input.Snapshot -> PaddleMove
+paddle_move_from_input : Devices.Snapshot -> PaddleMove
 paddle_move_from_input = |input| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
@@ -304,7 +301,7 @@ paddle_move_dir = |move|
 ## The step's own `dt` is a parameter rather than something read off a frame,
 ## because the caller decides how much time this step covers -- a fixed step can
 ## be handed straight in, which a sampled frame could not express.
-frame_input : Input.Snapshot, F32 -> FrameInput
+frame_input : Devices.Snapshot, F32 -> FrameInput
 frame_input = |input, dt| {
 	paddle_move: paddle_move_from_input(input),
 	action_pressed: input.key_pressed(KeySpace),
@@ -472,10 +469,10 @@ advance_game = |game, input|
 ## One sound per event, in the order the step produced them.
 ##
 ## `List.map` rather than a fold: every event makes exactly one sound, so the
-## action list is the event list retyped, and two brick hits in one step stay
+## command list is the event list retyped, and two brick hits in one step stay
 ## two brick sounds.
-step_event_actions : Sounds, List(StepEvent) -> List(Program.Action)
-step_event_actions = |sounds, events|
+step_event_commands : Sounds, List(StepEvent) -> List(App.Command)
+step_event_commands = |sounds, events|
 	List.map(
 		events,
 		|event|
@@ -491,35 +488,35 @@ step_event_actions = |sounds, events|
 ## `advance_game` was already a pure step returning events, and the events were
 ## already interpreted effectfully -- so this split is mostly a matter of moving
 ## the seam that was there all along. What used to be a `for` loop calling
-## `play!` is now the same loop building the actions `update` hands back.
+## `play!` is now the same loop building the commands `update` hands back.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	dt = step.time.elapsed_seconds
-	exit_actions =
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	dt = program_input.time.elapsed_seconds
+	exit_commands =
 		if model.demo {
-			match step.capture {
-				Finished(_) => [Program.exit(0)]
-				Failed(_) => [Program.exit(1)]
+			match program_input.capture {
+				Finished(_) => [App.exit(0)]
+				Failed(_) => [App.exit(1)]
 				_ => []
 			}
 		} else if input.key_pressed(KeyEscape) {
-			[Program.exit(0)]
+			[App.exit(0)]
 		} else {
 			[]
 		}
 
 	game_input = if model.demo demo_frame_input(model.game, dt) else frame_input(input, dt)
 	result = advance_game(model.game, game_input)
-	paddle_actions = if result.paddle_hit [model.sounds.paddle.play()] else []
+	paddle_commands = if result.paddle_hit [model.sounds.paddle.play()] else []
 
-	Program.static({ ..model, game: result.game })
-		.with_actions(
+	App.next({ ..model, game: result.game })
+		.with_commands(
 			List.concat(
-				exit_actions,
-				List.concat(paddle_actions, step_event_actions(model.sounds, result.events)),
+				exit_commands,
+				List.concat(paddle_commands, step_event_commands(model.sounds, result.events)),
 			),
 		)
 }

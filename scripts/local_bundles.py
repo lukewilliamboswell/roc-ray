@@ -349,12 +349,21 @@ def bundle_types(root: Path, output_dir: Path, roc: str = "roc") -> str:
     resolves on extraction.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    if IS_WINDOWS:
+        # Roc writes the archive through a temporary file and atomically
+        # renames it into --output-dir. GitHub's Windows runner places the
+        # system temp directory on C: and the checkout on D:, where that rename
+        # fails with CrossDevice. Keep bundle temporaries beside the output.
+        env["TEMP"] = str(output_dir.resolve())
+        env["TMP"] = str(output_dir.resolve())
     result = subprocess.run(
         [roc, "bundle", "main.roc", "--output-dir", str(output_dir)],
         cwd=root / "types",
         capture_output=True,
         text=True,
         shell=IS_WINDOWS,
+        env=env,
     )
     if result.returncode != 0:
         raise LocalBundleError(
@@ -411,6 +420,9 @@ def bundle_platform(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "ROC": roc}
+    if IS_WINDOWS:
+        env["TEMP"] = str(output_dir.resolve())
+        env["TMP"] = str(output_dir.resolve())
     bash = find_bash()
     if bash is None:
         raise LocalBundleError("bash was not found, and scripts/bundle.sh needs it")

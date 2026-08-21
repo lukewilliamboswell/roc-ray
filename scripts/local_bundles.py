@@ -341,6 +341,21 @@ def _created_paths(output: str) -> list[str]:
     return created
 
 
+def _bundle_env(output_dir: Path) -> dict[str, str]:
+    """Environment that keeps Roc's temporary archive on the output volume."""
+    env = os.environ.copy()
+    if IS_WINDOWS:
+        # Different Windows runtimes consult different members of this family.
+        # Set all three because Roc creates the archive through a temporary file
+        # before atomically renaming it into --output-dir; a rename across the
+        # runner's C: and D: volumes fails with CrossDevice.
+        bundle_temp = str(output_dir.resolve())
+        env["TEMP"] = bundle_temp
+        env["TMP"] = bundle_temp
+        env["TMPDIR"] = bundle_temp
+    return env
+
+
 def bundle_types(root: Path, output_dir: Path, roc: str = "roc") -> str:
     """Bundle `types/` into `output_dir`; return the content-hash filename.
 
@@ -349,14 +364,7 @@ def bundle_types(root: Path, output_dir: Path, roc: str = "roc") -> str:
     resolves on extraction.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    if IS_WINDOWS:
-        # Roc writes the archive through a temporary file and atomically
-        # renames it into --output-dir. GitHub's Windows runner places the
-        # system temp directory on C: and the checkout on D:, where that rename
-        # fails with CrossDevice. Keep bundle temporaries beside the output.
-        env["TEMP"] = str(output_dir.resolve())
-        env["TMP"] = str(output_dir.resolve())
+    env = _bundle_env(output_dir)
     result = subprocess.run(
         [roc, "bundle", "main.roc", "--output-dir", str(output_dir)],
         cwd=root / "types",
@@ -419,10 +427,7 @@ def bundle_platform(
     Returns (platform bundle filename, types bundle filename).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "ROC": roc}
-    if IS_WINDOWS:
-        env["TEMP"] = str(output_dir.resolve())
-        env["TMP"] = str(output_dir.resolve())
+    env = {**_bundle_env(output_dir), "ROC": roc}
     bash = find_bash()
     if bash is None:
         raise LocalBundleError("bash was not found, and scripts/bundle.sh needs it")

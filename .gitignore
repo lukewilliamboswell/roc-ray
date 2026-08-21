@@ -29,10 +29,11 @@ all_roc_syntax
 build
 app
 
-# Ignore markdown files, except main README and CONTRIBUTING
+# Ignore markdown files except selected repository documents.
 *.md
 !README.md
 !CONTRIBUTING.md
+!AGENTS.md
 # `zig build lint` reads this one, so losing it breaks the build rather than
 # quietly dropping a note.
 !docs/action-coverage.md

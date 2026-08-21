@@ -4,20 +4,20 @@ app [Model, program] {
 }
 
 import rr.App
+import rr.Files
 import "assets/fonts/LiberationSans-Regular.ttf" as liberation_sans : List(U8)
 import rr.Camera
 import rr.Color
 import rr.Draw
 import rr.Math
-import rr.Program
-import rr.TaskQueue
+import rr.RequestQueue
 import rr.Text
 
 ## Walk a source tree from the working directory and plot every line of it,
 ## while it is still being walked.
 ##
 ## Nothing about the dataset is known when this starts. There is no list of
-## files: `Program.list_dir` reports one directory, the app decides which of its
+## files: `Files.list` reports one directory, the app decides which of its
 ## entries are worth descending into or reading, and enqueues more work. Run
 ## from the root of this repository it finds around five hundred files and a
 ## quarter of a million lines, and it is drawing the first of them a few frames
@@ -30,19 +30,19 @@ import rr.Text
 ## Five things have to compose for that to work, and this example exists to show
 ## that they do.
 ##
-## **Discovery is incremental.** `Program.list_dir` lists one directory and
+## **Discovery is incremental.** `Files.list` lists one directory and
 ## never its children, so a walk is the app's own loop: a listing arrives, its
 ## subdirectories become more listings and its files become reads, and all of it
 ## goes through the same queue as everything else. A host-side recursive walk
 ## would be one unbounded operation that no queue could pace.
 ##
-## **Reads never block the frame.** `Program.read_file` is a `Task`: `update`
+## **Reads never block the frame.** `Files.read_bytes` is a `Request`: `update`
 ## returns it and carries on, and the bytes come back later as an ordinary
 ## `Msg`. The delivered `List(U8)` is a seamless view onto the buffer the host
 ## already allocated, so no file bytes are copied to hand it over.
 ##
-## **Everything is paced.** The platform accepts 32 unanswered tasks across the
-## whole app, and this walk would happily ask for five hundred. `TaskQueue`
+## **Everything is paced.** The platform accepts 32 unanswered requests across the
+## whole app, and this walk would happily ask for five hundred. `RequestQueue`
 ## holds the backlog -- listings and reads together -- and releases at most
 ## `max_in_flight`. The queue depth in the masthead is the backlog being real.
 ##
@@ -74,7 +74,7 @@ import rr.Text
 ##   its summary describes, rather than as line-by-line detail.
 ##
 ## Scrolling to a lane whose points were dropped asks for the file again. That
-## is the point rather than a workaround: re-reading a file is a `Task` like any
+## is the point rather than a workaround: re-reading a file is a `Request` like any
 ## other, it is paced like any other, and a figure that can throw away detail
 ## and fetch it back on demand is one that does not care how large the tree is.
 ##
@@ -103,7 +103,7 @@ Model : {
 
 	## The backlog of listings and reads. Only `max_in_flight` of these reach
 	## the host at once, however much the walk has discovered.
-	queue : TaskQueue.TaskQueue(Msg),
+	queue : RequestQueue.Queue(Msg),
 
 	## What the walk has found so far, and what it is still owed.
 	walk : Walk,
@@ -157,8 +157,8 @@ Model : {
 	following : Bool,
 
 	## The logical window size this cycle. `render!` is handed the model and a
-	## frame but not the step, so laying the furniture out means sampling the
-	## size in `update`, where the step is.
+	## frame but not the input, so laying the furniture out means sampling the
+	## size in `update`, where the input is.
 	screen : Math.Vec2,
 
 	## Wrapped animation clock for the sweep, in seconds.
@@ -345,12 +345,12 @@ BestLine : {
 
 Msg : [
 
-	## The path travels with the result on purpose. A `Task` owns the callback
+	## The path travels with the result on purpose. A `Request` owns the callback
 	## that turns its one result into this message, and the platform consumed
 	## that callback to deliver it -- so a retry has to be built from scratch,
 	## and this message is all the app will have to build it from.
-	Listed(Str, Try(List(Program.DirEntry), Program.DirListError)),
-	FileRead(Str, [New, Lane(U64)], Try(List(U8), Program.FileReadError)),
+	Listed(Str, Try(List(Files.Entry), Files.ListError)),
+	FileRead(Str, [New, Lane(U64)], Try(List(U8), Files.ReadBytesError)),
 ]
 
 program = { init!, update, render! }
@@ -465,11 +465,11 @@ join_path = |dir, name|
 walk_root : Str
 walk_root = "."
 
-listing_task : Str -> Program.Task(Msg)
-listing_task = |path| Program.list_dir(path, |result| Listed(path, result))
+listing_request : Str -> App.Request(Msg)
+listing_request = |path| Files.list(path, |result| Listed(path, result))
 
-read_task : Str, [New, Lane(U64)] -> Program.Task(Msg)
-read_task = |path, slot| Program.read_file(path, |result| FileRead(path, slot, result))
+read_request : Str, [New, Lane(U64)] -> App.Request(Msg)
+read_request = |path, slot| Files.read_bytes(path, |result| FileRead(path, slot, result))
 
 ## Turn one directory's entries into the work they imply.
 ##
@@ -477,7 +477,7 @@ read_task = |path, slot| Program.read_file(path, |result| FileRead(path, slot, r
 ## is counted and dropped. Both go on the same queue, which is what makes the
 ## walk breadth-first in practice and, more to the point, paced: discovering a
 ## directory of four hundred files cannot outrun the reads.
-enqueue_entries : Model, Str, List(Program.DirEntry) -> Model
+enqueue_entries : Model, Str, List(Files.Entry) -> Model
 enqueue_entries = |model, dir, entries|
 	List.fold(
 		entries,
@@ -488,13 +488,13 @@ enqueue_entries = |model, dir, entries|
 				Descend => {
 					..acc,
 					walk: { ..acc.walk, dirs_found: acc.walk.dirs_found + 1 },
-					queue: acc.queue.enqueue(listing_task(path)),
+					queue: acc.queue.enqueue(listing_request(path)),
 				}
 
 				Read => {
 					..acc,
 					walk: { ..acc.walk, files_found: acc.walk.files_found + 1 },
-					queue: acc.queue.enqueue(read_task(path, New)),
+					queue: acc.queue.enqueue(read_request(path, New)),
 				}
 
 				Ignore => { ..acc, walk: { ..acc.walk, files_skipped: acc.walk.files_skipped + 1 } }
@@ -509,7 +509,7 @@ enqueue_entries = |model, dir, entries|
 ## but every decision it makes lives here and needs nothing.
 Decision : [Descend, Read, Ignore]
 
-classify : Program.DirEntry -> Decision
+classify : Files.Entry -> Decision
 classify = |entry|
 	match entry.kind {
 		Dir => if List.contains(skipped_dirs, entry.name) {
@@ -526,7 +526,7 @@ classify = |entry|
 		Other => Ignore
 	}
 
-describe_list_error : Program.DirListError -> Str
+describe_list_error : Files.ListError -> Str
 describe_list_error = |reason|
 	match reason {
 		NotFound => "not found"
@@ -537,7 +537,7 @@ describe_list_error = |reason|
 		TooLarge => "too many entries"
 	}
 
-describe_read_error : Program.FileReadError -> Str
+describe_read_error : Files.ReadBytesError -> Str
 describe_read_error = |reason|
 	match reason {
 		NotFound => "not found"
@@ -553,10 +553,10 @@ describe_read_error = |reason|
 
 ## How many listings and reads may be with the host at once.
 ##
-## The platform's own ceiling is 32 tasks in flight for the whole app. Six is
+## The platform's own ceiling is 32 requests in flight for the whole app. Six is
 ## chosen instead so the pacing is real rather than theoretical: a walk of a few
 ## hundred files genuinely queues, the backlog in the masthead genuinely rises
-## and falls, and the recipe in `TaskQueue`'s module documentation is genuinely
+## and falls, and the recipe in `RequestQueue`'s module documentation is genuinely
 ## exercised rather than just being present.
 max_in_flight : U64
 max_in_flight = 6
@@ -1465,14 +1465,12 @@ other_mode = |mode|
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("A tree, streamed - RocRay live plot")
-			.with_size({ width: 1240, height: 860 })
-			.with_min_size({ width: 980, height: 640 })
-			.with_resizable(Bool.True)
-			.with_frame_pacing(VSync),
-	),
+	App.default
+		.with_title("A tree, streamed - RocRay live plot")
+		.with_size({ width: 1240, height: 860 })
+		.with_min_size({ width: 980, height: 640 })
+		.with_resizable(Bool.True)
+		.with_frame_pacing(VSync),
 	|_startup| {
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
 		# is rasterised at the size it is loaded at, so a masthead drawn from a
@@ -1500,7 +1498,7 @@ init! = App.init(
 
 		Ok({
 			glow: glow,
-			queue: TaskQueue.new(max_in_flight),
+			queue: RequestQueue.Queue.new(max_in_flight),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
 			arrivals: [],
 			parsing: Idle,
@@ -1535,20 +1533,20 @@ init! = App.init(
 sprite_of : Model -> Draw.Texture
 sprite_of = |model| Draw.render_texture(model.glow)
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	# 1. Fold this cycle's completions in. Each one ends a task the queue
-	#    released, so each one reports a completion to the queue -- and a
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	# 1. Fold this cycle's completions in. Each one ends a request the queue
+	#    ready, so each one reports a completion to the queue -- and a
 	#    listing may enqueue a great deal more work while it is at it.
-	settled_model = List.fold(step.messages, model, receive)
+	settled_model = List.fold(program_input.messages, model, receive)
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
 	primed =
-		if step.time.frame_count == 0 {
+		if program_input.time.cycle_count == 0 {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
-				queue: settled_model.queue.enqueue(listing_task(walk_root)),
+				queue: settled_model.queue.enqueue(listing_request(walk_root)),
 			}
 		} else {
 			settled_model
@@ -1561,7 +1559,7 @@ update = |model, step| {
 
 	# 4. The view is pure state too, so a headless run scrolls the same way an
 	#    interactive one does.
-	viewed = look(parsed, step)
+	viewed = look(parsed, program_input)
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
 	#    were dropped. At most one of these is outstanding.
@@ -1572,16 +1570,16 @@ update = |model, step| {
 	#    files are waiting for the scanner, which is the thing that actually
 	#    pins memory. Without it a fast disk fills the model with a whole tree
 	#    of bytes while the parser works through it one window at a time.
-	released =
+	ready =
 		if List.len(refetched.arrivals) >= arrival_limit {
-			{ queue: refetched.queue, tasks: [] }
+			{ queue: refetched.queue, requests: [] }
 		} else {
-			refetched.queue.release()
+			refetched.queue.take_ready()
 		}
 
-	Program.static({ ..refetched, queue: released.queue })
-		.with_actions(if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [])
-		.with_tasks(released.tasks)
+	App.next({ ..refetched, queue: ready.queue })
+		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
+		.with_requests(ready.requests)
 }
 
 ## Fold one completion into the model.
@@ -1592,7 +1590,7 @@ receive = |model, message|
 			enqueue_entries(
 				{
 					..model,
-					queue: model.queue.completed(),
+					queue: model.queue.response_received(),
 					walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1 },
 				},
 				dir,
@@ -1600,22 +1598,22 @@ receive = |model, message|
 			)
 
 		# A refused listing still ended, so its slot is free -- and the work
-		# goes back on the queue as a *new* task, because the callback that
+		# goes back on the queue as a *new* request, because the callback that
 		# would have delivered its result is the one that just delivered this.
 		Listed(dir, Err(Busy)) => {
 			..model,
-			queue: model.queue.completed().enqueue(listing_task(dir)),
+			queue: model.queue.response_received().enqueue(listing_request(dir)),
 		}
 
 		Listed(_dir, Err(_reason)) => {
 			..model,
-			queue: model.queue.completed(),
+			queue: model.queue.response_received(),
 			walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1, dirs_failed: model.walk.dirs_failed + 1 },
 		}
 
 		FileRead(path, slot, Ok(bytes)) => {
 			..model,
-			queue: model.queue.completed(),
+			queue: model.queue.response_received(),
 			# The bytes go straight into the model. There is no copy here and
 			# no host handle to hold: the list *is* the ownership.
 			arrivals: List.append(model.arrivals, { path: path, bytes: bytes, replaces: slot }),
@@ -1625,12 +1623,12 @@ receive = |model, message|
 
 		FileRead(path, slot, Err(Busy)) => {
 			..model,
-			queue: model.queue.completed().enqueue(read_task(path, slot)),
+			queue: model.queue.response_received().enqueue(read_request(path, slot)),
 		}
 
 		FileRead(_path, New, Err(_reason)) => {
 			..model,
-			queue: model.queue.completed(),
+			queue: model.queue.response_received(),
 			walk: { ..model.walk, files_skipped: model.walk.files_skipped + 1 },
 		}
 
@@ -1638,16 +1636,16 @@ receive = |model, message|
 		# without points -- and clears the slot so another can be asked for.
 		FileRead(_path, Lane(_index), Err(_reason)) => {
 			..model,
-			queue: model.queue.completed(),
+			queue: model.queue.response_received(),
 			refetching: Nothing,
 		}
 	}
 
 ## Advance the camera, the clocks and the throughput samples.
-look : Model, Program.Step(Msg) -> Model
-look = |model, step| {
-	input = step.input
-	screen = { x: I32.to_f32(step.window.size.width), y: I32.to_f32(step.window.size.height) }
+look : Model, App.Input(Msg) -> Model
+look = |model, program_input| {
+	input = program_input.devices
+	screen = { x: I32.to_f32(program_input.window.size.width), y: I32.to_f32(program_input.window.size.height) }
 	area = plot_area(screen)
 
 	wheel = input.mouse.wheel_delta().y
@@ -1655,7 +1653,7 @@ look = |model, step| {
 	dragging = input.mouse.button_down(Left)
 	refit = input.key_pressed(KeyR)
 
-	delta = F32.min(step.time.elapsed_seconds, 0.05)
+	delta = F32.min(program_input.time.elapsed_seconds, 0.05)
 	advanced = model.sweep + delta
 	opened = F32.min(model.entrance + delta / entrance_seconds, 1)
 
@@ -1734,7 +1732,7 @@ look = |model, step| {
 ##
 ## This is the other half of the retention budget. Points are thrown away
 ## oldest-first without regard for where the view is, which is only reasonable
-## because getting them back is a `Task` like any other -- paced by the same
+## because getting them back is a `Request` like any other -- paced by the same
 ## queue, delivered as the same message, parsed by the same scanner.
 request_refetch : Model -> Model
 request_refetch = |model|
@@ -1751,7 +1749,7 @@ request_refetch = |model|
 					Ok(index) => {
 						..model,
 						refetching: Fetching(index),
-						queue: model.queue.enqueue(read_task(lane_path(model, index), Lane(index))),
+						queue: model.queue.enqueue(read_request(lane_path(model, index), Lane(index))),
 					}
 				}
 			}
@@ -2099,7 +2097,7 @@ draw_head! = |frame, model|
 		}
 	}
 
-## A slow highlight crossing the plot, driven by `step.time` alone, so the frame
+## A slow highlight crossing the plot, driven by `program_input.time` alone, so the frame
 ## has something moving in it whether or not data is still arriving.
 draw_sweep! : Draw.Frame, Model, Math.Rect => {}
 draw_sweep! = |frame, model, area| {
@@ -2289,7 +2287,7 @@ draw_figures! = |frame, model, fade| {
 		},
 		{
 			label: "QUEUED",
-			value: commas(model.queue.pending_len()),
+			value: commas(model.queue.queued_len()),
 			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.queue.in_flight()), Str.concat(" / ", U64.to_str(model.queue.max_in_flight())))),
 		},
 		{
@@ -2763,7 +2761,7 @@ expect List.count_if(sample_entries, |entry| classify(entry) == Descend) == 1
 expect List.count_if(sample_entries, |entry| classify(entry) == Read) == 2
 expect List.count_if(sample_entries, |entry| classify(entry) == Ignore) == 3
 
-sample_entries : List(Program.DirEntry)
+sample_entries : List(Files.Entry)
 sample_entries = [
 	{ name: "src", kind: Dir },
 	{ name: ".git", kind: Dir },

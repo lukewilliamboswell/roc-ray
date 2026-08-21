@@ -26,8 +26,8 @@
   opaque model between callbacks, but must not inspect it, mutate it, or infer
   application decisions from it.
 - Classify every application/host interaction as one of the five protocols in
-  `design.md`: startup authority, `Program.Input`, `Program.Command`,
-  `Program.Request`, or `Draw.Frame`. Adding another interaction shape is an
+  `design.md`: startup authority, `App.Input`, `App.Command`,
+  `App.Request`, or `Draw.Frame`. Adding another interaction shape is an
   architecture change, not an ordinary feature.
 - Preserve the pure `update` transition and serial application callbacks. Host
   workers must not execute Roc application code or share Roc values across

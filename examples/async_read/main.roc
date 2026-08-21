@@ -1,19 +1,19 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
+import rr.Files
 import rr.Color
 import rr.Draw
-import rr.Program
 import rr.Text
 
 ## Read files without stalling the frame.
 ##
-## Both reads are `Task`s: `update` submits them and returns immediately, while
+## Both reads are `Request`s: `update` submits them and returns immediately, while
 ## the host does blocking I/O away from the drawing thread and later delivers a
 ## typed `Msg`. No request IDs or completion filtering leak into the app.
 ##
-## `Program.read_small_file` copies valid UTF-8 into a `Str`, so it has a small
-## inline limit. `Program.read_file` instead delivers an ordinary `List(U8)`:
+## `Files.read_text` copies valid UTF-8 into a `Str`, so it has a small
+## inline limit. `Files.read_bytes` instead delivers an ordinary `List(U8)`:
 ## the host moves the worker allocation into List ARC without copying file
 ## bytes. Keep the list in the model for as long as its bytes are useful; when
 ## the final List or seamless sublist goes away, its typed host resource is
@@ -34,8 +34,8 @@ ReadState : [Waiting, Loaded(U64), Failed(Str)]
 BytesState : [Waiting, Held(List(U8)), Failed(Str)]
 
 Msg : [
-	SmallReadFinished(Try(Str, Program.SmallFileError)),
-	BytesReadFinished(Try(List(U8), Program.FileReadError)),
+	SmallReadFinished(Try(Str, Files.ReadTextError)),
+	BytesReadFinished(Try(List(U8), Files.ReadBytesError)),
 ]
 
 small_path : Str
@@ -48,7 +48,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Async Read").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Async Read").with_frame_pacing(Capped(120)),
 	|_host| {
 		font = Draw.default_font!()
 		Ok({
@@ -60,22 +60,22 @@ init! = App.init(
 	},
 )
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	resolved = List.fold(step.messages, { small: model.small, large: model.large }, apply_message)
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	resolved = List.fold(program_input.messages, { small: model.small, large: model.large }, apply_message)
 	reads =
-		if step.time.frame_count == 0 {
+		if program_input.time.cycle_count == 0 {
 			[
-				Program.read_small_file(small_path, |result| SmallReadFinished(result)),
-				Program.read_file(large_path, |result| BytesReadFinished(result)),
+				Files.read_text(small_path, |result| SmallReadFinished(result)),
+				Files.read_bytes(large_path, |result| BytesReadFinished(result)),
 			]
 		} else {
 			[]
 		}
 
-	Program.static({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + step.time.elapsed_seconds })
-		.with_actions(if step.input.key_pressed(KeyEscape) [Program.exit(0)] else [])
-		.with_tasks(reads)
+	App.next({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
+		.with_requests(reads)
 }
 
 apply_message : { small : ReadState, large : BytesState }, Msg -> { small : ReadState, large : BytesState }
@@ -85,7 +85,7 @@ apply_message = |state, message|
 		BytesReadFinished(result) => { ..state, large: bytes_state(result) }
 	}
 
-string_state : Try(Str, Program.SmallFileError) -> ReadState
+string_state : Try(Str, Files.ReadTextError) -> ReadState
 string_state = |result|
 	match result {
 		Ok(contents) => Loaded(Str.count_utf8_bytes(contents))
@@ -97,7 +97,7 @@ string_state = |result|
 		Err(NotUtf8) => Failed("not text")
 	}
 
-bytes_state : Try(List(U8), Program.FileReadError) -> BytesState
+bytes_state : Try(List(U8), Files.ReadBytesError) -> BytesState
 bytes_state = |result|
 	match result {
 		Ok(bytes) => Held(bytes)

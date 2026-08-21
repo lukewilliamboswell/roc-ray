@@ -22,7 +22,7 @@ is a regression. A frame that costs less means somebody made the model's
 collections unique again: that is the outcome everyone wants, and the fix for
 this failure is to switch this check to `--require-in-place`, delete the
 characterization numbers, and update the notes in `platform/main.roc` and
-`platform/Program.roc` that record the copying behaviour.
+`platform/App.roc` that record the copying behaviour.
 
 `--require-in-place` asserts the invariant that copying denies: steady-state
 per-frame allocation under a small fixed budget. It is expected to FAIL today.
@@ -72,7 +72,7 @@ POINT_COUNT = 1_000_000
 IN_PLACE_BUDGET_BYTES = 16 * 1024
 
 LINE_RE = re.compile(
-    r"\[roc-ray-alloc\] frame=(?P<frame>\d+) "
+    r"\[roc-ray-alloc\] cycle=(?P<cycle>\d+) "
     r"alloc_bytes=(?P<alloc_bytes>\d+) allocs=(?P<allocs>\d+) "
     r"frees=(?P<frees>\d+) free_bytes=(?P<free_bytes>\d+) "
     r"update_bytes=(?P<update_bytes>\d+) update_allocs=(?P<update_allocs>\d+)"
@@ -150,7 +150,7 @@ def measure(root: Path, pattern: str, frames: int, warmup: int) -> list[dict[str
             f"no per-frame allocator lines for pattern {pattern}; "
             "is the host built from this working tree?"
         )
-    steady = [row for row in rows if row["frame"] >= warmup]
+    steady = [row for row in rows if row["cycle"] >= warmup]
     if len(steady) < 8:
         raise MeasurementError(
             f"only {len(steady)} steady-state frame(s) for pattern {pattern}; "
@@ -177,7 +177,7 @@ def check_set_copies_once(rows: list[dict[str, int]]) -> list[str]:
             f"set: {measured} bytes per frame is less than one copy of the list "
             f"({one_copy}). The model's collections may be unique again -- if so, "
             "rerun with --require-in-place, make that the checked contract, and "
-            "update the notes in platform/main.roc and platform/Program.roc"
+            "update the notes in platform/main.roc and platform/App.roc"
         ]
     return []
 
@@ -189,7 +189,7 @@ def check_append_regrows_exactly(rows: list[dict[str, int]]) -> list[str]:
     per-frame rise of exactly one element is the copy-on-write path instead.
     """
     first, last = rows[0], rows[-1]
-    span = last["frame"] - first["frame"]
+    span = last["cycle"] - first["cycle"]
     growth = last["update_bytes"] - first["update_bytes"]
     expected = span * ELEMENT_BYTES
     if growth != expected:

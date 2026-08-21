@@ -5,11 +5,11 @@ platform ""
 				config : List(Str) -> App.Config,
 				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			update : model, Program.Step(msg) -> Program.Update(model, msg),
+			update : model, App.Input(msg) -> App.Transition(model, msg),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw, Text, Color, Input, Window, Keys, Mouse, Gamepad, Time, Audio, App, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Program, TaskQueue, Random]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -96,9 +96,9 @@ platform ""
 		"roc_host_read_file_raw": HostHost.read_file!,
 		"roc_host_set_clipboard_text": HostHost.set_clipboard_text!,
 		"roc_host_set_exit_key": HostHost.set_exit_key!,
-		"roc_host_set_screen_size": HostHost.set_screen_size!,
+		"roc_host_suggest_window_size": HostHost.suggest_window_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
-		"roc_host_set_window_min_size": HostHost.set_window_min_size!,
+		"roc_host_suggest_window_min_size": HostHost.suggest_window_min_size!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
@@ -134,7 +134,8 @@ import Draw
 import DrawHost
 import Text
 import Color
-import Input
+import Devices
+import Files
 import Window
 import HostHost
 import Keys
@@ -148,6 +149,7 @@ import App
 import AppConfig
 import Capture
 import CaptureHost
+import CommandApply
 import Assets
 import AssetsHost
 import Math
@@ -156,12 +158,13 @@ import Sprite
 import Tilemap
 import TilemapHost
 import Physics
-import Program
-import TaskQueue
+import AppHost
+import AppTransport
+import RequestQueue
 import Random
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
-## Keep this layout-compatible with the public `Input.Snapshot` record; the
+## Keep this layout-compatible with the public `Devices.Snapshot` record; the
 ## compiler may optimize the reshaping below into a direct pass-through.
 InputFromHost : {
 	keys : List(U8), ## 349 packed state bytes, one per raylib key code 0-348
@@ -192,26 +195,26 @@ InputFromHost : {
 ## cross the boundary unchanged rather than being mirrored by a second copy that
 ## could drift. Only `input` needs reshaping, and only to rename one field.
 ##
-## Unions do not cross this boundary, so task results and recording state arrive
+## Unions do not cross this boundary, so request results and recording state arrive
 ## as flat records. The host owns each pending callback envelope and returns it
-## with its raw terminal result; Roc invokes it before rebuilding `Program.Step`.
-StepFromHost(msg) : {
-	input : InputFromHost,
+## with its raw terminal result; Roc invokes it before rebuilding `App.Input`.
+InputFromHostCycle(msg) : {
+	devices : InputFromHost,
 	window : Window.Snapshot,
-	time : Time.Frame,
-	completed : List(Program.CompletionEnvelope(msg)),
-	capture : Program.CaptureFromHost,
+	time : Time.Cycle,
+	responses : List(AppHost.PendingResponse(msg)),
+	capture : AppHost.RawCaptureStatus,
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
 app_config_for_host! = || AppConfig.to_host({}, (program.init!.config)(HostHost.args!()))
 
-## Reshape the flat sampled input into the public `Input.Snapshot` record.
+## Reshape the flat sampled input into the public `Devices.Snapshot` record.
 ##
 ## Only `gamepads.available` is renamed; the compiler may optimize the rest of
 ## this into a direct pass-through, which is why the two layouts are kept
 ## deliberately compatible.
-input_from_raw : InputFromHost -> Input.Snapshot
+input_from_raw : InputFromHost -> Devices.Snapshot
 input_from_raw = |raw| {
 	keys: raw.keys,
 	text_input: raw.text_input,
@@ -223,14 +226,14 @@ input_from_raw = |raw| {
 	mouse: raw.mouse,
 }
 
-## Rebuild a public `Program.Step` after resolving private host completions.
-step_from_raw : InputFromHost, Window.Snapshot, Time.Frame, Program.CaptureFromHost, List(msg) -> Program.Step(msg)
-step_from_raw = |input, window, time, capture, messages| {
-	input: input_from_raw(input),
+## Rebuild a public `App.Input` after resolving private host responses.
+app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg) -> App.Input(msg)
+app_input_from_raw = |devices, window, time, capture, messages| {
+	devices: input_from_raw(devices),
 	window,
 	time,
 	messages,
-	capture: Program.capture_from_host(capture),
+	capture: AppTransport.capture_status(capture),
 }
 
 ## Run the app's startup callback with the platform's startup authority.
@@ -238,7 +241,7 @@ step_from_raw = |input, window, time, capture, messages| {
 ## No input, window, or timing observations have been sampled at this point.
 init_for_host! : () => Try(Box(Model), I64)
 init_for_host! = ||
-	match (program.init!.run!)(App.Startup.from_host(HostHost.Startup.for_host)) {
+	match (program.init!.run!)(HostHost.Startup.for_host) {
 		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)
@@ -246,8 +249,10 @@ init_for_host! = ||
 
 ## Advance the model by one cycle and hand the host back any work it wants done.
 ##
-## Called once per rendered frame. Applies actions before rendering and returns
-## flattened requests for asynchronous host execution. The host assigns private
+## Called once per fresh host-cycle input, whether or not that cycle presents.
+## Applies commands before returning flattened requests for host submission.
+## The separate `render_for_host!` callback is optional for the cycle and, when
+## invoked, receives this resulting model. The host assigns private
 ## tickets while it takes each returned callback envelope into its pending set.
 ##
 ## Writing to a collection held in the model copies it. The box arrives holding
@@ -258,105 +263,87 @@ init_for_host! = ||
 ## copy per frame for a million-element `List(F32)`, 4,000,000 bytes, by
 ## `test/model_inplace` under `scripts/test_model_allocation.py`. Writes after
 ## the first, within the same cycle, are in place: the copy is unique.
-update_for_host! : Box(Model), StepFromHost(Msg) => Try({ model : Box(Model), tasks : List(Program.TaskToHost(Msg)) }, I64)
-update_for_host! = |boxed_model, { input, window, time, completed, capture }| {
-	messages = resolve_completions(completed)
-	step = step_from_raw(input, window, time, capture, messages)
+update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)) }, I64)
+update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
+	messages = receive_responses(responses)
+	input = app_input_from_raw(devices, window, time, capture, messages)
 	model = Box.unbox(boxed_model)
-	next = (program.update)(model, step)
+	next = (program.update)(model, input)
 	next_fields = next.fields()
 	# A malformed upload is a programmer error, and every one of them is
-	# knowable before any action runs. Check the whole list first so the app
-	# stops without having applied half a cycle. Running out of upload budget
-	# is not one of these: that is a runtime limit, handled in order below.
-	refuse_unfittable_uploads(next_fields.actions)
-	run_actions!(next_fields.actions, 0, 0)
+	# knowable before any command runs. Check the whole list first so the app
+	# stops without having applied half a cycle.
+	validate_commands(next_fields.commands)
+	apply_commands!(next_fields.commands, 0)
 	Ok({
-		model: Box.box(next_fields.value),
-		tasks: submit_tasks(next_fields.tasks),
+		model: Box.box(next_fields.model),
+		requests: submit_requests(next_fields.requests),
 	})
 }
 
-## Invoke every returned completion envelope in the host's observed order.
+## Invoke every returned response envelope in the host's observed order.
 ##
 ## The host removes an accepted envelope before returning it, so its own ticket
-## table detects unknown or duplicate completions. This list is pre-sized and
+## table detects unknown or duplicate responses. This list is pre-sized and
 ## preserves that delivery order without intermediate result lists.
-resolve_completions : List(Program.CompletionEnvelope(msg)) -> List(msg)
-resolve_completions = |completed| {
-	var $messages = List.with_capacity(List.len(completed))
-	for completion in completed {
-		$messages = List.append($messages, Program.complete(completion))
+receive_responses : List(AppHost.PendingResponse(msg)) -> List(msg)
+receive_responses = |responses| {
+	var $messages = List.with_capacity(List.len(responses))
+	for response in responses {
+		$messages = List.append($messages, AppTransport.receive_response(response))
 	}
 	$messages
 }
 
-## Flatten outgoing tasks in one pass. `with_capacity` avoids reallocations;
+## Flatten outgoing requests in one pass. `with_capacity` avoids reallocations;
 ## each normalized request moves its callback envelope and request-only data to
 ## the host without retaining the application model in Roc.
-submit_tasks : List(Program.Task(msg)) -> List(Program.TaskToHost(msg))
-submit_tasks = |requested| {
-	var $tasks = List.with_capacity(List.len(requested))
-	for task in requested {
-		$tasks = List.append($tasks, Program.normalize(task))
+submit_requests : List(App.Request(msg)) -> List(AppHost.SubmittedRequest(msg))
+submit_requests = |requested| {
+	var $requests = List.with_capacity(List.len(requested))
+	for request in requested {
+		$requests = List.append($requests, AppTransport.normalize(request))
 	}
-	$tasks
+	$requests
 }
 
-## Stop the cycle before any action runs if one of its uploads is malformed.
+## Stop the cycle before any command runs if one of its uploads is malformed.
 ##
-## Only the two programmer errors stop the app. An upload that does not fit in
-## the cycle's byte budget is skipped in order by `run_actions!`, along with
-## every upload after it, so `Program.check_uploads` stopping at that same first
-## refusal reports exactly what the app will get.
-refuse_unfittable_uploads : List(Program.Action) -> {}
-refuse_unfittable_uploads = |actions|
-	match Program.check_uploads(actions) {
+validate_commands : List(App.Command) -> {}
+validate_commands = |commands|
+	match AppTransport.validate_commands(commands) {
 		Ok({}) => {}
 		Err(PixelCountMismatch) => refuse_upload(PixelCountMismatch)
 		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
-		Err(UploadBudgetExceeded) => {}
 	}
 
 ## Name the programmer error an upload was refused for, and stop.
 ##
-## These are cheap to find before returning the action -- `Program.check_uploads`
+## These are cheap to find before returning the command -- `AppTransport.validate_commands`
 ## reports both -- and there is no sensible way to carry on past one: the app
 ## asked to write pixels somewhere they do not fit.
 refuse_upload : [PixelCountMismatch, RegionOutOfBounds] -> {}
 refuse_upload = |reason|
 	match reason {
 		PixelCountMismatch => {
-			crash "roc-ray: an UpdateTexture action carried a pixel list that is not exactly width * height for its texture. Check it with Program.check_uploads before returning it."
+			crash "roc-ray: an UpdateTexture command carried a pixel list that is not exactly width * height for its texture."
 		}
 
 		RegionOutOfBounds => {
-			crash "roc-ray: an UpdateTextureRegion action named a rectangle that is not inside its texture. Check it with Program.check_uploads before returning it."
+			crash "roc-ray: an UpdateTextureRegion command named a rectangle that is not inside its texture."
 		}
 	}
 
-## Apply a cycle's actions in order, skipping uploads that do not fit.
-##
-## Index iteration preserves effect order. `charged` is the upload bytes this
-## cycle has already spent; `Program.place_upload` decides whether the next
-## action fits and carries the running total on. Once an upload has been
-## refused the total is past the budget, so every later upload is skipped too
-## and its texture keeps the contents it had. Actions that are not uploads run
-## regardless, before, between, and after.
-run_actions! : List(Program.Action), U64, U64 => {}
-run_actions! = |actions, index, charged|
-	if index >= List.len(actions) {
+## Apply every command exactly once in list order.
+apply_commands! : List(App.Command), U64 => {}
+apply_commands! = |commands, index|
+	if index >= List.len(commands) {
 		{}
 	} else {
-		match List.get(actions, index) {
-			Ok(action) => {
-				placement = Program.place_upload(action, charged)
-				if placement.apply {
-					run_action!(action)
-				} else {
-					{}
-				}
-				run_actions!(actions, index + 1, placement.charged)
+		match List.get(commands, index) {
+			Ok(command) => {
+				apply_command!(command)
+				apply_commands!(commands, index + 1)
 			}
 
 			# Unreachable: the index is bounded above.
@@ -364,16 +351,15 @@ run_actions! = |actions, index, charged|
 		}
 	}
 
-## Apply one action through the effect it stands for.
+## Apply one command through the effect it stands for.
 ##
-## Actions are interpreted within the platform and do not cross the host ABI,
-## and none of them reports anything back: an action that could fail either
-## stops the app (a malformed upload, refused above) or is silently skipped (an
-## upload with no budget left). Outcomes an app needs to observe arrive on a
-## later `Step` instead -- `step.capture` for recordings, a task for reads.
-run_action! : Program.Action => {}
-run_action! = |action|
-	match action {
+## Commands are interpreted within the platform and do not cross the host ABI,
+## and none of them reports anything back: a command that could fail either
+## stops the app (a malformed upload, refused above). Outcomes an app needs to observe arrive on a
+## later `Input` instead -- `input.capture` for recordings, a request for reads.
+apply_command! : App.Command => {}
+apply_command! = |command|
+	match command {
 		# Deferred rather than immediate, matching `host.exit!`: the host
 		# finishes this cycle -- including the draw, and including capturing it
 		# -- and shuts down afterwards.
@@ -384,9 +370,9 @@ run_action! = |action|
 		SetExitKey(key) => HostHost.set_exit_key!(Keys.exit_key_code(key))
 		# A window with no area has no drawing space to report back, so a
 		# non-positive dimension is ignored rather than passed on.
-		SetWindowSize(size) =>
+		SuggestWindowSize(size) =>
 			if size.width > 0 and size.height > 0 {
-				match HostHost.set_screen_size!(size) {
+				match HostHost.suggest_window_size!(size) {
 					Ok({}) => {}
 					Err(NotSupported) => {}
 				}
@@ -394,8 +380,8 @@ run_action! = |action|
 				{}
 			}
 
-		SetWindowMinSize(size) =>
-			HostHost.set_window_min_size!({
+		SuggestWindowMinSize(size) =>
+			HostHost.suggest_window_min_size!({
 				width: if size.width > 0 size.width else 0,
 				height: if size.height > 0 size.height else 0,
 			})
@@ -419,32 +405,25 @@ run_action! = |action|
 		UpdateTextureRegion(request) => settle_upload(Assets.update_texture_region!(request.texture, request.region))
 		SetTextureFilter(request) => Assets.set_texture_filter!(request.texture, request.filter)
 		SetTextureWrap(request) => Assets.set_texture_wrap!(request.texture, request.wrap)
-		SetVirtualMouse(pointer) => Capture.apply_virtual_mouse!(pointer)
-		StartRecording(recording) => Capture.apply_start!(recording)
-		StopRecording => Capture.apply_stop!()
+		SetMouseSource(source) => CommandApply.set_mouse_source!(source)
+		StartRecording(recording) => CommandApply.start_recording!(recording)
+		StopRecording => CommandApply.stop_recording!()
 	}
 
 ## Take the host's answer to an upload that was already cleared to run.
-##
-## The host refuses an over-budget upload rather than aborting on one, and this
-## cycle's budget gate has already skipped the ones that do not fit, so a
-## refusal for budget here means the host's accounting and Roc's disagree by a
-## byte somewhere. Skipping is still the answer: a lost upload is never a reason
-## to stop the app.
-##
-## The other two are the programmer errors `refuse_unfittable_uploads` reports.
+## Structural errors should have been rejected by complete prevalidation.
+## Capacity refusal is never converted into a silent command no-op.
 ## Reaching one here means the texture's real dimensions are not the ones the
 ## `Texture` value carries -- an upload aimed at something that cannot take it.
-settle_upload : Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..]) -> {}
+settle_upload : Try({}, [PixelCountMismatch, RegionOutOfBounds, ..]) -> {}
 settle_upload = |result|
 	match result {
 		Ok({}) => {}
-		Err(UploadBudgetExceeded) => {}
 		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
 		Err(_) => refuse_upload(PixelCountMismatch)
 	}
 
-## Draw the current model, then hand the same box back.
+## Optionally present the current model, then hand the same box back.
 ##
 ## Unboxing borrows rather than consumes, so the host's model reference is
 ## returned unchanged.

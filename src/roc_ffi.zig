@@ -298,13 +298,13 @@ test "dynamic input lists reuse capacity and preserve retained snapshots" {
 }
 
 /// Flat sampled input for one cycle.
-/// This is not the public `Input.Snapshot` record exposed to Roc apps.
-pub const InputSnapshot = abi.Update_for_hostArg1Input;
+/// This is not the public `Devices.Snapshot` record exposed to Roc apps.
+pub const InputSnapshot = abi.Update_for_hostArg1Devices;
 
 /// Window geometry and visibility sampled for one cycle. This crosses the
 /// boundary unchanged as the public `Window.Snapshot`.
 pub const WindowSnapshot = abi.Update_for_hostArg1Window;
 
 /// When one cycle happened. This crosses the boundary unchanged as the public
-/// `Time.Frame`.
+/// `Time.Cycle`.
 pub const TimeFrame = abi.Update_for_hostArg1Time;

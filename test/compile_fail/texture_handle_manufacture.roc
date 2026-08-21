@@ -9,7 +9,6 @@ app [Model, program] {
 # handle from a raw integer.
 import rr.App
 import rr.Draw
-import rr.Program
 import rrt.Texture
 
 Model : {
@@ -20,7 +19,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(
-	App.static_config(App.default),
+	App.default,
 	|_startup| {
 		handle = Texture.Handle.(Box.box(0))
 		Ok({ texture: { handle, width: 8, height: 8 } })
@@ -29,8 +28,8 @@ init! = App.init(
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, _step| Program.static(model)
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, _input| App.next(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

@@ -8,8 +8,7 @@ import rr.Assets
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Keys
 import rr.Math
 import rr.Mouse
@@ -151,7 +150,7 @@ air_drag = 0.35
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Cave Climb").with_frame_pacing(Capped(120)),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/cave_climb/assets"))?
 		tiles = Assets.load_texture!(assets, "kenney-platformer/spritesheet-tiles-default.png")?
@@ -349,7 +348,7 @@ checkpoints_from_tilemap = |tilemap| {
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Input.Snapshot -> F32
+input_axis : Devices.Snapshot -> F32
 input_axis = |input| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
@@ -400,7 +399,7 @@ unit_from_turn = |turn| Physics.normalize(Physics.vector(cos_turn(turn), sin_tur
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 screen_to_map = |camera, screen| camera.screen_to_world(screen)
 
-tool_input : Input.Snapshot, Camera.Camera2D -> ToolInput
+tool_input : Devices.Snapshot, Camera.Camera2D -> ToolInput
 tool_input = |input, camera| {
 	aim = map_to_world(screen_to_map(camera, { x: input.mouse.x, y: input.mouse.y }))
 	{
@@ -853,9 +852,9 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 
 	restart = input.key_pressed(KeySpace)
 	tools = tool_input(input, camera_for(model.level, model.world.player.pos))
@@ -866,14 +865,14 @@ update = |model, step| {
 			input_axis(input),
 			input.key_pressed(KeySpace) or input.key_pressed(KeyUp) or input.key_pressed(KeyW),
 			tools,
-			step.time.elapsed_seconds,
+			program_input.time.elapsed_seconds,
 		)
 		Won => if restart new_world(model.level) else model.world
 		GameOver => if restart new_world(model.level) else model.world
 	}
 
-	Program.static({ ..model, world: next_world })
-		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+	App.next({ ..model, world: next_world })
+		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

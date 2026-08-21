@@ -4,14 +4,13 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Program
 import rr.Text
 
 ## Render an animated bar chart to a file, with no runtime capture code.
 ##
 ## The recording is declared in the startup config, so the host arms it before
 ## the first frame and finalizes it on exit. Because it asks for `FixedStep`
-## timing, `step.time.elapsed_seconds` is exactly 1/25s every frame no matter how
+## timing, `program_input.time.elapsed_seconds` is exactly 1/25s every frame no matter how
 ## long the readback actually took -- so the animation in the file is smooth and
 ## identical between runs, even though capturing stalls the GPU.
 ##
@@ -41,25 +40,21 @@ recorded_frames = 75
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Capture: Plot")
-			.with_size({ width: 640, height: 360 })
-			.with_frame_pacing(Capped(60))
-			.with_visible(Bool.False)
-			.with_output_dir("captures")
-			.with_recording(
-				Record(
-					Capture.default
-						.with_path("plot.webm")
-						.with_format(WebM)
-						.with_fps(25)
-						.with_max_frames(recorded_frames)
-						.with_scale(Half)
-						.with_timing(FixedStep),
-				),
-			),
-	),
+	App.default
+		.with_title("RocRay Capture: Plot")
+		.with_size({ width: 640, height: 360 })
+		.with_frame_pacing(Capped(60))
+		.with_visible(Bool.False)
+		.with_output_dir("captures")
+		.with_recording(
+			Capture.default
+				.with_path("plot.webm")
+				.with_format(WebM)
+				.with_fps(25)
+				.with_max_frames(recorded_frames)
+				.with_scale(Half)
+				.with_timing(FixedStep),
+		),
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
@@ -73,27 +68,27 @@ init! = App.init(
 ## Elapsed time advances on the tick rather than inside the draw, so the plot
 ## is a pure function of the model when `render!` runs.
 ##
-## The recording state arrives on the step rather than being asked for. There is
-## no effect that asks: starting and stopping are actions, so the sampled state
+## The recording state arrives on the input rather than being asked for. There is
+## no effect that asks: starting and stopping are commands, so the sampled state
 ## is the only channel a recording's outcome has.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
 	# is also what a run with no recording at all looks like, and a headless
-	# run is exactly that, so this app used to exit on its first step having
+	# run is exactly that, so this app used to exit on its first input having
 	# captured nothing and call it a success.
-	actions =
-		match step.capture {
-			Finished(_) => [Program.exit(0)]
-			Failed(_) => [Program.exit(1)]
+	commands =
+		match program_input.capture {
+			Finished(_) => [App.exit(0)]
+			Failed(_) => [App.exit(1)]
 			Idle => []
 			Active(_) => []
 		}
 
-	Program.static({ ..model, elapsed: model.elapsed + step.time.elapsed_seconds }).with_actions(actions)
+	App.next({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds }).with_commands(commands)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

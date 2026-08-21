@@ -2,9 +2,8 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.Draw
 import rr.Color
-import rr.Input
+import rr.Devices
 import rr.Window
-import rr.Program
 import rr.Keys
 import rr.Mouse
 import rr.Gamepad
@@ -21,31 +20,29 @@ Model : {
 	## the snapshot, so here the snapshot genuinely is the model.
 	##
 	## `init!` cannot supply one: `App.Startup` is authority, and nothing has
-	## been sampled before the first frame. `Input.empty` is that "nothing" as a
+	## been sampled before the first cycle. `Devices.empty` is that "nothing" as a
 	## value -- every list empty, the pointer at the origin, and every receiver
 	## answering `False` rather than crashing.
-	input : Input.Snapshot,
+	input : Devices.Snapshot,
 }
 
 program = { init!, update, render! }
 
-## A clipboard task chooses this message at submission time. The app receives
-## the typed result directly in `step.messages`, with no public task ID.
+## A clipboard request chooses this message at submission time. The app receives
+## the typed result directly in `program_input.messages`, with no public request ID.
 Msg : [ClipboardReadFinished(Try(Str, [Unavailable, TooLarge, Busy]))]
 
 init! : App.Init(Model, [])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Input Inspector")
-			.with_size({ width: 820, height: 700 })
-			.with_resizable(Bool.True)
-		# Without this raylib closes the window on Escape, so the Esc indicator
-		# below could never light up. Q exits instead.
-			.with_exit_key(NoExitKey)
-			.with_frame_pacing(Capped(120)),
-	),
-	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Input.empty }),
+	App.default
+		.with_title("RocRay Input Inspector")
+		.with_size({ width: 820, height: 700 })
+		.with_resizable(Bool.True)
+	# Without this raylib closes the window on Escape, so the Esc indicator
+	# below could never light up. Q exits instead.
+		.with_exit_key(NoExitKey)
+		.with_frame_pacing(Capped(120)),
+	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty }),
 )
 
 title : Str
@@ -75,11 +72,11 @@ ascii_typed = |codepoints|
 	)
 
 ## Everything the host used to be told mid-update is returned instead: settings
-## that just happen become actions, and reading the clipboard -- which answers
-## back -- becomes a task.
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+## that just happen become commands, and reading the clipboard -- which answers
+## back -- becomes a request.
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 
 	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
 	typed_this_frame = if ctrl_held "" else ascii_typed(input.text_input)
@@ -88,46 +85,46 @@ update = |model, step| {
 	# One chain, as before, so two shortcuts pressed together still resolve in
 	# this order -- it now yields the work to do alongside the new buffer.
 	clipboard = if ctrl_held and input.key_pressed(KeyC) {
-		{ typed: buffered, clipboard_status: "copied to clipboard", actions: [Window.set_clipboard_text(buffered)], tasks: [] }
+		{ typed: buffered, clipboard_status: "copied to clipboard", commands: [Window.set_clipboard_text(buffered)], requests: [] }
 	} else if ctrl_held and input.key_pressed(KeyV) {
-		# A read answers back, so it is a task: the pasted text is appended on
-		# the step that carries the answer rather than on this one.
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [Program.read_clipboard(|result| ClipboardReadFinished(result))] }
+		# A read answers back, so it is a request: the pasted text is appended on
+		# the input that carries the answer rather than on this one.
+		{ typed: buffered, clipboard_status: model.clipboard_status, commands: [], requests: [Window.read_clipboard(|result| ClipboardReadFinished(result))] }
 	} else if ctrl_held and input.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared", actions: [], tasks: [] }
+		{ typed: "", clipboard_status: "cleared", commands: [], requests: [] }
 	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		{ typed: buffered, clipboard_status: "Esc now exits again", actions: [Keys.set_exit_key(ExitKey(KeyEscape))], tasks: [] }
+		{ typed: buffered, clipboard_status: "Esc now exits again", commands: [Keys.set_exit_key(ExitKey(KeyEscape))], requests: [] }
 	} else if ctrl_held and input.key_pressed(KeyM) {
-		{ typed: buffered, clipboard_status: "window minimum set to 640x480", actions: [Window.set_window_min_size({ width: 640, height: 480 })], tasks: [] }
+		{ typed: buffered, clipboard_status: "window minimum suggested as 640x480", commands: [Window.suggest_min_size({ width: 640, height: 480 })], requests: [] }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status, actions: [], tasks: [] }
+		{ typed: buffered, clipboard_status: model.clipboard_status, commands: [], requests: [] }
 	}
 
 	# Ctrl+V can be pressed again before a slow earlier read answers. Fold every
 	# message in host-observed order so no successful paste is silently lost; the
 	# status describes the last terminal result in that order.
-	pasted = apply_paste_messages({ typed: clipboard.typed, clipboard_status: clipboard.clipboard_status }, step.messages)
+	pasted = apply_paste_messages({ typed: clipboard.typed, clipboard_status: clipboard.clipboard_status }, program_input.messages)
 
 	# Applied in order, before anything is drawn, which is where the effects
 	# they replace used to run.
-	actions =
+	commands =
 		List.join([
-			if input.key_pressed(KeyQ) [Program.exit(0)] else [],
+			if input.key_pressed(KeyQ) [App.exit(0)] else [],
 			if input.key_pressed(KeyH) [Mouse.set_cursor_mode(Hidden)] else [],
 			if input.key_pressed(KeyJ) [Mouse.set_cursor_mode(Visible)] else [],
 			if input.key_pressed(KeyK) [Mouse.set_cursor_mode(Locked)] else [],
 			if input.key_pressed(KeyL) [Mouse.set_cursor_mode(Visible)] else [],
-			clipboard.actions,
+			clipboard.commands,
 			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
 		])
 
-	Program.static({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
-		.with_actions(actions)
-		.with_tasks(clipboard.tasks)
+	App.next({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
+		.with_commands(commands)
+		.with_requests(clipboard.requests)
 }
 
-## Fold this step's callback messages into the text field.
+## Fold this input's callback messages into the text field.
 ##
 ## `TooLarge` is its own outcome rather than being folded into `NoText`: there
 ## *is* text, the host just would not copy that much of it onto the frame

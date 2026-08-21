@@ -3,10 +3,9 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 import rr.App
 import rr.Color
 import rr.Draw
-import rr.Program
 import rr.Text
 
-## Everything `render!` needs must live here now: it is handed no step, so
+## Everything `render!` needs must live here now: it is handed no input, so
 ## anything read from input or the clock has to be recorded by `update` first.
 Model : {
 	title : Text.Prepared,
@@ -26,7 +25,7 @@ program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120))),
+	App.default.with_title("Hello RocRay").with_frame_pacing(Capped(120)),
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
@@ -44,17 +43,17 @@ init! = App.init(
 ##
 ## No `!`: this is a pure function, so it cannot read input or exit by itself.
 ## It is handed everything the host saw and returns the next model plus the work
-## it wants done -- here, an `Exit` action on the frame Escape is pressed.
+## it wants done -- here, an `Exit` command on the frame Escape is pressed.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 	# Solve once for the next model. `render!` consumes this retained layout and
 	# the following update can use it for hit testing without any host calls.
 	layout = solve_layout(model.font)
-	Program.static({ ..model, layout, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
-		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+	App.next({ ..model, layout, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
+		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
 }
 
 solve_layout : Draw.Font -> Layout

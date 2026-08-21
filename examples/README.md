@@ -26,20 +26,20 @@ roc build examples/snake/main.roc --output snake
 
 | Example | What it is | Patterns to reuse |
 | --- | --- | --- |
-| [Hello World](hello_world/main.roc) | A polished minimal interactive scene | App lifecycle, prepared text, pointer input, exit actions |
+| [Hello World](hello_world/main.roc) | A polished minimal interactive scene | App lifecycle, prepared text, pointer input, exit commands |
 | [Pong](pong/main.roc) | A complete two-player arcade game | Delta-time movement, collision, scoring, generated audio |
 | [Snake](snake/main.roc) | A grid-based game with restartable state | Discrete simulation, keyboard control, deterministic updates |
 | [Breakout](breakout/main.roc) | A complete game that can record its own demo | Separating game rules from effects, event-driven sound, CLI modes, capture |
 | [Pixel Workshop](generated_assets/main.roc) | A tiny paint program with a mutable GPU texture | Generated assets, palette tools, texture updates, feedback sounds |
 | [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout, mouse and keyboard navigation, minimum window size |
-| [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor and PNG exporter | Screenshot tasks, output directories, async success feedback |
-| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Input snapshots, typed messages, window actions, clipboard tasks |
+| [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor and PNG exporter | Screenshot requests, output directories, async success feedback |
+| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, typed messages, window commands, clipboard requests |
 
 ## Larger showcases
 
 | Example | What it demonstrates |
 | --- | --- |
-| [Live Plot](live_plot/main.roc) | A whole source tree walked with `Program.list_dir`, read and parsed through a paced task queue, and drawn as a scrolling strip of a quarter of a million lines under a fixed point budget that evicts and re-reads on demand |
+| [Live Plot](live_plot/main.roc) | A whole source tree walked with `Files.list`, read and parsed through a paced request queue, and drawn as a scrolling strip of a quarter of a million lines under a fixed point budget that evicts and re-reads on demand |
 | [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
 | [Cave Climb](cave_climb/main.roc) | Platforming physics, animation, tilemaps, camera tracking, audio, and mouse-driven tools split across modules |
 
@@ -64,15 +64,15 @@ recommended starting point for a whole application.
 
 ## What these examples consider good practice
 
-- Keep application state in `Model`; update it purely from `Program.Step`.
+- Keep application state in `Model`; update it purely from `App.Input`.
 - Load and prepare long-lived resources once in `init!`, then retain them in the
   model instead of recreating them each frame.
 - Derive layout and view-only values with pure helpers rather than storing
   duplicate state that can drift out of sync. Ask `frame.size!()` for the
-  surface being drawn to instead of copying `step.window.size` into the model:
+  surface being drawn to instead of copying `input.window.size` into the model:
   it is current, and inside `with_render_texture!` it is the target's size
   rather than the window's.
-- Return actions for fire-and-forget work and tasks for work whose typed result
+- Return commands for ordered response-free work and requests for work whose typed result
   matters to the application.
 - Keep game or tool rules separate from rendering where that makes them easy to
   test, as Breakout does.

@@ -1,7 +1,6 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
-import rr.Program
 
 Model : { args : List(Str) }
 
@@ -22,19 +21,19 @@ config_for_args = |args|
 	}
 
 init! : App.Init(Model, [])
-init! = App.init(config_for_args, |startup| Ok({ args: startup.args!() }))
+init! = App.init_for_args(config_for_args, |startup| Ok({ args: App.args!(startup) }))
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
 	passed =
 		List.len(model.args) == 3
 			and List.contains(model.args, config_flag)
 				and List.contains(model.args, passthrough_flag)
-					and step.window.size == { width: 321, height: 123 }
+					and program_input.window.size == { width: 321, height: 123 }
 
-	Program.static(model).with_actions([Program.exit(if passed 0 else 1)])
+	App.next(model).with_commands([App.exit(if passed 0 else 1)])
 }
 
 render! : Model, _ => Try({}, [Exit(I64), ..])

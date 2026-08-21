@@ -1,16 +1,16 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
-import rr.Program
 import rr.Text
 
 ## A tiny postcard maker: choose a colourway, move the sun, and export the
 ## composition as `postcards/sunrise.png`.
 ##
-## The screenshot task is used at a realistic boundary: the editor stays
+## The screenshot request is used at a realistic boundary: the editor stays
 ## responsive while the host encodes the current frame, then reports the
 ## result back as a message.
 Model : {
@@ -20,19 +20,17 @@ Model : {
 	status : Text.Prepared,
 }
 
-Msg : [PostcardSaved(Try({}, Program.ScreenshotError))]
+Msg : [PostcardSaved(Try({}, Capture.ScreenshotError))]
 
 program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Postcard Studio")
-			.with_size({ width: 720, height: 480 })
-			.with_output_dir("postcards")
-			.with_frame_pacing(Capped(120)),
-	),
+	App.default
+		.with_title("RocRay Postcard Studio")
+		.with_size({ width: 720, height: 480 })
+		.with_output_dir("postcards")
+		.with_frame_pacing(Capped(120)),
 	|_startup| {
 		font = Draw.default_font!()
 		idle = Text.from("Ready to export", font).size(16).prepare!()?
@@ -53,12 +51,12 @@ init! = App.init(
 	},
 )
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 	copy = Box.unbox(model.copy)
 	resolved = List.fold(
-		step.messages,
+		program_input.messages,
 		model,
 		|current, message|
 			match message {
@@ -81,9 +79,9 @@ update = |model, step| {
 		status: if save copy.saving else resolved.status,
 	}
 
-	Program.static(next)
-		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
-		.with_tasks(if save [Program.screenshot("sunrise.png", |result| PostcardSaved(result))] else [])
+	App.next(next)
+		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+		.with_requests(if save [Capture.screenshot("sunrise.png", |result| PostcardSaved(result))] else [])
 }
 
 Palette : { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }

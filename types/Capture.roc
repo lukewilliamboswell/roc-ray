@@ -96,7 +96,7 @@ Capture := [].{
 		with_fps = |rec, value| { ..rec, fps: normalize_fps(value) }
 
 		## Return a recording that stops after this many captured frames. `0`
-		## records until a `Capture.stop` action is applied or the app exits.
+		## records until a `Capture.stop` command is applied or the app exits.
 		with_max_frames : Recording, U64 -> Recording
 		with_max_frames = |rec, value| { ..rec, max_frames: value }
 

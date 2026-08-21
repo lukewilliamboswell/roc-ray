@@ -4,13 +4,13 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Program
+import rr.Mouse
 import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
 ##
-## `Capture.set_virtual_mouse!` replaces only what the host reports on the
-## step, so the widget code below is ordinary hover and hit-test logic
+## `Mouse.set_source` replaces only what the host reports on the
+## input, so the widget code below is ordinary hover and hit-test logic
 ## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
 ## fake one, so what you see in the GIF is what a real click would do.
@@ -24,7 +24,7 @@ Model : {
 	pointer : { x : F32, y : F32 },
 	clicking : Bool,
 
-	## What `step.input.mouse` actually reported this frame, as distinct from the
+	## What `program_input.devices.mouse` actually reported this frame, as distinct from the
 	## scripted `pointer` above. Hover and press styling are drawn from this,
 	## so the recording shows what the app was really told.
 	mouse : { x : F32, y : F32 },
@@ -59,26 +59,22 @@ slider_track = { x: 60, y: 260, width: 370, height: 12 }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Capture: UI demo")
-			.with_size({ width: 490, height: 320 })
-			.with_frame_pacing(Capped(60))
-			.with_visible(Bool.False)
-			.with_output_dir("captures")
-			.with_recording(
-				Record(
-					Capture.default
-						.with_path("ui_demo.gif")
-						.with_format(Gif)
-						.with_fps(25)
-						.with_max_frames(recorded_frames)
-						.with_scale(Full)
-						.with_timing(FixedStep)
-						.with_cursor(DrawCursor),
-				),
-			),
-	),
+	App.default
+		.with_title("RocRay Capture: UI demo")
+		.with_size({ width: 490, height: 320 })
+		.with_frame_pacing(Capped(60))
+		.with_visible(Bool.False)
+		.with_output_dir("captures")
+		.with_recording(
+			Capture.default
+				.with_path("ui_demo.gif")
+				.with_format(Gif)
+				.with_fps(25)
+				.with_max_frames(recorded_frames)
+				.with_scale(Full)
+				.with_timing(FixedStep)
+				.with_cursor(DrawCursor),
+		),
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
@@ -110,15 +106,15 @@ prepare_counter_labels! = |font, index, acc|
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
 
 	# Where the pointer is *this* frame: the position commanded on the previous
 	# one, which the model already kept. Reading it back off `input.mouse` would
-	# work -- the host samples the scripted pointer into the step exactly as it
+	# work -- the host samples the scripted pointer into the input exactly as it
 	# does a hardware one -- but the app is the thing that scripted it, so it
 	# has no reason to ask the host what it already said.
 	mouse = model.pointer
@@ -140,21 +136,21 @@ update = |model, step| {
 			model.slider
 		}
 
-	# The scripted pointer is an action, so the platform installs it after this
+	# The scripted pointer is a command, so the platform installs it after this
 	# returns and before anything is drawn -- the same instant
-	# `Capture.set_virtual_mouse!` reached the host from inside an effectful
-	# update, and still a frame before the host samples it back.
-	pointer_action = Capture.set_virtual_mouse(
-		if pointer_step.clicking Capture.clicking_at(pointer_step.pos) else Capture.at(pointer_step.pos),
+	# the old effectful setter reached the host, and still a cycle before the
+	# host samples it back.
+	pointer_command = Mouse.set_source(
+		if pointer_step.clicking Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
 	)
-	actions =
+	commands =
 		if model.frame >= recorded_frames {
-			[pointer_action, Program.exit(0)]
+			[pointer_command, App.exit(0)]
 		} else {
-			[pointer_action]
+			[pointer_command]
 		}
 
-	Program.static({
+	App.next({
 		..model,
 		frame: model.frame + 1,
 		pointer: pointer_step.pos,
@@ -165,7 +161,7 @@ update = |model, step| {
 		toggled: toggled,
 		slider: slider,
 	})
-		.with_actions(actions)
+		.with_commands(commands)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

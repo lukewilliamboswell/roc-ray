@@ -4,13 +4,13 @@ app [Model, program] {
 }
 
 import rr.App
+import rr.Time
 import rr.Assets
 import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Keys
 import rr.Math
 import rr.Sprite
@@ -360,9 +360,9 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 ## How loud each effect is mixed.
 ##
 ## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
-## so every action has to name its sound's level -- a `Sound` has no volume of
+## so every command has to name its sound's level -- a `Sound` has no volume of
 ## its own to set in `init!` and inherit. These constants are the one place the
-## levels live, so an action cannot drift away from what the mix intends.
+## levels live, so an command cannot drift away from what the mix intends.
 collect_volume : F32
 collect_volume = 0.58
 
@@ -408,7 +408,7 @@ burst_duration = 0.36
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
 	|_startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
@@ -493,7 +493,7 @@ make_sounds! = || {
 
 	# Only the music sets a volume here. Every effect is played through a
 	# `Playback` that states its own, so setting one now would be a second
-	# source of truth that the next action overwrites anyway.
+	# source of truth that the next command overwrites anyway.
 	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 
@@ -711,7 +711,7 @@ hazard_color = |id|
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-input_axis : Input.Snapshot -> Math.Vec2
+input_axis : Devices.Snapshot -> Math.Vec2
 input_axis = |input| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
 	right = input.key_down(KeyRight) or input.key_down(KeyD)
@@ -992,20 +992,20 @@ advance_world = |level, world, input| {
 	}
 }
 
-## Turn a cycle's world events into the sound actions they ask for.
+## Turn a cycle's world events into the sound commands they ask for.
 ##
 ## Pure, because `update` is: nothing is played here, each event just names the
 ## playback it wants. The pan and pitch that used to be written immediately
 ## before a `play!` become that same sound's `Playback` parameters, so a
 ## parameter can no longer be left behind on the wrong sound -- note that a
 ## collected spark pans `collect` but pitches `sparkle`.
-play_step_events : Model, World.StepResult -> List(Program.Action)
+play_step_events : Model, World.StepResult -> List(App.Command)
 play_step_events = |model, result| {
 	sounds = model.sounds
 
-	var $actions = []
+	var $commands = []
 	for event in result.events {
-		event_actions =
+		event_commands =
 			match event {
 				DashStarted(pos) => [
 					sounds.dash
@@ -1030,20 +1030,20 @@ play_step_events = |model, result| {
 					}
 				}
 
-		$actions = List.concat($actions, event_actions)
+		$commands = List.concat($commands, event_commands)
 	}
-	$actions
+	$commands
 }
 
-## One cycle of play: the next model together with the actions it wants run.
+## One cycle of play: the next model together with the commands it wants run.
 ##
-## The actions travel back with the model rather than being fired here, and the
+## The commands travel back with the model rather than being fired here, and the
 ## caller concatenates them as it unwinds.
 ##
 ## The seconds to advance by are a plain parameter rather than a whole
-## `Time.Frame`: only the elapsed time is used, so the caller stays free to pass
+## `Time.Cycle`: only the elapsed time is used, so the caller stays free to pass
 ## a fixed step instead of whatever the last frame happened to take.
-advance_playing : Model, Input.Snapshot, F32 -> { model : Model, actions : List(Program.Action) }
+advance_playing : Model, Devices.Snapshot, F32 -> { model : Model, commands : List(App.Command) }
 advance_playing = |model, input, dt| {
 	result = advance_world(
 		model.level,
@@ -1057,39 +1057,39 @@ advance_playing = |model, input, dt| {
 
 	{
 		model: { ..model, world: result.world },
-		actions: play_step_events(model, result),
+		commands: play_step_events(model, result),
 	}
 }
 
 ## Space restarts from either end state, restoring the music to the level
 ## `Escaped` ducked it away from.
-restart_on_space : Model, Input.Snapshot -> { model : Model, actions : List(Program.Action) }
+restart_on_space : Model, Devices.Snapshot -> { model : Model, commands : List(App.Command) }
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
 		{
 			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
-			actions: [model.sounds.music.set_volume(music_volume)],
+			commands: [model.sounds.music.set_volume(music_volume)],
 		}
 	} else {
-		{ model, actions: [] }
+		{ model, commands: [] }
 	}
 
 ## No `!`: the sounds this frame plays and the exit Escape asks for are returned
-## as actions, and the platform applies them in order before `render!`.
+## as commands, and the platform applies them in order before `render!`.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	next = match model.world.state {
-		Playing => advance_playing(model, input, step.time.elapsed_seconds)
+		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
 		Won => restart_on_space(model, input)
 		GameOver => restart_on_space(model, input)
 	}
 
-	Program.static(next.model).with_actions(List.concat(exit_actions, next.actions))
+	App.next(next.model).with_commands(List.concat(exit_commands, next.commands))
 }
 
 ## The camera follows the (shaken) player position, so it is a pure function of

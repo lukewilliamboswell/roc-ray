@@ -193,12 +193,12 @@ Draw := [].{
 		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
 		## centre points directly, and a render target's dimensions are already
 		## `F32` on `Texture`. `Window.Snapshot.size` stays `I32` because it is
-		## also the thing `Window.set_size` sets.
+		## also the thing `Window.suggest_size` sets.
 		##
 		## Reach for this when laying something out against the surface -- a HUD
 		## in a corner, a title centred across the top. Layout decisions that
 		## `update` also has to make, such as which arrangement to use or what
-		## the pointer is over, belong on `step.window` where the rest of
+		## the pointer is over, belong on `input.window` where the rest of
 		## application logic can see them.
 		size! : Frame => FrameSize
 		size! = |_frame| DrawHost.frame_size!()

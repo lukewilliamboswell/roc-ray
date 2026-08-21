@@ -6,49 +6,46 @@
 ##
 ## Use `focused` and `minimized` to pause input or skip expensive work while the
 ## window is inactive.
+import rrt.Window as RrtWindow
+
 Window := [].{
 
 	## Window geometry and visibility sampled once for this cycle.
-	Snapshot : {
+	Snapshot : RrtWindow.Snapshot
 
-		## Logical drawing dimensions for this frame, in the same coordinate
-		## space as mouse input.
-		size : { width : I32, height : I32 },
-
-		## Whether the window currently has input focus.
-		focused : Bool,
-
-		## Whether the window is currently minimized.
-		minimized : Bool,
-	}
-
-	## Resize the window, as an action.
+	## Suggest a new logical window size to the window manager.
 	##
-	## The size is the logical drawing size, the same one `Snapshot.size`
-	## reports. Non-positive dimensions are ignored, because a window with no
-	## area has no drawing space to report back. The new size is visible to the
-	## `render!` that follows in the same cycle.
-	set_size : { width : I32, height : I32 } -> [SetWindowSize({ width : I32, height : I32 }), ..]
-	set_size = |size| SetWindowSize(size)
+	## Non-positive dimensions are ignored. A valid suggestion is issued once in
+	## command order, but the backend or window manager controls the resulting
+	## geometry. Observe the latest accepted size through a later `Snapshot`;
+	## this command does not promise that the following presentation has changed.
+	suggest_size : { width : I32, height : I32 } -> [SuggestWindowSize({ width : I32, height : I32 }), ..]
+	suggest_size = |size| SuggestWindowSize(size)
 
-	## Set the smallest size the window can be dragged down to, as an action.
+	## Suggest the smallest size the window can be dragged down to.
 	##
 	## Each negative dimension is clamped to `0`, leaving that axis
 	## unconstrained. A minimum only binds on a resizable window, so pair it
-	## with `App.default.with_resizable(Bool.True)`.
-	set_window_min_size : { width : I32, height : I32 } -> [SetWindowMinSize({ width : I32, height : I32 }), ..]
-	set_window_min_size = |size| SetWindowMinSize(size)
+	## with `App.default.with_resizable(Bool.True)`. The window manager may apply
+	## target-specific constraints; `Snapshot` remains the authoritative sample.
+	suggest_min_size : { width : I32, height : I32 } -> [SuggestWindowMinSize({ width : I32, height : I32 }), ..]
+	suggest_min_size = |size| SuggestWindowMinSize(size)
 
-	## Set raylib's CPU-side frame-rate cap, as an action.
+	ClipboardReadError : [Unavailable, TooLarge, Busy]
+
+	read_clipboard : (Try(Str, ClipboardReadError) -> msg) -> [ReadClipboard({ callback : Try(Str, ClipboardReadError) -> msg }), ..]
+	read_clipboard = |callback| ReadClipboard({ callback: callback })
+
+	## Set raylib's CPU-side frame-rate cap, as a command.
 	##
 	## Values at or below zero render uncapped. This neither selects a software
 	## renderer nor controls VSync.
 	set_target_fps : I32 -> [SetTargetFps(I32), ..]
 	set_target_fps = |fps| SetTargetFps(fps)
 
-	## Replace the system clipboard contents, as an action.
+	## Replace the system clipboard contents, as a command.
 	##
-	## Reading it back is a `Program.read_clipboard` task instead, because a read has an
+	## Reading it back is a `Window.read_clipboard` request instead, because a read has an
 	## answer to deliver.
 	set_clipboard_text : Str -> [SetClipboardText(Str), ..]
 	set_clipboard_text = |text| SetClipboardText(text)

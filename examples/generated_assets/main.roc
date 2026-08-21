@@ -8,10 +8,9 @@ import rr.Assets
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Input
+import rr.Devices
 import rr.Math
 import rr.Mouse
-import rr.Program
 import rr.Text
 
 PaintState := [Idle, Painted(U64)].{
@@ -49,7 +48,7 @@ canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
 
 ## The brush is quiet next to the tone it is generated from. Named once because
-## `init!` applies it to the sound and every `PlaySound` action carries it again:
+## `init!` applies it to the sound and every `PlaySound` command carries it again:
 ## a `Playback` states all three settings, so it would otherwise reset to full
 ## volume the first time a pitch is chosen.
 paint_volume : F32
@@ -80,9 +79,9 @@ initial_pixels = List.map_with_index(
 	},
 )
 
-init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed, UploadBudgetExceeded])
+init! : App.Init(Model, [PixelCountMismatch, ResourceLimit, SoundGenerationFailed, TextureGenerationFailed])
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Pixel Workshop").with_frame_pacing(Capped(120)),
 	|_startup| {
 		font = Draw.default_font!()
 		texture = Assets.generate_color_texture!({ width: 16, height: 16, color: Color.white })?
@@ -106,7 +105,7 @@ init! = App.init(
 	},
 )
 
-palette_from_input : U64, Input.Snapshot -> U64
+palette_from_input : U64, Devices.Snapshot -> U64
 palette_from_input = |current, input|
 	if input.key_pressed(Key1) 0 else if input.key_pressed(Key2) 1 else if input.key_pressed(Key3) 2 else if input.key_pressed(Key4) 3 else current
 
@@ -133,10 +132,10 @@ cell_at = |point| {
 ## the two from drifting apart.
 Edited : {
 	model : Model,
-	actions : List(Program.Action),
+	commands : List(App.Command),
 }
 
-update_editor : Model, Input.Snapshot -> Edited
+update_editor : Model, Devices.Snapshot -> Edited
 update_editor = |model, input| {
 	palette = palette_from_input(model.palette, input)
 	base = { ..model, palette }
@@ -144,24 +143,24 @@ update_editor = |model, input| {
 	if input.key_pressed(KeyC) {
 		{
 			model: { ..base, pixels: initial_pixels, last_cell: Idle },
-			actions: [
+			commands: [
 				Assets.update_texture(base.texture, initial_pixels),
 				paint(base.paint_sound, 0.7),
 			],
 		}
 	} else if input.mouse.button_down(Left) {
 		match cell_at(input.mouse.position()) {
-			Err(_) => { model: { ..base, last_cell: Idle }, actions: [] }
+			Err(_) => { model: { ..base, last_cell: Idle }, commands: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
-					{ model: base, actions: [] }
+					{ model: base, commands: [] }
 				} else {
 					match base.pixels.set(index, palette_color(palette)) {
-						Err(_) => { model: base, actions: [] }
+						Err(_) => { model: base, commands: [] }
 						Ok(pixels) => {
 							{
 								model: { ..base, pixels, last_cell: Painted(index) },
-								actions: [
+								commands: [
 									# One cell changed, so one cell is uploaded.
 									# Re-uploading the whole canvas would send
 									# 256 pixels to say something about one.
@@ -183,7 +182,7 @@ update_editor = |model, input| {
 				}
 			}
 	} else {
-		{ model: { ..base, last_cell: Idle }, actions: [] }
+		{ model: { ..base, last_cell: Idle }, commands: [] }
 	}
 }
 
@@ -191,7 +190,7 @@ update_editor = |model, input| {
 ##
 ## Pitch and playback travel as a single `Playback`, so a stroke can no longer be
 ## heard at the previous stroke's pitch.
-paint : Audio.Sound, F32 -> Program.Action
+paint : Audio.Sound, F32 -> App.Command
 paint = |sound, pitch|
 	sound.playback().with_volume(paint_volume).with_pitch(pitch).play()
 
@@ -204,15 +203,15 @@ draw_swatch! = |frame, index, selected| {
 
 ## A mismatched pixel count is no longer this function's problem: the check
 ## happens where the upload does, when the platform applies the `UpdateTexture`
-## action, and a failure ends the cycle exactly as
+## command, and a failure ends the cycle exactly as
 ## `Assets.update_texture!(texture, pixels)?`
 ## used to. So the error type is the same one every other example has.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	next = update_editor(model, input)
 	mouse = input.mouse.position()
@@ -223,10 +222,10 @@ update = |model, step| {
 		},
 	)
 
-	Program.static({ ..next.model, mouse })
-		.with_actions(exit_actions)
-		.with_actions(next.actions)
-		.with_action(cursor)
+	App.next({ ..next.model, mouse })
+		.with_commands(exit_commands)
+		.with_commands(next.commands)
+		.with_command(cursor)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

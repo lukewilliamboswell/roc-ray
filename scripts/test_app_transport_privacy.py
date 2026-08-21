@@ -44,6 +44,22 @@ CASES = (
         ("package module is private", "`rr.File`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "app_host_module.roc",
+        ("package module is private", "`rr.AppHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "app_transport_type.roc",
+        ("type not exposed", "The type RawResponse"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "program_module_removed.roc",
+        ("package module is private", "`rr.Program`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "input_module_removed.roc",
+        ("package module is private", "`rr.Input`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "texture_handle_manufacture.roc",
         ("cannot use opaque nominal type", "instance of Texture.Handle"),
     ),

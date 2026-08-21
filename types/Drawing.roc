@@ -9,11 +9,11 @@ frame.Drawable(font) :
 		frame.rectangle! : frame, { x : F32, y : F32, width : F32, height : F32, style : { fill : [NoFill, Fill(Color.Rgba)], stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })] } } => {},
 		frame.rounded_rectangle! : frame, { x : F32, y : F32, width : F32, height : F32, radius : F32, segments : I32, style : { fill : [NoFill, Fill(Color.Rgba)], stroke : [NoStroke, Stroke({ color : Color.Rgba, thickness : F32 })] } } => {},
 		frame.text! : frame, { pos : Math.Vec2, text : Str, size : F32, spacing : F32, color : Color.Rgba, font : font, align : { horizontal : [Left, Center, Right], vertical : [Top, Middle, Bottom] } } => {},
-		frame.texture! : frame, Frame.TextureDraw => {},
+	frame.texture! : frame, Drawing.TextureDraw => {},
 		frame.with_scissor! : frame, Math.Rect, (frame => Try({}, [ScopeLimit])) => Try({}, [ScopeLimit]),
 	]
 
-Frame := [].{
+Drawing := [].{
 
 	Fill : [NoFill, Fill(Color.Rgba)]
 

@@ -8,7 +8,6 @@ import rr.Assets
 import rr.Color
 import rr.Draw
 import rr.Math
-import rr.Program
 import rr.Text
 
 ## A sprite fountain that draws every particle in a single hosted call.
@@ -126,12 +125,10 @@ to_instance = |particle| {
 
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Particles")
-			.with_size({ width: 800, height: 600 })
-			.with_frame_pacing(Capped(120)),
-	),
+	App.default
+		.with_title("RocRay Particles")
+		.with_size({ width: 800, height: 600 })
+		.with_frame_pacing(Capped(120)),
 	|_startup| {
 		sprite = Assets.generate_color_texture!({ width: 8, height: 8, color: Color.white })?
 		font = Draw.default_font!()
@@ -144,24 +141,24 @@ init! = App.init(
 	},
 )
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
-	dt = F32.min(step.time.elapsed_seconds, 0.05)
+	dt = F32.min(program_input.time.elapsed_seconds, 0.05)
 	spread = if input.key_down(KeySpace) 1.9 else 0.7
 	pointer = input.mouse.position()
 	emitter =
 		if pointer.x == 0 and pointer.y == 0 {
-			{ x: I32.to_f32(step.window.size.width) / 2, y: I32.to_f32(step.window.size.height) / 3 }
+			{ x: I32.to_f32(program_input.window.size.width) / 2, y: I32.to_f32(program_input.window.size.height) / 3 }
 		} else {
 			pointer
 		}
 
 	particles = List.map(model.particles, |particle| step_particle(particle, emitter, spread, dt))
 
-	Program.static({ ..model, particles: particles, instances: List.map(particles, to_instance) })
-		.with_actions(if input.key_pressed(KeyEscape) [Program.exit(0)] else [])
+	App.next({ ..model, particles: particles, instances: List.map(particles, to_instance) })
+		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

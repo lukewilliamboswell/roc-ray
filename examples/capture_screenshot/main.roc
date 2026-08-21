@@ -1,9 +1,9 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
+import rr.Capture
 import rr.Color
 import rr.Draw
-import rr.Program
 import rr.Text
 
 ## Take a single screenshot, and show what the output sandbox refuses.
@@ -34,20 +34,18 @@ Model : {
 	settled : Bool,
 }
 
-## The task callback selects a message variant, so two screenshots completing
-## on one step need neither IDs nor completion filtering.
-Msg : [EscapingScreenshotFinished(Try({}, Program.ScreenshotError)), SavedScreenshotFinished(Try({}, Program.ScreenshotError))]
+## The request callback selects a message variant, so two screenshots completing
+## on one input need neither IDs nor completion filtering.
+Msg : [EscapingScreenshotFinished(Try({}, Capture.ScreenshotError)), SavedScreenshotFinished(Try({}, Capture.ScreenshotError))]
 
 program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.static_config(
-		App.default
-			.with_title("RocRay Capture: Screenshot")
-			.with_size({ width: 640, height: 360 })
-			.with_output_dir("shots"),
-	),
+	App.default
+		.with_title("RocRay Capture: Screenshot")
+		.with_size({ width: 640, height: 360 })
+		.with_output_dir("shots"),
 	|_startup|
 		{
 			font = Draw.default_font!()
@@ -65,43 +63,43 @@ init! = App.init(
 		},
 )
 
-## A screenshot can fail, and this app branches on that, so it is a task rather
-## than an action: the request goes out here and the outcome comes back on a
-## later step instead of being read off the call.
+## A screenshot can fail, and this app branches on that, so it is a request rather
+## than an command: the request goes out here and the outcome comes back on a
+## later input instead of being read off the call.
 ##
 ## The pixels are still this frame's -- the host reads the framebuffer at the
 ## end of the frame that asked, exactly where `Capture.screenshot!` read it --
 ## so only the report waits.
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	next = apply_messages(model, step.messages)
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	next = apply_messages(model, program_input.messages)
 
 	# `..` cannot reach outside the output directory, so this comes back as
 	# PathEscapesOutputDir rather than writing beside the example source.
 	escape_requested = input.key_pressed(KeyE)
-	save_requested = input.key_pressed(KeyS) or step.time.frame_count == 3
+	save_requested = input.key_pressed(KeyS) or program_input.time.cycle_count == 3
 
 	# Frame 3 asks and the host reads the framebuffer at the end of it, but the
 	# file is encoded and written off the frame thread, so the outcome arrives
-	# on whichever later step the write finished by. Wait for it rather than for
-	# a frame number: that is the whole difference between a task and an action.
+	# on whichever later input the write finished by. Wait for it rather than for
+	# a frame number: that is the whole difference between a request and an command.
 	# The frame cap is only so an unattended run cannot hang.
 	settled = next.settled
-	actions =
-		if input.key_pressed(KeyEscape) or (settled and step.time.frame_count > 4) or step.time.frame_count > 240 {
-			[Program.exit(0)]
+	commands =
+		if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {
+			[App.exit(0)]
 		} else {
 			[]
 		}
 
-	tasks =
+	requests =
 		List.concat(
-			if escape_requested [Program.screenshot("../escaped.png", |result| EscapingScreenshotFinished(result))] else [],
-			if save_requested [Program.screenshot("scene.png", |result| SavedScreenshotFinished(result))] else [],
+			if escape_requested [Capture.screenshot("../escaped.png", |result| EscapingScreenshotFinished(result))] else [],
+			if save_requested [Capture.screenshot("scene.png", |result| SavedScreenshotFinished(result))] else [],
 		)
 
-	Program.static(next).with_actions(actions).with_tasks(tasks)
+	App.next(next).with_commands(commands).with_requests(requests)
 }
 
 ## Apply every callback in host-observed order with one `List.fold` over the

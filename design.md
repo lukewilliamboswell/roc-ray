@@ -50,14 +50,14 @@ The vocabulary deliberately follows established meanings:
 | RocRay term | Meaning |
 | --- | --- |
 | `Model` | Application-owned state retained between host cycles |
-| `Program.Input(msg)` | Everything supplied to one state transition: sampled host state, interval events, and response messages |
+| `App.Input(msg)` | Everything supplied to one state transition: sampled host state, interval events, and response messages |
 | `update` | The pure transition function |
-| `Program.Transition(model, msg)` | The next model and the host work requested by that transition |
-| `Program.Command` | An ordered, current-host-cycle instruction that produces no response |
-| `Program.Request(msg)` | One finite request that produces exactly one later response message while the application remains alive |
+| `App.Transition(model, msg)` | The next model and the host work requested by that transition |
+| `App.Command` | An ordered, current-host-cycle instruction that produces no response |
+| `App.Request(msg)` | One finite request that produces exactly one later response message while the application remains alive |
 | application `Message` or `msg` | Application data produced from a request response and delivered in a later `Input` |
 | `Draw.Frame` | Render-scoped authority for the active drawing surface |
-| host cycle | One `Program.Input`, one call to `update`, command application, request submission, and optional presentation |
+| host cycle | One `App.Input`, one call to `update`, command application, request submission, and optional presentation |
 | simulation step | Application-defined domain advancement performed zero or more times within one `update` |
 | presentation frame | One call to `render!` using the latest model |
 
@@ -119,8 +119,8 @@ The names also account for conventions that conflict across software domains:
 `Step`, `Action`, `Task`, and `Update` are therefore not synonyms retained for
 variety. They name different concepts elsewhere and are not used for these
 public roles. Likewise, `Context` is avoided because framework contexts usually
-carry capabilities or services, whereas `Program.Input` carries data only. A
-transition containing only a next model is constructed as `Program.next(model)`;
+carry capabilities or services, whereas `App.Input` carries data only. A
+transition containing only a next model is constructed as `App.next(model)`;
 *static* would falsely imply that the model did not change.
 
 ## Design goals
@@ -197,8 +197,8 @@ A RocRay program has three responsibilities:
 - `init!` validates startup configuration, performs one-time startup effects,
   and creates the initial model. Startup may load or allocate resources before
   interactive cycling begins.
-- `update` receives the current model and one `Program.Input`. It returns a
-  `Program.Transition` containing the next model, commands, and requests. It is
+- `update` receives the current model and one `App.Input`. It returns an
+  `App.Transition` containing the next model, commands, and requests. It is
   pure.
 - `render!` receives the resulting model and a `Draw.Frame`. It may issue
   drawing commands and frame-scoped draw-state changes, but it cannot change
@@ -212,8 +212,8 @@ sequenceDiagram
     participant App as Roc application
 
     loop Each host cycle
-        Host->>App: update(model, Program.Input)
-        App-->>Host: Program.Transition(next model, commands, requests)
+        Host->>App: update(model, App.Input)
+        App-->>Host: App.Transition(next model, commands, requests)
         Host->>Host: apply commands, then submit requests
         opt Presentation is scheduled
             Host->>App: render!(next model, Draw.Frame)
@@ -223,7 +223,7 @@ sequenceDiagram
 
     loop Each accepted request, outside application callbacks
         Host->>Host: execute request and stage one terminal response
-        Note over Host,App: its mapped Message appears in a later Program.Input
+        Note over Host,App: its mapped Message appears in a later App.Input
     end
 ```
 
@@ -235,7 +235,7 @@ scheduler; the observable contract remains the same.
 
 ### Host cycles, simulation steps, and presentation
 
-A host cycle supplies one fresh `Program.Input` and invokes `update` exactly
+A host cycle supplies one fresh `App.Input` and invokes `update` exactly
 once. After applying the resulting commands and submitting its requests, the
 host may invoke `render!` at most once with the resulting model. A graphical
 host normally presents every cycle; a headless, minimized, or deliberately
@@ -282,15 +282,15 @@ failure semantics.
 | Protocol | Direction | Timing and cardinality |
 | --- | --- | --- |
 | Startup authority | Host to `init!`, with direct startup operations | Once, before cycling |
-| `Program.Input(msg)` | Host to `update` | Exactly once per host cycle |
-| `Program.Command` | `update` to host | Zero or more, applied this host cycle, no response |
-| `Program.Request(msg)` | `update` to host and one response message back | Zero or more; response delivered in a later input |
+| `App.Input(msg)` | Host to `update` | Exactly once per host cycle |
+| `App.Command` | `update` to host | Zero or more, applied this host cycle, no response |
+| `App.Request(msg)` | `update` to host and one response message back | Zero or more; response delivered in a later input |
 | `Draw.Frame` | Host to `render!`, with draw calls back to host | Zero or one per host cycle; exactly one per presentation frame |
 
 Adding a sixth protocol is an architecture change. Adding a new value carried
 by one of these protocols is ordinarily an API change only.
 
-### Input: `Program.Input(msg)`
+### Input: `App.Input(msg)`
 
 `Input` is immutable data supplied to one call of `update`. It contains three
 kinds of information, which are not falsely presented as one atomic operating-
@@ -304,7 +304,7 @@ system snapshot:
   the order the host observed them.
 
 The contained keyboard, pointer, touch, and gamepad snapshot is named
-`devices`, not `input`. This keeps `Program.Input` distinct from one category
+`devices`, not `input`. This keeps `App.Input` distinct from one category
 inside it and avoids the unhelpful expression `input.input` in application
 code.
 
@@ -323,7 +323,7 @@ device input are sampled or buffered into `Input`. Demand-driven sources such
 as a socket or database cursor can instead expose repeated finite requests.
 Neither shape invokes application code from a background thread.
 
-### Current-cycle instructions: `Program.Command`
+### Current-cycle instructions: `App.Command`
 
 A command is closed, inspectable data describing an ordered host instruction
 to apply after `update` and before rendering. It is appropriate when relative
@@ -343,7 +343,7 @@ A command's verb states the strength of its guarantee. `Set` is reserved for a
 state change the capability profile promises to apply; a window-manager hint,
 for example, is named `Suggest` rather than pretending the host controls the
 final geometry. If success or failure itself changes application policy, the
-operation is a request or exposes later status in `Program.Input`.
+operation is a request or exposes later status in `App.Input`.
 
 That last rule is the command-coverage invariant. An apply-capable hosted
 operation without a corresponding command is dead public API: `update` cannot
@@ -356,7 +356,7 @@ status in `Input`. Capacity exhaustion is not a reason to silently drop a
 command. Purely checkable structural errors are rejected before any command in
 the transition is invoked.
 
-### Finite request/response work: `Program.Request(msg)`
+### Finite request/response work: `App.Request(msg)`
 
 A request is inert, declarative data describing one finite operation. It
 carries a pure response mapper from the operation's typed result into an
@@ -404,15 +404,15 @@ surface scope is open.
 Rendering may query narrowly frame-relative facts such as the dimensions of
 the active surface or metrics of a draw resource. Such a query may influence
 drawing only. Anything that must affect the next model, hit testing, commands,
-or requests also needs a representation in `Program.Input`.
+or requests also needs a representation in `App.Input`.
 
 ### Choosing a protocol
 
 | Need | Protocol |
 | --- | --- |
-| Latest ambient state or bounded interval events | `Program.Input` field |
-| Finite work whose terminal outcome matters | `Program.Request(msg)` |
-| Ordered current-host-cycle instruction with no response | `Program.Command` |
+| Latest ambient state or bounded interval events | `App.Input` field |
+| Finite work whose terminal outcome matters | `App.Request(msg)` |
+| Ordered current-host-cycle instruction with no response | `App.Command` |
 | Drawing or draw state ordered within a frame | `render!` and `Draw.Frame` |
 | One-time blocking load or allocation | `init!` startup authority |
 
@@ -424,8 +424,8 @@ synchronous application operation.
 
 Each host cycle has a fixed logical order:
 
-1. The host constructs `Program.Input`.
-2. Pure `update` computes one `Program.Transition`.
+1. The host constructs `App.Input`.
+2. Pure `update` computes one `App.Transition`.
 3. The platform validates the complete transition and applies its commands in
    list order.
 4. The host submits its requests in list order. Even a response available
@@ -577,7 +577,7 @@ capacity currently in use, filesystem contents, permissions, a peer, a child
 process, a device, a driver, or scheduling. Capacity exhaustion, missing files,
 denied permissions, network failures, process exits, recoverable device loss,
 and invalid external input therefore produce typed request responses or
-documented status in `Program.Input`. They do not corrupt state, grow memory
+documented status in `App.Input`. They do not corrupt state, grow memory
 without bound, or silently consume a response.
 
 The platform does not guess repairs that change application meaning. It does
@@ -588,7 +588,7 @@ retry non-idempotent operations, or downgrade a requested capability.
 
 Pure `update` makes determinism possible, but does not promise it by itself.
 The enduring guarantee is narrower and more useful: given the same model and
-the same complete `Program.Input`, `update` returns the same transition. All
+the same complete `App.Input`, `update` returns the same transition. All
 changing host facts enter through explicit input or request responses.
 
 Simulation time and wall time are distinct. Animation and physics use the
@@ -631,7 +631,7 @@ backend state and resources needed to execute the current ordered draw stream.
 Frame and nested target scopes define where a draw lands. The active surface
 may answer for its own dimensions and other geometry needed to interpret draw
 coordinates. Application layout and interaction decisions still use the
-corresponding `Program.Input` data so rendering does not become a second update
+corresponding `App.Input` data so rendering does not become a second update
 function.
 
 Draw primitives, 2D or 3D cameras, meshes, text, shaders, and post-processing
@@ -650,7 +650,7 @@ application model works.
 Finite request/response operations are requests. Immediate ordered
 instructions with no required result are commands. Long-lived native state
 uses a typed ARC handle. Continuously arriving bounded observations are sampled
-or buffered into `Program.Input`. Protocol state, serialization, retry policy,
+or buffered into `App.Input`. Protocol state, serialization, retry policy,
 queries, domain caching, and interpretation remain in Roc unless the host must
 own a narrowly defined piece for device or operating-system ownership, memory
 or concurrency safety, or a measured boundary-performance need.
@@ -663,7 +663,7 @@ platform does not turn a convenient feature into ambient, undocumented access
 to the machine.
 
 There is no arbitrary native-call facility and no effect-thunk escape hatch
-such as `Program.command(|| ...)`. An opaque closure would evade phase checks,
+such as `App.command(|| ...)`. An opaque closure would evade phase checks,
 command inspection, pure validation, capability profiles, and test assertions.
 New host work is represented by a typed command, request, input field, render
 operation, or startup capability.
@@ -751,7 +751,7 @@ rendering, audio input, runtime resource loading, or a web host. They determine
 the shape those features must take. Likewise, a future subscription API may
 provide ergonomics for a continuous source, but its implementation must still
 use commands or requests for explicit lifecycle work and bounded
-`Program.Input` observations. It does not add a background callback protocol or
+`App.Input` observations. It does not add a background callback protocol or
 weaken the one-response request invariant.
 
 ## Evaluating changes

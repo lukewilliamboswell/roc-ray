@@ -2,8 +2,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.Draw
 import rr.Color
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Random
 import rr.Audio
 import rr.App
@@ -12,7 +11,7 @@ import rr.Math
 # Pong v2 - first to 5 wins, then SPACE to restart.
 #
 # Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
-# Motion is in pixels/second scaled by the step's elapsed seconds (frame-rate
+# Motion is in pixels/second scaled by the input's elapsed seconds (frame-rate
 # independent).
 # Serves leave at a random angle. When someone reaches `win_score`, the game
 # freezes on a win screen until SPACE is pressed (edge-detected, so holding it
@@ -115,18 +114,18 @@ new_round = |model| {
 	}
 }
 
-# The actions for a sound that should only be heard when `cond` is true.
+# The commands for a sound that should only be heard when `cond` is true.
 #
 # An empty list is the no-op: nothing plays, and the caller can concatenate it
 # unconditionally instead of branching around it.
-play_if : Bool, Audio.Sound -> List(Program.Action)
+play_if : Bool, Audio.Sound -> List(App.Command)
 play_if = |cond, sound| if cond [sound.play()] else []
 
 program = { init!, update, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Pong")),
+	App.default.with_title("RocRay Pong"),
 	|startup| {
 		# Generate the sound effects once; new_round carries the handles forward.
 		seed = {
@@ -144,7 +143,7 @@ init! = App.init(
 			font: Draw.default_font!(),
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2_000_000_000))),
+			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
 		}
 
 		Ok(new_round(seed))
@@ -162,23 +161,23 @@ game_over = |model| model.left_score >= win_score or model.right_score >= win_sc
 ## so `update` joins them without caring which branch it took.
 Stepped : {
 	model : Model,
-	actions : List(Program.Action),
+	commands : List(App.Command),
 }
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 
 	# Seconds since the previous frame - the basis for all motion this frame.
-	dt = step.time.elapsed_seconds
+	dt = program_input.time.elapsed_seconds
 
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
 
-	Program.static(stepped.model).with_actions(List.concat(exit_actions, stepped.actions))
+	App.next(stepped.model).with_commands(List.concat(exit_commands, stepped.commands))
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -196,17 +195,17 @@ render! = |model, frame| {
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
-step_game_over : Model, Input.Snapshot -> Stepped
+step_game_over : Model, Devices.Snapshot -> Stepped
 step_game_over = |model, input| {
 	model: if input.key_pressed(KeySpace) new_round(model) else model,
-	actions: [],
+	commands: [],
 }
 
 # --- Active play ---
 ## Play is a function of the sampled input and how much time to advance by, so
 ## the caller passes both rather than a whole frame the stepper would only take
 ## one field from.
-step_playing : Model, Input.Snapshot, F32 -> Stepped
+step_playing : Model, Devices.Snapshot, F32 -> Stepped
 step_playing = |model, input, dt| {
 
 	# --- Left paddle: player input (W up, S down) ---
@@ -280,7 +279,7 @@ step_playing = |model, input, dt| {
 	# still heard on the frame it happened.
 	{
 		model: next,
-		actions: List.concat(
+		commands: List.concat(
 			play_if(hit_left or hit_right, model.hit_sound),
 			List.concat(
 				play_if(hit_top or hit_bottom, model.wall_sound),

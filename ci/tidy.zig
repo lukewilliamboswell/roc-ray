@@ -88,7 +88,7 @@ pub fn main(init: std.process.Init) !void {
     dead_files_detector.finish(&errors);
 
     try checkPlatformHeadersInSync(gpa, io, &errors);
-    try checkActionCoverage(gpa, io, &errors);
+    try checkCommandCoverage(gpa, io, &errors);
 
     if (errors.count > 0) {
         std.debug.print("\n{s}[FAIL]{s} Found {d} tidy violations\n", .{ TermColor.red, TermColor.reset, errors.count });
@@ -192,20 +192,20 @@ const Errors = struct {
 
     pub fn addMissingCoverageDocument(errors: *Errors) void {
         errors.emit(
-            "{s}: error: missing; every commit-phase hosted effect is recorded here\n",
-            .{action_coverage_path},
+            "{s}: error: missing; every apply-phase hosted effect is recorded here\n",
+            .{command_coverage_path},
         );
     }
 
-    pub fn addUncoveredAction(
+    pub fn addUncoveredCommand(
         errors: *Errors,
         line_number: usize,
         operation: []const u8,
     ) void {
         errors.emit(
-            "{s}:{d}: error: '{s}' is reachable during the commit phase but is not" ++
-                " named in {s}; give it an Action variant or record why it has none\n",
-            .{ host_native_path, line_number, operation, action_coverage_path },
+            "{s}:{d}: error: '{s}' is reachable during the apply phase but is not" ++
+                " named in {s}; give it a Command variant or record why it has none\n",
+            .{ host_native_path, line_number, operation, command_coverage_path },
         );
     }
 
@@ -746,26 +746,26 @@ fn checkPlatformHeadersInSync(gpa: Allocator, io: std.Io, errors: *Errors) !void
 }
 
 const host_native_path = "src/host_native.zig";
-const action_coverage_path = "docs/action-coverage.md";
+const command_coverage_path = "docs/command-coverage.md";
 
-/// Every hosted effect the commit phase admits must have an `Action` that
+/// Every hosted effect the apply phase admits must have a `Command` that
 /// reaches it, or a written reason why it does not.
 ///
-/// `update` is pure and `render!` only draws, so an `Action` is the whole of
+/// `update` is pure and `render!` only draws, so a `Command` is the whole of
 /// what a running app can change about host state. An effect the host accepts
-/// during the commit phase that no action asks for is reachable from `init!`
+/// during the apply phase that no command asks for is reachable from `init!`
 /// alone: the permission is a lie, and apps get a capability they can read
 /// about and not use. That is easy to introduce and invisible afterwards --
 /// nothing fails, the effect is simply unreachable -- so the decision is
-/// recorded in `docs/action-coverage.md` and checked here.
+/// recorded in `docs/command-coverage.md` and checked here.
 ///
 /// The check is deliberately a string search rather than anything cleverer:
 /// what it has to catch is a name that was never thought about, and a name
 /// present anywhere in the document has been.
-fn checkActionCoverage(gpa: Allocator, io: std.Io, errors: *Errors) !void {
+fn checkCommandCoverage(gpa: Allocator, io: std.Io, errors: *Errors) !void {
     const host_text = try std.Io.Dir.cwd().readFileAlloc(io, host_native_path, gpa, .limited(2 * MiB));
     defer gpa.free(host_text);
-    const coverage_text = std.Io.Dir.cwd().readFileAlloc(io, action_coverage_path, gpa, .limited(MiB)) catch {
+    const coverage_text = std.Io.Dir.cwd().readFileAlloc(io, command_coverage_path, gpa, .limited(MiB)) catch {
         errors.addMissingCoverageDocument();
         return;
     };
@@ -781,11 +781,11 @@ fn checkActionCoverage(gpa: Allocator, io: std.Io, errors: *Errors) !void {
         // The phase set is the second argument, on the same line as the name.
         const line_end = mem.indexOfScalarPos(u8, host_text, name_end, '\n') orelse host_text.len;
         const arguments = host_text[name_end..line_end];
-        if (mem.indexOf(u8, arguments, "during_commit") == null) continue;
+        if (mem.indexOf(u8, arguments, "during_apply") == null) continue;
 
         const operation = host_text[name_at..name_end];
         if (mem.indexOf(u8, coverage_text, operation) != null) continue;
-        errors.addUncoveredAction(mem.count(u8, host_text[0..call_at], "\n") + 1, operation);
+        errors.addUncoveredCommand(mem.count(u8, host_text[0..call_at], "\n") + 1, operation);
     }
 }
 

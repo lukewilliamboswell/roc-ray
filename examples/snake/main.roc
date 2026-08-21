@@ -1,11 +1,11 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
 
 import rr.App
+import rr.Time
 import rr.Audio
 import rr.Color
 import rr.Draw
-import rr.Input
-import rr.Program
+import rr.Devices
 import rr.Random
 import rr.Math
 
@@ -41,11 +41,11 @@ Model : {
 ## it made getting there.
 ##
 ## One frame can run several fixed steps, and each of them can crash or eat, so
-## the actions have to be carried out of the recursion rather than returned by
+## the commands have to be carried out of the recursion rather than returned by
 ## whichever step happened to be last.
 Stepped : {
 	model : Model,
-	actions : List(Program.Action),
+	commands : List(App.Command),
 }
 
 program = { init!, update, render! }
@@ -79,7 +79,7 @@ start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.static_config(App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120))),
+	App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120)),
 	|startup| {
 		seed = {
 			snake: start_snake,
@@ -94,7 +94,7 @@ init! = App.init(
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update` advances without an effect.
-			rng: Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2_000_000_000))),
+			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
 		}
 
 		Ok(new_game(seed))
@@ -166,7 +166,7 @@ spawn_food = |state, snake| {
 	{ cell: find_open_cell({ x: column.value, y: row.value }, snake, 0), state: row.state }
 }
 
-requested_direction : Model, Input.Snapshot -> Direction
+requested_direction : Model, Devices.Snapshot -> Direction
 requested_direction = |model, input| {
 	up = input.key_pressed(KeyUp) or input.key_pressed(KeyW)
 	down = input.key_pressed(KeyDown) or input.key_pressed(KeyS)
@@ -186,7 +186,7 @@ requested_direction = |model, input| {
 	}
 }
 
-apply_input : Model, Input.Snapshot -> Model
+apply_input : Model, Devices.Snapshot -> Model
 apply_input = |model, input| {
 	requested = requested_direction(model, input)
 	pending = if can_turn(model.direction, requested) requested else model.pending_direction
@@ -206,7 +206,7 @@ step_snake = |model| {
 	if hit_wall or hit_self {
 		{
 			model: { ..model, accumulator: 0, state: GameOver },
-			actions: [model.crash_sound.play()],
+			commands: [model.crash_sound.play()],
 		}
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
@@ -226,7 +226,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				actions: [model.eat_sound.play()],
+				commands: [model.eat_sound.play()],
 			}
 		} else {
 			{
@@ -238,7 +238,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				actions: [],
+				commands: [],
 			}
 		}
 	}
@@ -247,20 +247,20 @@ step_snake = |model| {
 ## Run as many fixed steps as the accumulator has paid for, carrying the sounds
 ## along.
 ##
-## `actions` is the running total rather than something the tail returns: a
+## `commands` is the running total rather than something the tail returns: a
 ## frame that catches up over three steps can eat twice and then crash, and all
 ## three sounds have to survive, in that order. Returning only the last step's
-## actions would silently drop the earlier ones.
-advance_fixed_steps : Model, List(Program.Action) -> Stepped
-advance_fixed_steps = |model, actions| {
+## commands would silently drop the earlier ones.
+advance_fixed_steps : Model, List(App.Command) -> Stepped
+advance_fixed_steps = |model, commands| {
 	if model.accumulator < step_time {
-		{ model, actions }
+		{ model, commands }
 	} else {
 		stepped = step_snake({ ..model, accumulator: model.accumulator - step_time })
-		so_far = List.concat(actions, stepped.actions)
+		so_far = List.concat(commands, stepped.commands)
 		match stepped.model.state {
 			Playing => advance_fixed_steps(stepped.model, so_far)
-			GameOver => { model: stepped.model, actions: so_far }
+			GameOver => { model: stepped.model, commands: so_far }
 		}
 	}
 }
@@ -270,9 +270,9 @@ advance_fixed_steps = |model, actions| {
 ##
 ## `dt` arrives already bounded rather than being read from a frame here: this
 ## takes the seconds it should advance by, so a caller can hand it a real
-## frame's elapsed time or a fixed step without inventing a `Time.Frame` that
+## cycle's elapsed time or a fixed step without inventing a `Time.Cycle` that
 ## never happened.
-advance_playing : Model, Input.Snapshot, F32 -> Stepped
+advance_playing : Model, Devices.Snapshot, F32 -> Stepped
 advance_playing = |model, input, dt| {
 	input_model = apply_input(model, input)
 	accumulator = input_model.accumulator + dt
@@ -282,31 +282,31 @@ advance_playing = |model, input, dt| {
 
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
-	exit_actions = if input.key_pressed(KeyEscape) [Program.exit(0)] else []
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
+	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
 	# step remainder so normal frame-rate variation does not change game speed.
-	dt = Math.clamp(step.time.elapsed_seconds, 0, 0.25)
+	dt = Math.clamp(program_input.time.elapsed_seconds, 0, 0.25)
 
 	stepped = match model.state {
 		Playing => advance_playing(model, input, dt)
 		GameOver =>
 			if input.key_pressed(KeySpace) {
-				{ model: new_game(model), actions: [model.start_sound.play()] }
+				{ model: new_game(model), commands: [model.start_sound.play()] }
 			} else {
-				{ model, actions: [] }
+				{ model, commands: [] }
 			}
 		}
 
-	# The two independently-owned updates combine through Program's applicative
+	# The two independently-owned updates combine through App's applicative
 	# instance. Fields combine in source order, preserving exit-before-game sound
 	# ordering while the final map selects the whole game model.
-	exit_update = Program.static({}).with_actions(exit_actions)
-	game_update = Program.static(stepped.model).with_actions(stepped.actions)
-	{ exit: exit_update, game: game_update }.Program.map(|updates| updates.game)
+	exit_update = App.next({}).with_commands(exit_commands)
+	game_update = App.next(stepped.model).with_commands(stepped.commands)
+	{ exit: exit_update, game: game_update }.App.map(|updates| updates.game)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

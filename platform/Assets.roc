@@ -100,28 +100,7 @@ Assets := [].{
 		pixels : List(Color.Rgba),
 	}
 
-	## How many bytes of texture upload one cycle may ask for.
-	##
-	## A frame has a fixed upload budget because an upload enters the graphics
-	## driver synchronously and a driver call is not free. `init!` is exempt:
-	## startup is not a frame, and an app builds its atlases there.
-	##
-	## Going over is not fatal. Actions apply in order, and the first upload that
-	## does not fit is skipped along with every upload after it in the same
-	## cycle; those textures keep the contents they already had, and every action
-	## that is not an upload still runs. So an app that guesses wrong loses a
-	## frame of pixels rather than the process.
-	##
-	## Exposed so an app that generates pixels can stay inside the budget rather
-	## than discover it a frame late. `Program.check_uploads` answers the same
-	## question over a whole cycle's actions and stops exactly where the platform
-	## stops, which is the form worth reaching for.
-	##
-	## Mirrors `MAX_TEXTURE_UPLOAD_BYTES_PER_FRAME` in `src/host_native.zig`.
-	max_upload_bytes_per_step : U64
-	max_upload_bytes_per_step = 4 * 1024 * 1024
-
-	## What uploading these pixels costs against the budget: four bytes each.
+	## The byte size of an RGBA pixel list: four bytes per pixel.
 	upload_bytes : List(Color.Rgba) -> U64
 	upload_bytes = |pixels| List.len(pixels) * 4
 
@@ -192,16 +171,16 @@ Assets := [].{
 
 	## Replace every pixel. The row-major RGBA list must exactly match the
 	## texture dimensions and is borrowed only for this host call.
-	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, UploadBudgetExceeded, ..])
+	update_texture! : Texture, List(Color.Rgba) => Try({}, [PixelCountMismatch, ..])
 	update_texture! = |texture, pixels|
 		whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
 
-	## Replace every pixel, as an action a pure `update` can return.
+	## Replace every pixel, as a command a pure `update` can return.
 	update_texture : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
 	update_texture = |texture, pixels| UpdateTexture({ texture, pixels })
 
 	## Replace one rectangle of a texture, paying only for that rectangle.
-	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
 		region_result(
 			AssetsHost.update_texture_region!({
@@ -214,7 +193,7 @@ Assets := [].{
 			}),
 		)
 
-	## Replace one rectangle, as an action a pure `update` can return.
+	## Replace one rectangle, as a command a pure `update` can return.
 	update_texture_region : Texture, Region -> [UpdateTextureRegion({ texture : Texture, region : Region }), ..]
 	update_texture_region = |texture, region| UpdateTextureRegion({ texture, region })
 
@@ -222,7 +201,7 @@ Assets := [].{
 	set_texture_filter! : Texture, TextureFilter => {}
 	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
-	## Change how this texture is sampled when scaled, as an action a pure
+	## Change how this texture is sampled when scaled, as a command a pure
 	## `update` can return.
 	set_texture_filter : Texture, TextureFilter -> [SetTextureFilter({ texture : Texture, filter : TextureFilter }), ..]
 	set_texture_filter = |texture, filter| SetTextureFilter({ texture, filter })
@@ -231,7 +210,7 @@ Assets := [].{
 	set_texture_wrap! : Texture, TextureWrap => {}
 	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
 
-	## Change how out-of-range texture coordinates are wrapped, as an action a
+	## Change how out-of-range texture coordinates are wrapped, as a command a
 	## pure `update` can return.
 	set_texture_wrap : Texture, TextureWrap -> [SetTextureWrap({ texture : Texture, wrap : TextureWrap }), ..]
 	set_texture_wrap = |texture, wrap| SetTextureWrap({ texture, wrap })
@@ -302,9 +281,6 @@ wrap_code = |wrap|
 
 ## Code the host returns when an upload exceeded the frame's budget.
 ## Mirrored in `src/host_native.zig`.
-upload_err_budget : U8
-upload_err_budget = 4
-
 ## Code the host returns for a region that hangs over the texture's edge.
 ## Mirrored in `src/host_native.zig`.
 upload_err_out_of_bounds : U8
@@ -312,25 +288,21 @@ upload_err_out_of_bounds = 3
 
 ## Decode the host's code for a whole-texture upload, which has no region to
 ## be out of bounds.
-whole_texture_result : U8 -> Try({}, [PixelCountMismatch, UploadBudgetExceeded, ..])
+whole_texture_result : U8 -> Try({}, [PixelCountMismatch, ..])
 whole_texture_result = |code|
 	if code == 0 {
 		Ok({})
-	} else if code == upload_err_budget {
-		Err(UploadBudgetExceeded)
 	} else {
 		Err(PixelCountMismatch)
 	}
 
 ## Decode the host's code for a region upload.
-region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, UploadBudgetExceeded, ..])
+region_result : U8 -> Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 region_result = |code|
 	if code == 0 {
 		Ok({})
 	} else if code == upload_err_out_of_bounds {
 		Err(RegionOutOfBounds)
-	} else if code == upload_err_budget {
-		Err(UploadBudgetExceeded)
 	} else {
 		Err(PixelCountMismatch)
 	}

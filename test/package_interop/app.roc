@@ -9,10 +9,9 @@ import rr.App
 import rr.Assets
 import rr.Color
 import rr.Draw
-import rr.Input
+import rr.Devices
 import rr.Keys
 import rr.Math
-import rr.Program
 import rrt.Font
 import adapter.Input as Events
 
@@ -41,14 +40,14 @@ Model : {
 program = { init!, update, render! }
 
 ## `init!` receives an `App.Startup`: authority, with nothing sampled yet. The
-## first `Step` supplies the clock, so `started` is latched there.
+## first `App.Input` supplies the clock, so `started` is latched there.
 ##
 ## The texture is generated here and immediately handed to the package. Only the
 ## platform could have produced it and only the platform can upload to it, but
 ## the package can hold and measure it -- the whole point of the split.
 init! : App.Init(Model, [TextureGenerationFailed, ResourceLimit])
 init! = App.init(
-	App.static_config(App.default),
+	App.default,
 	|_startup| {
 		font = Draw.default_font!()
 		label = "idle"
@@ -76,11 +75,11 @@ solve_layout = |font, label| {
 	{ label: label_size, label_pos: { x: 10, y: 10 } }
 }
 
-## `input` is the platform's nominal `Input.Snapshot`; `KeyW` is the platform's
-## re-exported `KeyboardKey`. The event comes back carrying that same key type,
+## `input` is the platform's nominal `Devices.Snapshot`; `KeyW` is the platform's
+## re-exported `Key`. The event comes back carrying that same key type,
 ## and the platform's `Keys.key_code` accepts it -- a full round trip through a
 ## package that only ever depended on `roc-ray-types`.
-label_for : Input.Snapshot -> Str
+label_for : Devices.Snapshot -> Str
 label_for = |input|
 	match Events.key_event(input, KeyW) {
 		KeyDown(key) => if Keys.key_code(key) == 87 "W held" else "other key"
@@ -94,9 +93,9 @@ label_for = |input|
 ## platform's re-exports and the package's own types are the same nominals.
 Msg : []
 
-update : Model, Program.Step(Msg) -> Program.Update(Model, Msg)
-update = |model, step| {
-	input = step.input
+update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
+update = |model, program_input| {
+	input = program_input.devices
 
 	# `input.mouse` and `input.gamepads` are package-owned nominals reached
 	# through the platform's snapshot.
@@ -110,8 +109,8 @@ update = |model, step| {
 	}
 
 	# Timing is its own observation now, so the package gets it from
-	# `step.time` rather than from the input snapshot.
-	started = if step.time.frame_count == 0 step.time.timestamp_nanos else model.started
+	# `program_input.time` rather than from the input snapshot.
+	started = if program_input.time.cycle_count == 0 program_input.time.simulation_nanos else model.started
 	label = label_for(input)
 
 	# Interaction resolves against the retained previous layout. The next layout
@@ -127,19 +126,19 @@ update = |model, step| {
 	# one the host owns.
 	sized = Events.describe(model.swatch)
 
-	Program.static({
+	App.next({
 		started,
 		label: next_label,
 		clicked,
 		padded,
-		age: Events.age_seconds(started, step.time.timestamp_nanos),
+		age: Events.age_seconds(started, program_input.time.simulation_nanos),
 		font: model.font,
 		layout,
 		layout_passes: model.layout_passes + 1,
 		swatch: Events.retained(sized),
 		swatch_aspect: sized.aspect,
 	})
-		.with_actions(if input.key_pressed(KeyQ) [Program.exit(0)] else [])
+		.with_commands(if input.key_pressed(KeyQ) [App.exit(0)] else [])
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

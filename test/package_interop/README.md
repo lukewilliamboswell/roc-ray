@@ -11,7 +11,7 @@ same name, so `exposes` and every existing app are unchanged.
 ## What moved, and what cannot
 
 Moved: `Keys`, `Mouse`, `Gamepad`, `Time`, `Math`, `Camera`, `Physics`, `Color`,
-plus the platform-independent `Font`, `Texture`, and `Frame` contracts.
+plus the platform-independent `Font`, `Texture`, and `Drawing` contracts.
 
 `Color` needed reshaping first. A module file must declare a nominal matching
 its filename and that declaration cannot be an alias, so a module whose object
@@ -29,8 +29,8 @@ since the types inside them are separate nominals.
 - `input_adapter/` — a package depending **only** on `roc-ray-types`, never on
   the platform.
 - `app.roc` — runs on the platform and passes it the platform's
-  `Input.Snapshot`, `input.mouse`, `input.gamepads`, and a re-exported
-  `KeyboardKey`, then feeds the returned key back into `rr.Keys.key_code`.
+  `Devices.Snapshot`, `input.mouse`, `input.gamepads`, and a re-exported
+  `Key`, then feeds the returned key back into `rr.Keys.key_code`.
   It also retains the previous layout for hit testing, measures the next layout
   once in `update`, stores it in the model, and renders only stored commands.
 
@@ -91,7 +91,7 @@ behaviour but not the documentation.
 `roc docs types/main.roc` produces those pages in full, so the fix is to
 publish the package's docs alongside the platform's and link between them. That
 has to be part of the release process before this ships, or the published API
-reference silently loses every `Camera2D`, `Mouse.State`, and `ConnectedPad`
+reference silently loses every `Camera2D`, `Mouse.Snapshot`, and `Gamepad.View`
 method. Note this is the same `roc docs` behaviour that hid the startup `Config`
 receivers entirely until they were moved into an exposed module.
 

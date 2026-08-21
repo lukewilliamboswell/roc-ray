@@ -166,18 +166,18 @@ def steady_update_bytes(rows: list[dict[str, int]]) -> int:
     return int(statistics.median(row["update_bytes"] for row in rows))
 
 
-def check_set_copies_once(rows: list[dict[str, int]]) -> list[str]:
+def check_copies_once(rows: list[dict[str, int]], pattern: str) -> list[str]:
     """One copy of the list per frame: no more (regression), no less (fixed)."""
     measured = steady_update_bytes(rows)
     one_copy = POINT_COUNT * ELEMENT_BYTES
     if measured > one_copy * 3 // 2:
         return [
-            f"set: {measured} bytes per frame is more than one copy of the list "
+            f"{pattern}: {measured} bytes per frame is more than one copy of the list "
             f"({one_copy}); something now copies the model more than once a frame"
         ]
     if measured < one_copy // 2:
         return [
-            f"set: {measured} bytes per frame is less than one copy of the list "
+            f"{pattern}: {measured} bytes per frame is less than one copy of the list "
             f"({one_copy}). The model's collections may be unique again -- if so, "
             "rerun with --require-in-place, make that the checked contract, and "
             "update the notes in platform/main.roc and platform/App.roc"
@@ -186,21 +186,22 @@ def check_set_copies_once(rows: list[dict[str, int]]) -> list[str]:
 
 
 def check_append_regrows_exactly(rows: list[dict[str, int]]) -> list[str]:
-    """Appending copies into an exact-sized allocation, so cost grows linearly.
+    """Appending copies once per frame, with target-specific allocation sizing.
 
-    An amortized grow would keep most frames flat and spike on a doubling. A
-    per-frame rise of exactly one element is the copy-on-write path instead.
+    Unix targets report the exact requested size, which rises by one element a
+    frame. Windows reports a stable allocation size across this short interval.
+    In both cases `check_copies_once` and the median reported by this probe
+    establish that the update still pays for one full list copy.
     """
     first, last = rows[0], rows[-1]
     span = last["cycle"] - first["cycle"]
     growth = last["update_bytes"] - first["update_bytes"]
-    expected = span * ELEMENT_BYTES
+    expected = 0 if IS_WINDOWS else span * ELEMENT_BYTES
     if growth != expected:
         return [
             f"append: cost grew {growth} bytes over {span} frames, expected "
-            f"{expected} (one element a frame). Appending no longer reallocates "
-            "to the exact new length every frame -- if growth is amortized now, "
-            "this check needs rewriting around the new behaviour"
+            f"{expected} on this target. The append allocation pattern changed; "
+            "recheck whether the model still incurs exactly one list copy per frame"
         ]
     return []
 
@@ -279,7 +280,11 @@ def main() -> int:
     if args.require_in_place:
         failures = check_in_place(set_rows, "set") + check_in_place(append_rows, "append")
     else:
-        failures = check_set_copies_once(set_rows) + check_append_regrows_exactly(append_rows)
+        failures = (
+            check_copies_once(set_rows, "set")
+            + check_copies_once(append_rows, "append")
+            + check_append_regrows_exactly(append_rows)
+        )
         # Always say where the invariant stands, so the gap between what is
         # checked and what is wanted never has to be rediscovered.
         outstanding = check_in_place(set_rows, "set")

@@ -49,6 +49,7 @@ update! = |model, input| {
 		# Spawned from inside `update!`: the task parks on its sleep before this
 		# frame is drawn, and `Woke` arrives on a later input.
 		Task.spawn!(
+			input,
 			|| {
 				Task.sleep!(sleep_millis)
 				Woke

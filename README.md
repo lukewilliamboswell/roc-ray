@@ -75,11 +75,15 @@ inside it -- `Task.sleep!` today -- parks the task, not the frame:
 ```roc
 Msg : [Woke]
 
-Task.spawn!(|| {
+Task.spawn!(input, || {
     Task.sleep!(300)
     Woke
 })
 ```
+
+The `input` is a witness that pins the closure's message type to your app's
+`Msg`; `Task.spawn!` never reads it. Only the platform's `main.roc` can name
+your `Msg` directly, so an `App.Input(Msg)` is how the rest of the API names it.
 
 A **request** is the same idea for the host's file, clipboard, and screenshot
 work: give the constructor a typed callback that turns its terminal result

@@ -97,7 +97,7 @@ update! = |model, input| {
 	if model.cycle == 0 {
 		url = model.url
 		config = model.config
-		Task.spawn!(|| fetch!(config, url))
+		Task.spawn!(input, || fetch!(config, url))
 	}
 	outcome = List.fold(input.messages, model.outcome, |current, message| judge(current, message, model.expectation))
 	next = { ..model, cycle: model.cycle + 1, outcome }

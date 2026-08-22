@@ -25,6 +25,7 @@ import Capture
 import Files
 import AppHost
 import AppTransport
+import TaskHost
 
 App := [].{
 
@@ -449,6 +450,16 @@ App := [].{
 		## Replace this input's sampled recording status.
 		with_capture : Input(msg), Capture.Status -> Input(msg)
 		with_capture = |Input.(sampled), capture| Input.({ ..sampled, capture: capture })
+
+		## Start a task whose message this input's own type pins.
+		##
+		## `Task.spawn!(input, || ...)` is the documented form and calls this;
+		## `input.spawn!(|| ...)` reads better when the input is already at
+		## hand. Both need the input for the same reason: it is the witness
+		## that ties the closure's return type to the app's `Msg`. See
+		## `Task.spawn!` for what the input is doing there.
+		spawn! : Input(msg), (() => msg) => {}
+		spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 	}
 
 	## The window size `Input.for_tests` reports. Ordinary rather than special:

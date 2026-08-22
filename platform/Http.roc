@@ -11,6 +11,7 @@
 ##     update! = |model, input| {
 ##         if input.devices.key_pressed(KeyR) {
 ##             Task.spawn!(
+##                 input,
 ##                 || match Http.get_utf8!("http://127.0.0.1:8000/data.json") {
 ##                     Ok(body) => Loaded(body)
 ##                     Err(err) => Failed(Inspect.to_str(err))

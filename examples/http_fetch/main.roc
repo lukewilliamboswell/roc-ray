@@ -17,7 +17,7 @@ import http.Response
 ##
 ## The whole request is one ordinary-looking line inside `Task.spawn!`:
 ##
-##     Task.spawn!(|| fetch!(url))
+##     Task.spawn!(input, || fetch!(url))
 ##
 ## `Http.get_utf8!` inside that closure looks synchronous and is: it returns
 ## the body, or an error, and nothing else happens in that task until it does.
@@ -113,7 +113,7 @@ update! = |model, input| {
 	refetch = model.cycle == 0 or input.devices.key_pressed(KeyR)
 	if refetch {
 		url = model.url
-		Task.spawn!(|| fetch!(url))
+		Task.spawn!(input, || fetch!(url))
 	}
 
 	if input.devices.key_pressed(KeyEscape) {

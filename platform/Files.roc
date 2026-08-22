@@ -8,7 +8,7 @@
 ##
 ##     update! = |model, input| {
 ##         if input.devices.key_pressed(KeyEnter) {
-##             Task.spawn!(|| SaveLoaded(Files.read_text!("save.json")))
+##             Task.spawn!(input, || SaveLoaded(Files.read_text!("save.json")))
 ##         }
 ##         Ok(model)
 ##     }

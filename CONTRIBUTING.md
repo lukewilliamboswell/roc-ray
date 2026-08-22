@@ -262,7 +262,14 @@ the `roc-ray-types` package at `www/<version>/types/`. Both are required.
 `roc docs` attaches a nominal's receivers to the module that *declares* it, so
 the platform's re-export modules carry the signatures while `Camera2D.with_zoom`,
 `Mouse.State.position` and the rest live only on the package's pages. Each
-re-export module links across.
+re-export module links across. Put a receiver's user-facing documentation on
+the module that declares the nominal, or it will not render anywhere.
+
+The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
+opened with ```` ```roc ````. It does not take markdown headings, bullet lists,
+`**bold**`, or four-space indented code: each of those reaches the page as
+literal text. Write examples in fences and structure a long module comment with
+short paragraphs.
 
 Build and validate both locally:
 

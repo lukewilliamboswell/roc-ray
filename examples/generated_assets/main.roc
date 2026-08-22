@@ -13,6 +13,14 @@ import rr.Math
 import rr.Mouse
 import rr.Text
 
+## A paint program whose canvas, palette, and brush sound are all generated at
+## startup: no image or audio files.
+##
+## The canvas is one `Assets.Texture`. Painting a cell uploads that one cell with
+## `Assets.update_texture_region!` rather than re-sending the whole grid. The
+## editor is pure -- it returns the next model and a list of `Edit`s -- so what
+## changed and what to do about it can never come apart, and `update!` is the
+## thin shell that performs them.
 PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
@@ -47,10 +55,9 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
 
-## The brush is quiet next to the tone it is generated from. Named once because
-## `init!` applies it to the sound and every `PlaySound` command carries it again:
-## a `Playback` states all three settings, so it would otherwise reset to full
-## volume the first time a pitch is chosen.
+## The brush is quiet next to the tone it is generated from. Named once, because
+## every `Play` edit has to state it: a `Playback` carries volume, pitch, and pan
+## together, so a stroke that names only its pitch would play at full volume.
 paint_volume : F32
 paint_volume = 0.35
 
@@ -206,8 +213,8 @@ draw_swatch! = |frame, index, selected| {
 }
 
 ## Perform one edit. A mismatched upload is a programmer error -- the editor
-## built pixels that do not fit the texture it also built -- so it stops the
-## app rather than being reported as a state the model could handle.
+## built pixels that do not fit the texture it also built -- so it stops the app
+## rather than becoming a state the model has to carry.
 perform_edit! : Assets.Texture, Edit => {}
 perform_edit! = |texture, edit| {
 	result =
@@ -285,3 +292,12 @@ render! = |model, frame| {
 
 	Ok({})
 }
+
+expect palette_from_input(0, Devices.none.with_key_pressed(Key3)) == 2
+expect palette_from_input(2, Devices.none) == 2
+
+## The canvas maps the pointer to a cell index; anything off it is `Outside`,
+## which is also what switches the cursor back to an arrow.
+expect cell_at({ x: canvas_x + cell_size * 1.5, y: canvas_y + cell_size * 2.5 }) == Ok(2 * grid_side + 1)
+expect cell_at({ x: canvas_x - 1, y: canvas_y }) == Err(Outside)
+expect cell_at({ x: canvas_x + canvas_size, y: canvas_y }) == Err(Outside)

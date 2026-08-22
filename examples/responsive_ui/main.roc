@@ -8,6 +8,13 @@ import rr.Math
 import rr.Mouse
 import rr.Text
 
+## A settings screen that rearranges itself as the window resizes.
+##
+## `layout_for` is a pure function of the surface size, and both callbacks call
+## it: `update!` to decide what the pointer is over, `render!` to draw. Nothing
+## about the geometry is stored, so the two can never disagree. The window is
+## resizable with a minimum size, and `with_exit_key(NoExitKey)` frees Escape
+## for the UI so the app owns shutdown itself.
 Selection := [Display, AudioSettings, Controls].{
 	is_eq : _
 }
@@ -157,9 +164,9 @@ draw_preview! = |frame, bounds, selection, ui, screen, simulation_nanos| {
 ## pointer is over) and `render!` (drawing it) derive the same value rather than
 ## storing it -- one less thing that can disagree with itself.
 ##
-## `update` gets the size from `program_input.window`, because which arrangement to use
-## is application logic. `render!` gets it from `frame.size!()`, because by then
-## it is a property of what is being drawn to.
+## `update!` gets the size from the input's window, because which arrangement to
+## use is application logic. `render!` gets it from `frame.size!()`, because by
+## then it is a property of what is being drawn to.
 Layout : {
 	margin : F32,
 	screen_h : F32,
@@ -259,4 +266,29 @@ render! = |model, frame| {
 	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_bottom_left })
 
 	Ok({})
+}
+
+## Selection wraps in both directions, so an arrow key never dead-ends.
+expect previous_selection(Display) == Controls
+expect next_selection(Controls) == Display
+expect keyboard_selection(Display, Devices.none.with_key_pressed(Key3)) == Controls
+expect keyboard_selection(Display, Devices.none) == Display
+
+## The wide layout puts the preview beside the nav; the narrow one stacks it
+## below. This is the only thing the 700px breakpoint does.
+expect {
+	wide = layout_for({ width: 960, height: 640 })
+	wide.preview.x > wide.nav.x + wide.nav.width
+}
+
+expect {
+	narrow = layout_for({ width: 480, height: 640 })
+	narrow.preview.y > narrow.nav.y + narrow.nav.height
+}
+
+## Every nav item stays inside the nav panel at either size, which is what
+## makes hit-testing against the same layout `render!` draws safe.
+expect {
+	view = layout_for({ width: 360, height: 360 })
+	view.display_bounds.x >= view.nav.x and view.controls_bounds.x + view.controls_bounds.width <= view.nav.x + view.nav.width
 }

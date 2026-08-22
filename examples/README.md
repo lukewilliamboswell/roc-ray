@@ -79,7 +79,7 @@ recommended starting point for a whole application.
 | [Post Process](post_process/main.roc) | Render textures, blend scopes, shaders, and cached uniform locations |
 | [Particles](particles/main.roc) | Thousands of sprites drawn as one batched instance list rather than one call each |
 | [Capture Plot](capture_plot/main.roc) | A deterministic hidden-window WebM batch render |
-| [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real input path |
+| [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real pointer and keyboard path |
 
 ## What these examples consider good practice
 

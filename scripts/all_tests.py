@@ -34,6 +34,10 @@ This script runs:
                     the frame loop keep running (test/udp).
 - virtual keys    - Script a keyboard and typed text and assert the edges and
                     codepoints the next cycle is handed (test/virtual_keys).
+- subprocess      - Run six commands through the machine's own shell from a
+                    task and assert the output, the deadline, the output caps,
+                    the error naming, and that the frame loop kept going
+                    (test/cmd).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -363,6 +367,47 @@ def run_file_write_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run file write probe"]
+
+
+def run_cmd_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that `Cmd.run!` starts a real program, bounds it, and parks.
+
+    Nothing else in the suite starts a subprocess, so a `run!` that captured
+    nothing, ignored its deadline, confused a missing program with a failing
+    one, or blocked the frame loop instead of parking its task would pass every
+    other stage. The probe runs six commands through the machine's own shell --
+    `/bin/sh`, or `cmd.exe` on Windows, chosen by the app itself -- and asserts
+    on what came back as well as on how many frames were drawn meanwhile.
+
+    Nothing it runs writes a file or reaches the network. Exit 3 means a
+    property did not hold; exit 4 means the task never answered.
+    """
+    fixture = root / "test" / "cmd" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning subprocess probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cmd")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build cmd probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build cmd probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=400",
+        ],
+        "run cmd probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run cmd probe"]
 
 
 def run_udp_probe(
@@ -1060,6 +1105,7 @@ def _run_example_stages(
         failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
         failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
+        failed.extend(run_cmd_probe(root, packages, args.verbose))
         failed.extend(run_sqlite_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))

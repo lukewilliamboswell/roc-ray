@@ -153,7 +153,8 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   command-line arguments, and environment access.
 - File reads, writes, directory listings, and metadata; standard output and
   error for headless and batch runs; an embedded SQLite database; UDP sockets;
-  and an HTTP client over the shared
+  external programs run as child processes with deadlines and output caps; and
+  an HTTP client over the shared
   [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
   types, with TLS through the system certificate store. Everything that waits
   runs on a task while the frame keeps drawing.

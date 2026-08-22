@@ -20,6 +20,7 @@ const http_effect = @import("http_effect.zig");
 const udp_effect = @import("udp_effect.zig");
 const sqlite_effect = @import("sqlite_effect.zig");
 const stdio_effect = @import("stdio_effect.zig");
+const cmd_effect = @import("cmd_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -28,6 +29,7 @@ const stdio_effect = @import("stdio_effect.zig");
 test {
     _ = http_effect;
     _ = sqlite_effect;
+    _ = cmd_effect;
 }
 
 // Import backend
@@ -1371,6 +1373,141 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
     active_phase = .idle;
     defer active_phase = resume_phase;
     return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+}
+
+/// This process's own environment, as `std.process.Environ`.
+///
+/// `Cmd.run!` needs it twice over: it is where a bare program name is resolved
+/// against `PATH`, and it is what a child inherits unless the command replaces
+/// it. `host_environ` is what `platform_main` captured off the process stack;
+/// under `zig test` no `platform_main` ran, so the libc-linked test binary
+/// reads the C runtime's own global instead of running the tests against an
+/// empty environment.
+fn hostProcessEnviron() std.process.Environ {
+    if (comptime builtin.os.tag == .windows) return .{ .block = .global };
+    if (host_environ.len != 0) {
+        const entries: [*:null]const ?[*:0]const u8 = @ptrCast(host_environ.ptr);
+        return .{ .block = .{ .slice = entries[0..host_environ.len :null] } };
+    }
+    if (comptime builtin.link_libc) {
+        var count: usize = 0;
+        while (std.c.environ[count] != null) : (count += 1) {}
+        const entries: [*:null]const ?[*:0]const u8 = @ptrCast(std.c.environ);
+        return .{ .block = .{ .slice = entries[0..count :null] } };
+    }
+    return .empty;
+}
+
+/// A run that started no child, carrying only its code.
+fn cmdRunFailure(code: u8) abi.CmdHostRunRetRecord {
+    return .{
+        .err = code,
+        .exit_code = 0,
+        .stdout = abi.RocListWith(u8, false).empty(),
+        .stderr = abi.RocListWith(u8, false).empty(),
+    };
+}
+
+/// Copy the command out of the Roc record into host-owned storage.
+///
+/// The copy is the point: the child runs on a blocking-pool worker, and a
+/// worker may not read a Roc value. Everything it needs -- the program, the
+/// arguments, the environment pairs, the working directory -- is duplicated
+/// into an arena the frame thread owns and discards when the run returns.
+fn copyCmdSpec(arena: std.mem.Allocator, args: abi.CmdHostRunArgs) ?cmd_effect.Spec {
+    const program = arena.dupe(u8, args.program.asSlice()) catch return null;
+    const working_dir = arena.dupe(u8, args.working_dir.asSlice()) catch return null;
+
+    const arg_items = args.args.items();
+    const copied_args = arena.alloc([]const u8, arg_items.len) catch return null;
+    for (arg_items, copied_args) |item, *slot| {
+        slot.* = arena.dupe(u8, item.asSlice()) catch return null;
+    }
+
+    const env_items = args.envs.items();
+    const copied_envs = arena.alloc(cmd_effect.EnvPair, env_items.len) catch return null;
+    for (env_items, copied_envs) |item, *slot| {
+        slot.* = .{
+            .name = arena.dupe(u8, item.name.asSlice()) catch return null,
+            .value = arena.dupe(u8, item.value.asSlice()) catch return null,
+        };
+    }
+
+    return .{
+        .program = program,
+        .args = copied_args,
+        .envs = copied_envs,
+        .clear_envs = args.clear_envs,
+        .working_dir = working_dir,
+        .timeout_ms = args.timeout_ms,
+        .stdout_limit_bytes = args.stdout_limit_bytes,
+        .stderr_limit_bytes = args.stderr_limit_bytes,
+    };
+}
+
+/// `Cmd.run!`: start one child process and park until it has finished.
+///
+/// A child slot is reserved before anything is copied or started, so a
+/// terminal `Busy` means precisely that no process was created.
+///
+/// The child itself runs through `std.Io.Threaded` on zio's blocking pool
+/// rather than through the runtime's own backend, for the same reason
+/// `writeFileWaiting` does: process creation and reaping are what that backend
+/// does not implement everywhere. The pool parks this coroutine the way the
+/// event loop would, and the worker sees only the host-owned copy `copyCmdSpec`
+/// made.
+///
+/// Both streams cross as ordinary copies rather than through the byte-list
+/// transfer path. A run produces two payloads where that path hands over one
+/// allocation per slot, and both are already bounded by limits the app stated.
+fn hostedCmdRun(roc_host: *RocHost, args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord {
+    enforcePhase("Cmd.run!", during_wait);
+    defer args.decref(roc_host);
+
+    if (!cmd_effect.reserve()) return cmdRunFailure(cmd_effect.ERR_BUSY);
+    defer cmd_effect.release();
+
+    const allocator = allocatorFromHost(roc_host);
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const spec = copyCmdSpec(arena_state.allocator(), args) orelse
+        return cmdRunFailure(cmd_effect.ERR_SPAWN_FAILED);
+
+    const environ = hostProcessEnviron();
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("cmd", spec.timeout_ms);
+    defer AppTasks.traceResume("cmd");
+
+    const outcome = outcome: {
+        // No runtime means `init!` on a host whose task runtime never started,
+        // so the child runs inline the way a file write does there.
+        const rt = AppTasks.currentRuntime() orelse
+            break :outcome cmd_effect.run(allocator, environ, spec);
+        // A pool that would not take the work is reported rather than run
+        // here: this is the frame thread, and a command may wait a deadline
+        // the app chose to be as long as it likes.
+        var blocking = rt.spawnBlocking(cmd_effect.run, .{ allocator, environ, spec }) catch
+            break :outcome cmd_effect.Outcome{
+                .err = cmd_effect.ERR_SPAWN_FAILED,
+                .exit_code = 0,
+                .stdout = &.{},
+                .stderr = &.{},
+            };
+        break :outcome blocking.join();
+    };
+    defer outcome.deinit(allocator);
+
+    return .{
+        .err = outcome.err,
+        .exit_code = outcome.exit_code,
+        .stdout = abi.RocListWith(u8, false).fromSlice(outcome.stdout, roc_host),
+        .stderr = abi.RocListWith(u8, false).fromSlice(outcome.stderr, roc_host),
+    };
+}
+
+fn exportedCmdRun(args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord {
+    return hostedCmdRun(activeHost(), args);
 }
 
 /// `Udp.bind!`: open one IPv4 UDP socket and put it in the socket heap.
@@ -6563,6 +6700,7 @@ fn deinitResources() void {
     // before resource teardown. A non-zero value here would make the next app
     // lifetime under-admit reads.
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
+    std.debug.assert(cmd_effect.admittedCount() == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
     std.debug.assert(shader_heap.active() == 0);
@@ -6733,6 +6871,7 @@ comptime {
         @export(&exportedUdpBind, .{ .name = "roc_udp_bind" });
         @export(&exportedUdpSend, .{ .name = "roc_udp_send" });
         @export(&exportedUdpReceive, .{ .name = "roc_udp_receive" });
+        @export(&exportedCmdRun, .{ .name = "roc_cmd_run" });
     }
 }
 
@@ -8920,12 +9059,18 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // reservations, cleared before capture and resource teardown can touch the
     // buffers they bound.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
+    defer cmd_effect.clearAfterWorkStops();
 
     var app_tasks = AppTasks.init(allocator, hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
         std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
         return 1;
     };
     defer app_tasks.deinit();
+    // Registered after the registry's own teardown, so LIFO runs it first:
+    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // waiting on, so every child is ended before the runtime tries to join
+    // the worker holding one.
+    defer cmd_effect.killLiveChildren();
     app_tasks.activate();
     // `Http.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -9063,6 +9208,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     defer deinitResources();
     // A failed or early-exiting run must not poison the next app lifetime.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
+    defer cmd_effect.clearAfterWorkStops();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -9072,6 +9218,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         return 1;
     };
     defer app_tasks.deinit();
+    // Registered after the registry's own teardown, so LIFO runs it first:
+    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // waiting on, so every child is ended before the runtime tries to join
+    // the worker holding one.
+    defer cmd_effect.killLiveChildren();
     app_tasks.activate();
     // `Http.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry

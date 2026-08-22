@@ -47,6 +47,35 @@ Task := [].{
 	spawn! : App.Input(msg), (() => msg) => {}
 	spawn! = |input, task!| App.Input.spawn!(input, task!)
 
+	## Start a task whose message belongs to a component, wrapped into the
+	## app's own `Msg` on the way back.
+	##
+	## `spawn!` needs the closure to answer in the app's `Msg`, which forces a
+	## component to know the type of the app that hosts it. `spawn_with!`
+	## splits that in two: the closure answers in the component's own message
+	## type, and the parent supplies the constructor that lifts it.
+	##
+	##     # Counter.roc -- knows nothing about the app's Msg
+	##     Msg : [Loaded(U64), LoadFailed]
+	##     load! : () => Msg
+	##
+	##     # the app -- Msg : [CounterMsg(Counter.Msg), ...]
+	##     Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
+	##
+	## A bare tag name is not a function, so the wrapper is written as the
+	## lambda `|m| CounterMsg(m)` rather than as `CounterMsg`.
+	##
+	## The wrapper runs on the task's own coroutine, right after the closure
+	## returns and before the message is handed back, so it is ordinary pure
+	## code and not a second scheduled step.
+	##
+	## `input.spawn_with!(task!, wrap)` is the same effect written as a
+	## receiver. Everything `spawn!` says about the `App.Input` witness, about
+	## when a task's message arrives, and about which callbacks may spawn
+	## applies here unchanged.
+	spawn_with! : App.Input(msg), (() => a), (a -> msg) => {}
+	spawn_with! = |input, task!, wrap| App.Input.spawn_with!(input, task!, wrap)
+
 	## Wait at least `millis` without stalling the frame.
 	##
 	## Valid inside a task, where it parks the coroutine, and inside `init!`,

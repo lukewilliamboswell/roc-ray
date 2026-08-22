@@ -458,6 +458,14 @@ App := [].{
 		## `Task.spawn!` for what the input is doing there.
 		spawn! : Input(msg), (() => msg) => {}
 		spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
+
+		## Start a task that answers in a component's own message type, wrapped
+		## into this input's.
+		##
+		## `Task.spawn_with!(input, task!, wrap)` is the documented form and
+		## calls this. See it for the component idiom this exists for.
+		spawn_with! : Input(msg), (() => a), (a -> msg) => {}
+		spawn_with! = |input, task!, wrap| Input.spawn!(input, || wrap(task!()))
 	}
 
 	## The window size `Input.for_tests` reports. Ordinary rather than special:

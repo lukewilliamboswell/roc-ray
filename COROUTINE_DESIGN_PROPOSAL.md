@@ -1,18 +1,19 @@
 # Effectful update and coroutine-backed tasks for roc-ray
 
-Status: proposal, 2026-08-22. **Steps 1, 2, and the effects of step 4 are
-implemented on branch `spike-coro`** -- see "Spike status" below and
-`docs/spike-coro-findings.md` for the measurements. `App.Request` and
-`RequestQueue` remain until step 6.
+Status: proposal, 2026-08-22. **Steps 1, 2, the effects of step 4, and the
+HTTP client half of step 7 are implemented on branch `spike-coro`** -- see
+"Spike status" below and `docs/spike-coro-findings.md` for the measurements.
+`App.Request` and `RequestQueue` remain until step 6.
 
-**Blocked.** Message delivery is broken on the branch: a `Task.spawn!`
-closure's `Msg`, and a `Request`'s callback result, both reach `update!`
-with the wrong tag and a misread payload. It arrived with step 2's move of
-submission into hosted signatures that carry a type variable, and it means
-steps 4's port and step 6's deletion cannot be finished -- an app ported off
-`Request` onto tasks would receive nothing usable. `main` is unaffected.
-The bisection, the shapes that do not fix it, and the two ways forward are
-in `docs/spike-coro-findings.md`.
+**Blocked on a compiler bug.** An erased closure (`Box(() => msg)` or
+`Box(RawResponse -> Box(msg))`) that crosses a hosted boundary returns
+certain tag-union layouts with the wrong tag, or double-frees on release
+(native codegen only; the interpreter is fine). It is layout-dependent:
+`[A(U64), B(U64)]` and `[Num(U64), Text(Str)]` fail; `[Num(U64), Text(Str),
+Nothing]` and `[Fetched(U16, Str, U64), Failed(Str)]` pass. It affects
+`Task.spawn!` and `App.request!` alike, so step 4's example ports and step 6
+wait on the fix; root-causing is in progress against the roc checkout.
+`main` is unaffected. The bisection is in `docs/spike-coro-findings.md`.
 
 ## Spike status (2026-08-22, branch `spike-coro`)
 
@@ -87,6 +88,47 @@ compiler is the reference.
 Section 4.4's `map_msg` regression is real: a child component's tasks must
 produce the parent's `Msg`, and requests go through `App.map_request`. The
 `Task.spawn_with!` helper suggested there is not written yet.
+
+### Step 7 status: the HTTP client (2026-08-22)
+
+`Http` is implemented and issue #151 is answered. `Http.send!` is a hosted
+effect over `std.http.Client` given `rt.io()`, so it parks the calling
+coroutine and the frame loop keeps drawing. From Roc it is a plain
+synchronous call, exactly like basic-cli's -- which is the point: the task
+model, not a callback API, is what pays the 200 ms.
+
+The API mirrors basic-cli over the shared `roc-lang/http` `Request` and
+`Response` types (`send!`, `send_json!`, `get_utf8!`, `get!`,
+`decode_json_response`, `with_json_body`, `TransportErr`) and adds `Config`
+and `send_with!` from basic-webserver's hardened shape, because a dashboard
+polling a remote endpoint needs a deadline and a response cap. `Url` is
+vendored from basic-cli; the shared package has no URL type.
+
+Measured on this branch, headless at 60 Hz:
+
+| Question | Answer |
+|---|---|
+| Does a fetch keep the frame moving? | Yes. A localhost GET spawned on cycle 0 finished on cycle 1; `https://www.roc-lang.org/` (25 kB) finished on cycle 9, ~150 ms, with the ring in `examples/http_fetch` turning throughout. |
+| Does the phase guard reach it? | Yes. `Http.send!` from `update!` aborts with "It waits: call it inside `Task.spawn!` ... or in `init!`, where it blocks." From `init!` it blocks and succeeds. |
+| Does TLS work? | On Linux, yes, against a real `https://` host with the system store. macOS and Windows are unverified -- `Bundle.rescan` has paths for both, but no CI makes an HTTPS request there yet. |
+| Are the limits real? | Yes, and exact. A 56-byte body passes at `max_response_bytes: 56` and fails at 55; a 3 s route under a 300 ms deadline fails as `Timeout` on cycle 18. |
+| New link stubs for `roc build`? | None. `socket`, `connect`, `send`, `recv` and `getaddrinfo` are already in both glibc stubs from the `link_libc` work, and a stub-linked binary completed a real TLS fetch. |
+
+Two things it cost, both recorded in `docs/http.md`:
+
+* `zio.withTimeout` does not work for this. It converts a cancellation into
+  `error.Timeout` only when the wrapped call can return `error.Canceled`, and
+  `std.http`'s error sets have no such error -- a cancelled read surfaces as
+  `error.ReadFailed`, and a timed-out fetch was reported as `NetworkError`.
+  Arming `zio.AutoCancel` by hand, and asking the timer rather than the error
+  value, fixes it. Any future waiting effect built on `std` will hit this.
+* A Debug host archive grew 50.8 MB -> 88.1 MB, because `std.crypto`'s TLS
+  comes with it, four targets over. That pushed a locally bundled platform
+  past roc's default 100 MB transitive-dependency budget and broke *every*
+  app's build until the harness raised it. A `ReleaseFast` host, which is
+  what a release ships, is 9.9 MB.
+
+Still open from step 7: `Files.write_*!` and `Path`.
 
 
 This document proposes replacing the pure `update` / `Transition` /
@@ -626,11 +668,11 @@ enough to keep an enum layer for it. What exists instead:
    path, so it is not retired yet.
 5. **CI on all four targets**; link stubs the `roc build` path needs.
 6. **Delete** `Request` and everything under it. Regenerate the ABI.
-   *Blocked: `Task.spawn!` cannot yet carry a message, so nothing can be
-   ported off `Request`.*
-7. **Add what the critique asked for**: `Http.fetch!` (`std.http.Client`
-   over `rt.io()`; zio has an `http_client` example), `Files.write_*!`,
-   `Path`.
+   *Blocked: `Task.spawn!` cannot yet carry every message shape, so nothing
+   can be ported off `Request`.*
+7. **Add what the critique asked for**: `Http.send!` (`std.http.Client`
+   over `rt.io()`; zio has an `http_client` example) -- *done, out of
+   order, see "Step 7 status" above*; `Files.write_*!`, `Path`.
 
 ## 11. Summary for the two audiences
 

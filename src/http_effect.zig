@@ -201,7 +201,7 @@ pub fn send(roc_host: *abi.RocHost, allocator: std.mem.Allocator, args: Request)
 /// Every slice this produces is copied into the arena, so the Roc strings the
 /// caller owns can be released the moment `send` returns whatever happens.
 fn prepare(arena: std.mem.Allocator, io: std.Io, args: Request) ExchangeError!Exchange {
-    const method = try methodFromCode(args.method, args.method_ext.asSlice());
+    const method = try methodFromCode(args.method);
     const uri = std.Uri.parse(try arena.dupe(u8, args.uri.asSlice())) catch return error.UnsupportedUri;
 
     const body = try arena.dupe(u8, args.body.items());
@@ -321,8 +321,13 @@ fn copyHeaders(arena: std.mem.Allocator, head: std.http.Client.Response.Head) Ex
 /// `std.http.Method` is a closed enum of the nine RFC methods, so `QUERY` and
 /// any `Unknown(ext)` method cannot be put on the wire from here and are
 /// reported rather than silently rewritten.
-fn methodFromCode(code: u8, ext: []const u8) ExchangeError!std.http.Method {
-    _ = ext;
+///
+/// `Http.send_with!` refuses both before the effect runs, so this is kept as
+/// defence rather than as the reachable path: the host is a separate trust
+/// boundary from the Roc code above it, and code `2` is the one the wire can
+/// still carry. `request.method_ext` names the method Roc meant; nothing here
+/// can use it, because there is no `std.http.Method` to become.
+fn methodFromCode(code: u8) ExchangeError!std.http.Method {
     return switch (code) {
         0 => .CONNECT,
         1 => .DELETE,
@@ -506,10 +511,11 @@ fn tracePreview(body: []const u8) void {
 }
 
 test "a method code outside the nine standard methods is refused" {
-    try std.testing.expectEqual(std.http.Method.GET, try methodFromCode(3, ""));
-    try std.testing.expectEqual(std.http.Method.POST, try methodFromCode(7, ""));
+    try std.testing.expectEqual(std.http.Method.GET, try methodFromCode(3));
+    try std.testing.expectEqual(std.http.Method.POST, try methodFromCode(7));
     // 2 is basic-cli's code for QUERY and for every Unknown(ext) method.
-    try std.testing.expectError(error.UnsupportedMethod, methodFromCode(2, "QUERY"));
+    // `Http.send_with!` refuses those first; this is the host's own guard.
+    try std.testing.expectError(error.UnsupportedMethod, methodFromCode(2));
 }
 
 test "header bytes that would break the wire format are refused" {

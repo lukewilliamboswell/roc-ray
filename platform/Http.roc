@@ -88,6 +88,11 @@ Http := [].{
 	## Invalid URLs return `InvalidUrl` before any host effect occurs. Fragments
 	## are removed because they are client-side identifiers and are not sent.
 	##
+	## The method must be one of the nine RFC methods. `QUERY` and any
+	## `Unknown(ext)` method fail as `HttpErr(Other(...))` naming the method,
+	## also before any host effect occurs; see `check_method` for why that is
+	## `Other` and not a variant of its own.
+	##
 	## A `TimeoutMilliseconds` set on the request itself overrides the config's
 	## `timeout_ms`; `NoTimeout` on the request means the config's deadline is
 	## used, so a request built the ordinary way is never left without one.
@@ -107,6 +112,7 @@ Http := [].{
 	## ```
 	send_with! : Config, Request => Try(Response, [InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
 	send_with! = |config, request| {
+		check_method(Request.method(request)) ? HttpErr
 		url = Url.parse(Request.uri(request)) ? InvalidUrl
 		canonical = Url.without_fragment(url)
 		raw = HttpHost.send!(to_host_request(config, request, Url.to_str(canonical)))
@@ -184,6 +190,41 @@ Http := [].{
 	}
 }
 
+## Refuse a method this platform cannot put on the wire.
+##
+## `std.http.Method` in the host is a closed enum of the nine RFC methods, so
+## `QUERY` and any `Unknown(ext)` method have no representation there. The host
+## refuses them too, but only after the request has crossed the boundary and
+## been charged against its timeout. Deciding it here means nothing is built,
+## nothing is sent, and the failure is the same on every run.
+##
+## The refusal is an `Other` rather than a variant of its own. Both
+## `TransportErr` and `send!`'s error union are matched exhaustively by the apps
+## that read them, so a new variant would break every one of them -- for a
+## failure that only a request no host could send can reach. The message names
+## the method, which is what an app has to print either way.
+##
+## The host keeps its own refusal for the same codes. It is a separate trust
+## boundary, and its check is what makes `methodFromCode` total.
+check_method : Method.Method -> Try({}, Http.TransportErr)
+check_method = |method|
+	match method {
+		QUERY => Err(Other(Str.to_utf8(unsupported_method_message("QUERY"))))
+		Unknown(ext) => Err(Other(Str.to_utf8(unsupported_method_message(ext))))
+		_ => Ok({})
+	}
+
+## Say which method was refused. Written once, so the `expect`s below pin the
+## wording an app will print.
+unsupported_method_message : Str -> Str
+unsupported_method_message = |name|
+	"${name} is not a method this platform can send"
+
+expect check_method(GET) == Ok({})
+expect check_method(POST) == Ok({})
+expect check_method(QUERY) == Err(Other(Str.to_utf8("QUERY is not a method this platform can send")))
+expect check_method(Unknown("FROB")) == Err(Other(Str.to_utf8("FROB is not a method this platform can send")))
+
 ## Flatten a validated request for the host boundary.
 ##
 ## The URI is passed separately because the caller has already canonicalized
@@ -226,6 +267,10 @@ to_transport_err = |raw|
 	}
 
 ## basic-cli's numeric method codes, so the two hosts agree on the wire.
+##
+## `send_with!` refuses `QUERY` and `Unknown(_)` before this runs, so their
+## branches are unreachable from the public API. They stay because the match
+## has to be total, and `2` is the code the host refuses.
 to_host_method : Method.Method -> U8
 to_host_method = |method|
 	match method {
@@ -243,6 +288,10 @@ to_host_method = |method|
 	}
 
 ## Name the method when its code cannot: `QUERY`, and anything `Unknown`.
+##
+## Always `""` for a request `send_with!` accepted. The field stays on the wire
+## because it is part of the shape basic-cli's host reads, and because it is
+## what the host would need if it ever learned to send an extension method.
 to_host_method_ext : Method.Method -> Str
 to_host_method_ext = |method|
 	match method {

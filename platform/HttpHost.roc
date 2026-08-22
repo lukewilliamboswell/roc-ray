@@ -31,7 +31,10 @@ HttpHost := [].{
 	## A request, already validated by `Http` and flattened for the host.
 	##
 	## `method` is basic-cli's numeric method code and `method_ext` names the
-	## method when the code cannot (`QUERY`, and anything `Unknown`).
+	## method when the code cannot (`QUERY`, and anything `Unknown`). `Http`
+	## refuses both before this effect runs, so `method_ext` is empty on every
+	## request that gets here; the field stays because it is part of the shape
+	## basic-cli's host reads, and the host keeps its own refusal for it.
 	##
 	## `timeout_ms` of 0 means no deadline, matching basic-cli's
 	## `to_host_timeout`. `max_response_bytes` is a hard cap on the decompressed

@@ -30,7 +30,7 @@ roc build examples/snake/main.roc --output snake
 `update!` calls host effects directly, and most of them answer at once. Work
 that has to wait goes in `Task.spawn!(input, || ...)` instead: the closure runs
 on its own coroutine while the frame loop keeps drawing, and its return value
-arrives as a `Msg` on a later `input.messages`. These four are that idea, from
+arrives as a `Msg` on a later `input.messages`. These five are that idea, from
 the smallest version to the largest.
 
 | Example | What it is |
@@ -39,6 +39,7 @@ the smallest version to the largest.
 | [Async Read](async_read/main.roc) | Two file reads in flight at once, each with its own `Msg` variant, so neither needs an id |
 | [Capture Screenshot](capture_screenshot/main.roc) | A screenshot encoded and written off the frame thread, and the output-directory sandbox refusing a path that escapes it |
 | [HTTP Fetch](http_fetch/main.roc) | An HTTP GET on a task, re-fetchable mid-flight, with each reply carrying the id of the fetch it belongs to |
+| [UDP Cursor](udp_cursor/main.roc) | Two instances showing each other's pointer: a receiving task restarted each time it answers, and sends made straight from `update!` |
 
 ## Small apps worth copying
 

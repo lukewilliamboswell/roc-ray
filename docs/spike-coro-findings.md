@@ -230,7 +230,7 @@ The coroutine side needs no further proving; what remains is API work.
   and a plain `zig build` refetches it when the directory is absent
   (verified by moving it aside), so it is gitignored rather than committed.
 
-# Step 2: effectful `update!`, `Task.spawn!`, no command layer
+## Step 2: effectful `update!`, `Task.spawn!`, no command layer
 
 Same branch, 2026-08-22, on top of the spike. Reference compiler is still the
 pinned release nightly.

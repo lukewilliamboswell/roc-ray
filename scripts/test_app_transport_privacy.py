@@ -48,6 +48,10 @@ CASES = (
         ("package module is private", "`rr.AppHost`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "files_host_module.roc",
+        ("package module is private", "`rr.FilesHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "app_transport_type.roc",
         ("type not exposed", "The type RawResponse"),
     ),

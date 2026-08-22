@@ -60,6 +60,13 @@ pub fn Tasks(comptime Hooks: type) type {
             current = self;
         }
 
+        /// The runtime a waiting effect performs its IO through, or null when
+        /// no app is running (unit tests, or a runtime that would not start).
+        pub fn currentRuntime() ?*zio.Runtime {
+            const self = current orelse return null;
+            return self.rt;
+        }
+
         pub fn liveCount(self: *const Self) usize {
             return self.live.items.len;
         }

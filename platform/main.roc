@@ -86,6 +86,9 @@ platform ""
 		"roc_draw_text_raw": DrawHost.text!,
 		"roc_draw_triangle_lines_raw": DrawHost.triangle_lines!,
 		"roc_draw_triangle_raw": DrawHost.triangle!,
+		"roc_files_read_text": FilesHost.read_text!,
+		"roc_files_read_bytes": FilesHost.read_bytes!,
+		"roc_files_list": FilesHost.list!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
@@ -140,6 +143,7 @@ import Text
 import Color
 import Devices
 import Files
+import FilesHost
 import Window
 import HostHost
 import Keys

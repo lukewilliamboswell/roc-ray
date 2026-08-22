@@ -20,6 +20,13 @@ const tmx_loader = @import("tmx_loader.zig");
 // Import backend
 const raylib = @import("backend_raylib.zig");
 
+/// Keep zio's own debug chatter -- blocking-pool thread spawns, loop internals
+/// -- out of an app's output. The host's own `ROC_RAY_TRACE_TASKS` lines are
+/// unscoped `info` and are unaffected.
+pub const std_options: std.Options = .{
+    .log_scope_levels = &.{.{ .scope = .zio, .level = .warn }},
+};
+
 // Type aliases
 const RocBox = ffi.RocBox;
 const RocResult = ffi.Try(ffi.RocBox, i64);
@@ -1211,22 +1218,172 @@ fn stageTaskResults(app_tasks: *AppTasks, staging: *ResponseStaging, roc_host: *
     }
 }
 
-/// `Task.sleep!`: park the calling task, or block during `init!`.
+/// The phase a waiting effect must restore when its park returns.
 ///
 /// The phase is saved and cleared across the park: the frame loop runs in
 /// between and sets phases of its own, and the task must see `.task` again
 /// when it resumes.
+const WaitScope = struct {
+    resumed: Phase,
+
+    fn enter() WaitScope {
+        const scope = WaitScope{ .resumed = active_phase };
+        active_phase = .idle;
+        return scope;
+    }
+
+    fn leave(self: WaitScope) void {
+        active_phase = self.resumed;
+    }
+};
+
+/// The `std.Io` a waiting effect performs its work through.
+///
+/// On a task, zio parks the coroutine on the io_uring/kqueue/IOCP completion
+/// and switches to the executor, which returns to the frame loop; a later pump
+/// resumes the task and the call returns. In `init!` the frame loop is zio's
+/// own main task, so the same call parks that task and runs the event loop
+/// until the answer is in -- effectively blocking, which is what startup wants.
+/// Without a runtime (unit tests, or a runtime that would not start) this is
+/// the frame thread's ordinary blocking implementation.
+fn waitingIo() std.Io {
+    if (AppTasks.currentRuntime()) |rt| return rt.io();
+    return mainThreadIo();
+}
+
+/// `Task.sleep!`: park the calling task, or block during `init!`.
 fn hostedTaskSleep(millis: u64) callconv(.c) void {
     enforcePhase("Task.sleep!", during_wait);
-    const resume_phase = active_phase;
-    active_phase = .idle;
-    defer active_phase = resume_phase;
+    const scope = WaitScope.enter();
+    defer scope.leave();
     AppTasks.tracePark("sleep", millis);
     zio.sleep(.fromMilliseconds(@intCast(millis))) catch |err| switch (err) {
         // Cancelled at shutdown: return at once so the task can run to its end.
         error.Canceled => {},
     };
     AppTasks.traceResume("sleep");
+}
+
+/// Read a whole file on the waiting path, parked rather than blocking.
+///
+/// `limit` is the operation's own ceiling: a text read stops one byte past the
+/// largest string the host will build, a byte read one past the per-file
+/// ceiling, so a file of exactly the limit succeeds and one byte more is
+/// `TooLarge` without the whole file having been read first.
+fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize, out_err: *u8) ?[]u8 {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("read", 0);
+    defer AppTasks.traceResume("read");
+    return std.Io.Dir.cwd().readFileAlloc(waitingIo(), path, allocator, .limited(limit)) catch |err| {
+        out_err.* = readErrorCode(err);
+        return null;
+    };
+}
+
+/// `Files.read_text!`: read a bounded UTF-8 file into a `Str`.
+///
+/// The whole file is copied into the string, so the ceiling is the small one:
+/// this is the only read whose cost on the frame thread is proportional to the
+/// file. A file that is not valid UTF-8 is reported rather than delivered,
+/// because `RocStr.fromSlice` only copies and every later string operation on
+/// an invalid one would be undefined.
+fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
+    enforcePhase("Files.read_text!", during_wait);
+    defer path_arg.decref(roc_host);
+
+    const allocator = allocatorFromHost(roc_host);
+    var err: u8 = READ_ERR_FAILED;
+    const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse
+        return .{ .err = err, .contents = abi.RocStr.empty() };
+    defer allocator.free(bytes);
+
+    if (!std.unicode.utf8ValidateSlice(bytes)) {
+        return .{ .err = READ_ERR_NOT_UTF8, .contents = abi.RocStr.empty() };
+    }
+    return .{ .err = 0, .contents = abi.RocStr.fromSlice(bytes, roc_host) };
+}
+
+fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
+    return hostedFilesReadText(activeHost(), path_arg);
+}
+
+/// `Files.read_bytes!`: read a bounded file without copying its payload.
+///
+/// The buffer the read filled is the buffer Roc gets: it moves into the typed
+/// byte-list heap and out again as an owning seamless `List(U8)`, so a 16 MiB
+/// file costs one allocation and no copy. A delivery slot is reserved before
+/// any I/O starts, so a full heap answers `Busy` rather than reading a file and
+/// discarding it.
+fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
+    enforcePhase("Files.read_bytes!", during_wait);
+    defer path_arg.decref(roc_host);
+    return readByteListWaiting(roc_host, path_arg.asSlice(), .read);
+}
+
+fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
+    return hostedFilesReadBytes(activeHost(), path_arg);
+}
+
+/// `Files.list!`: one directory's entries, encoded into the same byte list a
+/// read delivers and decoded by `Files`.
+fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
+    enforcePhase("Files.list!", during_wait);
+    defer path_arg.decref(roc_host);
+    // Structurally the same record as a byte read's, but a distinct generated
+    // type, so copy it across field by field rather than casting.
+    const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
+    return .{ .err = result.err, .bytes = result.bytes };
+}
+
+fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
+    return hostedFilesList(activeHost(), path_arg);
+}
+
+/// Which of the two byte-list producing waits to run. They share everything
+/// after the syscall: the same admission, the same ownership transfer, and the
+/// same list on the way out.
+const ByteListWait = enum { read, list };
+
+fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait) abi.FilesHostRead_bytesRetRecord {
+    const empty = abi.RocListWith(u8, false).empty();
+    // Reserve before any filesystem work starts. A terminal `Busy` here means
+    // precisely that nothing was read.
+    if (!file_bytes_delivery_reservations.reserve()) {
+        return .{ .err = READ_ERR_BUSY, .bytes = empty };
+    }
+    defer file_bytes_delivery_reservations.release();
+
+    const allocator = allocatorFromHost(roc_host);
+    const bytes = switch (kind) {
+        .read => blk: {
+            var err: u8 = READ_ERR_FAILED;
+            break :blk readFileWaiting(allocator, path, MAX_FILE_READ_BYTES + 1, &err) orelse
+                return .{ .err = err, .bytes = empty };
+        },
+        .list => blk: {
+            const scope = WaitScope.enter();
+            defer scope.leave();
+            AppTasks.tracePark("list", 0);
+            defer AppTasks.traceResume("list");
+            var encoded: ?[]u8 = null;
+            const err = encodeListing(waitingIo(), allocator, path, &encoded);
+            break :blk encoded orelse return .{
+                .err = if (err == 0) READ_ERR_FAILED else err,
+                .bytes = empty,
+            };
+        },
+    };
+
+    if (bytes.len == 0) {
+        allocator.free(bytes);
+        return .{ .err = 0, .bytes = empty };
+    }
+    const resource = file_bytes_heap.insert(0, .{ .allocator = allocator, .bytes = bytes }) orelse {
+        allocator.free(bytes);
+        return .{ .err = READ_ERR_BUSY, .bytes = empty };
+    };
+    return .{ .err = 0, .bytes = seamlessByteList(resource, bytes) };
 }
 
 var active_phase: Phase = .idle;
@@ -5931,6 +6088,9 @@ comptime {
         @export(&exportedArgs, .{ .name = "roc_host_args" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
+        @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
+        @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
+        @export(&exportedFilesList, .{ .name = "roc_files_list" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
         @export(&hostedAppSubmitRequest, .{ .name = "roc_app_submit_request" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });

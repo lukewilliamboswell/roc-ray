@@ -1669,6 +1669,168 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_fa110e8829dc221b
+pub const __AnonStruct_fa110e8829dc221b = if (@sizeOf(usize) == 4) extern struct {
+    exit_code: i64,
+    stderr: RocListWith(u8, false),
+    stdout: RocListWith(u8, false),
+    err: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.stderr.decref(roc_host);
+        value.stdout.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.stderr.incref(amount);
+        value.stdout.incref(amount);
+    }
+} else extern struct {
+    exit_code: i64,
+    stderr: RocListWith(u8, false),
+    stdout: RocListWith(u8, false),
+    err: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.stderr.decref(roc_host);
+        value.stdout.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.stderr.incref(amount);
+        value.stdout.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_fa110e8829dc221b) != 64) @compileError("__AnonStruct_fa110e8829dc221b size mismatch");
+        if (@alignOf(__AnonStruct_fa110e8829dc221b) != 8) @compileError("__AnonStruct_fa110e8829dc221b alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_fa110e8829dc221b) != 40) @compileError("__AnonStruct_fa110e8829dc221b size mismatch");
+        if (@alignOf(__AnonStruct_fa110e8829dc221b) != 8) @compileError("__AnonStruct_fa110e8829dc221b alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_3fe396bc5ba0c31c
+pub const __AnonStruct_3fe396bc5ba0c31c = if (@sizeOf(usize) == 4) extern struct {
+    stderr_limit_bytes: u64,
+    stdout_limit_bytes: u64,
+    timeout_ms: u64,
+    args: RocList(RocStr),
+    envs: RocList(__AnonStruct_82a96c5d55d63488),
+    program: RocStr,
+    working_dir: RocStr,
+    clear_envs: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefListOfStr(value.args, roc_host);
+        decrefListOf__AnonStruct_82a96c5d55d63488(value.envs, roc_host);
+        value.program.decref(roc_host);
+        value.working_dir.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.args.incref(amount);
+        value.envs.incref(amount);
+        value.program.incref(amount);
+        value.working_dir.incref(amount);
+    }
+} else extern struct {
+    stderr_limit_bytes: u64,
+    stdout_limit_bytes: u64,
+    timeout_ms: u64,
+    args: RocList(RocStr),
+    envs: RocList(__AnonStruct_82a96c5d55d63488),
+    program: RocStr,
+    working_dir: RocStr,
+    clear_envs: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefListOfStr(value.args, roc_host);
+        decrefListOf__AnonStruct_82a96c5d55d63488(value.envs, roc_host);
+        value.program.decref(roc_host);
+        value.working_dir.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.args.incref(amount);
+        value.envs.incref(amount);
+        value.program.incref(amount);
+        value.working_dir.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_3fe396bc5ba0c31c) != 128) @compileError("__AnonStruct_3fe396bc5ba0c31c size mismatch");
+        if (@alignOf(__AnonStruct_3fe396bc5ba0c31c) != 8) @compileError("__AnonStruct_3fe396bc5ba0c31c alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_3fe396bc5ba0c31c) != 80) @compileError("__AnonStruct_3fe396bc5ba0c31c size mismatch");
+        if (@alignOf(__AnonStruct_3fe396bc5ba0c31c) != 8) @compileError("__AnonStruct_3fe396bc5ba0c31c alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_82a96c5d55d63488
+pub const __AnonStruct_82a96c5d55d63488 = if (@sizeOf(usize) == 4) extern struct {
+    name: RocStr,
+    value: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.value.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.value.incref(amount);
+    }
+} else extern struct {
+    name: RocStr,
+    value: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.name.decref(roc_host);
+        value.value.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.name.incref(amount);
+        value.value.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_82a96c5d55d63488) != 48) @compileError("__AnonStruct_82a96c5d55d63488 size mismatch");
+        if (@alignOf(__AnonStruct_82a96c5d55d63488) != 8) @compileError("__AnonStruct_82a96c5d55d63488 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_82a96c5d55d63488) != 24) @compileError("__AnonStruct_82a96c5d55d63488 size mismatch");
+        if (@alignOf(__AnonStruct_82a96c5d55d63488) != 4) @compileError("__AnonStruct_82a96c5d55d63488 alignment mismatch");
+    }
+}
+
 /// Element type for Camera.Camera2D
 pub const CameraCamera2D = if (@sizeOf(usize) == 4) extern struct {
     offset: MathVec2,
@@ -4414,52 +4576,6 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(__AnonStruct_da7cbd33c88fa20a) != 40) @compileError("__AnonStruct_da7cbd33c88fa20a size mismatch");
         if (@alignOf(__AnonStruct_da7cbd33c88fa20a) != 4) @compileError("__AnonStruct_da7cbd33c88fa20a alignment mismatch");
-    }
-}
-
-/// Element type for __AnonStruct_82a96c5d55d63488
-pub const __AnonStruct_82a96c5d55d63488 = if (@sizeOf(usize) == 4) extern struct {
-    name: RocStr,
-    value: RocStr,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.name.decref(roc_host);
-        value.value.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.name.incref(amount);
-        value.value.incref(amount);
-    }
-} else extern struct {
-    name: RocStr,
-    value: RocStr,
-    /// Recursively decrement Roc-owned fields.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        const value = self;
-        value.name.decref(roc_host);
-        value.value.decref(roc_host);
-    }
-
-    /// Increment Roc-owned fields.
-    pub fn incref(self: @This(), amount: isize) void {
-        const value = self;
-        value.name.incref(amount);
-        value.value.incref(amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_82a96c5d55d63488) != 48) @compileError("__AnonStruct_82a96c5d55d63488 size mismatch");
-        if (@alignOf(__AnonStruct_82a96c5d55d63488) != 8) @compileError("__AnonStruct_82a96c5d55d63488 alignment mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_82a96c5d55d63488) != 24) @compileError("__AnonStruct_82a96c5d55d63488 size mismatch");
-        if (@alignOf(__AnonStruct_82a96c5d55d63488) != 4) @compileError("__AnonStruct_82a96c5d55d63488 alignment mismatch");
     }
 }
 
@@ -7620,6 +7736,31 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(SqliteHostExec_scriptRetRecord) != 24) @compileError("SqliteHostExec_scriptRetRecord size mismatch");
         if (@alignOf(SqliteHostExec_scriptRetRecord) != 8) @compileError("SqliteHostExec_scriptRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for CmdHost.run!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const CmdHostRunRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    exit_code: i64,
+    stderr: RocListWith(u8, false),
+    stdout: RocListWith(u8, false),
+    err: u8,
+} else extern struct {
+    exit_code: i64,
+    stderr: RocListWith(u8, false),
+    stdout: RocListWith(u8, false),
+    err: u8,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(CmdHostRunRetRecord) != 64) @compileError("CmdHostRunRetRecord size mismatch");
+        if (@alignOf(CmdHostRunRetRecord) != 8) @compileError("CmdHostRunRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(CmdHostRunRetRecord) != 40) @compileError("CmdHostRunRetRecord size mismatch");
+        if (@alignOf(CmdHostRunRetRecord) != 8) @compileError("CmdHostRunRetRecord alignment mismatch");
     }
 }
 
@@ -11085,6 +11226,74 @@ pub const SqliteHostExec_scriptArgs = extern struct {
     arg1: RocStr,
 };
 
+/// Arguments for CmdHost.run!
+/// Roc signature: { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => { err : U8, exit_code : I64, stderr : List(U8), stdout : List(U8) }
+/// Refcounted fields are owned by the hosted function.
+pub const CmdHostRunArgs = if (@sizeOf(usize) == 4) extern struct {
+    stderr_limit_bytes: u64,
+    stdout_limit_bytes: u64,
+    timeout_ms: u64,
+    args: RocList(RocStr),
+    envs: RocList(__AnonStruct_82a96c5d55d63488),
+    program: RocStr,
+    working_dir: RocStr,
+    clear_envs: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefListOfStr(value.args, roc_host);
+        decrefListOf__AnonStruct_82a96c5d55d63488(value.envs, roc_host);
+        value.program.decref(roc_host);
+        value.working_dir.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.args.incref(amount);
+        value.envs.incref(amount);
+        value.program.incref(amount);
+        value.working_dir.incref(amount);
+    }
+} else extern struct {
+    stderr_limit_bytes: u64,
+    stdout_limit_bytes: u64,
+    timeout_ms: u64,
+    args: RocList(RocStr),
+    envs: RocList(__AnonStruct_82a96c5d55d63488),
+    program: RocStr,
+    working_dir: RocStr,
+    clear_envs: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefListOfStr(value.args, roc_host);
+        decrefListOf__AnonStruct_82a96c5d55d63488(value.envs, roc_host);
+        value.program.decref(roc_host);
+        value.working_dir.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.args.incref(amount);
+        value.envs.incref(amount);
+        value.program.incref(amount);
+        value.working_dir.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(CmdHostRunArgs) != 128) @compileError("CmdHostRunArgs size mismatch");
+        if (@alignOf(CmdHostRunArgs) != 8) @compileError("CmdHostRunArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(CmdHostRunArgs) != 80) @compileError("CmdHostRunArgs size mismatch");
+        if (@alignOf(CmdHostRunArgs) != 8) @compileError("CmdHostRunArgs alignment mismatch");
+    }
+}
+
 // Platform Type Aliases
 
 pub const AssetsHostOpen_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
@@ -11200,6 +11409,9 @@ pub const SqliteHostRun_onceArg2 = __AnonStruct_90c9f98ccd96f8ce;
 pub const SqliteHostRun_once = __AnonStruct_4bc5d3695423e2f1;
 pub const SqliteHostRun_onceCells = __AnonStruct_3a90da783672cf8d;
 pub const SqliteHostExec_script = __AnonStruct_e7ff50a9dfab1a8d;
+pub const CmdHostRunArg0 = __AnonStruct_3fe396bc5ba0c31c;
+pub const CmdHostRunArg0Envs = __AnonStruct_82a96c5d55d63488;
+pub const CmdHostRun = __AnonStruct_fa110e8829dc221b;
 pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
 pub const Update_for_hostArg1 = __AnonStruct_fd4f879167f97520;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
@@ -11328,6 +11540,24 @@ pub const __AnonStruct_ae8e8c7ef6b24769Release = struct {
 
 pub const DrawRenderTextureRelease = struct {
     pub fn release(value: DrawRenderTexture, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_fa110e8829dc221bRelease = struct {
+    pub fn release(value: __AnonStruct_fa110e8829dc221b, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_3fe396bc5ba0c31cRelease = struct {
+    pub fn release(value: __AnonStruct_3fe396bc5ba0c31c, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_82a96c5d55d63488Release = struct {
+    pub fn release(value: __AnonStruct_82a96c5d55d63488, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -11756,12 +11986,6 @@ pub const __AnonStruct_da7cbd33c88fa20aRelease = struct {
     }
 };
 
-pub const __AnonStruct_82a96c5d55d63488Release = struct {
-    pub fn release(value: __AnonStruct_82a96c5d55d63488, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
 pub const __AnonStruct_85380e02323174c5Release = struct {
     pub fn release(value: __AnonStruct_85380e02323174c5, roc_host: *RocHost) void {
         value.decref(roc_host);
@@ -12140,6 +12364,11 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_96bd4e483c462501) return __AnonStruct_96bd4e483c462501Release;
     if (T == __AnonStruct_ae8e8c7ef6b24769) return __AnonStruct_ae8e8c7ef6b24769Release;
     if (T == DrawRenderTexture) return DrawRenderTextureRelease;
+    if (T == __AnonStruct_fa110e8829dc221b) return __AnonStruct_fa110e8829dc221bRelease;
+    if (T == __AnonStruct_3fe396bc5ba0c31c) return __AnonStruct_3fe396bc5ba0c31cRelease;
+    if (T == RocList(RocStr)) return RocListRelease(RocList(RocStr), RocStrRelease);
+    if (T == RocList(__AnonStruct_82a96c5d55d63488)) return RocListRelease(RocList(__AnonStruct_82a96c5d55d63488), __AnonStruct_82a96c5d55d63488Release);
+    if (T == __AnonStruct_82a96c5d55d63488) return __AnonStruct_82a96c5d55d63488Release;
     if (T == DrawHostRenderTexture) return DrawHostRenderTextureRelease;
     if (T == __AnonStruct_83bbf23095f15134) return __AnonStruct_83bbf23095f15134Release;
     if (T == __AnonStruct_5cba559c3a07b56a) return __AnonStruct_5cba559c3a07b56aRelease;
@@ -12173,13 +12402,10 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_4e4c37f995c5205a) return __AnonStruct_4e4c37f995c5205aRelease;
     if (T == __AnonStruct_e98c7d72bcd7a610) return __AnonStruct_e98c7d72bcd7a610Release;
     if (T == __AnonStruct_5b08b74ffdd2f118) return __AnonStruct_5b08b74ffdd2f118Release;
-    if (T == RocList(RocStr)) return RocListRelease(RocList(RocStr), RocStrRelease);
     if (T == HostHostGet_clipboard_textResult) return HostHostGet_clipboard_textResultRelease;
     if (T == HostHostRead_envResult) return HostHostRead_envResultRelease;
     if (T == __AnonStruct_1504326a3d41a158) return __AnonStruct_1504326a3d41a158Release;
     if (T == __AnonStruct_da7cbd33c88fa20a) return __AnonStruct_da7cbd33c88fa20aRelease;
-    if (T == RocList(__AnonStruct_82a96c5d55d63488)) return RocListRelease(RocList(__AnonStruct_82a96c5d55d63488), __AnonStruct_82a96c5d55d63488Release);
-    if (T == __AnonStruct_82a96c5d55d63488) return __AnonStruct_82a96c5d55d63488Release;
     if (T == __AnonStruct_85380e02323174c5) return __AnonStruct_85380e02323174c5Release;
     if (T == __AnonStruct_d1ff90659ed42132) return __AnonStruct_d1ff90659ed42132Release;
     if (T == __AnonStruct_e7ff50a9dfab1a8d) return __AnonStruct_e7ff50a9dfab1a8dRelease;
@@ -13028,6 +13254,14 @@ pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__Anon
 ///     arg1.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_sqlite_exec_script(arg0: *u64, arg1: RocStr) callconv(.c) __AnonStruct_e7ff50a9dfab1a8d;
+
+/// Hosted symbol for CmdHost.run!
+/// Roc signature: { args : List(Str), clear_envs : Bool, envs : List({ name : Str, value : Str }), program : Str, stderr_limit_bytes : U64, stdout_limit_bytes : U64, timeout_ms : U64, working_dir : Str } => { err : U8, exit_code : I64, stderr : List(U8), stdout : List(U8) }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_cmd_run(arg0: CmdHostRunArgs) callconv(.c) __AnonStruct_fa110e8829dc221b;
 
 /// Default memory management functions for Roc platforms.
 ///

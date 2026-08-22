@@ -82,14 +82,12 @@ Capture := [].{
 	## the frame thread. This call waits for that write, so it parks the task
 	## until the file exists and answers with the write's own outcome.
 	##
-	## Valid **only** inside a task, and this is the one waiting effect that is.
-	## `Files.read_text!` and the rest also work in `init!`, where they block;
-	## a screenshot cannot, because what it waits for is the end of a frame and
-	## `init!` runs before the frame loop has drawn one. Calling it from
-	## `init!`, `update!` or `render!` is a programmer error and stops the app
-	## with a message naming the effect and the fix. Spawn a task from
-	## `update!` instead -- on the first cycle if the shot is meant to be of
-	## the first frame:
+	## Legal **only** in a task, where it parks the task; refused in `init!`,
+	## `update!`, and `render!`. Every other waiting effect also works in
+	## `init!`, where it blocks; a screenshot cannot, because what it waits for
+	## is the end of a frame and `init!` runs before the frame loop has drawn
+	## one. Spawn a task from `update!` instead -- on the first cycle if the
+	## shot is meant to be of the first frame:
 	##
 	##     if input.time.cycle_count == 0 {
 	##         Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
@@ -115,7 +113,9 @@ Capture := [].{
 	default : Recording
 	default = RrtCapture.default
 
-	## Begin recording. Valid during `init!`, `update!`, and tasks.
+	## Begin recording.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	##
 	## Frames accumulate until the recording hits its frame cap, `Capture.stop!`
 	## is called, or the app exits -- all three finalize the file.
@@ -141,12 +141,13 @@ Capture := [].{
 		{}
 	}
 
-	## Finish the current recording and write its file. Valid during `init!`,
-	## `update!`, and tasks -- not `render!`, where an encode and a file write
-	## would land in the middle of drawing a frame.
+	## Finish the current recording and write its file.
 	##
-	## Stopping while idle does nothing. The next input reports the frame count and
-	## file size as `Finished`.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`, where an
+	## encode and a file write would land in the middle of drawing a frame.
+	##
+	## Stopping while idle does nothing. The next input reports the frame count
+	## and file size as `Finished`.
 	stop! : () => {}
 	stop! = || {
 		_finished = CaptureHost.stop_recording!()

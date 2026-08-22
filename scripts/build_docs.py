@@ -35,6 +35,10 @@ PRIVATE_ENTRIES = {
     "Draw": ("Frame.from_host", "Font.from_host!", "Font.for_host"),
     "Keys": ("exit_key_code",),
     "Mouse": ("cursor_code", "cursor_mode_code"),
+    # `integer` is what every width-checked integer decoder is built from. It
+    # has to live inside the nominal to be a receiver, but it reads as a
+    # duplicate of `i64` next to it, so it is not part of the documented API.
+    "Sqlite": ("Row.integer",),
 }
 APP_INTERNAL_TYPES = (
     "SubmittedRequest",

@@ -32,6 +32,8 @@ This script runs:
 - udp sockets     - Send datagrams between two loopback sockets and assert the
                     bytes, the sender address, and that a parked receive lets
                     the frame loop keep running (test/udp).
+- virtual keys    - Script a keyboard and typed text and assert the edges and
+                    codepoints the next cycle is handed (test/virtual_keys).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -410,6 +412,41 @@ def run_udp_probe(
             failures.append(f"run udp probe ({label})")
     print("ok" if not failures else "FAILED")
     return failures
+
+
+def run_virtual_keys_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a scripted keyboard arrives as ordinary keyboard input.
+
+    A headless run asserts only an exit code, so an app whose scripted keys
+    never reached it would still pass every other stage. The probe installs a
+    virtual source and queues text on one cycle and asserts what the next cycle
+    was handed: exactly one pressed edge for a newly held key, a plain down
+    while it stays held, released when the script lets go, and the codepoints
+    delivered on one cycle and gone from the next. Exit 3 means a property did
+    not hold; exit 4 means the script never reached its verdict.
+    """
+    fixture = root / "test" / "virtual_keys" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning virtual keyboard probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "virtual_keys")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build virtual keys probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build virtual keys probe"]
+
+    ok = run_cmd(
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8"],
+        "run virtual keys probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run virtual keys probe"]
 
 
 def run_sqlite_probe(
@@ -1011,6 +1048,7 @@ def _run_example_stages(
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
+        failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
         failed.extend(run_sqlite_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))

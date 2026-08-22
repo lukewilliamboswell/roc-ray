@@ -9,6 +9,14 @@ import rr.Devices
 import rr.Random
 import rr.Math
 
+## Snake on a fixed timestep, with a replayable simulation.
+##
+## `update!` folds each cycle's elapsed seconds into an accumulator and runs as
+## many discrete steps as the frame paid for, so the snake moves at the same
+## speed whatever the frame rate. The step is pure and returns the sounds it
+## made; `update!` plays them. Randomness is `Random.State` in the model rather
+## than an effect, so food placement is decided on the frame it is eaten and a
+## run replays exactly from its seed.
 Cell : {
 	x : I32,
 	y : I32,
@@ -278,6 +286,62 @@ advance_playing = |model, input, dt| {
 	accumulator = input_model.accumulator + dt
 	with_accumulator = { ..input_model, accumulator }
 	advance_fixed_steps(with_accumulator, [])
+}
+
+## A model with no host resources behind it, so the rules above can be exercised
+## from an `expect`. `Audio.Sound.stub` is a sound that plays nothing, which is
+## all a pure test needs of one.
+test_model : Model
+test_model = {
+	snake: start_snake,
+	direction: DirRight,
+	pending_direction: DirRight,
+	food: { x: 18, y: 9 },
+	score: 0,
+	accumulator: 0,
+	state: Playing,
+	eat_sound: Audio.Sound.stub,
+	crash_sound: Audio.Sound.stub,
+	start_sound: Audio.Sound.stub,
+	rng: Random.seed(1),
+}
+
+expect delta(DirUp) == { x: 0, y: -1 }
+
+## A turn into the body is refused; any other turn is allowed.
+expect !can_turn(DirRight, DirLeft)
+expect can_turn(DirRight, DirUp)
+
+## Food never lands on the snake: the probe walks on until it finds a free cell.
+expect find_open_cell({ x: 12, y: 9 }, start_snake, 0) == { x: 13, y: 9 }
+
+## An ordinary step moves the head one cell and drops the tail, so the length
+## holds and nothing sounds.
+expect {
+	stepped = step_snake(test_model)
+	head_of(stepped.model.snake) == { x: 13, y: 9 } and List.len(stepped.model.snake) == 3 and List.is_empty(stepped.sounds)
+}
+
+## Eating keeps the tail, scores, and asks for a sound.
+expect {
+	stepped = step_snake({ ..test_model, food: { x: 13, y: 9 } })
+	List.len(stepped.model.snake) == 4 and stepped.model.score == 1 and List.len(stepped.sounds) == 1
+}
+
+## Walking off the board ends the run.
+expect {
+	stepped = step_snake({ ..test_model, snake: [{ x: 24, y: 9 }] })
+	match stepped.model.state {
+		GameOver => Bool.True
+		Playing => Bool.False
+	}
+}
+
+## The accumulator is what makes speed independent of frame rate: two steps'
+## worth of seconds runs two steps, whether that arrived as one frame or four.
+expect {
+	stepped = advance_playing(test_model, Devices.none, step_time * 2)
+	head_of(stepped.model.snake) == { x: 14, y: 9 }
 }
 
 Msg : []

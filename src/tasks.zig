@@ -44,6 +44,10 @@ pub fn Tasks(comptime Hooks: type) type {
         /// Closures waiting for a live slot, oldest first.
         queued: std.ArrayListUnmanaged(Queued) = .empty,
         finished: std.ArrayListUnmanaged(Finished) = .empty,
+        /// The results the last `takeFinished` handed to the frame loop.
+        /// Two buffers take turns rather than one being freed and allocated
+        /// again every frame a task completes on.
+        delivered: std.ArrayListUnmanaged(Finished) = .empty,
         next_id: u64 = 1,
         cycle: u64 = 0,
         trace: bool = false,
@@ -270,20 +274,27 @@ pub fn Tasks(comptime Hooks: type) type {
         }
 
         /// The finished tasks' results in completion order, for the host to
-        /// stage as responses. Ownership moves to the caller; the list is
-        /// emptied.
+        /// stage as responses. The results are the caller's to move; the
+        /// slice itself is on loan until `releaseTaken`, and tasks that
+        /// finish meanwhile collect into the other buffer.
+        ///
+        /// The slice is not the caller's to free, and deliberately so: it is
+        /// the shorter `items` of a list whose allocation is capacity-sized,
+        /// and an allocator handed that back would be freeing at a size it
+        /// never allocated at.
         pub fn takeFinished(self: *Self) []const Finished {
             if (self.trace and self.finished.items.len != 0) {
                 std.log.info("[TASK] delivering {d} result(s) as messages on cycle {d}", .{ self.finished.items.len, self.cycle });
             }
-            const items = self.finished.items;
-            self.finished = .empty;
-            return items;
+            std.mem.swap(std.ArrayListUnmanaged(Finished), &self.finished, &self.delivered);
+            return self.delivered.items;
         }
 
-        /// Release a slice returned by `takeFinished` once its items are moved.
+        /// Give back a slice returned by `takeFinished` once its items are
+        /// moved. The buffer stays here for the next frame to fill.
         pub fn releaseTaken(self: *Self, taken: []const Finished) void {
-            self.allocator.free(taken);
+            std.debug.assert(taken.len == self.delivered.items.len);
+            self.delivered.clearRetainingCapacity();
         }
 
         /// Cancel every live task, run each to completion on the cancelled
@@ -317,6 +328,9 @@ pub fn Tasks(comptime Hooks: type) type {
             self.live.deinit(self.allocator);
             self.queued.deinit(self.allocator);
             self.finished.deinit(self.allocator);
+            // Empty by now: whoever took the results gave the buffer back
+            // before the app could exit. Only its capacity is left to drop.
+            self.delivered.deinit(self.allocator);
             if (current == self) current = null;
         }
     };

@@ -190,12 +190,10 @@ fn destroyStmt(resource: *StmtResource) void {
     }
 }
 
-/// Kinds 10 and 11; 1 through 9 belong to the resource heaps in
-/// `host_native.zig`.
 /// The connection heap's type. Its capacity is the connection bound.
-pub const DbHeap = host_resource.HostResourceHeap(u64, DbResource, max_connections, 11, writeU64Token, readU64Token, destroyDb);
+pub const DbHeap = host_resource.HostResourceHeap(u64, DbResource, max_connections, .sqlite_db, writeU64Token, readU64Token, destroyDb);
 /// The statement heap's type. Its capacity is the statement bound.
-pub const StmtHeap = host_resource.HostResourceHeap(u64, StmtResource, max_statements, 12, writeU64Token, readU64Token, destroyStmt);
+pub const StmtHeap = host_resource.HostResourceHeap(u64, StmtResource, max_statements, .sqlite_stmt, writeU64Token, readU64Token, destroyStmt);
 
 /// Every open connection. Registered with `host_native.zig`'s dealloc routing,
 /// retirement drain, and shutdown.

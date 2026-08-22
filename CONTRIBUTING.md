@@ -414,7 +414,9 @@ python3 scripts/test_roc_platform_abi.py
 Host-backed resources use typed, generation-checked slots. Successful hosted
 effects must release transferred references exactly once, including failure and
 scope-unwind paths. The headless backend should continue to exercise lifecycle
-behavior without requiring GPU objects.
+behavior without requiring GPU objects. A new typed resource adds a member to
+`host_resource.Kind` and nowhere else -- heaps name a kind rather than a number,
+and the host fails to build if a kind has no heap or has two.
 
 A new `src/*.zig` module whose only caller is a hosted export needs a
 `test { _ = the_module; }` in `src/host_native.zig`. The exports are compiled

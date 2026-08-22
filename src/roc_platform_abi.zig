@@ -5029,6 +5029,52 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_bbf5049c4fa71893
+pub const __AnonStruct_bbf5049c4fa71893 = if (@sizeOf(usize) == 4) extern struct {
+    seconds: i64,
+    nanosecond: u32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    seconds: i64,
+    nanosecond: u32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_bbf5049c4fa71893) != 16) @compileError("__AnonStruct_bbf5049c4fa71893 size mismatch");
+        if (@alignOf(__AnonStruct_bbf5049c4fa71893) != 8) @compileError("__AnonStruct_bbf5049c4fa71893 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_bbf5049c4fa71893) != 16) @compileError("__AnonStruct_bbf5049c4fa71893 size mismatch");
+        if (@alignOf(__AnonStruct_bbf5049c4fa71893) != 8) @compileError("__AnonStruct_bbf5049c4fa71893 alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_def8e181e644dca4
 pub const __AnonStruct_def8e181e644dca4 = if (@sizeOf(usize) == 4) extern struct {
     @"init!": __AnonStruct_8fd71e3705bdb8b5,
@@ -6578,6 +6624,27 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HttpHostSendRetRecord) != 40) @compileError("HttpHostSendRetRecord size mismatch");
         if (@alignOf(HttpHostSendRetRecord) != 4) @compileError("HttpHostSendRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for TimeHost.now!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const TimeHostNowRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    seconds: i64,
+    nanosecond: u32,
+} else extern struct {
+    seconds: i64,
+    nanosecond: u32,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(TimeHostNowRetRecord) != 16) @compileError("TimeHostNowRetRecord size mismatch");
+        if (@alignOf(TimeHostNowRetRecord) != 8) @compileError("TimeHostNowRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(TimeHostNowRetRecord) != 16) @compileError("TimeHostNowRetRecord size mismatch");
+        if (@alignOf(TimeHostNowRetRecord) != 8) @compileError("TimeHostNowRetRecord alignment mismatch");
     }
 }
 
@@ -9888,6 +9955,7 @@ pub const HttpHostSendArg0 = __AnonStruct_85380e02323174c5;
 pub const HttpHostSendArg0Headers = __AnonStruct_82a96c5d55d63488;
 pub const HttpHostSend = __AnonStruct_da7cbd33c88fa20a;
 pub const HttpHostSendHeaders = __AnonStruct_82a96c5d55d63488;
+pub const TimeHostNow = __AnonStruct_bbf5049c4fa71893;
 pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
 pub const Update_for_hostArg1 = __AnonStruct_fd4f879167f97520;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
@@ -10500,6 +10568,12 @@ pub const __AnonStruct_66e2af4e09d9cfd8Release = struct {
 
 pub const __AnonStruct_9f9f7e660a5e922bRelease = struct {
     pub fn release(value: __AnonStruct_9f9f7e660a5e922b, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_bbf5049c4fa71893Release = struct {
+    pub fn release(value: __AnonStruct_bbf5049c4fa71893, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -11478,6 +11552,10 @@ pub extern fn roc_draw_set_shader_vec4_raw(arg0: DrawHostSet_shader_vec4Args) ca
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_http_send(arg0: HttpHostSendArgs) callconv(.c) __AnonStruct_da7cbd33c88fa20a;
+
+/// Hosted symbol for TimeHost.now!
+/// Roc signature: {} => { nanosecond : U32, seconds : I64 }
+pub extern fn roc_time_now() callconv(.c) __AnonStruct_bbf5049c4fa71893;
 
 /// Hosted symbol for StdioHost.write_text!
 /// Roc signature: U8, Str => U8

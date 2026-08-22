@@ -133,6 +133,7 @@ platform ""
 		"roc_draw_set_shader_vec3_raw": DrawHost.set_shader_vec3!,
 		"roc_draw_set_shader_vec4_raw": DrawHost.set_shader_vec4!,
 		"roc_http_send": HttpHost.send!,
+		"roc_time_now": TimeHost.now!,
 		"roc_stdio_write_text": StdioHost.write_text!,
 		"roc_stdio_write_line": StdioHost.write_line!,
 		"roc_stdio_write_bytes": StdioHost.write_bytes!,
@@ -181,6 +182,7 @@ import Url
 import Stdout
 import Stderr
 import StdioHost
+import TimeHost
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the

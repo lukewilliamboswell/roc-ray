@@ -722,6 +722,41 @@ fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, 
     return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
 }
 
+/// Split a wall-clock reading into the normalized parts `Time.Timestamp` holds.
+///
+/// The seconds are floored rather than truncated, so the fractional part is
+/// always the nanoseconds elapsed within the instant's own second on both
+/// sides of the epoch. A reading a signed 64-bit count of seconds cannot hold
+/// saturates: no real clock reaches it, and an app is better served by an
+/// instant at the end of time than by a wrapped one in the middle of it.
+fn timestampFromNanos(nanos: i128) abi.TimeHostNowRetRecord {
+    const whole = @divFloor(nanos, std.time.ns_per_s);
+    const seconds = std.math.cast(i64, whole) orelse {
+        return .{
+            .seconds = if (whole < 0) std.math.minInt(i64) else std.math.maxInt(i64),
+            .nanosecond = 0,
+        };
+    };
+    return .{ .seconds = seconds, .nanosecond = @intCast(nanos - whole * std.time.ns_per_s) };
+}
+
+/// `Time.now!`: what time it is in the world.
+///
+/// Reading the clock changes nothing and waits for nothing, but it is refused
+/// during `render!` all the same. Wall time is not the timeline this platform
+/// paces: an animation driven from it would ignore the fixed step a capture
+/// records under, and `render!` is handed the model rather than an input, so
+/// the instant a frame draws is one the model already decided on.
+/// The reading itself is `Clock.real`, which is settable and can jump when the
+/// administrator or NTP moves it. That is what a calendar is; the timeline
+/// that only moves forward is `input.time`, and the two are deliberately
+/// different values. Reading a clock does not block, so this takes no
+/// `WaitScope` and needs none of the parking machinery a waiting effect has.
+fn hostedTimeNow() callconv(.c) abi.TimeHostNowRetRecord {
+    enforcePhase("Time.now!", during_update);
+    return timestampFromNanos(std.Io.Clock.real.now(waitingIo()).nanoseconds);
+}
+
 /// The stream a `StdioHost` call names. Mirrored in `StdioHost.roc`.
 const STDIO_STREAM_STDOUT: u8 = 1;
 
@@ -5786,6 +5821,7 @@ comptime {
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
         @export(&hostedHttpSend, .{ .name = "roc_http_send" });
+        @export(&hostedTimeNow, .{ .name = "roc_time_now" });
         @export(&exportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
         @export(&exportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
         @export(&exportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
@@ -7945,6 +7981,39 @@ test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
     try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
+}
+
+test "a wall-clock reading is normalized on both sides of the epoch" {
+    try std.testing.expectEqual(@as(i64, 0), timestampFromNanos(0).seconds);
+    try std.testing.expectEqual(@as(u32, 0), timestampFromNanos(0).nanosecond);
+
+    try std.testing.expectEqual(@as(i64, 1), timestampFromNanos(1_500_000_000).seconds);
+    try std.testing.expectEqual(@as(u32, 500_000_000), timestampFromNanos(1_500_000_000).nanosecond);
+
+    // One nanosecond before the epoch is the last nanosecond of 1969, not a
+    // negative fraction of second zero. Truncating instead of flooring here
+    // would make the two sides of 1970 disagree about what a second is.
+    try std.testing.expectEqual(@as(i64, -1), timestampFromNanos(-1).seconds);
+    try std.testing.expectEqual(@as(u32, 999_999_999), timestampFromNanos(-1).nanosecond);
+
+    // No real clock reaches this, but a reading that cannot be represented
+    // saturates rather than wrapping into the middle of history.
+    const beyond = @as(i128, std.math.maxInt(i64)) * std.time.ns_per_s + std.time.ns_per_s;
+    try std.testing.expectEqual(std.math.maxInt(i64), timestampFromNanos(beyond).seconds);
+    try std.testing.expectEqual(std.math.minInt(i64), timestampFromNanos(-beyond).seconds);
+}
+
+test "reading the clock is refused while drawing" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Not because it costs anything, but because a frame that reads the
+    // calendar is a frame animating on a timeline the platform does not pace.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    enforcePhase("Time.now!", during_update);
+    const violation = last_phase_violation orelse return error.ClockReadWasNotRejected;
+    try std.testing.expectEqual(Phase.render, violation.actual);
 }
 
 test "a stream write joins its two parts and loops until every byte is out" {

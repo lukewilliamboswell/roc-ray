@@ -60,6 +60,10 @@ CASES = (
         ("package module is private", "`rr.StdioHost`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "time_host_module.roc",
+        ("package module is private", "`rr.TimeHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "task_host_module.roc",
         ("package module is private", "`rr.TaskHost`"),
     ),

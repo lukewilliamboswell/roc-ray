@@ -8036,11 +8036,48 @@ const TestSocketPair = struct {
         self.receiver.inner.close();
     }
 
+    /// Send one datagram and return once the kernel is holding it.
+    ///
+    /// The precondition the pump tests are about is "a datagram the kernel
+    /// already has", not "a datagram handed to `sendto` a moment ago". The
+    /// two coincide on Linux loopback and need not anywhere else: a stack
+    /// that finishes delivery after `sendto` returns would leave the one
+    /// pump under test polling an empty socket, and the test would be
+    /// measuring the network stack rather than the scheduler. Waiting for
+    /// readability is what makes the precondition established rather than
+    /// assumed.
     fn ping(self: *TestSocketPair) !void {
         try std.testing.expectEqual(
             @as(u8, 0),
             udp_effect.send(&self.sender, self.receiver.local_ip, self.receiver.local_port, "ping"),
         );
+        try self.waitReadable();
+    }
+
+    /// Block this thread until the receiver has a datagram to read.
+    ///
+    /// Deliberately `poll` rather than anything of zio's: the event loop is
+    /// exactly what must not run here, because a pump is the only thing
+    /// allowed to advance the task under test.
+    fn waitReadable(self: *TestSocketPair) !void {
+        var fds = [_]zio.os.net.pollfd{.{
+            .fd = self.receiver.inner.handle,
+            .events = zio.os.net.POLL.IN,
+            .revents = 0,
+        }};
+        // A loopback datagram the kernel has already accepted, so anything
+        // but "at once" means a broken machine. The deadline is here so a
+        // broken one fails instead of hanging.
+        const ready = zio.os.net.poll(&fds, 1000) catch |err| {
+            std.debug.print("poll on the receiver failed: {s}\n", .{@errorName(err)});
+            return error.PollFailed;
+        };
+        // Windows is the exception, and not a failure: a receive already
+        // posted against the socket completes into its own buffer, so the
+        // datagram can be gone from the socket before this thread ever sees
+        // it readable. That is the precondition met and consumed, not
+        // missed, and the assertions after the pump tell the two apart.
+        if (ready == 0 and builtin.os.tag != .windows) return error.DatagramNeverArrived;
     }
 };
 
@@ -8072,8 +8109,11 @@ test "one yield pump resumes a task whose datagram arrived since the last one" {
 
     try sockets.ping();
 
-    // Frame two, and the only pump under test. The datagram is in the kernel
-    // before it starts, so the task must resume and finish inside it.
+    // Frame two, and the only pump under test. `ping` did not return until
+    // the kernel had the datagram, so the pump starts with it there and the
+    // task must resume and finish inside it. That the pump can only ever see
+    // what the kernel already holds is the point: every turn it takes is a
+    // non-blocking poll, because a frame must not wait on a peer.
     app_tasks.pump(2, .yield);
 
     const finished = app_tasks.takeFinished();

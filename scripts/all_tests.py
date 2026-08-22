@@ -23,6 +23,8 @@ This script runs:
 - headless runs   - Run each built example for a few frames
 - cli args        - Build and run the argv bridge probe
 - model alloc     - Measure what a frame costs a large collection in the model
+- task delivery   - Spawn one task per Msg variant and assert every message
+                    arrives with the right tag and payload (test/task_delivery).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -234,6 +236,44 @@ def run_cli_args_integration(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run CLI argument probe"]
+
+
+def run_task_delivery_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a task's message survives the trip back into `update!`.
+
+    A headless run only asserts an exit code, so an example whose messages never
+    arrive still passes every other step here. This probe spawns one task per
+    `Msg` variant -- including the tag-union layouts that used to come back with
+    the wrong tag -- and exits non-zero unless each message arrives with the
+    right tag *and* the right payload. Exit 3 means a mismatch, exit 4 means
+    something never arrived.
+    """
+    fixture = root / "test" / "task_delivery" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning task delivery probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_delivery")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build task delivery probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build task delivery probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run task delivery probe",
+        verbose,
+        cwd=root,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run task delivery probe"]
 
 
 def run_model_allocation_check(
@@ -788,6 +828,7 @@ def _run_example_stages(
     else:
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
+        failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

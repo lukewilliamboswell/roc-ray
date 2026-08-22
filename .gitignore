@@ -118,6 +118,12 @@ __pycache__/
 # Generated model-allocation probe executable.
 /test/model_inplace/main
 
+# Generated task-delivery probe executable.
+/test/task_delivery/main
+
+# Generated HTTP client probe executable.
+/test/http_fetch/main
+
 # Output written by the capture examples
 captures/
 shots/

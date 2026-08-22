@@ -647,3 +647,17 @@ that has to mirror the hosted list forever.
 * Gaps for us: Windows, shutdown, live-task cap, frame budget, phase guard.
   zio (section 5.2) covers the first three; the budget and guard are ours.
   Its hand-written `asm/*.s` and libxev dependency are superseded.
+
+## Follow-up: keep release bundles lean
+
+Adding the HTTP client pulled `std.crypto` (TLS) into the host. A Debug
+host archive grew 51 → 88 MB across four targets, pushing a locally built
+bundle past roc's 100 MB transitive-dependency default; the harness now
+passes `--max-transitive-mb=512` for local bundles. Releases build with
+`-Doptimize=ReleaseFast` and `strip`, so a published host is ~10 MB and
+unaffected -- but nothing *checks* that. To do:
+
+1. Assert the bundle size in `release.yml` (budget well under 100 MB) so
+   growth fails CI instead of being hidden by the raised limit.
+2. Measure `std.crypto`'s ReleaseFast cost; evaluate `ReleaseSmall` for
+   the host and per-target trimming of CA-bundle code.

@@ -458,3 +458,31 @@ Two directions:
 Step 4's effects are independent of this and are already useful from
 `init!`: an app can read its config, its atlas, and its level manifest at
 startup with no first-frame state machine.
+
+### Delivery defect, narrowed (reviewer's reproduction, 2026-08-22)
+
+The section above overstates the defect. Re-tested on `spike-coro` with
+~20 minimal probe apps (`Msg` shape varied, one `Task.spawn!` or
+`App.request!` per probe, exit code encodes what `update!` received):
+
+* It is **layout-dependent**, not universal. Fail (wrong tag, or abort in
+  `roc_dealloc` on release): `[A(U64), B(U64)]`, `[A(Str), B(U64)]`,
+  `[Num(U64), Text(Str)]`, `[Num(U64), Text(Str), Bytes(List(U8))]`,
+  `[A(U64), B(U64), C]`, `[Other(U64)]`. Pass: `[Num(U64), Text(Str),
+  Nothing]`, `[Num(U64), Text(Str), Bytes(List(U8)), Nothing]`, `[A(Str),
+  B(U64), C(List(U8)), D]`, `[Fetched(U16, Str, U64), Failed(Str)]` (the
+  HTTP probe), `[SmallReadFinished(Try(Str, _)), BytesReadFinished(Try(List(U8), _))]`
+  via request callbacks, and `[Woke]`.
+* It affects **both** `Task.spawn!` and `App.request!` for a failing shape
+  (`|_r| B(5)` as a read callback aborts), and neither for a passing one.
+* The same value constructed locally in `update!` is always fine; the
+  standalone logic passes under `roc test` (interpreter). This is native
+  codegen of an erased closure that crossed a hosted boundary.
+* Platform-side shapes that do **not** change the outcome: returning
+  `Box(msg)` instead of `msg`; adding an argument; pure vs effectful
+  closure; calling from a polymorphic helper vs `run_task_for_host!`;
+  wrapping the result in `[Done(msg), Pending]` (aborts instead).
+
+Root-causing is in progress against the roc checkout. Until it lands,
+`Task.spawn!`/`App.request!` are reliable only for shapes verified by a
+probe; step 4's example ports and step 6 wait on the fix.

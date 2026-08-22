@@ -6,6 +6,24 @@
 ## [basic-cli](https://github.com/roc-lang/basic-cli/blob/main/platform/Http.roc).
 ## This module adds the effects and the small JSON and UTF-8 conveniences.
 ##
+## ## Declaring the package
+##
+## An app that names `Request` or `Response` declares the `http` package in its
+## own header, beside the platform:
+##
+##     app [Model, program] {
+##         rr: platform "https://.../roc-ray/platform.tar.zst",
+##         http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
+##     }
+##
+##     import rr.Http
+##     import http.Request
+##
+## `Http.get!` and `Http.get_utf8!` take a URL and hand back decoded data, so
+## an app that uses only those needs no package dependency of its own.
+##
+## ## Sending
+##
 ## `Http.send!` waits, so it belongs inside `Task.spawn!`:
 ##
 ##     update! = |model, input| {
@@ -22,24 +40,40 @@
 ##     }
 ##
 ## The task parks on the host's socket while the frame loop keeps drawing, and
-## the closure's return value arrives on a later `Input.messages`. Calling
-## `send!` from `update!` or `render!` is a programmer error and stops the app
-## with a message naming the phase; calling it from `init!` blocks the startup
-## callback, which is the one place blocking is intended.
+## the closure's return value arrives on a later `Input.messages`. `send!` is
+## legal in `init!`, where it blocks startup, and in tasks, where it parks the
+## task; it is refused in `update!` and `render!`.
+##
+## Up to three redirects are followed, and the `Response` is the one at the end
+## of that chain.
 ##
 ## ## Limits
 ##
-## Every send carries a timeout and a hard cap on the response body. The
-## defaults come from `Http.default_config`; `send_with!` takes a `Config` when
-## an app wants different ones. A response larger than the cap is refused --
-## the host stops reading and the send fails -- rather than allowing a remote
-## server to choose how much of this process's memory to use.
+## Every send carries a deadline and a hard cap on the response body, taken
+## from `Http.default_config`: thirty seconds, and eight megabytes. Pass a
+## `Config` to `send_with!` for different ones, and `0` in either field to
+## disable that limit. A request that sets `TimeoutMilliseconds` itself
+## overrides the config's deadline; `NoTimeout` on a request means the config's
+## deadline applies, so an ordinarily built request is never sent without one.
+##
+## The body cap is measured after decompression, and it is a refusal rather
+## than a truncation: a response over the cap fails the send, because a
+## truncated body decodes into wrong data rather than into an error. What it
+## bounds is how much of this process's memory a remote server can choose to
+## use.
+##
+## ## What is and is not an error
+##
+## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
+## carrying that status; only a failure to complete the exchange is `HttpErr`.
 ##
 ## ## TLS
 ##
-## `https` URLs are served by Zig's `std.crypto.tls` against the system
-## certificate store. On Linux that is the usual `/etc/ssl` bundle. See
-## `docs/http.md` for what each target needs.
+## `https` URLs are served by Zig's `std.crypto.tls` against the operating
+## system's certificate store -- on Linux the usual `/etc/ssl` bundle. Nothing
+## here configures a custom certificate authority or turns verification off. A
+## store that cannot be loaded fails the send with `HttpErr(Other(...))` saying
+## so, rather than continuing unverified.
 import HttpHost
 import Url
 import http.Request
@@ -49,23 +83,32 @@ import http.Method
 
 Http := [].{
 
-	## Errors raised by the host while sending a request, before a real HTTP
-	## response is available.
+	## Why the exchange did not produce an HTTP response.
 	##
-	## `Other` carries the host's own description of the failure -- a refused
-	## connection, an unresolvable name, a body over `max_response_bytes` --
-	## as UTF-8 bytes.
+	## An HTTP status is never one of these: a 404 or a 503 is an `Ok`
+	## response.
+	##
+	## `Timeout` is the deadline expiring before the exchange finished.
+	## `NetworkError` is a connection that could not be made or did not survive
+	## the exchange -- a refused port, a dropped socket, an unreachable host.
+	## `BadBody` is a reply that arrived but was not a well-formed HTTP
+	## response. `Other` carries the host's own description as UTF-8 bytes: a
+	## name that would not resolve, a body over `max_response_bytes`, a
+	## certificate store that could not be loaded, or a method this platform
+	## cannot send.
 	TransportErr : [Timeout, NetworkError, BadBody, Other(List(U8))]
 
 	## Per-send limits.
 	##
 	## `timeout_ms` is the deadline for the whole exchange: connect, send,
-	## response head, and body. 0 means no deadline, which is only ever
-	## appropriate against a host you control.
+	## response head, and body. `0` means no deadline, which is only ever
+	## appropriate against a server you control. A request that sets
+	## `TimeoutMilliseconds` itself overrides this value.
 	##
-	## `max_response_bytes` caps the decompressed response body. A response
-	## that would exceed it fails with `Other` rather than being truncated,
-	## because a truncated body silently decodes into wrong data.
+	## `max_response_bytes` caps the decompressed response body, and `0` means
+	## no cap. A response that would exceed it fails with `Other` rather than
+	## being truncated, because a truncated body silently decodes into wrong
+	## data.
 	Config : {
 		timeout_ms : U64,
 		max_response_bytes : U64,
@@ -85,17 +128,19 @@ Http := [].{
 	## Validate and send an HTTP request under `default_config`.
 	##
 	## The request URI must be an absolute HTTP or HTTPS URL accepted by `Url`.
-	## Invalid URLs return `InvalidUrl` before any host effect occurs. Fragments
-	## are removed because they are client-side identifiers and are not sent.
+	## An invalid URL answers `InvalidUrl` before any host effect occurs.
+	## Fragments are removed, because they are client-side identifiers and are
+	## not sent.
 	##
 	## The method must be one of the nine RFC methods. `QUERY` and any
 	## `Unknown(ext)` method fail as `HttpErr(Other(...))` naming the method,
-	## also before any host effect occurs; see `check_method` for why that is
-	## `Other` and not a variant of its own.
+	## also before any host effect occurs: the host's method type has no
+	## representation for either, and reporting it as `Other` keeps an app's
+	## exhaustive match over `TransportErr` from breaking over a request no
+	## host could send.
 	##
-	## A `TimeoutMilliseconds` set on the request itself overrides the config's
-	## `timeout_ms`; `NoTimeout` on the request means the config's deadline is
-	## used, so a request built the ordinary way is never left without one.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	##
 	## ```roc
 	## request = Request.from_method(GET).with_uri("https://www.roc-lang.org")
@@ -105,6 +150,9 @@ Http := [].{
 	send! = |request| send_with!(default_config, request)
 
 	## Validate and send an HTTP request under explicit limits.
+	##
+	## The same validation, the same phases, and the same outcomes as `send!`;
+	## only the deadline and the body cap differ.
 	##
 	## ```roc
 	## slow = { ..Http.default_config, timeout_ms: 2_000 }
@@ -153,6 +201,10 @@ Http := [].{
 	## `Url.from_quote`, so a URL written out in the source is checked at
 	## compile time; a string built at runtime goes through `Url.parse`.
 	##
+	## A body that is not valid UTF-8 answers `BadBody`. The status is not
+	## inspected, so an error page comes back as the `Str` the server sent.
+	## Same phases as `send!`.
+	##
 	## ```roc
 	## hello_str = Http.get_utf8!("http://localhost:8000")?
 	## ```
@@ -177,6 +229,10 @@ Http := [].{
 	}
 
 	## Perform an HTTP GET and decode the response body as JSON.
+	##
+	## The expected result type selects the parser through static dispatch. The
+	## status is not inspected, so a JSON error page decodes if it happens to
+	## fit the expected shape. Same phases as `send!`.
 	##
 	## ```roc
 	## payload : Try({ foo : Str }, _)

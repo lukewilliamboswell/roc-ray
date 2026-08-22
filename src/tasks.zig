@@ -1,9 +1,10 @@
 //! Coroutine-backed app tasks (spike; see COROUTINE_DESIGN_PROPOSAL.md).
 //!
 //! One zio executor, on the frame thread, runs every task. A task is a boxed
-//! Roc closure `() => Msg`; it runs on its own coroutine stack, parks on the
-//! host when it waits, and its message is collected by the frame loop in
-//! completion order. No Roc value ever runs on another thread.
+//! Roc closure `() => Msg` handed over by the `Task.spawn!` effect; it runs on
+//! its own coroutine stack, parks on the host when it waits, and its message is
+//! collected by the frame loop in completion order. No Roc value ever runs on
+//! another thread.
 const std = @import("std");
 const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
@@ -63,27 +64,14 @@ pub fn Tasks(comptime Hooks: type) type {
             return self.live.items.len;
         }
 
-        /// Spawn every task `update` returned and release the list.
-        pub fn spawnAll(self: *Self, roc_host: *abi.RocHost, submitted: abi.RocList(abi.Update_for_hostOkTasks)) void {
-            defer {
-                if (submitted.hasOneRef()) {
-                    for (submitted.allocationItems()) |item| item.decref(roc_host);
-                }
-                submitted.decref(roc_host);
-            }
-            const unique = submitted.isUnique();
-            const mutable: []abi.Update_for_hostOkTasks = if (unique) @constCast(submitted.items()) else &.{};
-            for (submitted.items(), 0..) |task, index| {
-                const run = if (unique) blk: {
-                    const moved = mutable[index].run;
-                    mutable[index].run = null;
-                    break :blk moved;
-                } else blk: {
-                    abi.increfErasedCallable(task.run, 1);
-                    break :blk task.run;
-                };
-                self.spawn(roc_host, run);
-            }
+        /// Spawn one erased closure on the active registry (`Task.spawn!`).
+        /// Without a runtime the closure is released and nothing runs.
+        pub fn spawnCurrent(roc_host: *abi.RocHost, run: abi.RocErasedCallable) void {
+            const self = current orelse {
+                abi.decrefErasedCallable(run, roc_host);
+                return;
+            };
+            self.spawn(roc_host, run);
         }
 
         fn spawn(self: *Self, roc_host: *abi.RocHost, run: abi.RocErasedCallable) void {

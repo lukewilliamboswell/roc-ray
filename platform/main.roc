@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random, Task]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -20,6 +20,7 @@ platform ""
 		"update_for_host": update_for_host!,
 		"render_for_host": render_for_host!,
 		"drop_model_for_host": drop_model_for_host!,
+		"run_task_for_host": run_task_for_host!,
 	}
 	hosted {
 		"roc_assets_open_store_raw": AssetsHost.open_store!,
@@ -101,6 +102,7 @@ platform ""
 		"roc_host_suggest_window_min_size": HostHost.suggest_window_min_size!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
+		"roc_task_sleep": TaskHost.sleep!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
 		"roc_tilemap_draw_raw": TilemapHost.draw!,
 		"roc_draw_begin_camera": DrawHost.begin_camera!,
@@ -162,6 +164,8 @@ import AppHost
 import AppTransport
 import RequestQueue
 import Random
+import TaskHost
+import Task
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the
@@ -263,7 +267,7 @@ init_for_host! = ||
 ## million-element `List(F32)` by `test/model_inplace` under
 ## `scripts/test_model_allocation.py`, which checks that budget. Earlier pins
 ## copied the whole list every frame; `--characterize` describes that behaviour.
-update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)) }, I64)
+update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)), tasks : List(AppHost.SubmittedTask(Msg)) }, I64)
 update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
 	messages = receive_responses(responses)
 	input = app_input_from_raw(devices, window, time, capture, messages)
@@ -278,7 +282,37 @@ update_for_host! = |boxed_model, { devices, window, time, responses, capture }| 
 	Ok({
 		model: Box.box(next_fields.model),
 		requests: submit_requests(next_fields.requests),
+		tasks: submit_tasks(next_fields.tasks),
 	})
+}
+
+## Box each task closure so the host can hold it opaquely until it runs.
+submit_tasks : List(() => msg) -> List(AppHost.SubmittedTask(msg))
+submit_tasks = |tasks| {
+	var $submitted = List.with_capacity(List.len(tasks))
+	for task! in tasks {
+		$submitted = List.append($submitted, { run: Box.box(task!) })
+	}
+	$submitted
+}
+
+## Run one task to completion on the host's coroutine and hand back its message.
+##
+## The host calls this from the task's own stack; a waiting effect inside the
+## closure parks that stack and this call returns later, after the frame loop
+## has gone around as many times as it needed to.
+##
+## The message comes back wrapped as a response mapper -- the same
+## `Box(RawResponse -> Box(msg))` every request callback uses -- so the host
+## stages it as an ordinary `PendingResponse` and `receive_responses` delivers
+## it with code that already exists. Unboxing a `Box(Msg)` taken straight out
+## of a list crashes the pinned compiler's SpecConstr pass when `Msg : []`
+## (every app without messages); this shape does not.
+run_task_for_host! : Box(() => Msg) => Box(AppHost.RawResponse -> Box(Msg))
+run_task_for_host! = |boxed| {
+	run! = Box.unbox(boxed)
+	message = Box.box(run!())
+	Box.box(|_raw| message)
 }
 
 ## Invoke every returned response envelope in the host's observed order.

@@ -12,6 +12,12 @@ AppHost := [].{
 		deliver : Box(RawResponse -> Box(msg)),
 	}
 
+	## One task returned by `update`, boxed so the host can hold it opaquely
+	## and hand it back to `run_task_for_host!` on its own coroutine.
+	SubmittedTask(msg) : {
+		run : Box(() => msg),
+	}
+
 	RawResponse : {
 		kind : U8,
 		ticket : U64,

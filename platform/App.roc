@@ -483,6 +483,7 @@ App := [].{
 				model : model,
 				commands : List(Command),
 				requests : List(Request(msg)),
+				tasks : List(() => msg),
 			},
 		),
 	].{
@@ -493,6 +494,7 @@ App := [].{
 			model : model,
 			commands : List(Command),
 			requests : List(Request(msg)),
+			tasks : List(() => msg),
 		}
 		fields = |update|
 			match update {
@@ -503,7 +505,7 @@ App := [].{
 		map : Transition(a, msg), (a -> b) -> Transition(b, msg)
 		map = |transition, transform| {
 			transition_fields = transition.fields()
-			Transition.(Transition({ model: transform(transition_fields.model), commands: transition_fields.commands, requests: transition_fields.requests }))
+			Transition.(Transition({ model: transform(transition_fields.model), commands: transition_fields.commands, requests: transition_fields.requests, tasks: transition_fields.tasks }))
 		}
 
 		## Lift a transition.s messages into an enclosing application's message type.
@@ -553,6 +555,7 @@ App := [].{
 					model: transition_fields.model,
 					commands: transition_fields.commands,
 					requests: List.map(transition_fields.requests, |request| map_request(request, transform)),
+					tasks: List.map(transition_fields.tasks, |task!| || transform(task!())),
 				}),
 			)
 		}
@@ -561,28 +564,48 @@ App := [].{
 		with_command : Transition(model, msg), Command -> Transition(model, msg)
 		with_command = |transition, command| {
 			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, List.append(transition_fields.commands, command), transition_fields.requests)
+			Transition.(Transition({ model: transition_fields.model, commands: List.append(transition_fields.commands, command), requests: transition_fields.requests, tasks: transition_fields.tasks }))
 		}
 
 		## Append commands after commands already requested by this update.
 		with_commands : Transition(model, msg), List(Command) -> Transition(model, msg)
 		with_commands = |transition, commands| {
 			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, List.concat(transition_fields.commands, commands), transition_fields.requests)
+			Transition.(Transition({ model: transition_fields.model, commands: List.concat(transition_fields.commands, commands), requests: transition_fields.requests, tasks: transition_fields.tasks }))
 		}
 
 		## Append one deferred request after requests already requested by this update.
 		with_request : Transition(model, msg), Request(msg) -> Transition(model, msg)
 		with_request = |transition, request| {
 			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, transition_fields.commands, List.append(transition_fields.requests, request))
+			Transition.(Transition({ model: transition_fields.model, commands: transition_fields.commands, requests: List.append(transition_fields.requests, request), tasks: transition_fields.tasks }))
 		}
 
 		## Append deferred requests after requests already requested by this update.
 		with_requests : Transition(model, msg), List(Request(msg)) -> Transition(model, msg)
 		with_requests = |transition, requests| {
 			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, transition_fields.commands, List.concat(transition_fields.requests, requests))
+			Transition.(Transition({ model: transition_fields.model, commands: transition_fields.commands, requests: List.concat(transition_fields.requests, requests), tasks: transition_fields.tasks }))
+		}
+
+		## Append one task. It starts this cycle on its own coroutine and its
+		## return value arrives on a later `Input.messages`.
+		##
+		##     App.next(model).with_task(|| {
+		##         Task.sleep!(300)
+		##         Woke
+		##     })
+		with_task : Transition(model, msg), (() => msg) -> Transition(model, msg)
+		with_task = |transition, task!| {
+			transition_fields = transition.fields()
+			Transition.(Transition({ model: transition_fields.model, commands: transition_fields.commands, requests: transition_fields.requests, tasks: List.append(transition_fields.tasks, task!) }))
+		}
+
+		## Append tasks after tasks already requested by this update.
+		with_tasks : Transition(model, msg), List(() => msg) -> Transition(model, msg)
+		with_tasks = |transition, tasks| {
+			transition_fields = transition.fields()
+			Transition.(Transition({ model: transition_fields.model, commands: transition_fields.commands, requests: transition_fields.requests, tasks: List.concat(transition_fields.tasks, tasks) }))
 		}
 	}
 
@@ -591,14 +614,14 @@ App := [].{
 	## This and `map2` live on `App` so `Transition` participates in Roc's
 	## record-builder syntax: `{ field: update }.App`.
 	next : model -> Transition(model, msg)
-	next = |model| Transition.(Transition({ model, commands: [], requests: [] }))
+	next = |model| Transition.(Transition({ model, commands: [], requests: [], tasks: [] }))
 
 	## Start a transition with all of its ordered host work.
 	##
 	## Most code reads better with `next(...).with_command(...)`; this is useful
 	## when a helper already computes both lists.
 	from_parts : model, List(Command), List(Request(msg)) -> Transition(model, msg)
-	from_parts = |model, commands, requests| Transition.(Transition({ model, commands, requests }))
+	from_parts = |model, commands, requests| Transition.(Transition({ model, commands, requests, tasks: [] }))
 
 	## Transform a transition.s model while retaining its ordered host work.
 	map : Transition(a, msg), (a -> b) -> Transition(b, msg)
@@ -614,6 +637,7 @@ App := [].{
 				model: combine(left_fields.model, right_fields.model),
 				commands: List.concat(left_fields.commands, right_fields.commands),
 				requests: List.concat(left_fields.requests, right_fields.requests),
+				tasks: List.concat(left_fields.tasks, right_fields.tasks),
 			}),
 		)
 	}

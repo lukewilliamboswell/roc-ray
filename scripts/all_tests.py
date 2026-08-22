@@ -415,14 +415,20 @@ def run_udp_probe(
 ) -> list[str]:
     """Check that datagrams arrive with the right bytes from the right sender.
 
-    Two properties nothing else in the suite covers. First, a datagram sent
+    Three properties nothing else in the suite covers. First, a datagram sent
     from one socket reaches another and reports the address it actually came
     from -- the probe replies to that reported address rather than to the one
     it already knows, so a receive that named the wrong peer sends the pong
     into the void and the run times out. Second, `receive!` parks its task
     instead of blocking: the timeout half asserts that several frames were
     drawn while a task sat in a 200 ms receive, which a blocking implementation
-    could not manage.
+    could not manage. Third, each hop is delivered within a few cycles of the
+    task parking on it: a frame loop that does not poll the event loop every
+    frame still completes the round trip, just several frames after the
+    datagrams were ready, and only a bound on the delay catches that. The
+    bound holds here but bites in a window: headless pacing sleeps the frame
+    loop, which polls the event loop whatever the pump does, so a run with a
+    real window is what puts the third property under load.
 
     Loopback only, on ephemeral ports, so it needs no network and cannot
     collide with anything else on the machine. Exit 3 means a property did not

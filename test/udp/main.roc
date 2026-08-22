@@ -16,6 +16,12 @@ import rr.Udp
 ## address: a receive that reported the wrong peer would still deliver the right
 ## bytes, and only this catches it.
 ##
+## Each hop is also timed. A datagram sitting in the kernel is only seen when
+## the frame loop polls the event loop, so a loop that polls when it feels
+## like it rather than every frame carries the right bytes from the right
+## sender several frames late. `max_delivery_cycles` is what a run has to stay
+## inside, and both hops are measured against the cycle their task parked on.
+##
 ## `--udp-expect-timeout` runs the other half: one socket, nothing sent, and a
 ## receive that must report `Timeout`. It also checks that several frames went
 ## by while that task was parked, which is what distinguishes a waiting effect
@@ -44,7 +50,7 @@ State : [Idle, AwaitingPing, AwaitingPong, AwaitingTimeout]
 Outcome : [Pending, Passed, FailedWith(Str)]
 
 Msg : [
-	Received(Udp.Address, List(Udp.Datagram)),
+	Received(Udp.Address, List(Udp.Datagram), U64),
 	ReceiveFailed(Udp.Address, Udp.ReceiveError, U64),
 ]
 
@@ -67,6 +73,19 @@ timeout_ms = 200
 ## the wrong reason.
 min_parked_cycles : U64
 min_parked_cycles = 3
+
+## The most cycles that may pass between a task parking in `receive!` and the
+## batch it received reaching `update!`.
+##
+## Both hops of the round trip send before the listening task has run, so the
+## datagram is already in the kernel when the task parks on it: the pump the
+## task parks in must see it, and the message must arrive on the next input.
+## That is one cycle, and the slack above it is for a first frame that runs
+## long. A frame loop that polls the event loop only when its scheduler
+## happens to feel like it delivers this several cycles later, and this bound
+## is what says so.
+max_delivery_cycles : U64
+max_delivery_cycles = 3
 
 program = { init!, update!, render! }
 
@@ -173,7 +192,7 @@ listen! = |input, socket, cycle| {
 	Task.spawn!(
 		input,
 		|| match Udp.Socket.receive!(socket, { timeout_ms, max_datagrams: 16 }) {
-			Ok(datagrams) => Received(local, datagrams)
+			Ok(datagrams) => Received(local, datagrams, cycle)
 			Err(err) => ReceiveFailed(local, err, cycle)
 		},
 	)
@@ -229,7 +248,7 @@ react! = |model, input, message, cycle, current|
 					state: model.state,
 				}
 
-				(ExpectTimeout, Received(_, _)) => {
+				(ExpectTimeout, Received(_, _, _)) => {
 					outcome: FailedWith("a socket nobody sent to received something"),
 					state: model.state,
 				}
@@ -239,19 +258,28 @@ react! = |model, input, message, cycle, current|
 					state: model.state,
 				}
 
-				(RoundTrip, Received(local, datagrams)) => reply!(model, input, local, datagrams, cycle)
+				(RoundTrip, Received(local, datagrams, started)) => reply!(model, input, local, datagrams, cycle, started)
 			}
 		}
 
 ## Check one delivered batch and, when it was the ping, answer it.
-reply! : Model, App.Input(Msg), Udp.Address, List(Udp.Datagram), U64 => { outcome : Outcome, state : State }
-reply! = |model, input, local, datagrams, cycle| {
+reply! : Model, App.Input(Msg), Udp.Address, List(Udp.Datagram), U64, U64 => { outcome : Outcome, state : State }
+reply! = |model, input, local, datagrams, cycle, started| {
 	address_a = Udp.Socket.local_address(model.socket_a)
 	address_b = Udp.Socket.local_address(model.socket_b)
 	match List.first(datagrams) {
 		Err(_) => { outcome: FailedWith("a receive answered Ok with no datagrams"), state: model.state }
 		Ok(datagram) =>
-			if List.len(datagrams) != 1 {
+			# The latency assertion, and the reason the start cycle rides along
+			# on `Received` as well as on `ReceiveFailed`. The bytes and the
+			# sender can all be right and the exchange still be several frames
+			# behind where the datagram was ready.
+			if cycle > started + max_delivery_cycles {
+				{
+					outcome: FailedWith("${U64.to_str(cycle - started)} cycle(s) passed before the batch was delivered"),
+					state: model.state,
+				}
+			} else if List.len(datagrams) != 1 {
 				{ outcome: FailedWith("expected exactly one datagram in the batch"), state: model.state }
 			} else if local == address_b {
 				if datagram.bytes != expected_ping {

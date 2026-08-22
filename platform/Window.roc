@@ -2,7 +2,10 @@
 ##
 ## The size here is the *logical* drawing size: it matches mouse coordinates and
 ## raylib drawing units, and on a HiDPI display it is smaller than the actual
-## framebuffer in pixels.
+## framebuffer in pixels. `scale!` is the factor between the two, and it is what
+## makes the resolution of a `Capture` explainable: a capture is taken from the
+## framebuffer, so a `960 x 640` window on a display with a scale of `2` records
+## `1920 x 1280` pixels.
 ##
 ## Use `focused` and `minimized` to pause input or skip expensive work while the
 ## window is inactive.
@@ -88,6 +91,81 @@ Window := [].{
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_clipboard_text! : Str => {}
 	set_clipboard_text! = |text| HostHost.set_clipboard_text!(text)
+
+	## How many framebuffer pixels one logical unit is, per axis.
+	##
+	## `1` on an ordinary display and `2` on a doubled HiDPI one; the two axes
+	## can differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to
+	## get the pixel resolution a `Capture` records at.
+	##
+	## Reading a factor the backend already holds costs nothing and allocates
+	## nothing, so this is legal in any callback, `render!` included.
+	scale! : () => { x : F32, y : F32 }
+	scale! = || HostHost.window_scale_dpi!()
+
+	## One display the windowing backend can currently see.
+	##
+	## `index` is the argument `suggest_monitor!` takes. `size` and
+	## `refresh_hz` describe the video mode the monitor is running now, not what
+	## it is capable of, and `position` is its top-left corner in the same
+	## virtual-desktop coordinates `suggest_position!` uses -- so
+	## `suggest_position!(monitor.position)` puts the window in the corner of
+	## that monitor.
+	Monitor : {
+		index : I32,
+		name : Str,
+		size : { width : I32, height : I32 },
+		position : { x : I32, y : I32 },
+		refresh_hz : I32,
+	}
+
+	## Every display the windowing backend can currently see.
+	##
+	## The list is as long as the operating system's monitor count, and that
+	## count is the bound: the host asks for it, builds exactly that many
+	## entries, and never retains any of them. Monitors come and go while an
+	## app runs, so an answer describes the moment it was taken; ask again
+	## rather than caching one for the life of the process.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	monitors! : () => List(Monitor)
+	monitors! = || List.map(HostHost.monitors!(), monitor_from_host)
+
+	## Suggest where the window's top-left corner should sit, in
+	## virtual-desktop coordinates.
+	##
+	## The window manager controls the resulting geometry, and a position
+	## outside every monitor may be adjusted or ignored. Pair it with
+	## `monitors!` to place a window on a chosen display.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	suggest_position! : { x : I32, y : I32 } => {}
+	suggest_position! = |position| HostHost.suggest_window_position!(position)
+
+	## Suggest which monitor the window should move to, by `Monitor.index`.
+	##
+	## An index outside the connected set is ignored: which monitors exist can
+	## change between reading `monitors!` and acting on one, so a stale index is
+	## an ordinary race rather than a fault to report.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	suggest_monitor! : I32 => {}
+	suggest_monitor! = |index| HostHost.suggest_window_monitor!(index)
+}
+
+## Group the host's flat monitor record into the shape applications read.
+monitor_from_host : HostHost.MonitorInfo -> Window.Monitor
+monitor_from_host = |info| {
+	index: info.index,
+	name: info.name,
+	size: { width: info.width, height: info.height },
+	position: { x: info.x, y: info.y },
+	refresh_hz: info.refresh_hz,
+}
+
+expect {
+	monitor = monitor_from_host({ index: 1, name: "HDMI-1", width: 2560, height: 1440, x: 1920, y: 0, refresh_hz: 144 })
+	monitor.size == { width: 2560, height: 1440 } and monitor.position == { x: 1920, y: 0 }
 }
 
 ## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.

@@ -1606,6 +1606,16 @@ var headless_screen_height: i32 = 600;
 /// to ask, and a constant keeps `--host-headless` output reproducible.
 const HEADLESS_WINDOW_FOCUSED = true;
 const HEADLESS_WINDOW_MINIMIZED = false;
+/// A headless run has no display to enumerate, so it answers with one virtual
+/// monitor the size of the configured window. That keeps an app that places
+/// itself on a monitor, or divides by the DPI scale, on the same code path in
+/// CI as on a desktop, without inventing a geometry the run was never told
+/// about.
+const HEADLESS_MONITOR_NAME = "Headless";
+const HEADLESS_MONITOR_REFRESH_HZ: i32 = 60;
+/// The scale of an ordinary, non-HiDPI display: the headless answer, and the
+/// stand-in for a factor the backend cannot state usefully.
+const DEFAULT_WINDOW_SCALE: f32 = 1;
 var headless_random_state: u32 = 0x4d595df4;
 /// Headless runs never open a window, so there is no system clipboard to talk
 /// to. Back the clipboard effects with a process-local buffer instead of a
@@ -5264,6 +5274,138 @@ fn hostedSuggestWindowMinSize(args: abi.HostHostSuggest_window_min_sizeArgs) cal
     raylib.suggestWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
 
+/// `Window.suggest_position!`: move the window's top-left corner.
+///
+/// Nothing is validated here. Every position is meaningful to some multi-monitor
+/// desktop -- negative coordinates are ordinary on a display left of the primary
+/// one -- and the window manager is the only thing that knows which are not.
+fn hostedSuggestWindowPosition(args: abi.HostHostSuggest_window_positionArgs) callconv(.c) void {
+    enforcePhase("Window.suggest_position!", during_update);
+    if (headlessMode()) return;
+    raylib.suggestWindowPosition(args.x, args.y);
+}
+
+/// `Window.suggest_monitor!`: move the window to a monitor by index.
+///
+/// An index outside the connected set is ignored rather than reported: which
+/// monitors exist can change between the `Window.monitors!` that produced the
+/// index and this call, so a stale index is a race the app cannot prevent, not
+/// a fault it can act on.
+fn hostedSuggestWindowMonitor(monitor: i32) callconv(.c) void {
+    enforcePhase("Window.suggest_monitor!", during_update);
+    if (headlessMode()) return;
+    raylib.suggestWindowMonitor(monitor);
+}
+
+/// A scale factor the app can safely divide by.
+///
+/// The windowing backend answers `0` for a window it has not finished creating,
+/// and a fresh window on a display that has just been unplugged can answer with
+/// a non-finite factor. Both would silently corrupt every size derived from
+/// them, so they become `1`, the scale of an ordinary display.
+fn usableScaleFactor(value: f32) f32 {
+    if (!std.math.isFinite(value) or value <= 0) return DEFAULT_WINDOW_SCALE;
+    return value;
+}
+
+/// A monitor coordinate as an integer, saturating rather than trapping.
+///
+/// The backend states monitor positions as floats even though they are whole
+/// virtual-desktop pixels. A direct conversion is undefined for a value outside
+/// `i32`, and the host must not be the thing that stops working because a
+/// display driver answered strangely. The comparison widens to `f64` because
+/// `i32`'s bounds are exactly representable there and not in `f32`.
+fn monitorCoordinate(value: f32) i32 {
+    if (std.math.isNan(value)) return 0;
+    const widened: f64 = value;
+    if (widened <= @as(f64, std.math.minInt(i32))) return std.math.minInt(i32);
+    if (widened >= @as(f64, std.math.maxInt(i32))) return std.math.maxInt(i32);
+    return @intFromFloat(widened);
+}
+
+/// `Window.scale!`: how many framebuffer pixels one logical unit is.
+///
+/// The backend already holds both factors, so this copies two floats and
+/// allocates nothing -- which is why it is legal during `render!` too, where a
+/// shader or a capture wants the pixel resolution of the surface it is on.
+fn hostedWindowScaleDpi() callconv(.c) abi.HostHostWindow_scale_dpiRetRecord {
+    enforcePhase("Window.scale!", constant_time_anywhere);
+    if (headlessMode()) return .{ .x = DEFAULT_WINDOW_SCALE, .y = DEFAULT_WINDOW_SCALE };
+    const scale = raylib.getWindowScaleDpi();
+    return .{ .x = usableScaleFactor(scale.x), .y = usableScaleFactor(scale.y) };
+}
+
+/// The one virtual monitor a headless run reports.
+///
+/// Sized from the configured window, so `--host-headless` output stays a
+/// function of the app's own configuration rather than of the CI machine.
+fn headlessMonitor(roc_host: *RocHost) abi.HostHostMonitors {
+    return .{
+        .index = 0,
+        .name = abi.RocStr.fromSlice(HEADLESS_MONITOR_NAME, roc_host),
+        .width = headless_screen_width,
+        .height = headless_screen_height,
+        .x = 0,
+        .y = 0,
+        .refresh_hz = HEADLESS_MONITOR_REFRESH_HZ,
+    };
+}
+
+/// One monitor as the windowing backend currently describes it.
+///
+/// The name pointer belongs to the backend: it is null for an index the backend
+/// does not know, must never be freed, and is invalidated by the next backend
+/// call -- so it is copied into a Roc `Str` here. Native monitor names are not
+/// guaranteed to be UTF-8, and a Roc `Str` must be, so an invalid one becomes
+/// the replacement character rather than an invalid string, exactly as argv
+/// does.
+fn nativeMonitor(roc_host: *RocHost, index: i32) abi.HostHostMonitors {
+    const monitor = nonNegativeCInt(index);
+    const position = raylib.getMonitorPosition(monitor);
+    const name = if (raylib.getMonitorName(monitor)) |pointer| std.mem.span(pointer) else "";
+    return .{
+        .index = index,
+        .name = abi.RocStr.fromSlice(
+            if (std.unicode.utf8ValidateSlice(name)) name else "\xEF\xBF\xBD",
+            roc_host,
+        ),
+        .width = @intCast(raylib.getMonitorWidth(monitor)),
+        .height = @intCast(raylib.getMonitorHeight(monitor)),
+        .x = monitorCoordinate(position.x),
+        .y = monitorCoordinate(position.y),
+        .refresh_hz = @intCast(raylib.getMonitorRefreshRate(monitor)),
+    };
+}
+
+/// `Window.monitors!`: every display the windowing backend can see.
+///
+/// The bound is the operating system's own monitor count: the backend is asked
+/// how many there are, exactly that many entries are built, and the host retains
+/// none of them -- the list belongs to Roc as soon as it is returned. Reading
+/// them copies a name per monitor, so this is an ordinary state-changing-phase
+/// effect rather than a `render!` query.
+fn hostedMonitors(roc_host: *RocHost) callconv(.c) abi.RocList(abi.HostHostMonitors) {
+    enforcePhase("Window.monitors!", during_update);
+
+    const count: usize = if (headlessMode()) 1 else @intCast(@max(raylib.getMonitorCount(), 0));
+    if (count == 0) return abi.RocList(abi.HostHostMonitors).empty();
+
+    const list = abi.RocList(abi.HostHostMonitors).allocate(count, roc_host);
+    if (list.elements_ptr) |entries| {
+        for (entries[0..count], 0..) |*entry, index| {
+            entry.* = if (headlessMode())
+                headlessMonitor(roc_host)
+            else
+                nativeMonitor(roc_host, @intCast(index));
+        }
+    }
+    return list;
+}
+
+fn exportedMonitors() callconv(.c) abi.RocList(abi.HostHostMonitors) {
+    return hostedMonitors(activeHost());
+}
+
 fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     enforcePhase("Keys.set_exit_key!", during_update);
     if (active_headless) return;
@@ -6290,6 +6432,10 @@ comptime {
         @export(&hostedSuggestWindowSize, .{ .name = "roc_host_suggest_window_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSuggestWindowMinSize, .{ .name = "roc_host_suggest_window_min_size" });
+        @export(&hostedSuggestWindowPosition, .{ .name = "roc_host_suggest_window_position" });
+        @export(&hostedSuggestWindowMonitor, .{ .name = "roc_host_suggest_window_monitor" });
+        @export(&hostedWindowScaleDpi, .{ .name = "roc_host_window_scale_dpi" });
+        @export(&exportedMonitors, .{ .name = "roc_host_monitors" });
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
@@ -7933,6 +8079,127 @@ test "window-size suggestions and frame-rate caps are taken during update" {
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Window.set_target_fps!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_update));
+}
+
+test "the DPI scale answers in every callback and never with a factor to divide by" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // An app multiplies a window size by this to learn the resolution a capture
+    // records at, and divides by it to go the other way. The backend answers 0
+    // for a window it has not finished creating, so the factor that crosses has
+    // to be one that survives both.
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(0));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(-2));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(std.math.nan(f32)));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(std.math.inf(f32)));
+    try std.testing.expectEqual(@as(f32, 2), usableScaleFactor(2));
+
+    // Monitor positions arrive as floats and are used as whole pixels, so a
+    // value no `i32` can hold has to saturate rather than trap the host.
+    try std.testing.expectEqual(@as(i32, -1920), monitorCoordinate(-1920));
+    try std.testing.expectEqual(@as(i32, 0), monitorCoordinate(std.math.nan(f32)));
+    try std.testing.expectEqual(std.math.maxInt(i32), monitorCoordinate(std.math.inf(f32)));
+    try std.testing.expectEqual(std.math.minInt(i32), monitorCoordinate(-std.math.inf(f32)));
+
+    // Copying two floats the backend already holds is what makes this legal
+    // mid-frame, where a shader or a capture is the thing that needs it.
+    for ([_]Phase{ .startup, .update, .render, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        const scale = hostedWindowScaleDpi();
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+        try std.testing.expectEqual(DEFAULT_WINDOW_SCALE, scale.x);
+        try std.testing.expectEqual(DEFAULT_WINDOW_SCALE, scale.y);
+    }
+}
+
+test "a headless run enumerates one monitor the size of its own window" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+    const restore_width = headless_screen_width;
+    const restore_height = headless_screen_height;
+    defer headless_screen_width = restore_width;
+    defer headless_screen_height = restore_height;
+    headless_screen_width = 1280;
+    headless_screen_height = 720;
+
+    {
+        const scope = PhaseScope.enter(.update);
+        defer scope.leave();
+        const monitors = hostedMonitors(&roc_host);
+        defer {
+            for (monitors.allocationItems()) |monitor| monitor.decref(&roc_host);
+            monitors.decref(&roc_host);
+        }
+
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+        try std.testing.expectEqual(@as(usize, 1), monitors.items().len);
+
+        // Sized from the configured window rather than from the CI machine, so
+        // an app that places itself on a monitor answers the same everywhere.
+        const only = monitors.items()[0];
+        try std.testing.expectEqual(@as(i32, 0), only.index);
+        try std.testing.expectEqualStrings(HEADLESS_MONITOR_NAME, only.name.asSlice());
+        try std.testing.expectEqual(@as(i32, 1280), only.width);
+        try std.testing.expectEqual(@as(i32, 720), only.height);
+        try std.testing.expectEqual(@as(i32, 0), only.x);
+        try std.testing.expectEqual(@as(i32, 0), only.y);
+        try std.testing.expectEqual(HEADLESS_MONITOR_REFRESH_HZ, only.refresh_hz);
+    }
+
+    // Enumerating allocates a list and copies a name per monitor, which is why
+    // it stops at the frame while the scale factor above does not.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    last_phase_violation = null;
+    const refused = hostedMonitors(&roc_host);
+    for (refused.allocationItems()) |monitor| monitor.decref(&roc_host);
+    refused.decref(&roc_host);
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.monitors!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_update));
+}
+
+test "window placement suggestions are taken wherever host state changes" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Headless has no window manager to move a window on, so the raylib calls
+    // sit behind `headlessMode()` and what this exercises is the guard --
+    // including that an out-of-range monitor index is an ordinary no-op rather
+    // than a refusal an app would have to handle.
+    for ([_]Phase{ .startup, .update, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        hostedSuggestWindowPosition(.{ .x = -1920, .y = 40 });
+        hostedSuggestWindowMonitor(0);
+        hostedSuggestWindowMonitor(-1);
+        hostedSuggestWindowMonitor(99);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+
+    // Moving the window mid-frame would move the surface being drawn into.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    last_phase_violation = null;
+    hostedSuggestWindowPosition(.{ .x = 0, .y = 0 });
+    const position_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.suggest_position!", position_violation.operation);
+    try std.testing.expect(position_violation.allowed.eql(during_update));
+
+    last_phase_violation = null;
+    hostedSuggestWindowMonitor(0);
+    const monitor_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.suggest_monitor!", monitor_violation.operation);
+    try std.testing.expect(monitor_violation.allowed.eql(during_update));
 }
 
 test "a rejection names every phase the operation was allowed in" {

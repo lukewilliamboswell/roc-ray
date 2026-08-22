@@ -1147,6 +1147,68 @@ pub fn setExitKey(key: c_int) void {
     rl.SetExitKey(key);
 }
 
+/// Suggest where the window's top-left corner sits, in virtual-desktop pixels.
+///
+/// The window manager may adjust or ignore the request; the position observed
+/// from the window afterward is authoritative.
+pub fn suggestWindowPosition(x: c_int, y: c_int) void {
+    rl.SetWindowPosition(x, y);
+}
+
+/// Suggest that the window move to a monitor index.
+///
+/// raylib bounds-checks the index itself and logs a warning for one outside the
+/// connected set, leaving the window where it is.
+pub fn suggestWindowMonitor(monitor: c_int) void {
+    rl.SetWindowMonitor(monitor);
+}
+
+/// The framebuffer-to-logical scale of the window, one factor per axis.
+///
+/// `1` without `FLAG_WINDOW_HIGHDPI` or on an ordinary display, and the
+/// display's scale factor with it -- so the framebuffer this reports is the
+/// resolution a capture reads back at.
+pub fn getWindowScaleDpi() Vec2 {
+    const scale = rl.GetWindowScaleDPI();
+    return .{ .x = scale.x, .y = scale.y };
+}
+
+/// How many monitors the windowing backend can currently see.
+pub fn getMonitorCount() c_int {
+    return rl.GetMonitorCount();
+}
+
+/// Width of a monitor's current video mode, in pixels.
+pub fn getMonitorWidth(monitor: c_int) c_int {
+    return rl.GetMonitorWidth(monitor);
+}
+
+/// Height of a monitor's current video mode, in pixels.
+pub fn getMonitorHeight(monitor: c_int) c_int {
+    return rl.GetMonitorHeight(monitor);
+}
+
+/// A monitor's top-left corner in virtual-desktop coordinates.
+pub fn getMonitorPosition(monitor: c_int) Vec2 {
+    const position = rl.GetMonitorPosition(monitor);
+    return .{ .x = position.x, .y = position.y };
+}
+
+/// Refresh rate of a monitor's current video mode, in hertz.
+pub fn getMonitorRefreshRate(monitor: c_int) c_int {
+    return rl.GetMonitorRefreshRate(monitor);
+}
+
+/// A monitor's human-readable name, owned by the windowing backend.
+///
+/// Never free it, and copy it before the next backend call: the pointer is null
+/// for an index outside the connected set.
+pub fn getMonitorName(monitor: c_int) ?[*:0]const u8 {
+    const name = rl.GetMonitorName(monitor);
+    if (name == null) return null;
+    return @ptrCast(name);
+}
+
 /// Read UTF-8 text from the system clipboard.
 ///
 /// The returned pointer is owned by the windowing backend: never free it, and

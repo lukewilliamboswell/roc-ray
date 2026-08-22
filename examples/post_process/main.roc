@@ -18,7 +18,7 @@ Model : {
 	seconds : F32,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
@@ -41,9 +41,9 @@ init! = App.init(
 ## the draws it precedes.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input|
-	App.next({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input|
+	Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
@@ -84,7 +84,7 @@ render! = |model, frame| {
 		model.shader,
 		|shader_frame| {
 			# Inside the scope and before the draw it applies to, which is the
-			# whole reason this is here rather than in an command list.
+			# whole reason this is here rather than in `update!`.
 			model.time_uniform.set!(model.seconds)
 			shader_frame.texture!(target_draw)
 			Ok({})

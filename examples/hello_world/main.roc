@@ -21,7 +21,7 @@ Layout : {
 	title_size : Draw.TextSize,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -46,14 +46,17 @@ init! = App.init(
 ## it wants done -- here, an `Exit` command on the frame Escape is pressed.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
-	# Solve once for the next model. `render!` consumes this retained layout and
-	# the following update can use it for hit testing without any host calls.
-	layout = solve_layout(model.font)
-	App.next({ ..model, layout, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		# Solve once for the next model. `render!` consumes this retained layout and
+		# the following update can use it for hit testing without any host calls.
+		layout = solve_layout(model.font)
+		Ok({ ..model, layout, pointer: input.mouse.position(), accent_on: input.mouse.button_down(Left) })
+	}
 }
 
 solve_layout : Draw.Font -> Layout

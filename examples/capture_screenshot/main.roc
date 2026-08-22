@@ -38,7 +38,7 @@ Model : {
 ## on one input need neither IDs nor completion filtering.
 Msg : [EscapingScreenshotFinished(Try({}, Capture.ScreenshotError)), SavedScreenshotFinished(Try({}, Capture.ScreenshotError))]
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -70,8 +70,8 @@ init! = App.init(
 ## The pixels are still this frame's -- the host reads the framebuffer at the
 ## end of the frame that asked, exactly where `Capture.screenshot!` read it --
 ## so only the report waits.
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	next = apply_messages(model, program_input.messages)
 
@@ -83,23 +83,22 @@ update = |model, program_input| {
 	# Frame 3 asks and the host reads the framebuffer at the end of it, but the
 	# file is encoded and written off the frame thread, so the outcome arrives
 	# on whichever later input the write finished by. Wait for it rather than for
-	# a frame number: that is the whole difference between a request and an command.
-	# The frame cap is only so an unattended run cannot hang.
+	# a frame number: that is the whole difference between a request and a
+	# direct effect. The frame cap is only so an unattended run cannot hang.
 	settled = next.settled
-	commands =
-		if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {
-			[App.exit(0)]
-		} else {
-			[]
-		}
 
-	requests =
-		List.concat(
-			if escape_requested [Capture.screenshot("../escaped.png", |result| EscapingScreenshotFinished(result))] else [],
-			if save_requested [Capture.screenshot("scene.png", |result| SavedScreenshotFinished(result))] else [],
-		)
+	if escape_requested {
+		App.request!(Capture.screenshot("../escaped.png", |result| EscapingScreenshotFinished(result)))
+	}
+	if save_requested {
+		App.request!(Capture.screenshot("scene.png", |result| SavedScreenshotFinished(result)))
+	}
 
-	App.next(next).with_commands(commands).with_requests(requests)
+	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {
+		Err(Exit(0))
+	} else {
+		Ok(next)
+	}
 }
 
 ## Apply every callback in host-observed order with one `List.fold` over the

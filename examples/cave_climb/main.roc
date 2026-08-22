@@ -53,7 +53,7 @@ World : Cave.World
 
 Model : Cave.Model
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -852,8 +852,8 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	restart = input.key_pressed(KeySpace)
@@ -871,8 +871,11 @@ update = |model, program_input| {
 		GameOver => if restart new_world(model.level) else model.world
 	}
 
-	App.next({ ..model, world: next_world })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, world: next_world })
+	}
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

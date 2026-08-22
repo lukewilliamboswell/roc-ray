@@ -64,8 +64,8 @@ CASES = (
         ("cannot use opaque nominal type", "instance of Texture.Handle"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
-        ("does not exist", "rr.Capture.stop! does not exist"),
+        ROOT / "test" / "compile_fail" / "transition_removed.roc",
+        ("does not exist", "rr.App.next does not exist"),
     ),
 )
 

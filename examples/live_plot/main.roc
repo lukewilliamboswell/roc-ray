@@ -353,7 +353,7 @@ Msg : [
 	FileRead(Str, [New, Lane(U64)], Try(List(U8), Files.ReadBytesError)),
 ]
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 # ---------------------------------------------------------------------------
 # The tree
@@ -1533,8 +1533,8 @@ init! = App.init(
 sprite_of : Model -> Draw.Texture
 sprite_of = |model| Draw.render_texture(model.glow)
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	# 1. Fold this cycle's completions in. Each one ends a request the queue
 	#    ready, so each one reports a completion to the queue -- and a
 	#    listing may enqueue a great deal more work while it is at it.
@@ -1577,9 +1577,15 @@ update = |model, program_input| {
 			refetched.queue.take_ready()
 		}
 
-	App.next({ ..refetched, queue: ready.queue })
-		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(ready.requests)
+	for request in ready.requests {
+		App.request!(request)
+	}
+
+	if program_input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..refetched, queue: ready.queue })
+	}
 }
 
 ## Fold one completion into the model.

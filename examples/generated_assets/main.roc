@@ -27,7 +27,7 @@ Model : {
 	ui : Box({ title : Text.Prepared, help : Text.Prepared, palette : Text.Prepared }),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 grid_side : U64
 grid_side = 16
@@ -128,11 +128,18 @@ cell_at = |point| {
 ## canvas visible and audible.
 ##
 ## The pixels live in the model and on the GPU, so every branch that changes them
-## has to emit the matching `UpdateTexture`; returning both together is what keeps
-## the two from drifting apart.
+## has to emit the matching upload; returning both together is what keeps the
+## two from drifting apart. The edits are data so the editor stays pure;
+## `update!` performs them.
+Edit : [
+	Upload(List(Color.Rgba)),
+	UploadRegion(Assets.Region),
+	Play(Audio.Playback),
+]
+
 Edited : {
 	model : Model,
-	commands : List(App.Command),
+	edits : List(Edit),
 }
 
 update_editor : Model, Devices.Snapshot -> Edited
@@ -143,37 +150,34 @@ update_editor = |model, input| {
 	if input.key_pressed(KeyC) {
 		{
 			model: { ..base, pixels: initial_pixels, last_cell: Idle },
-			commands: [
-				Assets.update_texture(base.texture, initial_pixels),
+			edits: [
+				Upload(initial_pixels),
 				paint(base.paint_sound, 0.7),
 			],
 		}
 	} else if input.mouse.button_down(Left) {
 		match cell_at(input.mouse.position()) {
-			Err(_) => { model: { ..base, last_cell: Idle }, commands: [] }
+			Err(_) => { model: { ..base, last_cell: Idle }, edits: [] }
 			Ok(index) =>
 				if base.last_cell == Painted(index) {
-					{ model: base, commands: [] }
+					{ model: base, edits: [] }
 				} else {
 					match base.pixels.set(index, palette_color(palette)) {
-						Err(_) => { model: base, commands: [] }
+						Err(_) => { model: base, edits: [] }
 						Ok(pixels) => {
 							{
 								model: { ..base, pixels, last_cell: Painted(index) },
-								commands: [
+								edits: [
 									# One cell changed, so one cell is uploaded.
 									# Re-uploading the whole canvas would send
 									# 256 pixels to say something about one.
-									Assets.update_texture_region(
-										base.texture,
-										{
-											x: U64.to_i32_wrap(index % grid_side),
-											y: U64.to_i32_wrap(index // grid_side),
-											width: 1,
-											height: 1,
-											pixels: [palette_color(palette)],
-										},
-									),
+									UploadRegion({
+										x: U64.to_i32_wrap(index % grid_side),
+										y: U64.to_i32_wrap(index // grid_side),
+										width: 1,
+										height: 1,
+										pixels: [palette_color(palette)],
+									}),
 									paint(base.paint_sound, 0.8 + U64.to_f32(palette) * 0.18),
 								],
 							}
@@ -182,7 +186,7 @@ update_editor = |model, input| {
 				}
 			}
 	} else {
-		{ model: { ..base, last_cell: Idle }, commands: [] }
+		{ model: { ..base, last_cell: Idle }, edits: [] }
 	}
 }
 
@@ -190,9 +194,9 @@ update_editor = |model, input| {
 ##
 ## Pitch and playback travel as a single `Playback`, so a stroke can no longer be
 ## heard at the previous stroke's pitch.
-paint : Audio.Sound, F32 -> App.Command
+paint : Audio.Sound, F32 -> Edit
 paint = |sound, pitch|
-	sound.playback().with_volume(paint_volume).with_pitch(pitch).play()
+	Play(sound.playback().with_volume(paint_volume).with_pitch(pitch))
 
 draw_swatch! : Draw.Frame, U64, U64 => {}
 draw_swatch! = |frame, index, selected| {
@@ -201,31 +205,50 @@ draw_swatch! = |frame, index, selected| {
 	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
 }
 
-## A mismatched pixel count is no longer this function's problem: the check
-## happens where the upload does, when the platform applies the `UpdateTexture`
-## command, and a failure ends the cycle exactly as
-## `Assets.update_texture!(texture, pixels)?`
-## used to. So the error type is the same one every other example has.
+## Perform one edit. A mismatched upload is a programmer error -- the editor
+## built pixels that do not fit the texture it also built -- so it stops the
+## app rather than being reported as a state the model could handle.
+perform_edit! : Assets.Texture, Edit => {}
+perform_edit! = |texture, edit| {
+	result =
+		match edit {
+			Upload(pixels) => Assets.update_texture!(texture, pixels)
+			UploadRegion(region) => Assets.update_texture_region!(texture, region)
+			Play(playback) => {
+				playback.play!()
+				Ok({})
+			}
+		}
+	match result {
+		Ok({}) => {}
+		Err(_) => crash "generated_assets: a texture upload did not fit its texture"
+	}
+}
+
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	next = update_editor(model, input)
+	for edit in next.edits {
+		perform_edit!(next.model.texture, edit)
+	}
+
 	mouse = input.mouse.position()
-	cursor = Mouse.set_cursor(
+	Mouse.set_cursor!(
 		match cell_at(mouse) {
 			Ok(_) => Crosshair
 			Err(_) => Arrow
 		},
 	)
 
-	App.next({ ..next.model, mouse })
-		.with_commands(exit_commands)
-		.with_commands(next.commands)
-		.with_command(cursor)
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..next.model, mouse })
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

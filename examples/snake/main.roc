@@ -41,14 +41,14 @@ Model : {
 ## it made getting there.
 ##
 ## One frame can run several fixed steps, and each of them can crash or eat, so
-## the commands have to be carried out of the recursion rather than returned by
+## the sounds have to be carried out of the recursion rather than returned by
 ## whichever step happened to be last.
 Stepped : {
 	model : Model,
-	commands : List(App.Command),
+	sounds : List(Audio.Playback),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -206,7 +206,7 @@ step_snake = |model| {
 	if hit_wall or hit_self {
 		{
 			model: { ..model, accumulator: 0, state: GameOver },
-			commands: [model.crash_sound.play()],
+			sounds: [model.crash_sound.playback()],
 		}
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
@@ -226,7 +226,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				commands: [model.eat_sound.play()],
+				sounds: [model.eat_sound.playback()],
 			}
 		} else {
 			{
@@ -238,7 +238,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				commands: [],
+				sounds: [],
 			}
 		}
 	}
@@ -247,20 +247,20 @@ step_snake = |model| {
 ## Run as many fixed steps as the accumulator has paid for, carrying the sounds
 ## along.
 ##
-## `commands` is the running total rather than something the tail returns: a
+## `sounds` is the running total rather than something the tail returns: a
 ## frame that catches up over three steps can eat twice and then crash, and all
 ## three sounds have to survive, in that order. Returning only the last step's
-## commands would silently drop the earlier ones.
-advance_fixed_steps : Model, List(App.Command) -> Stepped
-advance_fixed_steps = |model, commands| {
+## sounds would silently drop the earlier ones.
+advance_fixed_steps : Model, List(Audio.Playback) -> Stepped
+advance_fixed_steps = |model, sounds| {
 	if model.accumulator < step_time {
-		{ model, commands }
+		{ model, sounds }
 	} else {
 		stepped = step_snake({ ..model, accumulator: model.accumulator - step_time })
-		so_far = List.concat(commands, stepped.commands)
+		so_far = List.concat(sounds, stepped.sounds)
 		match stepped.model.state {
 			Playing => advance_fixed_steps(stepped.model, so_far)
-			GameOver => { model: stepped.model, commands: so_far }
+			GameOver => { model: stepped.model, sounds: so_far }
 		}
 	}
 }
@@ -282,10 +282,9 @@ advance_playing = |model, input, dt| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
 	# step remainder so normal frame-rate variation does not change game speed.
@@ -295,18 +294,23 @@ update = |model, program_input| {
 		Playing => advance_playing(model, input, dt)
 		GameOver =>
 			if input.key_pressed(KeySpace) {
-				{ model: new_game(model), commands: [model.start_sound.play()] }
+				{ model: new_game(model), sounds: [model.start_sound.playback()] }
 			} else {
-				{ model, commands: [] }
+				{ model, sounds: [] }
 			}
 		}
 
-	# The two independently-owned updates combine through App's applicative
-	# instance. Fields combine in source order, preserving exit-before-game sound
-	# ordering while the final map selects the whole game model.
-	exit_update = App.next({}).with_commands(exit_commands)
-	game_update = App.next(stepped.model).with_commands(stepped.commands)
-	{ exit: exit_update, game: game_update }.App.map(|updates| updates.game)
+	# The step is pure and says which sounds it made, in order; this is where
+	# they are played.
+	for playback in stepped.sounds {
+		playback.play!()
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(stepped.model)
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

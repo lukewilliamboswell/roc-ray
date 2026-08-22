@@ -34,7 +34,7 @@ Model : {
 	simulation_nanos : U64,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -197,8 +197,8 @@ layout_for = |screen| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	# Layout follows the window, pointing follows the mouse, and the preview
@@ -208,7 +208,7 @@ update = |model, program_input| {
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
-	cursor = Mouse.set_cursor(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
+	Mouse.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
 	from_keyboard = keyboard_selection(model.selection, input)
 	selection = if input.mouse.button_pressed(Left) and hover_display {
@@ -221,10 +221,13 @@ update = |model, program_input| {
 		from_keyboard
 	}
 
-	App.next({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos })
 	# With `with_exit_key(NoExitKey)` no key closes the window on its
 	# own, so the app decides. Escape is left free for the UI to use.
-		.with_commands(if input.key_pressed(KeyQ) [App.exit(0), cursor] else [cursor])
+	if input.key_pressed(KeyQ) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos })
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])

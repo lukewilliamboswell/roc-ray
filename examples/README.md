@@ -26,14 +26,14 @@ roc build examples/snake/main.roc --output snake
 
 | Example | What it is | Patterns to reuse |
 | --- | --- | --- |
-| [Hello World](hello_world/main.roc) | A polished minimal interactive scene | App lifecycle, prepared text, pointer input, exit commands |
+| [Hello World](hello_world/main.roc) | A polished minimal interactive scene | App lifecycle, prepared text, pointer input, exiting from `update!` |
 | [Pong](pong/main.roc) | A complete two-player arcade game | Delta-time movement, collision, scoring, generated audio |
 | [Snake](snake/main.roc) | A grid-based game with restartable state | Discrete simulation, keyboard control, deterministic updates |
 | [Breakout](breakout/main.roc) | A complete game that can record its own demo | Separating game rules from effects, event-driven sound, CLI modes, capture |
 | [Pixel Workshop](generated_assets/main.roc) | A tiny paint program with a mutable GPU texture | Generated assets, palette tools, texture updates, feedback sounds |
 | [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout, mouse and keyboard navigation, minimum window size |
 | [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor and PNG exporter | Screenshot requests, output directories, async success feedback |
-| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, typed messages, window commands, clipboard requests |
+| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, typed messages, direct window effects, clipboard requests |
 
 ## Larger showcases
 
@@ -65,7 +65,7 @@ recommended starting point for a whole application.
 
 ## What these examples consider good practice
 
-- Keep application state in `Model`; update it purely from `App.Input`.
+- Keep application state in `Model`; fold `App.Input` into it in pure helpers that `update!` calls.
 - Load and prepare long-lived resources once in `init!`, then retain them in the
   model instead of recreating them each frame.
 - Derive layout and view-only values with pure helpers rather than storing
@@ -73,8 +73,9 @@ recommended starting point for a whole application.
   surface being drawn to instead of copying `input.window.size` into the model:
   it is current, and inside `with_render_texture!` it is the target's size
   rather than the window's.
-- Return commands for ordered response-free work and requests for work whose typed result
-  matters to the application.
+- Call host effects directly from `update!` for response-free work; use
+  `Task.spawn!` and `App.request!` for work whose typed result matters to the
+  application, and fold the result in when it arrives as a message.
 - Keep game or tool rules separate from rendering where that makes them easy to
   test, as Breakout does.
 - Treat capture, scripted input, and headless execution as useful app modes,

@@ -44,7 +44,7 @@ small_path = "README.md"
 large_path : Str
 large_path = "src/roc_platform_abi.zig"
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -60,22 +60,19 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large }, apply_message)
-	reads =
-		if program_input.time.cycle_count == 0 {
-			[
-				Files.read_text(small_path, |result| SmallReadFinished(result)),
-				Files.read_bytes(large_path, |result| BytesReadFinished(result)),
-			]
-		} else {
-			[]
-		}
+	if program_input.time.cycle_count == 0 {
+		App.request!(Files.read_text(small_path, |result| SmallReadFinished(result)))
+		App.request!(Files.read_bytes(large_path, |result| BytesReadFinished(result)))
+	}
 
-	App.next({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(reads)
+	if program_input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+	}
 }
 
 apply_message : { small : ReadState, large : BytesState }, Msg -> { small : ReadState, large : BytesState }

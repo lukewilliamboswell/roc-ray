@@ -26,7 +26,7 @@ Model : {
 	input : Devices.Snapshot,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 ## A clipboard request chooses this message at submission time. The app receives
 ## the typed result directly in `program_input.messages`, with no public request ID.
@@ -71,34 +71,36 @@ ascii_typed = |codepoints|
 		),
 	)
 
-## Everything the host used to be told mid-update is returned instead: settings
-## that just happen become commands, and reading the clipboard -- which answers
-## back -- becomes a request.
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+## Settings that just happen are direct effects; reading the clipboard -- which
+## answers back -- is a request whose answer arrives on a later input.
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	ctrl_held = input.key_down(KeyLeftControl) or input.key_down(KeyRightControl)
 	typed_this_frame = if ctrl_held "" else ascii_typed(input.text_input)
 	buffered = Str.concat(model.typed, typed_this_frame)
 
-	# One chain, as before, so two shortcuts pressed together still resolve in
-	# this order -- it now yields the work to do alongside the new buffer.
+	# One chain, so two shortcuts pressed together still resolve in this order.
 	clipboard = if ctrl_held and input.key_pressed(KeyC) {
-		{ typed: buffered, clipboard_status: "copied to clipboard", commands: [Window.set_clipboard_text(buffered)], requests: [] }
+		Window.set_clipboard_text!(buffered)
+		{ typed: buffered, clipboard_status: "copied to clipboard" }
 	} else if ctrl_held and input.key_pressed(KeyV) {
 		# A read answers back, so it is a request: the pasted text is appended on
 		# the input that carries the answer rather than on this one.
-		{ typed: buffered, clipboard_status: model.clipboard_status, commands: [], requests: [Window.read_clipboard(|result| ClipboardReadFinished(result))] }
+		App.request!(Window.read_clipboard(|result| ClipboardReadFinished(result)))
+		{ typed: buffered, clipboard_status: model.clipboard_status }
 	} else if ctrl_held and input.key_pressed(KeyX) {
-		{ typed: "", clipboard_status: "cleared", commands: [], requests: [] }
+		{ typed: "", clipboard_status: "cleared" }
 	} else if ctrl_held and input.key_pressed(KeyE) {
 		# The same setting the startup config takes, applied mid-run.
-		{ typed: buffered, clipboard_status: "Esc now exits again", commands: [Keys.set_exit_key(ExitKey(KeyEscape))], requests: [] }
+		Keys.set_exit_key!(ExitKey(KeyEscape))
+		{ typed: buffered, clipboard_status: "Esc now exits again" }
 	} else if ctrl_held and input.key_pressed(KeyM) {
-		{ typed: buffered, clipboard_status: "window minimum suggested as 640x480", commands: [Window.suggest_min_size({ width: 640, height: 480 })], requests: [] }
+		Window.suggest_min_size!({ width: 640, height: 480 })
+		{ typed: buffered, clipboard_status: "window minimum suggested as 640x480" }
 	} else {
-		{ typed: buffered, clipboard_status: model.clipboard_status, commands: [], requests: [] }
+		{ typed: buffered, clipboard_status: model.clipboard_status }
 	}
 
 	# Ctrl+V can be pressed again before a slow earlier read answers. Fold every
@@ -106,22 +108,25 @@ update = |model, program_input| {
 	# status describes the last terminal result in that order.
 	pasted = apply_paste_messages({ typed: clipboard.typed, clipboard_status: clipboard.clipboard_status }, program_input.messages)
 
-	# Applied in order, before anything is drawn, which is where the effects
-	# they replace used to run.
-	commands =
-		List.join([
-			if input.key_pressed(KeyQ) [App.exit(0)] else [],
-			if input.key_pressed(KeyH) [Mouse.set_cursor_mode(Hidden)] else [],
-			if input.key_pressed(KeyJ) [Mouse.set_cursor_mode(Visible)] else [],
-			if input.key_pressed(KeyK) [Mouse.set_cursor_mode(Locked)] else [],
-			if input.key_pressed(KeyL) [Mouse.set_cursor_mode(Visible)] else [],
-			clipboard.commands,
-			[Mouse.set_cursor(if input.mouse.button_down(Left) Crosshair else Arrow)],
-		])
+	if input.key_pressed(KeyH) {
+		Mouse.set_cursor_mode!(Hidden)
+	}
+	if input.key_pressed(KeyJ) {
+		Mouse.set_cursor_mode!(Visible)
+	}
+	if input.key_pressed(KeyK) {
+		Mouse.set_cursor_mode!(Locked)
+	}
+	if input.key_pressed(KeyL) {
+		Mouse.set_cursor_mode!(Visible)
+	}
+	Mouse.set_cursor!(if input.mouse.button_down(Left) Crosshair else Arrow)
 
-	App.next({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
-		.with_commands(commands)
-		.with_requests(clipboard.requests)
+	if input.key_pressed(KeyQ) {
+		Err(Exit(0))
+	} else {
+		Ok({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
+	}
 }
 
 ## Fold this input's callback messages into the text field.

@@ -22,7 +22,7 @@ Model : {
 
 Msg : [PostcardSaved(Try({}, Capture.ScreenshotError))]
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -51,8 +51,8 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	copy = Box.unbox(model.copy)
 	resolved = List.fold(
@@ -79,9 +79,15 @@ update = |model, program_input| {
 		status: if save copy.saving else resolved.status,
 	}
 
-	App.next(next)
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(if save [Capture.screenshot("sunrise.png", |result| PostcardSaved(result))] else [])
+	if save {
+		App.request!(Capture.screenshot("sunrise.png", |result| PostcardSaved(result)))
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(next)
+	}
 }
 
 Palette : { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }

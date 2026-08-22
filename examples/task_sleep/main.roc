@@ -25,7 +25,7 @@ Msg : [Woke]
 sleep_millis : U64
 sleep_millis = 300
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -41,22 +41,24 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, input| {
 	cycle = input.time.cycle_count
 	state = List.fold(input.messages, model.state, |current, message| apply_message(current, message, cycle))
-	next = { ..model, state, cycle, elapsed: model.elapsed + input.time.elapsed_seconds }
-	transition = App.next(next)
-		.with_commands(if input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
 	if cycle == 0 {
-		transition.with_task(
+		# Spawned from inside `update!`: the task parks on its sleep before this
+		# frame is drawn, and `Woke` arrives on a later input.
+		Task.spawn!(
 			|| {
 				Task.sleep!(sleep_millis)
 				Woke
 			},
 		)
+	}
+	if input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
 	} else {
-		transition
+		Ok({ ..model, state, cycle, elapsed: model.elapsed + input.time.elapsed_seconds })
 	}
 }
 

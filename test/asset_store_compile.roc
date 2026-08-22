@@ -9,7 +9,7 @@ import rr.Draw
 
 Model : { store : Assets.Store, texture : Assets.Texture, font : Draw.Font, shader : Draw.Shader }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
@@ -35,8 +35,8 @@ init! = App.init(
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, _input| App.next(model)
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, _input| Ok(model)
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

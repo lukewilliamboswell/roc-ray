@@ -16,7 +16,7 @@ Model : {
 	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w = 800.F32
 
@@ -70,8 +70,8 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
 
@@ -80,8 +80,11 @@ update = |model, program_input| {
 	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
 	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	App.next({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
+	}
 }
 
 ## The camera and both mouse projections are derived rather than stored: they

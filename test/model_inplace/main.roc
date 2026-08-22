@@ -55,7 +55,7 @@ Msg : []
 point_count : U64
 point_count = 1_000_000
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(
@@ -100,20 +100,20 @@ parse_pattern = |name|
 ##
 ## Every branch uses the ordinary record-update spread an app would write,
 ## except `SetWithoutSpread`, which exists to price the spread itself.
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, _input|
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, _input|
 	match model.pattern {
 		SetInPlace =>
-			App.next({ ..model, points: set_point(model.points, model.cursor), cursor: model.cursor + 1 })
+			Ok({ ..model, points: set_point(model.points, model.cursor), cursor: model.cursor + 1 })
 
 		AppendGrowth =>
-			App.next({ ..model, trail: List.append(model.trail, marker(model.cursor)), cursor: model.cursor + 1 })
+			Ok({ ..model, trail: List.append(model.trail, marker(model.cursor)), cursor: model.cursor + 1 })
 
 		SetKeepingFallback =>
 		# The same write, except that the failure branch names the original
 		# list again. If that second mention is what forces a copy, this
 		# pattern costs a full list and `SetInPlace` does not.
-			App.next({
+			Ok({
 				..model,
 				points: match List.set(model.points, model.cursor % point_count, marker(model.cursor)) {
 					Ok(updated) => updated
@@ -126,7 +126,7 @@ update = |model, _input|
 		# Two writes to the same list. One list's worth of allocation means
 		# the first write copied and the second mutated the copy in place;
 		# two means no write here is ever in place.
-			App.next({
+			Ok({
 				..model,
 				points: set_point(set_point(model.points, model.cursor), model.cursor + 1),
 				cursor: model.cursor + 1,
@@ -134,7 +134,7 @@ update = |model, _input|
 
 		SetWithoutSpread =>
 		# The same write, spelled without `..model`, to price the spread.
-			App.next({
+			Ok({
 				points: set_point(model.points, model.cursor),
 				trail: model.trail,
 				cursor: model.cursor + 1,
@@ -146,17 +146,17 @@ update = |model, _input|
 		# scope and dropped in it, so it can only ever have one reference:
 		# whatever this costs beyond the `List.repeat` is what an in-place
 		# write costs when uniqueness is not in doubt.
-			App.next({ ..model, cursor: model.cursor + 1, trail: local_write(model.cursor) })
+			Ok({ ..model, cursor: model.cursor + 1, trail: local_write(model.cursor) })
 
 		LocalBoxedSet =>
 		# `LocalSet` with one difference: the list is boxed and unboxed before
 		# it is written, the way the platform adapter reaches the model. One
 		# list's worth of allocation means the round trip through `Box` is
 		# free; two means unboxing leaves the box holding a second reference.
-			App.next({ ..model, cursor: model.cursor + 1, trail: local_boxed_write(model.cursor) })
+			Ok({ ..model, cursor: model.cursor + 1, trail: local_boxed_write(model.cursor) })
 
 		NoChange =>
-			App.next(model)
+			Ok(model)
 		}
 
 ## `List.set` with the failed write discarded rather than falling back to the
@@ -197,7 +197,7 @@ local_boxed_write = |cursor| {
 }
 
 ## Unbox a list and write to it, exactly as `update_for_host!` unboxes the
-## model and hands it to `update`, with the box still in scope.
+## model and hands it to `update!`, with the box still in scope.
 write_through_box : Box(List(F32)), U64 -> List(F32)
 write_through_box = |boxed, cursor| set_point(Box.unbox(boxed), cursor)
 

@@ -9,7 +9,7 @@ import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
 ##
-## `Mouse.set_source` replaces only what the host reports on the
+## `Mouse.set_source!` replaces only what the host reports on the
 ## input, so the widget code below is ordinary hover and hit-test logic
 ## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
@@ -38,7 +38,7 @@ Model : {
 	counter_labels : List(Text.Prepared),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
@@ -106,8 +106,8 @@ prepare_counter_labels! = |font, index, acc|
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
@@ -136,32 +136,27 @@ update = |model, program_input| {
 			model.slider
 		}
 
-	# The scripted pointer is a command, so the platform installs it after this
-	# returns and before anything is drawn -- the same instant
-	# the old effectful setter reached the host, and still a cycle before the
-	# host samples it back.
-	pointer_command = Mouse.set_source(
+	# The scripted pointer is installed here, before anything is drawn, and a
+	# cycle before the host samples it back.
+	Mouse.set_source!(
 		if pointer_step.clicking Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
 	)
-	commands =
-		if model.frame >= recorded_frames {
-			[pointer_command, App.exit(0)]
-		} else {
-			[pointer_command]
-		}
 
-	App.next({
-		..model,
-		frame: model.frame + 1,
-		pointer: pointer_step.pos,
-		clicking: pointer_step.clicking,
-		mouse: mouse,
-		held: held,
-		clicks: clicks,
-		toggled: toggled,
-		slider: slider,
-	})
-		.with_commands(commands)
+	if model.frame >= recorded_frames {
+		Err(Exit(0))
+	} else {
+		Ok({
+			..model,
+			frame: model.frame + 1,
+			pointer: pointer_step.pos,
+			clicking: pointer_step.clicking,
+			mouse: mouse,
+			held: held,
+			clicks: clicks,
+			toggled: toggled,
+			slider: slider,
+		})
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

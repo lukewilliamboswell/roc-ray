@@ -114,14 +114,14 @@ new_round = |model| {
 	}
 }
 
-# The commands for a sound that should only be heard when `cond` is true.
+# The playback for a sound that should only be heard when `cond` is true.
 #
 # An empty list is the no-op: nothing plays, and the caller can concatenate it
 # unconditionally instead of branching around it.
-play_if : Bool, Audio.Sound -> List(App.Command)
-play_if = |cond, sound| if cond [sound.play()] else []
+play_if : Bool, Audio.Sound -> List(Audio.Playback)
+play_if = |cond, sound| if cond [sound.playback()] else []
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
@@ -161,23 +161,31 @@ game_over = |model| model.left_score >= win_score or model.right_score >= win_sc
 ## so `update` joins them without caring which branch it took.
 Stepped : {
 	model : Model,
-	commands : List(App.Command),
+	sounds : List(Audio.Playback),
 }
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = program_input.time.elapsed_seconds
 
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
-
 	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
 
-	App.next(stepped.model).with_commands(List.concat(exit_commands, stepped.commands))
+	# The step is pure and says which sounds this frame made; playing them is
+	# the one effect here.
+	for playback in stepped.sounds {
+		playback.play!()
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(stepped.model)
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -198,7 +206,7 @@ render! = |model, frame| {
 step_game_over : Model, Devices.Snapshot -> Stepped
 step_game_over = |model, input| {
 	model: if input.key_pressed(KeySpace) new_round(model) else model,
-	commands: [],
+	sounds: [],
 }
 
 # --- Active play ---
@@ -274,12 +282,10 @@ step_playing = |model, input, dt| {
 		rng: serve.state,
 	}
 
-	# Sound effects for this frame's events, in the order they used to be played.
-	# The platform applies them before anything is drawn, so a paddle hit is
-	# still heard on the frame it happened.
+	# Sound effects for this frame's events, in the order they are played.
 	{
 		model: next,
-		commands: List.concat(
+		sounds: List.concat(
 			play_if(hit_left or hit_right, model.hit_sound),
 			List.concat(
 				play_if(hit_top or hit_bottom, model.wall_sound),

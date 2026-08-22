@@ -66,7 +66,7 @@ StepResult : {
 	paddle_hit : Bool,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -469,56 +469,56 @@ advance_game = |game, input|
 ## One sound per event, in the order the step produced them.
 ##
 ## `List.map` rather than a fold: every event makes exactly one sound, so the
-## command list is the event list retyped, and two brick hits in one step stay
+## playback list is the event list retyped, and two brick hits in one step stay
 ## two brick sounds.
-step_event_commands : Sounds, List(StepEvent) -> List(App.Command)
-step_event_commands = |sounds, events|
+step_event_sounds : Sounds, List(StepEvent) -> List(Audio.Playback)
+step_event_sounds = |sounds, events|
 	List.map(
 		events,
 		|event|
 			match event {
-				GameStarted => sounds.start.play()
-				WallHit => sounds.wall.play()
-				BrickHit(_) => sounds.brick.play()
-				LifeLost(_) => sounds.lose.play()
-				WallCleared => sounds.start.play()
+				GameStarted => sounds.start.playback()
+				WallHit => sounds.wall.playback()
+				BrickHit(_) => sounds.brick.playback()
+				LifeLost(_) => sounds.lose.playback()
+				WallCleared => sounds.start.playback()
 			},
 	)
 
-## `advance_game` was already a pure step returning events, and the events were
-## already interpreted effectfully -- so this split is mostly a matter of moving
-## the seam that was there all along. What used to be a `for` loop calling
-## `play!` is now the same loop building the commands `update` hands back.
+## `advance_game` is a pure step returning events, and the events name the
+## sounds they want; `update!` is where those sounds are played.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
-	exit_commands =
+	exit =
 		if model.demo {
 			match program_input.capture {
-				Finished(_) => [App.exit(0)]
-				Failed(_) => [App.exit(1)]
-				_ => []
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
 			}
 		} else if input.key_pressed(KeyEscape) {
-			[App.exit(0)]
+			Err(Exit(0))
 		} else {
-			[]
+			Ok({})
 		}
 
 	game_input = if model.demo demo_frame_input(model.game, dt) else frame_input(input, dt)
 	result = advance_game(model.game, game_input)
-	paddle_commands = if result.paddle_hit [model.sounds.paddle.play()] else []
+	if result.paddle_hit {
+		model.sounds.paddle.play!()
+	}
+	for playback in step_event_sounds(model.sounds, result.events) {
+		playback.play!()
+	}
 
-	App.next({ ..model, game: result.game })
-		.with_commands(
-			List.concat(
-				exit_commands,
-				List.concat(paddle_commands, step_event_commands(model.sounds, result.events)),
-			),
-		)
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..model, game: result.game })
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

@@ -1,5 +1,9 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
 
+# `update!` is effectful: host state changes are direct calls and deferred
+# work goes through `Task.spawn!` and `App.request!`. The pure-update
+# `Transition` builder is gone, and this checks it stays gone rather than
+# quietly coming back as a second way to describe the same work.
 import rr.App
 import rr.Draw
 
@@ -12,10 +16,11 @@ init! = App.init(App.default, |_startup| Ok({}))
 
 Msg : []
 
-Leaked : App.RawResponse
-
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
-update! = |model, _input| Ok(model)
+update! = |model, _input| {
+	_ = App.next(model)
+	Ok(model)
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |_model, _frame| Ok({})

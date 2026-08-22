@@ -22,7 +22,7 @@ Model : {
 	dragging : Bool,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 initial_corners : Corners
 initial_corners = {
@@ -54,23 +54,24 @@ init! = App.init(
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	dragged = drag_corner(model, program_input.devices)
-	App.next(dragged.model).with_commands(dragged.commands)
+	Mouse.set_cursor!(dragged.cursor)
+	Ok(dragged.model)
 }
 
 ## Fold one frame of pointer input into the quad.
 ##
-## The cursor shape is a host effect rather than model state, and `update` is
-## pure, so this hands the change back as an command instead of applying it. The
-## platform runs it before `render!` draws, which is when it used to happen.
-drag_corner : Model, Devices.Snapshot -> { model : Model, commands : List(App.Command) }
+## The cursor shape is a host effect rather than model state. This pure step
+## names the shape it wants and `update!` sets it, so the drag logic stays
+## testable without a host.
+drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
 drag_corner = |model, input| {
 	mouse = input.mouse.position()
 	handle_near = Math.distance(mouse, model.corners.top_right) < 34
 	dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
-	commands = [Mouse.set_cursor(if handle_near or dragging ResizeAll else Arrow)]
+	cursor = if handle_near or dragging ResizeAll else Arrow
 
 	candidate = if input.key_pressed(KeyR) {
 		initial_corners
@@ -87,8 +88,8 @@ drag_corner = |model, input| {
 	}
 
 	match Draw.ProjectiveQuad.from_corners(candidate) {
-		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, commands }
-		Err(_) => { model: { ..model, dragging }, commands }
+		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, cursor }
+		Err(_) => { model: { ..model, dragging }, cursor }
 	}
 }
 

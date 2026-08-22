@@ -29,7 +29,7 @@ Model : {
 	status : Text.Prepared,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 bar_count : U64
 bar_count = 12
@@ -73,22 +73,19 @@ init! = App.init(
 ## is the only channel a recording's outcome has.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	# The host finalizes the file itself once the recording reaches its frame
 	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
 	# is also what a run with no recording at all looks like, and a headless
 	# run is exactly that, so this app used to exit on its first input having
 	# captured nothing and call it a success.
-	commands =
-		match program_input.capture {
-			Finished(_) => [App.exit(0)]
-			Failed(_) => [App.exit(1)]
-			Idle => []
-			Active(_) => []
-		}
-
-	App.next({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds }).with_commands(commands)
+	match program_input.capture {
+		Finished(_) => Err(Exit(0))
+		Failed(_) => Err(Exit(1))
+		Idle => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+		Active(_) => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

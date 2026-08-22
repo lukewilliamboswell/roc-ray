@@ -292,7 +292,7 @@ Model : {
 	world : World,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -992,58 +992,70 @@ advance_world = |level, world, input| {
 	}
 }
 
-## Turn a cycle's world events into the sound commands they ask for.
+## What a cycle of play asks the audio host for, as data. The pure step names
+## each cue; `update!` performs them in order.
+Cue : [Play(Audio.Playback), MusicVolume(F32)]
+
+perform_cue! : Model, Cue => {}
+perform_cue! = |model, cue|
+	match cue {
+		Play(playback) => playback.play!()
+		MusicVolume(volume) => model.sounds.music.set_volume!(volume)
+	}
+
+## Turn a cycle's world events into the sound cues they ask for.
 ##
-## Pure, because `update` is: nothing is played here, each event just names the
-## playback it wants. The pan and pitch that used to be written immediately
-## before a `play!` become that same sound's `Playback` parameters, so a
-## parameter can no longer be left behind on the wrong sound -- note that a
-## collected spark pans `collect` but pitches `sparkle`.
-play_step_events : Model, World.StepResult -> List(App.Command)
+## Pure: nothing is played here, each event just names the playback it wants.
+## The pan and pitch that used to be written immediately before a `play!`
+## become that same sound's `Playback` parameters, so a parameter can no longer
+## be left behind on the wrong sound -- note that a collected spark pans
+## `collect` but pitches `sparkle`.
+play_step_events : Model, World.StepResult -> List(Cue)
 play_step_events = |model, result| {
 	sounds = model.sounds
 
-	var $commands = []
+	var $cues = []
 	for event in result.events {
-		event_commands =
+		event_cues =
 			match event {
 				DashStarted(pos) => [
-					sounds.dash
-						.playback()
-						.with_volume(dash_volume)
-						.with_pan(pan_for_world_x(pos.x))
-						.with_pitch(0.95 + U64.to_f32(model.world.score) * 0.015)
-						.play(),
+					Play(
+						sounds.dash
+							.playback()
+							.with_volume(dash_volume)
+							.with_pan(pan_for_world_x(pos.x))
+							.with_pitch(0.95 + U64.to_f32(model.world.score) * 0.015),
+					),
 				]
 				SparkCollected(spark) => {
-					collect = sounds.collect.playback().with_volume(collect_volume).with_pan(pan_for_world_x(spark.pos.x)).play()
-					sparkle = sounds.sparkle.playback().with_volume(sparkle_volume).with_pitch(0.92 + U64.to_f32(result.world.score) * 0.045).play()
+					collect = Play(sounds.collect.playback().with_volume(collect_volume).with_pan(pan_for_world_x(spark.pos.x)))
+					sparkle = Play(sounds.sparkle.playback().with_volume(sparkle_volume).with_pitch(0.92 + U64.to_f32(result.world.score) * 0.045))
 					if result.world.score % 3 == 0 [collect, sparkle] else [collect]
 				}
-				GateOpened => [sounds.gate.playback().with_volume(gate_volume).play()]
-				Escaped => [sounds.music.set_volume(music_won_volume), sounds.win.playback().with_volume(win_volume).play()]
+				GateOpened => [Play(sounds.gate.playback().with_volume(gate_volume))]
+				Escaped => [MusicVolume(music_won_volume), Play(sounds.win.playback().with_volume(win_volume))]
 				Damaged(state) =>
 					if state == GameOver {
-						[sounds.lose.playback().with_volume(lose_volume).play()]
+						[Play(sounds.lose.playback().with_volume(lose_volume))]
 					} else {
-						[sounds.hurt.playback().with_volume(hurt_volume).play()]
+						[Play(sounds.hurt.playback().with_volume(hurt_volume))]
 					}
 				}
 
-		$commands = List.concat($commands, event_commands)
+		$cues = List.concat($cues, event_cues)
 	}
-	$commands
+	$cues
 }
 
-## One cycle of play: the next model together with the commands it wants run.
+## One cycle of play: the next model together with the cues it wants performed.
 ##
-## The commands travel back with the model rather than being fired here, and the
-## caller concatenates them as it unwinds.
+## The cues travel back with the model rather than being fired here, and the
+## caller performs them as it unwinds.
 ##
 ## The seconds to advance by are a plain parameter rather than a whole
 ## `Time.Cycle`: only the elapsed time is used, so the caller stays free to pass
 ## a fixed step instead of whatever the last frame happened to take.
-advance_playing : Model, Devices.Snapshot, F32 -> { model : Model, commands : List(App.Command) }
+advance_playing : Model, Devices.Snapshot, F32 -> { model : Model, cues : List(Cue) }
 advance_playing = |model, input, dt| {
 	result = advance_world(
 		model.level,
@@ -1057,31 +1069,30 @@ advance_playing = |model, input, dt| {
 
 	{
 		model: { ..model, world: result.world },
-		commands: play_step_events(model, result),
+		cues: play_step_events(model, result),
 	}
 }
 
 ## Space restarts from either end state, restoring the music to the level
 ## `Escaped` ducked it away from.
-restart_on_space : Model, Devices.Snapshot -> { model : Model, commands : List(App.Command) }
+restart_on_space : Model, Devices.Snapshot -> { model : Model, cues : List(Cue) }
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
 		{
 			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
-			commands: [model.sounds.music.set_volume(music_volume)],
+			cues: [MusicVolume(music_volume)],
 		}
 	} else {
-		{ model, commands: [] }
+		{ model, cues: [] }
 	}
 
-## No `!`: the sounds this frame plays and the exit Escape asks for are returned
-## as commands, and the platform applies them in order before `render!`.
+## The step is pure and returns the cues it wants; `update!` performs them in
+## order and decides whether Escape ends the app.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	next = match model.world.state {
 		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
@@ -1089,7 +1100,15 @@ update = |model, program_input| {
 		GameOver => restart_on_space(model, input)
 	}
 
-	App.next(next.model).with_commands(List.concat(exit_commands, next.commands))
+	for cue in next.cues {
+		perform_cue!(model, cue)
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(next.model)
+	}
 }
 
 ## The camera follows the (shaken) player position, so it is a pure function of

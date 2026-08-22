@@ -98,7 +98,9 @@ messages within an input. A request that cannot complete with current host capac
 still calls its callback with its operation's `Busy` result, so an app may show
 an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads,
 [`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request, and
-[`task_sleep/main.roc`](examples/task_sleep/main.roc) for a task.
+[`task_sleep/main.roc`](examples/task_sleep/main.roc) for a task, and
+[`http_fetch/main.roc`](examples/http_fetch/main.roc) for an HTTP request that
+keeps the frame moving while it waits.
 
 ## Start your own project
 

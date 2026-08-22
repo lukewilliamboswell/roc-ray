@@ -35,7 +35,7 @@ the smallest version to the largest.
 
 | Example | What it is |
 | --- | --- |
-| [Task Sleep](task_sleep/main.roc) | One task, one `Task.sleep!`, one message back -- the shape of every other task on this page |
+| [Task Sleep](task_sleep/main.roc) | One task, one `Task.sleep!`, one message back -- the shape of every other task on this page -- and a second task that reports the result on standard output before the app exits |
 | [Async Read](async_read/main.roc) | Two file reads in flight at once, each with its own `Msg` variant, so neither needs an id |
 | [Capture Screenshot](capture_screenshot/main.roc) | A screenshot encoded and written off the frame thread, and the output-directory sandbox refusing a path that escapes it |
 | [HTTP Fetch](http_fetch/main.roc) | An HTTP GET on a task, re-fetchable mid-flight, with each reply carrying the id of the fetch it belongs to |

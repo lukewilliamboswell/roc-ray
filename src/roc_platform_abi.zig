@@ -9768,6 +9768,30 @@ comptime {
     }
 }
 
+/// Arguments for StdioHost.write_text!
+/// Roc signature: U8, Str => U8
+/// Refcounted fields are owned by the hosted function.
+pub const StdioHostWrite_textArgs = extern struct {
+    arg0: u8,
+    arg1: RocStr,
+};
+
+/// Arguments for StdioHost.write_line!
+/// Roc signature: U8, Str => U8
+/// Refcounted fields are owned by the hosted function.
+pub const StdioHostWrite_lineArgs = extern struct {
+    arg0: u8,
+    arg1: RocStr,
+};
+
+/// Arguments for StdioHost.write_bytes!
+/// Roc signature: U8, List(U8) => U8
+/// Refcounted fields are owned by the hosted function.
+pub const StdioHostWrite_bytesArgs = extern struct {
+    arg0: u8,
+    arg1: RocListWith(u8, false),
+};
+
 // Platform Type Aliases
 
 pub const AssetsHostOpen_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
@@ -11454,6 +11478,27 @@ pub extern fn roc_draw_set_shader_vec4_raw(arg0: DrawHostSet_shader_vec4Args) ca
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_http_send(arg0: HttpHostSendArgs) callconv(.c) __AnonStruct_da7cbd33c88fa20a;
+
+/// Hosted symbol for StdioHost.write_text!
+/// Roc signature: U8, Str => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_stdio_write_text(arg0: u8, arg1: RocStr) callconv(.c) u8;
+
+/// Hosted symbol for StdioHost.write_line!
+/// Roc signature: U8, Str => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_stdio_write_line(arg0: u8, arg1: RocStr) callconv(.c) u8;
+
+/// Hosted symbol for StdioHost.write_bytes!
+/// Roc signature: U8, List(U8) => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg1.decref(roc_host);
+pub extern fn roc_stdio_write_bytes(arg0: u8, arg1: RocListWith(u8, false)) callconv(.c) u8;
 
 /// Default memory management functions for Roc platforms.
 ///

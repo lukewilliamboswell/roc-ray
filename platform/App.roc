@@ -1,7 +1,48 @@
-## Application startup configuration and model initialization.
+## The shape of a RocRay program: its three callbacks, its startup
+## configuration, and the input each cycle folds in.
 ##
-## Use `App.init` when startup needs effects such as loading host-owned assets.
-## The callback runs after the window, renderer, and audio device are ready.
+## An app provides three callbacks:
+##
+##     program = { init!, update!, render! }
+##
+## `init!` runs once, after the window, renderer, and audio device are ready.
+## It reads startup configuration, loads the resources the app will hold, and
+## returns the first model. Use `App.init` to pair a `Config` with it.
+##
+## `update!` runs once per host cycle. It receives the model and one
+## `App.Input`, calls host effects directly, starts tasks, and returns the next
+## model -- or `Err(Exit(code))` to stop the app.
+##
+## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
+## change the model or reach host work of any other kind.
+##
+## ## Where an effect may be called
+##
+## The host knows which callback it is inside, and every effect documents the
+## phases it is legal in. Three rules cover nearly all of them:
+##
+## - An effect that **changes host state** -- the cursor, the window, audio, a
+##   recording, a loaded resource -- is legal in `init!`, `update!`, and tasks,
+##   and refused in `render!`.
+## - An effect that **draws** is legal only in `render!`, inside the frame
+##   scope the host opens around it.
+## - An effect that **waits** -- `Files.read_text!`, `Http.send!`,
+##   `Task.sleep!` -- is legal in `init!`, where it blocks startup, and in
+##   tasks, where it parks the task while the frame loop keeps drawing. It is
+##   refused in `update!` and `render!`.
+##
+## Calling an effect from a phase it does not permit is a programmer error, not
+## a runtime outcome: it stops the app at once with a message naming the
+## effect, the phase it was called from, and where it belongs.
+##
+## ## How messages arrive
+##
+## Work that waits belongs on a task. `Task.spawn!(input, || ...)`, from
+## `update!` or from another task, hands the host an effectful closure to run
+## on its own stack. When the closure returns, its value is delivered as a
+## message on `input.messages` in a later cycle, in the order the tasks
+## finished. A task cannot read or write the model, so its message is the only
+## thing it can say. See `Task`.
 import HostHost
 import Keys
 import Mouse
@@ -35,9 +76,6 @@ App := [].{
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
 	ExitKey : Keys.ExitKey
 
-	## Whether the host starts recording before the first frame. `Record` makes
-	## an app capture itself with no runtime code, which is how a visualization
-	## can be rendered straight to a file.
 	## Validated startup configuration. Its fields cannot be updated directly;
 	## use its receiver updates so startup invariants are preserved.
 	Config :: {
@@ -126,8 +164,10 @@ App := [].{
 
 		## Return a config that starts recording before the first frame.
 		##
-		## The recording finalizes when it reaches its frame cap, when
-		## `Capture.stop!` is called, or when the app exits.
+		## This is how an app captures itself with no runtime code at all, so a
+		## visualization can be rendered straight to a file. The recording
+		## finalizes when it reaches its frame cap, when `Capture.stop!` is
+		## called, or when the app exits.
 		with_recording : Config, Capture.Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: Record(value) }
 
@@ -181,17 +221,20 @@ App := [].{
 		recording = |cfg| cfg.recording
 	}
 
-	## Opaque, zero-sized authority supplied only while the host runs `init!`.
+	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
 	##
-	## Startup provides one-shot system effects but no input, window, or timing
-	## observations. Seed models that require devices with `Devices.empty`; the first
-	## `App.Input` supplies the first sampled values. After initialization,
-	## change host state by calling effects from `update!`, and ask for deferred
-	## work with `Task.spawn!`.
+	## Every effect that takes a `Startup` is legal only in `init!`. Startup
+	## provides one-shot system effects but no input, window, or timing
+	## observations: seed models that require devices with `Devices.empty`, and
+	## the first `App.Input` supplies the first sampled values. After
+	## initialization, change host state by calling effects from `update!`, and
+	## ask for work that waits with `Task.spawn!`.
 	Startup : HostHost.Startup
 
 	## Exit the application with the given exit code.
-	## The exit happens after startup completes to allow proper cleanup.
+	##
+	## The exit happens after startup completes, so `init!` finishes and the
+	## host shuts down in the ordinary way. Legal only in `init!`.
 	exit! : Startup, I32 => {}
 	exit! = |_startup, code| HostHost.exit!(code)
 
@@ -200,11 +243,16 @@ App := [].{
 	## The first element is `argv[0]`, followed by application-owned arguments
 	## in order. The host removes its reserved `--host-*` switches before this
 	## list reaches the app. The value is stable for the process lifetime.
+	##
+	## Legal only in `init!`. `App.init_for_args` is the other way to read
+	## argv, before the window exists.
 	args! : Startup => List(Str)
 	args! = |_startup| HostHost.args!()
 
 	## Read an environment variable by key.
-	## Returns Ok with the value if found, or Err NotFound if not set.
+	##
+	## Answers `Err(NotFound)` when the variable is not set. Legal only in
+	## `init!`.
 	read_env! : Startup, Str => Try(Str, [NotFound, ..])
 	read_env! = |_startup, key|
 		match HostHost.read_env!(key) {
@@ -212,8 +260,11 @@ App := [].{
 			Err(NotFound) => Err(NotFound)
 		}
 
-	## Read a UTF-8 text file from disk.
-	## Call as `App.read_file!(startup, path)`.
+	## Read a UTF-8 text file from disk, blocking until it is read.
+	##
+	## Call as `App.read_file!(startup, path)`. Legal only in `init!`; use
+	## `Files.read_text!` inside a task to read a file while the app runs, and
+	## for the fuller error report.
 	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
 	read_file! = |_startup, path| {
 		result = HostHost.read_file!(path)
@@ -228,6 +279,8 @@ App := [].{
 
 	## Get varying startup entropy in the inclusive range `[min, max]`.
 	##
+	## Legal only in `init!`.
+	##
 	## For simulation or gameplay, call this once and initialize the exposed
 	## `roc-random` package with, for example,
 	## `Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2000000000)))`.
@@ -237,11 +290,11 @@ App := [].{
 	random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
 
 	## Suggest positive initial window dimensions to the window manager.
-	## Returns Err NotSupported on platforms that don't support window resizing.
-	## Call as `App.suggest_window_size!(startup, size)`.
 	##
-	## A running app resizes itself with `Window.suggest_size!`, which reaches
-	## the same host call; only this spelling can report a refusal.
+	## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
+	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`;
+	## a running app resizes itself with `Window.suggest_size!`, which reaches
+	## the same host call, and only this spelling can report a refusal.
 	suggest_window_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 	suggest_window_size! = |_startup, size|
 		if size.width <= 0 or size.height <= 0 {
@@ -253,11 +306,12 @@ App := [].{
 			}
 		}
 
-	## Suggest the smallest window size the user can drag the window down to. Each
-	## negative dimension is clamped to `0`, which leaves that axis
+	## Suggest the smallest window size the user can drag the window down to.
+	##
+	## Each negative dimension is clamped to `0`, which leaves that axis
 	## unconstrained. The minimum only applies to a resizable window, so pair it
-	## with `App.default.with_resizable(Bool.True)`.
-	## Call as `App.suggest_window_min_size!(startup, size)`.
+	## with `App.default.with_resizable(Bool.True)`. Call as
+	## `App.suggest_window_min_size!(startup, size)`. Legal only in `init!`.
 	suggest_window_min_size! : Startup, { width : I32, height : I32 } => {}
 	suggest_window_min_size! = |_startup, size|
 		HostHost.suggest_window_min_size!({
@@ -265,27 +319,33 @@ App := [].{
 			height: if size.height > 0 size.height else 0,
 		})
 
-	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
-	## uncapped. This neither selects a software renderer nor controls VSync.
-	## Call as `App.set_target_fps!(startup, fps)`.
+	## Set raylib's CPU-side frame-rate cap.
 	##
-	## A running app changes the cap with `Window.set_target_fps!`.
+	## Values at or below zero render uncapped. This neither selects a software
+	## renderer nor controls VSync. Call as `App.set_target_fps!(startup, fps)`.
+	## Legal only in `init!`; a running app changes the cap with
+	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
 	set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
 
 	## Set which key closes the window, or `NoExitKey` to stop any key from
-	## closing it. raylib defaults to `ExitKey(KeyEscape)`. The window close
-	## button is unaffected either way, so an app that disables the exit key
-	## should still handle shutdown itself by returning `Err(Exit(code))`.
-	## Call as `App.set_exit_key!(startup, NoExitKey)`.
+	## closing it.
+	##
+	## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
+	## unaffected either way, so an app that disables the exit key should still
+	## handle shutdown itself by returning `Err(Exit(code))`. Call as
+	## `App.set_exit_key!(startup, NoExitKey)`. Legal only in `init!`.
 	set_exit_key! : Startup, ExitKey => {}
 	set_exit_key! = |_startup, key| HostHost.set_exit_key!(Keys.exit_key_code(key))
 
 	## Read UTF-8 text from the system clipboard.
-	## Returns `Err(Unavailable)` when the clipboard is empty, holds non-text
+	##
+	## Answers `Err(Unavailable)` when the clipboard is empty, holds non-text
 	## content, or the windowing backend refuses the request -- the underlying
-	## platform does not distinguish these cases.
-	## Call as `App.get_clipboard_text!(startup)`.
+	## platform does not distinguish these cases. Call as
+	## `App.get_clipboard_text!(startup)`. Legal only in `init!`; a running app
+	## reads the clipboard with `Window.read_clipboard!`, which names the
+	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
 	get_clipboard_text! = |_startup|
 		match HostHost.get_clipboard_text!() {
@@ -294,15 +354,20 @@ App := [].{
 		}
 
 	## Replace the system clipboard contents with UTF-8 text.
-	## Call as `App.set_clipboard_text!(startup, text)`.
+	##
+	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`;
+	## a running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
 	set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
 
-	## Apply cursor visibility/capture atomically through one tagged operation.
+	## Apply cursor visibility and capture atomically through one tagged
+	## operation. Legal only in `init!`; `Mouse.set_cursor_mode!` is the same
+	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
 	set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
-	## Set the native operating-system cursor shape.
+	## Set the native operating-system cursor shape. Legal only in `init!`;
+	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
 	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
 
@@ -348,7 +413,7 @@ App := [].{
 	init_for_args : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
 	init_for_args = |config_for_args, callback!| { config: config_for_args, run!: callback! }
 
-	## Everything the host observed since the previous cycle.
+	## Everything the host observed for one cycle, handed to `update!`.
 	##
 	## `messages` contains every task message delivered for this cycle, in the
 	## order the tasks finished. Independent tasks may finish in any order; the

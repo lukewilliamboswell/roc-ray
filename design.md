@@ -203,12 +203,12 @@ sequenceDiagram
     participant Task as Task on its own stack
 
     loop Each host cycle
-        Host->>Host: give tasks a turn; collect finished messages
+        Host->>Host: give tasks a turn, collect finished messages
         Host->>App: update!(model, App.Input with those messages)
         App->>Host: direct effects, in program order
-        App->>Task: Task.spawn!(input, closure); it may start at once
+        App->>Task: Task.spawn!(input, closure) -- it may start at once
         App-->>Host: next model, or Err(Exit(code))
-        Host->>Host: give tasks a turn; every new task has reached its first wait
+        Host->>Host: give tasks a turn -- every new task has reached its first wait
         opt Presentation is scheduled
             Host->>App: render!(next model, Draw.Frame)
             App-->>Host: ordered draw operations
@@ -216,7 +216,7 @@ sequenceDiagram
     end
 
     loop While a task is live, between callbacks
-        Task->>Host: waiting effect parks the task; the frame loop continues
+        Task->>Host: waiting effect parks the task -- the frame loop continues
         Note over Host,App: the closure's return value is a message on a later App.Input
     end
 ```

@@ -1592,6 +1592,20 @@ var virtual_mouse_buttons: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
 var virtual_mouse_last_x: f32 = 0;
 var virtual_mouse_last_y: f32 = 0;
 var virtual_mouse_has_last: bool = false;
+/// Scripted keyboard state, replacing the hardware keyboard while active.
+///
+/// Held flags only: the same edge detector that runs over hardware runs over
+/// this array, so pressed and released fall out of consecutive frames rather
+/// than being described here. Nothing about the real keyboard changes -- a key
+/// the user is holding is simply not what Roc is told about.
+var virtual_keys_active: bool = false;
+var virtual_key_down: [ffi.KEY_COUNT]bool = @splat(false);
+/// Scripted text queued for the next input, in the order it was entered.
+///
+/// The same bound as the hardware channel, and lossy the same way: a longer
+/// script loses its tail rather than spilling into the following frame.
+var virtual_text: [raylib.TEXT_INPUT_CAPACITY]u32 = @splat(0);
+var virtual_text_len: usize = 0;
 /// Nanoseconds of divergence introduced by fixed-step recordings.
 ///
 /// Fixed-step recording reports exact `1/fps` deltas instead of raylib's
@@ -2260,10 +2274,7 @@ fn pathExists(path: []const u8) bool {
 
 fn resetHeadlessRuntime(app_config: AppConfig) void {
     capture_session.reset();
-    virtual_mouse_active = false;
-    virtual_mouse_has_last = false;
-    virtual_mouse_buttons = @splat(false);
-    virtual_mouse_wheel = 0;
+    resetVirtualInput();
 
     capture_screenshot_pending = false;
     still_budget.reset();
@@ -5565,6 +5576,71 @@ fn recordVirtualMousePosition() void {
     virtual_mouse_has_last = true;
 }
 
+/// Install the set of keys a scripted keyboard holds down, or release it.
+///
+/// A code the host has no slot for is dropped: `Keys.Key` admits a validated
+/// raw code, and the packed state list is one byte per raylib key code, so a
+/// code past the end names a key this backend cannot report either way.
+fn applyVirtualKeys(active: bool, codes: []const u64) void {
+    virtual_key_down = @splat(false);
+    virtual_keys_active = active;
+    if (!active) return;
+    for (codes) |code| {
+        if (code < ffi.KEY_COUNT) virtual_key_down[@intCast(code)] = true;
+    }
+}
+
+/// Queue scripted codepoints as the next input's text, discarding the excess.
+fn applyVirtualText(codepoints: []const u32) void {
+    const kept = @min(codepoints.len, virtual_text.len);
+    @memcpy(virtual_text[0..kept], codepoints[0..kept]);
+    virtual_text_len = kept;
+}
+
+/// Take the queued scripted text, or null when the frame's text is hardware's.
+///
+/// Taking rather than reading: text arrives on one frame and not the next, so
+/// a script that queued nothing this frame hands the channel back rather than
+/// repeating what it said last time.
+fn takeVirtualText() ?[]const u32 {
+    if (virtual_text_len == 0) return null;
+    const queued = virtual_text[0..virtual_text_len];
+    virtual_text_len = 0;
+    return queued;
+}
+
+/// Forget every scripted input, so one app lifetime cannot inherit another's.
+fn resetVirtualInput() void {
+    virtual_mouse_active = false;
+    virtual_mouse_has_last = false;
+    virtual_mouse_buttons = @splat(false);
+    virtual_mouse_wheel = 0;
+    virtual_keys_active = false;
+    virtual_key_down = @splat(false);
+    virtual_text_len = 0;
+    raylib.clearKeyState();
+}
+
+fn hostedCaptureSetVirtualKeys(host: *RocHost, args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
+    enforcePhase("Keys.set_source!", during_update);
+    defer args.keys.decref(host);
+    applyVirtualKeys(args.active, args.keys.items());
+}
+
+fn exportedCaptureSetVirtualKeys(args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
+    hostedCaptureSetVirtualKeys(activeHost(), args);
+}
+
+fn hostedCaptureSetVirtualText(host: *RocHost, text: abi.RocListWith(u32, false)) callconv(.c) void {
+    enforcePhase("Keys.set_text!", during_update);
+    defer text.decref(host);
+    applyVirtualText(text.items());
+}
+
+fn exportedCaptureSetVirtualText(text: abi.RocListWith(u32, false)) callconv(.c) void {
+    hostedCaptureSetVirtualText(activeHost(), text);
+}
+
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
     enforcePhase("Capture.stop!", during_update);
     const frames = capture_session.captured_frames;
@@ -6284,6 +6360,8 @@ comptime {
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
+        @export(&exportedCaptureSetVirtualKeys, .{ .name = "roc_capture_set_virtual_keys" });
+        @export(&exportedCaptureSetVirtualText, .{ .name = "roc_capture_set_virtual_text" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
         @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
         @export(&exportedCaptureScreenshotTexture, .{ .name = "roc_capture_screenshot_texture" });
@@ -6390,7 +6468,14 @@ const InputState = struct {
     }
 
     fn updateFromRaylib(self: *InputState) void {
-        raylib.updateKeyboardState();
+        // A scripted keyboard goes through the same edge detection as
+        // hardware, so pressed/released this frame behave identically for the
+        // app.
+        if (virtual_keys_active) {
+            raylib.updateKeyboardStateFrom(&virtual_key_down);
+        } else {
+            raylib.updateKeyboardState();
+        }
         self.keys.update(raylib.getKeyState());
 
         // A scripted pointer goes through the same edge detection as hardware,
@@ -6406,6 +6491,17 @@ const InputState = struct {
         self.gamepad_available.update(raylib.getGamepadAvailability());
         self.gamepad_buttons.update(raylib.getGamepadButtonState());
         self.gamepad_axes.update(raylib.getGamepadAxes());
+    }
+
+    /// Sample input for a headless cycle, where there is no hardware to ask.
+    ///
+    /// Only scripted input exists here, and it runs through the same edge
+    /// detector a windowed run uses, so a headless test sees the pressed and
+    /// released bits a real keyboard would have produced. With nothing
+    /// scripted the array is all false, which is what no keyboard looks like.
+    fn updateHeadless(self: *InputState) void {
+        raylib.updateKeyboardStateFrom(&virtual_key_down);
+        self.keys.update(raylib.getKeyState());
     }
 };
 
@@ -6574,10 +6670,7 @@ fn updateOnce(boxed_model: *RocBox, input: InputFromHost) UpdateResult {
 /// same way rather than being trusted because it came from config.
 fn configureCapture(app_config: AppConfig) void {
     capture_session.reset();
-    virtual_mouse_active = false;
-    virtual_mouse_has_last = false;
-    virtual_mouse_buttons = @splat(false);
-    virtual_mouse_wheel = 0;
+    resetVirtualInput();
 
     capture_screenshot_pending = false;
     still_budget.reset();
@@ -7071,6 +7164,67 @@ test "releasing the virtual pointer clears its buttons and history" {
     try std.testing.expect(!virtual_mouse_has_last);
     try std.testing.expect(!virtual_mouse_buttons[0]);
     try std.testing.expectEqual(@as(f32, 0), virtual_mouse_wheel);
+}
+
+test "a virtual held key is pressed once and then merely down" {
+    // raylib's KEY_SPACE. The packed state list is indexed by key code, so
+    // this is both the code the app scripts and the slot it lands in.
+    const space = 32;
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{space});
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, raylib.getKeyState()[space]);
+
+    // Held across a second frame: still down, but no longer a press. An app
+    // acting on `key_pressed` must act exactly once.
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_HELD, raylib.getKeyState()[space]);
+
+    applyVirtualKeys(true, &.{});
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, raylib.getKeyState()[space]);
+
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(@as(u8, 0), raylib.getKeyState()[space]);
+}
+
+test "releasing the virtual keyboard drops every held key" {
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{ 32, 65 });
+    try std.testing.expect(virtual_keys_active);
+    try std.testing.expect(virtual_key_down[32]);
+    try std.testing.expect(virtual_key_down[65]);
+
+    applyVirtualKeys(false, &.{});
+    try std.testing.expect(!virtual_keys_active);
+    try std.testing.expect(!virtual_key_down[32]);
+    try std.testing.expect(!virtual_key_down[65]);
+}
+
+test "a key code past the packed state list is dropped rather than written" {
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{ffi.KEY_COUNT + 10});
+    for (virtual_key_down) |down| try std.testing.expect(!down);
+}
+
+test "scripted text is delivered once and truncated at the frame's bound" {
+    defer resetVirtualInput();
+
+    applyVirtualText(&.{ 'h', 'i' });
+    try std.testing.expectEqualSlices(u32, &.{ 'h', 'i' }, takeVirtualText().?);
+    // Gone on the next frame: real characters arrive once, not every frame
+    // until something else is typed.
+    try std.testing.expectEqual(@as(?[]const u32, null), takeVirtualText());
+
+    var long: [raylib.TEXT_INPUT_CAPACITY + 4]u32 = @splat('x');
+    long[0] = 'a';
+    applyVirtualText(&long);
+    const delivered = takeVirtualText().?;
+    try std.testing.expectEqual(raylib.TEXT_INPUT_CAPACITY, delivered.len);
+    try std.testing.expectEqual(@as(u32, 'a'), delivered[0]);
 }
 
 test "taking a model for render clears the host-owned reference" {
@@ -8237,7 +8391,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             // again on every subsequent frame.
             virtual_mouse_wheel = 0;
         }
-        const text_input = raylib.getTextInput();
+        // Drain raylib's queue either way: a scripted frame that left the
+        // hardware characters behind would deliver them on the next one.
+        const typed_text = raylib.getTextInput();
+        const text_input: []const u32 = takeVirtualText() orelse typed_text;
         const input_snapshot = input.hostState(
             mouse_pos.x,
             mouse_pos.y,
@@ -8349,12 +8506,14 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
+        input.updateHeadless();
+        const text_input: []const u32 = takeVirtualText() orelse &.{};
         const input_snapshot = input.hostState(
             0,
             0,
             .{ .x = 0, .y = 0 },
             .{ .x = 0, .y = 0 },
-            &.{},
+            text_input,
         );
 
         last_frame_nanos = timestamp_nanos;

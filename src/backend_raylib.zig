@@ -226,6 +226,27 @@ pub fn updateKeyboardState() void {
     }
 }
 
+/// Advance the packed keyboard state from caller-supplied held flags.
+///
+/// Used by the virtual keyboard in place of `updateKeyboardState`, and by a
+/// headless run, which has no hardware to ask at all. It runs the same
+/// `nextInputState` edge detection, so a scripted key produces real
+/// pressed-this-frame and released-this-frame bits and an app's ordinary
+/// key handling reacts to it exactly as it would to hardware.
+pub fn updateKeyboardStateFrom(down: *const [ffi.KEY_COUNT]bool) void {
+    for (0..ffi.KEY_COUNT) |i| {
+        key_state[i] = nextInputState(key_state[i], down[i]);
+    }
+}
+
+/// Forget every key's held and edge bits.
+///
+/// Called when an app lifetime starts, so a key held when one app exited is
+/// not still held when the next one begins.
+pub fn clearKeyState() void {
+    key_state = [_]u8{0} ** ffi.KEY_COUNT;
+}
+
 /// Get the current packed keyboard state array.
 pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;

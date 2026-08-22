@@ -1473,6 +1473,48 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_c3425bb1e3730c6e
+pub const __AnonStruct_c3425bb1e3730c6e = if (@sizeOf(usize) == 4) extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+} else extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_c3425bb1e3730c6e) != 32) @compileError("__AnonStruct_c3425bb1e3730c6e size mismatch");
+        if (@alignOf(__AnonStruct_c3425bb1e3730c6e) != 8) @compileError("__AnonStruct_c3425bb1e3730c6e alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_c3425bb1e3730c6e) != 16) @compileError("__AnonStruct_c3425bb1e3730c6e size mismatch");
+        if (@alignOf(__AnonStruct_c3425bb1e3730c6e) != 4) @compileError("__AnonStruct_c3425bb1e3730c6e alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_96bd4e483c462501
 pub const __AnonStruct_96bd4e483c462501 = if (@sizeOf(usize) == 4) extern struct {
     max_frames: u64,
@@ -9837,6 +9879,57 @@ comptime {
     }
 }
 
+/// Arguments for CaptureHost.set_virtual_keys!
+/// Roc signature: { active : Bool, keys : List(U64) } => {}
+/// Refcounted fields are owned by the hosted function.
+pub const CaptureHostSet_virtual_keysArgs = if (@sizeOf(usize) == 4) extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+} else extern struct {
+    keys: RocListWith(u64, false),
+    active: bool,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.keys.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.keys.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(CaptureHostSet_virtual_keysArgs) != 32) @compileError("CaptureHostSet_virtual_keysArgs size mismatch");
+        if (@alignOf(CaptureHostSet_virtual_keysArgs) != 8) @compileError("CaptureHostSet_virtual_keysArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(CaptureHostSet_virtual_keysArgs) != 16) @compileError("CaptureHostSet_virtual_keysArgs size mismatch");
+        if (@alignOf(CaptureHostSet_virtual_keysArgs) != 4) @compileError("CaptureHostSet_virtual_keysArgs alignment mismatch");
+    }
+}
+
+/// Arguments for CaptureHost.set_virtual_text!
+/// Roc signature: List(U32) => {}
+/// Refcounted fields are owned by the hosted function.
+pub const CaptureHostSet_virtual_textArgs = extern struct {
+    arg0: RocListWith(u32, false),
+};
+
 /// Arguments for CaptureHost.start_recording!
 /// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8
 /// Refcounted fields are owned by the hosted function.
@@ -11146,6 +11239,7 @@ pub const FilesHostRead_bytes = __AnonStruct_5b08b74ffdd2f118;
 pub const FilesHostList = __AnonStruct_5b08b74ffdd2f118;
 pub const FilesHostMetadata = __AnonStruct_ee584b0815816939;
 pub const CaptureHostSet_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
+pub const CaptureHostSet_virtual_keysArg0 = __AnonStruct_c3425bb1e3730c6e;
 pub const CaptureHostStart_recordingArg0 = __AnonStruct_96bd4e483c462501;
 pub const CaptureHostStop_recording = __AnonStruct_7c66fb01c50d182a;
 pub const CaptureHostScreenshot_textureArg0 = __AnonStruct_ae8e8c7ef6b24769;
@@ -11304,6 +11398,12 @@ pub const __AnonStruct_71f03d460dd53e7dRelease = struct {
 
 pub const __AnonStruct_e20342da83229f51Release = struct {
     pub fn release(value: __AnonStruct_e20342da83229f51, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_c3425bb1e3730c6eRelease = struct {
+    pub fn release(value: __AnonStruct_c3425bb1e3730c6e, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12137,6 +12237,9 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_307d51efe2380633) return __AnonStruct_307d51efe2380633Release;
     if (T == __AnonStruct_82ca12cef4f5714b) return __AnonStruct_82ca12cef4f5714bRelease;
     if (T == __AnonStruct_71f03d460dd53e7d) return __AnonStruct_71f03d460dd53e7dRelease;
+    if (T == __AnonStruct_c3425bb1e3730c6e) return __AnonStruct_c3425bb1e3730c6eRelease;
+    if (T == RocListWith(u64, false)) return RocListSpineRelease(RocListWith(u64, false));
+    if (T == RocListWith(u32, false)) return RocListSpineRelease(RocListWith(u32, false));
     if (T == __AnonStruct_96bd4e483c462501) return __AnonStruct_96bd4e483c462501Release;
     if (T == __AnonStruct_ae8e8c7ef6b24769) return __AnonStruct_ae8e8c7ef6b24769Release;
     if (T == DrawRenderTexture) return DrawRenderTextureRelease;
@@ -12191,7 +12294,6 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == RocErasedCallable) return RocErasedCallableRelease;
     if (T == __AnonStruct_69c51f74695a8340) return __AnonStruct_69c51f74695a8340Release;
     if (T == __AnonStruct_831cf812524287ed) return __AnonStruct_831cf812524287edRelease;
-    if (T == RocListWith(u64, false)) return RocListSpineRelease(RocListWith(u64, false));
     if (T == RocList(__AnonStruct_1299823ae1663c65)) return RocListRelease(RocList(__AnonStruct_1299823ae1663c65), __AnonStruct_1299823ae1663c65Release);
     if (T == __AnonStruct_1299823ae1663c65) return __AnonStruct_1299823ae1663c65Release;
     if (T == RocList(__AnonStruct_109c1082e72f7bad)) return RocListRelease(RocList(__AnonStruct_109c1082e72f7bad), __AnonStruct_109c1082e72f7badRelease);
@@ -12220,7 +12322,6 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_1c8617e96852f779) return __AnonStruct_1c8617e96852f779Release;
     if (T == RocListWith(f32, false)) return RocListSpineRelease(RocListWith(f32, false));
     if (T == MouseSnapshot) return MouseSnapshotRelease;
-    if (T == RocListWith(u32, false)) return RocListSpineRelease(RocListWith(u32, false));
     if (T == RocList(__AnonStruct_3e6f83279dfc8d12)) return RocListRelease(RocList(__AnonStruct_3e6f83279dfc8d12), __AnonStruct_3e6f83279dfc8d12Release);
     if (T == __AnonStruct_3e6f83279dfc8d12) return __AnonStruct_3e6f83279dfc8d12Release;
     @compileError("generated glue has no recursive release policy for " ++ @typeName(T));
@@ -12683,6 +12784,20 @@ pub extern fn roc_files_write_bytes(arg0: RocStr, arg1: RocListWith(u8, false)) 
 /// Hosted symbol for CaptureHost.set_virtual_mouse!
 /// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
 pub extern fn roc_capture_set_virtual_mouse(arg0: CaptureHostSet_virtual_mouseArgs) callconv(.c) void;
+
+/// Hosted symbol for CaptureHost.set_virtual_keys!
+/// Roc signature: { active : Bool, keys : List(U64) } => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_set_virtual_keys(arg0: CaptureHostSet_virtual_keysArgs) callconv(.c) void;
+
+/// Hosted symbol for CaptureHost.set_virtual_text!
+/// Roc signature: List(U32) => {}
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_set_virtual_text(arg0: RocListWith(u32, false)) callconv(.c) void;
 
 /// Hosted symbol for CaptureHost.start_recording!
 /// Roc signature: { cursor : U8, every_nth : U32, format : U8, fps : I32, max_frames : U64, path : Str, quality : U8, scale_denominator : U32, scale_numerator : U32, timing : U8 } => U8

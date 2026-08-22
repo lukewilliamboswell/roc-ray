@@ -41,6 +41,24 @@ CaptureHost := [].{
 
 	set_virtual_mouse! : VirtualMouse => {}
 
+	## A scripted keyboard state. `active` false hands control back to hardware.
+	##
+	## `keys` carries the raylib key codes held down, and only those. Press and
+	## release edges are derived by the host from consecutive frames exactly as
+	## they are for hardware, so nothing here describes an edge.
+	VirtualKeys : {
+		active : Bool,
+		keys : List(U64),
+	}
+
+	set_virtual_keys! : VirtualKeys => {}
+
+	## Queue Unicode codepoints as the text entered on the next frame.
+	##
+	## The host delivers them once and then forgets them, the way a real
+	## keyboard's characters arrive on one frame and not the next.
+	set_virtual_text! : List(U32) => {}
+
 	## Arm a recording. The refusal code is latched by the host rather than
 	## acted on here, so the outcome is observed the same way whichever phase
 	## started it: an app reads it off `input.capture` on the next cycle.

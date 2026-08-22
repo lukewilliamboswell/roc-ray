@@ -94,6 +94,8 @@ platform ""
 		"roc_files_write_text": FilesHost.write_text!,
 		"roc_files_write_bytes": FilesHost.write_bytes!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
+		"roc_capture_set_virtual_keys": CaptureHost.set_virtual_keys!,
+		"roc_capture_set_virtual_text": CaptureHost.set_virtual_text!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
 		"roc_capture_screenshot": CaptureHost.screenshot!,

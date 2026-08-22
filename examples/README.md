@@ -56,6 +56,7 @@ recommended starting point for a whole application.
 | --- | --- |
 | [Camera World](camera/main.roc) | World/screen coordinate conversion, follow cameras, zoom, and rotation |
 | [Async Read](async_read/main.roc) | Non-blocking text and byte reads with typed completion messages |
+| [Task Sleep](task_sleep/main.roc) | A coroutine task that sleeps without stalling the frame (spike) |
 | [Projective Texture](projective_texture/main.roc) | A draggable perspective-correct quad and projected overlay points |
 | [Post Process](post_process/main.roc) | Render textures, blend scopes, shaders, and cached uniform locations |
 | [Particles](particles/main.roc) | Thousands of sprites drawn as one batched instance list rather than one call each |

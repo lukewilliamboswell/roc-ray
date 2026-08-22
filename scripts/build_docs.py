@@ -184,6 +184,9 @@ def inline_markdown(text: str) -> str:
     return "".join(rendered)
 
 
+SITE_NAME_PATTERN = re.compile(r'(<h1 class="pkg-full-name"><a href="[^"]*">)([^<]*)(</a></h1>)')
+
+
 def write_index_body(root: Path, entry: Path, display_name: str) -> None:
     """Give the site's front page the entry module's header as its body."""
     header = module_header_doc(entry)
@@ -199,27 +202,32 @@ def write_index_body(root: Path, entry: Path, display_name: str) -> None:
     marker = '        <div class="index-decoration">'
     if marker not in source:
         raise DocsError(f"{page}: no index body to fill in")
-    source = source.replace(marker, block + marker, 1)
-    source = source.replace(
-        f"<title>{entry.parent.name} Docs</title>",
-        f"<title>{html.escape(display_name)} Docs</title>",
-        1,
-    )
-    page.write_text(source, encoding="utf-8")
+    page.write_text(source.replace(marker, block + marker, 1), encoding="utf-8")
 
 
-def name_package(root: Path, entry_stem: str, display_name: str) -> None:
-    """Replace the filename-derived site name in every page's sidebar."""
+def name_site(root: Path, display_name: str) -> None:
+    """Replace the filename-derived site name in the title and every sidebar.
+
+    `roc docs` derives it from the entry, so the platform site would be called
+    "main" and the package site "types". Which of the two parts of the path it
+    picks is not worth predicting: read the name off the index page and replace
+    exactly that.
+    """
+    index = root / "index.html"
+    source = index.read_text(encoding="utf-8")
+    match = SITE_NAME_PATTERN.search(source)
+    if match is None:
+        raise DocsError(f"{index}: no site name to replace")
+    current = match.group(2)
+    escaped = html.escape(display_name)
     for page in root.rglob("index.html"):
-        source = page.read_text(encoding="utf-8")
-        replaced = re.sub(
-            r'(<h1 class="pkg-full-name"><a href="[^"]*">)'
-            + re.escape(entry_stem)
-            + r"(</a></h1>)",
-            lambda match: match.group(1) + html.escape(display_name) + match.group(2),
-            source,
+        text = page.read_text(encoding="utf-8")
+        replaced = SITE_NAME_PATTERN.sub(
+            lambda m: m.group(1) + escaped + m.group(3) if m.group(2) == current else m.group(0),
+            text,
         )
-        if replaced != source:
+        replaced = replaced.replace(f"<title>{current} Docs</title>", f"<title>{escaped} Docs</title>", 1)
+        if replaced != text:
             page.write_text(replaced, encoding="utf-8")
 
 
@@ -359,8 +367,8 @@ def build(roc: str, version_root: Path) -> None:
     strip_empty_type_defs(version_root)
     write_index_body(version_root, PLATFORM_ENTRY, PLATFORM_DISPLAY_NAME)
     write_index_body(types_root, PACKAGE_ENTRY, PACKAGE_DISPLAY_NAME)
-    name_package(types_root, PACKAGE_ENTRY.parent.name, PACKAGE_DISPLAY_NAME)
-    name_package(version_root, PLATFORM_ENTRY.parent.name, PLATFORM_DISPLAY_NAME)
+    name_site(types_root, PACKAGE_DISPLAY_NAME)
+    name_site(version_root, PLATFORM_DISPLAY_NAME)
     polish_platform_docs(version_root)
 
 

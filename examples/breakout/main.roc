@@ -8,6 +8,13 @@ import rr.Draw
 import rr.Devices
 import rr.Math
 
+## Breakout, with a `--record-demo` mode that records its own GIF.
+##
+## The rules are one pure step over a `Game` and a `FrameInput`, returning the
+## next game and the events it produced; `update!` turns those events into
+## sounds and plays them. Because the step only asks for a `FrameInput`, the
+## demo mode can hand it a paddle that follows the ball instead of a keyboard,
+## and record the result to a file with no other change.
 Brick : {
 	id : U64,
 	rect : Math.Rect,

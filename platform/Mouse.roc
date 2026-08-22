@@ -31,7 +31,8 @@ Mouse := [].{
 	virtual_click_at = RrtMouse.virtual_click_at
 
 	## Hand pointer input to a scripted source, or back to the hardware mouse.
-	## Valid during `init!`, `update!`, and tasks.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_source! : Source => {}
 	set_source! = |source|
 		match source {
@@ -82,11 +83,15 @@ Mouse := [].{
 	expect Mouse.cursor_mode_code(Visible) == 0
 	expect Mouse.cursor_mode_code(Locked) == 2
 
-	## Set the native cursor shape. Valid during `init!`, `update!`, and tasks.
+	## Set the native cursor shape.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor! : Cursor => {}
 	set_cursor! = |cursor| MouseHost.set_cursor!(cursor_code(cursor))
 
-	## Set cursor visibility and capture. Valid during `init!`, `update!`, and tasks.
+	## Set cursor visibility and capture, applied atomically as one operation.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_cursor_mode! : CursorMode => {}
 	set_cursor_mode! = |mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
 

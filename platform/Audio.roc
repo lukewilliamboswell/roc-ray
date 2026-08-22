@@ -1,8 +1,14 @@
-## Audio module - short sound effects, streamed music, and procedural tones.
+## Short sound effects, streamed music, and procedural tones.
 ##
-## Load or generate resources during initialization and keep the opaque values
-## in your model. Sound and music are distinct types, so they cannot be mixed by
+## Load or generate resources in `init!` and keep the opaque values in your
+## model. Sound and music are distinct types, so they cannot be mixed by
 ## accident. Their final Roc reference automatically unloads the host resource.
+##
+## Every effect here that loads a resource or changes what the mixer is doing
+## is legal in `init!`, `update!`, and tasks, and refused in `render!`. The
+## four queries that only read a scalar the device already has --
+## `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, and
+## `Music.time_played!` -- are legal in any callback, `render!` included.
 import AudioHost
 
 Audio := [].{
@@ -75,8 +81,9 @@ Audio := [].{
 		with_pan : Playback, F32 -> Playback
 		with_pan = |Playback.(settings), pan| Playback.({ ..settings, pan: pan })
 
-		## Apply the settings and start playback. Valid during `init!`,
-		## `update!`, and tasks.
+		## Apply the settings and start playback.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		##
 		## The three transport calls go straight to the host rather than through
 		## `Sound`, because `Sound.play!` is defined as this operation.

@@ -51,8 +51,9 @@ Keys := [].{
 	## `NoExitKey` stops any key from closing it; raylib defaults to
 	## `ExitKey(KeyEscape)`. The window close button is unaffected either way,
 	## so an app that disables the exit key should still handle shutdown itself
-	## by returning `Err(Exit(code))` from `update!`. Valid during `init!`,
-	## `update!`, and tasks.
+	## by returning `Err(Exit(code))` from `update!`.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_exit_key! : ExitKey => {}
 	set_exit_key! = |key| HostHost.set_exit_key!(exit_key_code(key))
 }

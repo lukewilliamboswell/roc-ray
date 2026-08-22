@@ -1,5 +1,5 @@
 app [Model, program] {
-	rr: platform "../../platform/main.roc",
+	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc1/G7CQg3PE51ioJgNENceqkbQSjjX5ULEd2jHbtWBbn9aN.tar.zst",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	roc: "nightly-2026-08-21-90da19f",
 }

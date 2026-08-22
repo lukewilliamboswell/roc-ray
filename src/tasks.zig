@@ -10,9 +10,18 @@ const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
 
 
-/// A finished task's message, wrapped as the response mapper the host's
-/// staging already delivers: `Box(RawResponse -> Box(msg))`.
+/// A finished task's message, wrapped in the erased thunk Roc calls to unwrap
+/// it. The host only moves it; only `receive_task_results` ever calls it.
 pub const TaskResult = abi.RocErasedCallable;
+
+/// How many tasks may be running at once.
+///
+/// Past this, `Task.spawn!` queues the closure and starts it when a slot
+/// frees. It never refuses: a refusal would need an error type on every
+/// spawn, and an app that wanted two hundred files read would have to write
+/// the pacing that this queue already is. Each live task owns a coroutine
+/// stack, which is what the cap is really bounding.
+pub const max_live_tasks: usize = 32;
 
 /// Behaviour the host supplies: the Roc entry points and the phase guard.
 pub fn Tasks(comptime Hooks: type) type {
@@ -27,9 +36,14 @@ pub fn Tasks(comptime Hooks: type) type {
 
         pub const Finished = struct { id: u64, result: TaskResult };
 
+        /// A spawn that arrived while every slot was taken.
+        const Queued = struct { id: u64, run: abi.RocErasedCallable };
+
         allocator: std.mem.Allocator,
         rt: ?*zio.Runtime = null,
         live: std.ArrayListUnmanaged(Live) = .empty,
+        /// Closures waiting for a live slot, oldest first.
+        queued: std.ArrayListUnmanaged(Queued) = .empty,
         finished: std.ArrayListUnmanaged(Finished) = .empty,
         next_id: u64 = 1,
         cycle: u64 = 0,
@@ -71,6 +85,11 @@ pub fn Tasks(comptime Hooks: type) type {
             return self.live.items.len;
         }
 
+        /// Spawns waiting for a slot. Non-zero means the cap is binding.
+        pub fn queuedCount(self: *const Self) usize {
+            return self.queued.items.len;
+        }
+
         /// Spawn one erased closure on the active registry (`Task.spawn!`).
         /// Without a runtime the closure is released and nothing runs.
         pub fn spawnCurrent(roc_host: *abi.RocHost, run: abi.RocErasedCallable) void {
@@ -82,12 +101,34 @@ pub fn Tasks(comptime Hooks: type) type {
         }
 
         fn spawn(self: *Self, roc_host: *abi.RocHost, run: abi.RocErasedCallable) void {
+            if (self.rt == null) {
+                abi.decrefErasedCallable(run, roc_host);
+                return;
+            }
+            const id = self.next_id;
+            self.next_id += 1;
+            if (self.trace) std.log.info("[TASK {d}] spawned on cycle {d}", .{ id, self.cycle });
+
+            // Past the cap the closure waits its turn rather than being
+            // refused. `drainQueued` starts it as soon as a slot frees.
+            if (self.live.items.len >= max_live_tasks) {
+                self.queued.append(self.allocator, .{ .id = id, .run = run }) catch {
+                    std.log.err("roc-ray: out of memory queueing task {d}; dropping it", .{id});
+                    abi.decrefErasedCallable(run, roc_host);
+                    return;
+                };
+                if (self.trace) std.log.info("[TASK {d}] queued behind {d} live task(s)", .{ id, self.live.items.len });
+                return;
+            }
+            self.start(roc_host, id, run);
+        }
+
+        /// Put one closure on its own coroutine, with a slot known to be free.
+        fn start(self: *Self, roc_host: *abi.RocHost, id: u64, run: abi.RocErasedCallable) void {
             const rt = self.rt orelse {
                 abi.decrefErasedCallable(run, roc_host);
                 return;
             };
-            const id = self.next_id;
-            self.next_id += 1;
             self.live.ensureUnusedCapacity(self.allocator, 1) catch @panic("roc-ray: out of memory spawning a task");
             const handle = rt.spawn(body, .{ id, run }) catch |err| {
                 std.log.err("roc-ray: could not spawn task {d}: {s}", .{ id, @errorName(err) });
@@ -95,7 +136,24 @@ pub fn Tasks(comptime Hooks: type) type {
                 return;
             };
             self.live.appendAssumeCapacity(.{ .id = id, .started_cycle = self.cycle, .handle = handle });
-            if (self.trace) std.log.info("[TASK {d}] spawned on cycle {d}", .{ id, self.cycle });
+        }
+
+        /// Start as many queued closures as there are free slots, oldest first.
+        ///
+        /// FIFO, and that is a guarantee: a queued task runs after every task
+        /// queued before it, so the order tasks are spawned in is the order
+        /// they are started in.
+        fn drainQueued(self: *Self, roc_host: *abi.RocHost) void {
+            var started: usize = 0;
+            while (started < self.queued.items.len and self.live.items.len < max_live_tasks) : (started += 1) {
+                const item = self.queued.items[started];
+                if (self.trace) std.log.info("[TASK {d}] dequeued on cycle {d}", .{ item.id, self.cycle });
+                self.start(roc_host, item.id, item.run);
+            }
+            if (started != 0) {
+                std.mem.copyForwards(Queued, self.queued.items[0 .. self.queued.items.len - started], self.queued.items[started..]);
+                self.queued.shrinkRetainingCapacity(self.queued.items.len - started);
+            }
         }
 
         /// The coroutine body: run the Roc closure to completion on this stack.
@@ -150,6 +208,13 @@ pub fn Tasks(comptime Hooks: type) type {
                 self.idle_pump_total_ns += self.last_pump_ns;
             }
             self.reap();
+            if (self.queued.items.len != 0) {
+                self.drainQueued(Hooks.host());
+                // The tasks just started have not run at all yet. Give them
+                // their turn now rather than a frame from now.
+                zio.yield() catch {};
+                self.reap();
+            }
         }
 
         /// Release the join handles of tasks that have finished.
@@ -185,6 +250,10 @@ pub fn Tasks(comptime Hooks: type) type {
         /// Cancel every live task, run each to completion on the cancelled
         /// path, drop any undelivered results, then tear the runtime down.
         pub fn deinit(self: *Self) void {
+            // Queued closures never started, so nothing owns them but this
+            // list. Drop them before the runtime goes away.
+            for (self.queued.items) |item| Hooks.dropResult(item.run);
+            self.queued.clearRetainingCapacity();
             if (self.rt) |rt| {
                 for (self.live.items) |*item| {
                     if (self.trace) std.log.info("[TASK {d}] cancelling at shutdown", .{item.id});
@@ -207,6 +276,7 @@ pub fn Tasks(comptime Hooks: type) type {
                 self.rt = null;
             }
             self.live.deinit(self.allocator);
+            self.queued.deinit(self.allocator);
             self.finished.deinit(self.allocator);
             if (current == self) current = null;
         }

@@ -430,6 +430,11 @@ const TaskHooks = struct {
     pub fn dropResult(result: tasks_mod.TaskResult) void {
         abi.decrefErasedCallable(result, activeHost());
     }
+    /// The Roc host a queued closure is released or started against. Only the
+    /// frame thread ever asks, and only while an app is running.
+    pub fn host() *RocHost {
+        return activeHost();
+    }
 };
 
 const AppTasks = tasks_mod.Tasks(TaskHooks);
@@ -441,6 +446,14 @@ const AppTasks = tasks_mod.Tasks(TaskHooks);
 /// task spawned this cycle parks on its first wait before the frame is drawn.
 fn hostedTaskSpawn(run: abi.RocErasedCallable) callconv(.c) void {
     enforcePhase("Task.spawn!", during_spawn);
+    // Spawning can hand control to the executor before it returns -- zio runs
+    // a newly spawned coroutine as soon as its tick budget says to -- and a
+    // task sets phases of its own while it runs, and clears them when it
+    // parks. Restore ours, so a second `Task.spawn!` in the same `update!`
+    // still sees `update`. Without this, spawning enough tasks in one call
+    // makes the next spawn fail the phase guard.
+    const scope = PhaseScope.enter(active_phase);
+    defer scope.leave();
     AppTasks.spawnCurrent(activeHost(), run);
 }
 

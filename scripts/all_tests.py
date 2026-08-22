@@ -25,6 +25,8 @@ This script runs:
 - model alloc     - Measure what a frame costs a large collection in the model
 - task delivery   - Spawn one task per Msg variant and assert every message
                     arrives with the right tag and payload (test/task_delivery).
+- task cap        - Spawn a hundred tasks against the host's cap of 32 and
+                    assert every one of them still answers (test/task_cap).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -274,6 +276,44 @@ def run_task_delivery_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run task delivery probe"]
+
+
+def run_task_cap_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that spawning past the host's live-task cap queues rather than drops.
+
+    A hundred tasks in one `update!`, against a cap of 32. The closures past the
+    cap have to wait for a slot and still run -- `Task.spawn!` has no error to
+    report, so a dropped one would simply never answer -- and the frame's phase
+    has to survive the burst, since spawning hands control to the executor.
+    Exit 3 means a message was lost, repeated or wrong; exit 4 means the queue
+    never drained.
+    """
+    fixture = root / "test" / "task_cap" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning task cap probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_cap")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build task cap probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build task cap probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=400",
+        ],
+        "run task cap probe",
+        verbose,
+        cwd=root,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run task cap probe"]
 
 
 def run_model_allocation_check(
@@ -829,6 +869,7 @@ def _run_example_stages(
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
+        failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

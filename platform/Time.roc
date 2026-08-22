@@ -243,8 +243,16 @@ to_calendar = |timestamp| {
 	day_of_year = day_of_era - (365 * year_of_era + year_of_era // 4 - year_of_era // 100)
 	month_index = (5 * day_of_year + 2) // 153
 	day = day_of_year - (153 * month_index + 2) // 5 + 1
-	month = if month_index < 10 { month_index + 3 } else { month_index - 9 }
-	year = year_of_era + era * 400 + if month <= 2 { 1 } else { 0 }
+	month = if month_index < 10 {
+		month_index + 3
+	} else {
+		month_index - 9
+	}
+	year = year_of_era + era * 400 + if month <= 2 {
+		1
+	} else {
+		0
+	}
 
 	{
 		year: year,

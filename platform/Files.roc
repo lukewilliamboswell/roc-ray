@@ -190,7 +190,7 @@ Files := [].{
 			# app could act on.
 			match Time.Timestamp.from_parts({ seconds: result.modified_seconds, nanosecond: result.modified_nanosecond }) {
 				Ok(modified) => Ok({ kind: entry_kind(result.kind), size_bytes: result.size_bytes, modified: modified })
-				Err(InvalidNanosecond) => crash("roc-ray: Files.metadata! received a modification time the host had not normalized")
+				Err(InvalidNanosecond) => crash ("roc-ray: Files.metadata! received a modification time the host had not normalized")
 			}
 		} else {
 			Err(metadata_error(result.err))

@@ -17,12 +17,18 @@
 ## what it can do, not by what it usually does.
 ##
 ## ```roc
+## init! : App.Init(Model, [StoreFailed])
 ## init! = App.init(
 ##     App.default.with_title("scores"),
 ##     |_startup| {
-##         db = Sqlite.Db.open!("scores.db")?
-##         Sqlite.exec_script!(db, "CREATE TABLE IF NOT EXISTS runs(name TEXT, score INTEGER)")?
-##         Ok({ db, rows: Sqlite.query!({ db, query: "SELECT name, score FROM runs", bindings: [] })? })
+##         db = Sqlite.Db.open!("scores.db") ? |_err| StoreFailed
+##         Sqlite.exec_script!(db, "CREATE TABLE IF NOT EXISTS runs(name TEXT, score INTEGER)") ? |_err| StoreFailed
+##         rows = Sqlite.query!({ db, query: "SELECT name, score FROM runs", bindings: [] }) ? |_err| StoreFailed
+##         leader = match List.first(rows) {
+##             Ok(row) => Sqlite.Row.str(row, "name") ? |_err| StoreFailed
+##             Err(_) => "nobody"
+##         }
+##         Ok({ db, rows, leader })
 ##     },
 ## )
 ##
@@ -39,13 +45,37 @@
 ##                 ],
 ##             }) {
 ##                 Ok(_outcome) => Saved
-##                 Err(err) => SaveFailed(Inspect.to_str(err))
+##                 Err(SqliteErr(code, message)) => SaveFailed("${Sqlite.errcode_to_str(code)} (${message})")
+##                 Err(_) => SaveFailed("the platform refused the write")
 ##             },
 ##         )
 ##     }
 ##     Ok(model)
 ## }
 ## ```
+##
+## Each call fails with a union of its own, and none of those unions is open, so
+## `?` cannot merge them: every one is mapped to the app's own `StoreFailed`
+## before it propagates. `examples/sqlite_scores` maps them to a `Str` through
+## `Sqlite.errcode_to_str` instead, which is what an app that shows the reason
+## on screen wants.
+##
+## Two shapes reach the same effects. The handle receivers -- `Sqlite.Db.open!`,
+## `Sqlite.Stmt.query!`, `Sqlite.Stmt.execute!` -- run a statement the app
+## prepared once and kept, which is what a query run every frame or every save
+## wants: the parse and the plan are paid at `prepare!`. The free functions
+## take a record naming the connection and the SQL --
+## `Sqlite.query!({ db, query, bindings })` -- and prepare, run, and discard the
+## statement in one call, which is what a one-off wants: a schema change, a
+## screen loaded once, a query whose text the app just built.
+##
+## Transactions are SQL, so they are written as SQL. `Sqlite.exec_script!(db,
+## "BEGIN")`, then the parameterised `execute!` calls, then
+## `Sqlite.exec_script!(db, "COMMIT")` -- N inserts through one prepared
+## statement inside one transaction is how a bulk write stays fast, because
+## SQLite otherwise pays a disk sync per statement. `"ROLLBACK"` undoes the
+## batch when one of those calls fails; a task that ends without committing
+## leaves the transaction open on that connection, so match every `BEGIN`.
 ##
 ## A `Db` is a reference-counted handle to a host-owned connection. Copying it
 ## shares the connection; releasing the last reference closes it, so there is
@@ -100,6 +130,13 @@ Sqlite := [].{
 	## `UNIQUE` violation is `Constraint` rather than a number an app would have
 	## to know. The accompanying `Str` carries SQLite's message, which is where
 	## the detail went.
+	##
+	## `Interrupt` is what shutdown looks like from inside a query. Rather than
+	## making the window wait for a long statement to finish, the host
+	## interrupts every connection with work in flight, and each of those calls
+	## answers `SqliteErr(Interrupt, _)`. A task that treats it as a database
+	## failure will report one on the way out; a task that is about to be
+	## cancelled anyway has nothing to report.
 	ErrCode : [
 		Error,
 		Internal,

@@ -1,8 +1,12 @@
 ## UDP sockets, for multiplayer, livecoding, and streaming data.
 ##
-## A socket is bound once and kept in the model. Sending is an ordinary effect
-## that does not wait, so it belongs in `update!` beside the rest of a frame's
-## work. Receiving waits, so it belongs in a task:
+## A socket is bound once and kept in the model. `bind!` and `send!` are legal
+## in `init!`, `update!`, and tasks, and refused in `render!`, which draws.
+## `receive!` waits: it is legal in `init!`, where it blocks startup, and in
+## tasks, where it parks the task; it is refused in `update!` and `render!`.
+##
+## So sending belongs in `update!` beside the rest of a frame's work, and
+## receiving belongs in a task:
 ##
 ## ```roc
 ## Msg : [Arrived(List(Udp.Datagram)), ReceiveFailed(Udp.ReceiveError)]
@@ -12,16 +16,26 @@
 ##     if !model.listening {
 ##         Task.spawn!(
 ##             input,
-##             || match socket.receive!(Udp.default_receive) {
+##             || match Udp.Socket.receive!(socket, Udp.default_receive) {
 ##                 Ok(datagrams) => Arrived(datagrams)
 ##                 Err(err) => ReceiveFailed(err)
 ##             },
 ##         )
 ##     }
-##     socket.send!(model.peer, position_bytes(input))?
-##     Ok({ model & listening: Bool.true })
+##     dropped = match Udp.Socket.send!(socket, model.peer, position_bytes(input)) {
+##         Ok({}) => model.dropped
+##         Err(_) => model.dropped + 1
+##     }
+##     answered = !List.is_empty(input.messages)
+##     Ok({ ..model, dropped, listening: !answered })
 ## }
 ## ```
+##
+## `listening` is set from whether this cycle's input answered rather than
+## latched to true, so the next `update!` starts the next listener. A failed
+## `send!` is counted rather than propagated: `WouldBlock` is a full send
+## buffer, an ordinary condition on a busy link, and a position update would
+## rather skip a frame than end the app.
 ##
 ## A task delivers exactly one message, so the loop is "receive, answer, and
 ## let `update!` start the next one" rather than a task that loops forever. A
@@ -62,7 +76,12 @@ Udp := [].{
 	## this is a plain record, so two values are equal when their text is.
 	Address : { ip : Str, port : U16 }
 
-	## One received datagram, and the address it came from. Reply to `from`.
+	## One received datagram, and the address it came from. Reply to `from`:
+	##
+	## ```roc
+	## reply! : Udp.Socket, Udp.Datagram, List(U8) => Try({}, Udp.SendError)
+	## reply! = |socket, datagram, bytes| Udp.Socket.send!(socket, datagram.from, bytes)
+	## ```
 	Datagram : { from : Address, bytes : List(U8) }
 
 	## Per-receive limits.
@@ -154,6 +173,12 @@ Udp := [].{
 		## peer is listening. Nothing here reports that a datagram arrived,
 		## because UDP does not.
 		##
+		## It is a queued effect: the datagram is handed whole to the kernel's
+		## bounded send buffer and the call returns at once, with the sending
+		## itself happening off the frame thread. `WouldBlock` is that queue's
+		## saturation -- the buffer was full, so this datagram was not taken --
+		## and it is a typed result rather than a wait or a silent drop.
+		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		send! : Socket, Address, List(U8) => Try({}, SendError)
 		send! = |Socket.(socket), to, bytes| {
@@ -199,89 +224,90 @@ Udp := [].{
 		## Resource-free socket value for pure tests.
 		##
 		## The handle never resolves to an open socket, so every effect made
-		## through it fails the way one made through a closed socket does. It
-		## exists for the app that keeps a socket in its model, to let a pure
-		## `expect` build that model. Do not use it to test delivery or
+		## through it fails as `Unavailable` -- `Err(Unavailable)` from `send!`
+		## and from `receive!` -- the same way a call through a closed socket
+		## does. It exists for the app that keeps a socket in its model, to let
+		## a pure `expect` build that model. Do not use it to test delivery or
 		## resource lifetime.
 		stub : Socket
 		stub = Socket.({ handle: UdpHost.Handle.stub, local: { ip: "0.0.0.0", port: 0 } })
 	}
-
-	## Rebuild the datagrams from the flat batch the host delivered.
-	decode_batch : List(UdpHost.DatagramSlice), List(U8) -> List(Datagram)
-	decode_batch = |slices, payload|
-		List.map(
-			slices,
-			|slice| {
-				from: { ip: format_ip(slice.ip), port: slice.port },
-				bytes: List.sublist(payload, { start: slice.start, len: slice.len }),
-			},
-		)
-
-	## Format a host-order IPv4 word as a dotted quad.
-	format_ip : U32 -> Str
-	format_ip = |ip| {
-		octet = |shift| U8.to_str(U32.to_u8_wrap(U32.shr_zf_wrap(ip, shift)))
-		"${octet(24)}.${octet(16)}.${octet(8)}.${octet(0)}"
-	}
-
-	## Name a failed bind. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-	bind_error : U8 -> BindError
-	bind_error = |code|
-		match code {
-			2 => InvalidAddress
-			4 => ResourceLimit
-			8 => AddressInUse
-			9 => AddressUnavailable
-			10 => PermissionDenied
-			_ => Unavailable
-		}
-
-	## Name a failed send. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-	send_error : U8 -> SendError
-	send_error = |code|
-		match code {
-			1 => Unavailable
-			2 => InvalidAddress
-			10 => PermissionDenied
-			11 => TooLarge
-			12 => WouldBlock
-			13 => Unreachable
-			_ => SendFailed
-		}
-
-	## Name a failed receive. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
-	receive_error : U8 -> ReceiveError
-	receive_error = |code|
-		match code {
-			1 => Unavailable
-			14 => Timeout
-			15 => AlreadyReceiving
-			_ => ReceiveFailed
-		}
 }
 
-expect Udp.format_ip(0x7f000001) == "127.0.0.1"
-expect Udp.format_ip(0) == "0.0.0.0"
-expect Udp.format_ip(0xffffffff) == "255.255.255.255"
-expect Udp.format_ip(0xc0a80101) == "192.168.1.1"
-expect Udp.format_ip(0x08080808) == "8.8.8.8"
+## Rebuild the datagrams from the flat batch the host delivered.
+decode_batch : List(UdpHost.DatagramSlice), List(U8) -> List(Udp.Datagram)
+decode_batch = |slices, payload|
+	List.map(
+		slices,
+		|slice| {
+			from: { ip: format_ip(slice.ip), port: slice.port },
+			bytes: List.sublist(payload, { start: slice.start, len: slice.len }),
+		},
+	)
 
-expect Udp.bind_error(2) == InvalidAddress
-expect Udp.bind_error(8) == AddressInUse
-expect Udp.bind_error(1) == Unavailable
-expect Udp.send_error(12) == WouldBlock
-expect Udp.send_error(11) == TooLarge
-expect Udp.send_error(3) == SendFailed
-expect Udp.receive_error(14) == Timeout
-expect Udp.receive_error(15) == AlreadyReceiving
-expect Udp.receive_error(3) == ReceiveFailed
+## Format a host-order IPv4 word as a dotted quad.
+format_ip : U32 -> Str
+format_ip = |ip| {
+	octet = |shift| U8.to_str(U32.to_u8_wrap(U32.shr_zf_wrap(ip, shift)))
+	"${octet(24)}.${octet(16)}.${octet(8)}.${octet(0)}"
+}
+
+## Name a failed bind. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
+bind_error : U8 -> Udp.BindError
+bind_error = |code|
+	match code {
+		2 => InvalidAddress
+		4 => ResourceLimit
+		8 => AddressInUse
+		9 => AddressUnavailable
+		10 => PermissionDenied
+		_ => Unavailable
+	}
+
+## Name a failed send. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
+send_error : U8 -> Udp.SendError
+send_error = |code|
+	match code {
+		1 => Unavailable
+		2 => InvalidAddress
+		10 => PermissionDenied
+		11 => TooLarge
+		12 => WouldBlock
+		13 => Unreachable
+		_ => SendFailed
+	}
+
+## Name a failed receive. Mirrors the `ERR_*` codes in `src/udp_effect.zig`.
+receive_error : U8 -> Udp.ReceiveError
+receive_error = |code|
+	match code {
+		1 => Unavailable
+		14 => Timeout
+		15 => AlreadyReceiving
+		_ => ReceiveFailed
+	}
+
+expect format_ip(0x7f000001) == "127.0.0.1"
+expect format_ip(0) == "0.0.0.0"
+expect format_ip(0xffffffff) == "255.255.255.255"
+expect format_ip(0xc0a80101) == "192.168.1.1"
+expect format_ip(0x08080808) == "8.8.8.8"
+
+expect bind_error(2) == InvalidAddress
+expect bind_error(8) == AddressInUse
+expect bind_error(1) == Unavailable
+expect send_error(12) == WouldBlock
+expect send_error(11) == TooLarge
+expect send_error(3) == SendFailed
+expect receive_error(14) == Timeout
+expect receive_error(15) == AlreadyReceiving
+expect receive_error(3) == ReceiveFailed
 
 ## Each datagram in a batch keeps its own bytes and its own sender: a decode
 ## that shared one slice, or lost the address, would make every reply go to the
 ## wrong peer.
 expect {
-	batch = Udp.decode_batch(
+	batch = decode_batch(
 		[
 			{ ip: 0x7f000001, port: 5000, start: 0, len: 4 },
 			{ ip: 0xc0a80102, port: 5001, start: 4, len: 3 },
@@ -295,4 +321,4 @@ expect {
 		]
 }
 
-expect Udp.decode_batch([], []) == []
+expect decode_batch([], []) == []

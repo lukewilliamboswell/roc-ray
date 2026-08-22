@@ -26,6 +26,11 @@ import rr.Time
 ## same statement runs on every keypress and re-parsing it each time would be
 ## work for nothing. The read is a one-shot `Sqlite.query!`, which does not
 ## occupy a statement slot.
+##
+## Each row is stamped with `Time.now!` rather than with the cycle's simulation
+## clock, and the board renders that stamp as an ISO 8601 instant. A row
+## outlives the process that wrote it, so the only clock it can be measured
+## against is the world's.
 Model : {
 	db : Sqlite.Db,
 	insert : Sqlite.Stmt,
@@ -38,7 +43,11 @@ Model : {
 
 ## One row of the board, in the app's own vocabulary rather than the database's.
 ## Decoding into this is what makes a renamed column an error in one place.
-Entry : { name : Str, score : I64, played_s : I64 }
+##
+## `played_at` is a wall-clock instant rather than a count of simulation
+## seconds, because it has to mean the same thing across the two runs of the
+## process that the database spans.
+Entry : { name : Str, score : I64, played_at : Time.Timestamp }
 
 Status : [Ready, Working, Failed(Str)]
 
@@ -51,9 +60,10 @@ db_dir = "sqlite_scores_out"
 db_path : Str
 db_path = "sqlite_scores_out/scores.db"
 
-## `played_at` is a REAL and `name` is UNIQUE, so the board exercises three
-## column types and gives a repeated name an outcome the app can show rather
-## than a silently duplicated row.
+## `played_at` is a REAL holding fractional seconds since the Unix epoch, and
+## `name` is UNIQUE, so the board exercises three column types and gives a
+## repeated name an outcome the app can show rather than a silently duplicated
+## row.
 schema : Str
 schema = "CREATE TABLE IF NOT EXISTS runs(name TEXT NOT NULL UNIQUE, score INTEGER NOT NULL, played_at REAL NOT NULL);"
 
@@ -77,7 +87,7 @@ init! = App.init(
 		# database lives in comes to exist.
 		_ = Files.write_bytes!("${db_dir}/.keep", [])
 
-		rng = Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000)))
+		rng = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
 		font = Draw.default_font!()
 
 		# A store that will not open is shown rather than fatal: the stub
@@ -137,8 +147,20 @@ decode_entry : Sqlite.Row -> Entry
 decode_entry = |row| {
 	name: or_else_str(Sqlite.Row.str(row, "name"), "?"),
 	score: or_else_i64(Sqlite.Row.i64(row, "score"), 0),
-	played_s: or_else_i64(Sqlite.Row.i64(row, "played_s"), 0),
+	played_at: to_timestamp(or_else_i64(Sqlite.Row.i64(row, "played_s"), 0)),
 }
+
+## Rebuild the instant a run was recorded from the whole seconds the query
+## casts it down to.
+##
+## A second is always a valid instant, so the fallback only names a value
+## `from_parts` will not produce here rather than a state the board can reach.
+to_timestamp : I64 -> Time.Timestamp
+to_timestamp = |seconds|
+	match Time.Timestamp.from_parts({ seconds, nanosecond: 0 }) {
+		Ok(at) => at
+		Err(InvalidNanosecond) => Time.Timestamp.epoch
+	}
 
 or_else_str : Try(Str, _), Str -> Str
 or_else_str = |result, fallback|
@@ -159,15 +181,19 @@ or_else_i64 = |result, fallback|
 ## Write and read inside one closure, so the message carries the board as it is
 ## after the write. Two separate tasks could answer out of order and leave the
 ## model showing a board that never existed.
-record_run! : Sqlite.Db, Sqlite.Stmt, Str, I64, F32 => Msg
-record_run! = |db, insert, name, score, played_at| {
+record_run! : Sqlite.Db, Sqlite.Stmt, Str, I64 => Msg
+record_run! = |db, insert, name, score| {
+	# The clock is read here rather than in `update!`, so the row is stamped
+	# with the instant the write happened. `Time.now!` does not wait, so it
+	# costs the task nothing to ask on its own.
+	played_at = Time.now!()
 	written =
 		Sqlite.Stmt.execute!(
 			insert,
 			[
 				{ name: ":name", value: String(name) },
 				{ name: ":score", value: Integer(score) },
-				{ name: ":played_at", value: Real(F32.to_f64(played_at)) },
+				{ name: ":played_at", value: Real(epoch_seconds(played_at)) },
 			],
 		)
 
@@ -185,10 +211,23 @@ record_run! = |db, insert, name, score, played_at| {
 		}
 }
 
+## Fractional seconds since the Unix epoch, which is what the REAL column
+## holds. Keeping the subsecond part is why the column is a REAL rather than an
+## INTEGER, even though the board only ever shows whole seconds.
+epoch_seconds : Time.Timestamp -> F64
+epoch_seconds = |at|
+	I64.to_f64(Time.Timestamp.seconds_since_epoch(at))
+		+ U32.to_f64(Time.Timestamp.subsecond_nanoseconds(at)) / 1_000_000_000
+
 ## Turn any of this module's errors into a line worth putting on screen.
 ##
 ## `SqliteErr` is the only one carrying detail the database chose, so it is the
 ## only one that gets the code spelled out.
+##
+## The union stays open, so the one function serves every call that can fail
+## here -- `open!`, `prepare!`, `query!`, and `execute!` each add refusals of
+## their own that this catch-all covers.
+describe : [SqliteErr(Sqlite.ErrCode, Str), ..] -> Str
 describe = |err|
 	match err {
 		SqliteErr(code, message) => "${Sqlite.errcode_to_str(code)} (${message})"
@@ -235,8 +274,7 @@ update! = |model, input| {
 		run = next_run(folded.rng)
 		db = folded.db
 		insert = folded.insert
-		played_at = Time.to_seconds(input.time.simulation_nanos)
-		Task.spawn!(input, || record_run!(db, insert, run.name, run.score, played_at))
+		Task.spawn!(input, || record_run!(db, insert, run.name, run.score))
 		Ok({ ..folded, rng: run.state, status: Working, pending: Bool.True })
 	} else if input.devices.key_pressed(KeyR) {
 		db = folded.db
@@ -312,8 +350,8 @@ draw_entry! = |frame, index, entry| {
 	})
 	frame.text_at!({
 		pos: { x: 430, y },
-		text: "at ${I64.to_str(entry.played_s)}s",
-		size: 20,
+		text: Time.Timestamp.to_iso_8601(entry.played_at),
+		size: 18,
 		color: Color.from_hex_rgb(0x6d778a),
 	})
 }
@@ -351,6 +389,14 @@ expect apply_message({ ..test_model, pending: Bool.True }, Failed("locked")).sta
 
 expect !apply_message({ ..test_model, pending: Bool.True }, Failed("locked")).pending
 
+## A stored second comes back as the instant that stamped it.
+expect Time.Timestamp.to_iso_8601(to_timestamp(0)) == "1970-01-01T00:00:00Z"
+
+expect Time.Timestamp.to_iso_8601(to_timestamp(1_700_000_000)) == "2023-11-14T22:13:20Z"
+
+## Whole seconds survive the trip out through the REAL column and back.
+expect epoch_seconds(to_timestamp(1_700_000_000)) == 1_700_000_000
+
 ## The same seed draws the same run, which is what makes a replay a replay.
 expect next_run(Random.seed(7)).name == next_run(Random.seed(7)).name
 
@@ -360,7 +406,7 @@ expect next_run(Random.seed(7)).score == next_run(Random.seed(7)).score
 expect List.contains(runner_names, next_run(Random.seed(11)).name)
 
 test_entry : Entry
-test_entry = { name: "ada", score: 10, played_s: 1 }
+test_entry = { name: "ada", score: 10, played_at: to_timestamp(1) }
 
 ## A resource-free model built from the `stub` handles, so the pure folds above
 ## can be exercised without a database.

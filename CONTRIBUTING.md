@@ -342,6 +342,15 @@ the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
 Roc-side decoder and `src/host_native.zig` in step; each constant says where
 its counterpart lives.
 
+A new private `<X>Host.roc` needs its own privacy fixture. The module is kept
+out of `exposes` so an app cannot import it, and nothing but a test proves that
+stayed true: add `test/compile_fail/<x>_host_module.roc` importing it, and
+register the file in `scripts/test_app_transport_privacy.py` as a `CASES` entry
+pairing that path with the diagnostic strings the compiler must produce -- the
+title `package module is private` and the module's own name -- so `zig build
+test` compiles it and requires that failure. Without the registration the
+fixture is never built and the privacy is unchecked.
+
 `roc test` cannot reach a new effect through `update!`: an `expect` cannot call
 an effectful function, and the phase guard would refuse the effects inside one
 anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
@@ -568,6 +577,8 @@ Before opening a PR:
 - Keep the change focused and explain the app-author problem it solves.
 - Add or update tests for behavior and failure paths.
 - Run `zig build lint` and `zig build test`.
+- For a new private `<X>Host.roc`, add `test/compile_fail/<x>_host_module.roc`
+  and register it in `scripts/test_app_transport_privacy.py`.
 - Run the graphical smoke test when pixels or drawing state can change.
 - Update examples and docs when public behavior changes.
 - Check `git status --short`, `git diff`, and `git diff --cached` for untracked

@@ -279,7 +279,7 @@ App := [].{
 	## last one by itself, and it is deliberately the app's decision:
 	##
 	## ```roc
-	## seed = Random.seed(U64.to_u32_wrap(startup.entropy!()))
+	## seed = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
 	## ```
 	##
 	## Keep the returned `Random.State` in the model and draw with pure

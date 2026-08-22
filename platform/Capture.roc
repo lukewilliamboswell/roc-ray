@@ -9,11 +9,15 @@
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
 ## containing `..` -- is refused rather than rewritten. Capture is the only
-## file-writing capability the platform grants.
+## path-sandboxed writer the platform grants: `Files.write_text!` and
+## `Files.write_bytes!` write wherever the process may write, while everything
+## here is confined to the output directory.
 ##
 ## Recording starts and stops through `Capture.start!` and `Capture.stop!`,
-## a single frame is written by `Capture.screenshot!`, and recording state is
-## available as `input.capture` each cycle.
+## a single frame is written by `Capture.screenshot!`, an offscreen
+## `Draw.RenderTexture` is written at its own size by
+## `Capture.screenshot_texture!`, and recording state is available as
+## `input.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
@@ -71,6 +75,17 @@ Capture := [].{
 	]
 
 	## Why a screenshot did not become a file.
+	##
+	## `PathInvalid` is a path the sandbox cannot even resolve: empty, absolute,
+	## containing `..`, or holding a NUL byte. `PathEscapesOutputDir` is the
+	## resolvable path that lands outside the output directory. Both are the
+	## app's own string to fix.
+	##
+	## `Busy` is the host at its limit across every capture request at once, so
+	## nothing was captured or written. It is about right now: the same
+	## screenshot offered on a later frame may well be taken, which is what
+	## separates it from `Unavailable`. `AlreadyPending` is narrower still --
+	## this app's own previous screenshot is still waiting for its frame.
 	##
 	## `Unavailable` is the host having no capture facility to use at all --
 	## the app is shutting down and the wait was cancelled before the frame
@@ -141,11 +156,11 @@ Capture := [].{
 	## export the target rather than the frame. Transparency survives, unlike a
 	## `screenshot!`, whose framebuffer readback is always opaque.
 	##
-	## Legal in `init!`, where it blocks, and in tasks, where it parks; refused
-	## in `update!` and `render!`. Nothing here waits on the frame loop, which is
-	## why `init!` is allowed where a `screenshot!` cannot be -- but drawing into
-	## a target is only possible during `render!`, so a target no `render!` has
-	## drawn into holds undefined pixels.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. Nothing here waits on the
+	## frame loop, which is why `init!` is allowed where a `screenshot!` cannot
+	## be -- but drawing into a target is only possible during `render!`, so a
+	## target no `render!` has drawn into holds undefined pixels.
 	##
 	## The pixels are the ones the last completed `render!` left in the target,
 	## so an app that draws its composition every frame exports what it last

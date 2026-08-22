@@ -200,7 +200,8 @@ Three things worth knowing:
 
 - **Paths are sandboxed.** Every capture path resolves under `with_output_dir`.
   Absolute paths and paths containing `..` are refused rather than rewritten;
-  this is the only file-writing capability the platform grants an app.
+  this is the only path-sandboxed writer the platform grants. `Files.write_text!`
+  and `Files.write_bytes!` write wherever the process itself may write.
 - **Recordings are reproducible.** `FixedStep` timing (the default) reports an
   exact `1/fps` frame delta regardless of how long the readback actually took,
   so a recording plays back smoothly and two runs produce identical output.

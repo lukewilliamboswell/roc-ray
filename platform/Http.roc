@@ -31,7 +31,11 @@
 ##             input,
 ##             || match Http.get_utf8!("http://127.0.0.1:8000/data.json") {
 ##                 Ok(body) => Loaded(body)
-##                 Err(err) => Failed(Inspect.to_str(err))
+##                 Err(InvalidUrl(_)) => Failed("that is not a URL this platform will fetch")
+##                 Err(HttpErr(Timeout)) => Failed("the request timed out")
+##                 Err(HttpErr(_)) => Failed("the request failed at the network layer")
+##                 Err(BadBody(_)) => Failed("the reply was not valid UTF-8")
+##                 Err(_) => Failed("the request failed")
 ##             },
 ##         )
 ##     }

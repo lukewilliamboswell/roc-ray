@@ -53,7 +53,7 @@ poster_width = 1440
 poster_height : F32
 poster_height = 960
 
-init! : App.Init(Model, _)
+init! : App.Init(Model, [ResourceLimit, RenderTextureLoadFailed])
 init! = App.init(
 	App.default
 		.with_title("RocRay Postcard Studio")

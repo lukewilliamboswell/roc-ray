@@ -16,6 +16,15 @@ import rr.Math
 import rr.Sprite
 import rr.Tilemap
 
+## A top-down arena built from an authored Tiled map: dash past the hazards,
+## collect every spark to open the gate, then reach the exit.
+##
+## An authored `.tmx` supplies the tiles and the typed objects the spawn, exit,
+## sparks, hazards, and decorations are read from. The simulation is one pure
+## step that returns the sound cues it wants; `update!` performs those cues and
+## nothing else decides when a sound plays. Sprites, a follow camera with
+## screen shake, looping music, and synthesized fallbacks for missing `.ogg`
+## files round out the loop.
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
 	is_eq : _
 }
@@ -360,9 +369,9 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 ## How loud each effect is mixed.
 ##
 ## A `Playback` states volume, pitch, and pan together and defaults volume to 1,
-## so every command has to name its sound's level -- a `Sound` has no volume of
+## so every play has to name its sound's level -- a `Sound` has no volume of
 ## its own to set in `init!` and inherit. These constants are the one place the
-## levels live, so an command cannot drift away from what the mix intends.
+## levels live, so no single play can drift away from what the mix intends.
 collect_volume : F32
 collect_volume = 0.58
 
@@ -492,8 +501,8 @@ make_sounds! = || {
 	music = Audio.load_music!(music_path)?
 
 	# Only the music sets a volume here. Every effect is played through a
-	# `Playback` that states its own, so setting one now would be a second
-	# source of truth that the next command overwrites anyway.
+	# `Playback` that states its own, so a volume set here would be a second
+	# source of truth that the next play overwrites anyway.
 	music.set_volume!(music_volume)
 	music.set_looping!(Bool.True)
 
@@ -1006,10 +1015,9 @@ perform_cue! = |model, cue|
 ## Turn a cycle's world events into the sound cues they ask for.
 ##
 ## Pure: nothing is played here, each event just names the playback it wants.
-## The pan and pitch that used to be written immediately before a `play!`
-## become that same sound's `Playback` parameters, so a parameter can no longer
-## be left behind on the wrong sound -- note that a collected spark pans
-## `collect` but pitches `sparkle`.
+## Pan and pitch are that playback's own parameters rather than settings written
+## onto the shared `Sound`, so a parameter cannot be left behind on the wrong
+## sound -- note that a collected spark pans `collect` but pitches `sparkle`.
 play_step_events : Model, World.StepResult -> List(Cue)
 play_step_events = |model, result| {
 	sounds = model.sounds
@@ -1086,6 +1094,7 @@ restart_on_space = |model, input|
 		{ model, cues: [] }
 	}
 
+## Nothing here waits, so there is no task to spawn and no message to fold in.
 ## The step is pure and returns the cues it wants; `update!` performs them in
 ## order and decides whether Escape ends the app.
 Msg : []

@@ -27,6 +27,8 @@ This script runs:
                     arrives with the right tag and payload (test/task_delivery).
 - task cap        - Spawn a hundred tasks against the host's cap of 32 and
                     assert every one of them still answers (test/task_cap).
+- file write      - Write files from a task, read them back, and compare
+                    (test/file_write).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -314,6 +316,48 @@ def run_task_cap_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run task cap probe"]
+
+
+def run_file_write_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a file written by `Files.write_*` reads back byte for byte.
+
+    A write that wrote nothing, wrote somewhere else, appended instead of
+    replacing, or left the tail of longer previous contents behind would pass
+    every other stage here: nothing else in the suite reads a file the app
+    wrote. The probe writes text and bytes, reads the same paths back, compares
+    them, and also checks that missing parent directories are created and that
+    a path whose parent is a file is refused by name.
+
+    It runs from the staged scratch directory and only touches `probe_out/`
+    beneath it, so it never writes into the tree. Exit 3 means a property did
+    not hold; exit 4 means the task never answered.
+    """
+    fixture = root / "test" / "file_write" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning file write probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "file_write")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build file write probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build file write probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run file write probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run file write probe"]
 
 
 def run_model_allocation_check(
@@ -870,6 +914,7 @@ def _run_example_stages(
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
+        failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

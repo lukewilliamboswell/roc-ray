@@ -7,6 +7,9 @@
 ## Every effect here waits. On a task the host parks the coroutine on its event
 ## loop and the frame loop keeps running; in `init!` the same call blocks while
 ## the loop is pumped, which is what startup asset loading wants.
+##
+## Reads answer with a record because they carry a payload; writes answer with
+## a bare error code because there is nothing to hand back but the outcome.
 FilesHost := [].{
 
 	## A finished text read. `contents` is the file when `err` is `0`, and an
@@ -35,4 +38,11 @@ FilesHost := [].{
 
 	## List one directory into the encoded form `Files` decodes.
 	list! : Str => BytesResult
+
+	## Replace a file's contents with this UTF-8 string. `0` means the file is
+	## on disk; anything else is a `WRITE_ERR_*` code `Files` names.
+	write_text! : Str, Str => U8
+
+	## Replace a file's contents with these bytes. Same codes as `write_text!`.
+	write_bytes! : Str, List(U8) => U8
 }

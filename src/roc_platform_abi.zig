@@ -8714,6 +8714,22 @@ pub const FilesHostListArgs = extern struct {
     arg0: RocStr,
 };
 
+/// Arguments for FilesHost.write_text!
+/// Roc signature: Str, Str => U8
+/// Refcounted fields are owned by the hosted function.
+pub const FilesHostWrite_textArgs = extern struct {
+    arg0: RocStr,
+    arg1: RocStr,
+};
+
+/// Arguments for FilesHost.write_bytes!
+/// Roc signature: Str, List(U8) => U8
+/// Refcounted fields are owned by the hosted function.
+pub const FilesHostWrite_bytesArgs = extern struct {
+    arg0: RocStr,
+    arg1: RocListWith(u8, false),
+};
+
 /// Arguments for CaptureHost.set_virtual_mouse!
 /// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}
 /// Refcounted fields are owned by the hosted function.
@@ -11185,6 +11201,22 @@ pub extern fn roc_files_read_bytes(arg0: RocStr) callconv(.c) __AnonStruct_5b08b
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_files_list(arg0: RocStr) callconv(.c) __AnonStruct_5b08b74ffdd2f118;
+
+/// Hosted symbol for FilesHost.write_text!
+/// Roc signature: Str, Str => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+///     arg1.decref(roc_host);
+pub extern fn roc_files_write_text(arg0: RocStr, arg1: RocStr) callconv(.c) u8;
+
+/// Hosted symbol for FilesHost.write_bytes!
+/// Roc signature: Str, List(U8) => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+///     arg1.decref(roc_host);
+pub extern fn roc_files_write_bytes(arg0: RocStr, arg1: RocListWith(u8, false)) callconv(.c) u8;
 
 /// Hosted symbol for CaptureHost.set_virtual_mouse!
 /// Roc signature: { active : Bool, left : Bool, middle : Bool, right : Bool, wheel : F32, x : F32, y : F32 } => {}

@@ -148,6 +148,16 @@ const READ_ERR_NOT_UTF8: u8 = 6;
 /// from "this entry is a file, read it instead".
 const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 
+/// The process may not write here. Mirrored in `Files.roc`.
+///
+/// Numbered past the read table rather than into it: a write shares
+/// `NOT_FOUND`, `FAILED` and `UNAVAILABLE` with a read, and the two failures
+/// only a write can have get codes of their own, so one code never means two
+/// things across the boundary.
+const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
+/// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
+const WRITE_ERR_NO_SPACE: u8 = 9;
+
 /// How many entries one listing may report, and how many bytes it may encode
 /// them into.
 ///
@@ -199,6 +209,21 @@ fn listErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound => READ_ERR_NOT_FOUND,
         error.NotDir => READ_ERR_NOT_A_DIRECTORY,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// Name a failed write in the app's vocabulary.
+///
+/// Only the failures an app can act on differently are separated: retry
+/// somewhere else (`PERMISSION_DENIED`), free space (`NO_SPACE`), fix the path
+/// (`NOT_FOUND`). Everything else is a plain failure, because an app cannot do
+/// anything different about it.
+fn writeErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
+        error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_PERMISSION_DENIED,
+        error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
         else => READ_ERR_FAILED,
     };
 }
@@ -584,6 +609,58 @@ fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.Fi
 
 fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
     return hostedFilesList(activeHost(), path_arg);
+}
+
+/// Replace a whole file on the waiting path, parked rather than blocking.
+///
+/// Missing parent directories are created, which is what `writeWholeFile` does
+/// for every file the host writes itself; the two differ only in that this one
+/// names its failure in the app's vocabulary instead of the capture codes.
+///
+/// The path is used as the app gave it. `Files` is not sandboxed in either
+/// direction -- reads take any path the process can open, and so do writes.
+/// `Capture` is the one part of this host with an output root, and it confines
+/// captures only.
+fn writeFileWaiting(path: []const u8, bytes: []const u8) u8 {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("write", 0);
+    defer AppTasks.traceResume("write");
+    return writeFileWaitingIn(std.Io.Dir.cwd(), waitingIo(), path, bytes);
+}
+
+/// `writeFileWaiting` against an explicit base directory, so a test can point
+/// it at a temporary tree without depending on the process working directory.
+fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []const u8) u8 {
+    if (std.fs.path.dirname(path)) |parent| {
+        base.createDirPath(io, parent) catch |err| return writeErrorCode(err);
+    }
+    base.writeFile(io, .{ .sub_path = path, .data = bytes }) catch |err| return writeErrorCode(err);
+    return 0;
+}
+
+/// `Files.write_text!`: replace a file's contents with a UTF-8 string.
+fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase("Files.write_text!", during_wait);
+    defer path_arg.decref(roc_host);
+    defer contents_arg.decref(roc_host);
+    return writeFileWaiting(path_arg.asSlice(), contents_arg.asSlice());
+}
+
+fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedFilesWriteText(activeHost(), path_arg, contents_arg);
+}
+
+/// `Files.write_bytes!`: replace a file's contents with the app's bytes.
+fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    enforcePhase("Files.write_bytes!", during_wait);
+    defer path_arg.decref(roc_host);
+    defer bytes_arg.decref(roc_host);
+    return writeFileWaiting(path_arg.asSlice(), bytes_arg.items());
+}
+
+fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
 }
 
 /// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
@@ -5509,6 +5586,8 @@ comptime {
         @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&exportedFilesList, .{ .name = "roc_files_list" });
+        @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
+        @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
         @export(&exportedReadClipboard, .{ .name = "roc_host_read_clipboard" });
@@ -7648,6 +7727,49 @@ test "listing names what went wrong: a missing path and a file are different" {
         encodeListingIn(tmp.dir, std.testing.io, std.testing.allocator, "plain.txt", &encoded),
     );
     try std.testing.expect(encoded == null);
+}
+
+test "a write creates the directories above it and replaces the whole file" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try std.testing.expectEqual(
+        @as(u8, 0),
+        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "the first contents"),
+    );
+    const first = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
+    defer std.testing.allocator.free(first);
+    try std.testing.expectEqualStrings("the first contents", first);
+
+    // Shorter than what is already there: a whole-file write has to shrink the
+    // file rather than leave the tail of the previous contents behind.
+    try std.testing.expectEqual(
+        @as(u8, 0),
+        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "second"),
+    );
+    const second = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualStrings("second", second);
+}
+
+test "a write whose parent is a file is refused by name" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "plain.txt", .data = "x" });
+
+    try std.testing.expectEqual(
+        READ_ERR_NOT_FOUND,
+        writeFileWaitingIn(tmp.dir, std.testing.io, "plain.txt/nested.txt", "x"),
+    );
+}
+
+test "a write names the failures an app can act on differently" {
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.FileNotFound));
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.NotDir));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, writeErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
+    try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
 }
 
 test "a directory past the entry cap is refused rather than allocated" {

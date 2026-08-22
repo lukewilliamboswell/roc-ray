@@ -1,4 +1,4 @@
-## Filesystem reads and their typed terminal outcomes.
+## Filesystem reads and writes, and their typed terminal outcomes.
 ##
 ## These effects wait. Inside `Task.spawn!` they park the task on the host's
 ## event loop and the frame loop keeps drawing; in `init!` they block until the
@@ -22,6 +22,11 @@
 ##         tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
 ##         LevelLoaded({ manifest, tiles })
 ##     }
+##
+## Paths are used as the app gives them, resolved against the process working
+## directory, and nothing here is sandboxed. `Capture` is the one part of this
+## platform with an output root, and it confines captures only; see
+## `write_text!`.
 import FilesHost
 
 Files := [].{
@@ -40,6 +45,15 @@ Files := [].{
 
 	## Why `list!` produced no directory entries.
 	ListError : [NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+
+	## Why a write did not leave the file on disk.
+	##
+	## `NotFound` means a component of the path is a file rather than a
+	## directory, or names something that cannot be created; the missing
+	## directories a write would otherwise trip over are created for it.
+	## `NoSpace` is the filesystem being full or over quota, and `WriteFailed`
+	## is every other refusal the host cannot name more precisely.
+	WriteError : [NotFound, PermissionDenied, NoSpace, WriteFailed, Unavailable]
 
 	## Read a bounded UTF-8 file into a `Str`.
 	##
@@ -98,6 +112,55 @@ Files := [].{
 			Err(list_error(result.err))
 		}
 	}
+
+	## Replace a file's contents with a `Str`, creating it if it is not there.
+	##
+	## The write replaces the whole file: there is no append, and no partial
+	## write is reported as success. Missing parent directories are created,
+	## the same as for every file the host writes itself, so an app's first
+	## `write_text!("saves/slot1.json", ...)` does not need a separate step to
+	## make `saves/`.
+	##
+	## ## Paths
+	##
+	## The path is used as the app gave it, resolved against the process
+	## working directory, exactly as `read_text!` resolves one. `Files` is not
+	## sandboxed in either direction: an app that can read `/etc/hosts` can
+	## write `/tmp/out.txt`. The one output root this platform enforces belongs
+	## to `Capture`, whose paths are computed by recording machinery rather
+	## than written out by the app, and it confines captures only.
+	##
+	## Valid inside a task, where it parks the coroutine, and inside `init!`,
+	## where it blocks. Calling it from `update!` or `render!` is a programmer
+	## error and stops the app.
+	##
+	##     update! = |model, input| {
+	##         if input.devices.key_pressed(KeyS) {
+	##             Task.spawn!(
+	##                 input,
+	##                 || match Files.write_text!("saves/slot1.json", encode(model)) {
+	##                     Ok({}) => Saved
+	##                     Err(err) => SaveFailed(err)
+	##                 },
+	##             )
+	##         }
+	##         Ok(model)
+	##     }
+	write_text! : Str, Str => Try({}, WriteError)
+	write_text! = |path, contents| write_result(FilesHost.write_text!(path, contents))
+
+	## Replace a file's contents with ordinary Roc bytes.
+	##
+	## The same path rules, the same whole-file replacement, and the same
+	## parent-directory creation as `write_text!`; only the payload differs.
+	## Nothing about the bytes is inspected, so this is the call for a PNG, a
+	## save blob, or anything else that is not text.
+	##
+	## Valid inside a task, where it parks the coroutine, and inside `init!`,
+	## where it blocks. Calling it from `update!` or `render!` is a programmer
+	## error and stops the app.
+	write_bytes! : Str, List(U8) => Try({}, WriteError)
+	write_bytes! = |path, bytes| write_result(FilesHost.write_bytes!(path, bytes))
 
 }
 
@@ -186,6 +249,53 @@ list_error = |code|
 expect list_error(1) == NotFound
 expect list_error(7) == NotADirectory
 expect list_error(2) == ReadFailed
+
+## The host refused the write because the path is not the app's to write.
+## Mirrored in `src/host_native.zig`.
+write_err_permission_denied : U8
+write_err_permission_denied = 8
+
+## The filesystem has no room for the file. Mirrored in
+## `src/host_native.zig`.
+write_err_no_space : U8
+write_err_no_space = 9
+
+## Turn a write's error code into its terminal outcome.
+##
+## The codes a write shares with a read -- `NotFound`, `Unavailable`, and the
+## generic failure -- are numbered the same as the read table's, so one code
+## never means two things across the boundary. The two a read cannot produce
+## are numbered past it.
+write_result : U8 -> Try({}, Files.WriteError)
+write_result = |code|
+	if code == 0 {
+		Ok({})
+	} else {
+		Err(write_error(code))
+	}
+
+write_error : U8 -> Files.WriteError
+write_error = |code|
+	if code == 1 {
+		NotFound
+	} else if code == 4 {
+		Unavailable
+	} else if code == write_err_permission_denied {
+		PermissionDenied
+	} else if code == write_err_no_space {
+		NoSpace
+	} else {
+		WriteFailed
+	}
+
+expect write_result(0) == Ok({})
+expect write_result(1) == Err(NotFound)
+expect write_error(1) == NotFound
+expect write_error(2) == WriteFailed
+expect write_error(4) == Unavailable
+expect write_error(8) == PermissionDenied
+expect write_error(9) == NoSpace
+expect write_error(99) == WriteFailed
 
 ## Decode a listing's bytes into entries.
 ##

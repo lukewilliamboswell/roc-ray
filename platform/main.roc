@@ -305,9 +305,14 @@ submit_tasks = |tasks| {
 ## The message comes back wrapped as a response mapper -- the same
 ## `Box(RawResponse -> Box(msg))` every request callback uses -- so the host
 ## stages it as an ordinary `PendingResponse` and `receive_responses` delivers
-## it with code that already exists. Unboxing a `Box(Msg)` taken straight out
-## of a list crashes the pinned compiler's SpecConstr pass when `Msg : []`
-## (every app without messages); this shape does not.
+## it with code that already exists.
+##
+## TODO(compiler): the direct shape -- `task_results : List(Box(msg))` on the
+## input, unboxed in a loop -- trips a debug-only postcheck invariant in
+## SpecConstr ("known constructor match had no matching branch") whenever
+## `Msg : []`. The pinned release nightly builds it; a debug build of the same
+## commit aborts. Keep this shape until that invariant is understood upstream,
+## then deliver task results directly and drop the wrapper closure.
 run_task_for_host! : Box(() => Msg) => Box(AppHost.RawResponse -> Box(Msg))
 run_task_for_host! = |boxed| {
 	run! = Box.unbox(boxed)

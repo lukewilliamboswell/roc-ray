@@ -560,6 +560,11 @@ App := [].{
 			)
 		}
 
+		## TODO(compiler): the receivers below spell the record out instead of
+		## `{ ..transition_fields, field: ... }`. The spread form trips a debug-only
+		## postcheck invariant in SpecConstr ("record update base type differed
+		## from its result type") on the pinned nightly's debug build; the release
+		## binary accepts it. Restore the spreads once that is fixed upstream.
 		## Append one command after commands already requested by this update.
 		with_command : Transition(model, msg), Command -> Transition(model, msg)
 		with_command = |transition, command| {

@@ -169,8 +169,16 @@ tasks" assertion held. No leak reported by the tracking allocator.
   existing `AppTransport.receive_response` does not. Workaround: return the
   message from `run_task_for_host!` already wrapped as
   `Box(RawResponse -> Box(Msg))` and deliver it through the response path.
-  Worth an upstream issue with `test/` reproduction.
-* **Record update spreads crash the compiler.** `Transition.(Transition({
+  Worth an upstream issue with `test/` reproduction. **Checked against the
+  pinned release nightly** (`~/roc_nightly-linux_x86_64-2026-08-21-90da19f`):
+  the release binary builds the direct form; only the locally built debug
+  `roc` aborts. The invariant is a debug-only postcheck assertion, so the
+  workaround is kept with a `TODO(compiler)` and the direct form can return
+  once upstream confirms the assertion is over-strict (rather than masking a
+  miscompile).
+* **Record update spreads crash the compiler** (same story: debug-only
+  postcheck invariant; release nightly builds them; `TODO(compiler)` left
+  on the receivers). `Transition.(Transition({
   ..fields, commands: ... }))` in `App.roc` type-checks but `roc build`
   panics in `SpecConstr` ("record update base type differed from its result
   type"). Writing the record out field by field avoids it. Worth an

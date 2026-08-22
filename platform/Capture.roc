@@ -343,8 +343,8 @@ Capture := [].{
 
 	## Finish the current recording and write its file.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`, where an
-	## encode and a file write would land in the middle of drawing a frame.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`. An encode and
+	## a file write would otherwise land in the middle of drawing a frame.
 	##
 	## Stopping while idle does nothing. The next input reports the frame count
 	## and file size as `Finished`.

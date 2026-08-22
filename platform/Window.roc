@@ -1,6 +1,6 @@
 ## What the window looked like this cycle, and how to change it.
 ##
-## The size here is the *logical* drawing size: it matches mouse coordinates and
+## The size here is the logical drawing size: it matches mouse coordinates and
 ## raylib drawing units, and on a HiDPI display it is smaller than the actual
 ## framebuffer in pixels. `scale!` is the factor between the two, and it is what
 ## makes the resolution of a `Capture` explainable: a capture is taken from the
@@ -59,12 +59,12 @@ Window := [].{
 
 	## Read the system clipboard as text.
 	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
+	## backend only answers on the thread that owns the window, and the read is a
+	## pointer copy rather than I/O, so this does not wait.
+	##
 	## Content that is not text, or is larger than the host will copy into a
 	## `Str`, is refused rather than truncated.
-	##
-	## The windowing backend only answers on the thread that owns the window,
-	## and the read is a pointer copy rather than I/O, so this does not wait:
-	## it is legal in `init!`, `update!`, and tasks, and refused in `render!`.
 	read_clipboard! : () => Try(Str, ClipboardReadError)
 	read_clipboard! = || {
 		result = HostHost.read_clipboard!()
@@ -94,12 +94,12 @@ Window := [].{
 
 	## How many framebuffer pixels one logical unit is, per axis.
 	##
-	## `1` on an ordinary display and `2` on a doubled HiDPI one; the two axes
-	## can differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to
-	## get the pixel resolution a `Capture` records at.
+	## Legal in any callback, `render!` included. Reading a factor the backend
+	## already holds costs nothing and allocates nothing.
 	##
-	## Reading a factor the backend already holds costs nothing and allocates
-	## nothing, so this is legal in any callback, `render!` included.
+	## `1` on an ordinary display and `2` on a doubled HiDPI one; the two axes can
+	## differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to get the
+	## pixel resolution a `Capture` records at.
 	scale! : () => { x : F32, y : F32 }
 	scale! = || HostHost.window_scale_dpi!()
 

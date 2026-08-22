@@ -224,7 +224,7 @@ Tilemap :: {
 	##
 	## It is also the resource-free value for pure tests, and needs no separate
 	## `stub`: a tilemap holds its textures in `render_tilesets`, and this one
-	## has none. Put it in a model to reach the app's real `update` from an
+	## has none. Put it in a model to reach the app's real `update!` from an
 	## `expect`. Drawing it draws nothing, which is what having no layers means.
 	empty : Tilemap
 	empty = {
@@ -491,8 +491,9 @@ Tilemap :: {
 		}
 	}
 
-	## Draw one named visible layer without camera culling. Legal in `render!`
-	## only, as every `draw_*!` in this module is.
+	## Draw one named visible layer without camera culling.
+	##
+	## Legal in `render!` only. So is every other `draw_*!` in this module.
 	draw_layer! : Tilemap, Draw.Frame, Str => {}
 	draw_layer! = |map, frame, layer_name| {
 		match find_layer_index(map.raw.layers, layer_name) {
@@ -504,6 +505,8 @@ Tilemap :: {
 	## Draw only cells intersecting `world_view`. This is the preferred hot path
 	## for maps larger than the viewport. One hosted effect draws the complete
 	## selected range; no per-tile effect or temporary List is created.
+	##
+	## Legal in `render!` only.
 	draw_layer_in! : Tilemap, Draw.Frame, Str, Math.Rect => {}
 	draw_layer_in! = |map, frame, layer_name, world_view| {
 		match find_layer_index(map.raw.layers, layer_name) {
@@ -517,10 +520,14 @@ Tilemap :: {
 	}
 
 	## Draw every visible layer configured with the `Drawn` role.
+	##
+	## Legal in `render!` only.
 	draw_layers! : Tilemap, Draw.Frame, TilemapDrawRole => {}
 	draw_layers! = |map, frame, role| draw_selection!(map, frame, selector_role, draw_role_code(role))
 
 	## Draw visible configured layers culled to a world-space viewport.
+	##
+	## Legal in `render!` only.
 	draw_layers_in! : Tilemap, Draw.Frame, TilemapDrawRole, Math.Rect => {}
 	draw_layers_in! = |map, frame, role, world_view| {
 		match Tilemap.cell_range_for_world_rect(map, world_view) {
@@ -530,10 +537,14 @@ Tilemap :: {
 	}
 
 	## Draw every visible tile layer, regardless of configured role.
+	##
+	## Legal in `render!` only.
 	draw_all! : Tilemap, Draw.Frame => {}
 	draw_all! = |map, frame| draw_selection!(map, frame, selector_all, 0)
 
 	## Draw every visible tile layer culled to a world-space viewport.
+	##
+	## Legal in `render!` only.
 	draw_all_in! : Tilemap, Draw.Frame, Math.Rect => {}
 	draw_all_in! = |map, frame, world_view| {
 		match Tilemap.cell_range_for_world_rect(map, world_view) {
@@ -549,6 +560,8 @@ Tilemap :: {
 	viewport_for_camera = |camera, screen_size| camera.viewport(screen_size)
 
 	## Convenience form of `draw_all_in!` for camera-driven scenes.
+	##
+	## Legal in `render!` only.
 	draw_all_for_camera! : Tilemap, Draw.Frame, Camera.Camera2D, Math.Vec2 => {}
 	draw_all_for_camera! = |map, frame, camera, screen_size| map.draw_all_in!(frame, camera.viewport(screen_size))
 

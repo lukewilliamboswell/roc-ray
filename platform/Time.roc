@@ -164,15 +164,15 @@ Time := [].{
 
 	## Read the world's clock.
 	##
-	## Two calls in one `update!` can answer differently, and an app that wants
-	## one instant for a whole cycle should read it once and keep it in the
-	## model. Nothing else about the platform changes with it: the calendar is
-	## explicitly nondeterministic, it is not what a capture paces, and it is
-	## not what animation should move on.
-	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`, which is
-	## given the model rather than an input and should draw the instant the
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`. `render!` is
+	## given the model rather than an input, and should draw the instant the
 	## model already decided on.
+	##
+	## Two calls in one `update!` can answer differently, and an app that wants
+	## one instant for a whole cycle should read it once and keep it in the model.
+	## Nothing else about the platform changes with it: the calendar is explicitly
+	## nondeterministic, it is not what a capture paces, and it is not what
+	## animation should move on.
 	now! : () => Timestamp
 	now! = || Timestamp.(TimeHost.now!())
 }

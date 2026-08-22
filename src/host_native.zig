@@ -7938,6 +7938,183 @@ test "a task message staged but never delivered is released at shutdown" {
     try std.testing.expectEqual(@as(usize, 0), staging.count());
 }
 
+/// A task body for the pump tests: an ordinary Zig thunk where the app would
+/// have a Roc closure.
+///
+/// The pointer travels as the erased callable and comes back out of
+/// `takeFinished` as the result, so these tests measure the scheduling and
+/// nothing else -- no interpreter, no Roc values, no refcounts.
+const TestTaskBody = struct {
+    call: *const fn (*TestTaskBody) void,
+    socket: *udp_effect.Socket,
+    /// True once the coroutine has run at all, which is how a test tells
+    /// "parked in the receive" from "never started".
+    started: bool = false,
+    err: u8 = 0,
+    datagrams: usize = 0,
+    bytes: [64]u8 = undefined,
+    len: usize = 0,
+
+    fn erased(self: *TestTaskBody) tasks_mod.TaskResult {
+        return @ptrCast(self);
+    }
+};
+
+/// Wait for one datagram, exactly as `hostedUdpReceive` does, and record it.
+fn testTaskReceive(body: *TestTaskBody) void {
+    body.started = true;
+    var slices: std.ArrayList(udp_effect.Slice) = .empty;
+    defer slices.deinit(std.testing.allocator);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+
+    switch (udp_effect.receive(body.socket, 2000, 8, &slices, &payload, std.testing.allocator)) {
+        .ok => |batch| {
+            body.datagrams = batch.slices.len;
+            if (batch.slices.len == 0) return;
+            const first = batch.slices[0];
+            body.len = @min(first.len, body.bytes.len);
+            @memcpy(body.bytes[0..body.len], batch.payload[first.start..][0..body.len]);
+        },
+        .err => |code| body.err = code,
+    }
+}
+
+/// The task registry with the Roc entry points replaced by `TestTaskBody`.
+const TestTaskHooks = struct {
+    pub fn enterTaskPhase() void {
+        active_phase = .task;
+    }
+    pub fn leaveTaskPhase() void {
+        active_phase = .idle;
+    }
+    pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
+        const body: *TestTaskBody = @ptrCast(@alignCast(run.?));
+        body.call(body);
+        return run;
+    }
+    pub fn dropResult(result: tasks_mod.TaskResult) void {
+        // The test owns the body; nothing here allocated it.
+        _ = result;
+    }
+    pub fn host() *RocHost {
+        // Only the queue drain asks, and no test below spawns past the cap.
+        unreachable;
+    }
+};
+
+const TestTasks = tasks_mod.Tasks(TestTaskHooks);
+
+/// Two bound loopback sockets on ephemeral ports, for the pump tests.
+const TestSocketPair = struct {
+    sender: udp_effect.Socket,
+    receiver: udp_effect.Socket,
+
+    fn open() !TestSocketPair {
+        const loopback = udp_effect.parseIp4("127.0.0.1").?;
+        const sender = switch (udp_effect.bind(loopback, 0)) {
+            .ok => |socket| socket,
+            .err => |code| {
+                std.debug.print("bind failed with code {d}\n", .{code});
+                return error.BindFailed;
+            },
+        };
+        var pair = TestSocketPair{ .sender = sender, .receiver = undefined };
+        pair.receiver = switch (udp_effect.bind(loopback, 0)) {
+            .ok => |socket| socket,
+            .err => |code| {
+                pair.sender.inner.close();
+                std.debug.print("bind failed with code {d}\n", .{code});
+                return error.BindFailed;
+            },
+        };
+        return pair;
+    }
+
+    fn close(self: *TestSocketPair) void {
+        self.sender.inner.close();
+        self.receiver.inner.close();
+    }
+
+    fn ping(self: *TestSocketPair) !void {
+        try std.testing.expectEqual(
+            @as(u8, 0),
+            udp_effect.send(&self.sender, self.receiver.local_ip, self.receiver.local_port, "ping"),
+        );
+    }
+};
+
+test "one yield pump resumes a task whose datagram arrived since the last one" {
+    // The regression this pins: a pump that only yields takes zio's fast path,
+    // which spends a scheduling quantum without ever running the event loop
+    // whenever nothing else is already runnable. The parked receive then sits
+    // unpolled for as many frames as it takes the tick budget to run out, and
+    // a datagram that was in the kernel the whole time is delivered several
+    // cycles late. One pump per frame must be one poll per frame.
+    var app_tasks = try TestTasks.init(std.testing.allocator, false);
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
+    var sockets = try TestSocketPair.open();
+    defer sockets.close();
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var body = TestTaskBody{ .call = &testTaskReceive, .socket = &sockets.receiver };
+    TestTasks.spawnCurrent(&roc_host, body.erased());
+
+    // Frame one: the task starts and parks with nothing to receive.
+    app_tasks.pump(1, .yield);
+    try std.testing.expect(body.started);
+    try std.testing.expectEqual(@as(usize, 1), app_tasks.liveCount());
+    try std.testing.expectEqual(@as(usize, 0), app_tasks.finished.items.len);
+
+    try sockets.ping();
+
+    // Frame two, and the only pump under test. The datagram is in the kernel
+    // before it starts, so the task must resume and finish inside it.
+    app_tasks.pump(2, .yield);
+
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    try std.testing.expectEqual(@as(usize, 1), finished.len);
+    try std.testing.expectEqual(@as(u8, 0), body.err);
+    try std.testing.expectEqual(@as(usize, 1), body.datagrams);
+    try std.testing.expectEqualStrings("ping", body.bytes[0..body.len]);
+}
+
+test "one yield pump finishes a task whose datagram was buffered before it parked" {
+    // The same latency, reached the other way round: the datagram is already
+    // in the kernel when the task first runs. Starting the coroutine, parking
+    // it, polling, resuming it and finishing it all have to happen inside one
+    // pump -- zio submits the receive to the event loop even when the bytes
+    // are already there, so an unpolled pump leaves this parked too.
+    var app_tasks = try TestTasks.init(std.testing.allocator, false);
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
+    var sockets = try TestSocketPair.open();
+    defer sockets.close();
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    try sockets.ping();
+
+    var body = TestTaskBody{ .call = &testTaskReceive, .socket = &sockets.receiver };
+    TestTasks.spawnCurrent(&roc_host, body.erased());
+
+    app_tasks.pump(1, .yield);
+
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    try std.testing.expectEqual(@as(usize, 1), finished.len);
+    try std.testing.expectEqual(@as(u8, 0), body.err);
+    try std.testing.expectEqual(@as(usize, 1), body.datagrams);
+    try std.testing.expectEqualStrings("ping", body.bytes[0..body.len]);
+}
+
 test "a file that is not text is refused rather than made into a Str" {
     // `RocStr.fromSlice` only copies, so an invalid one would be built without
     // complaint and every later string operation on it would be undefined.

@@ -235,30 +235,40 @@ pub fn Tasks(comptime Hooks: type) type {
         ///
         /// A zero-length sleep parks the main task on a timer that is already
         /// due, which is the one public way to make the executor run its loop.
-        /// One such turn does half the job: the loop polls, readies the tasks
-        /// whose I/O completed, and returns to the main task before running
-        /// them, because the same poll fired the timer. The second turn runs
-        /// them. A task that then parks on an operation the kernel can finish
-        /// at once needs the pair again, so the pairs repeat while some task
-        /// resumed or finished in the last one, up to a bound that keeps a
-        /// pathological task from holding the frame.
+        /// One such turn does only part of the job: the loop polls, readies
+        /// the tasks whose I/O completed, and returns to the main task before
+        /// running them, because the same poll fired the timer. The next turn
+        /// runs them, and a task that then submits another operation -- the
+        /// drain half of `Udp.receive!` does exactly that -- needs the pair
+        /// again before it can finish. So the turns repeat while any task
+        /// starts, resumes or finishes, and for `quiet_turns` beyond that.
         fn turnUntilQuiet(self: *Self) void {
-            var pairs: usize = 0;
+            var turns: usize = 0;
             var quiet: usize = 0;
-            while (pairs < max_turn_pairs and quiet < 2) : (pairs += 1) {
+            while (turns < max_turns and quiet < quiet_turns) : (turns += 1) {
                 const before = self.progress;
                 zio.sleep(.zero) catch {};
-                zio.sleep(.zero) catch {};
-                // One quiet pair is not proof of rest: an operation a task
-                // just submitted completes on the poll after the one that
-                // submitted it, and a readied task is invisible from here
-                // until it runs. Two quiet pairs in a row are.
                 quiet = if (self.progress == before) quiet + 1 else 0;
             }
         }
 
-        /// Turn pairs one pump will spend chasing tasks that keep resuming.
-        const max_turn_pairs: usize = 6;
+        /// Turns of no visible progress before a pump concludes the tasks are
+        /// at rest.
+        ///
+        /// Not one, and not two: progress is only visible when a task's Roc
+        /// code runs, and a completion the kernel already has takes several
+        /// turns to reach that point -- the poll that reaps it, the turn that
+        /// runs the task, the poll for the operation it submits next, and the
+        /// turn that runs it again. Measured at five for a `Udp.receive!`
+        /// whose datagram arrived while the last frame was being drawn, which
+        /// is the case a game's peer traffic is made of. Stopping short of
+        /// that is what left the receive to be delivered a frame or two later
+        /// than the frame it was ready in.
+        const quiet_turns: usize = 6;
+
+        /// Turns one pump will spend chasing tasks that keep resuming. The
+        /// bound is what keeps a pathological task from holding the frame.
+        const max_turns: usize = 12;
 
         /// Release the join handles of tasks that have finished.
         fn reap(self: *Self) void {

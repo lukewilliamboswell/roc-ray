@@ -297,8 +297,8 @@ update_for_host! = |boxed_model, { devices, window, time, task_results, capture 
 ##
 ## The message comes back wrapped in an erased thunk rather than as a
 ## `Box(Msg)`, because `roc glue` renders a `List(Box(msg))` with a one-word
-## list header while Roc releases it as a list of refcounted elements. See
-## `TaskHost.FinishedTask`.
+## list header while every backend allocates and frees it with the two-word
+## refcounted one. `TaskHost.FinishedTask` has the whole account.
 run_task_for_host! : Box(() => Msg) => Box({} -> Box(Msg))
 run_task_for_host! = |boxed| {
 	run! = Box.unbox(boxed)

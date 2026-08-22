@@ -1,3 +1,84 @@
+## RocRay is a Roc platform for raylib: a window, a renderer, input devices,
+## audio, textures, and the effects a game or a visualization needs, behind
+## three callbacks. An app states its `Model` and its `Msg`, provides `init!`,
+## `update!` and `render!`, and the host runs the frame loop around them. Only
+## the host runs Roc, and only on the frame thread, so nothing here is shared
+## between threads.
+##
+## `init!` runs once, with the window, renderer, and audio device already open,
+## and returns the first model. `update!` runs once per host cycle with that
+## model and one `App.Input`; it calls effects directly, starts tasks, and
+## returns the next model -- or `Err(Exit(code))` to stop the app. `render!`
+## receives the model and a `Draw.Frame` and draws. It cannot change the model
+## or reach host work of any other kind.
+##
+## Every effect says which callbacks it may be called from, and three rules
+## cover nearly all of them. An effect that changes host state -- the cursor,
+## the window, audio, a recording, a loaded resource -- is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`. An effect that draws is legal
+## in `render!` only. An effect that waits -- `Files.read_text!`, `Http.send!`,
+## `Task.sleep!` -- is legal in `init!`, where it blocks startup, and in tasks,
+## where it parks the task while the frame loop keeps drawing; it is refused in
+## `update!` and `render!`.
+##
+## Two effects sit outside those rules, and each says so on its own page.
+## `Capture.screenshot!` is legal only in a task: it waits for a frame that has
+## to be drawn first, and `init!` runs before the frame loop has gone around
+## once. `Assets.load_texture!` loads rather than waits -- it reads the file on
+## the calling thread instead of parking -- so it is legal in `update!`, where a
+## large load costs that frame rather than parking a task. Load in `init!`.
+##
+## Calling an effect from a callback that does not permit it is a programmer
+## error rather than a runtime outcome: the app stops at once with a message
+## naming the effect, the phase it was called from, and where it belongs.
+## Outcomes an app can do something about are typed `Try` results instead.
+##
+## Read `App` first, for the callbacks, the startup config, and the input. Then
+## `Draw` for the frame and the shapes, `Text` for fonts and text layout, and
+## `Devices`, `Keys`, `Mouse` and `Gamepad` for what the player did. Then
+## `Assets` and `Audio` for loaded resources, `Task` for work that waits, and
+## `Files`, `Http`, `Sqlite`, `Udp` and `Cmd` for what a task can do while the
+## frame loop keeps drawing. `Capture` records the window. `Time`, `Color`,
+## `Math`, `Camera`, `Physics`, `Random`, `Sprite`, `Tilemap`, `Url`, `Stdout`
+## and `Stderr` are pure or near-pure helpers to reach for as they come up.
+##
+## A whole app: it opens a window, draws one circle, and exits on escape.
+##
+## ```roc
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
+##
+## import rr.App
+## import rr.Color
+## import rr.Draw
+##
+## Model : { frames : U64 }
+##
+## Msg : []
+##
+## program = { init!, update!, render! }
+##
+## init! : App.Init(Model, [])
+## init! = App.init(App.default.with_title("Hello"), |_startup| Ok({ frames: 0 }))
+##
+## update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+## update! = |model, input|
+##     if input.devices.key_pressed(KeyEscape) {
+##         Err(Exit(0))
+##     } else {
+##         Ok({ frames: model.frames + 1 })
+##     }
+##
+## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+## render! = |_model, frame| {
+##     frame.clear!(Color.black)
+##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+##     Ok({})
+## }
+## ```
+##
+## The examples in the repository are the quickest start: copy the one closest
+## to what you want to make. For a project outside the checkout, replace the
+## local platform path with the `platform` declaration from the latest release.
 platform ""
 	requires {
 		[Model : model, Msg : msg] for program : {

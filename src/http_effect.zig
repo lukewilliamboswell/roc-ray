@@ -22,7 +22,7 @@
 //! ## Limits
 //!
 //! The request carries both limits: `timeout_ms` bounds the whole exchange
-//! through `zio.withTimeout`, and `max_response_bytes` bounds the decompressed
+//! through `runWithDeadline`, and `max_response_bytes` bounds the decompressed
 //! body through the reader's own limit. Zero disables either one. The body cap
 //! is a refusal, not a truncation: a body over the cap fails the send, because
 //! a truncated body decodes into wrong data rather than into an error.
@@ -126,8 +126,9 @@ const OutHeader = struct { name: []const u8, value: []const u8 };
 
 /// Everything one exchange needs, and everything it produced.
 ///
-/// `zio.withTimeout` takes a function and an argument tuple, so the inputs and
-/// outputs travel together in one pointer rather than as a long parameter list.
+/// The inputs and outputs travel together in one pointer rather than as a long
+/// parameter list, so `run` and `runWithDeadline` pass the whole exchange
+/// around by reference and fill in the output fields in place.
 const Exchange = struct {
     arena: std.mem.Allocator,
     io: std.Io,
@@ -384,8 +385,8 @@ fn overrideStandardHeader(
 
 /// Fold one of `std.http`'s many error sets into this file's.
 ///
-/// `error.Canceled` passes through unchanged: `zio.withTimeout` needs to see it
-/// to know that its own timer, rather than a shutdown, ended the exchange.
+/// `error.Canceled` passes through unchanged: `runWithDeadline` needs to see it
+/// to tell its own expired timer, through `AutoCancel.check`, from a shutdown.
 fn translate(err: anyerror) ExchangeError {
     return switch (err) {
         error.Canceled => error.Canceled,

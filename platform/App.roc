@@ -16,7 +16,6 @@ AppRecording := [NoRecording, Record(RrtCapture.Recording)].{
 	is_eq : _
 }
 
-## `Delay` uses wall time. Animation and physics should use `input.time`.
 import Devices
 import Window
 import Time

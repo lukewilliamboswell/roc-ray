@@ -113,9 +113,9 @@ const TEXTURE_UPDATE_OK: u8 = 0;
 const TEXTURE_UPDATE_PIXEL_COUNT: u8 = 1;
 const TEXTURE_UPDATE_NOT_MUTABLE: u8 = 2;
 const TEXTURE_UPDATE_OUT_OF_BOUNDS: u8 = 3;
-// Value 4 was the obsolete upload-capacity refusal. Valid commands are never
-// refused for host capacity now; keeping the remaining codes stable avoids needless
-// transport churn for the structurally checkable errors.
+// Value 4 was the obsolete upload-capacity refusal. A structurally valid
+// upload is never refused for host capacity now; keeping the remaining codes
+// stable avoids needless transport churn for the checkable errors.
 const TRY_TAG_OK: u8 = 1;
 const MAX_FILE_READ_BYTES: usize = 16 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
@@ -176,9 +176,11 @@ const DIR_ENTRY_OTHER: u8 = 3;
 
 /// The most the host will copy into a Roc string in one operation.
 ///
-/// Converting worker-owned bytes into a `Str` allocates and copies on the frame
-/// thread. `ReadSmallFile` reports `TooLarge` above this limit; `ReadFile`
-/// transfers its native allocation as an owning Roc byte list without copying.
+/// Converting the bytes into a `Str` allocates and copies, which is why only
+/// the reads that produce a string carry this limit: `Files.read_text!`
+/// reports `TooLarge` above it, while `Files.read_bytes!` transfers its
+/// allocation as an owning Roc byte list without copying and is bounded by the
+/// much larger `MAX_FILE_READ_BYTES` instead.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
 
 /// How many host-owned file-byte allocations may be live at once.
@@ -290,9 +292,9 @@ var last_frame_nanos: u64 = 0;
 ///
 /// Separate from `last_frame_nanos` because a fixed-step recording makes the
 /// simulation clock advance by an exact delta rather than by however long the
-/// frame took. Delays are armed and expired against *this* one: `Delay(1000)`
-/// means a second, and an app recording at a fixed step has not asked for its
-/// timeouts to be re-scaled.
+/// frame took. Waits are armed and expired against *this* one:
+/// `Task.sleep!(1000)` means a second, and an app recording at a fixed step
+/// has not asked for its timeouts to be re-scaled.
 var last_wall_nanos: u64 = 0;
 
 /// Start a fresh app lifetime.
@@ -425,9 +427,9 @@ const during_update = PhaseSet.initMany(&.{ .startup, .update, .task });
 /// The same set as `during_update`; the separate name records intent.
 const during_load = during_update;
 
-/// Handing the host deferred work: `Task.spawn!` and `App.request!`. The
-/// result comes back on a later input, which `init!` never sees, and
-/// `render!` does not change the world.
+/// Handing the host deferred work: `Task.spawn!`, and `Task.spawn_with!`
+/// through it. The task's message comes back on a later input, which `init!`
+/// never sees, and `render!` does not change the world.
 const during_spawn = PhaseSet.initMany(&.{ .update, .task });
 
 /// Constant-time operations with nothing to allocate and no I/O to do: reading
@@ -1168,12 +1170,12 @@ const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, wr
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
 
-/// Bytes a finished `ReadFile` handed over, and the allocator that owns them.
+/// Bytes a finished read handed over, and the allocator that owns them.
 ///
-/// The allocator travels with the buffer because the two paths that produce one
-/// do not share one: the worker allocates from its own handle on the host
-/// allocator, while a headless run reads on the frame thread through the Roc
-/// environment's. Whoever allocated it is who frees it.
+/// The allocator travels with the buffer rather than being assumed, because
+/// the buffer outlives the call that made it: it is freed when Roc drops the
+/// last reference to the list built on it, from `destroyFileBytes`, with no
+/// read in progress to ask. Whoever allocated it is who frees it.
 const FileBytesResource = struct {
     allocator: std.mem.Allocator,
     bytes: []u8,
@@ -1209,14 +1211,15 @@ fn seamlessByteList(resource: *u64, bytes: []u8) abi.RocListWith(u8, false) {
     };
 }
 
-/// Slots promised to reads which have been admitted but have not yet produced
-/// their terminal response. A `ReadFile` has to reserve one before it starts
-/// I/O: otherwise a full heap could let up to the worker limit of large buffers
-/// be read only to discard each one when delivery finds no handle slot.
+/// Slots promised to reads that have started but have not yet handed their
+/// bytes over. `Files.read_bytes!` has to reserve one before it opens the
+/// path: otherwise a full heap could let `MAX_LIVE_FILE_BYTE_LISTS` large
+/// files be read only to discard each one when there is no slot to install it
+/// in, so the app would pay for the I/O and still get `Busy`.
 ///
-/// This is deliberately just a count. The worker holds only plain request
-/// data, the frame thread is its sole reader/writer, and the pending-callback
-/// table already bounds the count to 32. No read admission allocates.
+/// This is deliberately just a count. Every read runs on the frame thread, so
+/// there is one reader and writer and nothing to synchronize, and
+/// `MAX_LIVE_FILE_BYTE_LISTS` bounds it. No read admission allocates.
 const FileBytesDeliveryReservations = struct {
     count: usize = 0,
 
@@ -1234,9 +1237,9 @@ const FileBytesDeliveryReservations = struct {
         self.count -= 1;
     }
 
-    /// Shutdown has stopped the worker and freed its unreported result
-    /// buffers. Their callbacks will never be invoked, so forget the matching
-    /// delivery promises before another app lifetime can begin.
+    /// Shutdown has cancelled every task that could still have been reading.
+    /// The reads they were parked in will never resume to release their own
+    /// promises, so forget them all before another app lifetime can begin.
     fn clearAfterWorkStops(self: *FileBytesDeliveryReservations) void {
         self.count = 0;
     }
@@ -1416,8 +1419,9 @@ fn allocatorFromHost(host: *RocHost) std.mem.Allocator {
 /// The main thread's IO implementation.
 ///
 /// Named for the thread rather than for being a default because it is
-/// explicitly single-threaded: handing this to the effect worker would be
-/// unsound and would appear to work. The worker builds its own instead.
+/// explicitly blocking: an effect that waits must use `waitingIo()`, the zio
+/// runtime's, so it parks its coroutine and lets the frame loop run. Reaching
+/// for this one there would stall the frame and would appear to work.
 fn mainThreadIo() std.Io {
     if (comptime builtin.is_test) {
         return std.testing.io;
@@ -2084,10 +2088,9 @@ test "the frame reports the active render target, and the window again once it c
     try std.testing.expectEqual(@as(f32, 1100), restored.width);
     try std.testing.expectEqual(@as(f32, 760), restored.height);
 
-    // The window is asked, not remembered, so a `Window.suggest_size` applied
-    // during the apply phase reaches the `render!` of the same cycle -- which
-    // is what that command requests, and one cycle sooner than a size sampled
-    // in `update` could report it.
+    // The window is asked, not remembered, so a `Window.suggest_size!` called
+    // from `update!` reaches the `render!` of the same cycle -- one cycle
+    // sooner than a size sampled in `update!` could report it.
     headless_screen_width = 640;
     headless_screen_height = 480;
     const resized = hostedDrawFrameSizeRaw();
@@ -3562,9 +3565,9 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
 /// Upload one rectangle of a texture.
 ///
 /// The reason this exists rather than being a convenience: without it, changing
-/// one pixel of an atlas means re-uploading the atlas. Commands carry their
-/// complete payload for this cycle, so a structurally valid upload is invoked
-/// rather than silently refused for transient host capacity.
+/// one pixel of an atlas means re-uploading the atlas. The call carries its
+/// complete payload, so a structurally valid upload is performed rather than
+/// silently refused for transient host capacity.
 fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
     enforcePhase("Assets.update_texture_region!", during_update);
     defer args.pixels.decref(host);
@@ -4699,7 +4702,7 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
     return std.fmt.bufPrint(buffer, "{s}_{d:0>5}{s}", .{ stem, index, extension }) catch null;
 }
 
-/// Apply a `Capture.start` command.
+/// `Capture.start!`: begin a recording.
 ///
 /// Refusals are latched in the session for the next `input.capture`. The return
 /// code preserves the hosted ABI and supports direct tests.
@@ -4948,9 +4951,10 @@ fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRec
 
 /// The recording state sampled into every input.
 ///
-/// A pure `update` cannot ask for this, and there is no longer anything to ask:
-/// starting and stopping are commands, so this is the only channel the outcome
-/// has. It is five scalars, so it rides along on the input record rather than
+/// Starting and stopping are effects called from `update!`, and a recording
+/// can also end on its own -- at its frame cap, or on an encoder failure -- so
+/// the input is where an app learns what happened without asking every frame.
+/// It is five scalars, so it rides along on the input record rather than
 /// costing a host call on every frame regardless of whether anything is
 /// recording.
 fn captureStateForStep() CaptureFromHost {
@@ -5486,8 +5490,9 @@ fn deinitResources() void {
     std.debug.assert(blend_scope_count == 0);
     std.debug.assert(camera_scope_count == 0);
     std.debug.assert(scissor_scope_count == 0);
-    // Worker shutdown clears delivery promises before resource teardown. A
-    // non-zero value here would make the next app lifetime under-admit reads.
+    // App shutdown clears delivery promises, through `clearAfterWorkStops`,
+    // before resource teardown. A non-zero value here would make the next app
+    // lifetime under-admit reads.
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
@@ -6414,7 +6419,6 @@ test "each update call takes the model afresh so one reference stays live" {
 }
 
 var test_callback_drops: usize = 0;
-var test_synchronous_task_starts: usize = 0;
 
 fn testCallbackCall(
     roc_host: *RocHost,
@@ -6622,7 +6626,7 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
 }
 
 
-test "completing a large read transfers the worker allocation without copying" {
+test "completing a large read transfers the read's allocation without copying" {
     // The claim under test, stated as a measurement: finishing a read costs the
     // frame thread nothing proportional to the file. The result has only the
     // three-word List value, so the same number comes out for a 16 MiB file as
@@ -6638,23 +6642,23 @@ test "completing a large read transfers the worker allocation without copying" {
         file_bytes_heap.deinitAll();
     }
 
-    // Stands in for the worker thread, which allocates and fills the buffer
-    // before the frame thread ever sees it. A different allocator on purpose:
-    // whatever the frame thread does shows up in `counter` and nowhere else.
-    const worker_bytes = try std.testing.allocator.alloc(u8, file_bytes);
-    @memset(worker_bytes, 'z');
-    const worker_ptr = worker_bytes.ptr;
+    // Stands in for the buffer a parked read filled before it resumed. A
+    // different allocator on purpose: the cost of installing it shows up in
+    // `counter`, and filling it does not.
+    const read_bytes = try std.testing.allocator.alloc(u8, file_bytes);
+    @memset(read_bytes, 'z');
+    const read_ptr = read_bytes.ptr;
 
     counter.allocated_bytes = 0;
-    const large = installReadBytes(std.testing.allocator, worker_bytes);
+    const large = installReadBytes(std.testing.allocator, read_bytes);
     const large_cost = counter.allocated_bytes;
 
     try std.testing.expectEqual(@as(u8, 0), large.err);
     try std.testing.expectEqual(@as(usize, file_bytes), large.bytes.len());
 
-    // Installed, not copied: the List reads the worker's own allocation at the
+    // Installed, not copied: the List reads the read's own allocation at the
     // same address, and has a tagged typed-heap allocation owner.
-    try std.testing.expectEqual(worker_ptr, large.bytes.elements_ptr.?);
+    try std.testing.expectEqual(read_ptr, large.bytes.elements_ptr.?);
     try std.testing.expect(large.bytes.isSeamlessSlice());
 
     // The same delivery for a file four million times smaller costs the frame
@@ -6926,7 +6930,7 @@ test "phases restore what they interrupted rather than falling back to idle" {
     startup.leave();
     try std.testing.expectEqual(Phase.idle, active_phase);
 
-    // Commands run inside the update call that produced them, so a nested scope
+    // A hosted effect runs inside the callback that called it, so a nested scope
     // has to land back in update and not in idle -- otherwise the phase after
     // a command would be wrong for the rest of the call.
     const update = PhaseScope.enter(.update);
@@ -7057,8 +7061,8 @@ test "uploading pixels is refused from render, and taken during update" {
         try std.testing.expectEqual(Phase.render, violation.actual);
     }
 
-    // Startup and apply both have authority to upload. Neither path may turn a
-    // structurally valid command into a capacity-based no-op.
+    // Startup and update both have authority to upload. Neither may turn a
+    // structurally valid call into a capacity-based no-op.
     for ([_]Phase{ .startup, .update }) |phase| {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
@@ -7073,7 +7077,7 @@ test "window-size suggestions and frame-rate caps are taken during update" {
     // itself in response to its own layout nor drop its frame cap while
     // running. raylib resizes a live window and re-caps a running loop as
     // readily as it does before the first frame, so the restriction bought
-    // nothing and cost two commands. Headless keeps the calls off raylib while
+    // nothing and cost two effects. Headless keeps the calls off raylib while
     // still exercising the guard and the size bookkeeping.
     last_phase_violation = null;
     defer last_phase_violation = null;
@@ -7166,10 +7170,9 @@ const TRACE_TASKS_ENV: []const u8 = "ROC_RAY_TRACE_TASKS";
 /// resize. `resize`/`remap` are forwarded so host-side Zig containers still
 /// work, and nothing Roc does reaches them.
 ///
-/// Counters are plain integers, not atomics. Only the frame thread's allocator
-/// is metered -- the effect worker keeps the unwrapped allocator it was started
-/// with -- and this is a diagnostic, so a skewed count is the worst a stray
-/// cross-thread allocation could cost.
+/// Counters are plain integers, not atomics, and nothing needs them to be:
+/// every Roc value is allocated and freed on the frame thread, tasks included,
+/// because a task runs on its own coroutine stack on that same thread.
 const AllocMeter = struct {
     inner: std.mem.Allocator,
     alloc_bytes: u64 = 0,
@@ -7624,9 +7627,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // dbg/expect/crashed handlers below, so the I/O backend (only used by the
     // generated DefaultHandlers) is left as a no-op freestanding implementation.
     // Metering is opt-in: with ROC_RAY_ALLOC_STATS unset this returns the same
-    // allocator, so a normal run has no wrapper and no counters. The effect
-    // worker keeps the unwrapped `allocator`, so only frame-thread traffic is
-    // counted.
+    // allocator, so a normal run has no wrapper and no counters. Everything
+    // Roc allocates runs on the frame thread, tasks included, so what is
+    // counted here is all of it.
     var roc_env = abi.RocEnv{
         .allocator = meteredAllocator(allocator),
         .roc_io = abi.RocIo.freestanding(),

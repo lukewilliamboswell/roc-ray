@@ -889,20 +889,16 @@ fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.Udp
     const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse
         return udpBindFailure(udp_effect.ERR_INVALID_ADDRESS);
 
-    // Reserve the slot before the descriptor exists, so a full heap cannot
-    // leave an open socket with nowhere to live.
-    if (udp_socket_heap.active() == MAX_LIVE_UDP_SOCKETS) {
-        drainRetiredResourcesUpTo(MAX_LIVE_UDP_SOCKETS);
-        if (udp_socket_heap.active() == MAX_LIVE_UDP_SOCKETS) {
-            return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
-        }
-    }
-
     const socket = switch (udp_effect.bind(ip, args.port)) {
         .ok => |value| value,
         .err => |code| return udpBindFailure(code),
     };
 
+    // The descriptor exists before its slot does, so a full heap closes it
+    // again rather than leaking it. `insert` finishes its own heap's
+    // outstanding destruction first, so a socket the app has already released
+    // is reclaimed here; nothing reaches for the global retirement drain,
+    // which would put a GPU or audio-device call inside this `update!`.
     const handle = udp_socket_heap.insert(0, socket) orelse {
         var rejected = socket;
         destroyUdpSocket(&rejected);
@@ -6818,6 +6814,64 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
     var roc_host = abi.makeRocHost(env);
     roc_host.roc_dealloc = &nativeRocDealloc;
     return roc_host;
+}
+
+test "the socket ceiling is a refusal an app can bind its way back out of" {
+    // The one bound an app can actually reach. `Udp.bind!` past the ceiling has
+    // to report `ResourceLimit` *and* leave no descriptor behind, and releasing
+    // a socket has to make the slot usable again -- otherwise a game that
+    // rebinds when the player changes port dies after eight attempts.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        udp_socket_heap.deinitAll();
+    }
+
+    const rt = zio.Runtime.init(std.testing.allocator, .{
+        .executors = .exact(1),
+        .enable_main_executor = true,
+    }) catch return;
+    defer rt.deinit();
+
+    var handles: [MAX_LIVE_UDP_SOCKETS]*u64 = undefined;
+    for (&handles) |*handle| {
+        const bound = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+        try std.testing.expectEqual(@as(u8, 0), bound.err);
+        handle.* = bound.handle;
+    }
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    const refused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(udp_effect.ERR_RESOURCE_LIMIT, refused.err);
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    // Release one. The slot is retired rather than free, so the next bind is
+    // what finishes the destruction -- which is exactly the case that would
+    // fail if `insert` did not drain its own heap first.
+    releaseResourceBox(&roc_host, handles[0]);
+    const reused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(@as(u8, 0), reused.err);
+    handles[0] = reused.handle;
+
+    for (handles) |handle| releaseResourceBox(&roc_host, handle);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
+}
+
+test "a bad address is refused before any descriptor is opened" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+
+    for ([_][]const u8{ "::1", "localhost", "999.0.0.1", "" }) |text| {
+        const result = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice(text, &roc_host), .port = 0 });
+        try std.testing.expectEqual(udp_effect.ERR_INVALID_ADDRESS, result.err);
+    }
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
 }
 
 test "completing a large read transfers the read's allocation without copying" {

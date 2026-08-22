@@ -431,18 +431,44 @@ App := [].{
 	init_for_args : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
 	init_for_args = |config_for_args, callback!| { config: config_for_args, run!: callback! }
 
+	## One file dropped onto the window, and where the pointer was when it landed.
+	##
+	## `path` is absolute, as the window system reported it. Nothing in the
+	## platform sandboxes it, so it is read the way any other path is: hand it
+	## to `Files.read_bytes!` inside a task, and the read parks that task while
+	## the frame loop keeps drawing.
+	##
+	## ```roc
+	## Task.spawn!(input, || Opened(Files.read_bytes!(drop.path)))
+	## ```
+	##
+	## `position` is the pointer position the host sampled for the cycle the
+	## drop arrived on, in the same logical coordinates as
+	## `input.devices.mouse.position()`, so an app that has more than one drop
+	## target can tell which one the file landed on.
+	Dropped : { path : Str, position : { x : F32, y : F32 } }
+
 	## Everything the host observed for one cycle, handed to `update!`.
 	##
 	## `messages` contains every task message delivered for this cycle, in the
 	## order the tasks finished. Independent tasks may finish in any order; the
 	## order they were spawned in does not constrain it.
 	## `capture` contains the recording status sampled for this cycle.
+	##
+	## `dropped` contains the files dropped onto the window since the previous
+	## input, in the order the window system reported them. Like a key press it
+	## is an interval event rather than a latest value: it is empty on almost
+	## every cycle, and exactly one call to `update!` sees any given drop. At
+	## most 64 paths are delivered per cycle; a single drop carrying more has
+	## its extra paths discarded, and `dropped_overflow` says so.
 	Input(msg) := {
 		devices : Devices.Snapshot,
 		window : Window.Snapshot,
 		time : Time.Cycle,
 		messages : List(msg),
 		capture : Capture.Status,
+		dropped : List(Dropped),
+		dropped_overflow : Bool,
 	}.{
 
 		## Return the complete structural input for platform-independent libraries.
@@ -452,6 +478,8 @@ App := [].{
 			time : Time.Cycle,
 			messages : List(msg),
 			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
 		}
 		fields = |input| input
 
@@ -469,6 +497,8 @@ App := [].{
 			time : Time.Cycle,
 			messages : List(msg),
 			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
 		} -> Input(msg)
 		from_fields = |sampled| Input.(sampled)
 
@@ -505,6 +535,8 @@ App := [].{
 					time: Time.first_cycle,
 					messages: [],
 					capture: Idle,
+					dropped: [],
+					dropped_overflow: Bool.False,
 				},
 			)
 
@@ -532,6 +564,15 @@ App := [].{
 		## Replace this input's sampled recording status.
 		with_capture : Input(msg), Capture.Status -> Input(msg)
 		with_capture = |Input.(sampled), capture| Input.({ ..sampled, capture: capture })
+
+		## Deliver files dropped onto the window on this input.
+		with_dropped : Input(msg), List(Dropped) -> Input(msg)
+		with_dropped = |Input.(sampled), dropped| Input.({ ..sampled, dropped: dropped })
+
+		## Say that this cycle's drop carried more paths than the host delivers,
+		## which is what `input.dropped_overflow` reports.
+		with_dropped_overflow : Input(msg), Bool -> Input(msg)
+		with_dropped_overflow = |Input.(sampled), overflowed| Input.({ ..sampled, dropped_overflow: overflowed })
 
 		## Start a task whose message this input's own type pins.
 		##
@@ -631,10 +672,18 @@ counter_step = |model, input| {
 neutral_input : App.Input(CounterMessage)
 neutral_input = App.Input.for_tests({})
 
+## One dropped file, named once so the drop assertions below read as one idea.
+## An absolute path is what the window system hands over, and `Files` reads it
+## as given.
+dropped_png : App.Dropped
+dropped_png = { path: "/home/user/pictures/holiday.png", position: { x: 120, y: 64 } }
+
 ## Every field of the neutral input, stated. A default nobody can see is a
 ## default nobody can rely on.
 expect neutral_input.messages == []
 expect neutral_input.capture == Idle
+expect neutral_input.dropped == []
+expect !(neutral_input.dropped_overflow)
 expect neutral_input.time == Time.first_cycle
 expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False }
 expect !(neutral_input.devices.key_pressed(KeyEscape))
@@ -652,6 +701,10 @@ expect neutral_input.with_time({ ..Time.first_cycle, cycle_count: 7, elapsed_sec
 expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True }).window.size == { width: 320, height: 240 }
 expect neutral_input.with_capture(Active({ frames: 3, dropped: 0 })).capture == Active({ frames: 3, dropped: 0 })
 expect neutral_input.with_messages([Tick]).window == neutral_input.window
+expect neutral_input.with_dropped([dropped_png]).dropped == [dropped_png]
+expect neutral_input.with_dropped([dropped_png]).dropped_overflow == Bool.False
+expect neutral_input.with_dropped_overflow(Bool.True).dropped_overflow
+expect neutral_input.with_dropped_overflow(Bool.True).dropped == []
 expect neutral_input.with_capture(Finished({ frames: 30, bytes: 4096 })).time == neutral_input.time
 
 ## `from_fields` states the whole sample at once, for a test that would rather
@@ -663,9 +716,25 @@ expect
 		time: Time.first_cycle,
 		messages: [Tick],
 		capture: Idle,
+		dropped: [],
+		dropped_overflow: Bool.False,
 	})
 		.messages
 		== [Tick]
+
+## A drop is stated the same way, and `dropped_overflow` travels with it.
+expect
+	App.Input.from_fields({
+		devices: Devices.none,
+		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+		time: Time.first_cycle,
+		messages: [],
+		capture: Idle,
+		dropped: [dropped_png],
+		dropped_overflow: Bool.True,
+	})
+		.dropped
+		== [dropped_png]
 
 ## Escape decides to shut down.
 expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape))) == Quit

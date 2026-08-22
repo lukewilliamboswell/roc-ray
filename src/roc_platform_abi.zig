@@ -6001,19 +6001,22 @@ comptime {
     }
 }
 
-/// Element type for __AnonStruct_fd4f879167f97520
-pub const __AnonStruct_fd4f879167f97520 = if (@sizeOf(usize) == 4) extern struct {
+/// Element type for __AnonStruct_9c901b89b0293b6b
+pub const __AnonStruct_9c901b89b0293b6b = if (@sizeOf(usize) == 4) extern struct {
     capture: __AnonStruct_681b090756070ab0,
     time: __AnonStruct_db5a281b648e1efe,
     devices: __AnonStruct_74da537dd9780edf,
+    dropped: RocList(__AnonStruct_66bf628355bb7f8e),
     task_results: RocList(__AnonStruct_3e6f83279dfc8d12),
     window: __AnonStruct_225d69ea1bc0e508,
+    dropped_overflow: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.capture.decref(roc_host);
         value.time.decref(roc_host);
         value.devices.decref(roc_host);
+        decrefListOf__AnonStruct_66bf628355bb7f8e(value.dropped, roc_host);
         decrefListOf__AnonStruct_3e6f83279dfc8d12(value.task_results, roc_host);
         value.window.decref(roc_host);
     }
@@ -6024,6 +6027,7 @@ pub const __AnonStruct_fd4f879167f97520 = if (@sizeOf(usize) == 4) extern struct
         value.capture.incref(amount);
         value.time.incref(amount);
         value.devices.incref(amount);
+        value.dropped.incref(amount);
         value.task_results.incref(amount);
         value.window.incref(amount);
     }
@@ -6031,14 +6035,17 @@ pub const __AnonStruct_fd4f879167f97520 = if (@sizeOf(usize) == 4) extern struct
     capture: __AnonStruct_681b090756070ab0,
     time: __AnonStruct_db5a281b648e1efe,
     devices: __AnonStruct_74da537dd9780edf,
+    dropped: RocList(__AnonStruct_66bf628355bb7f8e),
     task_results: RocList(__AnonStruct_3e6f83279dfc8d12),
     window: __AnonStruct_225d69ea1bc0e508,
+    dropped_overflow: bool,
     /// Recursively decrement Roc-owned fields.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
         const value = self;
         value.capture.decref(roc_host);
         value.time.decref(roc_host);
         value.devices.decref(roc_host);
+        decrefListOf__AnonStruct_66bf628355bb7f8e(value.dropped, roc_host);
         decrefListOf__AnonStruct_3e6f83279dfc8d12(value.task_results, roc_host);
         value.window.decref(roc_host);
     }
@@ -6049,6 +6056,7 @@ pub const __AnonStruct_fd4f879167f97520 = if (@sizeOf(usize) == 4) extern struct
         value.capture.incref(amount);
         value.time.incref(amount);
         value.devices.incref(amount);
+        value.dropped.incref(amount);
         value.task_results.incref(amount);
         value.window.incref(amount);
     }
@@ -6056,12 +6064,12 @@ pub const __AnonStruct_fd4f879167f97520 = if (@sizeOf(usize) == 4) extern struct
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(__AnonStruct_fd4f879167f97520) != 280) @compileError("__AnonStruct_fd4f879167f97520 size mismatch");
-        if (@alignOf(__AnonStruct_fd4f879167f97520) != 8) @compileError("__AnonStruct_fd4f879167f97520 alignment mismatch");
+        if (@sizeOf(__AnonStruct_9c901b89b0293b6b) != 304) @compileError("__AnonStruct_9c901b89b0293b6b size mismatch");
+        if (@alignOf(__AnonStruct_9c901b89b0293b6b) != 8) @compileError("__AnonStruct_9c901b89b0293b6b alignment mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(__AnonStruct_fd4f879167f97520) != 192) @compileError("__AnonStruct_fd4f879167f97520 size mismatch");
-        if (@alignOf(__AnonStruct_fd4f879167f97520) != 8) @compileError("__AnonStruct_fd4f879167f97520 alignment mismatch");
+        if (@sizeOf(__AnonStruct_9c901b89b0293b6b) != 208) @compileError("__AnonStruct_9c901b89b0293b6b size mismatch");
+        if (@alignOf(__AnonStruct_9c901b89b0293b6b) != 8) @compileError("__AnonStruct_9c901b89b0293b6b alignment mismatch");
     }
 }
 
@@ -6284,6 +6292,52 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(MouseSnapshot) != 44) @compileError("MouseSnapshot size mismatch");
         if (@alignOf(MouseSnapshot) != 4) @compileError("MouseSnapshot alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_66bf628355bb7f8e
+pub const __AnonStruct_66bf628355bb7f8e = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    position: __AnonStruct_2818a50bdccefb1e,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.position.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.position.incref(amount);
+    }
+} else extern struct {
+    path: RocStr,
+    position: __AnonStruct_2818a50bdccefb1e,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.position.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.position.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_66bf628355bb7f8e) != 32) @compileError("__AnonStruct_66bf628355bb7f8e size mismatch");
+        if (@alignOf(__AnonStruct_66bf628355bb7f8e) != 8) @compileError("__AnonStruct_66bf628355bb7f8e alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_66bf628355bb7f8e) != 20) @compileError("__AnonStruct_66bf628355bb7f8e size mismatch");
+        if (@alignOf(__AnonStruct_66bf628355bb7f8e) != 4) @compileError("__AnonStruct_66bf628355bb7f8e alignment mismatch");
     }
 }
 
@@ -11201,11 +11255,13 @@ pub const SqliteHostRun_once = __AnonStruct_4bc5d3695423e2f1;
 pub const SqliteHostRun_onceCells = __AnonStruct_3a90da783672cf8d;
 pub const SqliteHostExec_script = __AnonStruct_e7ff50a9dfab1a8d;
 pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
-pub const Update_for_hostArg1 = __AnonStruct_fd4f879167f97520;
+pub const Update_for_hostArg1 = __AnonStruct_9c901b89b0293b6b;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
 pub const Update_for_hostArg1Time = __AnonStruct_db5a281b648e1efe;
 pub const Update_for_hostArg1Devices = __AnonStruct_74da537dd9780edf;
 pub const Update_for_hostArg1DevicesGamepads = __AnonStruct_1c8617e96852f779;
+pub const Update_for_hostArg1Dropped = __AnonStruct_66bf628355bb7f8e;
+pub const Update_for_hostArg1DroppedPosition = __AnonStruct_2818a50bdccefb1e;
 pub const Update_for_hostArg1TaskResults = __AnonStruct_3e6f83279dfc8d12;
 pub const Update_for_hostArg1Window = __AnonStruct_225d69ea1bc0e508;
 pub const Update_for_hostArg1WindowSize = __AnonStruct_bc8fa73ca49a5ac0;
@@ -11954,8 +12010,8 @@ pub const Init_for_hostResultRelease = struct {
     }
 };
 
-pub const __AnonStruct_fd4f879167f97520Release = struct {
-    pub fn release(value: __AnonStruct_fd4f879167f97520, roc_host: *RocHost) void {
+pub const __AnonStruct_9c901b89b0293b6bRelease = struct {
+    pub fn release(value: __AnonStruct_9c901b89b0293b6b, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -11980,6 +12036,12 @@ pub const __AnonStruct_1c8617e96852f779Release = struct {
 
 pub const MouseSnapshotRelease = struct {
     pub fn release(value: MouseSnapshot, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_66bf628355bb7f8eRelease = struct {
+    pub fn release(value: __AnonStruct_66bf628355bb7f8e, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -12114,6 +12176,14 @@ pub fn decrefListOf__AnonStruct_9f9f7e660a5e922b(value: RocList(__AnonStruct_9f9
     value.deinitWith(__AnonStruct_9f9f7e660a5e922bRelease, roc_host);
 }
 
+/// Release one owned reference to a `RocList(__AnonStruct_66bf628355bb7f8e)`.
+///
+/// The allocation's final reference is claimed atomically before any element
+/// is read, so concurrent owners cannot skip or duplicate element teardown.
+pub fn decrefListOf__AnonStruct_66bf628355bb7f8e(value: RocList(__AnonStruct_66bf628355bb7f8e), roc_host: *RocHost) void {
+    value.deinitWith(__AnonStruct_66bf628355bb7f8eRelease, roc_host);
+}
+
 /// Release one owned reference to a `RocList(__AnonStruct_3e6f83279dfc8d12)`.
 ///
 /// The allocation's final reference is claimed atomically before any element
@@ -12215,12 +12285,14 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_def8e181e644dca4) return __AnonStruct_def8e181e644dca4Release;
     if (T == __AnonStruct_8fd71e3705bdb8b5) return __AnonStruct_8fd71e3705bdb8b5Release;
     if (T == __AnonStruct_1fdbe5c9dee1b2d2) return __AnonStruct_1fdbe5c9dee1b2d2Release;
-    if (T == __AnonStruct_fd4f879167f97520) return __AnonStruct_fd4f879167f97520Release;
+    if (T == __AnonStruct_9c901b89b0293b6b) return __AnonStruct_9c901b89b0293b6bRelease;
     if (T == __AnonStruct_74da537dd9780edf) return __AnonStruct_74da537dd9780edfRelease;
     if (T == __AnonStruct_1c8617e96852f779) return __AnonStruct_1c8617e96852f779Release;
     if (T == RocListWith(f32, false)) return RocListSpineRelease(RocListWith(f32, false));
     if (T == MouseSnapshot) return MouseSnapshotRelease;
     if (T == RocListWith(u32, false)) return RocListSpineRelease(RocListWith(u32, false));
+    if (T == RocList(__AnonStruct_66bf628355bb7f8e)) return RocListRelease(RocList(__AnonStruct_66bf628355bb7f8e), __AnonStruct_66bf628355bb7f8eRelease);
+    if (T == __AnonStruct_66bf628355bb7f8e) return __AnonStruct_66bf628355bb7f8eRelease;
     if (T == RocList(__AnonStruct_3e6f83279dfc8d12)) return RocListRelease(RocList(__AnonStruct_3e6f83279dfc8d12), __AnonStruct_3e6f83279dfc8d12Release);
     if (T == __AnonStruct_3e6f83279dfc8d12) return __AnonStruct_3e6f83279dfc8d12Release;
     @compileError("generated glue has no recursive release policy for " ++ @typeName(T));
@@ -13175,7 +13247,7 @@ pub extern fn app_config_for_host() callconv(.c) __AnonStruct_1fdbe5c9dee1b2d2;
 pub extern fn init_for_host() callconv(.c) Init_for_hostResult;
 
 /// Entrypoint: update_for_host!
-pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_fd4f879167f97520) callconv(.c) Update_for_hostResult;
+pub extern fn update_for_host(arg0: RocBox, arg1: __AnonStruct_9c901b89b0293b6b) callconv(.c) Update_for_hostResult;
 
 /// Entrypoint: render_for_host!
 pub extern fn render_for_host(arg0: RocBox) callconv(.c) Render_for_hostResult;

@@ -68,18 +68,18 @@ init! = App.init(
 ## Elapsed time advances on the tick rather than inside the draw, so the plot
 ## is a pure function of the model when `render!` runs.
 ##
-## The recording state arrives on the input rather than being asked for. There is
-## no effect that asks: starting and stopping are commands, so the sampled state
-## is the only channel a recording's outcome has.
+## Nothing here waits, so there is no task to spawn and no message to fold in.
+## A recording's outcome arrives on `input.capture` instead: it is sampled like
+## the devices and the clock, not asked for with an effect.
 Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	# The host finalizes the file itself once the recording reaches its frame
-	# cap, and says so with `Finished`. That used to arrive as `Idle` -- which
-	# is also what a run with no recording at all looks like, and a headless
-	# run is exactly that, so this app used to exit on its first input having
-	# captured nothing and call it a success.
+	# cap, and says so with `Finished`. Match on that rather than on `Idle`:
+	# `Idle` is also what a run with no recording at all looks like -- a
+	# headless run is exactly that -- so treating it as done would exit on the
+	# first cycle having captured nothing and call it a success.
 	match program_input.capture {
 		Finished(_) => Err(Exit(0))
 		Failed(_) => Err(Exit(1))

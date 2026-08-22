@@ -874,8 +874,7 @@ fn buildHostLib(
     host_lib.root_module.addIncludePath(raylib_include_path);
     host_lib.root_module.addLibraryPath(raylib_lib_path);
 
-    // Coroutine runtime for deferred app tasks (spike: see
-    // COROUTINE_DESIGN_PROPOSAL.md). Configured to a single executor on the
+    // Coroutine runtime for app tasks. Configured to a single executor on the
     // frame thread at runtime; task migration is compiled out so the
     // scheduler cannot move a Roc call onto another thread.
     host_lib.root_module.addImport("zio", zioModule(b, target, optimize));

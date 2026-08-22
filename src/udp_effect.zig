@@ -233,7 +233,9 @@ pub fn send(socket: *Socket, ip: u32, port: u16, bytes: []const u8) u8 {
     if (bytes.len > max_datagram_bytes) return ERR_TOO_LARGE;
 
     const address = addressOf(ip, port);
-    var storage = [1]zio.os.iovec_const{.{ .base = bytes.ptr, .len = bytes.len }};
+    // zio's own helper: the buffer descriptor is a `WSABUF` on Windows and an
+    // `iovec` everywhere else, and the two do not share field names.
+    var storage = [1]zio.os.iovec_const{zio.os.iovecConstFromSlice(bytes)};
     const written = zio.os.net.sendto(
         socket.inner.handle,
         &storage,

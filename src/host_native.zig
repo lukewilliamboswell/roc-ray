@@ -871,6 +871,158 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
     return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
 }
 
+/// `Udp.bind!`: open one IPv4 UDP socket and put it in the socket heap.
+///
+/// Binding does not wait for anything -- it makes a descriptor -- so this is an
+/// ordinary effect rather than a waiting one, and an app can start networking
+/// from `update!` when the player asks it to rather than having to spawn a task
+/// for it. The one subtlety is that reaching the event loop to submit the bind
+/// can hand a turn to the executor, which runs other tasks' Roc code; the
+/// `PhaseScope` restore is what keeps the rest of this `update!` in the right
+/// phase afterwards, exactly as `Task.spawn!` does.
+fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    enforcePhase("Udp.bind!", during_load);
+    defer args.decref(host);
+    const scope = PhaseScope.enter(active_phase);
+    defer scope.leave();
+
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse
+        return udpBindFailure(udp_effect.ERR_INVALID_ADDRESS);
+
+    // Reserve the slot before the descriptor exists, so a full heap cannot
+    // leave an open socket with nowhere to live.
+    if (udp_socket_heap.active() == MAX_LIVE_UDP_SOCKETS) {
+        drainRetiredResourcesUpTo(MAX_LIVE_UDP_SOCKETS);
+        if (udp_socket_heap.active() == MAX_LIVE_UDP_SOCKETS) {
+            return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
+        }
+    }
+
+    const socket = switch (udp_effect.bind(ip, args.port)) {
+        .ok => |value| value,
+        .err => |code| return udpBindFailure(code),
+    };
+
+    const handle = udp_socket_heap.insert(0, socket) orelse {
+        var rejected = socket;
+        destroyUdpSocket(&rejected);
+        return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
+    };
+    return .{
+        .handle = handle,
+        .ip = socket.local_ip,
+        .port = socket.local_port,
+        .err = 0,
+    };
+}
+
+fn exportedUdpBind(args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    return hostedUdpBind(activeHost(), args);
+}
+
+/// A bind that produced no socket. The handle is the shared invalid token, so
+/// `Udp` still gets a structurally valid value to discard.
+fn udpBindFailure(code: u8) abi.UdpHostBindRetRecord {
+    return .{ .handle = invalidResourceHandle(), .ip = 0, .port = 0, .err = code };
+}
+
+/// `Udp.send!`: hand one datagram to the kernel, without waiting.
+///
+/// No `WaitScope` and no event loop: `udp_effect.send` issues the syscall
+/// straight at the non-blocking descriptor. That is what makes this legal in
+/// `update!` -- there is no park for the frame to pay for, and no window in
+/// which another task's Roc code could run in the middle of an update.
+fn hostedUdpSend(host: *RocHost, args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    enforcePhase("Udp.send!", during_update);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse return udp_effect.ERR_UNAVAILABLE;
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse return udp_effect.ERR_INVALID_ADDRESS;
+    return udp_effect.send(socket, ip, args.port, args.bytes.items());
+}
+
+fn exportedUdpSend(args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    return hostedUdpSend(activeHost(), args);
+}
+
+/// `Udp.receive!`: park until a datagram arrives, then deliver the batch.
+///
+/// The phase handling mirrors `hostedTaskSleep`: the receive parks this
+/// coroutine, the frame loop runs in between and sets phases of its own, and
+/// the task must see `.task` again when the datagrams arrive.
+///
+/// The batch is built in host memory first and copied into Roc values only
+/// once it is complete, so a cancelled or failed receive cannot leave a
+/// half-built Roc value behind.
+fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    enforcePhase("Udp.receive!", during_wait);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse
+        return udpReceiveFailure(udp_effect.ERR_UNAVAILABLE);
+
+    const allocator = allocatorFromHost(host);
+    var slices: std.ArrayList(udp_effect.Slice) = .empty;
+    defer slices.deinit(allocator);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("udp receive", args.timeout_ms);
+    const outcome = udp_effect.receive(
+        socket,
+        args.timeout_ms,
+        args.max_datagrams,
+        &slices,
+        &payload,
+        allocator,
+    );
+    AppTasks.traceResume("udp receive");
+
+    const batch = switch (outcome) {
+        .ok => |value| value,
+        .err => |code| return udpReceiveFailure(code),
+    };
+    return .{
+        .err = 0,
+        .payload = abi.RocListWith(u8, false).fromSlice(batch.payload, host),
+        .slices = udpRocSlices(host, batch.slices),
+    };
+}
+
+fn exportedUdpReceive(args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    return hostedUdpReceive(activeHost(), args);
+}
+
+/// A receive that produced no datagrams, carrying only its code.
+fn udpReceiveFailure(code: u8) abi.UdpHostReceiveRetRecord {
+    return .{
+        .err = code,
+        .payload = abi.RocListWith(u8, false).empty(),
+        .slices = abi.RocListWith(abi.UdpHostReceiveSlices, false).empty(),
+    };
+}
+
+/// Copy the batch index into the Roc list `Udp` decodes.
+fn udpRocSlices(
+    host: *RocHost,
+    slices: []const udp_effect.Slice,
+) abi.RocListWith(abi.UdpHostReceiveSlices, false) {
+    if (slices.len == 0) return abi.RocListWith(abi.UdpHostReceiveSlices, false).empty();
+    const list = abi.RocListWith(abi.UdpHostReceiveSlices, false).allocate(slices.len, host);
+    const elements = list.elements_ptr.?;
+    for (slices, 0..) |slice, index| {
+        elements[index] = .{
+            .ip = slice.ip,
+            .port = slice.port,
+            .start = slice.start,
+            .len = slice.len,
+        };
+    }
+    return list;
+}
+
 var active_phase: Phase = .idle;
 
 /// Enter a phase for one call, restoring the prior phase to preserve nesting.
@@ -5671,6 +5823,9 @@ comptime {
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
         @export(&hostedHttpSend, .{ .name = "roc_http_send" });
+        @export(&exportedUdpBind, .{ .name = "roc_udp_bind" });
+        @export(&exportedUdpSend, .{ .name = "roc_udp_send" });
+        @export(&exportedUdpReceive, .{ .name = "roc_udp_receive" });
     }
 }
 

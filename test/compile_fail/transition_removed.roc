@@ -1,9 +1,9 @@
 app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
 
 # `update!` is effectful: host state changes are direct calls and deferred
-# work goes through `Task.spawn!` and `App.request!`. The pure-update
-# `Transition` builder is gone, and this checks it stays gone rather than
-# quietly coming back as a second way to describe the same work.
+# work goes through `Task.spawn!`. The pure-update `Transition` builder is
+# gone, and this checks it stays gone rather than quietly coming back as a
+# second way to describe the same work.
 import rr.App
 import rr.Draw
 

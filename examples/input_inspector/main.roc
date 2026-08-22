@@ -28,9 +28,13 @@ Model : {
 
 program = { init!, update!, render! }
 
-## A clipboard request chooses this message at submission time. The app receives
-## the typed result directly in `program_input.messages`, with no public request ID.
-Msg : [ClipboardReadFinished(Try(Str, [Unavailable, TooLarge, Busy]))]
+## Nothing here answers on a later cycle, so this app has no messages. Reading
+## the clipboard used to be a request; it is now an ordinary call whose result
+## is folded into the same frame that asked for it.
+Msg : []
+
+## What a clipboard read can come back with.
+Paste : Try(Str, [Unavailable, TooLarge, Busy])
 
 init! : App.Init(Model, [])
 init! = App.init(
@@ -71,8 +75,10 @@ ascii_typed = |codepoints|
 		),
 	)
 
-## Settings that just happen are direct effects; reading the clipboard -- which
-## answers back -- is a request whose answer arrives on a later input.
+## Every host effect this app uses is an ordinary call. Reading the clipboard
+## answers immediately -- the windowing backend hands over a pointer on the
+## window's own thread -- so its result feeds the frame that asked for it and
+## nothing has to be carried across a cycle boundary.
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	input = program_input.devices
@@ -86,10 +92,8 @@ update! = |model, program_input| {
 		Window.set_clipboard_text!(buffered)
 		{ typed: buffered, clipboard_status: "copied to clipboard" }
 	} else if ctrl_held and input.key_pressed(KeyV) {
-		# A read answers back, so it is a request: the pasted text is appended on
-		# the input that carries the answer rather than on this one.
-		App.request!(Window.read_clipboard(|result| ClipboardReadFinished(result)))
-		{ typed: buffered, clipboard_status: model.clipboard_status }
+		# The read returns its answer, so the pasted text lands on this frame.
+		apply_paste({ typed: buffered, clipboard_status: model.clipboard_status }, Window.read_clipboard!())
 	} else if ctrl_held and input.key_pressed(KeyX) {
 		{ typed: "", clipboard_status: "cleared" }
 	} else if ctrl_held and input.key_pressed(KeyE) {
@@ -102,11 +106,6 @@ update! = |model, program_input| {
 	} else {
 		{ typed: buffered, clipboard_status: model.clipboard_status }
 	}
-
-	# Ctrl+V can be pressed again before a slow earlier read answers. Fold every
-	# message in host-observed order so no successful paste is silently lost; the
-	# status describes the last terminal result in that order.
-	pasted = apply_paste_messages({ typed: clipboard.typed, clipboard_status: clipboard.clipboard_status }, program_input.messages)
 
 	if input.key_pressed(KeyH) {
 		Mouse.set_cursor_mode!(Hidden)
@@ -125,11 +124,13 @@ update! = |model, program_input| {
 	if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
-		Ok({ font: model.font, typed: pasted.typed, clipboard_status: pasted.clipboard_status, input: input })
+		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input })
 	}
 }
 
-## Fold this input's callback messages into the text field.
+## Fold one clipboard read's outcome into the text field.
+##
+## Pure, so the interesting half of Ctrl+V is testable without a window.
 ##
 ## `TooLarge` is its own outcome rather than being folded into `NoText`: there
 ## *is* text, the host just would not copy that much of it onto the frame
@@ -139,24 +140,21 @@ update! = |model, program_input| {
 ## `Busy` is separate again, and for the same reason in reverse: the clipboard
 ## is fine and so is this app, the host simply had no room to start the read.
 ## That is the one outcome here worth asking for a second time.
-apply_paste_messages : { typed : Str, clipboard_status : Str }, List(Msg) -> { typed : Str, clipboard_status : Str }
-apply_paste_messages = |state, messages| List.fold(messages, state, apply_paste_message)
-
-apply_paste_message : { typed : Str, clipboard_status : Str }, Msg -> { typed : Str, clipboard_status : Str }
-apply_paste_message = |state, message|
-	match message {
-		ClipboardReadFinished(Ok(text)) => { typed: Str.concat(state.typed, text), clipboard_status: "pasted from clipboard" }
+apply_paste : { typed : Str, clipboard_status : Str }, Paste -> { typed : Str, clipboard_status : Str }
+apply_paste = |state, result|
+	match result {
+		Ok(text) => { typed: Str.concat(state.typed, text), clipboard_status: "pasted from clipboard" }
 		# One error covers an empty clipboard and non-text content alike; the
 		# windowing backend does not tell them apart.
-		ClipboardReadFinished(Err(Unavailable)) => { ..state, clipboard_status: "clipboard has no text" }
-		ClipboardReadFinished(Err(TooLarge)) => { ..state, clipboard_status: "clipboard holds too much text to paste" }
-		ClipboardReadFinished(Err(Busy)) => { ..state, clipboard_status: "host was busy -- press Ctrl+V again" }
+		Err(Unavailable) => { ..state, clipboard_status: "clipboard has no text" }
+		Err(TooLarge) => { ..state, clipboard_status: "clipboard holds too much text to paste" }
+		Err(Busy) => { ..state, clipboard_status: "host was busy -- press Ctrl+V again" }
 	}
 
-expect apply_paste_messages(
-	{ typed: "", clipboard_status: "idle" },
-	[ClipboardReadFinished(Ok("first")), ClipboardReadFinished(Ok(" second"))],
-) == { typed: "first second", clipboard_status: "pasted from clipboard" }
+expect apply_paste(apply_paste({ typed: "", clipboard_status: "idle" }, Ok("first")), Ok(" second"))
+	== { typed: "first second", clipboard_status: "pasted from clipboard" }
+expect apply_paste({ typed: "kept", clipboard_status: "idle" }, Err(Unavailable))
+	== { typed: "kept", clipboard_status: "clipboard has no text" }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {

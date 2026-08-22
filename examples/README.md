@@ -74,9 +74,9 @@ recommended starting point for a whole application.
   surface being drawn to instead of copying `input.window.size` into the model:
   it is current, and inside `with_render_texture!` it is the target's size
   rather than the window's.
-- Call host effects directly from `update!` for response-free work; use
-  `Task.spawn!` and `App.request!` for work whose typed result matters to the
-  application, and fold the result in when it arrives as a message.
+- Call host effects directly from `update!` for work that answers immediately;
+  use `Task.spawn!(input, || ...)` for work that waits, and fold its return
+  value in when it arrives as a message on a later `input.messages`.
 - Keep game or tool rules separate from rendering where that makes them easy to
   test, as Breakout does.
 - Treat capture, scripted input, and headless execution as useful app modes,

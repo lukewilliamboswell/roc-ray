@@ -2,18 +2,24 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Files
+import rr.Task
 import rr.Color
 import rr.Draw
 import rr.Text
 
 ## Read files without stalling the frame.
 ##
-## Both reads are `Request`s: `update` submits them and returns immediately, while
-## the host does blocking I/O away from the drawing thread and later delivers a
-## typed `Msg`. No request IDs or completion filtering leak into the app.
+## Both reads happen inside tasks. `update!` spawns them and returns
+## immediately; each task parks on the host's event loop while the frame loop
+## keeps drawing, and its return value arrives as a typed `Msg` on a later
+## `input.messages`. No request IDs or completion filtering leak into the app.
 ##
-## `Files.read_text` copies valid UTF-8 into a `Str`, so it has a small
-## inline limit. `Files.read_bytes` instead delivers an ordinary `List(U8)`:
+## Inside a task the read is an ordinary call that returns its answer, so a
+## multi-step load is straight-line code with `?` rather than a state machine
+## spread over `Msg` and `update!`.
+##
+## `Files.read_text!` copies valid UTF-8 into a `Str`, so it has a small
+## inline limit. `Files.read_bytes!` instead returns an ordinary `List(U8)`:
 ## the host moves the worker allocation into List ARC without copying file
 ## bytes. Keep the list in the model for as long as its bytes are useful; when
 ## the final List or seamless sublist goes away, its typed host resource is
@@ -64,8 +70,8 @@ update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large }, apply_message)
 	if program_input.time.cycle_count == 0 {
-		App.request!(Files.read_text(small_path, |result| SmallReadFinished(result)))
-		App.request!(Files.read_bytes(large_path, |result| BytesReadFinished(result)))
+		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
+		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
 	}
 
 	if program_input.devices.key_pressed(KeyEscape) {

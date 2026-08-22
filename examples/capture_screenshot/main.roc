@@ -2,6 +2,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Capture
+import rr.Task
 import rr.Color
 import rr.Draw
 import rr.Text
@@ -34,8 +35,8 @@ Model : {
 	settled : Bool,
 }
 
-## The request callback selects a message variant, so two screenshots completing
-## on one input need neither IDs nor completion filtering.
+## Each task returns its own message variant, so two screenshots completing on
+## one input need neither IDs nor completion filtering.
 Msg : [EscapingScreenshotFinished(Try({}, Capture.ScreenshotError)), SavedScreenshotFinished(Try({}, Capture.ScreenshotError))]
 
 program = { init!, update!, render! }
@@ -63,13 +64,12 @@ init! = App.init(
 		},
 )
 
-## A screenshot can fail, and this app branches on that, so it is a request rather
-## than an command: the request goes out here and the outcome comes back on a
-## later input instead of being read off the call.
+## A screenshot waits: the host reads the framebuffer at the end of the frame
+## that asked, then encodes and writes the file off the frame thread. So the
+## call belongs inside a task, where it parks the coroutine and the frame loop
+## keeps drawing; its outcome arrives on a later input.
 ##
-## The pixels are still this frame's -- the host reads the framebuffer at the
-## end of the frame that asked, exactly where `Capture.screenshot!` read it --
-## so only the report waits.
+## The pixels are still the asking frame's. Only the report waits.
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	input = program_input.devices
@@ -82,16 +82,16 @@ update! = |model, program_input| {
 
 	# Frame 3 asks and the host reads the framebuffer at the end of it, but the
 	# file is encoded and written off the frame thread, so the outcome arrives
-	# on whichever later input the write finished by. Wait for it rather than for
-	# a frame number: that is the whole difference between a request and a
-	# direct effect. The frame cap is only so an unattended run cannot hang.
+	# on whichever later input the task finished by. Wait for it rather than for
+	# a frame number: that is the whole difference between a task and a direct
+	# effect. The frame cap is only so an unattended run cannot hang.
 	settled = next.settled
 
 	if escape_requested {
-		App.request!(Capture.screenshot("../escaped.png", |result| EscapingScreenshotFinished(result)))
+		Task.spawn!(program_input, || EscapingScreenshotFinished(Capture.screenshot!("../escaped.png")))
 	}
 	if save_requested {
-		App.request!(Capture.screenshot("scene.png", |result| SavedScreenshotFinished(result)))
+		Task.spawn!(program_input, || SavedScreenshotFinished(Capture.screenshot!("scene.png")))
 	}
 
 	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {

@@ -17,14 +17,15 @@
 ## what it can do, not by what it usually does.
 ##
 ## ```roc
+## init! : App.Init(Model, [StoreFailed])
 ## init! = App.init(
 ##     App.default.with_title("scores"),
 ##     |_startup| {
-##         db = Sqlite.Db.open!("scores.db")?
-##         Sqlite.exec_script!(db, "CREATE TABLE IF NOT EXISTS runs(name TEXT, score INTEGER)")?
-##         rows = Sqlite.query!({ db, query: "SELECT name, score FROM runs", bindings: [] })?
+##         db = Sqlite.Db.open!("scores.db") ? |_err| StoreFailed
+##         Sqlite.exec_script!(db, "CREATE TABLE IF NOT EXISTS runs(name TEXT, score INTEGER)") ? |_err| StoreFailed
+##         rows = Sqlite.query!({ db, query: "SELECT name, score FROM runs", bindings: [] }) ? |_err| StoreFailed
 ##         leader = match List.first(rows) {
-##             Ok(row) => Sqlite.Row.str(row, "name")?
+##             Ok(row) => Sqlite.Row.str(row, "name") ? |_err| StoreFailed
 ##             Err(_) => "nobody"
 ##         }
 ##         Ok({ db, rows, leader })
@@ -52,6 +53,12 @@
 ##     Ok(model)
 ## }
 ## ```
+##
+## Each call fails with a union of its own, and none of those unions is open, so
+## `?` cannot merge them: every one is mapped to the app's own `StoreFailed`
+## before it propagates. `examples/sqlite_scores` maps them to a `Str` through
+## `Sqlite.errcode_to_str` instead, which is what an app that shows the reason
+## on screen wants.
 ##
 ## Two shapes reach the same effects. The handle receivers -- `Sqlite.Db.open!`,
 ## `Sqlite.Stmt.query!`, `Sqlite.Stmt.execute!` -- run a statement the app

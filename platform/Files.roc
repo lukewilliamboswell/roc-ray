@@ -156,12 +156,12 @@ Files := [].{
 	##             Ok(meta) if meta.modified != seen => Modified(meta.modified)
 	##             Ok(_) => Unchanged
 	##             Err(NotFound) => Unchanged
-	##             Err(other) => Failed(other)
+	##             Err(other) => Stopped(other)
 	##         }
 	##     }
 	##     match $outcome {
 	##         Modified(at) => Changed(path, at)
-	##         Failed(err) => WatchFailed(err)
+	##         Stopped(err) => WatchFailed(err)
 	##         Unchanged => crash("watch!: the loop only ends once the path changed or the stat failed")
 	##     }
 	## }

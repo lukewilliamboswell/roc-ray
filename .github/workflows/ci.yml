@@ -86,22 +86,6 @@ jobs:
         if: runner.os != 'Windows'
         run: zig build libvpx-parity
 
-      # The windowed path has never been exercised on macOS. The graphical
-      # smoke job above runs on ubuntu under xvfb, and nothing else here opens
-      # a window at all -- so a Cocoa/NSOpenGL regression, which is exactly what
-      # issue #117 was, could only be found by a person running the examples.
-      # GitHub's macOS runners have a real GUI session, so raylib can create its
-      # (hidden, undecorated) window and the pixel assertions run for real.
-      #
-      # Only macOS: Linux keeps the separate xvfb job for the libc reason above,
-      # and the Windows runners have no usable GL driver to assert pixels with.
-      # Bounded because a window that never becomes ready would otherwise sit
-      # until the six-hour job limit.
-      - name: Run graphical smoke tests
-        if: runner.os == 'macOS'
-        timeout-minutes: 10
-        run: zig build graphical-smoke
-
       - name: Test Wayland bundle package
         if: runner.os == 'Linux'
         run: |

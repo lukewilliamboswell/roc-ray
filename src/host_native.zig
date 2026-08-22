@@ -65,6 +65,9 @@ const UpdateResult = abi.Update_for_hostResult;
 /// unwrap it. The host only moves it; it never calls it.
 const TaskResultEnvelope = abi.Update_for_hostArg1TaskResults;
 const CaptureFromHost = abi.Update_for_hostArg1Capture;
+/// One file dropped onto the window, crossing as the public `App.Dropped`.
+const DroppedFile = abi.Update_for_hostArg1Dropped;
+const DroppedPosition = abi.Update_for_hostArg1DroppedPosition;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -6608,6 +6611,105 @@ const InputState = struct {
     }
 };
 
+/// One cycle's file drops on their way to `update!`.
+///
+/// `files` owns its strings; handing it to Roc transfers them, exactly as a
+/// cycle's task results are transferred.
+const DroppedFiles = struct {
+    files: abi.RocList(DroppedFile),
+    overflowed: bool,
+};
+
+/// Copy this cycle's dropped paths into Roc values, latching the pointer.
+///
+/// The window system owns the path strings and frees them the moment the drop
+/// is released, so each one is copied into a `RocStr` here rather than
+/// borrowed. Every file in one drop gets the same position: the pointer was in
+/// one place when the drop landed, and that is the position the app is told
+/// about.
+///
+/// What is counted is paths, not bytes: at most `raylib.DROPPED_FILES_CAPACITY`
+/// of them cross in a cycle. Past that the extra paths are discarded and
+/// `overflowed` is set, so an app that received half a drop can say so rather
+/// than believing it got all of it.
+fn droppedFilesSnapshot(
+    roc_host: *RocHost,
+    paths: []const [*:0]const u8,
+    position: DroppedPosition,
+) DroppedFiles {
+    const capacity = raylib.DROPPED_FILES_CAPACITY;
+    const overflowed = paths.len > capacity;
+    const delivered = @min(paths.len, capacity);
+    if (delivered == 0) return .{ .files = abi.RocList(DroppedFile).empty(), .overflowed = overflowed };
+
+    var buffer: [raylib.DROPPED_FILES_CAPACITY]DroppedFile = undefined;
+    for (paths[0..delivered], buffer[0..delivered]) |path, *slot| {
+        slot.* = .{
+            .path = abi.RocStr.fromSlice(std.mem.span(path), roc_host),
+            .position = position,
+        };
+    }
+    return .{
+        .files = abi.RocList(DroppedFile).fromSlice(buffer[0..delivered], roc_host),
+        .overflowed = overflowed,
+    };
+}
+
+test "an ordinary cycle drops nothing and reports no overflow" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const sampled = droppedFilesSnapshot(&roc_host, &.{}, .{ .x = 0, .y = 0 });
+    defer sampled.files.deinit(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), sampled.files.len());
+    try std.testing.expect(!sampled.overflowed);
+}
+
+test "dropped paths are copied out and the field clears on the next cycle" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    // The second path is long enough to be a heap RocStr rather than a small
+    // one, so the copy is a real allocation the testing allocator checks.
+    const long_path = "/home/example/pictures/a-rather-long-name-for-a-dropped-image.png";
+    const paths = [_][*:0]const u8{ "/home/example/one.png", long_path };
+    const sampled = droppedFilesSnapshot(&roc_host, &paths, .{ .x = 12.5, .y = 34 });
+    try std.testing.expectEqual(@as(usize, 2), sampled.files.len());
+    try std.testing.expect(!sampled.overflowed);
+    const items = sampled.files.items();
+    try std.testing.expectEqualStrings("/home/example/one.png", items[0].path.asSlice());
+    try std.testing.expectEqualStrings(long_path, items[1].path.asSlice());
+    try std.testing.expectEqual(@as(f32, 12.5), items[1].position.x);
+    try std.testing.expectEqual(@as(f32, 34), items[1].position.y);
+    sampled.files.deinit(&roc_host);
+
+    // The list is built from this cycle's paths and nothing else, so the next
+    // cycle clears it rather than repeating the drop `update!` already saw.
+    const next = droppedFilesSnapshot(&roc_host, &.{}, .{ .x = 12.5, .y = 34 });
+    defer next.files.deinit(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), next.files.len());
+    try std.testing.expect(!next.overflowed);
+}
+
+test "a drop past the per-cycle cap is reported rather than silently truncated" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var paths: [raylib.DROPPED_FILES_CAPACITY + 3][*:0]const u8 = undefined;
+    for (&paths) |*slot| slot.* = "/home/example/drop.png";
+
+    const sampled = droppedFilesSnapshot(&roc_host, &paths, .{ .x = 0, .y = 0 });
+    defer sampled.files.deinit(&roc_host);
+    try std.testing.expectEqual(raylib.DROPPED_FILES_CAPACITY, sampled.files.len());
+    try std.testing.expect(sampled.overflowed);
+
+    // Exactly at the cap is not an overflow: the app was given the whole drop.
+    const exact = droppedFilesSnapshot(&roc_host, paths[0..raylib.DROPPED_FILES_CAPACITY], .{ .x = 0, .y = 0 });
+    defer exact.files.deinit(&roc_host);
+    try std.testing.expectEqual(raylib.DROPPED_FILES_CAPACITY, exact.files.len());
+    try std.testing.expect(!exact.overflowed);
+}
+
 /// Sample the window for one cycle: logical drawing size, focus, minimization.
 ///
 /// A headless run never opens a window, so every field is a fixed constant
@@ -8626,6 +8728,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             mouse_wheel,
             text_input,
         );
+        // raylib owns the dropped paths only until they are released, so they
+        // are copied into Roc strings first and handed back immediately. The
+        // pointer position is this cycle's, which is where the drop landed.
+        const dropped_paths = raylib.takeDroppedFiles();
+        const dropped = droppedFilesSnapshot(roc_host, dropped_paths, .{ .x = mouse_pos.x, .y = mouse_pos.y });
+        raylib.releaseDroppedFiles();
 
         last_frame_nanos = now_ns;
         last_wall_nanos = real_ns;
@@ -8643,6 +8751,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             },
             .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
+            .dropped = dropped.files,
+            .dropped_overflow = dropped.overflowed,
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
@@ -8773,6 +8883,10 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             },
             .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
+            // A headless run has no window to drop a file onto, and its output
+            // has to be reproducible, so nothing is ever dropped there.
+            .dropped = abi.RocList(DroppedFile).empty(),
+            .dropped_overflow = false,
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());

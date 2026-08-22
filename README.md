@@ -146,7 +146,8 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   exact projective texture drawing.
 - Explicit executable-relative, working-directory, or external disk asset
   stores with optional manifest identity validation; see the `Assets` module docs.
-- Keyboard, mouse, Unicode text, gamepad, and cursor input.
+- Keyboard, mouse, Unicode text, gamepad, and cursor input, plus files dropped
+  onto the window with the pointer position they landed at.
 - Window and frame timing, wall-clock timestamps, startup entropy, the
   [`roc-random`](https://github.com/kili-ilo/roc-random) generator package,
   command-line arguments, and environment access.

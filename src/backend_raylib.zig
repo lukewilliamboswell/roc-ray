@@ -325,6 +325,42 @@ pub fn getGamepadAxes() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 {
     return &gamepad_axes;
 }
 
+/// How many dropped paths one cycle delivers.
+///
+/// raylib puts no ceiling on a single drop: its window callback allocates for
+/// whatever the window system hands over, and the `capacity` field of a
+/// `FilePathList` is only filled in by the directory-listing calls. So the
+/// bound is the host's, and it is stated rather than implied -- a drop of more
+/// than this many files has the extra paths discarded and is reported as an
+/// overflow, never silently truncated.
+pub const DROPPED_FILES_CAPACITY: usize = 64;
+
+/// raylib's own list for the drop currently being read, owned until released.
+var dropped_files: ?rl.FilePathList = null;
+
+/// Borrow the paths from this cycle's drop, if the window saw one.
+///
+/// The C strings belong to raylib and stay valid only until
+/// `releaseDroppedFiles`, so a caller copies what it needs and then releases;
+/// the pair is what raylib's load/unload contract requires. An empty slice
+/// means no file was dropped, which is every cycle but a handful.
+pub fn takeDroppedFiles() []const [*:0]const u8 {
+    std.debug.assert(dropped_files == null);
+    if (!rl.IsFileDropped()) return &.{};
+    const list = rl.LoadDroppedFiles();
+    dropped_files = list;
+    if (list.paths == null or list.count == 0) return &.{};
+    const typed: [*]const [*:0]const u8 = @ptrCast(list.paths);
+    return typed[0..@as(usize, list.count)];
+}
+
+/// Hand this cycle's drop back to raylib. Safe to call when there was none.
+pub fn releaseDroppedFiles() void {
+    const list = dropped_files orelse return;
+    dropped_files = null;
+    rl.UnloadDroppedFiles(list);
+}
+
 /// Drain this frame's queued Unicode input and return a stable scratch slice.
 pub fn getTextInput() []const u32 {
     var count: usize = 0;

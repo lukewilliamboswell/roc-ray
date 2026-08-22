@@ -54,6 +54,7 @@ the smallest version to the largest.
 | [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout shared by `update!` and `render!`, mouse and keyboard navigation, minimum window size, DPI scale and monitor placement |
 | [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor that exports at twice the window size | Composing into an offscreen target, exporting a render texture from a task, output directories, status folded from a message |
 | [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, direct host effects, clipboard, live window reconfiguration |
+| [Drop Viewer](drop_viewer/main.roc) | An image viewer whose only control is dropping a file on it | `input.dropped`, reading an absolute path in a task, choosing a decoder from the bytes themselves, a bounded input source reporting its overflow |
 
 ## Larger showcases
 

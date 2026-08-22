@@ -241,12 +241,18 @@ InputFromHost : {
 ## Unions do not cross this boundary, so the recording state arrives as a flat
 ## record. Each finished task arrives as an erased thunk holding its message;
 ## Roc calls it before rebuilding `App.Input`.
+##
+## `dropped` is the cycle's file drops, already in the public `App.Dropped`
+## shape, and `dropped_overflow` says whether the host discarded paths past its
+## per-cycle cap.
 InputFromHostCycle(msg) : {
 	devices : InputFromHost,
 	window : Window.Snapshot,
 	time : Time.Cycle,
 	task_results : List(TaskHost.FinishedTask(msg)),
 	capture : AppHost.RawCaptureStatus,
+	dropped : List(App.Dropped),
+	dropped_overflow : Bool,
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
@@ -270,13 +276,15 @@ input_from_raw = |raw| {
 }
 
 ## Rebuild a public `App.Input` after unwrapping this cycle's task messages.
-app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg) -> App.Input(msg)
-app_input_from_raw = |devices, window, time, capture, messages| {
+app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg), List(App.Dropped), Bool -> App.Input(msg)
+app_input_from_raw = |devices, window, time, capture, messages, dropped, dropped_overflow| {
 	devices: input_from_raw(devices),
 	window,
 	time,
 	messages,
 	capture: AppTransport.capture_status(capture),
+	dropped,
+	dropped_overflow,
 }
 
 ## Run the app's startup callback with the platform's startup authority.
@@ -305,9 +313,9 @@ init_for_host! = ||
 ## that to under a hundred bytes per frame for a million-element `List(F32)`,
 ## under `scripts/test_model_allocation.py`.
 update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
-update_for_host! = |boxed_model, { devices, window, time, task_results, capture }| {
+update_for_host! = |boxed_model, { devices, window, time, task_results, capture, dropped, dropped_overflow }| {
 	messages = receive_task_results(task_results)
-	input = app_input_from_raw(devices, window, time, capture, messages)
+	input = app_input_from_raw(devices, window, time, capture, messages, dropped, dropped_overflow)
 	model = Box.unbox(boxed_model)
 	match (program.update!)(model, input) {
 		Ok(next) => Ok(Box.box(next))

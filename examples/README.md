@@ -53,7 +53,7 @@ the smallest version to the largest.
 | [Pixel Workshop](generated_assets/main.roc) | A tiny paint program with a mutable GPU texture | Generated assets, single-cell texture uploads, a pure editor returning edits |
 | [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout shared by `update!` and `render!`, mouse and keyboard navigation, minimum window size |
 | [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor that exports at twice the window size | Composing into an offscreen target, exporting a render texture from a task, output directories, status folded from a message |
-| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, direct host effects, clipboard, live window reconfiguration |
+| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, direct host effects, clipboard, live window reconfiguration, an eyedropper reading the pixel under the pointer |
 
 ## Larger showcases
 

@@ -8,15 +8,16 @@ import rr.Keys
 import rr.Mouse
 import rr.Gamepad
 import rr.App
+import rr.Capture
 
 ## A diagnostic that draws the whole `Devices.Snapshot`: keys down, pressed and
 ## released, mouse buttons and motion, gamepad sticks, and typed codepoints.
 ##
 ## Every host effect it uses -- the clipboard, the cursor mode, the exit key, a
-## minimum window size -- answers immediately, so all of them are ordinary calls
-## from `update!` and the answers land on the cycle that asked. Escape is handed
-## back to the app with `with_exit_key(NoExitKey)` so it can be shown lighting
-## up like any other key; Q quits.
+## minimum window size, the eyedropper -- answers immediately, so all of them
+## are ordinary calls from `update!` and the answers land on the cycle that
+## asked. Escape is handed back to the app with `with_exit_key(NoExitKey)` so it
+## can be shown lighting up like any other key; Q quits.
 Model : {
 	font : Draw.Font,
 
@@ -32,7 +33,16 @@ Model : {
 	## value -- every list empty, the pointer at the origin, and every receiver
 	## answering `False` rather than crashing.
 	input : Devices.Snapshot,
+
+	## The colour the eyedropper last found under the pointer.
+	picked : Picked,
 }
+
+## What one screen readback under the pointer came back with.
+##
+## `Unavailable` is the ordinary state on the first cycle: `update!` runs
+## before the frame loop has presented anything for the host to snapshot.
+Picked : Try(Color.Rgba, Capture.PixelReadError)
 
 program = { init!, update!, render! }
 
@@ -54,7 +64,7 @@ init! = App.init(
 	# below could never light up. Q exits instead.
 		.with_exit_key(NoExitKey)
 		.with_frame_pacing(Capped(120)),
-	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty }),
+	|_startup| Ok({ font: Draw.default_font!(), typed: "", clipboard_status: "clipboard idle", input: Devices.empty, picked: Err(Unavailable) }),
 )
 
 title : Str
@@ -129,12 +139,54 @@ update! = |model, program_input| {
 	}
 	Mouse.set_cursor!(if input.mouse.button_down(Left) Crosshair else Arrow)
 
+	# The eyedropper. One point of the frame the player is looking at, read
+	# here rather than in `render!`, where reading the pixels this frame has
+	# not finished drawing would be both a stall and a lie. A point costs no
+	# allocation, which a one-pixel region would not manage, and the pointer
+	# outside the window is `RegionOutOfBounds` rather than a nearby colour.
+	pointer = input.mouse.position()
+	picked = Capture.pixel_at!(Screen, { x: F32.to_i32_wrap(pointer.x), y: F32.to_i32_wrap(pointer.y) })
+
 	if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
-		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input })
+		Ok({ font: model.font, typed: clipboard.typed, clipboard_status: clipboard.clipboard_status, input: input, picked: picked })
 	}
 }
+
+## Say what the eyedropper found, or why it found nothing.
+##
+## Pure, so every branch is checkable without a window -- which matters here
+## because most of them only ever appear on a machine that has one.
+eyedropper_label : Picked -> Str
+eyedropper_label = |picked|
+	match picked {
+		Ok(color) => "Under the pointer: rgba(${U8.to_str(color.r)}, ${U8.to_str(color.g)}, ${U8.to_str(color.b)}, ${U8.to_str(color.a)})"
+		# The pointer is outside the window, which is an ordinary thing for it
+		# to be while a button is held.
+		Err(RegionOutOfBounds) => "Under the pointer: off screen"
+		# Nothing has been presented yet, or this run has no framebuffer at all.
+		Err(Unavailable) => "Under the pointer: no frame to read yet"
+		Err(Busy) => "Under the pointer: host busy, try again"
+		Err(TargetUnavailable) => "Under the pointer: no source"
+		Err(ReadbackFailed) => "Under the pointer: readback failed"
+	}
+
+expect eyedropper_label(Ok(Color.rgba(1, 2, 3, 255))) == "Under the pointer: rgba(1, 2, 3, 255)"
+expect eyedropper_label(Err(RegionOutOfBounds)) == "Under the pointer: off screen"
+expect eyedropper_label(Err(Unavailable)) == "Under the pointer: no frame to read yet"
+
+## The swatch colour to draw for one reading. A failed read shows the neutral
+## grey every other inactive indicator here uses.
+eyedropper_swatch : Picked -> Color.Rgba
+eyedropper_swatch = |picked|
+	match picked {
+		Ok(color) => color
+		Err(_) => Color.light_gray
+	}
+
+expect eyedropper_swatch(Ok(Color.rgba(9, 9, 9, 255))) == Color.rgba(9, 9, 9, 255)
+expect eyedropper_swatch(Err(Busy)) == Color.light_gray
 
 ## Fold one clipboard read's outcome into the text field.
 ##
@@ -273,5 +325,7 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", model.typed), size: 18, color: Color.dark_gray })
 	frame.text_at!({ pos: { x: 30, y: 568 }, text: model.clipboard_status, size: 18, color: Color.gray })
 	frame.text_at!({ pos: { x: 30, y: 594 }, text: "Hold left mouse for crosshair | Q exits | Esc is a normal key", size: 18, color: Color.gray })
+	frame.rectangle!({ x: 30, y: 620, width: 24, height: 24, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), Color.dark_gray, 1) })
+	frame.text_at!({ pos: { x: 66, y: 622 }, text: eyedropper_label(model.picked), size: 18, color: Color.gray })
 	Ok({})
 }

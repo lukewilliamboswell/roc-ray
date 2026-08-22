@@ -17,6 +17,7 @@ const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
+const udp_effect = @import("udp_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -1209,6 +1210,154 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
     return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
 }
 
+/// `Udp.bind!`: open one IPv4 UDP socket and put it in the socket heap.
+///
+/// Binding does not wait for anything -- it makes a descriptor -- so this is an
+/// ordinary effect rather than a waiting one, and an app can start networking
+/// from `update!` when the player asks it to rather than having to spawn a task
+/// for it. The one subtlety is that reaching the event loop to submit the bind
+/// can hand a turn to the executor, which runs other tasks' Roc code; the
+/// `PhaseScope` restore is what keeps the rest of this `update!` in the right
+/// phase afterwards, exactly as `Task.spawn!` does.
+fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    enforcePhase("Udp.bind!", during_load);
+    defer args.decref(host);
+    const scope = PhaseScope.enter(active_phase);
+    defer scope.leave();
+
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse
+        return udpBindFailure(udp_effect.ERR_INVALID_ADDRESS);
+
+    const socket = switch (udp_effect.bind(ip, args.port)) {
+        .ok => |value| value,
+        .err => |code| return udpBindFailure(code),
+    };
+
+    // The descriptor exists before its slot does, so a full heap closes it
+    // again rather than leaking it. `insert` finishes its own heap's
+    // outstanding destruction first, so a socket the app has already released
+    // is reclaimed here; nothing reaches for the global retirement drain,
+    // which would put a GPU or audio-device call inside this `update!`.
+    const handle = udp_socket_heap.insert(0, socket) orelse {
+        var rejected = socket;
+        destroyUdpSocket(&rejected);
+        return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
+    };
+    return .{
+        .handle = handle,
+        .ip = socket.local_ip,
+        .port = socket.local_port,
+        .err = 0,
+    };
+}
+
+fn exportedUdpBind(args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    return hostedUdpBind(activeHost(), args);
+}
+
+/// A bind that produced no socket. The handle is the shared invalid token, so
+/// `Udp` still gets a structurally valid value to discard.
+fn udpBindFailure(code: u8) abi.UdpHostBindRetRecord {
+    return .{ .handle = invalidResourceHandle(), .ip = 0, .port = 0, .err = code };
+}
+
+/// `Udp.send!`: hand one datagram to the kernel, without waiting.
+///
+/// No `WaitScope` and no event loop: `udp_effect.send` issues the syscall
+/// straight at the non-blocking descriptor. That is what makes this legal in
+/// `update!` -- there is no park for the frame to pay for, and no window in
+/// which another task's Roc code could run in the middle of an update.
+fn hostedUdpSend(host: *RocHost, args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    enforcePhase("Udp.send!", during_update);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse return udp_effect.ERR_UNAVAILABLE;
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse return udp_effect.ERR_INVALID_ADDRESS;
+    return udp_effect.send(socket, ip, args.port, args.bytes.items());
+}
+
+fn exportedUdpSend(args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    return hostedUdpSend(activeHost(), args);
+}
+
+/// `Udp.receive!`: park until a datagram arrives, then deliver the batch.
+///
+/// The phase handling mirrors `hostedTaskSleep`: the receive parks this
+/// coroutine, the frame loop runs in between and sets phases of its own, and
+/// the task must see `.task` again when the datagrams arrive.
+///
+/// The batch is built in host memory first and copied into Roc values only
+/// once it is complete, so a cancelled or failed receive cannot leave a
+/// half-built Roc value behind.
+fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    enforcePhase("Udp.receive!", during_wait);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse
+        return udpReceiveFailure(udp_effect.ERR_UNAVAILABLE);
+
+    const allocator = allocatorFromHost(host);
+    var slices: std.ArrayList(udp_effect.Slice) = .empty;
+    defer slices.deinit(allocator);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("udp receive", args.timeout_ms);
+    const outcome = udp_effect.receive(
+        socket,
+        args.timeout_ms,
+        args.max_datagrams,
+        &slices,
+        &payload,
+        allocator,
+    );
+    AppTasks.traceResume("udp receive");
+
+    const batch = switch (outcome) {
+        .ok => |value| value,
+        .err => |code| return udpReceiveFailure(code),
+    };
+    return .{
+        .err = 0,
+        .payload = abi.RocListWith(u8, false).fromSlice(batch.payload, host),
+        .slices = udpRocSlices(host, batch.slices),
+    };
+}
+
+fn exportedUdpReceive(args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    return hostedUdpReceive(activeHost(), args);
+}
+
+/// A receive that produced no datagrams, carrying only its code.
+fn udpReceiveFailure(code: u8) abi.UdpHostReceiveRetRecord {
+    return .{
+        .err = code,
+        .payload = abi.RocListWith(u8, false).empty(),
+        .slices = abi.RocListWith(abi.UdpHostReceiveSlices, false).empty(),
+    };
+}
+
+/// Copy the batch index into the Roc list `Udp` decodes.
+fn udpRocSlices(
+    host: *RocHost,
+    slices: []const udp_effect.Slice,
+) abi.RocListWith(abi.UdpHostReceiveSlices, false) {
+    if (slices.len == 0) return abi.RocListWith(abi.UdpHostReceiveSlices, false).empty();
+    const list = abi.RocListWith(abi.UdpHostReceiveSlices, false).allocate(slices.len, host);
+    const elements = list.elements_ptr.?;
+    for (slices, 0..) |slice, index| {
+        elements[index] = .{
+            .ip = slice.ip,
+            .port = slice.port,
+            .start = slice.start,
+            .len = slice.len,
+        };
+    }
+    return list;
+}
+
 var active_phase: Phase = .idle;
 
 /// Enter a phase for one call, restoring the prior phase to preserve nesting.
@@ -1513,6 +1662,16 @@ fn destroyStore(resource: *StoreResource) void {
     resource.root.close(mainThreadIo());
 }
 
+/// Close the descriptor when the last Roc reference to a socket is gone.
+///
+/// This is the whole lifecycle: there is no `close!` effect, so dropping the
+/// handle -- from the model, from a task closure, at shutdown -- is what closes
+/// the socket. A task still parked in `receive` cannot reach here, because it
+/// holds a reference of its own for as long as it is parked.
+fn destroyUdpSocket(resource: *udp_effect.Socket) void {
+    resource.inner.close();
+}
+
 fn writeU64Token(payload: *u64, token: u64) void {
     payload.* = token;
 }
@@ -1529,6 +1688,16 @@ const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResou
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
+
+/// How many UDP sockets an app may hold open at once.
+///
+/// Small on purpose: a game binds one socket, or two when it also runs a
+/// discovery or telemetry channel. Each slot carries its own 64 KiB receive
+/// staging buffer, which is what the cap is really bounding, and a bind past
+/// it is `ResourceLimit` rather than an unbounded descriptor count.
+const MAX_LIVE_UDP_SOCKETS: usize = 8;
+
+const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX_LIVE_UDP_SOCKETS, 10, writeU64Token, readU64Token, destroyUdpSocket);
 
 /// Bytes a finished read handed over, and the allocator that owns them.
 ///
@@ -1615,6 +1784,7 @@ var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
+var udp_socket_heap: UdpSocketHeap = .{};
 
 var prepared_text_prepare_calls: usize = 0;
 var prepared_text_draw_calls: usize = 0;
@@ -1687,7 +1857,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap, &udp_socket_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -5879,6 +6049,8 @@ fn deinitResources() void {
     std.debug.assert(sound_heap.active() == 0);
     std.debug.assert(file_bytes_heap.active() == 0);
     std.debug.assert(store_heap.active() == 0);
+    std.debug.assert(udp_socket_heap.active() == 0);
+    udp_socket_heap.deinitAll();
     file_bytes_heap.deinitAll();
     store_heap.deinitAll();
     shader_heap.deinitAll();
@@ -6015,6 +6187,9 @@ comptime {
         @export(&exportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
         @export(&exportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
         @export(&exportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
+        @export(&exportedUdpBind, .{ .name = "roc_udp_bind" });
+        @export(&exportedUdpSend, .{ .name = "roc_udp_send" });
+        @export(&exportedUdpReceive, .{ .name = "roc_udp_receive" });
     }
 }
 
@@ -6576,6 +6751,7 @@ fn drainRetiredResources() void {
 /// Destroy up to `limit` retired resources across every heap.
 fn drainRetiredResourcesUpTo(limit: usize) void {
     var budget = limit;
+    budget -= udp_socket_heap.drainRetired(budget);
     budget -= store_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);
@@ -7007,6 +7183,64 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
     var roc_host = abi.makeRocHost(env);
     roc_host.roc_dealloc = &nativeRocDealloc;
     return roc_host;
+}
+
+test "the socket ceiling is a refusal an app can bind its way back out of" {
+    // The one bound an app can actually reach. `Udp.bind!` past the ceiling has
+    // to report `ResourceLimit` *and* leave no descriptor behind, and releasing
+    // a socket has to make the slot usable again -- otherwise a game that
+    // rebinds when the player changes port dies after eight attempts.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        udp_socket_heap.deinitAll();
+    }
+
+    const rt = zio.Runtime.init(std.testing.allocator, .{
+        .executors = .exact(1),
+        .enable_main_executor = true,
+    }) catch return;
+    defer rt.deinit();
+
+    var handles: [MAX_LIVE_UDP_SOCKETS]*u64 = undefined;
+    for (&handles) |*handle| {
+        const bound = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+        try std.testing.expectEqual(@as(u8, 0), bound.err);
+        handle.* = bound.handle;
+    }
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    const refused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(udp_effect.ERR_RESOURCE_LIMIT, refused.err);
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    // Release one. The slot is retired rather than free, so the next bind is
+    // what finishes the destruction -- which is exactly the case that would
+    // fail if `insert` did not drain its own heap first.
+    releaseResourceBox(&roc_host, handles[0]);
+    const reused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(@as(u8, 0), reused.err);
+    handles[0] = reused.handle;
+
+    for (handles) |handle| releaseResourceBox(&roc_host, handle);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
+}
+
+test "a bad address is refused before any descriptor is opened" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+
+    for ([_][]const u8{ "::1", "localhost", "999.0.0.1", "" }) |text| {
+        const result = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice(text, &roc_host), .port = 0 });
+        try std.testing.expectEqual(udp_effect.ERR_INVALID_ADDRESS, result.err);
+    }
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
 }
 
 test "completing a large read transfers the read's allocation without copying" {

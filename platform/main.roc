@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Url, Stdout, Stderr]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -140,6 +140,9 @@ platform ""
 		"roc_stdio_write_text": StdioHost.write_text!,
 		"roc_stdio_write_line": StdioHost.write_line!,
 		"roc_stdio_write_bytes": StdioHost.write_bytes!,
+		"roc_udp_bind": UdpHost.bind!,
+		"roc_udp_send": UdpHost.send!,
+		"roc_udp_receive": UdpHost.receive!,
 	}
 	targets: {
 		inputs_dir: "targets/",
@@ -184,6 +187,8 @@ import TaskHost
 import Task
 import HttpHost
 import Http
+import UdpHost
+import Udp
 import Url
 import Stdout
 import Stderr

@@ -62,6 +62,8 @@ CASES = (
     (
         ROOT / "test" / "compile_fail" / "time_host_module.roc",
         ("package module is private", "`rr.TimeHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "udp_host_module.roc",
         ("package module is private", "`rr.UdpHost`"),
     ),

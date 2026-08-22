@@ -197,6 +197,11 @@ where the app decides when to capture. `Mouse.set_source` drives a
 scripted pointer through the same input path a real one uses, so a recorded walk
 through a UI exercises the app's ordinary hover and click handling.
 
+Pixels also come back the other way. `Capture.pixel_at!` reads one pixel of the
+last presented frame or of a `Draw.RenderTexture`, and `Capture.read_region!`
+reads a rectangle of one as RGBA8 bytes -- an eyedropper, a golden-image check
+a headless run makes itself, or an image-processing pass written in Roc.
+
 Three things worth knowing:
 
 - **Paths are sandboxed.** Every capture path resolves under `with_output_dir`.

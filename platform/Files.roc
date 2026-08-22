@@ -19,13 +19,17 @@
 ## function rather than a state machine spread over `Msg` and `update!`:
 ##
 ## ```roc
-## load_level! : Str => Msg
+## load_level! : Str => Try(Msg, [LevelFailed])
 ## load_level! = |dir| {
 ##     manifest = Files.read_text!("${dir}/level.json") ? |_e| LevelFailed
 ##     tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
-##     LevelLoaded({ manifest, tiles })
+##     Ok(LevelLoaded({ manifest, tiles }))
 ## }
 ## ```
+##
+## `?` gives up on the first failure, so the function answers with a `Try` and
+## the task closure turns that into the one message it owes:
+## `Task.spawn!(input, || match load_level!(dir) { Ok(msg) => msg, Err(_) => LevelFailed })`.
 ##
 ## Paths are used as the app gives them, resolved against the process working
 ## directory, and nothing here is sandboxed. `Capture` is the one part of this
@@ -145,26 +149,34 @@ Files := [].{
 	## ```roc
 	## watch! : Str, Time.Timestamp => Msg
 	## watch! = |path, seen| {
-	##     var $answer = None
-	##     while $answer == None {
+	##     var $outcome = Unchanged
+	##     while $outcome == Unchanged {
 	##         Task.sleep!(250)
-	##         $answer = match Files.metadata!(path) {
-	##             Ok(meta) if meta.modified != seen => Some(Changed(path, meta.modified))
-	##             Ok(_) => None
-	##             Err(NotFound) => None
-	##             Err(other) => Some(WatchFailed(other))
+	##         $outcome = match Files.metadata!(path) {
+	##             Ok(meta) if meta.modified != seen => Modified(meta.modified)
+	##             Ok(_) => Unchanged
+	##             Err(NotFound) => Unchanged
+	##             Err(other) => Failed(other)
 	##         }
 	##     }
-	##     Option.unwrap($answer)
+	##     match $outcome {
+	##         Modified(at) => Changed(path, at)
+	##         Failed(err) => WatchFailed(err)
+	##         Unchanged => crash("watch!: the loop only ends once the path changed or the stat failed")
+	##     }
 	## }
 	## ```
+	##
+	## The loop carries a sentinel tag rather than the message itself, so its
+	## `while` condition can compare it, and the `match` after the loop turns
+	## that sentinel into the one message the task owes.
 	##
 	## A loop rather than a recursive call, because a task runs on a
 	## fixed-size coroutine stack. `NotFound` keeps waiting rather than giving
 	## up: an editor saving a file often replaces it, so the path can be
 	## missing for a moment. `update!` spawns the watcher again when it handles
-	## `Changed`, and each live watcher holds one of the host's task slots for
-	## as long as it watches.
+	## `Changed`, and each live watcher holds one of the host's thirty-two task
+	## slots for as long as it watches.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.

@@ -14,11 +14,15 @@
 ## `Timestamp` and `now!` are the other clock: what time it is in the world,
 ## for stamping a filename, rendering a date, or correlating a log line with
 ## something outside the process. It is explicitly nondeterministic, and it is
-## never a substitute for `Cycle`.
+## never a substitute for `Cycle`. `now!` is legal in `init!`, `update!`, and
+## tasks; it is refused in `render!`, which is given the model rather than an
+## input and should draw the instant the model already decided on. It does not
+## wait, so it needs no task of its own.
 ##
 ## The `Cycle` helpers live in the companion `roc-ray-types` package so
-## reusable packages can depend on them without depending on this platform.
-## This module re-exports them.
+## reusable packages can depend on them without depending on this platform, and
+## this module re-exports them. `Timestamp` is this platform's own: reading the
+## world's clock is an effect, so it lives where the effects do.
 import rrt.Time as RrtTime
 import TimeHost
 

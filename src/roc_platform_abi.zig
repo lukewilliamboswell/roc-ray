@@ -4385,6 +4385,322 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_d1ff90659ed42132
+pub const __AnonStruct_d1ff90659ed42132 = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    db: *u64,
+    message: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.db), @alignOf(u64), false, null, roc_host);
+        value.message.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.db), amount);
+        value.message.incref(amount);
+    }
+} else extern struct {
+    err: i64,
+    db: *u64,
+    message: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.db), @alignOf(u64), false, null, roc_host);
+        value.message.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.db), amount);
+        value.message.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_d1ff90659ed42132) != 40) @compileError("__AnonStruct_d1ff90659ed42132 size mismatch");
+        if (@alignOf(__AnonStruct_d1ff90659ed42132) != 8) @compileError("__AnonStruct_d1ff90659ed42132 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_d1ff90659ed42132) != 24) @compileError("__AnonStruct_d1ff90659ed42132 size mismatch");
+        if (@alignOf(__AnonStruct_d1ff90659ed42132) != 8) @compileError("__AnonStruct_d1ff90659ed42132 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_e7ff50a9dfab1a8d
+pub const __AnonStruct_e7ff50a9dfab1a8d = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    message: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.message.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.message.incref(amount);
+    }
+} else extern struct {
+    err: i64,
+    message: RocStr,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.message.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.message.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_e7ff50a9dfab1a8d) != 32) @compileError("__AnonStruct_e7ff50a9dfab1a8d size mismatch");
+        if (@alignOf(__AnonStruct_e7ff50a9dfab1a8d) != 8) @compileError("__AnonStruct_e7ff50a9dfab1a8d alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_e7ff50a9dfab1a8d) != 24) @compileError("__AnonStruct_e7ff50a9dfab1a8d size mismatch");
+        if (@alignOf(__AnonStruct_e7ff50a9dfab1a8d) != 8) @compileError("__AnonStruct_e7ff50a9dfab1a8d alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_cff0e6766f0cb5bf
+pub const __AnonStruct_cff0e6766f0cb5bf = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    message: RocStr,
+    stmt: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.message.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.stmt), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.message.incref(amount);
+        increfBox(@ptrCast(value.stmt), amount);
+    }
+} else extern struct {
+    err: i64,
+    message: RocStr,
+    stmt: *u64,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.message.decref(roc_host);
+        decrefBoxWith(@ptrCast(value.stmt), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.message.incref(amount);
+        increfBox(@ptrCast(value.stmt), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_cff0e6766f0cb5bf) != 40) @compileError("__AnonStruct_cff0e6766f0cb5bf size mismatch");
+        if (@alignOf(__AnonStruct_cff0e6766f0cb5bf) != 8) @compileError("__AnonStruct_cff0e6766f0cb5bf alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_cff0e6766f0cb5bf) != 24) @compileError("__AnonStruct_cff0e6766f0cb5bf size mismatch");
+        if (@alignOf(__AnonStruct_cff0e6766f0cb5bf) != 8) @compileError("__AnonStruct_cff0e6766f0cb5bf alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_4bc5d3695423e2f1
+pub const __AnonStruct_4bc5d3695423e2f1 = if (@sizeOf(usize) == 4) extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.cells.decref(roc_host);
+        value.message.decref(roc_host);
+        value.names.decref(roc_host);
+        value.payload.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.cells.incref(amount);
+        value.message.incref(amount);
+        value.names.incref(amount);
+        value.payload.incref(amount);
+    }
+} else extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.cells.decref(roc_host);
+        value.message.decref(roc_host);
+        value.names.decref(roc_host);
+        value.payload.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.cells.incref(amount);
+        value.message.incref(amount);
+        value.names.incref(amount);
+        value.payload.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_4bc5d3695423e2f1) != 136) @compileError("__AnonStruct_4bc5d3695423e2f1 size mismatch");
+        if (@alignOf(__AnonStruct_4bc5d3695423e2f1) != 8) @compileError("__AnonStruct_4bc5d3695423e2f1 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_4bc5d3695423e2f1) != 88) @compileError("__AnonStruct_4bc5d3695423e2f1 size mismatch");
+        if (@alignOf(__AnonStruct_4bc5d3695423e2f1) != 8) @compileError("__AnonStruct_4bc5d3695423e2f1 alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_3a90da783672cf8d
+pub const __AnonStruct_3a90da783672cf8d = if (@sizeOf(usize) == 4) extern struct {
+    integer: i64,
+    len: u64,
+    real: f64,
+    start: u64,
+    kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+} else extern struct {
+    integer: i64,
+    len: u64,
+    real: f64,
+    start: u64,
+    kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        _ = value;
+        _ = roc_host;
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        _ = value;
+        _ = amount;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_3a90da783672cf8d) != 40) @compileError("__AnonStruct_3a90da783672cf8d size mismatch");
+        if (@alignOf(__AnonStruct_3a90da783672cf8d) != 8) @compileError("__AnonStruct_3a90da783672cf8d alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_3a90da783672cf8d) != 40) @compileError("__AnonStruct_3a90da783672cf8d size mismatch");
+        if (@alignOf(__AnonStruct_3a90da783672cf8d) != 8) @compileError("__AnonStruct_3a90da783672cf8d alignment mismatch");
+    }
+}
+
+/// Element type for __AnonStruct_90c9f98ccd96f8ce
+pub const __AnonStruct_90c9f98ccd96f8ce = if (@sizeOf(usize) == 4) extern struct {
+    integer: i64,
+    real: f64,
+    blob: RocListWith(u8, false),
+    name: RocStr,
+    text: RocStr,
+    kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.blob.decref(roc_host);
+        value.name.decref(roc_host);
+        value.text.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.blob.incref(amount);
+        value.name.incref(amount);
+        value.text.incref(amount);
+    }
+} else extern struct {
+    integer: i64,
+    real: f64,
+    blob: RocListWith(u8, false),
+    name: RocStr,
+    text: RocStr,
+    kind: u8,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.blob.decref(roc_host);
+        value.name.decref(roc_host);
+        value.text.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.blob.incref(amount);
+        value.name.incref(amount);
+        value.text.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_90c9f98ccd96f8ce) != 96) @compileError("__AnonStruct_90c9f98ccd96f8ce size mismatch");
+        if (@alignOf(__AnonStruct_90c9f98ccd96f8ce) != 8) @compileError("__AnonStruct_90c9f98ccd96f8ce alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_90c9f98ccd96f8ce) != 56) @compileError("__AnonStruct_90c9f98ccd96f8ce size mismatch");
+        if (@alignOf(__AnonStruct_90c9f98ccd96f8ce) != 8) @compileError("__AnonStruct_90c9f98ccd96f8ce alignment mismatch");
+    }
+}
+
 /// Element type for __AnonStruct_69c51f74695a8340
 pub const __AnonStruct_69c51f74695a8340 = if (@sizeOf(usize) == 4) extern struct {
     map: __AnonStruct_831cf812524287ed,
@@ -6578,6 +6894,164 @@ comptime {
     if (@sizeOf(usize) == 4) {
         if (@sizeOf(HttpHostSendRetRecord) != 40) @compileError("HttpHostSendRetRecord size mismatch");
         if (@alignOf(HttpHostSendRetRecord) != 4) @compileError("HttpHostSendRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.open!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostOpenRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    db: *u64,
+    message: RocStr,
+} else extern struct {
+    err: i64,
+    db: *u64,
+    message: RocStr,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostOpenRetRecord) != 40) @compileError("SqliteHostOpenRetRecord size mismatch");
+        if (@alignOf(SqliteHostOpenRetRecord) != 8) @compileError("SqliteHostOpenRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostOpenRetRecord) != 24) @compileError("SqliteHostOpenRetRecord size mismatch");
+        if (@alignOf(SqliteHostOpenRetRecord) != 8) @compileError("SqliteHostOpenRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.close!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostCloseRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    message: RocStr,
+} else extern struct {
+    err: i64,
+    message: RocStr,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostCloseRetRecord) != 32) @compileError("SqliteHostCloseRetRecord size mismatch");
+        if (@alignOf(SqliteHostCloseRetRecord) != 8) @compileError("SqliteHostCloseRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostCloseRetRecord) != 24) @compileError("SqliteHostCloseRetRecord size mismatch");
+        if (@alignOf(SqliteHostCloseRetRecord) != 8) @compileError("SqliteHostCloseRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.prepare!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostPrepareRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    message: RocStr,
+    stmt: *u64,
+} else extern struct {
+    err: i64,
+    message: RocStr,
+    stmt: *u64,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostPrepareRetRecord) != 40) @compileError("SqliteHostPrepareRetRecord size mismatch");
+        if (@alignOf(SqliteHostPrepareRetRecord) != 8) @compileError("SqliteHostPrepareRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostPrepareRetRecord) != 24) @compileError("SqliteHostPrepareRetRecord size mismatch");
+        if (@alignOf(SqliteHostPrepareRetRecord) != 8) @compileError("SqliteHostPrepareRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.run_stmt!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostRun_stmtRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+} else extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostRun_stmtRetRecord) != 136) @compileError("SqliteHostRun_stmtRetRecord size mismatch");
+        if (@alignOf(SqliteHostRun_stmtRetRecord) != 8) @compileError("SqliteHostRun_stmtRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostRun_stmtRetRecord) != 88) @compileError("SqliteHostRun_stmtRetRecord size mismatch");
+        if (@alignOf(SqliteHostRun_stmtRetRecord) != 8) @compileError("SqliteHostRun_stmtRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.run_once!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostRun_onceRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+} else extern struct {
+    changes: i64,
+    err: i64,
+    last_insert_rowid: i64,
+    ncols: u64,
+    row_count: u64,
+    cells: RocListWith(__AnonStruct_3a90da783672cf8d, false),
+    message: RocStr,
+    names: RocListWith(u8, false),
+    payload: RocListWith(u8, false),
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostRun_onceRetRecord) != 136) @compileError("SqliteHostRun_onceRetRecord size mismatch");
+        if (@alignOf(SqliteHostRun_onceRetRecord) != 8) @compileError("SqliteHostRun_onceRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostRun_onceRetRecord) != 88) @compileError("SqliteHostRun_onceRetRecord size mismatch");
+        if (@alignOf(SqliteHostRun_onceRetRecord) != 8) @compileError("SqliteHostRun_onceRetRecord alignment mismatch");
+    }
+}
+
+/// Return type record for SqliteHost.exec_script!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const SqliteHostExec_scriptRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    err: i64,
+    message: RocStr,
+} else extern struct {
+    err: i64,
+    message: RocStr,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(SqliteHostExec_scriptRetRecord) != 32) @compileError("SqliteHostExec_scriptRetRecord size mismatch");
+        if (@alignOf(SqliteHostExec_scriptRetRecord) != 8) @compileError("SqliteHostExec_scriptRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(SqliteHostExec_scriptRetRecord) != 24) @compileError("SqliteHostExec_scriptRetRecord size mismatch");
+        if (@alignOf(SqliteHostExec_scriptRetRecord) != 8) @compileError("SqliteHostExec_scriptRetRecord alignment mismatch");
     }
 }
 
@@ -9768,6 +10242,56 @@ comptime {
     }
 }
 
+/// Arguments for SqliteHost.open!
+/// Roc signature: Str, U8, U64, U64 => { db : SqliteHost.Db, err : I64, message : Str }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostOpenArgs = extern struct {
+    arg0: RocStr,
+    arg1: u8,
+    arg2: u64,
+    arg3: u64,
+};
+
+/// Arguments for SqliteHost.close!
+/// Roc signature: SqliteHost.Db => { err : I64, message : Str }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostCloseArgs = extern struct {
+    arg0: *u64,
+};
+
+/// Arguments for SqliteHost.prepare!
+/// Roc signature: SqliteHost.Db, Str => { err : I64, message : Str, stmt : SqliteHost.Stmt }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostPrepareArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
+};
+
+/// Arguments for SqliteHost.run_stmt!
+/// Roc signature: SqliteHost.Stmt, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostRun_stmtArgs = extern struct {
+    arg0: *u64,
+    arg1: RocList(__AnonStruct_90c9f98ccd96f8ce),
+};
+
+/// Arguments for SqliteHost.run_once!
+/// Roc signature: SqliteHost.Db, Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostRun_onceArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
+    arg2: RocList(__AnonStruct_90c9f98ccd96f8ce),
+};
+
+/// Arguments for SqliteHost.exec_script!
+/// Roc signature: SqliteHost.Db, Str => { err : I64, message : Str }
+/// Refcounted fields are owned by the hosted function.
+pub const SqliteHostExec_scriptArgs = extern struct {
+    arg0: *u64,
+    arg1: RocStr,
+};
+
 // Platform Type Aliases
 
 pub const AssetsHostOpen_storeArg0 = __AnonStruct_8f4b2816fd84fce2;
@@ -9864,6 +10388,16 @@ pub const HttpHostSendArg0 = __AnonStruct_85380e02323174c5;
 pub const HttpHostSendArg0Headers = __AnonStruct_82a96c5d55d63488;
 pub const HttpHostSend = __AnonStruct_da7cbd33c88fa20a;
 pub const HttpHostSendHeaders = __AnonStruct_82a96c5d55d63488;
+pub const SqliteHostOpen = __AnonStruct_d1ff90659ed42132;
+pub const SqliteHostClose = __AnonStruct_e7ff50a9dfab1a8d;
+pub const SqliteHostPrepare = __AnonStruct_cff0e6766f0cb5bf;
+pub const SqliteHostRun_stmtArg1 = __AnonStruct_90c9f98ccd96f8ce;
+pub const SqliteHostRun_stmt = __AnonStruct_4bc5d3695423e2f1;
+pub const SqliteHostRun_stmtCells = __AnonStruct_3a90da783672cf8d;
+pub const SqliteHostRun_onceArg2 = __AnonStruct_90c9f98ccd96f8ce;
+pub const SqliteHostRun_once = __AnonStruct_4bc5d3695423e2f1;
+pub const SqliteHostRun_onceCells = __AnonStruct_3a90da783672cf8d;
+pub const SqliteHostExec_script = __AnonStruct_e7ff50a9dfab1a8d;
 pub const App_config_for_host = __AnonStruct_1fdbe5c9dee1b2d2;
 pub const Update_for_hostArg1 = __AnonStruct_fd4f879167f97520;
 pub const Update_for_hostArg1Capture = __AnonStruct_681b090756070ab0;
@@ -10414,6 +10948,42 @@ pub const __AnonStruct_85380e02323174c5Release = struct {
     }
 };
 
+pub const __AnonStruct_d1ff90659ed42132Release = struct {
+    pub fn release(value: __AnonStruct_d1ff90659ed42132, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_e7ff50a9dfab1a8dRelease = struct {
+    pub fn release(value: __AnonStruct_e7ff50a9dfab1a8d, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_cff0e6766f0cb5bfRelease = struct {
+    pub fn release(value: __AnonStruct_cff0e6766f0cb5bf, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_4bc5d3695423e2f1Release = struct {
+    pub fn release(value: __AnonStruct_4bc5d3695423e2f1, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_3a90da783672cf8dRelease = struct {
+    pub fn release(value: __AnonStruct_3a90da783672cf8d, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_90c9f98ccd96f8ceRelease = struct {
+    pub fn release(value: __AnonStruct_90c9f98ccd96f8ce, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
 pub const __AnonStruct_69c51f74695a8340Release = struct {
     pub fn release(value: __AnonStruct_69c51f74695a8340, roc_host: *RocHost) void {
         value.decref(roc_host);
@@ -10634,6 +11204,14 @@ pub fn decrefListOf__AnonStruct_82a96c5d55d63488(value: RocList(__AnonStruct_82a
     value.deinitWith(__AnonStruct_82a96c5d55d63488Release, roc_host);
 }
 
+/// Release one owned reference to a `RocList(__AnonStruct_90c9f98ccd96f8ce)`.
+///
+/// The allocation's final reference is claimed atomically before any element
+/// is read, so concurrent owners cannot skip or duplicate element teardown.
+pub fn decrefListOf__AnonStruct_90c9f98ccd96f8ce(value: RocList(__AnonStruct_90c9f98ccd96f8ce), roc_host: *RocHost) void {
+    value.deinitWith(__AnonStruct_90c9f98ccd96f8ceRelease, roc_host);
+}
+
 /// Release one owned reference to a `RocList(__AnonStruct_1299823ae1663c65)`.
 ///
 /// The allocation's final reference is claimed atomically before any element
@@ -10739,6 +11317,13 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == RocList(__AnonStruct_82a96c5d55d63488)) return RocListRelease(RocList(__AnonStruct_82a96c5d55d63488), __AnonStruct_82a96c5d55d63488Release);
     if (T == __AnonStruct_82a96c5d55d63488) return __AnonStruct_82a96c5d55d63488Release;
     if (T == __AnonStruct_85380e02323174c5) return __AnonStruct_85380e02323174c5Release;
+    if (T == __AnonStruct_d1ff90659ed42132) return __AnonStruct_d1ff90659ed42132Release;
+    if (T == __AnonStruct_e7ff50a9dfab1a8d) return __AnonStruct_e7ff50a9dfab1a8dRelease;
+    if (T == __AnonStruct_cff0e6766f0cb5bf) return __AnonStruct_cff0e6766f0cb5bfRelease;
+    if (T == __AnonStruct_4bc5d3695423e2f1) return __AnonStruct_4bc5d3695423e2f1Release;
+    if (T == RocListWith(__AnonStruct_3a90da783672cf8d, false)) return RocListSpineRelease(RocListWith(__AnonStruct_3a90da783672cf8d, false));
+    if (T == RocList(__AnonStruct_90c9f98ccd96f8ce)) return RocListRelease(RocList(__AnonStruct_90c9f98ccd96f8ce), __AnonStruct_90c9f98ccd96f8ceRelease);
+    if (T == __AnonStruct_90c9f98ccd96f8ce) return __AnonStruct_90c9f98ccd96f8ceRelease;
     if (T == RocErasedCallable) return RocErasedCallableRelease;
     if (T == __AnonStruct_69c51f74695a8340) return __AnonStruct_69c51f74695a8340Release;
     if (T == __AnonStruct_831cf812524287ed) return __AnonStruct_831cf812524287edRelease;
@@ -11454,6 +12039,59 @@ pub extern fn roc_draw_set_shader_vec4_raw(arg0: DrawHostSet_shader_vec4Args) ca
 ///     arg0.decref(roc_host);
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_http_send(arg0: HttpHostSendArgs) callconv(.c) __AnonStruct_da7cbd33c88fa20a;
+
+/// Hosted symbol for SqliteHost.open!
+/// Roc signature: Str, U8, U64, U64 => { db : SqliteHost.Db, err : I64, message : Str }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_open(arg0: RocStr, arg1: u8, arg2: u64, arg3: u64) callconv(.c) __AnonStruct_d1ff90659ed42132;
+
+/// Hosted symbol for SqliteHost.close!
+/// Roc signature: SqliteHost.Db => { err : I64, message : Str }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_close(arg0: *u64) callconv(.c) __AnonStruct_e7ff50a9dfab1a8d;
+
+/// Hosted symbol for SqliteHost.prepare!
+/// Roc signature: SqliteHost.Db, Str => { err : I64, message : Str, stmt : SqliteHost.Stmt }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_prepare(arg0: *u64, arg1: RocStr) callconv(.c) __AnonStruct_cff0e6766f0cb5bf;
+
+/// Hosted symbol for SqliteHost.run_stmt!
+/// Roc signature: SqliteHost.Stmt, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg1, roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_run_stmt(arg0: *u64, arg1: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) __AnonStruct_4bc5d3695423e2f1;
+
+/// Hosted symbol for SqliteHost.run_once!
+/// Roc signature: SqliteHost.Db, Str, List({ blob : List(U8), integer : I64, kind : U8, name : Str, real : F64, text : Str }) => { cells : List({ integer : I64, kind : U8, len : U64, real : F64, start : U64 }), changes : I64, err : I64, last_insert_rowid : I64, message : Str, names : List(U8), ncols : U64, payload : List(U8), row_count : U64 }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     arg1.decref(roc_host);
+///     decrefListOf__AnonStruct_90c9f98ccd96f8ce(arg2, roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_run_once(arg0: *u64, arg1: RocStr, arg2: RocList(__AnonStruct_90c9f98ccd96f8ce)) callconv(.c) __AnonStruct_4bc5d3695423e2f1;
+
+/// Hosted symbol for SqliteHost.exec_script!
+/// Roc signature: SqliteHost.Db, Str => { err : I64, message : Str }
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     decrefBoxWith(@ptrCast(arg0), @alignOf(u64), false, null, roc_host);
+///     arg1.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_sqlite_exec_script(arg0: *u64, arg1: RocStr) callconv(.c) __AnonStruct_e7ff50a9dfab1a8d;
 
 /// Default memory management functions for Roc platforms.
 ///

@@ -298,6 +298,11 @@ pub fn build(b: *std.Build) void {
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
         native_tests.root_module.link_libc = true;
         native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
+        // The sqlite tests in src/sqlite_effect.zig run against a real
+        // in-memory database rather than a stand-in: a heap test built on
+        // zeroed memory makes every incref and decref a no-op and so cannot
+        // fail when a refcount is wrong.
+        native_tests.root_module.linkLibrary(buildSqlite3(b, native_target, optimize, roc_target));
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
 

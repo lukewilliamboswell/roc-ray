@@ -44,7 +44,7 @@ Task := [].{
 	## order the tasks finished.
 	##
 	## The first argument is the `App.Input` that `update!` was handed. It is
-	## never read: it is a *witness* that pins the closure's return type to the
+	## never read: it is the witness that pins the closure's return type to the
 	## app's own `Msg`. Without it `msg` stays free at the call site, the
 	## closure compiles at whatever type its body alone implies -- often a
 	## single-tag union with no discriminant -- while the host decodes the
@@ -70,18 +70,18 @@ Task := [].{
 	##
 	## `input.spawn!(|| ...)` is the same effect written as a receiver.
 	##
-	## Legal in `update!` and in tasks; refused in `init!`, which never sees the
-	## answering input, and in `render!`.
+	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`
+	## never sees the answering input, and `render!` does not change the world.
 	spawn! : App.Input(msg), (() => msg) => {}
 	spawn! = |input, task!| App.Input.spawn!(input, task!)
 
-	## Start a task whose message belongs to a component, wrapped into the
-	## app's own `Msg` on the way back.
+	## Start a task whose message belongs to a component, wrapped into the app's
+	## own `Msg` on the way back.
 	##
 	## `spawn!` needs the closure to answer in the app's `Msg`, which forces a
-	## component to know the type of the app that hosts it. `spawn_with!`
-	## splits that in two: the closure answers in the component's own message
-	## type, and the parent supplies the constructor that lifts it.
+	## component to know the type of the app that hosts it. `spawn_with!` splits
+	## that in two: the closure answers in the component's own message type, and
+	## the parent supplies the constructor that lifts it.
 	##
 	## ```roc
 	## # Counter.roc -- knows nothing about the app's Msg
@@ -92,17 +92,19 @@ Task := [].{
 	## Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
 	## ```
 	##
-	## A bare tag name is not a function, so the wrapper is written as the
-	## lambda `|m| CounterMsg(m)` rather than as `CounterMsg`.
+	## A bare tag name is not a function, so the wrapper is written as the lambda
+	## `|m| CounterMsg(m)` rather than as `CounterMsg`.
 	##
 	## The wrapper runs on the task's own stack, right after the closure returns
-	## and before the message is handed back, so it is ordinary pure code and
-	## not a second scheduled step.
+	## and before the message is handed back, so it is ordinary pure code and not
+	## a second scheduled step.
 	##
-	## `input.spawn_with!(task!, wrap)` is the same effect written as a
-	## receiver. Everything `spawn!` says about the `App.Input` witness, about
-	## when a task's message arrives, and about which callbacks may spawn
-	## applies here unchanged.
+	## `input.spawn_with!(task!, wrap)` is the same effect written as a receiver.
+	## Everything `spawn!` says about the `App.Input` witness, about when a task's
+	## message arrives, and about which callbacks may spawn applies here
+	## unchanged.
+	##
+	## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 	spawn_with! : App.Input(msg), (() => a), (a -> msg) => {}
 	spawn_with! = |input, task!, wrap| App.Input.spawn_with!(input, task!, wrap)
 

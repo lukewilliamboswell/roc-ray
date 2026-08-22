@@ -56,7 +56,7 @@
 ## rather than passed through, so a chatty tool cannot write over an app that
 ## is using `Stdout` itself.
 ##
-## Shutdown kills a running child. Invariant 7 cancels every live task, and a
+## Shutdown kills a running child. Shutdown cancels every live task, and a
 ## task parked in `run!` is interrupted through this facility's own mechanism:
 ## the host terminates the child it started, the parked task resumes on the
 ## cancelled path, and nothing is left running behind the app. A child that has
@@ -126,7 +126,7 @@ Cmd := {
 	## environment name this operating system cannot represent -- one that is
 	## empty, or contains `=` or a NUL.
 	##
-	## `CommandTimedOut` carries what the child had written before the
+	## `Timeout` carries what the child had written before the
 	## deadline killed it, because a program that hangs after printing why is
 	## the ordinary case. `StdoutLimitExceeded` and `StderrLimitExceeded` are
 	## refusals rather than truncations: half a stream decodes into wrong data
@@ -141,7 +141,7 @@ Cmd := {
 		SpawnFailed,
 		Busy,
 		Unavailable,
-		CommandTimedOut(Output),
+		Timeout(Output),
 		StdoutLimitExceeded,
 		StderrLimitExceeded,
 	]
@@ -290,7 +290,7 @@ Cmd := {
 		if result.err == 0 {
 			Ok(output)
 		} else if result.err == run_err_timed_out {
-			Err(CommandTimedOut(output))
+			Err(Timeout(output))
 		} else {
 			Err(run_error(result.err))
 		}
@@ -332,7 +332,7 @@ run_err_busy = 3
 
 ## Decode the host's run-error code.
 ##
-## `CommandTimedOut` is absent because it carries a payload only `run!` holds;
+## `Timeout` is absent because it carries a payload only `run!` holds;
 ## `run!` names it before asking here. Anything unrecognized is `SpawnFailed`,
 ## the code for a child that could not be started for a reason with no better
 ## name.

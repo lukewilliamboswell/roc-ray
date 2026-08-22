@@ -51,6 +51,9 @@ Capture := [].{
 	Quality : RrtCapture.Quality
 
 	## A validated recording request. Update it through its receivers.
+	##
+	## Declared in the `roc-ray-types` package's `Capture` and re-exported here,
+	## which is also where its receivers are documented.
 	Recording : RrtCapture.Recording
 
 	## Live recording state, sampled onto every `App.Input` as `input.capture`.
@@ -300,11 +303,12 @@ Capture := [].{
 		}
 	}
 
-	## Most RGBA bytes one `read_region!` may deliver: 128 MiB, or 8192 by 4096
-	## pixels.
+	## Most RGBA bytes one `read_region!` may deliver: 128 mebibytes, which is
+	## 8192 by 4096 pixels.
 	##
-	## The same budget the still exports in `screenshot_texture!` draw on, and
-	## for the same reason: each holds one RGBA image in host memory at a time.
+	## `screenshot_texture!` draws on the same budget, for the same reason: each
+	## holds one whole RGBA image in host memory while it works, so the two
+	## cannot both be given the whole of it.
 	max_readback_bytes : U64
 	max_readback_bytes = 128 * 1024 * 1024
 
@@ -343,8 +347,8 @@ Capture := [].{
 
 	## Finish the current recording and write its file.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`, where an
-	## encode and a file write would land in the middle of drawing a frame.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`. An encode and
+	## a file write would otherwise land in the middle of drawing a frame.
 	##
 	## Stopping while idle does nothing. The next input reports the frame count
 	## and file size as `Finished`.

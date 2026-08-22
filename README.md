@@ -68,6 +68,13 @@ purpose, or from a task, where it parks that task and the frame keeps going.
 Break one and the app stops immediately with a message naming the effect, the
 phase it was called from, and where it belongs.
 
+Two effects sit outside those rules, and each says so on its own docs page.
+`Capture.screenshot!` runs only from a task: it waits for a frame that has to
+be drawn first, and `init!` runs before the frame loop has gone around once.
+`Assets.load_texture!` loads rather than waits -- it reads the file on the
+calling thread instead of parking -- so it is legal in `update!`, where a large
+load costs that frame. Load textures in `init!`.
+
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
@@ -194,7 +201,7 @@ App.init(
 ```
 
 `Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
-where the app decides when to capture. `Mouse.set_source` drives a
+where the app decides when to capture. `Mouse.set_source!` drives a
 scripted pointer through the same input path a real one uses, so a recorded walk
 through a UI exercises the app's ordinary hover and click handling.
 

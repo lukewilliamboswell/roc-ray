@@ -1,13 +1,15 @@
-## Keys module - keyboard state and key constants.
+## Keyboard state and the key constants that name it.
 ##
-## Key state encoding uses one byte per key:
-## - bit 0 = currently held
-## - bit 1 = pressed during the input interval
-## - bit 2 = released during the input interval
+## A key is one byte of state in the snapshot `App.Input` carries. Bit 0 is
+## whether it is currently held, bit 1 whether it was pressed during the input
+## interval, and bit 2 whether it was released during it. Read it through
+## `Devices.Snapshot`'s receivers -- `input.devices.key_down(KeyW)`,
+## `key_pressed`, `key_released` -- rather than through the bytes.
 ##
 ## The host stores fixed-size state lists with one byte per raylib key code
-## 0-348. Named keys cover the full raylib keyboard-key enum. Use Raw(code)
-## through `from_code` when you need a backend-specific escape hatch.
+## `0` through `348`. The named keys cover the whole raylib keyboard enum;
+## `Raw(code)` through `from_code` is the backend-specific escape hatch for a
+## key with no name here.
 Keys := [].{
 
 	## Named raylib keyboard keys plus a validated backend-specific escape hatch.
@@ -123,11 +125,15 @@ Keys := [].{
 		KeyKpEqual,
 		Raw(U64),
 	].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
 	ExitKey := [NoExitKey, ExitKey(Key)].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 

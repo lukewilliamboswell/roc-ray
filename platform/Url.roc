@@ -1,17 +1,33 @@
 ## A validated HTTP or HTTPS URL implemented entirely in Roc.
 ##
+## `Http.send!` and `Http.get!` take a `Url` rather than a `Str`, so a URL is
+## checked once, before any host effect runs, instead of at the socket.
+##
+## A URL written out in the source needs no call at all: Roc reaches for
+## `from_quote` wherever a quoted literal is expected to have type `Url`, so
+## the literal is validated at compile time and a bad one is a compile error.
+##
+## ```roc
+## body = Http.get_utf8!("http://127.0.0.1:8000/data.json")?
+## ```
+##
+## A URL built at runtime goes through `parse`, which answers a `ParseErr`.
+## `resolve` follows a relative reference against a base URL, which is what a
+## link found in a fetched document needs, and `to_str` turns any of them back
+## into text.
+##
+## Parsing is deliberately stricter than a browser's. Hosts must be ASCII DNS
+## names, dotted-decimal IPv4 addresses, or bracketed IPv6 addresses made from
+## hexadecimal groups with optional `::` elision. IPv4-in-IPv6 and Unicode
+## domain names are unsupported, and inputs a browser would repair -- missing
+## authority slashes, backslashes -- are rejected rather than fixed.
+##
 ## Vendored verbatim from `roc-lang/basic-cli`'s `platform/Url.roc`, which is
 ## published under the same Universal Permissive License 1.0 this repository
 ## uses. The shared `roc-lang/http` package supplies `Request`, `Response`,
-## `Method` and `Header` but deliberately not a URL parser, and `Http.send!`
-## needs one to validate a URI before any host effect runs. Keeping this a
+## `Method` and `Header` but deliberately not a URL parser. Keeping this a
 ## byte-for-byte copy means the parser's behaviour, its error set, and its 67
 ## inline tests can be re-synced from upstream by replacing the file.
-##
-## This is deliberately stricter than a browser parser. Hosts must be ASCII
-## DNS names, dotted-decimal IPv4 addresses, or bracketed IPv6 addresses made
-## from hexadecimal groups with optional :: elision. IPv4-in-IPv6 and Unicode
-## domain names are intentionally unsupported.
 Url :: {
 	scheme : [Http, Https],
 	host : Str,

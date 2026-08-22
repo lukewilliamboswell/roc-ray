@@ -1,6 +1,6 @@
 ## What the window looked like this cycle, and how to change it.
 ##
-## The size here is the *logical* drawing size: it matches mouse coordinates and
+## The size here is the logical drawing size: it matches mouse coordinates and
 ## raylib drawing units, and on a HiDPI display it is smaller than the actual
 ## framebuffer in pixels. `scale!` is the factor between the two, and it is what
 ## makes the resolution of a `Capture` explainable: a capture is taken from the
@@ -9,12 +9,27 @@
 ##
 ## Use `focused` and `minimized` to pause input or skip expensive work while the
 ## window is inactive.
+##
+## The two verbs mean different things. A `suggest_*` call asks the window
+## manager for something it may decline, reshape, or apply later --
+## `suggest_size!`, `suggest_min_size!`, `suggest_position!`,
+## `suggest_monitor!` -- so nothing here reports what happened and the next
+## `Snapshot` is the authoritative answer. A `set_*` call changes something the
+## host itself owns -- `set_target_fps!`, `set_clipboard_text!` -- and takes
+## effect as asked.
 import rrt.Window as RrtWindow
 import HostHost
 
 Window := [].{
 
 	## Window geometry and visibility sampled once for this cycle.
+	##
+	## `size` is the logical drawing size, `focused` says whether the window has
+	## keyboard focus, and `minimized` says whether it is minimized. A minimized
+	## window still runs the frame loop.
+	##
+	## Declared in the `roc-ray-types` package's `Window` and re-exported here;
+	## `App.Input` carries one as `input.window`.
 	Snapshot : RrtWindow.Snapshot
 
 	## Suggest a new logical window size to the window manager.
@@ -59,12 +74,12 @@ Window := [].{
 
 	## Read the system clipboard as text.
 	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`. The windowing
+	## backend only answers on the thread that owns the window, and the read is a
+	## pointer copy rather than I/O, so this does not wait.
+	##
 	## Content that is not text, or is larger than the host will copy into a
 	## `Str`, is refused rather than truncated.
-	##
-	## The windowing backend only answers on the thread that owns the window,
-	## and the read is a pointer copy rather than I/O, so this does not wait:
-	## it is legal in `init!`, `update!`, and tasks, and refused in `render!`.
 	read_clipboard! : () => Try(Str, ClipboardReadError)
 	read_clipboard! = || {
 		result = HostHost.read_clipboard!()
@@ -94,12 +109,12 @@ Window := [].{
 
 	## How many framebuffer pixels one logical unit is, per axis.
 	##
-	## `1` on an ordinary display and `2` on a doubled HiDPI one; the two axes
-	## can differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to
-	## get the pixel resolution a `Capture` records at.
+	## Legal in any callback, `render!` included. Reading a factor the backend
+	## already holds costs nothing and allocates nothing.
 	##
-	## Reading a factor the backend already holds costs nothing and allocates
-	## nothing, so this is legal in any callback, `render!` included.
+	## `1` on an ordinary display and `2` on a doubled HiDPI one; the two axes can
+	## differ. Multiply a `Snapshot` size or a `Draw.FrameSize` by this to get the
+	## pixel resolution a `Capture` records at.
 	scale! : () => { x : F32, y : F32 }
 	scale! = || HostHost.window_scale_dpi!()
 

@@ -6,8 +6,34 @@
 ## in `render!`; every `draw_*!` here takes a `Draw.Frame` and is legal in
 ## `render!` only.
 ##
+## ```roc
+## raw = Tilemap.load_tmx!("assets/level.tmx")?
+## tilemap = Tilemap.from_raw(raw)
+##     .with_origin({ x: 0, y: 0 })
+##     .with_tileset_texture(1, tiles)
+##     .build()?
+## ```
+##
+## ```roc
+## tilemap.draw_all!(frame)
+## ```
+##
+## The builder is where a parsed map becomes a drawable one. Tiled records a
+## tileset by its image path; `with_tileset_texture` says which loaded texture
+## each first GID means, and `build` refuses a map with a tileset left
+## unbound rather than drawing it blank. `layer_role` and `object_role` attach
+## the app's own meaning -- which layers are solid, which objects are spawns --
+## so the rest of the app asks about roles instead of about layer names.
+##
 ## Grid queries and coordinate conversions are pure, so an app can use them
 ## from `update!` for collision and picking.
+##
+## Signatures here name `TilemapRawMap`, `TilemapRawObject`, `TilemapBuilder`
+## and their siblings. Those are module-private nominals, one per public alias;
+## the names to write are the short ones on this page -- `Tilemap.RawMap`,
+## `Tilemap.RawObject`, `Tilemap.Builder`. A nominal has to be declared outside
+## the module object to be aliased inside it, which is why the two spellings
+## exist.
 import Assets
 import Camera
 import Draw
@@ -34,6 +60,8 @@ TilemapTextureBinding : {
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -42,6 +70,8 @@ TilemapLayerRole := [Drawn, Solid, Hidden].{
 TilemapDrawRole : [Drawn, Solid]
 
 TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -189,16 +219,25 @@ Tilemap :: {
 
 	## Decoded Tiled tile-transform flags.
 	Flip : TilemapFlip
+
+	## A tileset with its texture binding resolved, as `build` left it.
 	ResolvedTileset : TilemapResolvedTileset
 
-	## Application-level behavior assigned to a named layer.
+	## Application-level behavior assigned to a named layer: `Drawn`, `Solid`,
+	## or `Hidden`.
 	LayerRole : TilemapLayerRole
+
+	## The two layer roles ordinary role-based drawing accepts. `Hidden` layers
+	## are drawn only by name.
 	DrawRole : TilemapDrawRole
 
 	## Application-level behavior assigned to an object name or type.
 	ObjectRole : TilemapObjectRole
 
-	## Immutable tilemap configuration builder.
+	## Immutable tilemap configuration builder, from `from_raw`.
+	##
+	## `TilemapBuilder` in the signature is the module-private nominal this
+	## aliases; `Tilemap.Builder` is the name to write.
 	Builder : TilemapBuilder
 
 	## Empty parsed map value, useful as a deliberate fallback.
@@ -224,7 +263,7 @@ Tilemap :: {
 	##
 	## It is also the resource-free value for pure tests, and needs no separate
 	## `stub`: a tilemap holds its textures in `render_tilesets`, and this one
-	## has none. Put it in a model to reach the app's real `update` from an
+	## has none. Put it in a model to reach the app's real `update!` from an
 	## `expect`. Drawing it draws nothing, which is what having no layers means.
 	empty : Tilemap
 	empty = {
@@ -491,8 +530,9 @@ Tilemap :: {
 		}
 	}
 
-	## Draw one named visible layer without camera culling. Legal in `render!`
-	## only, as every `draw_*!` in this module is.
+	## Draw one named visible layer without camera culling.
+	##
+	## Legal in `render!` only. So is every other `draw_*!` in this module.
 	draw_layer! : Tilemap, Draw.Frame, Str => {}
 	draw_layer! = |map, frame, layer_name| {
 		match find_layer_index(map.raw.layers, layer_name) {
@@ -504,6 +544,8 @@ Tilemap :: {
 	## Draw only cells intersecting `world_view`. This is the preferred hot path
 	## for maps larger than the viewport. One hosted effect draws the complete
 	## selected range; no per-tile effect or temporary List is created.
+	##
+	## Legal in `render!` only.
 	draw_layer_in! : Tilemap, Draw.Frame, Str, Math.Rect => {}
 	draw_layer_in! = |map, frame, layer_name, world_view| {
 		match find_layer_index(map.raw.layers, layer_name) {
@@ -517,10 +559,14 @@ Tilemap :: {
 	}
 
 	## Draw every visible layer configured with the `Drawn` role.
+	##
+	## Legal in `render!` only.
 	draw_layers! : Tilemap, Draw.Frame, TilemapDrawRole => {}
 	draw_layers! = |map, frame, role| draw_selection!(map, frame, selector_role, draw_role_code(role))
 
 	## Draw visible configured layers culled to a world-space viewport.
+	##
+	## Legal in `render!` only.
 	draw_layers_in! : Tilemap, Draw.Frame, TilemapDrawRole, Math.Rect => {}
 	draw_layers_in! = |map, frame, role, world_view| {
 		match Tilemap.cell_range_for_world_rect(map, world_view) {
@@ -530,10 +576,14 @@ Tilemap :: {
 	}
 
 	## Draw every visible tile layer, regardless of configured role.
+	##
+	## Legal in `render!` only.
 	draw_all! : Tilemap, Draw.Frame => {}
 	draw_all! = |map, frame| draw_selection!(map, frame, selector_all, 0)
 
 	## Draw every visible tile layer culled to a world-space viewport.
+	##
+	## Legal in `render!` only.
 	draw_all_in! : Tilemap, Draw.Frame, Math.Rect => {}
 	draw_all_in! = |map, frame, world_view| {
 		match Tilemap.cell_range_for_world_rect(map, world_view) {
@@ -549,6 +599,8 @@ Tilemap :: {
 	viewport_for_camera = |camera, screen_size| camera.viewport(screen_size)
 
 	## Convenience form of `draw_all_in!` for camera-driven scenes.
+	##
+	## Legal in `render!` only.
 	draw_all_for_camera! : Tilemap, Draw.Frame, Camera.Camera2D, Math.Vec2 => {}
 	draw_all_for_camera! = |map, frame, camera, screen_size| map.draw_all_in!(frame, camera.viewport(screen_size))
 

@@ -156,13 +156,13 @@ judge = |current, message, expectation|
 		}
 
 ## Name a send failure without depending on how the platform renders it.
-describe : [InvalidUrl(_), HttpErr([Timeout, NetworkError, BadBody, Other(List(U8))])] -> Str
+describe : [InvalidUrl(_), HttpErr([Timeout, NetworkError, MalformedResponse, Other(List(U8))])] -> Str
 describe = |err|
 	match err {
 		InvalidUrl(_) => "the URL was rejected before any host effect ran"
 		HttpErr(Timeout) => "the request timed out"
 		HttpErr(NetworkError) => "the request failed at the network layer"
-		HttpErr(BadBody) => "the reply was not a well-formed HTTP response"
+		HttpErr(MalformedResponse) => "the reply was not a well-formed HTTP response"
 		HttpErr(Other(bytes)) => Str.from_utf8(bytes) ?? "the host reported an unprintable failure"
 	}
 

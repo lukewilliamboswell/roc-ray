@@ -4,30 +4,40 @@
 ## animation state. Everything here but `Sprite.draw!` is pure, so an app can
 ## advance animation and compute frame rectangles in `update!`; the draw itself
 ## takes a `Draw.Frame` and is legal in `render!` only.
+##
+## Each transform is a noun named for what it sets: `sprite.pos(p)`,
+## `sprite.scale(2)`, `sprite.tint(Color.red)`. A `with_*` function of the same
+## name exists for each and is deprecated; it calls the receiver and is kept so
+## older code keeps building.
 import Assets
 import Color
 import Draw
 import Math
 
 Sprite := {
+
+	## The texture the sprite samples.
 	texture : Assets.Texture,
 
-	## Return a copy using a new texture source rectangle.
+	## The rectangle of the texture to sample: one spritesheet cell, or the
+	## whole image.
 	source : Math.Rect,
 
-	## Return a copy at a new destination position.
+	## Where the sprite's origin lands on the surface.
 	pos : Math.Vec2,
 
-	## Return a copy with a new rotation and scaling origin.
+	## The point within the scaled sprite that `pos` names, and that `rotation`
+	## turns around. `{ 0, 0 }` is its top-left corner.
 	origin : Math.Vec2,
 
-	## Return a copy with rotation in degrees.
+	## Clockwise rotation in degrees, about `origin`.
 	rotation : F32,
 
-	## Return a copy with uniform scale.
+	## Horizontal and vertical scale applied to `source`'s size.
 	scale : Math.Vec2,
 
-	## Return a copy with a multiplicative tint.
+	## A colour the sampled pixels are multiplied by. `Color.white` leaves them
+	## as they are.
 	tint : Color.Rgba,
 }.{
 
@@ -110,35 +120,35 @@ Sprite := {
 		tint: Color.white,
 	}
 
-	## Compatibility function for the `source` receiver method.
+	## Deprecated: use the `source` receiver.
 	with_source : Sprite, Math.Rect -> Sprite
 	with_source = |sprite, source_rect| sprite.source(source_rect)
 
-	## Compatibility function for the `pos` receiver method.
+	## Deprecated: use the `pos` receiver.
 	with_pos : Sprite, Math.Vec2 -> Sprite
 	with_pos = |sprite, new_pos| sprite.pos(new_pos)
 
-	## Compatibility function for the `origin` receiver method.
+	## Deprecated: use the `origin` receiver.
 	with_origin : Sprite, Math.Vec2 -> Sprite
 	with_origin = |sprite, new_origin| sprite.origin(new_origin)
 
-	## Compatibility function for the `centered` receiver method.
+	## Deprecated: use the `centered` receiver.
 	with_origin_center : Sprite -> Sprite
 	with_origin_center = |sprite| sprite.centered()
 
-	## Compatibility function for the `rotation` receiver method.
+	## Deprecated: use the `rotation` receiver.
 	with_rotation : Sprite, F32 -> Sprite
 	with_rotation = |sprite, angle| sprite.rotation(angle)
 
-	## Compatibility function for the `scale_xy` receiver method.
+	## Deprecated: use the `scale_xy` receiver.
 	with_scale_xy : Sprite, Math.Vec2 -> Sprite
 	with_scale_xy = |sprite, new_scale| sprite.scale_xy(new_scale)
 
-	## Compatibility function for the `scale` receiver method.
+	## Deprecated: use the `scale` receiver.
 	with_scale : Sprite, F32 -> Sprite
 	with_scale = |sprite, amount| sprite.scale(amount)
 
-	## Compatibility function for the `tint` receiver method.
+	## Deprecated: use the `tint` receiver.
 	with_tint : Sprite, Color.Rgba -> Sprite
 	with_tint = |sprite, new_tint| sprite.tint(new_tint)
 

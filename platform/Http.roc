@@ -11,13 +11,18 @@
 ##
 ## ```roc
 ## app [Model, program] {
-##     rr: platform "https://.../roc-ray/platform.tar.zst",
+##     rr: platform "../../platform/main.roc",
 ##     http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 ## }
 ##
 ## import rr.Http
 ## import http.Request
 ## ```
+##
+## The platform entry above is the path the repository's own examples use;
+## outside the checkout it is the `platform` declaration from the latest
+## release. The `http` line is the version this platform is built against, and
+## an app that names `Request` or `Response` must declare that same one.
 ##
 ## `Http.get!` and `Http.get_utf8!` take a URL and hand back decoded data, so
 ## an app that uses only those needs no package dependency of its own.
@@ -67,6 +72,13 @@
 ## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
 ## carrying that status; only a failure to complete the exchange is `HttpErr`.
 ##
+## `get!` and `send_json!` have a `_` where the decoded or encoded type would
+## be. That is static dispatch: the JSON parser and encoder are chosen from the
+## type the call site expects, so the same `get!` answers a `List(Reading)` in
+## one place and a `{ name : Str }` in another, and there is no decoder to pass
+## in. Annotate the binding, or the field the value goes into, and the
+## inference does the rest.
+##
 ## TLS: `https` URLs are served by Zig's `std.crypto.tls` against the operating
 ## system's certificate store -- on Linux the usual `/etc/ssl` bundle. Nothing
 ## here configures a custom certificate authority or turns verification off. A
@@ -89,12 +101,12 @@ Http := [].{
 	## `Timeout` is the deadline expiring before the exchange finished.
 	## `NetworkError` is a connection that could not be made or did not survive
 	## the exchange -- a refused port, a dropped socket, an unreachable host.
-	## `BadBody` is a reply that arrived but was not a well-formed HTTP
-	## response. `Other` carries the host's own description as UTF-8 bytes: a
+	## `MalformedResponse` is a reply that arrived but was not a well-formed
+	## HTTP response. `Other` carries the host's own description as UTF-8 bytes: a
 	## name that would not resolve, a body over `max_response_bytes`, a
 	## certificate store that could not be loaded, or a method this platform
 	## cannot send.
-	TransportErr : [Timeout, NetworkError, BadBody, Other(List(U8))]
+	TransportErr : [Timeout, NetworkError, MalformedResponse, Other(List(U8))]
 
 	## Per-send limits.
 	##
@@ -107,6 +119,10 @@ Http := [].{
 	## no cap. A response that would exceed it fails with `Other` rather than
 	## being truncated, because a truncated body silently decodes into wrong
 	## data.
+	##
+	## A plain record; build one with
+	## `{ ..Http.default_config, timeout_ms: 5_000 }` rather than a chain of
+	## `with_*` calls.
 	Config : {
 		timeout_ms : U64,
 		max_response_bytes : U64,
@@ -156,6 +172,9 @@ Http := [].{
 	## slow = { ..Http.default_config, timeout_ms: 2_000 }
 	## response = Http.send_with!(slow, request)?
 	## ```
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+	## task; refused in `update!` and `render!`.
 	send_with! : Config, Request => Try(Response, [InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
 	send_with! = |config, request| {
 		check_method(Request.method(request)) ? HttpErr
@@ -186,6 +205,9 @@ Http := [].{
 	}
 
 	## Encode a value as JSON, attach it to the request body, and send it.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+	## task; refused in `update!` and `render!`.
 	send_json! : Request, _ => Try(Response, [JsonErr(_), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
 	send_json! = |request, value| {
 		json_request = with_json_body(request, value)?
@@ -196,16 +218,21 @@ Http := [].{
 	## Perform an HTTP GET and decode the response body as a UTF-8 `Str`.
 	##
 	## The argument is a validated `Url`. Quoted literals work through
-	## `Url.from_quote`, so a URL written out in the source is checked at
-	## compile time; a string built at runtime goes through `Url.parse`.
+	## `Url.from_quote`, so a URL written out in the source is checked at compile
+	## time; a string built at runtime goes through `Url.parse`.
 	##
-	## A body that is not valid UTF-8 answers `BadBody`. The status is not
-	## inspected, so an error page comes back as the `Str` the server sent.
-	## Same phases as `send!`.
+	## A body that is not valid UTF-8 answers `BadBody(Str)`. That is this
+	## function's own decoding failure, and is not the transport's
+	## `MalformedResponse`: the reply arrived and was a well-formed HTTP
+	## response, it just is not text. The status is not inspected, so an error
+	## page comes back as the `Str` the server sent.
 	##
 	## ```roc
 	## hello_str = Http.get_utf8!("http://localhost:8000")?
 	## ```
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+	## task; refused in `update!` and `render!`.
 	get_utf8! : Url.Url => Try(Str, [BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), ..])
 	get_utf8! = |url| {
 		response = send!(Request.from_method(GET).with_uri(Url.to_str(url)))?
@@ -229,13 +256,16 @@ Http := [].{
 	## Perform an HTTP GET and decode the response body as JSON.
 	##
 	## The expected result type selects the parser through static dispatch. The
-	## status is not inspected, so a JSON error page decodes if it happens to
-	## fit the expected shape. Same phases as `send!`.
+	## status is not inspected, so a JSON error page decodes if it happens to fit
+	## the expected shape. Same phases as `send!`.
 	##
 	## ```roc
 	## payload : Try({ foo : Str }, _)
 	## payload = Http.get!("http://localhost:8000")
 	## ```
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks the
+	## task; refused in `update!` and `render!`.
 	get! : Url.Url => Try(_, [BadBody(Str), InvalidUrl(Url.ParseErr), HttpErr(TransportErr), JsonErr(_), ..])
 	get! = |url| {
 		response = send!(Request.from_method(GET).with_uri(Url.to_str(url)))?
@@ -315,7 +345,7 @@ to_transport_err = |raw|
 	} else if raw.err == 2 {
 		NetworkError
 	} else if raw.err == 3 {
-		BadBody
+		MalformedResponse
 	} else {
 		Other(Str.to_utf8(raw.err_message))
 	}
@@ -374,7 +404,7 @@ expect to_host_timeout(TimeoutMilliseconds(250), 30_000) == 250
 
 expect to_transport_err({ err: 1, err_message: "", status: 0, headers: [], body: [] }) == Timeout
 expect to_transport_err({ err: 2, err_message: "", status: 0, headers: [], body: [] }) == NetworkError
-expect to_transport_err({ err: 3, err_message: "", status: 0, headers: [], body: [] }) == BadBody
+expect to_transport_err({ err: 3, err_message: "", status: 0, headers: [], body: [] }) == MalformedResponse
 
 # An unrecognised code still reports the host's message rather than crashing.
 expect to_transport_err({ err: 99, err_message: "boom", status: 0, headers: [], body: [] }) == Other(Str.to_utf8("boom"))

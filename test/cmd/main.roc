@@ -110,7 +110,7 @@ check! = || {
 	# out the thirty seconds the command asked for.
 	timed_out =
 		match Cmd.run!(Cmd.new(shell).with_args(sleep_args).with_timeout_ms(timeout_ms)) {
-			Err(CommandTimedOut(_)) => Bool.True
+			Err(Timeout(_)) => Bool.True
 			Ok(_) => Bool.False
 			Err(_) => Bool.False
 		}

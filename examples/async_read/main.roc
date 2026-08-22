@@ -12,7 +12,8 @@ import rr.Text
 ## Both reads happen inside tasks. `update!` spawns them and returns
 ## immediately; each task parks on the host's event loop while the frame loop
 ## keeps drawing, and its return value arrives as a typed `Msg` on a later
-## `input.messages`. No request IDs or completion filtering leak into the app.
+## `input.messages`. Neither read needs an id or a completion filter: each has
+## its own `Msg` variant, so two answers landing on one cycle stay apart.
 ##
 ## Inside a task the read is an ordinary call that returns its answer, so a
 ## multi-step load is straight-line code with `?` rather than a state machine
@@ -116,12 +117,27 @@ expect match bytes_state(Ok([1, 2, 3])) {
 	_ => Bool.False
 }
 
+## `TooLarge` is the one error the two reads do not share a meaning for: a Str
+## has an inline limit that a `List(U8)` does not, so the same file can be too
+## large for one and fine for the other. Each says which limit it hit.
+expect string_state(Err(TooLarge)) == Failed("too large to copy into a Str")
+expect bytes_state(Err(TooLarge)) == Failed("larger than the host will read")
+
+## Each read has its own `Msg` variant, so two answers on one cycle land in two
+## fields rather than needing to be told apart.
+expect
+	apply_message(
+		apply_message({ small: Waiting, large: Waiting }, SmallReadFinished(Ok("hello"))),
+		BytesReadFinished(Ok([1, 2])),
+	)
+		== { small: Loaded(5), large: Held([1, 2]) }
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
-	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("ReadSmallFile README.md: ", describe_string(model.small)), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
-	frame.text_at!({ pos: { x: 40, y: 120 }, text: Str.concat("ReadFile generated ABI: ", describe_bytes(model.large)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
+	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("read_text README.md: ", describe_string(model.small)), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
+	frame.text_at!({ pos: { x: 40, y: 120 }, text: Str.concat("read_bytes generated ABI: ", describe_bytes(model.large)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
 	frame.circle!({ center: { x: 400 + 220 * F32.cos(model.elapsed * 2), y: 300 + 120 * F32.sin(model.elapsed * 2) }, radius: 26, style: Draw.filled(Color.from_hex_rgb(0x5e81ac)) })
 	Ok({})
 }

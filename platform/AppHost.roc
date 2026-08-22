@@ -1,30 +1,13 @@
-## Private request/response transport shared by the Roc adapter and native host.
+## Private host-boundary records shared by the Roc adapter and native host.
 ##
 ## This module is intentionally absent from the platform's `exposes` list.
-## Applications use `App.Request` and receive mapped messages through
-## `App.Input`; raw records and correlation tickets stay below that boundary.
+## Applications see `Capture.Status`; the flat record it is decoded from stays
+## below that boundary.
 AppHost := [].{
 
-	SubmittedRequest(msg) : {
-		kind : U8,
-		path : Str,
-		millis : U64,
-		deliver : Box(RawResponse -> Box(msg)),
-	}
-
-	RawResponse : {
-		kind : U8,
-		ticket : U64,
-		err : U8,
-		contents : Str,
-		bytes : List(U8),
-	}
-
-	PendingResponse(msg) : {
-		raw : RawResponse,
-		deliver : Box(RawResponse -> Box(msg)),
-	}
-
+	## One cycle's sampled recording state. Unions do not cross the host
+	## boundary, so this arrives flat and `AppTransport.capture_status` turns it
+	## into the public `Capture.Status`.
 	RawCaptureStatus : {
 		status : U8,
 		err : U8,

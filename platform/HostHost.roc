@@ -9,21 +9,56 @@ HostHost := [].{
 		for_host = Startup.({})
 	}
 
+	## A finished startup file read. `contents` is the file when `ok` is true;
+	## `err` is `1` for a missing file and anything else for a failed read.
 	ReadFileResult : {
 		ok : Bool,
 		err : U8,
 		contents : Str,
 	}
 
+	## Ask the host to stop after `init!` returns.
 	exit! : I32 => {}
+
+	## The launcher's argv, with the host's own `--host-*` switches removed.
 	args! : () => List(Str)
+
+	## The clipboard as text, without distinguishing why it was not available.
+	## `read_clipboard!` is the form that names the refusals.
 	get_clipboard_text! : () => Try(Str, [Unavailable])
+
+	## A clipboard read with the refusal codes `Window.ClipboardReadError`
+	## names. `contents` is the clipboard when `err` is `0`.
+	ClipboardResult : {
+		err : U8,
+		contents : Str,
+	}
+
+	read_clipboard! : () => ClipboardResult
+
+	## An environment variable, or `NotFound` when it is not set.
 	read_env! : Str => Try(Str, [NotFound])
+
+	## Read a whole UTF-8 file, blocking the caller.
 	read_file! : Str => ReadFileResult
+
+	## Startup entropy in the inclusive range `[min, max]`.
 	random_i32! : I32, I32 => I32
+
+	## Replace the clipboard with UTF-8 text.
 	set_clipboard_text! : Str => {}
+
+	## Set the raylib exit-key code; `0` disables the behaviour.
 	set_exit_key! : I32 => {}
+
+	## Ask the window manager for a logical window size. `NotSupported` is a
+	## target whose windows cannot be resized, not a refused request.
 	suggest_window_size! : { width : I32, height : I32 } => Try({}, [NotSupported])
+
+	## Set raylib's CPU-side frame-rate cap; at or below zero is uncapped.
 	set_target_fps! : I32 => {}
+
+	## Set the smallest window size the user can drag down to. `0` in an axis
+	## leaves it unconstrained.
 	suggest_window_min_size! : { width : I32, height : I32 } => {}
 }

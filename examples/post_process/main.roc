@@ -6,19 +6,28 @@ import rr.Color
 import rr.Draw
 import rr.Math
 
+## Render a scene to an offscreen texture, then draw that texture through a
+## fragment shader.
+##
+## Both are scopes: `with_render_texture!` redirects the draws inside it, and
+## `with_shader!` applies to the draws inside that. `size!` answers for whatever
+## surface the scope is drawing to, so the same call gives the target's size
+## inside and the window's size outside. The shader's uniform location is
+## resolved once in `init!` and written in `render!`, immediately before the
+## draw it applies to.
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
 
 	## The uniform's location, resolved once, and the value to write into it.
-	## The value lives in the model because `update` computes it; the write
+	## The value lives in the model because `update!` computes it; the write
 	## happens in `render!` because a uniform is a statement about the draws
 	## that follow it, and only `render!` knows where those are.
 	time_uniform : Draw.F32Uniform,
 	seconds : F32,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
@@ -35,15 +44,16 @@ init! = App.init(
 	},
 )
 
+## Nothing here waits, so there is no task to spawn and no message to fold in.
 ## The shader clock is the only state this example advances, and the input
-## carries it, so `update` reads it off the input and stores it. Writing it into
+## carries it, so `update!` reads it off the input and stores it. Writing it into
 ## the shader is `render!`'s job: the uniform only means anything relative to
 ## the draws it precedes.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input|
-	App.next({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input|
+	Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
@@ -84,7 +94,7 @@ render! = |model, frame| {
 		model.shader,
 		|shader_frame| {
 			# Inside the scope and before the draw it applies to, which is the
-			# whole reason this is here rather than in an command list.
+			# whole reason this is here rather than in `update!`.
 			model.time_uniform.set!(model.seconds)
 			shader_frame.texture!(target_draw)
 			Ok({})

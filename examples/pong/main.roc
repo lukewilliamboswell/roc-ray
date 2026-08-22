@@ -8,15 +8,14 @@ import rr.Audio
 import rr.App
 import rr.Math
 
-# Pong v2 - first to 5 wins, then SPACE to restart.
-#
-# Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
-# Motion is in pixels/second scaled by the input's elapsed seconds (frame-rate
-# independent).
-# Serves leave at a random angle. When someone reaches `win_score`, the game
-# freezes on a win screen until SPACE is pressed (edge-detected, so holding it
-# doesn't instantly restart again).
-
+## Two-paddle Pong: W and S drive the left paddle, an AI tracks the ball on the
+## right, first to five wins and SPACE serves a new match.
+##
+## Everything moves in pixels per second scaled by the cycle's elapsed seconds,
+## so the game plays the same at any frame rate. The step is pure and returns
+## the sounds the frame made; `update!` plays them and checks for Escape. Serve
+## angles are drawn from a `Random.State` held in the model, so a run replays
+## exactly from its seed.
 Model : {
 	ball_x : F32,
 	ball_y : F32,
@@ -114,14 +113,14 @@ new_round = |model| {
 	}
 }
 
-# The commands for a sound that should only be heard when `cond` is true.
+# The playback for a sound that should only be heard when `cond` is true.
 #
 # An empty list is the no-op: nothing plays, and the caller can concatenate it
 # unconditionally instead of branching around it.
-play_if : Bool, Audio.Sound -> List(App.Command)
-play_if = |cond, sound| if cond [sound.play()] else []
+play_if : Bool, Audio.Sound -> List(Audio.Playback)
+play_if = |cond, sound| if cond [sound.playback()] else []
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
@@ -142,7 +141,7 @@ init! = App.init(
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 			font: Draw.default_font!(),
 			# Entropy is asked for once, here. From this point randomness is
-			# model state that `update` advances without an effect.
+			# model state that `update!` advances without an effect.
 			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
 		}
 
@@ -150,7 +149,7 @@ init! = App.init(
 	},
 )
 
-## Whether the match is over is a function of the scores, so both `update` and
+## Whether the match is over is a function of the scores, so both `update!` and
 ## `render!` ask rather than storing a flag that could drift out of step.
 game_over : Model -> Bool
 game_over = |model| model.left_score >= win_score or model.right_score >= win_score
@@ -158,26 +157,34 @@ game_over = |model| model.left_score >= win_score or model.right_score >= win_sc
 ## A frame's outcome: the model it produced, and the sounds it wants heard.
 ##
 ## Both steppers return this shape even when one of them can never make a sound,
-## so `update` joins them without caring which branch it took.
+## so `update!` joins them without caring which branch it took.
 Stepped : {
 	model : Model,
-	commands : List(App.Command),
+	sounds : List(Audio.Playback),
 }
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = program_input.time.elapsed_seconds
 
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
-
 	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
 
-	App.next(stepped.model).with_commands(List.concat(exit_commands, stepped.commands))
+	# The step is pure and says which sounds this frame made; playing them is
+	# the one effect here.
+	for playback in stepped.sounds {
+		playback.play!()
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(stepped.model)
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -198,7 +205,7 @@ render! = |model, frame| {
 step_game_over : Model, Devices.Snapshot -> Stepped
 step_game_over = |model, input| {
 	model: if input.key_pressed(KeySpace) new_round(model) else model,
-	commands: [],
+	sounds: [],
 }
 
 # --- Active play ---
@@ -274,12 +281,10 @@ step_playing = |model, input, dt| {
 		rng: serve.state,
 	}
 
-	# Sound effects for this frame's events, in the order they used to be played.
-	# The platform applies them before anything is drawn, so a paddle hit is
-	# still heard on the frame it happened.
+	# Sound effects for this frame's events, in the order they are played.
 	{
 		model: next,
-		commands: List.concat(
+		sounds: List.concat(
 			play_if(hit_left or hit_right, model.hit_sound),
 			List.concat(
 				play_if(hit_top or hit_bottom, model.wall_sound),
@@ -302,4 +307,52 @@ draw_field! = |frame, model| {
 	frame.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
 	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
 	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
+}
+
+## A model with no host resources behind it, so the steppers above can be
+## exercised from an `expect`. The stubs are a font that measures nothing and
+## sounds that play nothing, which is all a pure test asks of them.
+test_model : Model
+test_model = {
+	ball_x: screen_w * 0.5,
+	ball_y: screen_h * 0.5,
+	ball_vx: init_vx,
+	ball_vy: 0,
+	left_y: 250,
+	right_y: 250,
+	left_score: 0,
+	right_score: 0,
+	hit_sound: Audio.Sound.stub,
+	wall_sound: Audio.Sound.stub,
+	score_sound: Audio.Sound.stub,
+	font: Draw.Font.stub,
+	rng: Random.seed(1),
+}
+
+expect !game_over(test_model)
+expect game_over({ ..test_model, right_score: win_score })
+
+## The empty list is the no-op, so a caller can concatenate unconditionally.
+expect List.is_empty(play_if(Bool.False, Audio.Sound.stub))
+expect List.len(play_if(Bool.True, Audio.Sound.stub)) == 1
+
+## The top wall reflects the ball and asks for one sound.
+expect {
+	stepped = step_playing({ ..test_model, ball_y: ball_r, ball_vy: -100 }, Devices.none, 0.1)
+	stepped.model.ball_vy > 0 and List.len(stepped.sounds) == 1
+}
+
+## A ball past the right edge scores for the left player and re-serves from the
+## centre.
+expect {
+	stepped = step_playing({ ..test_model, ball_x: screen_w - 5 }, Devices.none, 0.1)
+	stepped.model.left_score == 1 and stepped.model.ball_x == screen_w * 0.5
+}
+
+## The win screen holds until SPACE, and SPACE starts a whole new match rather
+## than resuming the old one.
+expect {
+	finished = { ..test_model, left_score: win_score }
+	step_game_over(finished, Devices.none).model.left_score == win_score
+		and step_game_over(finished, Devices.none.with_key_pressed(KeySpace)).model.left_score == 0
 }

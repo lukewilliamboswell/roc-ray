@@ -10,14 +10,14 @@ import rr.Camera
 import rr.Color
 import rr.Draw
 import rr.Math
-import rr.RequestQueue
+import rr.Task
 import rr.Text
 
 ## Walk a source tree from the working directory and plot every line of it,
 ## while it is still being walked.
 ##
 ## Nothing about the dataset is known when this starts. There is no list of
-## files: `Files.list` reports one directory, the app decides which of its
+## files: `Files.list!` reports one directory, the app decides which of its
 ## entries are worth descending into or reading, and enqueues more work. Run
 ## from the root of this repository it finds around five hundred files and a
 ## quarter of a million lines, and it is drawing the first of them a few frames
@@ -30,26 +30,32 @@ import rr.Text
 ## Five things have to compose for that to work, and this example exists to show
 ## that they do.
 ##
-## **Discovery is incremental.** `Files.list` lists one directory and
+## **Discovery is incremental.** `Files.list!` lists one directory and
 ## never its children, so a walk is the app's own loop: a listing arrives, its
 ## subdirectories become more listings and its files become reads, and all of it
-## goes through the same queue as everything else. A host-side recursive walk
-## would be one unbounded operation that no queue could pace.
+## goes through the same backlog as everything else. A host-side recursive walk
+## would be one unbounded operation that no backlog could pace.
 ##
-## **Reads never block the frame.** `Files.read_bytes` is a `Request`: `update`
-## returns it and carries on, and the bytes come back later as an ordinary
-## `Msg`. The delivered `List(U8)` is a seamless view onto the buffer the host
-## already allocated, so no file bytes are copied to hand it over.
+## **Reads never block the frame.** Each listing and each read runs inside
+## `Task.spawn!`. The task parks on the host's event loop while the frame loop
+## keeps drawing, and its return value arrives later as an ordinary `Msg`. The
+## delivered `List(U8)` is a seamless view onto the buffer the host already
+## allocated, so no file bytes are copied to hand it over.
 ##
-## **Everything is paced.** The platform accepts 32 unanswered requests across the
-## whole app, and this walk would happily ask for five hundred. `RequestQueue`
-## holds the backlog -- listings and reads together -- and releases at most
-## `max_in_flight`. The queue depth in the masthead is the backlog being real.
+## **Everything is paced.** The host runs 32 tasks at once and queues the rest,
+## so nothing is ever refused -- but this walk would happily ask for five
+## hundred files at once and hold every one of them in memory. So the app keeps
+## its own backlog of `Work` and starts at most `max_in_flight` tasks from it.
+## `arrival_limit` bounds the other end, the bytes that have already been
+## delivered and not yet parsed, which no host limit knows anything about. Both
+## bounds are plain data rather than opaque handles, so the pacing is testable
+## with ordinary equality. The queue depth in the masthead is the backlog being
+## real.
 ##
-## **Parsing is incremental.** `update` is pure and runs inside the frame, so it
-## may not scan a 400 KB file in one go. `scan_chunk` walks a bounded window of
-## one file per cycle and answers with the points it found and where to resume.
-## The frame time does not depend on how big the files are, only on the budget.
+## **Parsing is incremental.** `update!` runs inside the frame, so it may not
+## scan a 400 KB file in one go. `scan_chunk` walks a bounded window of one file
+## per cycle and answers with the points it found and where to resume. The frame
+## time does not depend on how big the files are, only on the budget.
 ##
 ## **Drawing is batched and bounded.** Every point is one `Draw.TextureInstance`
 ## in a single list, drawn with one `frame.texture_instances!` call from one
@@ -74,9 +80,9 @@ import rr.Text
 ##   its summary describes, rather than as line-by-line detail.
 ##
 ## Scrolling to a lane whose points were dropped asks for the file again. That
-## is the point rather than a workaround: re-reading a file is a `Request` like any
-## other, it is paced like any other, and a figure that can throw away detail
-## and fetch it back on demand is one that does not care how large the tree is.
+## is the point rather than a workaround: a re-read is `Work` like any other, it
+## is paced like any other, and a figure that can throw away detail and fetch it
+## back on demand is one that does not care how large the tree is.
 ##
 ## Wheel scrolls, shift-wheel zooms at the pointer, drag pans, `R` returns to
 ## the live edge, `N` switches the x scale, `ESC` quits.
@@ -101,9 +107,12 @@ Model : {
 	## additively stop being a scatter of dots and become a density field.
 	glow : Draw.RenderTexture,
 
-	## The backlog of listings and reads. Only `max_in_flight` of these reach
-	## the host at once, however much the walk has discovered.
-	queue : RequestQueue.Queue(Msg),
+	## The backlog of listings and reads. Only `max_in_flight` of these are
+	## running as tasks at once, however much the walk has discovered.
+	pending : List(Work),
+
+	## How many spawned tasks have not yet delivered their message.
+	in_flight : U64,
 
 	## What the walk has found so far, and what it is still owed.
 	walk : Walk,
@@ -158,7 +167,7 @@ Model : {
 
 	## The logical window size this cycle. `render!` is handed the model and a
 	## frame but not the input, so laying the furniture out means sampling the
-	## size in `update`, where the input is.
+	## size in `update!`, where the input is.
 	screen : Math.Vec2,
 
 	## Wrapped animation clock for the sweep, in seconds.
@@ -205,7 +214,7 @@ XMode : [Normalised, True]
 
 ## What the directory walk has found and what it still owes.
 ##
-## Only counts: the work itself lives in the queue, and a walk that kept its own
+## Only counts: the work itself lives in `pending`, and a walk that kept its own
 ## copy of the backlog would be a second place for it to go wrong.
 Walk : {
 	dirs_found : U64,
@@ -312,7 +321,7 @@ Sample : {
 	lines : U64,
 }
 
-## How much of one file a single `update` is allowed to scan.
+## How much of one file a single `update!` is allowed to scan.
 Budget : {
 	max_lines : U64,
 	max_bytes : U64,
@@ -345,15 +354,21 @@ BestLine : {
 
 Msg : [
 
-	## The path travels with the result on purpose. A `Request` owns the callback
-	## that turns its one result into this message, and the platform consumed
-	## that callback to deliver it -- so a retry has to be built from scratch,
-	## and this message is all the app will have to build it from.
+	## The path travels with the result on purpose. The task that produced it is
+	## gone by the time the message arrives, so this message is all the app has
+	## to work from -- to attribute the result, and to rebuild the work if it
+	## ever needs asking for again.
 	Listed(Str, Try(List(Files.Entry), Files.ListError)),
 	FileRead(Str, [New, Lane(U64)], Try(List(U8), Files.ReadBytesError)),
 ]
 
-program = { init!, update, render! }
+## One unit of deferred work the walk has discovered but not yet started.
+##
+## Ordinary data, so the backlog can be compared, counted and tested without a
+## window. `start_work!` is the only place it becomes an effect.
+Work : [ListDir(Str), ReadFile(Str, [New, Lane(U64)])]
+
+program = { init!, update!, render! }
 
 # ---------------------------------------------------------------------------
 # The tree
@@ -465,11 +480,13 @@ join_path = |dir, name|
 walk_root : Str
 walk_root = "."
 
-listing_request : Str -> App.Request(Msg)
-listing_request = |path| Files.list(path, |result| Listed(path, result))
-
-read_request : Str, [New, Lane(U64)] -> App.Request(Msg)
-read_request = |path, slot| Files.read_bytes(path, |result| FileRead(path, slot, result))
+## Run one unit of work as a task. The only effectful line in the walk.
+start_work! : App.Input(Msg), Work => {}
+start_work! = |input, work|
+	match work {
+		ListDir(path) => Task.spawn!(input, || Listed(path, Files.list!(path)))
+		ReadFile(path, slot) => Task.spawn!(input, || FileRead(path, slot, Files.read_bytes!(path)))
+	}
 
 ## Turn one directory's entries into the work they imply.
 ##
@@ -488,13 +505,13 @@ enqueue_entries = |model, dir, entries|
 				Descend => {
 					..acc,
 					walk: { ..acc.walk, dirs_found: acc.walk.dirs_found + 1 },
-					queue: acc.queue.enqueue(listing_request(path)),
+					pending: List.append(acc.pending, ListDir(path)),
 				}
 
 				Read => {
 					..acc,
 					walk: { ..acc.walk, files_found: acc.walk.files_found + 1 },
-					queue: acc.queue.enqueue(read_request(path, New)),
+					pending: List.append(acc.pending, ReadFile(path, New)),
 				}
 
 				Ignore => { ..acc, walk: { ..acc.walk, files_skipped: acc.walk.files_skipped + 1 } }
@@ -551,15 +568,43 @@ describe_read_error = |reason|
 # Pacing
 # ---------------------------------------------------------------------------
 
-## How many listings and reads may be with the host at once.
+## How many listings and reads may be running as tasks at once.
 ##
-## The platform's own ceiling is 32 requests in flight for the whole app. Six is
-## chosen instead so the pacing is real rather than theoretical: a walk of a few
-## hundred files genuinely queues, the backlog in the masthead genuinely rises
-## and falls, and the recipe in `RequestQueue`'s module documentation is genuinely
-## exercised rather than just being present.
+## The host runs 32 tasks at once and queues anything past that, so this is the
+## app's own choice rather than a limit it has to respect. Six is chosen so the
+## pacing is real rather than theoretical: a walk of a few hundred files
+## genuinely backs up, and the backlog in the masthead genuinely rises and falls.
 max_in_flight : U64
 max_in_flight = 6
+
+## Take as much off the front of the backlog as the in-flight budget has room
+## for, oldest first.
+##
+## The whole of the pacing, and pure: `update!` starts a task for each item
+## `starting` names and stores `pending` back in the model.
+take_ready : List(Work), U64 -> { pending : List(Work), starting : List(Work) }
+take_ready = |pending, in_flight| {
+	room = if in_flight >= max_in_flight 0 else max_in_flight - in_flight
+	split = List.split_at(pending, U64.min(room, List.len(pending)))
+	{ pending: split.others, starting: split.before }
+}
+
+## Readiness is FIFO, capped by the budget, and it takes from the front.
+expect take_ready([ListDir("a"), ListDir("b"), ListDir("c")], 4)
+	== { pending: [ListDir("c")], starting: [ListDir("a"), ListDir("b")] }
+expect take_ready([ListDir("a")], max_in_flight) == { pending: [ListDir("a")], starting: [] }
+expect take_ready([], 0) == { pending: [], starting: [] }
+expect take_ready([ReadFile("x", New), ReadFile("y", Lane(3))], 0)
+	== { pending: [], starting: [ReadFile("x", New), ReadFile("y", Lane(3))] }
+
+## One completion frees exactly one slot, and the count floors at zero so an
+## extra completion cannot wrap it into a budget that never starts anything.
+completed : U64 -> U64
+completed = |in_flight| if in_flight == 0 0 else in_flight - 1
+
+expect completed(0) == 0
+expect completed(1) == 0
+expect completed(6) == 5
 
 ## How many delivered-but-unparsed files the app will hold before it stops
 ## asking for more.
@@ -631,14 +676,14 @@ grow_run = |runs, added|
 # Incremental parsing
 # ---------------------------------------------------------------------------
 
-## What one `update` may scan.
+## What one `update!` may scan.
 ##
 ## Both halves matter. `max_lines` bounds how many points a cycle appends, which
 ## is what keeps the growing instance list from being rebuilt in one huge step.
 ## `max_bytes` bounds the scan itself, because a line budget alone does not:
 ## a generated file with one 300 KB line has a single line in it, and scanning
-## for its end would cost a frame. `update` is pure and runs inside the frame,
-## so its cost has to be bounded by something the input cannot inflate.
+## for its end would cost a frame. `update!` runs inside the frame, so its cost
+## has to be bounded by something the input cannot inflate.
 scan_budget : Budget
 scan_budget = { max_lines: 2_048, max_bytes: 65_536 }
 
@@ -1355,7 +1400,7 @@ follow_scroll : List(Lane), Math.Rect, F32 -> F32
 follow_scroll = |lanes, area, zoom| clamp_scroll(world_height(lanes) - visible_height(area, zoom) * tail_room, lanes, area, zoom)
 
 ## Build the camera for a scroll position. The builders sanitize rather than
-## refuse, so this is a plain expression and `update` stays total.
+## refuse, so this is a plain expression and `update!` stays total.
 camera_at : Math.Rect, F32, F32 -> Camera.Camera2D
 camera_at = |area, zoom, scroll|
 	Camera.new({ target: { x: world_width / 2, y: scroll }, offset: Math.center(area), rotation: 0, zoom: zoom })
@@ -1498,7 +1543,8 @@ init! = App.init(
 
 		Ok({
 			glow: glow,
-			queue: RequestQueue.Queue.new(max_in_flight),
+			pending: [],
+			in_flight: 0,
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
 			arrivals: [],
 			parsing: Idle,
@@ -1533,11 +1579,11 @@ init! = App.init(
 sprite_of : Model -> Draw.Texture
 sprite_of = |model| Draw.render_texture(model.glow)
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
-	# 1. Fold this cycle's completions in. Each one ends a request the queue
-	#    ready, so each one reports a completion to the queue -- and a
-	#    listing may enqueue a great deal more work while it is at it.
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
+	# 1. Fold this cycle's completions in. Each one ends a task this update
+	#    started, so each one frees a slot -- and a listing may enqueue a great
+	#    deal more work while it is at it.
 	settled_model = List.fold(program_input.messages, model, receive)
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
@@ -1546,7 +1592,7 @@ update = |model, program_input| {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
-				queue: settled_model.queue.enqueue(listing_request(walk_root)),
+				pending: List.append(settled_model.pending, ListDir(walk_root)),
 			}
 		} else {
 			settled_model
@@ -1565,21 +1611,28 @@ update = |model, program_input| {
 	#    were dropped. At most one of these is outstanding.
 	refetched = request_refetch(viewed)
 
-	# 6. Release whatever fits -- unless the parser is already behind. The queue
-	#    bounds how many reads are *in flight*; this bounds how many delivered
-	#    files are waiting for the scanner, which is the thing that actually
-	#    pins memory. Without it a fast disk fills the model with a whole tree
-	#    of bytes while the parser works through it one window at a time.
+	# 6. Start whatever fits -- unless the parser is already behind. The
+	#    in-flight budget bounds how many reads are *running*; this bounds how
+	#    many delivered files are waiting for the scanner, which is the thing
+	#    that actually pins memory. Without it a fast disk fills the model with
+	#    a whole tree of bytes while the parser works through it one window at
+	#    a time.
 	ready =
 		if List.len(refetched.arrivals) >= arrival_limit {
-			{ queue: refetched.queue, requests: [] }
+			{ pending: refetched.pending, starting: [] }
 		} else {
-			refetched.queue.take_ready()
+			take_ready(refetched.pending, refetched.in_flight)
 		}
 
-	App.next({ ..refetched, queue: ready.queue })
-		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(ready.requests)
+	for work in ready.starting {
+		start_work!(program_input, work)
+	}
+
+	if program_input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..refetched, pending: ready.pending, in_flight: refetched.in_flight + List.len(ready.starting) })
+	}
 }
 
 ## Fold one completion into the model.
@@ -1590,30 +1643,32 @@ receive = |model, message|
 			enqueue_entries(
 				{
 					..model,
-					queue: model.queue.response_received(),
+					in_flight: completed(model.in_flight),
 					walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1 },
 				},
 				dir,
 				entries,
 			)
 
-		# A refused listing still ended, so its slot is free -- and the work
-		# goes back on the queue as a *new* request, because the callback that
-		# would have delivered its result is the one that just delivered this.
+		# A refused listing still ended, so its slot is free, and the work goes
+		# back on the tail of the backlog to be started again. The host queues
+		# tasks rather than refusing them, so this branch should never be taken;
+		# it is here because the error union says it can be.
 		Listed(dir, Err(Busy)) => {
 			..model,
-			queue: model.queue.response_received().enqueue(listing_request(dir)),
+			in_flight: completed(model.in_flight),
+			pending: List.append(model.pending, ListDir(dir)),
 		}
 
 		Listed(_dir, Err(_reason)) => {
 			..model,
-			queue: model.queue.response_received(),
+			in_flight: completed(model.in_flight),
 			walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1, dirs_failed: model.walk.dirs_failed + 1 },
 		}
 
 		FileRead(path, slot, Ok(bytes)) => {
 			..model,
-			queue: model.queue.response_received(),
+			in_flight: completed(model.in_flight),
 			# The bytes go straight into the model. There is no copy here and
 			# no host handle to hold: the list *is* the ownership.
 			arrivals: List.append(model.arrivals, { path: path, bytes: bytes, replaces: slot }),
@@ -1623,12 +1678,13 @@ receive = |model, message|
 
 		FileRead(path, slot, Err(Busy)) => {
 			..model,
-			queue: model.queue.response_received().enqueue(read_request(path, slot)),
+			in_flight: completed(model.in_flight),
+			pending: List.append(model.pending, ReadFile(path, slot)),
 		}
 
 		FileRead(_path, New, Err(_reason)) => {
 			..model,
-			queue: model.queue.response_received(),
+			in_flight: completed(model.in_flight),
 			walk: { ..model.walk, files_skipped: model.walk.files_skipped + 1 },
 		}
 
@@ -1636,7 +1692,7 @@ receive = |model, message|
 		# without points -- and clears the slot so another can be asked for.
 		FileRead(_path, Lane(_index), Err(_reason)) => {
 			..model,
-			queue: model.queue.response_received(),
+			in_flight: completed(model.in_flight),
 			refetching: Nothing,
 		}
 	}
@@ -1732,8 +1788,8 @@ look = |model, program_input| {
 ##
 ## This is the other half of the retention budget. Points are thrown away
 ## oldest-first without regard for where the view is, which is only reasonable
-## because getting them back is a `Request` like any other -- paced by the same
-## queue, delivered as the same message, parsed by the same scanner.
+## because getting them back is a read like any other -- on the same backlog,
+## delivered as the same message, parsed by the same scanner.
 request_refetch : Model -> Model
 request_refetch = |model|
 	match model.refetching {
@@ -1749,7 +1805,7 @@ request_refetch = |model|
 					Ok(index) => {
 						..model,
 						refetching: Fetching(index),
-						queue: model.queue.enqueue(read_request(lane_path(model, index), Lane(index))),
+						pending: List.append(model.pending, ReadFile(lane_path(model, index), Lane(index))),
 					}
 				}
 			}
@@ -2287,8 +2343,8 @@ draw_figures! = |frame, model, fade| {
 		},
 		{
 			label: "QUEUED",
-			value: commas(model.queue.queued_len()),
-			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.queue.in_flight()), Str.concat(" / ", U64.to_str(model.queue.max_in_flight())))),
+			value: commas(List.len(model.pending)),
+			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.in_flight), Str.concat(" / ", U64.to_str(max_in_flight)))),
 		},
 		{
 			label: "FILE BYTES HELD",
@@ -2714,9 +2770,9 @@ rounded = |value|
 # Tests
 # ---------------------------------------------------------------------------
 #
-# `update` cannot be called from an `expect`: a `Model` holds a render texture,
+# `update!` cannot be called from an `expect`: a `Model` holds a render texture,
 # a font and prepared text, and those are host resources that only `init!` can
-# produce. So every decision `update` makes lives in a function that does not
+# produce. So every decision `update!` makes lives in a function that does not
 # need one -- `classify`, `scan_chunk`, `trim`, `sample_rates`, `zoom_at` -- and
 # those are what is tested here.
 

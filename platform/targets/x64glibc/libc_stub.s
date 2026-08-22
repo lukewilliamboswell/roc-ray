@@ -2493,3 +2493,10 @@ sigaltstack:
 unlinkat:
     xor %rax, %rax
     ret
+
+.balign 8
+.globl raise
+.type raise, %function
+raise:
+    xor %rax, %rax
+    ret

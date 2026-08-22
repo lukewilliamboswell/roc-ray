@@ -1,7 +1,14 @@
-## Text module - fonts, text measurement, and prepared text drawing.
+## Fonts, text measurement, and prepared text drawing.
 ##
-## `Draw.Font` enables pure layout measurement. Prepare text when rendering
-## needs host-owned cached bytes and bounds.
+## `Draw.Font` carries a metric snapshot, so layout measurement is pure.
+## Preparing text hands the host the UTF-8 bytes, the style, and the measured
+## bounds once, and every later draw reuses them.
+##
+## The two halves live in different phases. Preparing text allocates a host
+## resource: it is legal in `init!`, `update!`, and tasks, and refused in
+## `render!`. Drawing prepared text is legal in `render!` only, inside the
+## frame scope the host opens around it. Prepare the strings an app draws
+## repeatedly once, in `init!`, and keep the `Prepared` values in the model.
 import Color
 import Draw
 import DrawHost
@@ -42,7 +49,10 @@ Text := [].{
 		font : Builder, Draw.Font -> Builder
 		font = |builder, value| { ..builder, font: value }
 
-		## Cache immutable UTF-8 text, font/style, and measurement in the host.
+		## Cache immutable UTF-8 text, font and style, and measurement in the
+		## host.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		prepare! : Builder => Try(Prepared, [ResourceLimit, ..])
 		prepare! = |builder| Text.prepare_builder!(builder)
 	}
@@ -56,6 +66,7 @@ Text := [].{
 		bounds : Prepared -> Size
 		bounds = |Prepared.(prepared)| prepared.measured
 
+		## Draw this prepared text at a placement. Legal in `render!` only.
 		draw! : Prepared, Draw.Frame, Placement => {}
 		draw! = |prepared, frame, placement|
 			Text.draw_prepared!(
@@ -101,6 +112,9 @@ Text := [].{
 		font,
 	}
 
+	## Prepare a builder's text, as `Builder.prepare!` does.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	prepare_builder! : Builder => Try(Prepared, [ResourceLimit, ..])
 	prepare_builder! = |builder| {
 		result = DrawHost.prepare_text!({
@@ -175,6 +189,7 @@ Text := [].{
 		{ x: pos.x - offset.x, y: pos.y - offset.y }
 	}
 
+	## Draw prepared text, as `Prepared.draw!` does. Legal in `render!` only.
 	draw_prepared! : Draw.Frame, { text : Prepared, pos : Math.Vec2, color : Color.Rgba, align : Align } => {}
 	draw_prepared! = |_frame, cfg| {
 		Prepared.(prepared) = cfg.text

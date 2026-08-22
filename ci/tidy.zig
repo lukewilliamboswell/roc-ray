@@ -88,7 +88,6 @@ pub fn main(init: std.process.Init) !void {
     dead_files_detector.finish(&errors);
 
     try checkPlatformHeadersInSync(gpa, io, &errors);
-    try checkCommandCoverage(gpa, io, &errors);
 
     if (errors.count > 0) {
         std.debug.print("\n{s}[FAIL]{s} Found {d} tidy violations\n", .{ TermColor.red, TermColor.reset, errors.count });
@@ -187,25 +186,6 @@ const Errors = struct {
         errors.emit(
             "{s}: error: could not find a `targets: {{` block to compare around\n",
             .{file},
-        );
-    }
-
-    pub fn addMissingCoverageDocument(errors: *Errors) void {
-        errors.emit(
-            "{s}: error: missing; every apply-phase hosted effect is recorded here\n",
-            .{command_coverage_path},
-        );
-    }
-
-    pub fn addUncoveredCommand(
-        errors: *Errors,
-        line_number: usize,
-        operation: []const u8,
-    ) void {
-        errors.emit(
-            "{s}:{d}: error: '{s}' is reachable during the apply phase but is not" ++
-                " named in {s}; give it a Command variant or record why it has none\n",
-            .{ host_native_path, line_number, operation, command_coverage_path },
         );
     }
 
@@ -742,50 +722,6 @@ fn checkPlatformHeadersInSync(gpa: Allocator, io: std.Io, errors: *Errors) !void
                 wayland_split.after,
             ),
         );
-    }
-}
-
-const host_native_path = "src/host_native.zig";
-const command_coverage_path = "docs/command-coverage.md";
-
-/// Every hosted effect the apply phase admits must have a `Command` that
-/// reaches it, or a written reason why it does not.
-///
-/// `update` is pure and `render!` only draws, so a `Command` is the whole of
-/// what a running app can change about host state. An effect the host accepts
-/// during the apply phase that no command asks for is reachable from `init!`
-/// alone: the permission is a lie, and apps get a capability they can read
-/// about and not use. That is easy to introduce and invisible afterwards --
-/// nothing fails, the effect is simply unreachable -- so the decision is
-/// recorded in `docs/command-coverage.md` and checked here.
-///
-/// The check is deliberately a string search rather than anything cleverer:
-/// what it has to catch is a name that was never thought about, and a name
-/// present anywhere in the document has been.
-fn checkCommandCoverage(gpa: Allocator, io: std.Io, errors: *Errors) !void {
-    const host_text = try std.Io.Dir.cwd().readFileAlloc(io, host_native_path, gpa, .limited(2 * MiB));
-    defer gpa.free(host_text);
-    const coverage_text = std.Io.Dir.cwd().readFileAlloc(io, command_coverage_path, gpa, .limited(MiB)) catch {
-        errors.addMissingCoverageDocument();
-        return;
-    };
-    defer gpa.free(coverage_text);
-
-    const call = "enforcePhase(\"";
-    var search_from: usize = 0;
-    while (mem.indexOfPos(u8, host_text, search_from, call)) |call_at| {
-        const name_at = call_at + call.len;
-        const name_end = mem.indexOfScalarPos(u8, host_text, name_at, '"') orelse break;
-        search_from = name_end + 1;
-
-        // The phase set is the second argument, on the same line as the name.
-        const line_end = mem.indexOfScalarPos(u8, host_text, name_end, '\n') orelse host_text.len;
-        const arguments = host_text[name_end..line_end];
-        if (mem.indexOf(u8, arguments, "during_apply") == null) continue;
-
-        const operation = host_text[name_at..name_end];
-        if (mem.indexOf(u8, coverage_text, operation) != null) continue;
-        errors.addUncoveredCommand(mem.count(u8, host_text[0..call_at], "\n") + 1, operation);
     }
 }
 

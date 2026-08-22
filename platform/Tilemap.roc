@@ -1,4 +1,13 @@
-## Tilemap module - Tiled TMX data, tileset drawing, and grid queries.
+## Tiled TMX data, tileset drawing, and grid queries.
+##
+## Parse a map with `load_tmx!` in `init!`, bind its tilesets to loaded
+## textures, and keep the built `Tilemap` in the model. Parsing reads a file
+## and allocates, so it is legal in `init!`, `update!`, and tasks, and refused
+## in `render!`; every `draw_*!` here takes a `Draw.Frame` and is legal in
+## `render!` only.
+##
+## Grid queries and coordinate conversions are pure, so an app can use them
+## from `update!` for collision and picking.
 import Assets
 import Camera
 import Draw
@@ -226,8 +235,11 @@ Tilemap :: {
 		render_tilesets: [],
 	}
 
-	## Parse a Tiled TMX map. The returned data is an allocation-efficient set of
-	## flat lists with index ranges for nested properties, objects, and tile data.
+	## Parse a Tiled TMX map.
+	##
+	## The returned data is an allocation-efficient set of flat lists with index
+	## ranges for nested properties, objects, and tile data. Legal in `init!`,
+	## `update!`, and tasks; refused in `render!`.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
 	load_tmx! = |path| {
 		result = TilemapHost.load_tmx!(path)
@@ -479,7 +491,8 @@ Tilemap :: {
 		}
 	}
 
-	## Draw one named visible layer without camera culling.
+	## Draw one named visible layer without camera culling. Legal in `render!`
+	## only, as every `draw_*!` in this module is.
 	draw_layer! : Tilemap, Draw.Frame, Str => {}
 	draw_layer! = |map, frame, layer_name| {
 		match find_layer_index(map.raw.layers, layer_name) {

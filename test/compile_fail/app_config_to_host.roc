@@ -5,17 +5,17 @@ import rr.Draw
 
 Model : {}
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [])
 init! = App.init(App.default, |_startup| Ok({}))
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, _input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, _input| {
 	_transport = App.default.to_host()
-	App.next(model)
+	Ok(model)
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

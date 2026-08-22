@@ -8,14 +8,16 @@
 ## containing `..` -- is refused rather than rewritten. Capture is the only
 ## file-writing capability the platform grants.
 ##
-## Recording starts and stops through commands, screenshots use `App.Request`,
-## and recording state is available as `input.capture` each cycle.
+## Recording starts and stops through `Capture.start!` and `Capture.stop!`,
+## a single frame is written by `Capture.screenshot!`, and recording state is
+## available as `input.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Recording` here and in the package are the
 ## same nominal type.
 import rrt.Capture as RrtCapture
+import CaptureHost
 
 Capture := [].{
 
@@ -64,32 +66,95 @@ Capture := [].{
 		Unknown,
 	]
 
+	## Why a screenshot did not become a file.
+	##
+	## `Unavailable` is the host having no capture facility to use at all --
+	## the app is shutting down and the wait was cancelled before the frame
+	## ended. It is not what a call from the wrong callback gets: that is a
+	## programmer error and stops the app. See `screenshot!`.
 	ScreenshotError : [PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
 
-	screenshot : Str, (Try({}, ScreenshotError) -> msg) -> [Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }), ..]
-	screenshot = |path, callback| Screenshot({ path, callback })
+	## Write one PNG of the app's rendered output.
+	##
+	## The framebuffer is read back at the end of the frame that asked -- after
+	## the draw batch is flushed and before the buffers are swapped, so the
+	## pixels are the ones just drawn -- and the PNG is encoded and written off
+	## the frame thread. This call waits for that write, so it parks the task
+	## until the file exists and answers with the write's own outcome.
+	##
+	## Legal only in a task, where it parks the task; refused in `init!`,
+	## `update!`, and `render!`. Every other waiting effect also works in
+	## `init!`, where it blocks; a screenshot cannot, because what it waits for
+	## is the end of a frame and `init!` runs before the frame loop has drawn
+	## one. Spawn a task from `update!` instead -- on the first cycle if the
+	## shot is meant to be of the first frame:
+	##
+	## ```roc
+	## if input.time.cycle_count == 0 {
+	##     Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
+	## }
+	## ```
+	##
+	## A headless run has no framebuffer at all and answers `Ok({})` without
+	## writing, so a screenshotting app still runs under `--host-headless`.
+	##
+	## Only one screenshot can be in flight: a second one while the first is
+	## still waiting for its frame is `AlreadyPending`.
+	screenshot! : Str => Try({}, ScreenshotError)
+	screenshot! = |path| {
+		err = CaptureHost.screenshot!(path)
+		if err == 0 {
+			Ok({})
+		} else {
+			Err(screenshot_error(err))
+		}
+	}
 
 	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-input timing
 	## and balanced encoder quality.
 	default : Recording
 	default = RrtCapture.default
 
-	## Begin recording, as a command a pure `update` can return.
+	## Begin recording.
 	##
-	## Frames accumulate until the recording hits its frame cap, a
-	## `Capture.stop` command is applied, or the app exits -- all three finalize
-	## the file.
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	##
-	## A rejected start appears as `Failed` in `input.capture` on the next cycle.
-	start : Recording -> [StartRecording(Recording), ..]
-	start = |recording| StartRecording(recording)
+	## Frames accumulate until the recording hits its frame cap, `Capture.stop!`
+	## is called, or the app exits -- all three finalize the file.
+	##
+	## A rejected start appears as `Failed` in `input.capture` on the next cycle;
+	## the call itself reports nothing, so the recording's outcome is observed
+	## the same way whichever phase started it.
+	start! : Recording => {}
+	start! = |recording| {
+		ratio = RrtCapture.scale_ratio(recording.scale())
+		_refusal = CaptureHost.start_recording!({
+			path: recording.path(),
+			format: RrtCapture.format_code(recording.format()),
+			fps: recording.fps(),
+			max_frames: recording.max_frames(),
+			scale_numerator: ratio.numerator,
+			scale_denominator: ratio.denominator,
+			every_nth: recording.every_nth(),
+			timing: RrtCapture.timing_code(recording.timing()),
+			cursor: RrtCapture.cursor_code(recording.cursor()),
+			quality: RrtCapture.quality_code(recording.quality()),
+		})
+		{}
+	}
 
-	## Finish the current recording and write its file, as a command.
+	## Finish the current recording and write its file.
 	##
-	## Stopping while idle does nothing. The next input reports the frame count and
-	## file size as `Finished`.
-	stop : [StopRecording, ..]
-	stop = StopRecording
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`, where an
+	## encode and a file write would land in the middle of drawing a frame.
+	##
+	## Stopping while idle does nothing. The next input reports the frame count
+	## and file size as `Finished`.
+	stop! : () => {}
+	stop! = || {
+		_finished = CaptureHost.stop_recording!()
+		{}
+	}
 
 }
 
@@ -122,3 +187,28 @@ expect failure_reason(8) == WriteFailed
 expect failure_reason(9) == EncodeFailed
 expect failure_reason(0) == Unknown
 expect failure_reason(200) == Unknown
+
+## Decode the host's capture-error code for a screenshot.
+##
+## These are `src/capture.zig`'s codes, the same ones a recording's
+## `FailureReason` names, so a path that escapes the output directory is still
+## reported as the sandbox refusing it rather than as a failed write.
+screenshot_error : U8 -> Capture.ScreenshotError
+screenshot_error = |code|
+	match code {
+		1 => PathInvalid
+		2 => PathEscapesOutputDir
+		3 => AlreadyPending
+		7 => WriteFailed
+		10 => Busy
+		11 => Unavailable
+		_ => WriteFailed
+	}
+
+expect screenshot_error(1) == PathInvalid
+expect screenshot_error(2) == PathEscapesOutputDir
+expect screenshot_error(3) == AlreadyPending
+expect screenshot_error(7) == WriteFailed
+expect screenshot_error(10) == Busy
+expect screenshot_error(11) == Unavailable
+expect screenshot_error(99) == WriteFailed

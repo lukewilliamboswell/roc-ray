@@ -2,18 +2,25 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Files
+import rr.Task
 import rr.Color
 import rr.Draw
 import rr.Text
 
 ## Read files without stalling the frame.
 ##
-## Both reads are `Request`s: `update` submits them and returns immediately, while
-## the host does blocking I/O away from the drawing thread and later delivers a
-## typed `Msg`. No request IDs or completion filtering leak into the app.
+## Both reads happen inside tasks. `update!` spawns them and returns
+## immediately; each task parks on the host's event loop while the frame loop
+## keeps drawing, and its return value arrives as a typed `Msg` on a later
+## `input.messages`. Neither read needs an id or a completion filter: each has
+## its own `Msg` variant, so two answers landing on one cycle stay apart.
 ##
-## `Files.read_text` copies valid UTF-8 into a `Str`, so it has a small
-## inline limit. `Files.read_bytes` instead delivers an ordinary `List(U8)`:
+## Inside a task the read is an ordinary call that returns its answer, so a
+## multi-step load is straight-line code with `?` rather than a state machine
+## spread over `Msg` and `update!`.
+##
+## `Files.read_text!` copies valid UTF-8 into a `Str`, so it has a small
+## inline limit. `Files.read_bytes!` instead returns an ordinary `List(U8)`:
 ## the host moves the worker allocation into List ARC without copying file
 ## bytes. Keep the list in the model for as long as its bytes are useful; when
 ## the final List or seamless sublist goes away, its typed host resource is
@@ -44,7 +51,7 @@ small_path = "README.md"
 large_path : Str
 large_path = "src/roc_platform_abi.zig"
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -60,22 +67,19 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	resolved = List.fold(program_input.messages, { small: model.small, large: model.large }, apply_message)
-	reads =
-		if program_input.time.cycle_count == 0 {
-			[
-				Files.read_text(small_path, |result| SmallReadFinished(result)),
-				Files.read_bytes(large_path, |result| BytesReadFinished(result)),
-			]
-		} else {
-			[]
-		}
+	if program_input.time.cycle_count == 0 {
+		Task.spawn!(program_input, || SmallReadFinished(Files.read_text!(small_path)))
+		Task.spawn!(program_input, || BytesReadFinished(Files.read_bytes!(large_path)))
+	}
 
-	App.next({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-		.with_commands(if program_input.devices.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(reads)
+	if program_input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, small: resolved.small, large: resolved.large, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+	}
 }
 
 apply_message : { small : ReadState, large : BytesState }, Msg -> { small : ReadState, large : BytesState }
@@ -113,12 +117,27 @@ expect match bytes_state(Ok([1, 2, 3])) {
 	_ => Bool.False
 }
 
+## `TooLarge` is the one error the two reads do not share a meaning for: a Str
+## has an inline limit that a `List(U8)` does not, so the same file can be too
+## large for one and fine for the other. Each says which limit it hit.
+expect string_state(Err(TooLarge)) == Failed("too large to copy into a Str")
+expect bytes_state(Err(TooLarge)) == Failed("larger than the host will read")
+
+## Each read has its own `Msg` variant, so two answers on one cycle land in two
+## fields rather than needing to be told apart.
+expect
+	apply_message(
+		apply_message({ small: Waiting, large: Waiting }, SmallReadFinished(Ok("hello"))),
+		BytesReadFinished(Ok([1, 2])),
+	)
+		== { small: Loaded(5), large: Held([1, 2]) }
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
-	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("ReadSmallFile README.md: ", describe_string(model.small)), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
-	frame.text_at!({ pos: { x: 40, y: 120 }, text: Str.concat("ReadFile generated ABI: ", describe_bytes(model.large)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
+	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("read_text README.md: ", describe_string(model.small)), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
+	frame.text_at!({ pos: { x: 40, y: 120 }, text: Str.concat("read_bytes generated ABI: ", describe_bytes(model.large)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
 	frame.circle!({ center: { x: 400 + 220 * F32.cos(model.elapsed * 2), y: 300 + 120 * F32.sin(model.elapsed * 2) }, radius: 26, style: Draw.filled(Color.from_hex_rgb(0x5e81ac)) })
 	Ok({})
 }

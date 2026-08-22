@@ -8,6 +8,13 @@ import rr.Devices
 import rr.Math
 import rr.Text
 
+## World space and screen space in one frame, and the projections between them.
+##
+## `frame.with_camera!` draws the world inside a scope; everything outside it is
+## screen space, which is where the HUD goes. The camera and both mouse
+## projections are derived in `render!` from the model rather than stored, so
+## `screen_to_world` and `world_to_screen` are always talking about the camera
+## actually in use. WASD moves, the wheel zooms, Q/E rotate, R resets.
 Model : {
 	player : Math.Vec2,
 	zoom : F32,
@@ -16,7 +23,7 @@ Model : {
 	hud : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared }),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w = 800.F32
 
@@ -70,8 +77,8 @@ move_player = |player, input, dt| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	dt = program_input.time.elapsed_seconds
 
@@ -80,8 +87,11 @@ update = |model, program_input| {
 	rotation_dir = axis(input.key_down(KeyQ), input.key_down(KeyE))
 	rotation = if input.key_pressed(KeyR) 0 else model.rotation + rotation_dir * 90 * dt
 
-	App.next({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, player, zoom, rotation, mouse: input.mouse.position() })
+	}
 }
 
 ## The camera and both mouse projections are derived rather than stored: they
@@ -154,3 +164,11 @@ draw_hud! = |frame, model| {
 	hud.subtitle.draw!(frame, { pos: { x: 30, y: 62 }, color: Color.light_gray, align: Text.align_top_left })
 	hud.help.draw!(frame, { pos: { x: 30, y: 84 }, color: Color.light_gray, align: Text.align_top_left })
 }
+
+expect axis(Bool.True, Bool.False) == -1
+expect axis(Bool.False, Bool.False) == 0
+
+## Movement integrates over the seconds it is handed, and stops at the world
+## edge rather than running off it.
+expect move_player({ x: 0, y: 0 }, Devices.none.with_key_down(KeyD), 0.5) == { x: 180, y: 0 }
+expect move_player({ x: world_right, y: 0 }, Devices.none.with_key_down(KeyD), 1) == { x: world_right - 40, y: 0 }

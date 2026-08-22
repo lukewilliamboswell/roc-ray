@@ -17,6 +17,15 @@ import rr.Sprite
 import rr.Tilemap
 import Cave
 
+## A platformer with two mouse-driven tools: a laser that bounces off mirrors
+## and a grapple hook on a spring.
+##
+## Tilemap collision, gravity, and jumping come from `Physics`, with
+## `map_to_world` bridging Tiled's Y-down space and the Y-up physics space. Both
+## tools are pure recursive functions over the level, so a bounce path or a
+## latch point can be worked out without touching the host. Domain shapes live
+## in the sibling `Cave` module, which keeps this file to loading, simulation,
+## and drawing.
 GameState : Cave.GameState
 
 LaserSegment : Cave.LaserSegment
@@ -53,7 +62,7 @@ World : Cave.World
 
 Model : Cave.Model
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -852,8 +861,8 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	restart = input.key_pressed(KeySpace)
@@ -871,8 +880,11 @@ update = |model, program_input| {
 		GameOver => if restart new_world(model.level) else model.world
 	}
 
-	App.next({ ..model, world: next_world })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, world: next_world })
+	}
 }
 
 ## The camera follows the player, so it is a pure function of the model and is

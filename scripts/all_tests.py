@@ -23,6 +23,14 @@ This script runs:
 - headless runs   - Run each built example for a few frames
 - cli args        - Build and run the argv bridge probe
 - model alloc     - Measure what a frame costs a large collection in the model
+- task delivery   - Spawn one task per Msg variant and assert every message
+                    arrives with the right tag and payload (test/task_delivery).
+- task cap        - Spawn a hundred tasks against the host's cap of 32 and
+                    assert every one of them still answers (test/task_cap).
+- file write      - Write files from a task, read them back, and compare
+                    (test/file_write).
+- http client     - Serve a known file on localhost, fetch it from a task, and
+                    check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
                     served types URL, which is the case this all exists for
 - wayland bundle  - Bundle, inspect and build the Linux-only Wayland package
@@ -60,6 +68,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+import test_http_client  # noqa: E402  (needs the sys.path entry above)
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
@@ -68,6 +77,9 @@ IS_LINUX = platform.system() == "Linux"
 LOCAL_PLATFORM_REF = local_bundles.LOCAL_PLATFORM_REF
 RELEASE_PLATFORM_REF_RE = local_bundles.RELEASE_PLATFORM_REF_RE
 _rewrite_platform_ref = local_bundles.rewrite_platform_ref
+# See `local_bundles.PACKAGE_LIMIT_ARGS`: a locally built platform bundle is
+# bigger than roc's default transitive-dependency budget.
+LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
 
 # Examples to skip in the bundled-platform build test, mapping example name ->
 # reason. Use this when a specific example can't build against the bundled
@@ -209,7 +221,7 @@ def run_cli_args_integration(
     print("\nRunning CLI argument integration probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cli_args")
     if not run_cmd(
-        ["roc", "build", staged.name], "build CLI argument probe", verbose, cwd=staged.parent
+        ["roc", "build", staged.name, *LIMITS], "build CLI argument probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build CLI argument probe"]
@@ -228,6 +240,124 @@ def run_cli_args_integration(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run CLI argument probe"]
+
+
+def run_task_delivery_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a task's message survives the trip back into `update!`.
+
+    A headless run only asserts an exit code, so an example whose messages never
+    arrive still passes every other step here. This probe spawns one task per
+    `Msg` variant -- including the tag-union layouts that used to come back with
+    the wrong tag -- and exits non-zero unless each message arrives with the
+    right tag *and* the right payload. Exit 3 means a mismatch, exit 4 means
+    something never arrived.
+    """
+    fixture = root / "test" / "task_delivery" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning task delivery probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_delivery")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build task delivery probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build task delivery probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run task delivery probe",
+        verbose,
+        cwd=root,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run task delivery probe"]
+
+
+def run_task_cap_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that spawning past the host's live-task cap queues rather than drops.
+
+    A hundred tasks in one `update!`, against a cap of 32. The closures past the
+    cap have to wait for a slot and still run -- `Task.spawn!` has no error to
+    report, so a dropped one would simply never answer -- and the frame's phase
+    has to survive the burst, since spawning hands control to the executor.
+    Exit 3 means a message was lost, repeated or wrong; exit 4 means the queue
+    never drained.
+    """
+    fixture = root / "test" / "task_cap" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning task cap probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "task_cap")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build task cap probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build task cap probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=400",
+        ],
+        "run task cap probe",
+        verbose,
+        cwd=root,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run task cap probe"]
+
+
+def run_file_write_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a file written by `Files.write_*` reads back byte for byte.
+
+    A write that wrote nothing, wrote somewhere else, appended instead of
+    replacing, or left the tail of longer previous contents behind would pass
+    every other stage here: nothing else in the suite reads a file the app
+    wrote. The probe writes text and bytes, reads the same paths back, compares
+    them, and also checks that missing parent directories are created and that
+    a path whose parent is a file is refused by name.
+
+    It runs from the staged scratch directory and only touches `probe_out/`
+    beneath it, so it never writes into the tree. Exit 3 means a property did
+    not hold; exit 4 means the task never answered.
+    """
+    fixture = root / "test" / "file_write" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning file write probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "file_write")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build file write probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build file write probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run file write probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run file write probe"]
 
 
 def run_model_allocation_check(
@@ -255,7 +385,7 @@ def run_model_allocation_check(
     print("\nMeasuring model collection allocation per frame...", end=" ", flush=True)
     staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "model_inplace")
     if not run_cmd(
-        ["roc", "build", staged.name], "build model allocation probe", verbose, cwd=staged.parent
+        ["roc", "build", staged.name, *LIMITS], "build model allocation probe", verbose, cwd=staged.parent
     ):
         print("FAILED (build)")
         return ["model allocation probe build"]
@@ -304,7 +434,7 @@ def run_package_interop_test(
     failed: list[str] = []
     for command in ("check", "build"):
         print(f"  {command.capitalize()}ing {entry.name}...", end=" ", flush=True)
-        if run_cmd(["roc", command, staged.name], f"interop {command}", verbose, cwd=staged.parent):
+        if run_cmd(["roc", command, staged.name, *LIMITS], f"interop {command}", verbose, cwd=staged.parent):
             print("ok")
         else:
             print("FAILED")
@@ -390,7 +520,7 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
             )
             command = "build" if IS_LINUX else "check"
             ok = run_cmd(
-                ["roc", command, staged.name],
+                ["roc", command, staged.name, *LIMITS],
                 f"wayland bundle {command} {name}",
                 verbose,
                 cwd=staged.parent,
@@ -712,7 +842,7 @@ def _run_example_stages(
             name = example_name(example)
             print(f"  Checking {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "check", staged[example].name],
+                ["roc", "check", staged[example].name, *LIMITS],
                 f"check {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -730,7 +860,7 @@ def _run_example_stages(
                 name = example_name(example)
                 print(f"  Testing {name}...", end=" ", flush=True)
                 if run_cmd(
-                    ["roc", "test", staged[example].name],
+                    ["roc", "test", staged[example].name, *LIMITS],
                     f"test {name}",
                     args.verbose,
                     cwd=staged[example].parent,
@@ -754,7 +884,7 @@ def _run_example_stages(
 
             print(f"  Building {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "build", staged[example].name],
+                ["roc", "build", staged[example].name, *LIMITS],
                 f"build {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -782,7 +912,11 @@ def _run_example_stages(
     else:
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
+        failed.extend(run_task_delivery_probe(root, packages, args.verbose))
+        failed.extend(run_task_cap_probe(root, packages, args.verbose))
+        failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
+        failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 
     return failed
 

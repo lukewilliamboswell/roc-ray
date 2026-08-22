@@ -9,7 +9,7 @@ import rr.Text
 
 ## Record a UI demo driven by a scripted pointer.
 ##
-## `Mouse.set_source` replaces only what the host reports on the
+## `Mouse.set_source!` replaces only what the host reports on the
 ## input, so the widget code below is ordinary hover and hit-test logic
 ## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
@@ -22,9 +22,8 @@ import rr.Text
 Model : {
 	frame : U64,
 	pointer : { x : F32, y : F32 },
-	clicking : Bool,
 
-	## What `program_input.devices.mouse` actually reported this frame, as distinct from the
+	## Where the host said the pointer was this cycle, as distinct from the
 	## scripted `pointer` above. Hover and press styling are drawn from this,
 	## so the recording shows what the app was really told.
 	mouse : { x : F32, y : F32 },
@@ -38,7 +37,7 @@ Model : {
 	counter_labels : List(Text.Prepared),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
@@ -80,7 +79,6 @@ init! = App.init(
 		Ok({
 			frame: 0,
 			pointer: { x: 40, y: 300 },
-			clicking: Bool.False,
 			mouse: { x: 40, y: 300 },
 			held: Bool.False,
 			clicks: 0,
@@ -106,13 +104,13 @@ prepare_counter_labels! = |font, index, acc|
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	# Drive the pointer for the *next* frame from the script.
 	pointer_step = pointer_for_frame(model.frame)
 
-	# Where the pointer is *this* frame: the position commanded on the previous
+	# Where the pointer is *this* frame: the position scripted on the previous
 	# one, which the model already kept. Reading it back off `input.mouse` would
 	# work -- the host samples the scripted pointer into the input exactly as it
 	# does a hardware one -- but the app is the thing that scripted it, so it
@@ -136,32 +134,26 @@ update = |model, program_input| {
 			model.slider
 		}
 
-	# The scripted pointer is a command, so the platform installs it after this
-	# returns and before anything is drawn -- the same instant
-	# the old effectful setter reached the host, and still a cycle before the
-	# host samples it back.
-	pointer_command = Mouse.set_source(
+	# The scripted pointer is installed here, before anything is drawn, and a
+	# cycle before the host samples it back.
+	Mouse.set_source!(
 		if pointer_step.clicking Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
 	)
-	commands =
-		if model.frame >= recorded_frames {
-			[pointer_command, App.exit(0)]
-		} else {
-			[pointer_command]
-		}
 
-	App.next({
-		..model,
-		frame: model.frame + 1,
-		pointer: pointer_step.pos,
-		clicking: pointer_step.clicking,
-		mouse: mouse,
-		held: held,
-		clicks: clicks,
-		toggled: toggled,
-		slider: slider,
-	})
-		.with_commands(commands)
+	if model.frame >= recorded_frames {
+		Err(Exit(0))
+	} else {
+		Ok({
+			..model,
+			frame: model.frame + 1,
+			pointer: pointer_step.pos,
+			mouse: mouse,
+			held: held,
+			clicks: clicks,
+			toggled: toggled,
+			slider: slider,
+		})
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -293,3 +285,25 @@ draw_slider! = |frame, value| {
 		style: Draw.filled_and_outlined(Color.white, Color.from_hex_rgb(0x2b3550), 2),
 	})
 }
+
+expect clamp_unit(-0.5) == 0
+expect clamp_unit(1.5) == 1
+expect inside({ x: 70, y: 160 }, increment_button)
+expect !inside({ x: 10, y: 10 }, increment_button)
+
+## The slider's grab band is taller than the track it draws.
+expect inside_slider({ x: slider_track.x + 4, y: slider_track.y - 10 })
+
+## Easing starts and ends exactly on its endpoints, so a script that eases into
+## a button really does arrive over it.
+expect ease({ x: 0, y: 0 }, { x: 100, y: 40 }, 0) == { x: 0, y: 0 }
+expect ease({ x: 0, y: 0 }, { x: 100, y: 40 }, 1) == { x: 100, y: 40 }
+
+## The two clicks on the counter are single frames, so each one is an edge the
+## widget code sees exactly once.
+expect pointer_for_frame(30).clicking
+expect !pointer_for_frame(31).clicking
+
+## Every scripted click lands inside the widget it is aimed at.
+expect inside(pointer_for_frame(30).pos, increment_button)
+expect inside(pointer_for_frame(66).pos, toggle_button)

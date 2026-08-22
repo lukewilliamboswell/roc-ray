@@ -15,7 +15,7 @@ import rr.Math
 import rrt.Font
 import adapter.Input as Events
 
-## Everything the view needs, derived in `update` from values that came through
+## Everything the view needs, derived in `update!` from values that came through
 ## the package. `render!` only draws, so the round trip has to survive being
 ## stored in the model rather than being re-read from a snapshot.
 Model : {
@@ -37,7 +37,7 @@ Model : {
 	swatch_aspect : F32,
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 ## `init!` receives an `App.Startup`: authority, with nothing sampled yet. The
 ## first `App.Input` supplies the clock, so `started` is latched there.
@@ -93,8 +93,8 @@ label_for = |input|
 ## platform's re-exports and the package's own types are the same nominals.
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 
 	# `input.mouse` and `input.gamepads` are package-owned nominals reached
@@ -126,19 +126,22 @@ update = |model, program_input| {
 	# one the host owns.
 	sized = Events.describe(model.swatch)
 
-	App.next({
-		started,
-		label: next_label,
-		clicked,
-		padded,
-		age: Events.age_seconds(started, program_input.time.simulation_nanos),
-		font: model.font,
-		layout,
-		layout_passes: model.layout_passes + 1,
-		swatch: Events.retained(sized),
-		swatch_aspect: sized.aspect,
-	})
-		.with_commands(if input.key_pressed(KeyQ) [App.exit(0)] else [])
+	if input.key_pressed(KeyQ) {
+		Err(Exit(0))
+	} else {
+		Ok({
+			started,
+			label: next_label,
+			clicked,
+			padded,
+			age: Events.age_seconds(started, program_input.time.simulation_nanos),
+			font: model.font,
+			layout,
+			layout_passes: model.layout_passes + 1,
+			swatch: Events.retained(sized),
+			swatch_aspect: sized.aspect,
+		})
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

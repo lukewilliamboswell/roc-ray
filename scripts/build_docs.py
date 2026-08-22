@@ -194,7 +194,7 @@ def validate(version_root: Path) -> list[str]:
     problems += check_receivers_documented(version_root / TYPES_SUBDIR)
     problems += check_cross_links(version_root, version_root / TYPES_SUBDIR)
     app_page = (version_root / "App" / "index.html").read_text(encoding="utf-8")
-    for forbidden in (*APP_INTERNAL_TYPES, "Transport"):
+    for forbidden in (*APP_INTERNAL_TYPES, "AppTransport"):
         if forbidden in app_page:
             problems.append(f"App: private boundary term leaked into docs: {forbidden}")
     platform_pages = [version_root / "index.html"] + [

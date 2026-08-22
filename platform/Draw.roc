@@ -2,10 +2,18 @@
 ##
 ## The host owns the outer frame scope and passes an opaque `Frame` capability
 ## to `render!`. Draw through that receiver so drawing cannot happen before
-## BeginDrawing or after EndDrawing. Nested helpers keep raylib's begin/end state
-## transitions paired. Create host-owned fonts, render textures, and shaders
-## during initialization and keep them in the model; per-frame drawing and
-## uniform updates do not allocate.
+## BeginDrawing or after EndDrawing. Nested helpers keep raylib's begin/end
+## state transitions paired.
+##
+## Every effect that takes a `Frame` -- every shape, every texture, every
+## scope, and every uniform `set!` -- is legal in `render!` only. The loaders
+## in this module are the other half: `default_font!`, `load_store_font!`,
+## `font_from_bytes!`, `load_render_texture!`, `Shader.from_source!`,
+## `Shader.from_store!`, and the `Shader.uniform_*!` resolvers allocate host
+## resources, so they are legal in `init!`, `update!`, and tasks, and refused
+## in `render!`. Create them in `init!`, keep them in the model, and hand the
+## values to `render!`; per-frame drawing and uniform updates then allocate
+## nothing.
 import Assets
 import Camera
 import Color
@@ -174,9 +182,13 @@ Draw := [].{
 	from_rgba : { r : U8, g : U8, b : U8, a : U8 } -> Color.Rgba
 	from_rgba = |value| Color.rgba(value.r, value.g, value.b, value.a)
 
-	## Opaque, zero-sized authority supplied only while the host is running
-	## `render!`. It prevents drawing during initialization, but Roc does not yet
-	## enforce affine use or encode a frame epoch; do not retain it in the model.
+	## Opaque, zero-sized authority the host supplies only while it runs
+	## `render!`.
+	##
+	## Holding one is what makes a draw call expressible, so drawing cannot
+	## reach `init!` or `update!`. Roc does not enforce affine use or encode a
+	## frame epoch, so do not retain a `Frame` in the model: pass the
+	## callback's own frame down through helpers.
 	Frame :: DrawHost.Frame.{
 		from_host : DrawHost.Frame -> Frame
 		from_host = |frame| Frame.(frame)
@@ -578,6 +590,8 @@ Draw := [].{
 	RenderTexture :: DrawHost.RenderTexture.{
 
 		## Allocate an offscreen framebuffer.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		load! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
 		load! = |size| {
 			result = DrawHost.load_render_texture!(size)
@@ -617,6 +631,8 @@ Draw := [].{
 	Shader :: DrawHost.Shader.{
 
 		## Compile shader stages from source strings.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 		from_source! = |cfg| {
 			result = DrawHost.load_shader_source!(cfg)
@@ -624,6 +640,8 @@ Draw := [].{
 		}
 
 		## Compile shader stage files resolved through an explicit asset store.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [AssetPathInvalid, AssetNotFound, AssetReadFailed, ShaderLoadFailed, ResourceLimit, ..])
 		from_store! = |store, cfg| {
 			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
@@ -643,30 +661,39 @@ Draw := [].{
 		}
 
 		## Resolve a scalar floating-point uniform once.
+		##
+		## Resolving a uniform is a lookup against the compiled program, so it
+		## belongs beside the load: legal in `init!`, `update!`, and tasks, and
+		## refused in `render!`. Setting one is the opposite -- `set!` on the
+		## resolved handle is legal in `render!` only.
 		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound, ..])
 		uniform_f32! = |Shader.(shader), name| Ok(F32Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a scalar integer uniform once.
+		## Resolve a scalar integer uniform once. Same phases as `uniform_f32!`.
 		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound, ..])
 		uniform_i32! = |Shader.(shader), name| Ok(I32Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a two-component vector uniform once.
+		## Resolve a two-component vector uniform once. Same phases as
+		## `uniform_f32!`.
 		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound, ..])
 		uniform_vec2! = |Shader.(shader), name| Ok(Vec2Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a three-component vector uniform once.
+		## Resolve a three-component vector uniform once. Same phases as
+		## `uniform_f32!`.
 		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound, ..])
 		uniform_vec3! = |Shader.(shader), name| Ok(Vec3Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a four-component vector uniform once.
+		## Resolve a four-component vector uniform once. Same phases as
+		## `uniform_f32!`.
 		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound, ..])
 		uniform_vec4! = |Shader.(shader), name| Ok(Vec4Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a color-valued vec4 uniform once.
+		## Resolve a color-valued vec4 uniform once. Same phases as
+		## `uniform_f32!`.
 		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound, ..])
 		uniform_color! = |Shader.(shader), name| Ok(ColorUniform.(uniform_host!(shader, name)?))
 
-		## Resolve a sampled-texture uniform once.
+		## Resolve a sampled-texture uniform once. Same phases as `uniform_f32!`.
 		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 
@@ -807,7 +834,9 @@ Draw := [].{
 	filled_and_outlined : Color.Rgba, Color.Rgba, F32 -> ShapeStyle
 	filled_and_outlined = |fill, outline, thickness| { fill: Fill(fill), stroke: Draw.stroke(outline, thickness) }
 
-	## Snapshot raylib's built-in font during initialization.
+	## Snapshot raylib's built-in font, metrics included.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
 	default_font! = || Font.from_host!(DefaultFont)
 
@@ -1007,6 +1036,8 @@ Draw := [].{
 	}
 
 	## Load a font relative to an explicit asset store.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
 		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
@@ -1025,8 +1056,11 @@ Draw := [].{
 		}
 	}
 
-	## Decode an authored, compile-time embedded font. Bytes are borrowed while
-	## raylib copies/decodes them; no extra Roc payload-sized buffer is created.
+	## Decode an authored, compile-time embedded font.
+	##
+	## The bytes are borrowed while raylib copies and decodes them, so no extra
+	## Roc payload-sized buffer is created. Legal in `init!`, `update!`, and
+	## tasks; refused in `render!`.
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
 		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
@@ -1115,8 +1149,11 @@ Draw := [].{
 		tint: cfg.tint,
 	})
 
-	## Allocate an offscreen framebuffer. Do this during initialization, not per
-	## frame; creation allocates GPU resources and one fixed host-heap slot.
+	## Allocate an offscreen framebuffer.
+	##
+	## Creation allocates GPU resources and one fixed host-heap slot, so do it
+	## in `init!` rather than per frame. Legal in `init!`, `update!`, and
+	## tasks; refused in `render!`.
 	load_render_texture! : RenderTextureSize => Try(RenderTexture, [RenderTextureLoadFailed, ResourceLimit, ..])
 	load_render_texture! = |size| RenderTexture.load!(size)
 

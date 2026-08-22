@@ -2150,3 +2150,10 @@ _setjmp:
 longjmp:
     xor %rax, %rax
     ret
+
+.balign 8
+.globl raise
+.type raise, %function
+raise:
+    mov x0, #0
+    ret

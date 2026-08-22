@@ -9,6 +9,14 @@ import rr.Devices
 import rr.Random
 import rr.Math
 
+## Snake on a fixed timestep, with a replayable simulation.
+##
+## `update!` folds each cycle's elapsed seconds into an accumulator and runs as
+## many discrete steps as the frame paid for, so the snake moves at the same
+## speed whatever the frame rate. The step is pure and returns the sounds it
+## made; `update!` plays them. Randomness is `Random.State` in the model rather
+## than an effect, so food placement is decided on the frame it is eaten and a
+## run replays exactly from its seed.
 Cell : {
 	x : I32,
 	y : I32,
@@ -41,14 +49,14 @@ Model : {
 ## it made getting there.
 ##
 ## One frame can run several fixed steps, and each of them can crash or eat, so
-## the commands have to be carried out of the recursion rather than returned by
+## the sounds have to be carried out of the recursion rather than returned by
 ## whichever step happened to be last.
 Stepped : {
 	model : Model,
-	commands : List(App.Command),
+	sounds : List(Audio.Playback),
 }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 screen_w : F32
 screen_w = 800
@@ -93,7 +101,7 @@ init! = App.init(
 			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 })?,
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 			# Entropy is asked for once, here. From this point randomness is
-			# model state that `update` advances without an effect.
+			# model state that `update!` advances without an effect.
 			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
 		}
 
@@ -206,7 +214,7 @@ step_snake = |model| {
 	if hit_wall or hit_self {
 		{
 			model: { ..model, accumulator: 0, state: GameOver },
-			commands: [model.crash_sound.play()],
+			sounds: [model.crash_sound.playback()],
 		}
 	} else {
 		next_body = if ate model.snake else List.drop_last(model.snake, 1)
@@ -226,7 +234,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				commands: [model.eat_sound.play()],
+				sounds: [model.eat_sound.playback()],
 			}
 		} else {
 			{
@@ -238,7 +246,7 @@ step_snake = |model| {
 					accumulator: model.accumulator,
 					state: Playing,
 				},
-				commands: [],
+				sounds: [],
 			}
 		}
 	}
@@ -247,20 +255,20 @@ step_snake = |model| {
 ## Run as many fixed steps as the accumulator has paid for, carrying the sounds
 ## along.
 ##
-## `commands` is the running total rather than something the tail returns: a
+## `sounds` is the running total rather than something the tail returns: a
 ## frame that catches up over three steps can eat twice and then crash, and all
 ## three sounds have to survive, in that order. Returning only the last step's
-## commands would silently drop the earlier ones.
-advance_fixed_steps : Model, List(App.Command) -> Stepped
-advance_fixed_steps = |model, commands| {
+## sounds would silently drop the earlier ones.
+advance_fixed_steps : Model, List(Audio.Playback) -> Stepped
+advance_fixed_steps = |model, sounds| {
 	if model.accumulator < step_time {
-		{ model, commands }
+		{ model, sounds }
 	} else {
 		stepped = step_snake({ ..model, accumulator: model.accumulator - step_time })
-		so_far = List.concat(commands, stepped.commands)
+		so_far = List.concat(sounds, stepped.sounds)
 		match stepped.model.state {
 			Playing => advance_fixed_steps(stepped.model, so_far)
-			GameOver => { model: stepped.model, commands: so_far }
+			GameOver => { model: stepped.model, sounds: so_far }
 		}
 	}
 }
@@ -280,12 +288,67 @@ advance_playing = |model, input, dt| {
 	advance_fixed_steps(with_accumulator, [])
 }
 
+## A model with no host resources behind it, so the rules above can be exercised
+## from an `expect`. `Audio.Sound.stub` is a sound that plays nothing, which is
+## all a pure test needs of one.
+test_model : Model
+test_model = {
+	snake: start_snake,
+	direction: DirRight,
+	pending_direction: DirRight,
+	food: { x: 18, y: 9 },
+	score: 0,
+	accumulator: 0,
+	state: Playing,
+	eat_sound: Audio.Sound.stub,
+	crash_sound: Audio.Sound.stub,
+	start_sound: Audio.Sound.stub,
+	rng: Random.seed(1),
+}
+
+expect delta(DirUp) == { x: 0, y: -1 }
+
+## A turn into the body is refused; any other turn is allowed.
+expect !can_turn(DirRight, DirLeft)
+expect can_turn(DirRight, DirUp)
+
+## Food never lands on the snake: the probe walks on until it finds a free cell.
+expect find_open_cell({ x: 12, y: 9 }, start_snake, 0) == { x: 13, y: 9 }
+
+## An ordinary step moves the head one cell and drops the tail, so the length
+## holds and nothing sounds.
+expect {
+	stepped = step_snake(test_model)
+	head_of(stepped.model.snake) == { x: 13, y: 9 } and List.len(stepped.model.snake) == 3 and List.is_empty(stepped.sounds)
+}
+
+## Eating keeps the tail, scores, and asks for a sound.
+expect {
+	stepped = step_snake({ ..test_model, food: { x: 13, y: 9 } })
+	List.len(stepped.model.snake) == 4 and stepped.model.score == 1 and List.len(stepped.sounds) == 1
+}
+
+## Walking off the board ends the run.
+expect {
+	stepped = step_snake({ ..test_model, snake: [{ x: 24, y: 9 }] })
+	match stepped.model.state {
+		GameOver => Bool.True
+		Playing => Bool.False
+	}
+}
+
+## The accumulator is what makes speed independent of frame rate: two steps'
+## worth of seconds runs two steps, whether that arrived as one frame or four.
+expect {
+	stepped = advance_playing(test_model, Devices.none, step_time * 2)
+	head_of(stepped.model.snake) == { x: 14, y: 9 }
+}
+
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
-	exit_commands = if input.key_pressed(KeyEscape) [App.exit(0)] else []
 
 	# Bound catch-up after a breakpoint or stalled window, but retain the fixed
 	# step remainder so normal frame-rate variation does not change game speed.
@@ -295,18 +358,23 @@ update = |model, program_input| {
 		Playing => advance_playing(model, input, dt)
 		GameOver =>
 			if input.key_pressed(KeySpace) {
-				{ model: new_game(model), commands: [model.start_sound.play()] }
+				{ model: new_game(model), sounds: [model.start_sound.playback()] }
 			} else {
-				{ model, commands: [] }
+				{ model, sounds: [] }
 			}
 		}
 
-	# The two independently-owned updates combine through App's applicative
-	# instance. Fields combine in source order, preserving exit-before-game sound
-	# ordering while the final map selects the whole game model.
-	exit_update = App.next({}).with_commands(exit_commands)
-	game_update = App.next(stepped.model).with_commands(stepped.commands)
-	{ exit: exit_update, game: game_update }.App.map(|updates| updates.game)
+	# The step is pure and says which sounds it made, in order; this is where
+	# they are played.
+	for playback in stepped.sounds {
+		playback.play!()
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(stepped.model)
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

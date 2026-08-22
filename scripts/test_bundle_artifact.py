@@ -17,6 +17,10 @@ import time
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import local_bundles  # noqa: E402  (needs the sys.path entry above)
+
 
 IS_WINDOWS = platform.system() == "Windows"
 LOCAL_PLATFORM_REF = '"../../platform/main.roc"'
@@ -113,7 +117,7 @@ def find_roc(root: Path) -> str | None:
 def build_example(roc: str, example: Path) -> bool:
     print(f"Building: {example}", flush=True)
     result = subprocess.run(
-        [roc, "build", "main.roc"],
+        [roc, "build", "main.roc", *local_bundles.PACKAGE_LIMIT_ARGS],
         cwd=example.parent,
     )
     return result.returncode == 0

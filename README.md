@@ -50,44 +50,69 @@ A RocRay program has three callbacks. The model is the app state that survives
 from one host cycle to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
-- `update` receives that model and a read-only `App.Input` -- this cycle's
-  device snapshot, window snapshot, timing, interval events, and request
-  response messages -- and returns a `App.Transition`. It is pure.
-- `render!` receives the model and a `Frame` used for drawing.
+- `update!` receives that model and a read-only `App.Input` -- this cycle's
+  device snapshot, window snapshot, timing, and the messages finished tasks
+  delivered -- and returns the next model, or `Err(Exit(code))` to stop. It is
+  effectful: it calls host effects directly (`Window.set_clipboard_text!`,
+  `Audio.Sound.play!`, ...) and starts deferred work with `Task.spawn!`.
+- `render!` receives the model and a `Frame` used for drawing. It only draws;
+  an effect that changes host state stops the app with a message naming the
+  phase it belongs in.
+
+Three rules say where an effect belongs, and the host enforces all three at
+runtime. Anything that **changes host state** -- the cursor, the window, audio,
+a recording, a texture's pixels -- runs from `init!`, `update!`, or a task.
+Anything that **draws** runs only from `render!`. Anything that **waits** on a
+file, a socket, or the clock runs only from `init!`, where it blocks startup on
+purpose, or from a task, where it parks that task and the frame keeps going.
+Break one and the app stops immediately with a message naming the effect, the
+phase it was called from, and where it belongs.
 
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
-### Deferred requests
+### Tasks
 
-`update` can also return work that finishes later. Give each request constructor a
-typed callback that turns its terminal result into your app's `Msg`, then fold
-the resulting `input.messages` into the model on a later host cycle:
+Work that finishes later never blocks the frame. A **task** is an effectful
+closure that runs on its own coroutine alongside the frame loop; its return
+value arrives as a message on a later `input.messages`. An effect that waits
+inside it -- `Task.sleep!`, `Files.read_text!`, `Capture.screenshot!`,
+`Http.send!` -- parks the task, not the frame:
 
 ```roc
-Msg : [ConfigLoaded({ path : Str, result : Try(Str, Files.ReadTextError) })]
+Msg : [Woke]
 
-requests = [Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
-
-App.next(model)
-    .with_requests(requests)
+Task.spawn!(input, || {
+    Task.sleep!(300)
+    Woke
+})
 ```
 
-`App.next` starts a transition with no work. Its receiver methods append
-commands or requests in order; use `App.from_parts(model, commands, requests)` when
-a helper has already assembled both lists. Independent component updates can
-also be combined with Roc's record-builder form, for example
-`{ game: game_transition, ui: ui_transition }.App`; its commands and requests retain
-that left-to-right field order.
+The `input` is a witness that pins the closure's message type to your app's
+`Msg`; `Task.spawn!` never reads it. Only the platform's `main.roc` can name
+your `Msg` directly, so an `App.Input(Msg)` is how the rest of the API names it.
 
-The host owns private transport tickets; apps do not allocate IDs, match
-raw responses, or maintain a request batch. It preserves the host-observed order of
-messages within an input. A request that cannot complete with current host capacity
-still calls its callback with its operation's `Busy` result, so an app may show
-an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads and
-[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request.
+Inside the closure a waiting effect returns its answer, so a multi-step load
+reads as straight-line code with `?` rather than a state machine spread over
+`Msg` and `update!`:
+
+```roc
+Msg : [ConfigLoaded(Try(Str, Files.ReadTextError))]
+
+Task.spawn!(input, || ConfigLoaded(Files.read_text!("config.txt")))
+```
+
+Apps do not allocate IDs, match raw responses, or maintain a batch. Messages
+arrive in the order the tasks finished, and every task delivers exactly one.
+The host runs 32 tasks at once and queues anything past that, starting each as
+a slot frees, so `Task.spawn!` never refuses. See
+[`async_read/main.roc`](examples/async_read/main.roc) for file reads,
+[`live_plot/main.roc`](examples/live_plot/main.roc) for a paced directory walk,
+[`task_sleep/main.roc`](examples/task_sleep/main.roc) for the smallest task, and
+[`http_fetch/main.roc`](examples/http_fetch/main.roc) for a fetch that keeps the
+frame moving while it waits.
 
 ## Start your own project
 
@@ -120,11 +145,15 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
 - Loaded or generated textures, spritesheet animation, mutable pixel data, and
   exact projective texture drawing.
 - Explicit executable-relative, working-directory, or external disk asset
-  stores with optional manifest identity validation; see [asset stores](docs/assets.md).
+  stores with optional manifest identity validation; see the `Assets` module docs.
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
 - Window and frame timing, startup entropy, the
   [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
-  file and environment access.
+  environment access.
+- File reads and directory listings, and an HTTP client over the shared
+  [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
+  types, with TLS through the system certificate store. Both wait, so both run
+  on a task while the frame keeps drawing.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.

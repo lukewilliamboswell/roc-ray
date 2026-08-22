@@ -37,6 +37,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import local_bundles  # noqa: E402  (needs the sys.path entry above)
+
 IS_WINDOWS = platform.system() == "Windows"
 
 APP_DIR = Path("test") / "model_inplace"
@@ -85,7 +89,7 @@ def executable_path(root: Path) -> Path:
 
 def build_app(root: Path, verbose: bool) -> None:
     result = subprocess.run(
-        ["roc", "build", APP_ENTRY],
+        ["roc", "build", APP_ENTRY, *local_bundles.PACKAGE_LIMIT_ARGS],
         cwd=root / APP_DIR,
         capture_output=not verbose,
         text=True,

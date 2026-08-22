@@ -1,8 +1,14 @@
-## Audio module - short sound effects, streamed music, and procedural tones.
+## Short sound effects, streamed music, and procedural tones.
 ##
-## Load or generate resources during initialization and keep the opaque values
-## in your model. Sound and music are distinct types, so they cannot be mixed by
+## Load or generate resources in `init!` and keep the opaque values in your
+## model. Sound and music are distinct types, so they cannot be mixed by
 ## accident. Their final Roc reference automatically unloads the host resource.
+##
+## Every effect here that loads a resource or changes what the mixer is doing
+## is legal in `init!`, `update!`, and tasks, and refused in `render!`. The
+## four queries that only read a scalar the device already has --
+## `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, and
+## `Music.time_played!` -- are legal in any callback, `render!` included.
 import AudioHost
 
 Audio := [].{
@@ -37,27 +43,9 @@ Audio := [].{
 		is_playing! : Sound => Bool
 		is_playing! = |sound| AudioHost.is_sound_playing!(sound.resource)
 
-		## Play this sound at its default volume, pitch, and pan, as a command a
-		## pure `update` can return. Receiver form: `sound.play()`.
-		play : Sound -> [PlaySound(Playback), ..]
-		play = |sound| PlaySound(sound.playback())
-
-		## Stop playback and rewind, as a command. Receiver form: `sound.stop()`.
-		stop : Sound -> [StopSound(Sound), ..]
-		stop = |sound| StopSound(sound)
-
-		## Pause at the current position, as a command.
-		## Receiver form: `sound.pause()`.
-		pause : Sound -> [PauseSound(Sound), ..]
-		pause = |sound| PauseSound(sound)
-
-		## Resume a paused sound, as a command. Receiver form: `sound.resume()`.
-		resume : Sound -> [ResumeSound(Sound), ..]
-		resume = |sound| ResumeSound(sound)
-
-		## The settings this sound plays at by default, so a `PlaySound` command
-		## can adjust one of them without spelling out the rest:
-		## `sound.playback().with_pitch(0.8).play()`.
+		## The settings this sound plays at by default, so a play can adjust one
+		## of them without spelling out the rest:
+		## `sound.playback().with_pitch(0.8).play!()`.
 		playback : Sound -> Playback
 		playback = |sound| Playback.({ sound: sound, volume: 1, pitch: 1, pan: 0 })
 
@@ -66,9 +54,8 @@ Audio := [].{
 		## The handle never resolves to a host resource, so every host path it
 		## reaches treats it as an invalid one: playing, stopping, pausing, and
 		## resuming it are all no-ops, and `is_playing!` answers `Bool.False`.
-		## Put it in a model to reach the app's real `update` from an `expect`,
-		## and assert on the returned commands with `App.command_description`. Do not
-		## use it to test playback or resource lifetime.
+		## Put it in a model to reach the app's pure update logic from an
+		## `expect`. Do not use it to test playback or resource lifetime.
 		stub : Sound
 		stub = { resource: AudioHost.Sound.stub }
 	}
@@ -94,16 +81,12 @@ Audio := [].{
 		with_pan : Playback, F32 -> Playback
 		with_pan = |Playback.(settings), pan| Playback.({ ..settings, pan: pan })
 
-		## Turn these settings into a command. Receiver form: `settings.play()`.
-		play : Playback -> [PlaySound(Playback), ..]
-		play = |settings| PlaySound(settings)
-
 		## Apply the settings and start playback.
 		##
-		## The platform calls this to service a `PlaySound` command; an effectful
-		## context such as `init!` can call it directly. The three transport
-		## calls go straight to the host rather than through `Sound`, because
-		## `Sound.play!` is defined as this operation.
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		##
+		## The three transport calls go straight to the host rather than through
+		## `Sound`, because `Sound.play!` is defined as this operation.
 		play! : Playback => {}
 		play! = |Playback.(settings)| {
 			AudioHost.set_sound_volume!(settings.sound.resource, settings.volume)
@@ -164,58 +147,14 @@ Audio := [].{
 		time_played! : Music => F32
 		time_played! = |music| AudioHost.music_time_played!(music.resource)
 
-		## Start or restart playback, as a command a pure `update` can return.
-		## Receiver form: `music.play()`.
-		play : Music -> [PlayMusic(Music), ..]
-		play = |music| PlayMusic(music)
-
-		## Stop playback and rewind, as a command. Receiver form: `music.stop()`.
-		stop : Music -> [StopMusic(Music), ..]
-		stop = |music| StopMusic(music)
-
-		## Pause at the current position, as a command.
-		## Receiver form: `music.pause()`.
-		pause : Music -> [PauseMusic(Music), ..]
-		pause = |music| PauseMusic(music)
-
-		## Resume paused playback, as a command. Receiver form: `music.resume()`.
-		resume : Music -> [ResumeMusic(Music), ..]
-		resume = |music| ResumeMusic(music)
-
-		## Set stream volume as a command a pure `update` can return, clamped by
-		## the host to 0 through 1. Receiver form: `music.set_volume(0.13)`.
-		set_volume : Music, F32 -> [SetMusicVolume({ music : Music, volume : F32 }), ..]
-		set_volume = |music, volume| SetMusicVolume({ music: music, volume: volume })
-
-		## Set stream pitch multiplier, as a command.
-		## Receiver form: `music.set_pitch(1.5)`.
-		set_pitch : Music, F32 -> [SetMusicPitch({ music : Music, pitch : F32 }), ..]
-		set_pitch = |music, pitch| SetMusicPitch({ music: music, pitch: pitch })
-
-		## Set stereo pan, clamped by the host to -1 through 1, as a command.
-		## Receiver form: `music.set_pan(-0.5)`.
-		set_pan : Music, F32 -> [SetMusicPan({ music : Music, pan : F32 }), ..]
-		set_pan = |music, pan| SetMusicPan({ music: music, pan: pan })
-
-		## Enable or disable automatic looping, as a command.
-		## Receiver form: `music.set_looping(Bool.True)`.
-		set_looping : Music, Bool -> [SetMusicLooping({ music : Music, looping : Bool }), ..]
-		set_looping = |music, looping| SetMusicLooping({ music: music, looping: looping })
-
-		## Seek to seconds from the start, as a command. Negative values are
-		## clamped to zero. Receiver form: `music.seek(12.5)`.
-		seek : Music, F32 -> [SeekMusic({ music : Music, seconds : F32 }), ..]
-		seek = |music, seconds| SeekMusic({ music: music, seconds: seconds })
-
 		## Resource-free music value for pure tests.
 		##
 		## The handle never resolves to a host resource, so every host path it
 		## reaches treats it as an invalid one: transport and mutation calls are
 		## no-ops, `is_playing!` answers `Bool.False`, and `length!` and
-		## `time_played!` answer zero. Put it in a model to reach the app's real
-		## `update` from an `expect`, and assert on the returned commands with
-		## `App.command_description`. Do not use it to test playback or resource
-		## lifetime.
+		## `time_played!` answer zero. Put it in a model to reach the app's pure
+		## update logic from an `expect`. Do not use it to test playback or
+		## resource lifetime.
 		stub : Music
 		stub = { resource: AudioHost.Music.stub }
 	}
@@ -268,11 +207,6 @@ Audio := [].{
 	## Set global output volume for all sounds and music, clamped to 0 through 1.
 	set_master_volume! : F32 => {}
 	set_master_volume! = |volume| AudioHost.set_master_volume!(volume)
-
-	## Set global output volume for all sounds and music, as a command a pure
-	## `update` can return. Clamped by the host to 0 through 1.
-	set_master_volume : F32 -> [SetMasterVolume(F32), ..]
-	set_master_volume = |volume| SetMasterVolume(volume)
 
 	expect waveform_code(Sine) == 0
 	expect waveform_code(Noise) == 4

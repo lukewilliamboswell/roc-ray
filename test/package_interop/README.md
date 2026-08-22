@@ -1,4 +1,4 @@
-# Companion types package spike
+# Companion types package interop
 
 Tests whether RocRay's public data types can live in an ordinary Roc package
 that both the platform and reusable third-party packages depend on. Without

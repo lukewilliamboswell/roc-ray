@@ -15,7 +15,7 @@ candidate work and delivery order.
 
 This document should change only when a requirement changes, experience
 invalidates an assumption, or the project deliberately moves a system
-boundary. Adding a draw primitive, input source, request kind, resource type, or
+boundary. Adding a draw primitive, input source, effect, resource type, or
 target should not by itself require an architecture change.
 
 ## Product definition
@@ -40,9 +40,9 @@ the same application contract.
 
 ## Vocabulary and prior art
 
-RocRay is closest to a synchronous state transducer embedded in a game loop. It
-is informed by The Elm Architecture, but it is not a browser UI runtime: it
-samples several host facilities together, applies ordered device commands, and
+RocRay is closest to a state transducer embedded in a game loop. It is informed
+by The Elm Architecture, but it is not a browser UI runtime: it samples several
+host facilities together, changes device state through direct calls, and
 renders immediately to a frame.
 
 The vocabulary deliberately follows established meanings:
@@ -50,15 +50,16 @@ The vocabulary deliberately follows established meanings:
 | RocRay term | Meaning |
 | --- | --- |
 | `Model` | Application-owned state retained between host cycles |
-| `App.Input(msg)` | Everything supplied to one state transition: sampled host state, interval events, and response messages |
-| `update` | The pure transition function |
-| `App.Transition(model, msg)` | The next model and the host work requested by that transition |
-| `App.Command` | An ordered, current-host-cycle instruction that produces no response |
-| `App.Request(msg)` | One finite request that produces exactly one later response message while the application remains alive |
-| application `Message` or `msg` | Application data produced from a request response and delivered in a later `Input` |
+| `App.Input(msg)` | Everything supplied to one cycle: sampled host state, interval events, and task messages |
+| `update!` | The effectful step that folds one input into the next model |
+| effect | A direct host call made from an application callback or a task |
+| waiting effect | An effect that can wait on the outside world; on a task it parks the task rather than the frame |
+| task | Scheduled work with a lifecycle: an effectful closure started by `Task.spawn!`, running on its own stack until it returns one message |
+| application `Message` or `msg` | The value a finished task returns, delivered in a later `Input` |
+| phase | Which application callback the host is inside; every effect states the phases in which it is legal |
 | `Draw.Frame` | Render-scoped authority for the active drawing surface |
-| host cycle | One `App.Input`, one call to `update`, command application, request submission, and optional presentation |
-| simulation step | Application-defined domain advancement performed zero or more times within one `update` |
+| host cycle | One `App.Input`, one call to `update!`, and optional presentation |
+| simulation step | Application-defined domain advancement performed zero or more times within one `update!` |
 | presentation frame | One call to `render!` using the latest model |
 
 Names are selected by direction, timing, cardinality, and ownership rather than
@@ -74,86 +75,75 @@ Several words have precise meanings throughout this document:
 | bounded | The maximum host-retained items or bytes is known before admission; it need not be small or globally constant |
 | capability | An unforgeable typed value granting limited authority over a host facility or resource; possession does not guarantee a successful runtime outcome |
 | domain state | Application-meaningful state that determines behavior or policy, as distinct from a host facility's operational state |
-| terminal response | The single success, error, cancellation, or refusal that completes one request; that request produces nothing afterward |
-
-This is the conventional state-machine relationship: current state plus input
-determines next state plus output. A Mealy machine is formally a state machine
-that produces output for each transition; RocRay's transition outputs are
-commands and requests, while rendering is separately derived from the resulting
-model. See the [definition of a Mealy machine](https://en.wikipedia.org/wiki/Mealy_machine).
+| orderly lifetime | The span from a successful `init!` to the cycle that ends the application; guarantees about delivery hold within it and not across forced termination |
 
 The names also account for conventions that conflict across software domains:
 
 - [The Elm Architecture](https://guide.elm-lang.org/architecture/) uses
-  `Model`, `update`, messages, and command values that may eventually produce a
-  message. RocRay retains the names whose meanings match, but splits outbound
-  work by response cardinality: `Request` expects one; `Command` expects none.
-- [CQRS](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs)
-  also uses *command* for an instruction that changes state, in contrast to a
-  query that returns data. RocRay makes the no-response property explicit.
-- Graphics APIs also use *command* for ordered instructions submitted for
-  execution; for example, the
-  [Vulkan specification](https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html)
-  defines command buffers this way. RocRay commands are ordinary Roc data, not
-  public GPU command buffers, but the direction and ordering intuition match.
-- [Redux](https://redux.js.org/tutorials/fundamentals/part-2-concepts-data-flow#actions)
-  calls an inbound event an *action*, while
-  [XState](https://stately.ai/docs/actions) calls an outbound fire-and-forget
-  effect an *action*. RocRay uses *command* so direction is not framework-
-  dependent.
+  `Model`, `update`, and messages. RocRay keeps those names where the meanings
+  match: one model, one place per cycle where it changes, and messages that
+  arrive as data. It does not keep Elm's purity: RocRay's `update!` calls host
+  effects directly, so the `!` is part of the name.
 - In mainstream async APIs, such as
-  [Python `asyncio`](https://docs.python.org/3/library/asyncio-task.html#awaitables),
-  a *task* is scheduled or running work with identity and cancellation.
-  RocRay's value is an inert declarative request with no public identity, so
-  *request* better predicts its lifecycle.
+  [Python `asyncio`](https://docs.python.org/3/library/asyncio-task.html#awaitables)
+  and structured-concurrency libraries generally, a *task* is scheduled or
+  running work with a lifecycle: it starts, it may wait, it can be cancelled,
+  and it finishes with a value. That is precisely what `Task.spawn!` creates,
+  so *task* predicts the right behavior.
+- A *message* is conventionally a value delivered into a state machine's inbox
+  rather than a call. RocRay messages arrive on `Input.messages` in the order
+  their tasks finished and are consumed by exactly one `update!`, which is the
+  intuition the word already carries.
+- A *phase* names a stage of execution in which a different set of operations
+  is legal. `Context` is avoided for this role because framework contexts
+  usually carry capabilities or services, whereas a RocRay phase is host state
+  the application never holds.
 - A *step* conventionally suggests advancing a simulation. Game loops often
   distinguish variable-rate frame processing from fixed-rate physics steps, as
   illustrated by
   [Godot's processing model](https://docs.godotengine.org/en/4.6/tutorials/scripting/idle_and_physics_processing.html).
   One RocRay cycle may cause the application to perform zero, one, or several
-  simulation steps, so the value supplied to `update` is an *input*, not a
+  simulation steps, so the value supplied to `update!` is an *input*, not a
   `Step`.
-- *Commit* commonly implies an atomic or durable transaction. RocRay only
-  applies commands in order, so the phase is called *apply*.
 
-`Step`, `Action`, `Task`, and `Update` are therefore not synonyms retained for
-variety. They name different concepts elsewhere and are not used for these
-public roles. Likewise, `Context` is avoided because framework contexts usually
-carry capabilities or services, whereas `App.Input` carries data only. A
-transition containing only a next model is constructed as `App.next(model)`;
-*static* would falsely imply that the model did not change.
+`Step`, `Action`, and `Update` therefore name different concepts elsewhere and
+are not used for these public roles.
 
 ## Design goals
 
 ### Simple application reasoning
 
 An application should be understandable as a model transformed by a stream of
-complete observations, with requested effects stated as data. There is one
-place for domain state transitions and no hidden platform callback that can
-mutate the model.
+complete observations. There is one place per cycle where domain state changes
+and no hidden platform callback that can mutate the model. Work that finishes
+later reports back as data, not as a callback into application state.
 
 ### Testability and controlled reproducibility
 
 Application rules should be testable without a window, GPU, audio device,
-filesystem, network, or worker thread. Sources of nondeterminism must cross the
+filesystem, network, or coroutine. Sources of nondeterminism must cross the
 application boundary explicitly so an application can replace, record, or
-control them when reproducibility matters.
+control them when reproducibility matters. Because `update!` is effectful, the
+platform makes the *pure core* of an application testable rather than `update!`
+itself: inputs and host resources have pure constructors, so decisions folded
+out of `update!` can be exercised directly.
 
 ### Frame-time discipline under load
 
-Known blocking filesystem, network, process, and waiting operations do not run
-inside the host cycle. The amount of synchronous work introduced by the
+Filesystem, network, process, and waiting operations do not run inside
+`update!` or `render!`. They run on a task, where waiting parks that task and
+the frame loop continues. The amount of synchronous work introduced by the
 platform is bounded before it is admitted. Frame-scoped GPU and audio calls can
 still stall in a driver, so RocRay does not claim hard real-time deadlines.
 Saturation has deliberate semantics rather than causing unbounded retained
-work or silent response loss.
+work or silent message loss.
 
 ### Efficient boundary crossings
 
-The expensive unit is often a Roc/host transition, allocation, copy, or thread
-handoff rather than the primitive operation behind it. APIs should move
-compact batches and snapshots across the boundary and let each side loop over
-the representation it owns.
+The expensive unit is often a Roc/host transition, allocation, copy, or stack
+switch rather than the primitive operation behind it. APIs should move compact
+batches and snapshots across the boundary and let each side loop over the
+representation it owns.
 
 ### Honest portability
 
@@ -175,10 +165,10 @@ Each layer has a distinct responsibility:
 
 | Layer | Semantic authority | Runtime custody |
 | --- | --- | --- |
-| Roc application | Domain model, policy, interpretation of input, requested work | Ordinary Roc values reachable from the model and transition |
+| Roc application | Domain model, policy, interpretation of input, what work to start | Ordinary Roc values reachable from the model and from a task closure |
 | Pure Roc packages | Reusable vocabulary and algorithms | Their ordinary values, but no live host facility merely by defining its type |
-| Platform adapter | Public transition, command, request, and frame protocols | Values moving between the application and host ABI |
-| Host runtime | Cycle ordering, sampling policy, request execution, capacity, shutdown | The opaque model between callbacks, response mappers, and native resources |
+| Platform adapter | Public input, effect, task, and frame protocols | Values moving between the application and host ABI |
+| Host runtime | Cycle ordering, sampling policy, phase enforcement, task scheduling, capacity, shutdown | The opaque model between callbacks, undelivered task messages, and native resources |
 | Backend and operating system | Device and operating-system behavior | Windows or surfaces, files, processes, sockets, GPU state, and audio state |
 
 The application has semantic authority over its model. The host has custody of
@@ -186,7 +176,7 @@ the model between callbacks but treats it as opaque. It does not inspect the
 model to infer rendering, input interest, resource reachability, or domain
 decisions.
 
-Internal transport records, callback tickets, resource slots, native pointers,
+Internal transport records, task envelopes, resource slots, native pointers,
 and backend objects do not cross the public boundary. Public opaque values are
 typed capabilities, not escape hatches into host memory.
 
@@ -195,14 +185,14 @@ typed capabilities, not escape hatches into host memory.
 A RocRay program has three responsibilities:
 
 - `init!` validates startup configuration, performs one-time startup effects,
-  and creates the initial model. Startup may load or allocate resources before
-  interactive cycling begins.
-- `update` receives the current model and one `App.Input`. It returns an
-  `App.Transition` containing the next model, commands, and requests. It is
-  pure.
+  and creates the initial model. Startup may load or allocate resources, and
+  may use waiting effects, before interactive cycling begins.
+- `update!` receives the current model and one `App.Input`. It folds that input
+  into the next model, calls host effects directly, and starts tasks. It
+  returns the next model, or `Err(Exit(code))` to stop the application.
 - `render!` receives the resulting model and a `Draw.Frame`. It may issue
   drawing commands and frame-scoped draw-state changes, but it cannot change
-  the model or request general host work.
+  the model or reach general host work.
 
 Conceptually, the host drives this cycle:
 
@@ -210,89 +200,111 @@ Conceptually, the host drives this cycle:
 sequenceDiagram
     participant Host as Host runtime
     participant App as Roc application
+    participant Task as Task on its own stack
 
     loop Each host cycle
-        Host->>App: update(model, App.Input)
-        App-->>Host: App.Transition(next model, commands, requests)
-        Host->>Host: apply commands, then submit requests
+        Host->>Host: give tasks a turn, collect finished messages
+        Host->>App: update!(model, App.Input with those messages)
+        App->>Host: direct effects, in program order
+        App->>Task: Task.spawn!(input, closure) -- it may start at once
+        App-->>Host: next model, or Err(Exit(code))
+        Host->>Host: give tasks a turn -- every new task has reached its first wait
         opt Presentation is scheduled
             Host->>App: render!(next model, Draw.Frame)
             App-->>Host: ordered draw operations
         end
     end
 
-    loop Each accepted request, outside application callbacks
-        Host->>Host: execute request and stage one terminal response
-        Note over Host,App: its mapped Message appears in a later App.Input
+    loop While a task is live, between callbacks
+        Task->>Host: waiting effect parks the task -- the frame loop continues
+        Note over Host,App: the closure's return value is a message on a later App.Input
     end
 ```
 
-The ordering is intentional: the host constructs one input, `update` computes
-one transition, commands are applied in list order, requests are submitted in
-list order, and any presentation sees the new model after command application.
-A host may implement this with a native loop, a browser callback, or another
-scheduler; the observable contract remains the same.
+The ordering is intentional: the host constructs one input, `update!` runs
+exactly once against it, and any presentation sees the model that call
+returned. A host may implement this with a native loop, a browser callback, or
+another scheduler; the observable contract remains the same.
 
 ### Host cycles, simulation steps, and presentation
 
-A host cycle supplies one fresh `App.Input` and invokes `update` exactly
-once. After applying the resulting commands and submitting its requests, the
-host may invoke `render!` at most once with the resulting model. A graphical
-host normally presents every cycle; a headless, minimized, or deliberately
-throttled host may omit presentation.
+A host cycle supplies one fresh `App.Input` and invokes `update!` exactly once.
+The host may then invoke `render!` at most once with the resulting model. A
+graphical host normally presents every cycle; a headless, minimized, or
+deliberately throttled host may omit presentation.
 
 A simulation step is application-defined rather than a platform callback. An
 application may advance its domain simulation zero, one, or several times
-during one `update`, accumulating commands and requests in their intended
-order. Only the final model is available for presentation.
+during one `update!`. Only the final model is available for presentation.
 
-The host does not invoke `update` repeatedly with the same input to catch up.
-Each interval event and request response is therefore consumed by exactly one
-transition. Simulation pacing, catch-up limits, and overload policy remain
-explicit application policy.
+The host does not invoke `update!` repeatedly with the same input to catch up.
+Each interval event and task message is therefore consumed by exactly one call.
+Simulation pacing, catch-up limits, and overload policy remain explicit
+application policy.
 
-Repeated calls to `update` within one host callback would not by themselves
-create concurrency, yield to host work, or allow a request response to arrive
-between calls. Independently scheduled transitions would require new input,
-effect-ordering, and overload semantics, so adding them is an architecture
-change rather than a host optimization.
+The platform cannot prevent application code from taking too long. It can and
+does prevent `update!` and `render!` from becoming blocking I/O entry points:
+every effect that can wait is refused in those phases. Work that waits belongs
+on a task and answers on a later cycle.
 
-Roc application callbacks execute serially. The host never concurrently
-touches the same Roc application value from multiple threads. Roc values have
-immutable value semantics. Explicit mutable variables may be reassigned, as
-described in Roc's [functional programming
-guide](https://roc-lang.org/functional), and the compiler may reuse uniquely
-owned storage, but aliases do
-not thereby observe an existing value change. Runtime representations can
-nevertheless contain mutable ARC metadata, so unsynchronized threads sharing
-the same value could race while updating its reference count. Serial callbacks
-also give applications one unambiguous order of model transitions.
+## Invariants
 
-The platform cannot prevent application code itself from taking too long, but
-no runtime effect exposed to `update` or `render!` may turn those callbacks into
-blocking I/O entry points. Long-running work belongs to the host and returns on
-a later host cycle.
+These properties are the architecture. A change that weakens one of them is an
+architecture change, not a feature.
+
+1. **One Roc thread.** Every application callback and every task body runs on
+   the frame thread, one at a time. The host never runs Roc code on a worker
+   thread and never shares a Roc value with one. Host workers see bytes the
+   host owns, never Roc values.
+2. **The model changes in one place.** `update!` is the only callback that
+   returns a new model. A task cannot read or write the model; it computes a
+   value and returns it.
+3. **Tasks report by message.** During an orderly lifetime a task delivers
+   exactly one message, on `Input.messages`, and never delivers again. Messages
+   arrive in the order their tasks finished; the order they were spawned in
+   does not constrain that.
+4. **Waiting happens only in startup or on a task.** No effect reachable from
+   `update!` or `render!` may wait on the filesystem, the network, a device, a
+   peer, or the clock.
+5. **Live tasks are bounded, and spawning never fails.** A fixed number of
+   tasks run at once; each owns a stack, which is what the bound is really
+   bounding. A spawn past that limit is queued and started in submission order
+   as a slot frees. `Task.spawn!` has no failure to report, so a refusal would
+   have to be a silently dropped closure that never answers.
+6. **Scheduling is cooperative.** A task yields only at a waiting effect. Long
+   pure computation inside a task holds the frame exactly as it would inside
+   `update!`; the platform buys overlap for waiting, not for computing.
+7. **Shutdown cancels and drains.** No `Input` exists after the last cycle, so
+   nothing produced afterwards can be delivered. Live tasks are cancelled -- a
+   parked waiting effect returns at once on the cancelled path -- closures that
+   never started are dropped, and staged messages are released rather than
+   leaked. Forced process termination is outside this guarantee.
+8. **A phase violation is a programmer error.** Every effect declares the
+   phases it is legal in. Reaching one from another phase fails immediately,
+   naming the effect, the phase it was called from, and where it belongs.
+9. **Rendering only draws.** `render!` cannot change the model, change host
+   state, or start work. Anything that must affect the next model has a
+   representation in `App.Input`.
 
 ## Boundary protocols
 
-The application and host interact through five explicit protocols. They are
+The application and host interact through four explicit protocols. They are
 separate because they have different direction, timing, cardinality, and
 failure semantics.
 
 | Protocol | Direction | Timing and cardinality |
 | --- | --- | --- |
 | Startup authority | Host to `init!`, with direct startup operations | Once, before cycling |
-| `App.Input(msg)` | Host to `update` | Exactly once per host cycle |
-| `App.Command` | `update` to host | Zero or more, applied this host cycle, no response |
-| `App.Request(msg)` | `update` to host and one response message back | Zero or more; response delivered in a later input |
+| `App.Input(msg)` | Host to `update!` | Exactly once per host cycle |
+| Effects | Application to host, in program order | Any number, synchronously, from the phases each effect permits |
 | `Draw.Frame` | Host to `render!`, with draw calls back to host | Zero or one per host cycle; exactly one per presentation frame |
 
-Adding a sixth protocol is an architecture change. Adding a new value carried
+Adding a fifth protocol is an architecture change. Adding a new value carried
 by one of these protocols is ordinarily an API change only.
 
 ### Input: `App.Input(msg)`
 
-`Input` is immutable data supplied to one call of `update`. It contains three
+`Input` is immutable data supplied to one call of `update!`. It contains three
 kinds of information, which are not falsely presented as one atomic operating-
 system snapshot:
 
@@ -300,8 +312,7 @@ system snapshot:
   held keys, surface dimensions, focus, and recording status;
 - **interval events** report ordered occurrences retained since the preceding
   input, such as presses, text, dropped files, or touch transitions;
-- **messages** are application values produced by mapping request responses in
-  the order the host observed them.
+- **messages** are the values finished tasks returned, in completion order.
 
 The contained keyboard, pointer, touch, and gamepad snapshot is named
 `devices`, not `input`. This keeps `App.Input` distinct from one category
@@ -311,89 +322,71 @@ code.
 Every input field documents which kind it is, when it is sampled, its ordering
 and coalescing rules, and its finite capacity. A bounded event source either
 reports overflow explicitly or documents that it is intentionally lossy and
-what is coalesced. “Latest value” is sufficient for state; silently losing an
-edge or response is not equivalent.
+what is coalesced. "Latest value" is sufficient for state; silently losing an
+edge or a message is not equivalent.
 
-If application logic needs an answer, that answer arrives as input data.
-General host reads inside `update` would make the transition effectful and let
-two reads during one transition disagree.
+`App.Input(msg)` is also the type witness that ties a task's message to the
+application's own `Msg`. Only the platform's entry module can name the
+`requires` bound, so any public function whose signature mentions `msg` and
+reaches a hosted effect takes an input it never reads. Without it, `msg`
+generalizes at the call site and the host decodes the returned bytes at a
+different type.
 
 Continuously changing sources have two valid shapes. Ambient sources such as
 device input are sampled or buffered into `Input`. Demand-driven sources such
-as a socket or database cursor can instead expose repeated finite requests.
-Neither shape invokes application code from a background thread.
+as a socket or database cursor can instead expose a repeated waiting effect
+inside a task. Neither shape invokes application code from a background thread.
 
-### Current-cycle instructions: `App.Command`
+### Effects
 
-A command is closed, inspectable data describing an ordered host instruction
-to apply after `update` and before rendering. It is appropriate when relative
-order matters and the application needs no response.
+An effect is a direct host call. Synchronous effects — setting the cursor,
+resizing the window, playing a sound, uploading pixels, starting a recording —
+run in program order at the point they are written, from `init!`, `update!`, or
+a task. They are not available to `render!`, which draws.
 
-Commands have these properties:
-
-- every structurally valid command is invoked exactly once in list order;
-- they contain no arbitrary effectful closure;
-- their comparable descriptions can be inspected in pure tests without
-  inspecting opaque host resources;
-- they do not produce callbacks or immediate results;
-- every apply-phase hosted operation is reachable through a command or has a
-  documented reason why it is not application-reachable.
-
-A command's verb states the strength of its guarantee. `Set` is reserved for a
+An effect's verb states the strength of its guarantee. `Set` is reserved for a
 state change the capability profile promises to apply; a window-manager hint,
 for example, is named `Suggest` rather than pretending the host controls the
 final geometry. If success or failure itself changes application policy, the
-operation is a request or exposes later status in `App.Input`.
+effect returns a typed result or the condition appears in a later `App.Input`.
 
-That last rule is the command-coverage invariant. An apply-capable hosted
-operation without a corresponding command is dead public API: `update` cannot
-call it and `render!` must not. Coverage is mechanically checked.
+Invoking an effect and observing a physical outcome are different guarantees.
+Device effects can be subject to documented backend behavior, but a condition
+the model must distinguish must be observable — as a returned value or as
+input — rather than silently absorbed.
 
-Invoking a command and observing a physical outcome are different guarantees.
-Device commands can be subject to documented backend behavior, but a condition
-the model must distinguish makes the operation a request or requires later
-status in `Input`. Capacity exhaustion is not a reason to silently drop a
-command. Purely checkable structural errors are rejected before any command in
-the transition is invoked.
+### Tasks
 
-### Finite request/response work: `App.Request(msg)`
+A task is an effectful closure handed to `Task.spawn!` from `update!` or from
+another task. The host runs it on its own stack. A waiting effect inside it
+parks that stack; the frame loop resumes and keeps rendering, and a later cycle
+resumes the task where it left off. When the closure returns, its value is
+staged and delivered as a message on the next `App.Input`.
 
-A request is inert, declarative data describing one finite operation. It
-carries a pure response mapper from the operation's typed result into an
-application message. The host owns correlation; applications never allocate
-transport tickets, match raw responses, or inspect a global registry.
+When a task starts is the host's choice: it may run up to its first waiting
+effect before `Task.spawn!` returns, or in the host's turn after `update!`
+returns. Either way it has reached its first wait, or finished, before
+`render!` of the same cycle. A task's code and its synchronous effects can
+therefore interleave with the rest of the `update!` that spawned it, and
+application code must not assume an order between the two. The only ordering
+a task promises is its message: on a later cycle, after every task that
+finished before it.
 
-Finite describes response cardinality, not a universal wall-clock deadline.
-An operation that can wait indefinitely on an external party defines a
-deadline, cancellation, or capability-lifecycle operation so the host can
-eventually release its reservation without abandoning the response mapper.
+This is what makes a multi-step operation readable: inside a task, a waiting
+effect returns its answer, so a load-then-parse-then-fetch sequence is
+straight-line code with ordinary error propagation rather than a state machine
+spread across message variants.
 
-During an orderly application lifetime, every submitted request produces
-exactly one response message. Rejection because capacity is exhausted is
-itself a response such as `Busy`; it is not a dropped request. This invariant
-means a component can account for every request it emitted without public IDs,
-timeouts invented only to detect host loss, or callbacks stranded forever.
+Tasks buy overlap for waiting only. They are not a general concurrency
+facility: the application never observes two of its own callbacks running at
+once, never needs a lock, and never has to reason about a partially updated
+model. The cost of that simplicity is invariant 6 — a task that computes
+without waiting holds the frame.
 
-Exactly one response is an in-process bookkeeping guarantee, not a claim of
-exactly-once execution by a filesystem, network peer, database, or subprocess.
-An external side effect may have occurred even when its outcome is an error;
-safe retry and idempotency remain application or protocol policy.
-
-Accepted asynchronous work reserves the resources needed both to execute and
-to stage its response. A request that cannot obtain that reservation is refused
-with an immediate terminal response. Applications that want less concurrency
-than the platform permits pace requests in their pure model.
-
-Requests are submitted in list order after all commands have been applied, but
-independent requests may respond in any order. Required dependencies are
-expressed by submitting a later request only after the earlier response has
-entered the model.
-
-Orderly shutdown is the deliberate exception to response delivery: no future
-`Input` exists, so pending response mappers are released while host work is
-cancelled, joined, or cleaned up according to its contract. Forced process
-termination and catastrophic host failure are outside the in-process delivery
-guarantee.
+Because a task cannot touch the model, the only thing it can say is its message.
+An operation whose outcome must change application policy therefore returns
+that outcome in the message; a task that returns nothing useful is a task whose
+completion the model cannot account for.
 
 ### Rendering: `Draw.Frame`
 
@@ -403,77 +396,58 @@ surface scope is open.
 
 Rendering may query narrowly frame-relative facts such as the dimensions of
 the active surface or metrics of a draw resource. Such a query may influence
-drawing only. Anything that must affect the next model, hit testing, commands,
-or requests also needs a representation in `App.Input`.
+drawing only. Anything that must affect the next model, hit testing, or host
+state also needs a representation in `App.Input`.
 
-### Choosing a protocol
+### Choosing where work goes
 
-| Need | Protocol |
+| Need | Mechanism |
 | --- | --- |
 | Latest ambient state or bounded interval events | `App.Input` field |
-| Finite work whose terminal outcome matters | `App.Request(msg)` |
-| Ordered current-host-cycle instruction with no response | `App.Command` |
+| An immediate host state change with no waiting | Effect called from `update!` |
+| Work that waits, and whose outcome matters | Task, reporting one message |
 | Drawing or draw state ordered within a frame | `render!` and `Draw.Frame` |
-| One-time blocking load or allocation | `init!` startup authority |
+| One-time load or allocation before the first frame | `init!` startup authority |
 
 The classification follows semantics, not backend convenience. An operating-
 system function being synchronous does not make it safe to expose as a
-synchronous application operation.
+frame-phase effect.
 
-## Cycle ordering and capability enforcement
-
-Each host cycle has a fixed logical order:
-
-1. The host constructs `App.Input`.
-2. Pure `update` computes one `App.Transition`.
-3. The platform validates the complete transition and applies its commands in
-   list order.
-4. The host submits its requests in list order. Even a response available
-   immediately is staged for a later input.
-5. If presentation is scheduled, the host calls `render!` with the resulting
-   model and an open `Draw.Frame`, then closes the frame.
-6. The host performs bounded housekeeping.
-
-This is ordering, not transactionality. Commands may have physical effects as
-they are invoked; RocRay does not claim that a driver or operating system can
-roll them back. Validation before application prevents purely structural
-errors from causing a knowingly partial cycle.
-
-The conceptual application phases and the host's dynamic enforcement scopes
-are related but not identical:
-
-| Application phase | Allowed public behavior | Enforcement |
-| --- | --- | --- |
-| Startup | Direct one-time startup operations | Startup capability plus host phase checks |
-| Transition | Pure construction of next model, commands, and requests | Public API exposes no hosted operation to `update` |
-| Apply | Interpretation of returned commands | Private adapter plus host phase checks |
-| Render | Drawing and render-scoped queries | `Draw.Frame`, structured scopes, and host phase checks |
-| Host service | Request execution, response staging, cleanup, shutdown | No application callback and no worker access to Roc values |
+## Phases and enforcement
 
 Capabilities can outlive the callback that supplied them, so possession of a
-value alone is not authority to use it in every phase. Every hosted operation
-that can actually be invoked is checked against its dynamic host scope; purity
-of `update` is primarily a public-surface guarantee rather than a fictional
-hosted `Update` phase.
+value is not authority to use it in every phase. The host therefore tracks
+which callback it is inside — `init!`, `update!`, `render!`, a task, or none —
+and checks every hosted operation against the set of phases that operation
+declares. The sets are few, and are stated as rules rather than as a list of
+functions:
 
-Direct loading and allocation are startup-only because they may block, touch a
-driver, or return a new capability. Runtime loading is a request: the host
-performs each part in an appropriate service or device phase and returns the
-handle or error in a later input.
+- Anything that **changes host state** is legal in `init!`, `update!`, and a
+  task, and refused in `render!`.
+- Anything that **draws** is legal only in `render!`, inside the frame scope
+  the host opens around it.
+- Anything that **waits** is legal only in `init!`, where it blocks startup
+  deliberately, and on a task, where it parks that task.
+- **Starting a task** is legal in `update!` and in another task. It is refused
+  in `init!`, which never sees the answering input, and in `render!`.
+- A few genuinely **constant-time queries** with nothing to allocate and no I/O
+  to do are legal in any callback. Anything that copies, allocates, writes, or
+  reaches a driver does not belong in that set.
 
-Draw state is render-only because its meaning is its position relative to the
-draws around it. Scoped resources such as render targets and shaders use
-structured entry and exit so nesting is validated and backend state cannot
-leak into another frame.
+This runtime guard replaces a type-level purity guarantee. It buys direct,
+readable effect calls and straight-line tasks; it costs a class of error that
+the compiler does not catch. The trade is deliberate, and it is why
+violations fail loudly and immediately, in application vocabulary, naming the
+effect, the phase it was reached from, and the phase it belongs in.
 
-There is no public “constant-time anywhere” escape hatch. A read needed by
-model logic is input or a request response. A read meaningful only for drawing
-belongs to `Draw.Frame`. Startup-only facts belong to startup. Implementation
-cost does not decide semantic placement.
+A waiting effect saves and clears the phase across its park and restores it on
+resume, because the frame loop runs in between and enters phases of its own. A
+task therefore always observes its own phase, however many cycles it waited.
 
-Capability or scope violations are programmer errors. They fail immediately
-with a message in application vocabulary rather than relying on undefined
-backend behavior.
+There is no phase-free escape hatch. A read needed by model logic is input, an
+effect, or a task message. A read meaningful only for drawing belongs to
+`Draw.Frame`. Startup-only facts belong to startup. Implementation cost does
+not decide semantic placement.
 
 ## State, resources, and ownership
 
@@ -496,12 +470,12 @@ The resource contract is:
 Automatic reclamation does not prohibit semantic lifecycle operations. A
 socket may be half-closed, a transaction committed or rolled back, a process
 stopped and awaited, or an encoder finished while its handle remains live.
-Those are commands or requests with domain meaning. Final ARC release remains
-the safe cleanup path when no explicit lifecycle operation occurred.
+Those are effects with domain meaning. Final ARC release remains the safe
+cleanup path when no explicit lifecycle operation occurred.
 
 Native destruction may call a GPU driver, audio device, filesystem, process,
 or network stack, so ARC release records retirement rather than performing
-unbounded destruction inside pure application work. The host drains retired
+unbounded destruction inside application work. The host drains retired
 resources at safe, bounded points. A resource remains unavailable for reuse
 until destruction has actually completed.
 
@@ -513,6 +487,12 @@ slice may retain the whole allocation, and an explicit copy is how an
 application releases excess capacity. This optimization must not change the
 value's semantics.
 
+A task closure is an ordinary Roc value: it captures what it needs, the host
+owns it from the moment it is spawned, and it is released when the task
+finishes, when it is cancelled, or when it is dropped from the pending queue at
+shutdown. A message that was produced but never delivered is released the same
+way.
+
 The model remains the only semantic authority for application domain state. A
 database, socket, process, or stream handle denotes host-owned operational
 state; it is not permission for the host to mutate the model or call
@@ -523,18 +503,18 @@ application code in the background.
 Every platform-owned resource-bearing path has a bound established before work
 is admitted. A bound may be fixed by the capability profile, configured during
 startup, negotiated when a resource is created, or derived from the size of an
-explicit value submitted by the application. This includes at least request
-reservations, worker queues, response staging, native resource heaps, input and
-stream buffers, file and network payloads, capture buffers, per-cycle uploads,
-scoped draw stacks, and deferred destruction.
+explicit value submitted by the application. This includes at least live tasks,
+message staging, native resource heaps, input and stream buffers, file and
+network payloads, capture buffers, per-cycle uploads, scoped draw stacks, and
+deferred destruction.
 
-Bounded does not mean every application-supplied list is capped at a small
-platform constant. Traversing a list returned by `update` is work proportional
-to an explicit input chosen and retained by the application. If accepting an
-item would cause the host to retain additional work or memory beyond that
-cycle, however, the host reserves the relevant capacity before acceptance.
-There are no implicitly unbounded retained queues, caches, registries, or
-background worker sets.
+Bounded does not mean every application-supplied quantity is capped at a small
+platform constant. What is bounded is what the host *starts*, because that is
+what costs a stack, a socket, or a file descriptor. A queue of not-yet-started
+task closures is proportional to spawns the application itself chose to make,
+in the same way that traversing a list returned by the application is
+proportional to a list it chose to build. There are no implicitly unbounded
+retained caches, registries, or background worker sets.
 
 For each bound, the implementation defines:
 
@@ -547,13 +527,12 @@ For each bound, the implementation defines:
 
 A limit is not merely an implementation constant: its exact value may change,
 but its unit and saturation semantics are part of the public contract when
-applications can observe them. Request saturation produces a terminal response
-and does not allow later requests to leapfrog an earlier request refused by the
-same ordered admission queue. A command is either structurally rejected during
-prevalidation or invoked; saturation is not represented as a silent command
-no-op.
+applications can observe them. Task saturation is expressed as delayed start in
+submission order, never as a dropped closure, because a dropped closure is an
+answer that never comes. An effect that cannot proceed returns a typed outcome;
+saturation is not represented as a silent no-op.
 
-Batching is preferred where it reduces transitions without hiding
+Batching is preferred where it reduces boundary crossings without hiding
 backpressure. A list of draw instances, tile commands, samples, or upload
 regions should normally cross once and be traversed on the host side. Batches
 still have explicit size and lifetime bounds.
@@ -564,21 +543,24 @@ The platform distinguishes programmer errors from runtime outcomes by where
 the relevant fact comes from.
 
 A programmer error violates an invariant determined entirely by the submitted
-value, its types, and the live capabilities already held by the application.
-Examples include violating a phase or scope, supplying internally inconsistent
-dimensions, and using a capability for the wrong operation. Prefer types and
-constructors that make such values unrepresentable. Remaining violations fail
-the application promptly. When a transition contains multiple commands, all
-purely checkable structural errors are found before any command is applied so a
-bad transition does not knowingly cause a partial cycle.
+value, its types, the current phase, and the live capabilities already held by
+the application — calling an effect from the wrong phase, supplying internally
+inconsistent dimensions, using a capability for the wrong operation. Prefer
+types and constructors that make such values unrepresentable. Remaining
+violations fail the application promptly, with a message written in the
+application's own vocabulary rather than the host's.
 
 A runtime outcome depends on mutable state outside the submitted value:
 capacity currently in use, filesystem contents, permissions, a peer, a child
 process, a device, a driver, or scheduling. Capacity exhaustion, missing files,
 denied permissions, network failures, process exits, recoverable device loss,
-and invalid external input therefore produce typed request responses or
-documented status in `App.Input`. They do not corrupt state, grow memory
-without bound, or silently consume a response.
+and invalid external input therefore produce typed results from effects, typed
+values inside task messages, or documented status in `App.Input`. They do not
+corrupt state, grow memory without bound, or silently consume a message.
+
+An external side effect may have occurred even when its outcome is an error.
+Safe retry and idempotency remain application or protocol policy; the platform
+does not retry on the application's behalf.
 
 The platform does not guess repairs that change application meaning. It does
 not silently substitute resources, reinterpret malformed data, invent paths,
@@ -586,16 +568,16 @@ retry non-idempotent operations, or downgrade a requested capability.
 
 ## Time, nondeterminism, and capture
 
-Pure `update` makes determinism possible, but does not promise it by itself.
-The enduring guarantee is narrower and more useful: given the same model and
-the same complete `App.Input`, `update` returns the same transition. All
-changing host facts enter through explicit input or request responses.
+The enduring determinism guarantee is narrow and useful: all changing host
+facts enter the model through explicit input or through task messages, so given
+the same model, the same complete `App.Input`, and the same effect outcomes, an
+application takes the same decisions.
 
 Simulation time and wall time are distinct. Animation and physics use the
-cycle's simulation timeline. Calendar time, external I/O, device input,
-concurrent completion order, and entropy are explicitly nondeterministic.
-Randomness used by domain logic is represented by explicit generator state;
-startup entropy may seed it when variation is wanted.
+cycle's simulation timeline. Calendar time, external I/O, device input, task
+completion order, and entropy are explicitly nondeterministic. Randomness used
+by domain logic is represented by explicit generator state; startup entropy may
+seed it when variation is wanted.
 
 A reproducible run therefore controls or records:
 
@@ -604,8 +586,7 @@ A reproducible run therefore controls or records:
 - real and virtual input;
 - random seeds;
 - resource bytes and platform versions;
-- every external request response and its delivery order that affects the
-  model.
+- every task message that affects the model, and its delivery order.
 
 Fixed-step capture controls simulation pacing; it does not make wall time,
 network responses, microphone input, or GPU behavior across different devices
@@ -631,8 +612,7 @@ backend state and resources needed to execute the current ordered draw stream.
 Frame and nested target scopes define where a draw lands. The active surface
 may answer for its own dimensions and other geometry needed to interpret draw
 coordinates. Application layout and interaction decisions still use the
-corresponding `App.Input` data so rendering does not become a second update
-function.
+corresponding `App.Input` data, so rendering does not become a second update.
 
 Draw primitives, 2D or 3D cameras, meshes, text, shaders, and post-processing
 are all extensions of this same ordered rendering boundary. Adding them does
@@ -647,10 +627,10 @@ Filesystem access, networking, databases, subprocesses, clipboard access,
 audio input, and similar facilities extend what the host can do, not how the
 application model works.
 
-Finite request/response operations are requests. Immediate ordered
-instructions with no required result are commands. Long-lived native state
-uses a typed ARC handle. Continuously arriving bounded observations are sampled
-or buffered into `App.Input`. Protocol state, serialization, retry policy,
+Anything that waits is a waiting effect, used inside a task. An immediate
+change to host state is an ordinary effect. Long-lived native state uses a
+typed ARC handle. Continuously arriving bounded observations are sampled or
+buffered into `App.Input`. Protocol state, serialization, retry policy,
 queries, domain caching, and interpretation remain in Roc unless the host must
 own a narrowly defined piece for device or operating-system ownership, memory
 or concurrency safety, or a measured boundary-performance need.
@@ -662,21 +642,23 @@ and device capabilities state their platform permission behavior. The
 platform does not turn a convenient feature into ambient, undocumented access
 to the machine.
 
-There is no arbitrary native-call facility and no effect-thunk escape hatch
-such as `App.command(|| ...)`. An opaque closure would evade phase checks,
-command inspection, pure validation, capability profiles, and test assertions.
-New host work is represented by a typed command, request, input field, render
-operation, or startup capability.
+There is no arbitrary native-call facility. Effectful closures exist for
+exactly one purpose — the body of a task — and a task runs on the frame thread
+under the same phase guard as every other application code. No API accepts a
+closure the host will run at an unspecified time, on an unspecified thread, or
+outside a phase. New host work is represented by a typed effect, waiting
+effect, input field, render operation, or startup capability.
 
 ## Targets and capability profiles
 
 The core contract does not assume a blocking native main loop. The host may
 drive cycles from a desktop loop, a browser callback, a test harness, or a
-future platform scheduler.
+future platform scheduler. What each must supply is a way to run a task's
+suspended stack and resume it later without moving Roc code to another thread.
 
 Each released target declares a capability profile. A target may implement a
-strict subset of facilities—for example, a browser need not expose native
-subprocesses or unrestricted files—but every included facility preserves its
+strict subset of facilities — for example, a browser need not expose native
+subprocesses or unrestricted files — but every included facility preserves its
 documented semantics. A structurally unsupported facility is absent at build
 time or excluded by selecting a narrower platform bundle. A facility present
 in the profile may still be unavailable at runtime because of mutable facts
@@ -688,9 +670,9 @@ uses. Pure packages remain portable regardless of host profile. Target-specific
 optimizations and backend objects stay below the platform boundary.
 
 A non-rendering headless host is a semantic test backend, not a pixel-accurate
-renderer. It preserves the host cycle, request and command behavior,
-resource ownership, and controlled observations that do not require a real
-device. Pixel behavior is verified against graphical backends separately.
+renderer. It preserves the host cycle, effect and task behavior, resource
+ownership, and controlled observations that do not require a real device.
+Pixel behavior is verified against graphical backends separately.
 
 ## Pure types and package interoperability
 
@@ -713,20 +695,31 @@ cannot refer to an unavailable or structurally different vocabulary build.
 Architectural claims are upheld by executable checks wherever possible. The
 names and locations of checks may change, but the verification layers do not:
 
-- pure tests exercise transitions, command and request descriptions,
-  validation, pacing, and replay without a host;
-- compile-fail tests prove that applications cannot import transport modules,
-  manufacture capabilities, or invoke phase-specific effects directly;
-- host property tests cover phase enforcement, typed resource identity,
-  specified ownership-transfer paths with adversarial alias, slice, and drop
-  orders, bounded saturation, exactly-one response cardinality, shutdown, and
-  ownership transfer;
-- contract tests run shared semantics against every capability profile and
-  backend that claims them;
-- graphical smoke tests verify representative pixels and nested render scopes
-  on a real rendering backend;
-- packaged examples are checked and exercised in the same dependency shape in
-  which applications consume a release.
+- **Pure tests over the application's own core.** `roc test` cannot call
+  `update!`, so the platform supplies what makes the decisions inside it
+  testable: `App.Input.for_tests` builds a neutral input with per-field
+  `with_*` receivers, and every host resource has a resource-free `stub`, so a
+  model full of assets can be written down in an `expect`. Applications are
+  expected to keep a pure core — which message to fold in, whether to quit,
+  what work to start — and let `update!` perform its decisions.
+- **Compile-fail fixtures** prove that applications cannot import transport
+  modules, manufacture capabilities, or name a removed API.
+- **Host tests** cover phase enforcement, typed resource identity,
+  ownership-transfer paths with adversarial alias, slice, and drop orders,
+  bounded saturation, staged-but-undelivered message release, and shutdown.
+- **Task behavior tests.** One end-to-end application spawns a task per message
+  variant and fails unless every message returns with the right tag and
+  payload, which is what keeps the `msg`-witness rule honest. Another spawns
+  far more tasks than may run at once and fails unless all of them are started
+  and accounted for, which is what keeps the cap a queue rather than a refusal.
+- **Headless runs of every example** exercise startup, cycling, task delivery,
+  and shutdown without a display. `ROC_RAY_TRACE_TASKS` adds a per-task trace —
+  spawn, queue, park, resume, finish, deliver — so a run can assert on
+  scheduling behavior and not only on the final state.
+- **Graphical smoke tests** verify representative pixels and nested render
+  scopes on a real rendering backend.
+- **Packaged examples** are checked and exercised in the same dependency shape
+  in which applications consume a release.
 
 A property that is intended but not yet checked is described as an unverified
 design goal, not as an established guarantee.
@@ -737,22 +730,25 @@ RocRay does not provide:
 
 - a retained scene graph, entity-component system, game editor, domain model,
   or mandatory asset build pipeline;
-- a general asynchronous Roc runtime, concurrent application callbacks, or
-  blocking I/O inside the frame cycle;
+- concurrent application callbacks, parallel execution of Roc code, or blocking
+  I/O inside `update!` or `render!`;
+- a general asynchronous Roc runtime — tasks overlap waiting, not computation,
+  and are not offered as a way to use more than one core;
 - hidden mutable application state in the host;
 - public transport tickets, native pointers, untyped resource IDs, arbitrary
-  FFI, or effectful closures returned from `update`;
+  FFI, or any facility that runs an application closure outside a task and its
+  phase guard;
 - an implicit promise that every target supports every host capability;
 - universal deterministic output in the presence of uncontrolled external
-  input, request response ordering, clocks, devices, or backend differences.
+  input, task completion ordering, clocks, devices, or backend differences.
 
 These boundaries do not exclude networking, databases, subprocesses, 3D
 rendering, audio input, runtime resource loading, or a web host. They determine
 the shape those features must take. Likewise, a future subscription API may
 provide ergonomics for a continuous source, but its implementation must still
-use commands or requests for explicit lifecycle work and bounded
-`App.Input` observations. It does not add a background callback protocol or
-weaken the one-response request invariant.
+use effects and tasks for explicit lifecycle work and bounded `App.Input`
+observations. It does not add a background callback protocol and does not let a
+task deliver more than once.
 
 ## Evaluating changes
 
@@ -763,9 +759,9 @@ chosen:
    in the application or a package?
 2. Which existing boundary protocol carries each value, instruction, and
    result?
-3. In which phase does every host operation run?
-4. Who owns every value, native resource, thread, queue entry, and callback,
-   and when is each released?
+3. In which phases is every host operation legal, and can it wait?
+4. Who owns every value, native resource, stack, queue entry, and closure, and
+   when is each released?
 5. What is bounded, in what unit, and what happens at saturation and shutdown?
 6. Which errors are programmer errors and which are runtime data?
 7. How does the feature affect replay, capture, and completion ordering?

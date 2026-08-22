@@ -10,13 +10,31 @@ const ffi = @import("roc_ffi.zig");
 const capture = @import("capture.zig");
 const capture_vp8 = @import("capture_vp8.zig");
 const gif_encoder = @import("gif_encoder.zig");
+const zio = @import("zio");
+const tasks_mod = @import("tasks.zig");
 const host_resource = @import("host_resource.zig");
 const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
+const http_effect = @import("http_effect.zig");
+
+// `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
+// exports are compiled out under `zig test` (see the `!builtin.is_test` gate
+// below), so nothing would reference the module and its own tests would never
+// be collected. Reference it here instead.
+test {
+    _ = http_effect;
+}
 
 // Import backend
 const raylib = @import("backend_raylib.zig");
+
+/// Keep zio's own debug chatter -- blocking-pool thread spawns, loop internals
+/// -- out of an app's output. The host's own `ROC_RAY_TRACE_TASKS` lines are
+/// unscoped `info` and are unaffected.
+pub const std_options: std.Options = .{
+    .log_scope_levels = &.{.{ .scope = .zio, .level = .warn }},
+};
 
 // Type aliases
 const RocBox = ffi.RocBox;
@@ -36,21 +54,13 @@ const HostReadFileRawResult = abi.HostHostRead_fileRetRecord;
 const TilemapLoadTmxRawResult = abi.TilemapHostLoad_tmxRetRecord;
 const AppConfig = abi.App_config_for_host;
 // One cycle of observations handed to update. Unions do not cross this
-// boundary, so responses and the recording state arrive as flat records that
-// Roc decodes.
+// boundary, so the recording state arrives as a flat record that Roc decodes.
 const InputFromHost = abi.Update_for_hostArg1;
 const UpdateResult = abi.Update_for_hostResult;
-/// The raw, host-shaped terminal outcome. This crosses the worker boundary,
-/// but contains no Roc callback or any other Roc-owned closure.
-const RawResponse = abi.Update_for_hostArg1ResponsesRaw;
-/// The Roc-only response bridge. `deliver` moves from the outgoing request,
-/// through the main-thread pending table, and back to Roc in this envelope.
-const ResponseEnvelope = abi.Update_for_hostArg1Responses;
+/// One finished task's message, wrapped in the erased thunk Roc calls to
+/// unwrap it. The host only moves it; it never calls it.
+const TaskResultEnvelope = abi.Update_for_hostArg1TaskResults;
 const CaptureFromHost = abi.Update_for_hostArg1Capture;
-// Commands never come here: `update` is pure, and the platform adapter applies
-// them through hosted effects before returning. Only requests cross this ABI;
-// accepted filesystem work becomes a genuine worker request afterward.
-const RequestToHost = abi.Update_for_hostOkRequests;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -103,9 +113,9 @@ const TEXTURE_UPDATE_OK: u8 = 0;
 const TEXTURE_UPDATE_PIXEL_COUNT: u8 = 1;
 const TEXTURE_UPDATE_NOT_MUTABLE: u8 = 2;
 const TEXTURE_UPDATE_OUT_OF_BOUNDS: u8 = 3;
-// Value 4 was the obsolete upload-capacity refusal. Valid commands are never
-// refused for host capacity now; keeping the remaining codes stable avoids needless
-// transport churn for the structurally checkable errors.
+// Value 4 was the obsolete upload-capacity refusal. A structurally valid
+// upload is never refused for host capacity now; keeping the remaining codes
+// stable avoids needless transport churn for the checkable errors.
 const TRY_TAG_OK: u8 = 1;
 const MAX_FILE_READ_BYTES: usize = 16 * 1024 * 1024;
 const HEADLESS_CLIPBOARD_CAPACITY: usize = 4096;
@@ -115,24 +125,9 @@ extern fn init_for_host() callconv(.c) RocResult;
 extern fn update_for_host(arg0: RocBox, arg1: InputFromHost) callconv(.c) UpdateResult;
 extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
+extern fn run_task_for_host(arg0: abi.RocErasedCallable) callconv(.c) abi.RocErasedCallable;
 
-/// `kind` codes for a response. Mirrored in the private App transport adapter.
-const RESPONSE_SMALL_FILE_READ: u8 = 0;
-const RESPONSE_DELAY: u8 = 1;
-const RESPONSE_SCREENSHOT_FINISHED: u8 = 2;
-const RESPONSE_CLIPBOARD_READ: u8 = 3;
-const RESPONSE_FILE_READ: u8 = 4;
-const RESPONSE_DIR_LISTED: u8 = 5;
-
-/// `kind` codes for a request returned by `update`. Mirrored in the private App transport adapter.
-const REQUEST_READ_SMALL_FILE: u8 = 0;
-const REQUEST_DELAY: u8 = 1;
-const REQUEST_SCREENSHOT: u8 = 2;
-const REQUEST_READ_CLIPBOARD: u8 = 3;
-const REQUEST_READ_FILE: u8 = 4;
-const REQUEST_LIST_DIR: u8 = 5;
-
-/// Read-error codes. Mirrored in the private App transport adapter.
+/// Read-error codes. Mirrored in `Files.roc`, `Window.roc` and `Capture.roc`.
 ///
 /// `BUSY` and `UNAVAILABLE` are refusals rather than failures: the host declined
 /// to start the work rather than running it on the frame thread.
@@ -153,6 +148,16 @@ const READ_ERR_NOT_UTF8: u8 = 6;
 /// from "this entry is a file, read it instead".
 const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 
+/// The process may not write here. Mirrored in `Files.roc`.
+///
+/// Numbered past the read table rather than into it: a write shares
+/// `NOT_FOUND`, `FAILED` and `UNAVAILABLE` with a read, and the two failures
+/// only a write can have get codes of their own, so one code never means two
+/// things across the boundary.
+const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
+/// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
+const WRITE_ERR_NO_SPACE: u8 = 9;
+
 /// How many entries one listing may report, and how many bytes it may encode
 /// them into.
 ///
@@ -164,46 +169,19 @@ const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 const MAX_DIR_ENTRIES: usize = 8192;
 const MAX_DIR_LISTING_BYTES: usize = 1024 * 1024;
 
-/// Entry kinds in an encoded listing. Mirrored in the private App transport adapter.
+/// Entry kinds in an encoded listing. Mirrored in `Files.roc`.
 const DIR_ENTRY_FILE: u8 = 1;
 const DIR_ENTRY_DIR: u8 = 2;
 const DIR_ENTRY_OTHER: u8 = 3;
 
-/// The only way a delay fails: the host was already holding as many unanswered
-/// requests as it will, so it never started this one. Mirrored in the private App transport adapter.
-const DELAY_ERR_BUSY: u8 = 1;
-
 /// The most the host will copy into a Roc string in one operation.
 ///
-/// Converting worker-owned bytes into a `Str` allocates and copies on the frame
-/// thread. `ReadSmallFile` reports `TooLarge` above this limit; `ReadFile`
-/// transfers its native allocation as an owning Roc byte list without copying.
+/// Converting the bytes into a `Str` allocates and copies, which is why only
+/// the reads that produce a string carry this limit: `Files.read_text!`
+/// reports `TooLarge` above it, while `Files.read_bytes!` transfers its
+/// allocation as an owning Roc byte list without copying and is bounded by the
+/// much larger `MAX_FILE_READ_BYTES` instead.
 const MAX_INLINE_READ_BYTES: usize = 64 * 1024;
-
-/// Total main-thread Roc-string-copy work admitted while submitting requests.
-///
-/// Clipboard reads share this budget. Requests beyond it receive `Busy`
-/// immediately; they are never kept in a private host queue to surprise a
-/// later frame. This does not cover windowed worker responses, which are
-/// independently bounded by their at-most-32 resource reservations.
-const MAX_SYNC_ROC_STRING_BYTES_PER_INPUT: usize = 1024 * 1024;
-
-/// Main-thread request starts admitted while submitting one input's requests.
-///
-/// Clipboard reads can do meaningful metadata work even when they copy zero
-/// bytes. Bound that work independently from the byte budget above. This is a
-/// private admission budget, not a public request-list cap; every request beyond
-/// it receives its typed `Busy` result now.
-const MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_INPUT: usize = 32;
-
-/// Headless reads run on the frame thread for deterministic test output.
-///
-/// Unlike the windowed worker, they need explicit resource admission: no more
-/// than 32 filesystem operations and 16 MiB of successfully-read bytes start
-/// in an input. A read that would exceed the remaining byte credit receives
-/// `Busy`; it is not held for a later frame.
-const MAX_HEADLESS_READS_PER_INPUT: usize = 32;
-const MAX_HEADLESS_READ_BYTES_PER_INPUT: usize = MAX_FILE_READ_BYTES;
 
 /// How many host-owned file-byte allocations may be live at once.
 ///
@@ -217,17 +195,6 @@ const MAX_LIVE_FILE_BYTE_LISTS: usize = 32;
 /// A file past the host's per-file ceiling is `TooLarge` rather than
 /// `ReadFailed`: nothing went wrong, the host declined a read of that size, and
 /// those are different things for an app deciding what to do next.
-/// How many bytes a read may take before it is refused as too large.
-///
-/// A byte-list read has no per-file ceiling below the host's own, because nothing
-/// proportional to the file happens on the frame thread. A small read is
-/// delivered as a `Str`, so it stops one byte past the largest string the frame
-/// thread will build -- `readFileAlloc` refuses at the limit, and one past is
-/// what makes a file of exactly that size succeed.
-fn smallReadLimit(deliver_bytes: bool) usize {
-    return if (deliver_bytes) MAX_FILE_READ_BYTES + 1 else MAX_INLINE_READ_BYTES + 1;
-}
-
 fn readErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound => READ_ERR_NOT_FOUND,
@@ -244,6 +211,21 @@ fn listErrorCode(err: anyerror) u8 {
     return switch (err) {
         error.FileNotFound => READ_ERR_NOT_FOUND,
         error.NotDir => READ_ERR_NOT_A_DIRECTORY,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// Name a failed write in the app's vocabulary.
+///
+/// Only the failures an app can act on differently are separated: retry
+/// somewhere else (`PERMISSION_DENIED`), free space (`NO_SPACE`), fix the path
+/// (`NOT_FOUND`). Everything else is a plain failure, because an app cannot do
+/// anything different about it.
+fn writeErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
+        error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_PERMISSION_DENIED,
+        error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
         else => READ_ERR_FAILED,
     };
 }
@@ -295,432 +277,6 @@ fn encodeListingIn(base: std.Io.Dir, io: std.Io, allocator: std.mem.Allocator, p
     return 0;
 }
 
-/// Blocking effects executed off the main thread.
-///
-/// The worker accepts and returns plain Zig values. It must not call Roc,
-/// allocate or free Roc memory, read `active_roc_host`, or access resource
-/// heaps. The main thread converts results to Roc values while draining the
-/// result queue. The shared host allocator must be thread-safe.
-///
-/// Both rings are single-producer/single-consumer -- main writes requests and
-/// reads results, the worker does the reverse -- so acquire/release on the
-/// indices is all the *data* transfer needs, and neither ring is ever locked.
-///
-/// The mutex and condition variable only coordinate sleeping and waking; ring
-/// data transfer remains lock-free. See `wake` and `awaitRequest`.
-const EffectWorker = struct {
-    /// Power of two so the index wrap is a mask.
-    const capacity: usize = 64;
-    const mask: usize = capacity - 1;
-
-    /// What the worker was asked to do.
-    ///
-    /// The two share a ring because they share the property that matters: a
-    /// bounded amount of plain-Zig state goes in, slow work happens on this
-    /// thread, and a plain-Zig answer comes back.
-    const Kind = enum(u8) { read_file, list_dir, write_png };
-
-    const Request = struct {
-        kind: Kind,
-        /// Private host transport ticket. This is plain Zig data; callbacks
-        /// remain exclusively in `pending_mappers` on the frame thread.
-        ticket: u64,
-        path: [capture.path_capacity]u8,
-        path_len: usize,
-        /// Whether the answer is an owning Roc byte list rather than a string.
-        ///
-        /// The worker reads a file the same way either way -- it allocates and
-        /// fills native memory and knows nothing about Roc. This only says what
-        /// the main thread will do with the buffer when it drains the result:
-        /// install it into a typed file-byte slot, or copy it into a `RocStr`.
-        deliver_bytes: bool = false,
-        /// Which response the answer belongs in. A read and a listing share
-        /// the byte-delivery path exactly, and differ only in the response
-        /// the app is waiting on, so that is carried rather than re-derived.
-        response: u8 = RESPONSE_FILE_READ,
-        /// `write_png`: the framebuffer readback, owned by `allocator` and
-        /// freed on this thread once it has been encoded.
-        pixels: []u8 = &.{},
-        width: u32 = 0,
-        height: u32 = 0,
-    };
-
-    /// `bytes` is owned by `allocator` until the main thread takes it: either by
-    /// copying it into a `RocStr` and freeing it, or -- for `ReadFile` -- by
-    /// moving the allocation itself into a typed slot without touching it.
-    const Result = struct {
-        kind: Kind,
-        ticket: u64,
-        bytes: ?[]u8 = null,
-        err: u8 = 0,
-        deliver_bytes: bool = false,
-        response: u8 = RESPONSE_FILE_READ,
-    };
-
-    requests: [capacity]Request = undefined,
-    request_write: std.atomic.Value(usize) = .init(0),
-    request_read: std.atomic.Value(usize) = .init(0),
-
-    results: [capacity]Result = undefined,
-    result_write: std.atomic.Value(usize) = .init(0),
-    result_read: std.atomic.Value(usize) = .init(0),
-
-    should_stop: std.atomic.Value(bool) = .init(false),
-
-    /// Guards the sleep decision, and nothing else. Never held across a read.
-    idle: std.Io.Mutex = .init,
-    /// Signalled when `should_stop` is set or a request is published.
-    wakeup: std.Io.Condition = .init,
-    /// Signalled when the frame thread takes a result, or on shutdown, so a
-    /// worker parked on a full result ring can continue.
-    drained: std.Io.Condition = .init,
-    /// How many times the worker has decided to sleep.
-    ///
-    /// Observability only, and the reason it lives here rather than in a test:
-    /// nothing else distinguishes "the submission woke a parked worker" from
-    /// "the worker had not looked at the ring yet", and only the first of those
-    /// exercises the wake protocol at all.
-    parks: std.atomic.Value(u64) = .init(0),
-
-    /// Whether requests will be serviced. Separate from `thread` so the ring
-    /// can be tested without spawning one.
-    accepting: bool = false,
-    thread: ?std.Thread = null,
-    allocator: std.mem.Allocator = undefined,
-
-    fn start(self: *EffectWorker, allocator: std.mem.Allocator) void {
-        self.allocator = allocator;
-        self.should_stop.store(false, .release);
-        self.accepting = true;
-        self.thread = std.Thread.spawn(.{}, run, .{self}) catch |err| {
-            self.accepting = false;
-            // Running effects inline still works; results just arrive on the
-            // frame the command was issued rather than a later one.
-            std.log.warn("roc-ray could not start the effect worker ({s}); effects run inline", .{@errorName(err)});
-            return;
-        };
-    }
-
-    fn stop(self: *EffectWorker) void {
-        self.accepting = false;
-        if (self.thread) |thread| {
-            // Same protocol as a submission, for the same reason: the flag is
-            // published before the lock is taken, so a worker that reaches the
-            // sleep decision after this cannot fail to see it, and a worker
-            // already asleep is signalled. Queued *writes* are then flushed --
-            // see `awaitRequest` -- so shutdown costs the screenshots the app
-            // has already been promised, and nothing else.
-            //
-            // The flush cannot deadlock on a full result ring: `postResult`
-            // stops waiting once `should_stop` is set, and by then the file it
-            // was reporting on is already written.
-            self.should_stop.store(true, .release);
-            self.wake();
-            thread.join();
-            self.thread = null;
-        }
-        // The worker has stopped, so both rings belong to this thread again.
-        // Everything still in them owns memory nobody will come back for.
-        while (self.takeRequest()) |request| {
-            if (request.pixels.len != 0) self.allocator.free(request.pixels);
-        }
-        while (self.takeResult()) |result| {
-            if (result.bytes) |bytes| self.allocator.free(bytes);
-        }
-    }
-
-    /// Nudge the worker out of `awaitRequest`. Frame thread only.
-    ///
-    /// This is the half of the protocol that makes a lost wakeup impossible.
-    /// The caller has already published the state change (a ring index or
-    /// `should_stop`) with a release store. Taking and immediately releasing
-    /// `idle` orders that publication against the worker's sleep decision:
-    ///
-    ///   * If the worker already read the predicate under `idle` and found
-    ///     nothing, it registered itself as a waiter *before* releasing the
-    ///     lock inside `wait`, so this `lock` can only succeed once it is
-    ///     parked -- and the `signal` below therefore reaches it.
-    ///   * Otherwise the worker takes `idle` after this `unlock`, so it
-    ///     observes the published change and never waits at all.
-    ///
-    /// There is no third case, which is why the wait is never a bare one-shot.
-    fn wake(self: *EffectWorker) void {
-        const io = mainThreadIo();
-        self.idle.lockUncancelable(io);
-        self.idle.unlock(io);
-        self.wakeup.signal(io);
-        // Shutdown has to reach a worker parked on either condition, and this
-        // is the only path that sets `should_stop`.
-        self.drained.signal(io);
-    }
-
-    /// Why a submission was refused, so the caller can report it rather than
-    /// dropping the command or running it on the frame thread.
-    const Submission = enum { accepted, busy, unavailable };
-
-    /// Queue a read. Frame thread only.
-    fn submitReadFile(self: *EffectWorker, ticket: u64, path: []const u8, deliver_bytes: bool) Submission {
-        if (!self.accepting) return .unavailable;
-        if (path.len > capture.path_capacity) return .unavailable;
-
-        const write = self.request_write.load(.monotonic);
-        if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
-
-        const slot = &self.requests[write & mask];
-        slot.* = .{ .kind = .read_file, .ticket = ticket, .path = undefined, .path_len = path.len, .deliver_bytes = deliver_bytes };
-        // The worker cannot borrow the Roc string the path arrived in.
-        @memcpy(slot.path[0..path.len], path);
-        self.request_write.store(write +% 1, .release);
-        // Only after the request is visible; a refusal wakes nobody, which is
-        // what keeps `Busy` and `Unavailable` pure refusals.
-        self.wake();
-        return .accepted;
-    }
-
-    /// Queue a directory listing. Frame thread only.
-    ///
-    /// The same ring, the same refusals and the same ownership as a read: the
-    /// answer is a buffer this thread allocates and the frame thread moves into
-    /// Roc without copying. Only what fills the buffer differs.
-    fn submitListDir(self: *EffectWorker, ticket: u64, path: []const u8) Submission {
-        if (!self.accepting) return .unavailable;
-        if (path.len > capture.path_capacity) return .unavailable;
-
-        const write = self.request_write.load(.monotonic);
-        if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
-
-        const slot = &self.requests[write & mask];
-        slot.* = .{
-            .kind = .list_dir,
-            .ticket = ticket,
-            .path = undefined,
-            .path_len = path.len,
-            .deliver_bytes = true,
-            .response = RESPONSE_DIR_LISTED,
-        };
-        @memcpy(slot.path[0..path.len], path);
-        self.request_write.store(write +% 1, .release);
-        self.wake();
-        return .accepted;
-    }
-
-    /// Queue a screenshot write. Frame thread only.
-    ///
-    /// Takes ownership of `pixels` on acceptance, and leaves it with the caller
-    /// otherwise -- a refusal must not free a buffer the caller may still want
-    /// to write inline.
-    fn submitWritePng(
-        self: *EffectWorker,
-        ticket: u64,
-        path: []const u8,
-        pixels: []u8,
-        width: u32,
-        height: u32,
-    ) Submission {
-        if (!self.accepting) return .unavailable;
-        if (path.len > capture.path_capacity) return .unavailable;
-
-        const write = self.request_write.load(.monotonic);
-        if (write -% self.request_read.load(.acquire) >= capacity) return .busy;
-
-        const slot = &self.requests[write & mask];
-        slot.* = .{
-            .kind = .write_png,
-            .ticket = ticket,
-            .path = undefined,
-            .path_len = path.len,
-            .pixels = pixels,
-            .width = width,
-            .height = height,
-        };
-        @memcpy(slot.path[0..path.len], path);
-        self.request_write.store(write +% 1, .release);
-        self.wake();
-        return .accepted;
-    }
-
-    /// Pop one request. Worker thread only.
-    fn takeRequest(self: *EffectWorker) ?Request {
-        const read = self.request_read.load(.monotonic);
-        if (read == self.request_write.load(.acquire)) return null;
-        const request = self.requests[read & mask];
-        self.request_read.store(read +% 1, .release);
-        return request;
-    }
-
-    /// Pop one result. Frame thread only.
-    fn takeResult(self: *EffectWorker) ?Result {
-        const read = self.result_read.load(.monotonic);
-        if (read == self.result_write.load(.acquire)) return null;
-        const result = self.results[read & mask];
-        self.result_read.store(read +% 1, .release);
-        // A worker parked on a full ring is now free to continue. Signalling
-        // only here means the cost is one signal per completed request rather than
-        // one per frame.
-        if (self.accepting) self.drained.signal(mainThreadIo());
-        return result;
-    }
-
-    /// Publish a finished result, waiting for room if the ring is full.
-    ///
-    /// Worker thread only. Accepted requests guarantee one response, so a full
-    /// result ring blocks this worker instead of discarding a result. The frame
-    /// thread never waits on this condition.
-    ///
-    /// The ring is larger than the `MAX_REQUESTS_IN_FLIGHT` reservation budget, so
-    /// the wait is unreachable under the current capacity invariant. Keeping
-    /// the wait preserves correctness if either capacity changes.
-    fn postResult(self: *EffectWorker, io: std.Io, result: Result) void {
-        while (true) {
-            const write = self.result_write.load(.monotonic);
-            if (write -% self.result_read.load(.acquire) < capacity) {
-                self.results[write & mask] = result;
-                self.result_write.store(write +% 1, .release);
-                return;
-            }
-            if (self.should_stop.load(.acquire)) {
-                // Nobody will ever drain this. Owning the buffer, free it.
-                if (result.bytes) |bytes| self.allocator.free(bytes);
-                return;
-            }
-            self.idle.lockUncancelable(io);
-            defer self.idle.unlock(io);
-            // Re-check under the lock: a drain between the test above and the
-            // lock would otherwise park this thread on a ring that has room.
-            if (self.result_write.load(.monotonic) -% self.result_read.load(.acquire) >= capacity and
-                !self.should_stop.load(.acquire))
-            {
-                self.drained.waitUncancelable(io, &self.idle);
-            }
-        }
-    }
-
-    /// Block until there is a request to run, or until shutdown. Worker only.
-    ///
-    /// The predicate -- "shutting down, or the ring is non-empty" -- is read
-    /// under `idle` and re-read in a loop, so a spurious wakeup just goes back
-    /// to sleep and a real one cannot be missed. See `wake` for the other half.
-    /// The lock is released before the caller does any I/O.
-    fn awaitRequest(self: *EffectWorker, io: std.Io) ?Request {
-        self.idle.lockUncancelable(io);
-        defer self.idle.unlock(io);
-        while (true) {
-            if (self.should_stop.load(.acquire)) {
-                // Shutting down, but an accepted write is still finished. The
-                // app was told the host had taken that screenshot -- it got a
-                // response saying so -- and a file that never appears makes
-                // that a lie. Reads are abandoned instead: their answer was
-                // going to a model that is about to stop existing, and a
-                // request holds no memory of its own, so nothing leaks.
-                while (self.takeRequest()) |request| {
-                    if (request.kind == .write_png) return request;
-                }
-                return null;
-            }
-            if (self.takeRequest()) |request| return request;
-            // Bumped under `idle`, so a frame thread that has seen it knows the
-            // worker is past its last predicate check and cannot miss a signal.
-            _ = self.parks.fetchAdd(1, .release);
-            self.wakeup.waitUncancelable(io, &self.idle);
-        }
-    }
-
-    /// The worker loop. Nothing in here may touch Roc.
-    fn run(self: *EffectWorker) void {
-        // Its own IO: `mainThreadIo` is explicitly single-threaded, and this
-        // thread must never reach for it.
-        var threaded: std.Io.Threaded = .init(self.allocator, .{});
-        defer threaded.deinit();
-        const io = threaded.io();
-
-        while (self.awaitRequest(io)) |request| {
-            switch (request.kind) {
-                .read_file => self.runRead(io, request),
-                .list_dir => self.runListDir(io, request),
-                .write_png => self.runWritePng(io, request),
-            }
-        }
-    }
-
-    /// Read a file whole. Worker thread only.
-    fn runRead(self: *EffectWorker, io: std.Io, request: Request) void {
-        const path = request.path[0..request.path_len];
-        // The native allocation later owned by Roc's byte list is made and
-        // filled here. The main thread moves that slice into its typed slot and
-        // builds only the three-word List value around it.
-        //
-        // A small read stops one byte past what it could deliver rather than
-        // reading up to the byte-list ceiling and then rejecting it: refusing a
-        // 16 MiB file should not mean having read 16 MiB first.
-        const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(smallReadLimit(request.deliver_bytes))) catch |err| {
-            self.postResult(io, .{
-                .kind = .read_file,
-                .ticket = request.ticket,
-                .err = readErrorCode(err),
-                .deliver_bytes = request.deliver_bytes,
-                .response = request.response,
-            });
-            return;
-        };
-        self.postResult(io, .{
-            .kind = .read_file,
-            .ticket = request.ticket,
-            .bytes = bytes,
-            .deliver_bytes = request.deliver_bytes,
-            .response = request.response,
-        });
-    }
-
-    /// List one directory into an encoded byte buffer. Worker thread only.
-    ///
-    /// Only one directory, never its children: recursion is the app's to drive,
-    /// because only the app knows which subtrees are worth descending into and
-    /// how fast it wants them. A host-side recursive walk would be one
-    /// unbounded operation that no queue could pace.
-    fn runListDir(self: *EffectWorker, io: std.Io, request: Request) void {
-        const path = request.path[0..request.path_len];
-        var encoded: ?[]u8 = null;
-        const err = encodeListing(io, self.allocator, path, &encoded);
-        self.postResult(io, .{
-            .kind = .list_dir,
-            .ticket = request.ticket,
-            .bytes = if (err == 0) encoded else null,
-            .err = err,
-            .deliver_bytes = true,
-            .response = RESPONSE_DIR_LISTED,
-        });
-    }
-
-    /// Encode a framebuffer readback as a PNG and write it. Worker thread only.
-    ///
-    /// Performs PNG compression and file I/O without accessing raylib. The
-    /// frame thread is responsible only for framebuffer readback.
-    fn runWritePng(self: *EffectWorker, io: std.Io, request: Request) void {
-        defer self.allocator.free(request.pixels);
-        const path = request.path[0..request.path_len];
-
-        const encoded = png.encodeRgba(self.allocator, request.pixels, request.width, request.height) catch |err| {
-            self.postResult(io, .{
-                .kind = .write_png,
-                .ticket = request.ticket,
-                .err = switch (err) {
-                    error.OutOfMemory => capture.err_out_of_memory,
-                    else => capture.err_write_failed,
-                },
-            });
-            return;
-        };
-        defer self.allocator.free(encoded);
-
-        self.postResult(io, .{
-            .kind = .write_png,
-            .ticket = request.ticket,
-            .err = writeWholeFile(io, path, encoded),
-        });
-    }
-};
-
-/// Create the parent directory if needed, then write the file. Any thread.
 fn writeWholeFile(io: std.Io, path: []const u8, bytes: []const u8) u8 {
     if (std.fs.path.dirname(path)) |parent| {
         std.Io.Dir.cwd().createDirPath(io, parent) catch return capture.err_write_failed;
@@ -729,8 +285,6 @@ fn writeWholeFile(io: std.Io, path: []const u8, bytes: []const u8) u8 {
     return capture.err_none;
 }
 
-var effect_worker = EffectWorker{};
-
 /// The simulation clock this frame reported to Roc.
 var last_frame_nanos: u64 = 0;
 
@@ -738,311 +292,64 @@ var last_frame_nanos: u64 = 0;
 ///
 /// Separate from `last_frame_nanos` because a fixed-step recording makes the
 /// simulation clock advance by an exact delta rather than by however long the
-/// frame took. Delays are armed and expired against *this* one: `Delay(1000)`
-/// means a second, and an app recording at a fixed step has not asked for its
-/// timeouts to be re-scaled.
+/// frame took. Waits are armed and expired against *this* one:
+/// `Task.sleep!(1000)` means a second, and an app recording at a fixed step
+/// has not asked for its timeouts to be re-scaled.
 var last_wall_nanos: u64 = 0;
 
-/// How many requests may be accepted but not yet answered.
+/// Start a fresh app lifetime.
 ///
-/// Bounds *acceptance* rather than delivery. A request is accepted only if a
-/// reservation is free, and it holds that reservation until its response is
-/// staged. So the amount of deferred work the host is carrying is bounded
-/// without any response ever being dropped -- which is what makes "every
-/// accepted request yields exactly one response" a property of the code rather
-/// than a hope.
-const MAX_REQUESTS_IN_FLIGHT: usize = 32;
-
-/// Windowed worker delivery happens before dispatch and has its own bound.
-///
-/// At most one small-file result fits each reservation, so a frame can copy at
-/// most 32 × 64 KiB = 2 MiB from worker buffers into Roc strings. This is
-/// intentionally separate from the 1 MiB synchronous request-admission budget.
-const MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_INPUT: usize = MAX_REQUESTS_IN_FLIGHT * MAX_INLINE_READ_BYTES;
-
-/// Commands whose result is due once a deadline passes.
-///
-/// Sized to the pending-callback budget: an armed timer owns one callback, so
-/// this table cannot fill after that callback was admitted.
-const PendingTimer = struct { ticket: u64, due_nanos: u64 };
-var pending_timers: [MAX_REQUESTS_IN_FLIGHT]PendingTimer = undefined;
-var pending_timer_count: usize = 0;
-
-/// A Roc continuation retained privately by the frame thread until one raw
-/// terminal result is ready. Tickets are host transport details only: no app
-/// value is ever used to correlate a result.
-///
-/// This is deliberately an array, not a map or growable allocation. It shares
-/// the 32-operation admission limit, so lookup is at most 32 comparisons and
-/// accepting an asynchronous request does not allocate. The worker sees only the
-/// ticket; it can neither retain nor call a Roc closure.
-const PendingMappers = struct {
-    const Entry = struct {
-        ticket: u64,
-        deliver: abi.RocErasedCallable,
-    };
-
-    entries: [MAX_REQUESTS_IN_FLIGHT]Entry = undefined,
-    count: usize = 0,
-    /// Zero is kept invalid so an uninitialized native result cannot happen to
-    /// match a callback. Exhaustion is not recoverable without reusing a
-    /// ticket, which would violate the exactly-once transport invariant.
-    next_ticket: u64 = 1,
-
-    fn issueTicket(self: *PendingMappers) u64 {
-        const ticket = self.next_ticket;
-        if (ticket == 0) @panic("roc-ray: exhausted private request tickets");
-        // Do not let the final valid ticket wrap the counter during the
-        // increment. The following request sees the invalid zero sentinel and
-        // terminates rather than reusing a ticket that could still be live.
-        self.next_ticket = if (ticket == std.math.maxInt(u64)) 0 else ticket + 1;
-        return ticket;
-    }
-
-    /// Take ownership of a callback for an accepted deferred request.
-    fn insert(self: *PendingMappers, ticket: u64, deliver: abi.RocErasedCallable) bool {
-        if (self.count == self.entries.len) return false;
-        std.debug.assert(ticket != 0);
-        std.debug.assert(deliver != null);
-        self.entries[self.count] = .{ .ticket = ticket, .deliver = deliver };
-        self.count += 1;
-        return true;
-    }
-
-    /// Move the callback out of the table. A duplicate or forged ticket has no
-    /// callback to deliver, and is rejected by the caller without disturbing a
-    /// legitimate pending entry.
-    fn take(self: *PendingMappers, ticket: u64) ?abi.RocErasedCallable {
-        var index: usize = 0;
-        while (index < self.count) : (index += 1) {
-            if (self.entries[index].ticket != ticket) continue;
-            const deliver = self.entries[index].deliver;
-            self.count -= 1;
-            self.entries[index] = self.entries[self.count];
-            return deliver;
-        }
-        return null;
-    }
-
-    /// Drop callbacks whose host work will never be delivered, such as process
-    /// shutdown after a worker has stopped. Each entry is removed before its
-    /// final decref, which makes this safe to call only once and makes a later
-    /// accidental response an unknown ticket rather than a double drop.
-    fn release(self: *PendingMappers, roc_host: *RocHost) void {
-        while (self.count != 0) {
-            self.count -= 1;
-            abi.decrefErasedCallable(self.entries[self.count].deliver, roc_host);
-        }
-    }
-};
-
-var pending_mappers = PendingMappers{};
-
-/// Start a fresh app lifetime. Every previous lifetime must have dropped its
-/// callbacks and abandoned delivery reservations before this point; resetting
-/// either would leak a Roc capture or let stale work collide with a new app.
-fn beginPendingMappers() void {
-    std.debug.assert(pending_mappers.count == 0);
-    std.debug.assert(pending_timer_count == 0);
+/// Every previous lifetime must have released its byte-list reservations
+/// before this point; resetting the count would let a stale reservation
+/// collide with a new app.
+fn beginAppLifetime() void {
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
-    pending_mappers.next_ticket = 1;
     exit_requested = null;
 }
 
-/// End one app lifetime after no worker or frame callback can publish another
-/// response. Discard timer producer records before dropping their callback
-/// targets, so no retained ticket can ever name a callback as teardown runs or
-/// before a future lifetime resets ticket numbering.
-fn endPendingMappers(roc_host: *RocHost) void {
-    pending_timer_count = 0;
-    pending_mappers.release(roc_host);
-}
-
-/// Responses gathered for the input being assembled.
+/// One cycle's finished task messages, on their way to the next `update!`.
 ///
-/// This is deliberately not tied to a request-count limit. An input may submit any
-/// number of requests; the host admits only work for which it has a real resource
-/// reservation and gives every other request a terminal `Busy` response.
+/// The list outlives a single cycle: tasks finish while `update!` is running,
+/// and their messages are delivered on the following input rather than being
+/// spliced into the one already built.
 ///
-/// The backing allocation grows geometrically and is retained until shutdown.
-/// Thus an idle frame has no allocation, ordinary later frames reuse the same
-/// storage, and a burst only pays while it establishes a larger high-water
-/// mark. OOM cannot be converted into a missing response, so it terminates
-/// rather than silently stranding an accepted request.
-const ResponseStaging = struct {
-    items: std.ArrayListUnmanaged(ResponseEnvelope) = .empty,
+/// The backing allocation grows geometrically and is retained until shutdown,
+/// so an idle frame has no allocation, ordinary frames reuse the same storage,
+/// and a burst only pays while it establishes a larger high-water mark.
+const TaskResultStaging = struct {
+    items: std.ArrayListUnmanaged(TaskResultEnvelope) = .empty,
 
-    fn count(self: *const ResponseStaging) usize {
+    fn count(self: *const TaskResultStaging) usize {
         return self.items.items.len;
     }
 
-    fn ensureOne(self: *ResponseStaging, roc_host: *RocHost) void {
+    /// Move one finished task's erased message thunk into the input being
+    /// assembled. `deliver` is always an owned reference, taken from the task
+    /// registry. No Roc call happens in Zig.
+    fn append(self: *TaskResultStaging, roc_host: *RocHost, deliver: abi.RocErasedCallable) void {
+        std.debug.assert(deliver != null);
         self.items.ensureUnusedCapacity(allocatorFromHost(roc_host), 1) catch
-            @panic("roc-ray: out of memory while staging a request response");
+            @panic("roc-ray: out of memory while staging a task result");
+        self.items.appendAssumeCapacity(.{ .deliver = deliver });
     }
 
-    /// Append an owned response after `ensureOne` has reserved its slot.
-    fn appendAssumeCapacity(self: *ResponseStaging, item: ResponseEnvelope) void {
-        self.items.appendAssumeCapacity(item);
-    }
-
-    /// Move a raw result and its mapper into the input being assembled.
-    /// `deliver` is always an owned reference: it was either moved from a
-    /// unique request list, incref'd from a shared one, or taken from the pending
-    /// table. No callback invocation happens in Zig.
-    fn completeDirect(
-        self: *ResponseStaging,
-        roc_host: *RocHost,
-        raw: RawResponse,
-        deliver: abi.RocErasedCallable,
-    ) void {
-        std.debug.assert(deliver != null);
-        self.ensureOne(roc_host);
-        self.appendAssumeCapacity(.{ .raw = raw, .deliver = deliver });
-    }
-
-    /// As `completeDirect`, when the caller already reserved the staging slot
-    /// before constructing an owned Roc payload.
-    fn completeDirectAssumeCapacity(
-        self: *ResponseStaging,
-        raw: RawResponse,
-        deliver: abi.RocErasedCallable,
-    ) void {
-        std.debug.assert(deliver != null);
-        self.appendAssumeCapacity(.{ .raw = raw, .deliver = deliver });
-    }
-
-    /// Finish one accepted request. Reserve space before removing its callback so
-    /// allocation failure cannot strand an accepted request with its sole callback
-    /// still hidden in the host table.
-    fn completeTicket(self: *ResponseStaging, roc_host: *RocHost, raw: RawResponse) void {
-        self.ensureOne(roc_host);
-        self.completeTicketAssumeCapacity(roc_host, raw);
-    }
-
-    /// As `completeTicket`, with one slot already reserved by a caller that
-    /// had to allocate a raw payload first. Keeping that allocation before the
-    /// callback move avoids both a second capacity check and a result whose
-    /// payload has nowhere to go on OOM.
-    fn completeTicketAssumeCapacity(self: *ResponseStaging, roc_host: *RocHost, raw: RawResponse) void {
-        const deliver = pending_mappers.take(raw.ticket) orelse {
-            // This is an internal protocol violation (duplicate worker result,
-            // stale result after shutdown, or a malformed ticket), never an
-            // application-visible retry. Release any raw payload exactly once.
-            if (builtin.is_test) {
-                // Focused raw-result tests exercise the conversion and payload
-                // ownership without setting up a callback table. Production
-                // never takes this branch: every response must name an
-                // accepted private ticket.
-                self.appendAssumeCapacity(.{ .raw = raw, .deliver = null });
-                return;
-            }
-            raw.decref(roc_host);
-            std.debug.panic("roc-ray: response for unknown or duplicate ticket {d}", .{raw.ticket});
-        };
-        self.appendAssumeCapacity(.{ .raw = raw, .deliver = deliver });
-    }
-
-    /// A response that carries nothing Roc has to free.
+    /// Hand this input's task messages to Roc and empty the staging area.
     ///
-    /// Every field the operation does not use is spelled out once here rather
-    /// than at each call site, so adding one to the transport record does not
-    /// mean editing five constructors that never fill it in.
-    fn plain(kind: u8, ticket: u64, err: u8) RawResponse {
-        return .{
-            .kind = kind,
-            .ticket = ticket,
-            .err = err,
-            .contents = abi.RocStr.empty(),
-            .bytes = abi.RocListWith(u8, false).empty(),
-        };
-    }
-
-    /// Report a read the app asked to have delivered as a string.
-    ///
-    /// The validation is here rather than at the call sites because this is the
-    /// one place a file's bytes become a `Str`, and there are two ways in --
-    /// the worker's result and the inline headless read. A `Str` is UTF-8 and a
-    /// file is arbitrary bytes; `RocStr.fromSlice` only copies, so an invalid
-    /// one would be built without complaint and every later string operation on
-    /// it would be undefined. The same invariant applies to every byte source.
-    fn fileRead(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, err: u8, contents: []const u8) void {
-        if (err == 0 and !std.unicode.utf8ValidateSlice(contents)) {
-            self.completeTicket(roc_host, plain(RESPONSE_SMALL_FILE_READ, ticket, READ_ERR_NOT_UTF8));
-            return;
-        }
-        // Reserve staging before allocating the payload. OOM therefore cannot
-        // leave a newly built Roc value with nowhere safe to put it.
-        self.ensureOne(roc_host);
-        var item = plain(RESPONSE_SMALL_FILE_READ, ticket, err);
-        if (contents.len != 0) item.contents = abi.RocStr.fromSlice(contents, roc_host);
-        self.completeTicketAssumeCapacity(roc_host, item);
-    }
-
-    /// Report a byte-list operation that produced no bytes, in the response
-    /// it asked for: a read and a listing share this path and differ only in
-    /// which response the app is waiting on.
-    fn byteListReadFailed(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, err: u8) void {
-        std.debug.assert(err != 0);
-        self.completeTicket(roc_host, plain(response, ticket, err));
-    }
-
-    /// Report a read by moving its existing typed file-byte heap reference into an owning
-    /// seamless `List(U8)`. Its allocation pointer is the typed heap payload,
-    /// one word after the slot refcount, exactly where Roc list ARC expects it.
-    /// The seamless tag prevents reusing or resizing that backing allocation,
-    /// but a unique List operation may still mutate visible elements in place.
-    /// Safety comes from the complete transfer: the host never reads or shares
-    /// these bytes after this move, while sublists retain the one allocation.
-    fn byteListRead(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, bytes: abi.RocListWith(u8, false)) void {
-        self.ensureOne(roc_host);
-        var item = plain(response, ticket, 0);
-        item.bytes = bytes;
-        self.completeTicketAssumeCapacity(roc_host, item);
-    }
-
-    fn delayElapsed(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, err: u8) void {
-        self.completeTicket(roc_host, plain(RESPONSE_DELAY, ticket, err));
-    }
-
-    fn screenshotFinished(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, err: u8) void {
-        self.completeTicket(roc_host, plain(RESPONSE_SCREENSHOT_FINISHED, ticket, err));
-    }
-
-    fn clipboardRead(self: *ResponseStaging, roc_host: *RocHost, ticket: u64, err: u8, text: []const u8, deliver: ?abi.RocErasedCallable) void {
-        self.ensureOne(roc_host);
-        var item = plain(RESPONSE_CLIPBOARD_READ, ticket, err);
-        if (text.len != 0) item.contents = abi.RocStr.fromSlice(text, roc_host);
-        if (deliver) |owned| {
-            self.completeDirectAssumeCapacity(item, owned);
-        } else {
-            self.completeTicketAssumeCapacity(roc_host, item);
-        }
-    }
-
-    /// Hand the staged responses to Roc as one list, transferring ownership.
-    fn toRocList(self: *ResponseStaging, roc_host: *RocHost) abi.RocList(ResponseEnvelope) {
-        if (self.count() == 0) return abi.RocList(ResponseEnvelope).empty();
-        return abi.RocList(ResponseEnvelope).fromSlice(self.items.items, roc_host);
-    }
-
-    /// Hand this input's responses to Roc and empty the staging area.
-    ///
-    /// The returned list owns its payloads. Clear staging without releasing them
-    /// to avoid a double free. Results staged afterward are owned by staging and
-    /// delivered on the next input.
-    fn take(self: *ResponseStaging, roc_host: *RocHost) abi.RocList(ResponseEnvelope) {
-        const list = self.toRocList(roc_host);
+    /// The returned list owns its thunks. Staging is cleared without releasing
+    /// them, to avoid a double free; a task that finishes afterwards is staged
+    /// again and delivered on the next input.
+    fn take(self: *TaskResultStaging, roc_host: *RocHost) abi.RocList(TaskResultEnvelope) {
+        const list = if (self.count() == 0)
+            abi.RocList(TaskResultEnvelope).empty()
+        else
+            abi.RocList(TaskResultEnvelope).fromSlice(self.items.items, roc_host);
         self.items.clearRetainingCapacity();
         return list;
     }
 
-    /// Release staged responses that never reached Roc.
-    ///
-    /// A handle staged but never delivered still owns its slot, so dropping it
-    /// here is what frees the file behind a read that finished during the frame
-    /// the app exited on.
-    fn release(self: *ResponseStaging, roc_host: *RocHost) void {
+    /// Release messages staged but never delivered, such as a task that
+    /// finished during the frame the app exited on.
+    fn release(self: *TaskResultStaging, roc_host: *RocHost) void {
         for (self.items.items) |item| item.decref(roc_host);
         self.items.deinit(allocatorFromHost(roc_host));
         self.items = .empty;
@@ -1079,18 +386,21 @@ const Phase = enum {
     idle,
     /// Inside `init_for_host`, and inside the startup config callback.
     startup,
-    /// Inside `update_for_host`, applying the commands `update` returned.
-    apply,
+    /// Inside `update_for_host`, while the app's `update!` runs.
+    update,
     /// Inside `render_for_host`.
     render,
+    /// On a task coroutine, inside `run_task_for_host`.
+    task,
 
     /// How the phase is named in a rejection, in the app's own vocabulary.
     fn label(self: Phase) []const u8 {
         return switch (self) {
             .idle => "outside any app callback",
             .startup => "init!",
-            .apply => "a command returned by update",
+            .update => "update!",
             .render => "render!",
+            .task => "a task",
         };
     }
 };
@@ -1098,23 +408,467 @@ const Phase = enum {
 /// Callback phases in which an operation is valid.
 const PhaseSet = std.EnumSet(Phase);
 
-/// Loading, allocating or generating a resource. Startup only: all of these
-/// block, allocate on the GPU, or both, and a frame is not the place for it.
+/// Startup-only operations: the `App.Startup` capabilities (blocking reads,
+/// the clipboard read, the random seed), which exist so that `init!` can do
+/// one-off setup work with the window already open.
 const during_startup = PhaseSet.initOne(.startup);
 
 /// Drawing, and anything that changes how the draws after it are interpreted.
 /// Only defined inside the frame scope the host opens around `render!`.
 const during_render = PhaseSet.initOne(.render);
 
-/// Changing host state between frames: cursor, window, audio, releases.
-/// Reachable while starting up and while applying a command, and nowhere else.
-const during_apply = PhaseSet.initMany(&.{ .startup, .apply });
+/// Changing host state: cursor, window, audio, recordings. Reachable from
+/// `init!`, `update!`, and tasks, and not from `render!`, which only draws.
+const during_update = PhaseSet.initMany(&.{ .startup, .update, .task });
+
+/// Loading, allocating or generating a resource. Allowed wherever the app
+/// changes host state -- `init!`, `update!`, and tasks -- but not during
+/// `render!`, where an upload or a decode lands in the middle of a frame.
+/// The same set as `during_update`; the separate name records intent.
+const during_load = during_update;
+
+/// Handing the host deferred work: `Task.spawn!`, and `Task.spawn_with!`
+/// through it. The task's message comes back on a later input, which `init!`
+/// never sees, and `render!` does not change the world.
+const during_spawn = PhaseSet.initMany(&.{ .update, .task });
 
 /// Constant-time operations with nothing to allocate and no I/O to do: reading
 /// a font metric, asking whether a sound is still playing, taking a random
 /// number. Valid in every callback, but not outside callbacks. Operations that
 /// copy, allocate, write files, or access a driver do not belong in this set.
-const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .apply, .render });
+const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .update, .render, .task });
+
+/// Effects that wait. On a task they park the coroutine; in `init!` they
+/// block. Never during a frame.
+const during_wait = PhaseSet.initMany(&.{ .startup, .task });
+
+/// Waiting effects whose answer is a frame that has to be drawn first.
+///
+/// `during_wait` minus `init!`. A screenshot is read back at the end of a
+/// frame, and `init!` runs before the frame loop has gone around once, so a
+/// screenshot asked for there would park for a frame that cannot arrive while
+/// it holds the frame thread. That is a programming error with a fix -- spawn
+/// a task from `update!` -- rather than a condition to report, so it is
+/// refused by name here rather than coming back as an `Unavailable` that says
+/// nothing about what to do instead.
+const during_frame_wait = PhaseSet.initOne(.task);
+
+/// The host-side hooks the task registry needs: Roc entry points and the
+/// phase guard, kept here because `active_phase` is file-private.
+const TaskHooks = struct {
+    pub fn enterTaskPhase() void {
+        active_phase = .task;
+    }
+    pub fn leaveTaskPhase() void {
+        active_phase = .idle;
+    }
+    pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
+        return run_task_for_host(run);
+    }
+    pub fn dropResult(result: tasks_mod.TaskResult) void {
+        abi.decrefErasedCallable(result, activeHost());
+    }
+    /// The Roc host a queued closure is released or started against. Only the
+    /// frame thread ever asks, and only while an app is running.
+    pub fn host() *RocHost {
+        return activeHost();
+    }
+};
+
+const AppTasks = tasks_mod.Tasks(TaskHooks);
+
+/// `Task.spawn!`: hand an erased `() => Msg` closure to the task runtime.
+///
+/// The closure is owned by this call. It starts on its own coroutine at the
+/// next pump, which the frame loop runs right after `update!` returns, so a
+/// task spawned this cycle parks on its first wait before the frame is drawn.
+fn hostedTaskSpawn(run: abi.RocErasedCallable) callconv(.c) void {
+    enforcePhase("Task.spawn!", during_spawn);
+    // Spawning can hand control to the executor before it returns -- zio runs
+    // a newly spawned coroutine as soon as its tick budget says to -- and a
+    // task sets phases of its own while it runs, and clears them when it
+    // parks. Restore ours, so a second `Task.spawn!` in the same `update!`
+    // still sees `update`. Without this, spawning enough tasks in one call
+    // makes the next spawn fail the phase guard.
+    const scope = PhaseScope.enter(active_phase);
+    defer scope.leave();
+    AppTasks.spawnCurrent(activeHost(), run);
+}
+
+/// Stage every finished task's message for the next input.
+fn stageTaskResults(app_tasks: *AppTasks, staging: *TaskResultStaging, roc_host: *RocHost) void {
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    for (finished) |item| staging.append(roc_host, item.result);
+}
+
+/// The phase a waiting effect must restore when its park returns.
+///
+/// The phase is saved and cleared across the park: the frame loop runs in
+/// between and sets phases of its own, and the task must see `.task` again
+/// when it resumes.
+const WaitScope = struct {
+    resumed: Phase,
+
+    fn enter() WaitScope {
+        const scope = WaitScope{ .resumed = active_phase };
+        active_phase = .idle;
+        return scope;
+    }
+
+    fn leave(self: WaitScope) void {
+        active_phase = self.resumed;
+    }
+};
+
+/// The `std.Io` a waiting effect performs its work through.
+///
+/// On a task, zio parks the coroutine on the io_uring/kqueue/IOCP completion
+/// and switches to the executor, which returns to the frame loop; a later pump
+/// resumes the task and the call returns. In `init!` the frame loop is zio's
+/// own main task, so the same call parks that task and runs the event loop
+/// until the answer is in -- effectively blocking, which is what startup wants.
+/// Without a runtime (unit tests, or a runtime that would not start) this is
+/// the frame thread's ordinary blocking implementation.
+fn waitingIo() std.Io {
+    if (AppTasks.currentRuntime()) |rt| return rt.io();
+    return mainThreadIo();
+}
+
+/// `Task.sleep!`: park the calling task, or block during `init!`.
+fn hostedTaskSleep(millis: u64) callconv(.c) void {
+    enforcePhase("Task.sleep!", during_wait);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sleep", millis);
+    zio.sleep(.fromMilliseconds(@intCast(millis))) catch |err| switch (err) {
+        // Cancelled at shutdown: return at once so the task can run to its end.
+        error.Canceled => {},
+    };
+    AppTasks.traceResume("sleep");
+}
+
+/// Read a whole file on the waiting path, parked rather than blocking.
+///
+/// `limit` is the operation's own ceiling: a text read stops one byte past the
+/// largest string the host will build, a byte read one past the per-file
+/// ceiling, so a file of exactly the limit succeeds and one byte more is
+/// `TooLarge` without the whole file having been read first.
+fn readFileWaiting(allocator: std.mem.Allocator, path: []const u8, limit: usize, out_err: *u8) ?[]u8 {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("read", 0);
+    defer AppTasks.traceResume("read");
+    return std.Io.Dir.cwd().readFileAlloc(waitingIo(), path, allocator, .limited(limit)) catch |err| {
+        out_err.* = readErrorCode(err);
+        return null;
+    };
+}
+
+/// `Files.read_text!`: read a bounded UTF-8 file into a `Str`.
+///
+/// The whole file is copied into the string, so the ceiling is the small one:
+/// this is the only read whose cost on the frame thread is proportional to the
+/// file. A file that is not valid UTF-8 is reported rather than delivered,
+/// because `RocStr.fromSlice` only copies and every later string operation on
+/// an invalid one would be undefined.
+fn hostedFilesReadText(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
+    enforcePhase("Files.read_text!", during_wait);
+    defer path_arg.decref(roc_host);
+
+    const allocator = allocatorFromHost(roc_host);
+    var err: u8 = READ_ERR_FAILED;
+    const bytes = readFileWaiting(allocator, path_arg.asSlice(), MAX_INLINE_READ_BYTES + 1, &err) orelse
+        return .{ .err = err, .contents = abi.RocStr.empty() };
+    defer allocator.free(bytes);
+
+    if (!std.unicode.utf8ValidateSlice(bytes)) {
+        return .{ .err = READ_ERR_NOT_UTF8, .contents = abi.RocStr.empty() };
+    }
+    return .{ .err = 0, .contents = abi.RocStr.fromSlice(bytes, roc_host) };
+}
+
+fn exportedFilesReadText(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_textRetRecord {
+    return hostedFilesReadText(activeHost(), path_arg);
+}
+
+/// `Files.read_bytes!`: read a bounded file without copying its payload.
+///
+/// The buffer the read filled is the buffer Roc gets: it moves into the typed
+/// byte-list heap and out again as an owning seamless `List(U8)`, so a 16 MiB
+/// file costs one allocation and no copy. A delivery slot is reserved before
+/// any I/O starts, so a full heap answers `Busy` rather than reading a file and
+/// discarding it.
+fn hostedFilesReadBytes(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
+    enforcePhase("Files.read_bytes!", during_wait);
+    defer path_arg.decref(roc_host);
+    return readByteListWaiting(roc_host, path_arg.asSlice(), .read);
+}
+
+fn exportedFilesReadBytes(path_arg: abi.RocStr) callconv(.c) abi.FilesHostRead_bytesRetRecord {
+    return hostedFilesReadBytes(activeHost(), path_arg);
+}
+
+/// `Files.list!`: one directory's entries, encoded into the same byte list a
+/// read delivers and decoded by `Files`.
+fn hostedFilesList(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
+    enforcePhase("Files.list!", during_wait);
+    defer path_arg.decref(roc_host);
+    // Structurally the same record as a byte read's, but a distinct generated
+    // type, so copy it across field by field rather than casting.
+    const result = readByteListWaiting(roc_host, path_arg.asSlice(), .list);
+    return .{ .err = result.err, .bytes = result.bytes };
+}
+
+fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetRecord {
+    return hostedFilesList(activeHost(), path_arg);
+}
+
+/// Replace a whole file on the waiting path, parked rather than blocking.
+///
+/// Missing parent directories are created, which is what `writeWholeFile` does
+/// for every file the host writes itself; the two differ only in that this one
+/// names its failure in the app's vocabulary instead of the capture codes.
+///
+/// The path is used as the app gave it. `Files` is not sandboxed in either
+/// direction -- reads take any path the process can open, and so do writes.
+/// `Capture` is the one part of this host with an output root, and it confines
+/// captures only.
+fn writeFileWaiting(path: []const u8, bytes: []const u8) u8 {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("write", 0);
+    defer AppTasks.traceResume("write");
+    // Written through std's threaded implementation on zio's blocking pool
+    // rather than through the runtime's own file backend: creating
+    // directories and files through that backend fails on Windows. The pool
+    // parks the calling task the same way the event loop would, and the
+    // worker touches only the host-visible path and payload bytes.
+    const allocator = allocatorFromHost(activeHost());
+    const rt = AppTasks.currentRuntime() orelse return writeFileBlocking(allocator, path, bytes);
+    var blocking = rt.spawnBlocking(writeFileBlocking, .{ allocator, path, bytes }) catch return READ_ERR_FAILED;
+    return blocking.join();
+}
+
+/// The write itself, on whichever thread the caller chose.
+fn writeFileBlocking(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) u8 {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return writeFileWaitingIn(std.Io.Dir.cwd(), threaded.io(), path, bytes);
+}
+
+/// `writeFileWaiting` against an explicit base directory, so a test can point
+/// it at a temporary tree without depending on the process working directory.
+fn writeFileWaitingIn(base: std.Io.Dir, io: std.Io, path: []const u8, bytes: []const u8) u8 {
+    if (std.fs.path.dirname(path)) |parent| {
+        base.createDirPath(io, parent) catch |err| return writeErrorCode(err);
+    }
+    base.writeFile(io, .{ .sub_path = path, .data = bytes }) catch |err| return writeErrorCode(err);
+    return 0;
+}
+
+/// `Files.write_text!`: replace a file's contents with a UTF-8 string.
+fn hostedFilesWriteText(roc_host: *RocHost, path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase("Files.write_text!", during_wait);
+    defer path_arg.decref(roc_host);
+    defer contents_arg.decref(roc_host);
+    return writeFileWaiting(path_arg.asSlice(), contents_arg.asSlice());
+}
+
+fn exportedFilesWriteText(path_arg: abi.RocStr, contents_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedFilesWriteText(activeHost(), path_arg, contents_arg);
+}
+
+/// `Files.write_bytes!`: replace a file's contents with the app's bytes.
+fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    enforcePhase("Files.write_bytes!", during_wait);
+    defer path_arg.decref(roc_host);
+    defer bytes_arg.decref(roc_host);
+    return writeFileWaiting(path_arg.asSlice(), bytes_arg.items());
+}
+
+fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
+}
+
+/// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
+///
+/// The readback has to happen on the frame thread inside the drawing scope, so
+/// the effect registers the request, parks the task, and is woken by
+/// `serviceCaptureRequests` with the pixels. Encoding a 1080p PNG is tens of
+/// milliseconds, so it runs on zio's blocking pool -- which parks the task
+/// again rather than stalling the frame, and never touches Roc.
+///
+/// A task is the only place this works: waiting for the end of a frame from
+/// `init!` would wait for a frame the frame loop has not started yet. See
+/// `during_frame_wait`.
+fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase("Capture.screenshot!", during_frame_wait);
+    defer path_arg.decref(roc_host);
+    const path = path_arg.asSlice();
+
+    const validation = capture.validateRelativePath(path);
+    if (validation != capture.err_none) return validation;
+
+    // No framebuffer to read, so the request is answered without writing a
+    // file of zeroes. Headless runs exist to produce identical output twice.
+    if (headlessMode()) return capture.err_none;
+
+    // No runtime at all: a unit test, or a runtime that would not start. The
+    // phase guard has already refused every callback but a task, and under
+    // `zig test` it only records the violation, so this second check is what
+    // keeps a test from parking on a frame loop that is not running.
+    const rt = AppTasks.currentRuntime() orelse return capture.err_unavailable;
+    if (active_phase != .task) return capture.err_unavailable;
+
+    if (screenshot_wait != null or capture_screenshot_pending) {
+        return capture.err_already_recording;
+    }
+    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
+        return capture.err_path_invalid;
+    }
+
+    var resolved_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+        return capture.err_write_failed;
+    var resolved_copy: [capture.path_capacity]u8 = undefined;
+    @memcpy(resolved_copy[0..resolved.len], resolved);
+
+    var wait = ScreenshotWait{};
+    screenshot_wait = &wait;
+    capture_screenshot_pending = true;
+
+    {
+        const scope = WaitScope.enter();
+        defer scope.leave();
+        AppTasks.tracePark("screenshot", 0);
+        defer AppTasks.traceResume("screenshot");
+        wait.ready.wait() catch {
+            // Cancelled at shutdown before the frame ended. Nothing was
+            // captured, so there is nothing to free.
+            screenshot_wait = null;
+            capture_screenshot_pending = false;
+            return capture.err_unavailable;
+        };
+    }
+    screenshot_wait = null;
+    if (wait.err != capture.err_none) return wait.err;
+
+    const allocator = allocatorFromHost(roc_host);
+    defer allocator.free(wait.pixels);
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    var blocking = rt.spawnBlocking(encodeAndWritePng, .{
+        allocator,
+        wait.pixels,
+        wait.width,
+        wait.height,
+        resolved_copy[0..resolved.len],
+    }) catch return capture.err_out_of_memory;
+    return blocking.join();
+}
+
+/// Encode RGBA pixels as a PNG and write the file. Runs on zio's blocking
+/// pool: plain Zig values in, an error code out, and no Roc call anywhere.
+fn encodeAndWritePng(
+    allocator: std.mem.Allocator,
+    pixels: []const u8,
+    width: u32,
+    height: u32,
+    path: []const u8,
+) u8 {
+    const encoded = png.encodeRgba(allocator, pixels, width, height) catch |err| return switch (err) {
+        error.OutOfMemory => capture.err_out_of_memory,
+        else => capture.err_write_failed,
+    };
+    defer allocator.free(encoded);
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return writeWholeFile(threaded.io(), path, encoded);
+}
+
+fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedCaptureScreenshot(activeHost(), path_arg);
+}
+
+/// Which of the two byte-list producing waits to run. They share everything
+/// after the syscall: the same admission, the same ownership transfer, and the
+/// same list on the way out.
+const ByteListWait = enum { read, list };
+
+fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait) abi.FilesHostRead_bytesRetRecord {
+    const empty = abi.RocListWith(u8, false).empty();
+    // Reserve before any filesystem work starts. A terminal `Busy` here means
+    // precisely that nothing was read.
+    if (!file_bytes_delivery_reservations.reserve()) {
+        return .{ .err = READ_ERR_BUSY, .bytes = empty };
+    }
+    defer file_bytes_delivery_reservations.release();
+
+    const allocator = allocatorFromHost(roc_host);
+    const bytes = switch (kind) {
+        .read => blk: {
+            var err: u8 = READ_ERR_FAILED;
+            break :blk readFileWaiting(allocator, path, MAX_FILE_READ_BYTES + 1, &err) orelse
+                return .{ .err = err, .bytes = empty };
+        },
+        .list => blk: {
+            const scope = WaitScope.enter();
+            defer scope.leave();
+            AppTasks.tracePark("list", 0);
+            defer AppTasks.traceResume("list");
+            var encoded: ?[]u8 = null;
+            const err = encodeListing(waitingIo(), allocator, path, &encoded);
+            break :blk encoded orelse return .{
+                .err = if (err == 0) READ_ERR_FAILED else err,
+                .bytes = empty,
+            };
+        },
+    };
+
+    return installReadBytes(allocator, bytes);
+}
+
+/// Move an owned buffer into a typed heap slot and hand it back as an owning
+/// seamless `List(U8)`.
+///
+/// Its allocation pointer is the typed heap payload, one word after the slot
+/// refcount, exactly where Roc list ARC expects it. The seamless tag prevents
+/// reusing or resizing the backing allocation, but a unique List operation may
+/// still mutate visible elements in place. Safety comes from the complete
+/// transfer: the host never reads or shares these bytes afterwards, while
+/// sublists retain the one allocation.
+///
+/// An empty read becomes the canonical empty list rather than occupying a slot,
+/// and a full heap frees the buffer and reports `Busy` -- the read happened,
+/// but there is nowhere to hand it over.
+fn installReadBytes(allocator: std.mem.Allocator, bytes: []u8) abi.FilesHostRead_bytesRetRecord {
+    const empty = abi.RocListWith(u8, false).empty();
+    if (bytes.len == 0) {
+        allocator.free(bytes);
+        return .{ .err = 0, .bytes = empty };
+    }
+    const resource = file_bytes_heap.insert(0, .{ .allocator = allocator, .bytes = bytes }) orelse {
+        allocator.free(bytes);
+        return .{ .err = READ_ERR_BUSY, .bytes = empty };
+    };
+    return .{ .err = 0, .bytes = seamlessByteList(resource, bytes) };
+}
+
+/// `Http.send!`: run one HTTP exchange, parking the task while it waits.
+///
+/// The phase handling mirrors `hostedTaskSleep`: the request parks this
+/// coroutine, the frame loop runs in between and sets phases of its own, and
+/// the task must see `.task` again when the response arrives.
+fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Response {
+    enforcePhase("Http.send!", during_wait);
+    const roc_host = activeHost();
+    const resume_phase = active_phase;
+    active_phase = .idle;
+    defer active_phase = resume_phase;
+    return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+}
 
 var active_phase: Phase = .idle;
 
@@ -1168,11 +922,17 @@ fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
         describePhases(allowed, &buffer),
         active_phase.label(),
         if (allowed.eql(during_startup))
-            " Load it in init! and keep the handle in your model; loading during a frame blocks it."
+            " It is an App.Startup capability: call it in init! and keep what it returns in your model."
+        else if (allowed.eql(during_update))
+            " It changes host state rather than drawing: call it from init!, update!, or a task, not from render!."
         else if (allowed.eql(during_render))
             " Drawing is only defined inside the frame scope the host opens around render!."
-        else if (allowed.eql(during_apply))
-            " Return it from update as a command; it changes host state rather than drawing, so it runs during apply before optional presentation."
+        else if (allowed.eql(during_spawn))
+            " Deferred work answers on a later input: start it from update! or from another task."
+        else if (allowed.eql(during_wait))
+            " It waits: call it inside Task.spawn!, where it parks the task, or in init!, where it blocks."
+        else if (allowed.eql(during_frame_wait))
+            " It waits for the end of a frame, so it only works inside Task.spawn!: init! runs before the first frame is drawn."
         else
             "",
     });
@@ -1190,14 +950,23 @@ var capture_recording_path_len: usize = 0;
 var capture_screenshot_path: [capture.path_capacity]u8 = undefined;
 var capture_screenshot_path_len: usize = 0;
 var capture_screenshot_pending: bool = false;
-/// Private ticket of the screenshot request that queued the pending request.
+/// The task waiting for `Capture.screenshot!` to finish, and its answer.
 ///
-/// Set for every pending screenshot. The optional spans request acceptance and the
-/// framebuffer readback performed later in the frame.
-var capture_screenshot_ticket: ?u64 = null;
-/// A serviced screenshot request whose response has not reached Roc yet.
-var capture_screenshot_done: ?ScreenshotOutcome = null;
-const ScreenshotOutcome = struct { ticket: u64, err: u8 };
+/// One slot, because the host reads the framebuffer back once per frame and
+/// keeps one pending path. A second concurrent screenshot is `AlreadyPending`
+/// rather than silently replacing the first.
+const ScreenshotWait = struct {
+    /// Signalled by the frame loop once the readback has been handed to the
+    /// waiting task, which then encodes and writes it.
+    ready: zio.ResetEvent = .init,
+    /// The captured pixels, owned by the waiting task once `ready` is set.
+    pixels: []u8 = &.{},
+    width: u32 = 0,
+    height: u32 = 0,
+    /// Non-zero when the frame loop could not produce a readback at all.
+    err: u8 = 0,
+};
+var screenshot_wait: ?*ScreenshotWait = null;
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -1416,12 +1185,12 @@ const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, wr
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
 
-/// Bytes a finished `ReadFile` handed over, and the allocator that owns them.
+/// Bytes a finished read handed over, and the allocator that owns them.
 ///
-/// The allocator travels with the buffer because the two paths that produce one
-/// do not share one: the worker allocates from its own handle on the host
-/// allocator, while a headless run reads on the frame thread through the Roc
-/// environment's. Whoever allocated it is who frees it.
+/// The allocator travels with the buffer rather than being assumed, because
+/// the buffer outlives the call that made it: it is freed when Roc drops the
+/// last reference to the list built on it, from `destroyFileBytes`, with no
+/// read in progress to ask. Whoever allocated it is who frees it.
 const FileBytesResource = struct {
     allocator: std.mem.Allocator,
     bytes: []u8,
@@ -1457,14 +1226,15 @@ fn seamlessByteList(resource: *u64, bytes: []u8) abi.RocListWith(u8, false) {
     };
 }
 
-/// Slots promised to reads which have been admitted but have not yet produced
-/// their terminal response. A `ReadFile` has to reserve one before it starts
-/// I/O: otherwise a full heap could let up to the worker limit of large buffers
-/// be read only to discard each one when delivery finds no handle slot.
+/// Slots promised to reads that have started but have not yet handed their
+/// bytes over. `Files.read_bytes!` has to reserve one before it opens the
+/// path: otherwise a full heap could let `MAX_LIVE_FILE_BYTE_LISTS` large
+/// files be read only to discard each one when there is no slot to install it
+/// in, so the app would pay for the I/O and still get `Busy`.
 ///
-/// This is deliberately just a count. The worker holds only plain request
-/// data, the frame thread is its sole reader/writer, and the pending-callback
-/// table already bounds the count to 32. No read admission allocates.
+/// This is deliberately just a count. Every read runs on the frame thread, so
+/// there is one reader and writer and nothing to synchronize, and
+/// `MAX_LIVE_FILE_BYTE_LISTS` bounds it. No read admission allocates.
 const FileBytesDeliveryReservations = struct {
     count: usize = 0,
 
@@ -1482,9 +1252,9 @@ const FileBytesDeliveryReservations = struct {
         self.count -= 1;
     }
 
-    /// Shutdown has stopped the worker and freed its unreported result
-    /// buffers. Their callbacks will never be invoked, so forget the matching
-    /// delivery promises before another app lifetime can begin.
+    /// Shutdown has cancelled every task that could still have been reading.
+    /// The reads they were parked in will never resume to release their own
+    /// promises, so forget them all before another app lifetime can begin.
     fn clearAfterWorkStops(self: *FileBytesDeliveryReservations) void {
         self.count = 0;
     }
@@ -1664,8 +1434,9 @@ fn allocatorFromHost(host: *RocHost) std.mem.Allocator {
 /// The main thread's IO implementation.
 ///
 /// Named for the thread rather than for being a default because it is
-/// explicitly single-threaded: handing this to the effect worker would be
-/// unsound and would appear to work. The worker builds its own instead.
+/// explicitly blocking: an effect that waits must use `waitingIo()`, the zio
+/// runtime's, so it parks its coroutine and lets the frame loop run. Reaching
+/// for this one there would stall the frame and would appear to work.
 fn mainThreadIo() std.Io {
     if (comptime builtin.is_test) {
         return std.testing.io;
@@ -1880,8 +1651,6 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
-    capture_screenshot_ticket = null;
-    capture_screenshot_done = null;
     capture_screenshot_path_len = 0;
     capture_recording_path_len = 0;
     capture_output_dir_len = 0;
@@ -2334,10 +2103,9 @@ test "the frame reports the active render target, and the window again once it c
     try std.testing.expectEqual(@as(f32, 1100), restored.width);
     try std.testing.expectEqual(@as(f32, 760), restored.height);
 
-    // The window is asked, not remembered, so a `Window.suggest_size` applied
-    // during the apply phase reaches the `render!` of the same cycle -- which
-    // is what that command requests, and one cycle sooner than a size sampled
-    // in `update` could report it.
+    // The window is asked, not remembered, so a `Window.suggest_size!` called
+    // from `update!` reaches the `render!` of the same cycle -- one cycle
+    // sooner than a size sampled in `update!` could report it.
     headless_screen_width = 640;
     headless_screen_height = 480;
     const resized = hostedDrawFrameSizeRaw();
@@ -2593,7 +2361,7 @@ test "resource-free texture is safe across hosted operations and ordinary deallo
     }
 
     {
-        const scope = PhaseScope.enter(.apply);
+        const scope = PhaseScope.enter(.update);
         defer scope.leave();
 
         hostedAssetsSetTextureFilterRaw(allocateTestTextureStub(&roc_host, 16, 8), 1);
@@ -2818,7 +2586,7 @@ test "resource-free audio handles are inert across every sound and music call" {
     const real_music = storeMusic(.headless).?;
 
     {
-        const scope = PhaseScope.enter(.apply);
+        const scope = PhaseScope.enter(.update);
         defer scope.leave();
 
         hostedAudioPlay(allocateTestResourceStub(&roc_host));
@@ -2982,7 +2750,7 @@ test "an instance batch called from update is rejected" {
     roc_host.roc_dealloc = &nativeRocDealloc;
     active_roc_host = &roc_host;
     active_headless = true;
-    const phase = PhaseScope.enter(.apply);
+    const phase = PhaseScope.enter(.update);
     last_phase_violation = null;
     defer {
         last_phase_violation = null;
@@ -3001,7 +2769,7 @@ test "an instance batch called from update is rejected" {
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.texture_instances!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_render));
-    try std.testing.expectEqual(Phase.apply, violation.actual);
+    try std.testing.expectEqual(Phase.update, violation.actual);
 }
 
 test "one tilemap host call draws a culled batch and releases texture owners" {
@@ -3211,7 +2979,7 @@ test "a structurally valid texture upload is not refused for host capacity" {
     roc_host.roc_dealloc = &nativeRocDealloc;
     active_roc_host = &roc_host;
     active_headless = true;
-    const scope = PhaseScope.enter(.apply);
+    const scope = PhaseScope.enter(.update);
     defer {
         scope.leave();
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -3246,7 +3014,7 @@ test "texture updates validate native dimensions instead of public metadata" {
     roc_host.roc_dealloc = &nativeRocDealloc;
     active_roc_host = &roc_host;
     active_headless = true;
-    const scope = PhaseScope.enter(.apply);
+    const scope = PhaseScope.enter(.update);
     defer {
         scope.leave();
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
@@ -3648,7 +3416,7 @@ test "embedded texture and font bytes are consumed exactly once" {
 }
 
 fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) callconv(.c) abi.AssetsHostOpen_storeRetRecord {
-    enforcePhase("Assets.Store.open!", during_startup);
+    enforcePhase("Assets.Store.open!", during_load);
     defer args.root.decref(host);
     defer args.asset_set.decref(host);
     defer args.content_hash.decref(host);
@@ -3702,7 +3470,7 @@ fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []c
 }
 
 fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.AssetsHostLoad_store_textureArgs) callconv(.c) abi.AssetsHostLoad_store_textureRetRecord {
-    enforcePhase("Assets.load_texture!", during_startup);
+    enforcePhase("Assets.load_texture!", during_load);
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     const store = store_heap.get(args.store.*) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ };
@@ -3743,7 +3511,7 @@ fn exportedAssetsLoadStoreTextureRaw(args: abi.AssetsHostLoad_store_textureArgs)
 }
 
 fn hostedAssetsLoadTextureBytesRaw(host: *RocHost, args: abi.AssetsHostLoad_texture_bytesArgs) callconv(.c) abi.AssetsHostLoad_texture_bytesRetRecord {
-    enforcePhase("Assets.texture_from_bytes!", during_startup);
+    enforcePhase("Assets.texture_from_bytes!", during_load);
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
     if (bytes.len == 0 or imageFileType(args.format) == null) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
@@ -3763,7 +3531,7 @@ fn exportedAssetsLoadTextureBytesRaw(args: abi.AssetsHostLoad_texture_bytesArgs)
 }
 
 fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textureArgs) callconv(.c) abi.AssetsHostGenerate_color_textureRetRecord {
-    enforcePhase("Assets.generate_color_texture!", during_startup);
+    enforcePhase("Assets.generate_color_texture!", during_load);
     if (args.width <= 0 or args.height <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
@@ -3777,7 +3545,7 @@ fn hostedAssetsGenerateColorTextureRaw(args: abi.AssetsHostGenerate_color_textur
 }
 
 fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_textureArgs) callconv(.c) abi.AssetsHostGenerate_checked_textureRetRecord {
-    enforcePhase("Assets.generate_checked_texture!", during_startup);
+    enforcePhase("Assets.generate_checked_texture!", during_load);
     if (args.width <= 0 or args.height <= 0 or args.checks_x <= 0 or args.checks_y <= 0) return .{ .texture = invalidTexture(), .err = RESOURCE_ERR_FAILED };
     if (active_headless) {
         const texture = storeTexture(.{ .headless = .{ .width = args.width, .height = args.height } }) orelse
@@ -3791,7 +3559,7 @@ fn hostedAssetsGenerateCheckedTextureRaw(args: abi.AssetsHostGenerate_checked_te
 }
 
 fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textureArgs) callconv(.c) u8 {
-    enforcePhase("Assets.update_texture!", during_apply);
+    enforcePhase("Assets.update_texture!", during_update);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
     const token = args.texture.handle.*;
@@ -3812,11 +3580,11 @@ fn hostedAssetsUpdateTextureRaw(host: *RocHost, args: abi.AssetsHostUpdate_textu
 /// Upload one rectangle of a texture.
 ///
 /// The reason this exists rather than being a convenience: without it, changing
-/// one pixel of an atlas means re-uploading the atlas. Commands carry their
-/// complete payload for this cycle, so a structurally valid upload is invoked
-/// rather than silently refused for transient host capacity.
+/// one pixel of an atlas means re-uploading the atlas. The call carries its
+/// complete payload, so a structurally valid upload is performed rather than
+/// silently refused for transient host capacity.
 fn hostedAssetsUpdateTextureRegionRaw(host: *RocHost, args: abi.AssetsHostUpdate_texture_regionArgs) callconv(.c) u8 {
-    enforcePhase("Assets.update_texture_region!", during_apply);
+    enforcePhase("Assets.update_texture_region!", during_update);
     defer args.pixels.decref(host);
     defer args.texture.decref(host);
 
@@ -3858,7 +3626,7 @@ fn exportedAssetsUpdateTextureRegionRaw(args: abi.AssetsHostUpdate_texture_regio
 }
 
 fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
-    enforcePhase("Assets.set_texture_filter!", during_apply);
+    enforcePhase("Assets.set_texture_filter!", during_update);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
@@ -3866,7 +3634,7 @@ fn hostedAssetsSetTextureFilterRaw(texture_owner: abi.Texture, code: u8) callcon
 }
 
 fn hostedAssetsSetTextureWrapRaw(texture_owner: abi.Texture, code: u8) callconv(.c) void {
-    enforcePhase("Assets.set_texture_wrap!", during_apply);
+    enforcePhase("Assets.set_texture_wrap!", during_update);
     defer texture_owner.decref(activeHost());
     if (builtin.is_test) return;
     const texture = nativeTextureForToken(texture_owner.handle.*) orelse return;
@@ -3890,7 +3658,7 @@ fn storeShader(resource: ShaderResource) ?*u64 {
 }
 
 fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) callconv(.c) abi.DrawHostLoad_render_textureRetRecord {
-    enforcePhase("Draw.RenderTexture.load!", during_startup);
+    enforcePhase("Draw.RenderTexture.load!", during_load);
     if (args.width <= 0 or args.height <= 0) return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .err = RESOURCE_ERR_FAILED };
     if (headlessMode()) {
         const target = storeRenderTexture(.headless) orelse
@@ -3905,7 +3673,7 @@ fn hostedDrawLoadRenderTextureRaw(args: abi.DrawHostLoad_render_textureArgs) cal
 }
 
 fn hostedDrawLoadShaderSourceRaw(host: *RocHost, args: abi.DrawHostLoad_shader_sourceArgs) callconv(.c) abi.DrawHostLoad_shader_sourceRetRecord {
-    enforcePhase("Draw.Shader.from_source!", during_startup);
+    enforcePhase("Draw.Shader.from_source!", during_load);
     defer args.vertex_source.decref(host);
     defer args.fragment_source.decref(host);
     const vertex_slice = args.vertex_source.asSlice();
@@ -3933,7 +3701,7 @@ fn exportedDrawLoadShaderSourceRaw(args: abi.DrawHostLoad_shader_sourceArgs) cal
 }
 
 fn hostedDrawLoadStoreShaderRaw(host: *RocHost, args: abi.DrawHostLoad_store_shaderArgs) callconv(.c) abi.DrawHostLoad_store_shaderRetRecord {
-    enforcePhase("Draw.Shader.from_store!", during_startup);
+    enforcePhase("Draw.Shader.from_store!", during_load);
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     defer releaseResourceBox(host, args.store);
@@ -4103,7 +3871,7 @@ fn hostedDrawEndBlendRaw() callconv(.c) void {
 }
 
 fn hostedDrawShaderLocationRaw(host: *RocHost, args: abi.DrawHostShader_locationArgs) callconv(.c) i32 {
-    enforcePhase("Draw.Shader.uniform_*!", during_startup);
+    enforcePhase("Draw.Shader.uniform_*!", during_load);
     defer args.name.decref(host);
     defer releaseResourceBox(host, args.shader);
     const resource = shader_heap.get(args.shader.*) orelse return -1;
@@ -4327,7 +4095,7 @@ fn hostedDrawTriangleLinesRaw(args: abi.DrawHostTriangle_linesArgs) callconv(.c)
 }
 
 fn hostedDrawLoadFontBytesRaw(host: *RocHost, args: abi.DrawHostLoad_font_bytesArgs) callconv(.c) abi.DrawHostLoad_font_bytesRetRecord {
-    enforcePhase("Draw.font_from_bytes!", during_startup);
+    enforcePhase("Draw.font_from_bytes!", during_load);
     defer args.bytes.decref(host);
     const bytes = args.bytes.items();
     const file_type = fontFileType(args.format) orelse return .{ .font = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
@@ -4346,7 +4114,7 @@ fn exportedDrawLoadFontBytesRaw(args: abi.DrawHostLoad_font_bytesArgs) callconv(
 }
 
 fn hostedDrawLoadStoreFontRaw(host: *RocHost, args: abi.DrawHostLoad_store_fontArgs) callconv(.c) abi.DrawHostLoad_store_fontRetRecord {
-    enforcePhase("Draw.load_store_font!", during_startup);
+    enforcePhase("Draw.load_store_font!", during_load);
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     if (args.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
@@ -4443,7 +4211,7 @@ fn snapshotRaylibFontMetrics(host: *RocHost, font: raylib.Font) abi.DrawHostFont
 }
 
 fn hostedDrawFontMetricsRaw(host: *RocHost, font: abi.DefaultFontOrLoadedFont) callconv(.c) abi.DrawHostFont_metricsRetRecord {
-    enforcePhase("Draw font metric snapshot", during_startup);
+    enforcePhase("Draw font metric snapshot", during_load);
     defer font.decref(host);
     if (headlessMode()) return headlessFontMetrics(host);
     return snapshotRaylibFontMetrics(host, fontForValue(&font));
@@ -4489,7 +4257,7 @@ test "font metric snapshots release the source Font and retain only scalar Roc d
 }
 
 fn hostedDrawPrepareTextRaw(host: *RocHost, args: abi.DrawHostPrepare_textArgs) callconv(.c) abi.DrawHostPrepare_textRetRecord {
-    enforcePhase("Text.prepare!", during_startup);
+    enforcePhase("Text.prepare!", during_load);
     defer args.text.decref(host);
     prepared_text_prepare_calls += 1;
 
@@ -4667,7 +4435,7 @@ var exit_requested: ?i64 = null;
 var active_app_args: []const [*:0]u8 = &.{};
 
 fn hostedArgs(roc_host: *RocHost) callconv(.c) abi.RocList(abi.RocStr) {
-    enforcePhase("App.Startup.args!", during_startup);
+    enforcePhase("App.Startup.args!", during_load);
 
     const result = abi.RocList(abi.RocStr).allocate(active_app_args.len, roc_host);
     if (result.elements_ptr) |items| {
@@ -4755,7 +4523,7 @@ fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult 
 }
 
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
-    enforcePhase("Tilemap.load_tmx!", during_startup);
+    enforcePhase("Tilemap.load_tmx!", during_load);
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
@@ -4844,7 +4612,7 @@ fn exportedTilemapDrawRaw(args: abi.TilemapHostDrawArgs) callconv(.c) void {
 }
 
 fn hostedExit(code: i32) callconv(.c) void {
-    enforcePhase("App.exit", during_apply);
+    enforcePhase("App.Startup.exit!", during_update);
     exit_requested = @as(i64, code);
 }
 
@@ -4855,7 +4623,7 @@ fn hostedExit(code: i32) callconv(.c) void {
 /// geometry the backend actually established. The headless semantic backend
 /// honors the hint deterministically.
 fn hostedSuggestWindowSize(args: abi.HostHostSuggest_window_sizeArgs) callconv(.c) u8 {
-    enforcePhase("Window.suggest_size", during_apply);
+    enforcePhase("Window.suggest_size!", during_update);
     // `headlessMode()` rather than `active_headless`: it folds to true at
     // comptime under `zig test`, which keeps the raylib call out of the test
     // binary's link so the phase guard here is testable at all.
@@ -4869,19 +4637,19 @@ fn hostedSuggestWindowSize(args: abi.HostHostSuggest_window_sizeArgs) callconv(.
 }
 
 fn hostedSetTargetFps(fps: i32) callconv(.c) void {
-    enforcePhase("Window.set_target_fps", during_apply);
+    enforcePhase("Window.set_target_fps!", during_update);
     if (headlessMode()) return;
     raylib.setTargetFps(fps);
 }
 
 fn hostedSuggestWindowMinSize(args: abi.HostHostSuggest_window_min_sizeArgs) callconv(.c) void {
-    enforcePhase("Window.suggest_min_size", during_apply);
+    enforcePhase("Window.suggest_min_size!", during_update);
     if (headlessMode()) return;
     raylib.suggestWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
 
 fn hostedSetExitKey(key_code: i32) callconv(.c) void {
-    enforcePhase("Keys.set_exit_key", during_apply);
+    enforcePhase("Keys.set_exit_key!", during_update);
     if (active_headless) return;
     raylib.setExitKey(nonNegativeCInt(key_code));
 }
@@ -4949,12 +4717,12 @@ fn framePathForIndex(buffer: []u8, path: []const u8, index: u64) ?[]const u8 {
     return std.fmt.bufPrint(buffer, "{s}_{d:0>5}{s}", .{ stem, index, extension }) catch null;
 }
 
-/// Apply a `Capture.start` command.
+/// `Capture.start!`: begin a recording.
 ///
 /// Refusals are latched in the session for the next `input.capture`. The return
 /// code preserves the hosted ABI and supports direct tests.
 fn hostedCaptureStartRecording(roc_host: *RocHost, args: abi.CaptureHostStart_recordingArgs) callconv(.c) u8 {
-    enforcePhase("Capture.start", during_apply);
+    enforcePhase("Capture.start!", during_update);
     defer args.path.decref(roc_host);
     const result = startCaptureRecording(.{
         .path = args.path.asSlice(),
@@ -5146,7 +4914,7 @@ fn currentRenderHeight() i32 {
 }
 
 fn hostedCaptureSetVirtualMouse(args: abi.CaptureHostSet_virtual_mouseArgs) callconv(.c) void {
-    enforcePhase("Mouse.set_source", during_apply);
+    enforcePhase("Mouse.set_source!", during_update);
     if (!args.active) {
         virtual_mouse_active = false;
         virtual_mouse_has_last = false;
@@ -5182,7 +4950,7 @@ fn recordVirtualMousePosition() void {
 }
 
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
-    enforcePhase("Capture.stop", during_apply);
+    enforcePhase("Capture.stop!", during_update);
     const frames = capture_session.captured_frames;
     const stop_result = capture_session.stop();
     if (stop_result == capture.err_not_recording) {
@@ -5198,9 +4966,10 @@ fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRec
 
 /// The recording state sampled into every input.
 ///
-/// A pure `update` cannot ask for this, and there is no longer anything to ask:
-/// starting and stopping are commands, so this is the only channel the outcome
-/// has. It is five scalars, so it rides along on the input record rather than
+/// Starting and stopping are effects called from `update!`, and a recording
+/// can also end on its own -- at its frame cap, or on an encoder failure -- so
+/// the input is where an app learns what happened without asking every frame.
+/// It is five scalars, so it rides along on the input record rather than
 /// costing a host call on every frame regardless of whether anything is
 /// recording.
 fn captureStateForStep() CaptureFromHost {
@@ -5243,8 +5012,46 @@ fn exportedGetClipboardText() callconv(.c) ClipboardTextResult {
     return hostedGetClipboardText(activeHost());
 }
 
+/// `Window.read_clipboard!`: the clipboard as text, or why not.
+///
+/// The windowing backend only answers on the thread that owns the window, and
+/// the read is a pointer copy rather than I/O, so there is nothing to move off
+/// the frame thread and nothing to wait for -- this is a state read, legal
+/// wherever host state is read, and it never parks.
+///
+/// The clipboard is arbitrary content from outside the app: another process
+/// decides how big it is, and turning it into a `Str` is a copy and a UTF-8
+/// scan on this thread. Cap it where a text read is capped, and for the same
+/// reason.
+fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostHostRead_clipboardRetRecord {
+    enforcePhase("Window.read_clipboard!", during_update);
+
+    if (headlessMode()) {
+        if (!headless_clipboard_set) return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
+        return .{
+            .err = 0,
+            .contents = abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host),
+        };
+    }
+
+    // The pointer belongs to the windowing backend: it is null when the
+    // clipboard is empty or holds non-text content, must never be freed, and is
+    // invalidated by the next clipboard call -- so copy it out now.
+    const text = raylib.getClipboardText() orelse
+        return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
+    const contents = std.mem.span(text);
+    if (contents.len > MAX_INLINE_READ_BYTES) {
+        return .{ .err = READ_ERR_TOO_LARGE, .contents = abi.RocStr.empty() };
+    }
+    return .{ .err = 0, .contents = abi.RocStr.fromSlice(contents, roc_host) };
+}
+
+fn exportedReadClipboard() callconv(.c) abi.HostHostRead_clipboardRetRecord {
+    return hostedReadClipboard(activeHost());
+}
+
 fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
-    enforcePhase("Window.set_clipboard_text", during_apply);
+    enforcePhase("Window.set_clipboard_text!", during_update);
     // Roc transfers ownership of refcounted args to the hosted fn; release it
     // on every path, including the early returns below.
     defer text_arg.decref(roc_host);
@@ -5284,7 +5091,7 @@ fn cursorModeFromCode(code: u8) CursorMode {
 }
 
 fn hostedMouseSetCursorModeRaw(mode_code: u8) callconv(.c) void {
-    enforcePhase("Mouse.set_cursor_mode", during_apply);
+    enforcePhase("Mouse.set_cursor_mode!", during_update);
     if (active_headless) return;
     switch (cursorModeFromCode(mode_code)) {
         .visible => raylib.enableCursor(),
@@ -5302,7 +5109,7 @@ fn mouseCursorFromCode(code: u8) raylib.MouseCursor {
 }
 
 fn hostedMouseSetCursorRaw(cursor: u8) callconv(.c) void {
-    enforcePhase("Mouse.set_cursor", during_apply);
+    enforcePhase("Mouse.set_cursor!", during_update);
     if (active_headless) return;
     const next = mouseCursorFromCode(cursor);
     const next_code: u8 = @intCast(@intFromEnum(next));
@@ -5390,7 +5197,7 @@ fn storeMusic(resource: MusicResource) ?*u64 {
 }
 
 fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHostGen_toneRetRecord {
-    enforcePhase("Audio.gen_tone!", during_startup);
+    enforcePhase("Audio.gen_tone!", during_load);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -5401,7 +5208,7 @@ fn hostedAudioGenTone(args: abi.AudioHostGen_toneArgs) callconv(.c) abi.AudioHos
 }
 
 fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioHostGen_soundRetRecord {
-    enforcePhase("Audio.gen_sound!", during_startup);
+    enforcePhase("Audio.gen_sound!", during_load);
     if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
@@ -5412,7 +5219,7 @@ fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioH
 }
 
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_soundRetRecord {
-    enforcePhase("Audio.load_sound!", during_startup);
+    enforcePhase("Audio.load_sound!", during_load);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -5436,7 +5243,7 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_s
 }
 
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
-    enforcePhase("Audio.load_music!", during_startup);
+    enforcePhase("Audio.load_music!", during_load);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
@@ -5467,7 +5274,7 @@ fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_m
 // running, which is the part worth testing: an unresolvable token has to reach
 // the `orelse return` and still release the reference it was handed.
 fn hostedAudioPlay(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Sound.play!", during_apply);
+    enforcePhase("Audio.Sound.play!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5477,7 +5284,7 @@ fn hostedAudioPlay(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioStop(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Sound.stop!", during_apply);
+    enforcePhase("Audio.Sound.stop!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5487,7 +5294,7 @@ fn hostedAudioStop(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioPause(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Sound.pause!", during_apply);
+    enforcePhase("Audio.Sound.pause!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5497,7 +5304,7 @@ fn hostedAudioPause(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioResume(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Sound.resume!", during_apply);
+    enforcePhase("Audio.Sound.resume!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5517,7 +5324,7 @@ fn hostedAudioIsPlaying(handle: *u64) callconv(.c) bool {
 }
 
 fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
-    enforcePhase("Audio.Sound.set_volume!", during_apply);
+    enforcePhase("Audio.Sound.set_volume!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5527,7 +5334,7 @@ fn hostedAudioSetVolume(handle: *u64, volume: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
-    enforcePhase("Audio.Sound.set_pitch!", during_apply);
+    enforcePhase("Audio.Sound.set_pitch!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5537,7 +5344,7 @@ fn hostedAudioSetPitch(handle: *u64, pitch: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
-    enforcePhase("Audio.Sound.set_pan!", during_apply);
+    enforcePhase("Audio.Sound.set_pan!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = sound_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5547,7 +5354,7 @@ fn hostedAudioSetPan(handle: *u64, pan: f32) callconv(.c) void {
 }
 
 fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Music.play!", during_apply);
+    enforcePhase("Audio.Music.play!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5557,7 +5364,7 @@ fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Music.stop!", during_apply);
+    enforcePhase("Audio.Music.stop!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5567,7 +5374,7 @@ fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Music.pause!", during_apply);
+    enforcePhase("Audio.Music.pause!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5577,7 +5384,7 @@ fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
-    enforcePhase("Audio.Music.resume!", during_apply);
+    enforcePhase("Audio.Music.resume!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5587,7 +5394,7 @@ fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
-    enforcePhase("Audio.Music.set_volume!", during_apply);
+    enforcePhase("Audio.Music.set_volume!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5597,7 +5404,7 @@ fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
-    enforcePhase("Audio.Music.set_pitch!", during_apply);
+    enforcePhase("Audio.Music.set_pitch!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5607,7 +5414,7 @@ fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
-    enforcePhase("Audio.Music.set_pan!", during_apply);
+    enforcePhase("Audio.Music.set_pan!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5617,7 +5424,7 @@ fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
 }
 
 fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
-    enforcePhase("Audio.Music.set_looping!", during_apply);
+    enforcePhase("Audio.Music.set_looping!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5637,7 +5444,7 @@ fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
 }
 
 fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
-    enforcePhase("Audio.Music.seek!", during_apply);
+    enforcePhase("Audio.Music.seek!", during_update);
     defer releaseResourceBox(activeHost(), handle);
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
@@ -5667,7 +5474,7 @@ fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
 }
 
 fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
-    enforcePhase("Audio.set_master_volume!", during_apply);
+    enforcePhase("Audio.set_master_volume!", during_update);
     if (active_headless) return;
     raylib.setMasterVolume(volume);
 }
@@ -5698,8 +5505,9 @@ fn deinitResources() void {
     std.debug.assert(blend_scope_count == 0);
     std.debug.assert(camera_scope_count == 0);
     std.debug.assert(scissor_scope_count == 0);
-    // Worker shutdown clears delivery promises before resource teardown. A
-    // non-zero value here would make the next app lifetime under-admit reads.
+    // App shutdown clears delivery promises, through `clearAfterWorkStops`,
+    // before resource teardown. A non-zero value here would make the next app
+    // lifetime under-admit reads.
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
@@ -5813,7 +5621,15 @@ comptime {
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&exportedArgs, .{ .name = "roc_host_args" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
+        @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
+        @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
+        @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
+        @export(&exportedFilesList, .{ .name = "roc_files_list" });
+        @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
+        @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
+        @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
+        @export(&exportedReadClipboard, .{ .name = "roc_host_read_clipboard" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });
@@ -5822,6 +5638,7 @@ comptime {
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
+        @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
         @export(&hostedSuggestWindowSize, .{ .name = "roc_host_suggest_window_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSuggestWindowMinSize, .{ .name = "roc_host_suggest_window_min_size" });
@@ -5829,6 +5646,7 @@ comptime {
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
+        @export(&hostedHttpSend, .{ .name = "roc_http_send" });
     }
 }
 
@@ -6084,504 +5902,14 @@ const CycleCallbackSchedule = struct {
 /// Presentation is scheduled independently afterward, so an omitted frame
 /// never causes the host to repeat or skip this transition.
 fn updateOnce(boxed_model: *RocBox, input: InputFromHost) UpdateResult {
-    // The commands `update` returns are applied by the platform before this
-    // call returns, so they run inside this scope too -- which is why an
-    // command's effect is checked against apply and not against idle.
-    const phase = PhaseScope.enter(.apply);
+    // `update!` calls host effects directly, and spawns tasks through the
+    // `Task.spawn!` effect, all inside this scope.
+    const phase = PhaseScope.enter(.update);
     defer phase.leave();
     // Off unless ROC_RAY_ALLOC_STATS asked for metering; one branch per frame.
     const metered = allocMeterMark();
     defer allocMeterRecordUpdate(metered);
     return update_for_host(takeModel(boxed_model), input);
-}
-
-/// Submit the requests returned by one `update` call and release the list.
-///
-/// Reads run on the worker and respond in a later input. An unavailable or full
-/// worker refuses them immediately instead of running slow work on this thread.
-///
-/// Headless mode performs reads synchronously for deterministic response
-/// ordering, but still reports them through the normal response path.
-///
-/// Screenshot and clipboard requests require main-thread APIs. They are serviced
-/// in this cycle and reported in the next input.
-///
-/// Every request yields one terminal response, including refused requests.
-/// Responses staged here land in the next input because the current input is
-/// immutable.
-///
-/// Reservations bound genuinely asynchronous work; requests without a reservation
-/// are refused, never dropped. Synchronous work has operation-specific byte
-/// limits rather than a hidden request-count queue.
-const HeadlessReadBudget = struct {
-    operations: usize = 0,
-    bytes: usize = 0,
-
-    fn begin(self: *HeadlessReadBudget) bool {
-        if (self.operations == MAX_HEADLESS_READS_PER_INPUT) return false;
-        if (self.bytes == MAX_HEADLESS_READ_BYTES_PER_INPUT) return false;
-        self.operations += 1;
-        return true;
-    }
-
-    fn remainingBytes(self: *const HeadlessReadBudget) usize {
-        return MAX_HEADLESS_READ_BYTES_PER_INPUT - self.bytes;
-    }
-};
-
-fn submitRequests(staging: *ResponseStaging, roc_host: *RocHost, requests: abi.RocList(RequestToHost)) void {
-    defer {
-        if (requests.hasOneRef()) {
-            for (requests.allocationItems()) |item| item.decref(roc_host);
-        }
-        requests.decref(roc_host);
-    }
-
-    const unique = requests.isUnique();
-    const mutable_tasks: []RequestToHost = if (unique) @constCast(requests.items()) else &.{};
-    var roc_string_bytes: usize = 0;
-    var synchronous_tasks: usize = 0;
-    var headless_reads = HeadlessReadBudget{};
-    for (requests.items(), 0..) |request, index| {
-        // A list returned directly from Roc is normally unique. Move the
-        // callable out in that case, nulling its list slot before the generated
-        // list decref runs. A shared list must retain one reference for this
-        // dispatch, because the originating list still owns its callback.
-        const deliver = if (unique) blk: {
-            const moved = mutable_tasks[index].deliver;
-            mutable_tasks[index].deliver = null;
-            break :blk moved;
-        } else blk: {
-            abi.increfErasedCallable(request.deliver, 1);
-            break :blk request.deliver;
-        };
-        std.debug.assert(deliver != null);
-
-        const ticket = pending_mappers.issueTicket();
-        // Clipboard work finishes during this dispatch. Keep its callback out
-        // of the fixed pending table: that table is a reservation for work
-        // which can outlive this frame.
-        if (request.kind == REQUEST_READ_CLIPBOARD) {
-            if (synchronous_tasks == MAX_SYNC_MAIN_THREAD_OPERATIONS_PER_INPUT) {
-                refuseRequest(staging, roc_host, request, ticket, deliver);
-                continue;
-            }
-            synchronous_tasks += 1;
-            startSynchronousRequest(staging, roc_host, request, ticket, deliver, &roc_string_bytes);
-            continue;
-        }
-        if (!pending_mappers.insert(ticket, deliver)) {
-            // Capacity is a bound on deferred callbacks, not a public request
-            // list limit. The callback moves straight into a terminal Busy
-            // envelope, so the app receives exactly one typed result.
-            refuseRequest(staging, roc_host, request, ticket, deliver);
-            continue;
-        }
-        startRequest(staging, roc_host, request, ticket, &headless_reads);
-    }
-}
-
-/// Start one request whose callback has already been retained in the private
-/// table. Only work that can outlive this dispatch reaches here; it passes an
-/// opaque ticket onward and returns the callback with its terminal envelope.
-fn startRequest(staging: *ResponseStaging, roc_host: *RocHost, request: RequestToHost, ticket: u64, headless_reads: *HeadlessReadBudget) void {
-    switch (request.kind) {
-        REQUEST_READ_SMALL_FILE => submitRead(staging, roc_host, ticket, request.path.asSlice(), false, headless_reads),
-        REQUEST_READ_FILE => submitRead(staging, roc_host, ticket, request.path.asSlice(), true, headless_reads),
-        REQUEST_LIST_DIR => submitListing(staging, roc_host, ticket, request.path.asSlice(), headless_reads),
-        REQUEST_DELAY => armTimer(ticket, request.millis),
-        REQUEST_SCREENSHOT => blk: {
-            const err = beginScreenshotTask(ticket, request.path.asSlice()) orelse break :blk;
-            staging.screenshotFinished(roc_host, ticket, err);
-        },
-        REQUEST_READ_CLIPBOARD => unreachable,
-        // The host and the platform are built together, so this is not a newer
-        // app talking to an older host -- it is transport disagreeing with
-        // itself. Drop the retained callback before terminating, rather than
-        // leaking a closure on this internal error path.
-        else => {
-            abi.decrefErasedCallable(pending_mappers.take(ticket) orelse null, roc_host);
-            std.debug.panic("roc-ray: unknown request kind {d}", .{request.kind});
-        },
-    }
-}
-
-/// Finish work that cannot outlive this dispatch, moving its callback directly
-/// into the response envelope. This deliberately does not consume one of the
-/// fixed deferred-operation reservations.
-fn startSynchronousRequest(staging: *ResponseStaging, roc_host: *RocHost, request: RequestToHost, ticket: u64, deliver: abi.RocErasedCallable, roc_string_bytes: *usize) void {
-    if (builtin.is_test) test_synchronous_task_starts += 1;
-    switch (request.kind) {
-        REQUEST_READ_CLIPBOARD => stageClipboardRead(staging, roc_host, ticket, roc_string_bytes, deliver),
-        else => {
-            abi.decrefErasedCallable(deliver, roc_host);
-            std.debug.panic("roc-ray: request kind {d} cannot finish synchronously", .{request.kind});
-        },
-    }
-}
-
-/// Report a request the host would not start, in the response it asked for.
-///
-/// Preserve the request kind and use a fresh private ticket for its `Busy`
-/// envelope, so the app can retry on a later cycle without seeing transport
-/// correlation state.
-fn refuseRequest(staging: *ResponseStaging, roc_host: *RocHost, request: RequestToHost, ticket: u64, deliver: abi.RocErasedCallable) void {
-    const raw = switch (request.kind) {
-        REQUEST_READ_SMALL_FILE => ResponseStaging.plain(RESPONSE_SMALL_FILE_READ, ticket, READ_ERR_BUSY),
-        REQUEST_READ_FILE => ResponseStaging.plain(RESPONSE_FILE_READ, ticket, READ_ERR_BUSY),
-        REQUEST_LIST_DIR => ResponseStaging.plain(RESPONSE_DIR_LISTED, ticket, READ_ERR_BUSY),
-        REQUEST_DELAY => ResponseStaging.plain(RESPONSE_DELAY, ticket, DELAY_ERR_BUSY),
-        REQUEST_SCREENSHOT => ResponseStaging.plain(RESPONSE_SCREENSHOT_FINISHED, ticket, capture.err_busy),
-        REQUEST_READ_CLIPBOARD => ResponseStaging.plain(RESPONSE_CLIPBOARD_READ, ticket, READ_ERR_BUSY),
-        else => {
-            abi.decrefErasedCallable(deliver, roc_host);
-            std.debug.panic("roc-ray: unknown request kind {d}", .{request.kind});
-        },
-    };
-    staging.completeDirect(roc_host, raw, deliver);
-}
-
-/// Queue a screenshot, or refuse it with a capture error code.
-///
-/// Returns null when the request was accepted: the framebuffer is read at the
-/// end of this frame -- the same instant `Capture.screenshot!` reads it -- so
-/// the pixels are the ones the app just drew, and only the report waits for the
-/// next input. The sandbox check is the same one the effect uses, so a path that
-/// escapes the output directory is still refused rather than rewritten.
-fn beginScreenshotTask(ticket: u64, path: []const u8) ?u8 {
-    const validation = capture.validateRelativePath(path);
-    if (validation != capture.err_none) return validation;
-
-    // Headless runs have no framebuffer to read, so the request is completed
-    // synchronously rather than writing a file of zeroes. It is still staged
-    // here and delivered on the next input, like every other request response.
-    if (headlessMode()) return capture.err_none;
-
-    // A request already queued this frame has not been serviced yet, and there
-    // is only one slot. Refuse rather than silently discarding the first path.
-    if (capture_screenshot_pending) return capture.err_already_recording;
-
-    // Likewise a serviced request whose outcome has not been staged yet:
-    // accepting now would overwrite the older result, and the app would hear
-    // about one of its two screenshots twice and the other never.
-    if (capture_screenshot_done != null) return capture.err_already_recording;
-
-    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
-        return capture.err_path_invalid;
-    }
-    capture_screenshot_pending = true;
-    capture_screenshot_ticket = ticket;
-    return null;
-}
-
-/// Stage the response for a screenshot serviced at the end of a past frame.
-///
-/// Runs before this input's requests are submitted, so the single outcome slot is
-/// always empty by the time a new screenshot can be accepted.
-fn stageCaptureResults(staging: *ResponseStaging, roc_host: *RocHost) void {
-    const done = capture_screenshot_done orelse return;
-    capture_screenshot_done = null;
-    staging.screenshotFinished(roc_host, done.ticket, done.err);
-}
-
-/// Record the outcome of the screenshot just serviced.
-///
-/// The outcome becomes a response on the next input. A missing private ticket
-/// indicates inconsistent host state and aborts.
-fn reportScreenshotResult(err: u8) void {
-    const ticket = capture_screenshot_ticket orelse
-        @panic("roc-ray: serviced a screenshot with no request to report it to");
-    capture_screenshot_ticket = null;
-    capture_screenshot_done = .{ .ticket = ticket, .err = err };
-}
-
-/// Read the clipboard on the calling thread and stage the response.
-///
-/// The windowing backend only answers on the thread that owns the window, and
-/// the read is a pointer copy rather than I/O, so there is nothing to move off
-/// the frame thread. One input of latency is the cost of `update` being pure.
-fn stageClipboardRead(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, roc_string_bytes: *usize, deliver: ?abi.RocErasedCallable) void {
-    if (headlessMode()) {
-        if (!headless_clipboard_set) {
-            staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "", deliver);
-            return;
-        }
-        if (headless_clipboard_len > MAX_SYNC_ROC_STRING_BYTES_PER_INPUT -| roc_string_bytes.*) {
-            staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "", deliver);
-            return;
-        }
-        roc_string_bytes.* += headless_clipboard_len;
-        staging.clipboardRead(roc_host, ticket, 0, headless_clipboard[0..headless_clipboard_len], deliver);
-        return;
-    }
-
-    // The pointer belongs to the windowing backend: it is null when the
-    // clipboard is empty or holds non-text content, must never be freed, and is
-    // invalidated by the next clipboard call -- so copy it out now.
-    const text = raylib.getClipboardText() orelse {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_UNAVAILABLE, "", deliver);
-        return;
-    };
-
-    // The clipboard is arbitrary content from outside the app -- another
-    // process decides how big it is -- and turning it into a `Str` is a copy
-    // and a UTF-8 scan on this thread. Cap it at the same size a small file
-    // read is capped at, and for the same reason.
-    const contents = std.mem.span(text);
-    if (contents.len > MAX_INLINE_READ_BYTES) {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_TOO_LARGE, "", deliver);
-        return;
-    }
-    if (contents.len > MAX_SYNC_ROC_STRING_BYTES_PER_INPUT -| roc_string_bytes.*) {
-        staging.clipboardRead(roc_host, ticket, READ_ERR_BUSY, "", deliver);
-        return;
-    }
-    roc_string_bytes.* += contents.len;
-    staging.clipboardRead(roc_host, ticket, 0, contents, deliver);
-}
-
-/// Hand one read to the worker, or answer it in this cycle if it was refused.
-///
-/// `deliver_bytes` decides which response the app will be looking for, and a
-/// refusal has to use the same one: an app waiting on `FileRead` must not be
-/// answered with `SmallFileRead` because the request ring happened to be full.
-/// Returns true when the read was answered in this cycle rather than queued.
-fn submitRead(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, path: []const u8, deliver_bytes: bool, headless_reads: *HeadlessReadBudget) void {
-    // Reserve before either branch can start reading or queue a worker request.
-    // A terminal `Busy` here means precisely that no filesystem work started.
-    if (deliver_bytes and !file_bytes_delivery_reservations.reserve()) {
-        stageReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_BUSY, true);
-        return;
-    }
-    if (headlessMode()) {
-        if (!headless_reads.begin()) {
-            if (deliver_bytes) {
-                stageReservedReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_BUSY);
-            } else {
-                stageReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_BUSY, false);
-            }
-            return;
-        }
-        readFileNow(staging, roc_host, ticket, path, deliver_bytes, headless_reads, deliver_bytes);
-        return;
-    }
-    switch (effect_worker.submitReadFile(ticket, path, deliver_bytes)) {
-        .accepted => {},
-        .busy => if (deliver_bytes)
-            stageReservedReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_BUSY)
-        else
-            stageReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_BUSY, false),
-        .unavailable => if (deliver_bytes)
-            stageReservedReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_UNAVAILABLE)
-        else
-            stageReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, READ_ERR_UNAVAILABLE, false),
-    }
-}
-
-/// Ask for one directory's entries, with exactly the admission a byte-list read
-/// gets: one delivery reservation, taken before any filesystem work starts and
-/// released by whichever staging call answers the ticket.
-///
-/// A listing always delivers bytes, so unlike `submitRead` there is no
-/// string-returning branch to keep straight.
-fn submitListing(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, path: []const u8, headless_reads: *HeadlessReadBudget) void {
-    if (!file_bytes_delivery_reservations.reserve()) {
-        stageReadError(staging, roc_host, ticket, RESPONSE_DIR_LISTED, READ_ERR_BUSY, true);
-        return;
-    }
-    if (headlessMode()) {
-        if (!headless_reads.begin()) {
-            stageReservedReadError(staging, roc_host, ticket, RESPONSE_DIR_LISTED, READ_ERR_BUSY);
-            return;
-        }
-        listDirNow(staging, roc_host, ticket, path, headless_reads);
-        return;
-    }
-    switch (effect_worker.submitListDir(ticket, path)) {
-        .accepted => {},
-        .busy => stageReservedReadError(staging, roc_host, ticket, RESPONSE_DIR_LISTED, READ_ERR_BUSY),
-        .unavailable => stageReservedReadError(staging, roc_host, ticket, RESPONSE_DIR_LISTED, READ_ERR_UNAVAILABLE),
-    }
-}
-
-/// List on the calling thread and stage the response. Headless only.
-///
-/// Installs through the same reserved byte-list path a worker listing does, so
-/// a headless run and a windowed one differ in which thread allocated the
-/// buffer and in nothing the app can observe.
-fn listDirNow(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, path: []const u8, headless_reads: ?*HeadlessReadBudget) void {
-    const allocator = allocatorFromHost(roc_host);
-    var encoded: ?[]u8 = null;
-    const err = encodeListing(mainThreadIo(), allocator, path, &encoded);
-    const bytes = encoded orelse {
-        stageReservedReadError(staging, roc_host, ticket, RESPONSE_DIR_LISTED, if (err == 0) READ_ERR_FAILED else err);
-        return;
-    };
-    if (headless_reads) |budget| budget.bytes += bytes.len;
-    stageReservedByteListRead(staging, roc_host, ticket, RESPONSE_DIR_LISTED, allocator, bytes);
-}
-
-/// Report a read that produced no bytes, in whichever response it asked for.
-fn stageReadError(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, err: u8, deliver_bytes: bool) void {
-    if (deliver_bytes) {
-        staging.byteListReadFailed(roc_host, ticket, response, err);
-    } else {
-        staging.fileRead(roc_host, ticket, err, "");
-    }
-}
-
-/// Report an error for an already-admitted byte-list read, then return its
-/// resource-slot promise. Every path after `FileBytesDeliveryReservations.reserve`
-/// goes through this helper or `stageReservedByteListRead` exactly once.
-fn stageReservedReadError(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, err: u8) void {
-    defer file_bytes_delivery_reservations.release();
-    stageReadError(staging, roc_host, ticket, response, err, true);
-}
-
-/// Install a finished read's buffer in the typed ARC heap and transfer its sole
-/// reference to an ordinary seamless `List(U8)`. No byte payload is copied or
-/// allocated here. After this call, the host does not read or retain `bytes`:
-/// it is exclusively Roc-owned until list ARC routes its final drop back here.
-fn stageByteListRead(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, allocator: std.mem.Allocator, bytes: []u8) void {
-    if (bytes.len == 0) {
-        allocator.free(bytes);
-        staging.byteListRead(roc_host, ticket, response, abi.RocListWith(u8, false).empty());
-        return;
-    }
-    const resource = file_bytes_heap.insert(
-        0,
-        .{ .allocator = allocator, .bytes = bytes },
-    ) orelse {
-        allocator.free(bytes);
-        staging.byteListReadFailed(roc_host, ticket, response, READ_ERR_BUSY);
-        return;
-    };
-    staging.byteListRead(roc_host, ticket, response, seamlessByteList(resource, bytes));
-}
-
-/// Finish an admitted byte-list read. Keep the low-level `stageByteListRead` fallback
-/// defensive for direct callers, while this wrapper releases the admission
-/// promise on both its successful install and its impossible-in-normal-use
-/// late `Busy` fallback.
-fn stageReservedByteListRead(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, response: u8, allocator: std.mem.Allocator, bytes: []u8) void {
-    std.debug.assert(file_bytes_delivery_reservations.count != 0);
-    defer file_bytes_delivery_reservations.release();
-    stageByteListRead(staging, roc_host, ticket, response, allocator, bytes);
-}
-
-/// Read on the calling thread and stage the response. Headless only.
-///
-/// The byte-list path runs here too, and installs exactly the same way, so a
-/// headless run and a windowed one differ in which thread allocated the buffer
-/// and in nothing else the app can observe.
-fn readFileNow(staging: *ResponseStaging, roc_host: *RocHost, ticket: u64, path: []const u8, deliver_bytes: bool, headless_reads: ?*HeadlessReadBudget, byte_list_delivery_reserved: bool) void {
-    std.debug.assert(!byte_list_delivery_reserved or deliver_bytes);
-    const allocator = allocatorFromHost(roc_host);
-    const operation_limit = smallReadLimit(deliver_bytes);
-    const limit = if (headless_reads) |budget|
-        @min(operation_limit, budget.remainingBytes() + 1)
-    else
-        operation_limit;
-    const budget_limited = limit < operation_limit;
-    const bytes = std.Io.Dir.cwd().readFileAlloc(mainThreadIo(), path, allocator, .limited(limit)) catch |err| {
-        const code = if (budget_limited) switch (err) {
-            error.StreamTooLong => blk: {
-                // `readFileAlloc` consumed the remaining credit plus its
-                // overflow byte to discover this. Exhaust it so a hostile
-                // batch cannot repeat that same partial read 32 times.
-                if (headless_reads) |budget| budget.bytes = MAX_HEADLESS_READ_BYTES_PER_INPUT;
-                break :blk READ_ERR_BUSY;
-            },
-            else => readErrorCode(err),
-        } else readErrorCode(err);
-        if (byte_list_delivery_reserved) {
-            stageReservedReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, code);
-        } else {
-            stageReadError(staging, roc_host, ticket, RESPONSE_FILE_READ, code, deliver_bytes);
-        }
-        return;
-    };
-    if (headless_reads) |budget| budget.bytes += bytes.len;
-    if (deliver_bytes) {
-        if (byte_list_delivery_reserved) {
-            stageReservedByteListRead(staging, roc_host, ticket, RESPONSE_FILE_READ, allocator, bytes);
-        } else {
-            stageByteListRead(staging, roc_host, ticket, RESPONSE_FILE_READ, allocator, bytes);
-        }
-        return;
-    }
-    defer allocator.free(bytes);
-    staging.fileRead(roc_host, ticket, 0, bytes);
-}
-
-/// Record a delay so its result can be delivered once the deadline passes.
-///
-/// Never answers in this cycle, so it always returns false. The table is sized
-/// to the reservation budget and the caller holds one, so it cannot be full --
-/// a delay that got this far is always armed.
-fn armTimer(ticket: u64, millis: u64) void {
-    std.debug.assert(pending_timer_count < pending_timers.len);
-    // `millis` comes from the app, so saturate rather than wrap: a wrapped
-    // deadline fires immediately, which looks like a delay that did not work.
-    const delay_nanos = std.math.mul(u64, millis, std.time.ns_per_ms) catch std.math.maxInt(u64);
-    pending_timers[pending_timer_count] = .{ .ticket = ticket, .due_nanos = last_wall_nanos +| delay_nanos };
-    pending_timer_count += 1;
-}
-
-/// Stage a response for every timer whose deadline has passed.
-fn expireTimers(staging: *ResponseStaging, roc_host: *RocHost, now_nanos: u64) void {
-    var index: usize = 0;
-    while (index < pending_timer_count) {
-        if (pending_timers[index].due_nanos <= now_nanos) {
-            staging.delayElapsed(roc_host, pending_timers[index].ticket, 0);
-            pending_timer_count -= 1;
-            pending_timers[index] = pending_timers[pending_timer_count];
-        } else {
-            index += 1;
-        }
-    }
-}
-
-/// Stage the worker's finished reads.
-///
-/// The only place a worker result becomes a Roc value, and it runs on the main
-/// thread -- which is what keeps `roc_alloc` single-threaded. Drains everything
-/// the worker has finished: each of those results is an accepted request holding a
-/// reservation, and there are at most `MAX_REQUESTS_IN_FLIGHT` of those.
-///
-/// The two paths part company here, and the difference is the feature: a small
-/// read is copied into a `RocStr` and its buffer freed, while a byte-list read
-/// moves the worker's allocation into a typed slot and copies nothing. Only the
-/// first is proportional to the file, which is why only the first is capped.
-fn stageWorkerResults(staging: *ResponseStaging, roc_host: *RocHost) void {
-    var small_read_bytes: usize = 0;
-    while (true) {
-        const result = effect_worker.takeResult() orelse return;
-
-        if (result.kind == .write_png) {
-            staging.screenshotFinished(roc_host, result.ticket, result.err);
-            continue;
-        }
-
-        const bytes = result.bytes orelse {
-            if (result.deliver_bytes) {
-                stageReservedReadError(staging, roc_host, result.ticket, result.response, result.err);
-            } else {
-                stageReadError(staging, roc_host, result.ticket, result.response, result.err, false);
-            }
-            continue;
-        };
-        if (result.deliver_bytes) {
-            stageReservedByteListRead(staging, roc_host, result.ticket, result.response, effect_worker.allocator, bytes);
-            continue;
-        }
-        // The read stopped at the ceiling, so anything that arrives here fits.
-        std.debug.assert(bytes.len <= MAX_INLINE_READ_BYTES);
-        small_read_bytes += bytes.len;
-        std.debug.assert(small_read_bytes <= MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_INPUT);
-        defer effect_worker.allocator.free(bytes);
-        staging.fileRead(roc_host, result.ticket, 0, bytes);
-    }
 }
 
 /// Apply the startup capture configuration once the window exists.
@@ -6597,8 +5925,6 @@ fn configureCapture(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
-    capture_screenshot_ticket = null;
-    capture_screenshot_done = null;
     capture_recording_bytes = 0;
     capture_clock_offset_ns = 0;
     capture_clock_last_real_ns = 0;
@@ -6710,13 +6036,18 @@ fn serviceCaptureRequests() void {
 
     var image = raylib.captureFramebuffer() orelse {
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
-        if (wants_screenshot) reportScreenshotResult(capture.err_out_of_memory);
+        if (wants_screenshot) {
+            if (screenshot_wait) |wait| {
+                wait.err = capture.err_out_of_memory;
+                wait.ready.set();
+            }
+        }
         return;
     };
     defer image.deinit();
 
     if (wants_screenshot) {
-        writeScreenshot(image, capture_screenshot_path[0..capture_screenshot_path_len]);
+        if (screenshot_wait) |wait| handOverScreenshot(wait, image);
     }
 
     if (!wants_frame) return;
@@ -6729,75 +6060,24 @@ fn serviceCaptureRequests() void {
     finishRecordingAtFrameCap();
 }
 
-/// Hand a screenshot to the worker, or refuse it.
-///
-/// The readback above had to happen on this thread -- it is a GL operation, and
-/// only inside the drawing scope. Everything after it is CPU work on a plain
-/// byte buffer, so it goes to the worker: encoding a 1080p PNG is tens of
-/// milliseconds, which is several dropped frames spent on a file the app is not
-/// waiting for.
-///
-/// **There is deliberately no inline fallback.** Encoding here when the worker
-/// is full is the exact behaviour that turns a busy host into a stalled one:
-/// the queue backs up, so the frame thread takes on the most expensive work in
-/// the system, so frames get longer, so the queue drains slower. An app that is
-/// told `Busy` can ask again next frame; an app whose frame rate collapsed
-/// cannot do anything at all.
-///
-/// Headless is not this path -- `beginScreenshotTask` answers a headless
-/// request without a framebuffer to read -- so nothing here has to make an
-/// exception for a run with no frame deadline.
+/// Copy the readback out for the task parked on `Capture.screenshot!`.
 ///
 /// The pixels are copied rather than moved because the readback buffer belongs
-/// to the graphics backend, which frees it on this thread. A memcpy is the
-/// price of not having the worker call into raylib, and it is a small fraction
-/// of the encode it replaces.
-fn writeScreenshot(image: raylib.CaptureImage, path: []const u8) void {
-    const ticket = capture_screenshot_ticket orelse
-        @panic("roc-ray: writing a screenshot with no private request ticket");
-
-    var resolved_storage: [capture.path_capacity]u8 = undefined;
-    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse {
-        reportScreenshotResult(capture.err_write_failed);
-        return;
-    };
-
-    // No worker at all -- the thread would not spawn -- so there is nowhere for
-    // this to go except here. Retrying will not change that, which is what
-    // `Unavailable` says and `Busy` would not.
-    if (!effect_worker.accepting) {
-        reportScreenshotResult(capture.err_unavailable);
-        return;
-    }
-
+/// to the graphics backend, which frees it on this thread as soon as the
+/// drawing scope closes. A memcpy is the price of the encode happening
+/// somewhere other than the frame thread.
+fn handOverScreenshot(wait: *ScreenshotWait, image: raylib.CaptureImage) void {
     const source = image.pixels();
-    const pixels = effect_worker.allocator.alloc(u8, source.len) catch {
-        reportScreenshotResult(capture.err_out_of_memory);
+    const pixels = allocatorFromHost(activeHost()).alloc(u8, source.len) catch {
+        wait.err = capture.err_out_of_memory;
+        wait.ready.set();
         return;
     };
-
     @memcpy(pixels, source);
-    switch (effect_worker.submitWritePng(
-        ticket,
-        resolved,
-        pixels,
-        image.width(),
-        image.height(),
-    )) {
-        .accepted => {
-            // The outcome now arrives as a worker result. Clear the ticket
-            // so a second screenshot this frame is correlated to itself.
-            capture_screenshot_ticket = null;
-        },
-        .busy => {
-            effect_worker.allocator.free(pixels);
-            reportScreenshotResult(capture.err_busy);
-        },
-        .unavailable => {
-            effect_worker.allocator.free(pixels);
-            reportScreenshotResult(capture.err_unavailable);
-        },
-    }
+    wait.pixels = pixels;
+    wait.width = image.width();
+    wait.height = image.height();
+    wait.ready.set();
 }
 
 /// Hand one captured frame, already at the recording's size, to its sink.
@@ -7154,7 +6434,6 @@ test "each update call takes the model afresh so one reference stays live" {
 }
 
 var test_callback_drops: usize = 0;
-var test_synchronous_task_starts: usize = 0;
 
 fn testCallbackCall(
     roc_host: *RocHost,
@@ -7183,474 +6462,131 @@ fn testCallback(roc_host: *RocHost) abi.RocErasedCallable {
     return abi.rocErasedCallableAllocate(roc_host, &testCallbackCall, &testCallbackDrop, 0);
 }
 
-fn testRequest(roc_host: *RocHost, kind: u8) RequestToHost {
-    return .{
-        .kind = kind,
-        .path = abi.RocStr.empty(),
-        .millis = 0,
-        .deliver = testCallback(roc_host),
-    };
-}
-
-fn resetPendingMappersForTest(roc_host: *RocHost) void {
-    endPendingMappers(roc_host);
-    pending_mappers.next_ticket = 1;
-}
-
-test "staged responses become one Roc list, and an idle input allocates none" {
+test "finished task messages become one Roc list, and an idle input allocates none" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
-    // The ordinary frame completes nothing, so it must allocate nothing.
-    var idle = ResponseStaging{};
-    const empty = idle.toRocList(&roc_host);
+    var idle = TaskResultStaging{};
+    const empty = idle.take(&roc_host);
     try std.testing.expectEqual(@as(usize, 0), empty.items().len);
     empty.decref(&roc_host);
+    idle.release(&roc_host);
 
-    var staging = ResponseStaging{};
-    staging.fileRead(&roc_host, 7, 0, "a payload long enough to need the heap");
-    staging.delayElapsed(&roc_host, 9, 0);
+    var staging = TaskResultStaging{};
+    staging.append(&roc_host, testCallback(&roc_host));
+    staging.append(&roc_host, testCallback(&roc_host));
+    try std.testing.expectEqual(@as(usize, 2), staging.count());
 
+    // The list belongs to Roc after this, so the staging area must not free the
+    // same thunks a second time -- and anything staged afterwards is a message
+    // for the *next* input, not this one.
     const list = staging.take(&roc_host);
     try std.testing.expectEqual(@as(usize, 2), list.items().len);
-    try std.testing.expectEqual(RESPONSE_SMALL_FILE_READ, list.items()[0].raw.kind);
-    try std.testing.expectEqual(@as(u64, 9), list.items()[1].raw.ticket);
+    try std.testing.expectEqual(@as(usize, 0), staging.count());
 
-    // Roc consumes the list in the real loop; this stands in for that. A leak
-    // reported by std.testing.allocator means a payload escaped.
+    // Stands in for Roc consuming the input.
+    test_callback_drops = 0;
     for (list.allocationItems()) |item| item.decref(&roc_host);
     list.decref(&roc_host);
-    staging.release(&roc_host);
-}
-
-test "releasing staged responses frees payloads that never reach Roc" {
-    // The path where update fails before the input is delivered.
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-
-    var staging = ResponseStaging{};
-    staging.fileRead(&roc_host, 1, 0, "contents the staging area still owns");
-    staging.fileRead(&roc_host, 2, 0, "and a second one for good measure");
-    staging.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-}
-
-test "response staging grows past the former request cap and retains capacity" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    var staging = ResponseStaging{};
-
-    // Nine is deliberately the first size the former public batch rejected.
-    // A larger burst proves the backing store grows rather than asserting.
-    var id: usize = 0;
-    while (id < 65) : (id += 1) staging.delayElapsed(&roc_host, id, DELAY_ERR_BUSY);
-    const capacity_after_burst = staging.items.capacity;
-    try std.testing.expectEqual(@as(usize, 65), staging.count());
-    try std.testing.expect(capacity_after_burst >= staging.count());
-
-    const list = staging.take(&roc_host);
-    for (list.allocationItems()) |item| item.decref(&roc_host);
-    list.decref(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-
-    // The common warm frame appends without allocating or growing again.
-    staging.delayElapsed(&roc_host, 99, 0);
-    try std.testing.expectEqual(capacity_after_burst, staging.items.capacity);
-    staging.release(&roc_host);
-}
-
-test "submission accepts nine requests without a request-count admission limit" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    pending_timer_count = 0;
-    last_wall_nanos = 0;
-    defer {
-        pending_timer_count = 0;
-        resetPendingMappersForTest(&roc_host);
-    }
-
-    var requests: [9]RequestToHost = undefined;
-    for (&requests) |*request| {
-        request.* = testRequest(&roc_host, REQUEST_DELAY);
-        request.millis = 1;
-    }
-    var staging = ResponseStaging{};
-    submitRequests(&staging, &roc_host, abi.RocList(RequestToHost).fromSlice(&requests, &roc_host));
-    try std.testing.expectEqual(@as(usize, 9), pending_timer_count);
-    try std.testing.expectEqual(@as(usize, 9), pending_mappers.count);
-
-    expireTimers(&staging, &roc_host, std.time.ns_per_ms);
-    try std.testing.expectEqual(@as(usize, 9), staging.count());
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-}
-
-test "unique request lists move callbacks while shared lists retain them" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    pending_timer_count = 0;
-    last_wall_nanos = 0;
-    defer {
-        pending_timer_count = 0;
-        resetPendingMappersForTest(&roc_host);
-    }
-    test_callback_drops = 0;
-
-    // The ordinary path is unique: dispatch nulls its list slot and moves the
-    // one callback reference into the table without an ARC round trip.
-    {
-        var requests = [_]RequestToHost{testRequest(&roc_host, REQUEST_DELAY)};
-        requests[0].millis = 1;
-        var staging = ResponseStaging{};
-        submitRequests(&staging, &roc_host, abi.RocList(RequestToHost).fromSlice(&requests, &roc_host));
-        expireTimers(&staging, &roc_host, std.time.ns_per_ms);
-        staging.release(&roc_host);
-        try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-    }
-
-    // A shared list keeps its own element alive. Dispatch takes exactly one
-    // additional callback ref for the pending table, then the caller releases
-    // the original list after its independent use is complete.
-    {
-        var requests = [_]RequestToHost{testRequest(&roc_host, REQUEST_DELAY)};
-        requests[0].millis = 1;
-        const shared = abi.RocList(RequestToHost).fromSlice(&requests, &roc_host);
-        shared.incref(1);
-        var staging = ResponseStaging{};
-        submitRequests(&staging, &roc_host, shared);
-        expireTimers(&staging, &roc_host, std.time.ns_per_ms);
-        staging.release(&roc_host);
-        try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-
-        // The caller's shared reference owns the original callback until here.
-        for (shared.allocationItems()) |request| request.decref(&roc_host);
-        shared.decref(&roc_host);
-        try std.testing.expectEqual(@as(usize, 2), test_callback_drops);
-    }
-}
-
-test "a shared synchronous request list retains its callback independently" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-    test_callback_drops = 0;
-
-    var requests = [_]RequestToHost{testRequest(&roc_host, REQUEST_READ_CLIPBOARD)};
-    const shared = abi.RocList(RequestToHost).fromSlice(&requests, &roc_host);
-    shared.incref(1);
-    var staging = ResponseStaging{};
-    submitRequests(&staging, &roc_host, shared);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), test_callback_drops);
-
-    // The caller's retained list reference owns the original callback until it
-    // independently releases that list.
-    for (shared.allocationItems()) |request| request.decref(&roc_host);
-    shared.decref(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-}
-
-test "more than 32 requests receive terminal envelopes without a public request cap" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    pending_timer_count = 0;
-    last_wall_nanos = 0;
-    defer {
-        pending_timer_count = 0;
-        resetPendingMappersForTest(&roc_host);
-    }
-
-    var staging = ResponseStaging{};
-
-    const request_count = MAX_REQUESTS_IN_FLIGHT * 2 + 1;
-    var requests: [request_count]RequestToHost = undefined;
-    for (&requests) |*request| {
-        request.* = testRequest(&roc_host, REQUEST_DELAY);
-        request.millis = 1;
-    }
-    submitRequests(&staging, &roc_host, abi.RocList(RequestToHost).fromSlice(&requests, &roc_host));
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT, pending_timer_count);
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT, pending_mappers.count);
-    try std.testing.expectEqual(request_count - MAX_REQUESTS_IN_FLIGHT, staging.count());
-    for (staging.items.items) |item| {
-        try std.testing.expectEqual(RESPONSE_DELAY, item.raw.kind);
-        try std.testing.expectEqual(DELAY_ERR_BUSY, item.raw.err);
-    }
-    expireTimers(&staging, &roc_host, std.time.ns_per_ms);
-    try std.testing.expectEqual(request_count, staging.count());
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-}
-
-test "synchronous clipboard bypasses a full deferred callback table" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    defer {
-        pending_timer_count = 0;
-        resetPendingMappersForTest(&roc_host);
-    }
-    test_callback_drops = 0;
-    last_wall_nanos = 0;
-
-    // Keep every deferred reservation occupied. Clipboard remains admissible
-    // because it completes immediately and never enters that table.
-    var held: usize = 0;
-    while (held < MAX_REQUESTS_IN_FLIGHT) : (held += 1) {
-        const ticket = pending_mappers.issueTicket();
-        try std.testing.expect(pending_mappers.insert(ticket, testCallback(&roc_host)));
-        armTimer(ticket, 1);
-    }
-
-    const clipboard_text = "clipboard text";
-    @memcpy(headless_clipboard[0..clipboard_text.len], clipboard_text);
-    headless_clipboard_len = clipboard_text.len;
-    headless_clipboard_set = true;
-    defer {
-        headless_clipboard_len = 0;
-        headless_clipboard_set = false;
-    }
-
-    var requests = [_]RequestToHost{testRequest(&roc_host, REQUEST_READ_CLIPBOARD)};
-
-    var staging = ResponseStaging{};
-    submitRequests(&staging, &roc_host, abi.RocList(RequestToHost).fromSlice(&requests, &roc_host));
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT, pending_mappers.count);
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT, pending_timer_count);
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(RESPONSE_CLIPBOARD_READ, staging.items.items[0].raw.kind);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqualStrings(clipboard_text, staging.items.items[0].raw.contents.asSlice());
-    staging.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-    resetPendingMappersForTest(&roc_host);
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT + 1, test_callback_drops);
-}
-
-test "private tickets use their last value without wrapping" {
-    var callbacks = PendingMappers{ .next_ticket = std.math.maxInt(u64) - 1 };
-    try std.testing.expectEqual(std.math.maxInt(u64) - 1, callbacks.issueTicket());
-    try std.testing.expectEqual(std.math.maxInt(u64), callbacks.issueTicket());
-    try std.testing.expectEqual(@as(u64, 0), callbacks.next_ticket);
-}
-
-test "a direct Busy response moves its mapper into staging" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-    test_callback_drops = 0;
-
-    var staging = ResponseStaging{};
-    var held: usize = 0;
-    while (held < MAX_REQUESTS_IN_FLIGHT) : (held += 1) {
-        const ticket = pending_mappers.issueTicket();
-        try std.testing.expect(pending_mappers.insert(ticket, testCallback(&roc_host)));
-    }
-    const request = testRequest(&roc_host, REQUEST_DELAY);
-    const ticket = pending_mappers.issueTicket();
-    refuseRequest(&staging, &roc_host, request, ticket, request.deliver);
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(DELAY_ERR_BUSY, staging.items.items[0].raw.err);
-    try std.testing.expect(staging.items.items[0].deliver != null);
-    staging.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-}
-
-test "timers complete with their private callback in observed order" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    pending_timer_count = 0;
-    last_wall_nanos = 0;
-    defer {
-        pending_timer_count = 0;
-        resetPendingMappersForTest(&roc_host);
-    }
-    var staging = ResponseStaging{};
-    const first = pending_mappers.issueTicket();
-    const second = pending_mappers.issueTicket();
-    try std.testing.expect(pending_mappers.insert(first, testCallback(&roc_host)));
-    try std.testing.expect(pending_mappers.insert(second, testCallback(&roc_host)));
-    armTimer(first, 10);
-    armTimer(second, 30);
-    expireTimers(&staging, &roc_host, 40 * std.time.ns_per_ms);
-    try std.testing.expectEqual(@as(usize, 2), staging.count());
-    try std.testing.expectEqual(first, staging.items.items[0].raw.ticket);
-    try std.testing.expectEqual(second, staging.items.items[1].raw.ticket);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-}
-
-test "independent requests preserve observed response order" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-
-    const first_submitted = pending_mappers.issueTicket();
-    const second_submitted = pending_mappers.issueTicket();
-    try std.testing.expect(pending_mappers.insert(first_submitted, testCallback(&roc_host)));
-    try std.testing.expect(pending_mappers.insert(second_submitted, testCallback(&roc_host)));
-
-    var staging = ResponseStaging{};
-    // Independent host work is allowed to finish in either order. Staging
-    // preserves observation order; it does not reorder by submission ticket.
-    staging.completeTicket(&roc_host, ResponseStaging.plain(RESPONSE_DELAY, second_submitted, 0));
-    staging.completeTicket(&roc_host, ResponseStaging.plain(RESPONSE_DELAY, first_submitted, 0));
-    try std.testing.expectEqual(second_submitted, staging.items.items[0].raw.ticket);
-    try std.testing.expectEqual(first_submitted, staging.items.items[1].raw.ticket);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-}
-
-test "unknown and duplicate tickets do not consume another callback" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-    test_callback_drops = 0;
-    var staging = ResponseStaging{};
-    const ticket = pending_mappers.issueTicket();
-    try std.testing.expect(pending_mappers.insert(ticket, testCallback(&roc_host)));
-    const deliver = pending_mappers.take(ticket) orelse return error.CallbackWasNotRetained;
-    staging.completeDirect(&roc_host, ResponseStaging.plain(RESPONSE_DELAY, ticket, 0), deliver);
-    try std.testing.expectEqual(@as(?abi.RocErasedCallable, null), pending_mappers.take(ticket));
-    try std.testing.expectEqual(@as(?abi.RocErasedCallable, null), pending_mappers.take(ticket + 99));
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(ticket, staging.items.items[0].raw.ticket);
-    staging.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-}
-
-test "pending response mappers are dropped once on shutdown" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-    test_callback_drops = 0;
-    var count: usize = 0;
-    while (count < MAX_REQUESTS_IN_FLIGHT) : (count += 1) {
-        const ticket = pending_mappers.issueTicket();
-        try std.testing.expect(pending_mappers.insert(ticket, testCallback(&roc_host)));
-    }
-    pending_mappers.release(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    try std.testing.expectEqual(MAX_REQUESTS_IN_FLIGHT, test_callback_drops);
-}
-
-test "ending an app lifetime clears timers before ticket numbering resets" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer resetPendingMappersForTest(&roc_host);
-    test_callback_drops = 0;
-    last_wall_nanos = 0;
-
-    // A delayed request from the first lifetime uses the first private ticket.
-    // Ending that lifetime must remove both its timer and callback.
-    exit_requested = 99;
-    beginPendingMappers();
-    try std.testing.expectEqual(@as(?i64, null), exit_requested);
-    const first = pending_mappers.issueTicket();
-    try std.testing.expectEqual(@as(u64, 1), first);
-    try std.testing.expect(pending_mappers.insert(first, testCallback(&roc_host)));
-    armTimer(first, std.math.maxInt(u64));
-    endPendingMappers(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    try std.testing.expectEqual(@as(usize, 0), pending_timer_count);
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-
-    // The next lifetime legitimately reuses ticket one. A stale timer would
-    // consume this new callback (or trip the duplicate-ticket assertion) here.
-    beginPendingMappers();
-    const second = pending_mappers.issueTicket();
-    try std.testing.expectEqual(@as(u64, 1), second);
-    try std.testing.expect(pending_mappers.insert(second, testCallback(&roc_host)));
-    var staging = ResponseStaging{};
-    expireTimers(&staging, &roc_host, std.math.maxInt(u64));
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-    try std.testing.expectEqual(@as(usize, 1), pending_mappers.count);
-    endPendingMappers(&roc_host);
     try std.testing.expectEqual(@as(usize, 2), test_callback_drops);
+
+    staging.append(&roc_host, testCallback(&roc_host));
+    try std.testing.expectEqual(@as(usize, 1), staging.count());
     staging.release(&roc_host);
 }
 
-test "a delay is a real second even while the simulation clock is fixed-step" {
-    pending_timer_count = 0;
-    capture_clock_offset_ns = 0;
-    capture_clock_last_real_ns = 0;
-    defer {
-        pending_timer_count = 0;
-        capture_clock_offset_ns = 0;
-        capture_clock_last_real_ns = 0;
-    }
+test "a task message staged but never delivered is released at shutdown" {
+    // The app exited on the frame a task finished on. Nothing carried the
+    // message to Roc, so staging owns the only reference and has to drop it.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
 
-    // A 30fps recording of a frame that really took 100ms. The simulation clock
-    // is told the frame was 1/30s, so it falls behind the wall clock -- which
-    // is the point: the captured animation plays at the rate it asked for.
-    const real_ns: u64 = 100 * std.time.ns_per_ms;
-    const simulated = captureAdjustedClock(real_ns, 1.0 / 30.0);
-    try std.testing.expect(simulated < real_ns);
-
-    // A delay armed on that frame is still due one real second later. Arming it
-    // off the simulation clock would have made `Delay(1000)` mean whatever the
-    // recording's step happened to add up to.
-    last_frame_nanos = simulated;
-    last_wall_nanos = real_ns;
-    _ = armTimer(1, 1_000);
-    try std.testing.expectEqual(real_ns + std.time.ns_per_s, pending_timers[0].due_nanos);
-}
-
-test "an absurd delay saturates its deadline instead of wrapping to the past" {
-    pending_timer_count = 0;
-    last_wall_nanos = 1_000;
-    _ = armTimer(1, std.math.maxInt(u64));
-    try std.testing.expectEqual(std.math.maxInt(u64), pending_timers[0].due_nanos);
-    pending_timer_count = 0;
+    var staging = TaskResultStaging{};
+    staging.append(&roc_host, testCallback(&roc_host));
+    test_callback_drops = 0;
+    staging.release(&roc_host);
+    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
+    try std.testing.expectEqual(@as(usize, 0), staging.count());
 }
 
 test "a file that is not text is refused rather than made into a Str" {
+    // `RocStr.fromSlice` only copies, so an invalid one would be built without
+    // complaint and every later string operation on it would be undefined.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
-    var staging = ResponseStaging{};
-    defer staging.release(&roc_host);
-
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
     // A lone continuation byte: short, well inside every limit, and not UTF-8.
-    // `RocStr.fromSlice` would have copied it without complaint, and every
-    // later string operation on the result would have been undefined.
-    staging.fileRead(&roc_host, 1, 0, "\x80 not text");
-    try std.testing.expectEqual(RESPONSE_SMALL_FILE_READ, staging.items.items[0].raw.kind);
-    try std.testing.expectEqual(READ_ERR_NOT_UTF8, staging.items.items[0].raw.err);
-    try std.testing.expectEqual(@as(usize, 0), staging.items.items[0].raw.contents.asSlice().len);
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "binary", .data = "\x80 not text" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "text", .data = "caf\u{e9}" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "empty", .data = "" });
 
-    // Valid text still arrives as text, including the empty file.
-    staging.fileRead(&roc_host, 2, 0, "caf\u{e9}");
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[1].raw.err);
-    try std.testing.expectEqualStrings("caf\u{e9}", staging.items.items[1].raw.contents.asSlice());
+    var path_buffer: [capture.path_capacity]u8 = undefined;
 
-    staging.fileRead(&roc_host, 3, 0, "");
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[2].raw.err);
+    const binary = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "binary"));
+    try std.testing.expectEqual(READ_ERR_NOT_UTF8, binary.err);
+    try std.testing.expectEqual(@as(usize, 0), binary.contents.asSlice().len);
+    binary.contents.decref(&roc_host);
+
+    const text = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "text"));
+    try std.testing.expectEqual(@as(u8, 0), text.err);
+    try std.testing.expectEqualStrings("caf\u{e9}", text.contents.asSlice());
+    text.contents.decref(&roc_host);
+
+    // The empty file is text too, and the shortest way to get it wrong.
+    const empty = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "empty"));
+    try std.testing.expectEqual(@as(u8, 0), empty.err);
+    try std.testing.expectEqual(@as(usize, 0), empty.contents.asSlice().len);
+    empty.contents.decref(&roc_host);
 }
 
 test "a read above the inline cap is refused rather than copied on the frame thread" {
-    // The worker reads off-thread, but turning bytes into a Str happens here.
-    // Without the cap a 16 MiB read still costs a 16 MiB copy mid-frame, which
-    // is most of what moving the read off-thread was supposed to buy.
+    // Turning bytes into a `Str` copies the whole file on the frame thread.
+    // Without the cap a 16 MiB text read costs a 16 MiB copy mid-frame, which
+    // is most of what parking the read was supposed to buy. A file of exactly
+    // the limit still succeeds; one byte more is `TooLarge`.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
-    const oversized = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES + 1);
-    defer std.testing.allocator.free(oversized);
-    @memset(oversized, 'x');
+    const at_limit = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES);
+    defer std.testing.allocator.free(at_limit);
+    @memset(at_limit, 'x');
 
-    var staging = ResponseStaging{};
-    if (oversized.len > MAX_INLINE_READ_BYTES) {
-        staging.fileRead(&roc_host, 1, READ_ERR_TOO_LARGE, "");
-    } else {
-        staging.fileRead(&roc_host, 1, 0, oversized);
-    }
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "at-limit", .data = at_limit });
+    const over_limit = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES + 1);
+    defer std.testing.allocator.free(over_limit);
+    @memset(over_limit, 'x');
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "over", .data = over_limit });
 
-    try std.testing.expectEqual(READ_ERR_TOO_LARGE, staging.items.items[0].raw.err);
-    // Nothing was copied: the response carries an empty string.
-    try std.testing.expectEqual(@as(usize, 0), staging.items.items[0].raw.contents.asSlice().len);
-    staging.release(&roc_host);
+    var path_buffer: [capture.path_capacity]u8 = undefined;
+
+    const fits = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "at-limit"));
+    try std.testing.expectEqual(@as(u8, 0), fits.err);
+    try std.testing.expectEqual(MAX_INLINE_READ_BYTES, fits.contents.asSlice().len);
+    fits.contents.decref(&roc_host);
+
+    const refused = hostedFilesReadText(&roc_host, tmpPathString(&roc_host, &path_buffer, &tmp.sub_path, "over"));
+    try std.testing.expectEqual(READ_ERR_TOO_LARGE, refused.err);
+    // Nothing was copied: the answer carries an empty string.
+    try std.testing.expectEqual(@as(usize, 0), refused.contents.asSlice().len);
+    refused.contents.decref(&roc_host);
 }
+
+/// A Roc-owned path string for a file `std.testing.tmpDir` created, resolved
+/// the way the effects resolve one: against the test's working directory.
+fn tmpPathString(roc_host: *RocHost, buffer: []u8, sub_path: []const u8, name: []const u8) abi.RocStr {
+    const path = std.fmt.bufPrint(buffer, testing_tmp_prefix ++ "{s}/{s}", .{ sub_path, name }) catch unreachable;
+    return abi.RocStr.fromSlice(path, roc_host);
+}
+
+/// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.
+///
+/// The effects resolve paths against `cwd`, so a test file has to be named the
+/// way they will look for it.
+const testing_tmp_prefix = ".zig-cache/tmp/";
 
 /// An allocator that reports how many bytes it was asked for.
 ///
@@ -7704,12 +6640,7 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
     return roc_host;
 }
 
-/// The owning byte list a staged `ReadFile` response is carrying.
-fn stagedBytes(item: RawResponse) abi.RocListWith(u8, false) {
-    return item.bytes;
-}
-
-test "completing a large read transfers the worker allocation without copying" {
+test "completing a large read transfers the read's allocation without copying" {
     // The claim under test, stated as a measurement: finishing a read costs the
     // frame thread nothing proportional to the file. The result has only the
     // three-word List value, so the same number comes out for a 16 MiB file as
@@ -7725,49 +6656,44 @@ test "completing a large read transfers the worker allocation without copying" {
         file_bytes_heap.deinitAll();
     }
 
-    // Stands in for the worker thread, which allocates and fills the buffer
-    // before the frame thread ever sees it. A different allocator on purpose:
-    // whatever the frame thread does shows up in `counter` and nowhere else.
-    const worker_bytes = try std.testing.allocator.alloc(u8, file_bytes);
-    @memset(worker_bytes, 'z');
-    const worker_ptr = worker_bytes.ptr;
+    // Stands in for the buffer a parked read filled before it resumed. A
+    // different allocator on purpose: the cost of installing it shows up in
+    // `counter`, and filling it does not.
+    const read_bytes = try std.testing.allocator.alloc(u8, file_bytes);
+    @memset(read_bytes, 'z');
+    const read_ptr = read_bytes.ptr;
 
-    var staging = ResponseStaging{};
-    // Staging is persistent runtime bookkeeping, not a per-file-byte cost. Warm
-    // it before measuring the two delivery paths below.
-    staging.delayElapsed(&roc_host, 0, 0);
-    staging.items.clearRetainingCapacity();
     counter.allocated_bytes = 0;
-    stageByteListRead(&staging, &roc_host, 1, RESPONSE_FILE_READ, std.testing.allocator, worker_bytes);
+    const large = installReadBytes(std.testing.allocator, read_bytes);
     const large_cost = counter.allocated_bytes;
 
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqual(@as(usize, file_bytes), stagedBytes(staging.items.items[0].raw).len());
-    try std.testing.expectEqual(@as(usize, 0), staging.items.items[0].raw.contents.asSlice().len);
+    try std.testing.expectEqual(@as(u8, 0), large.err);
+    try std.testing.expectEqual(@as(usize, file_bytes), large.bytes.len());
 
-    // Installed, not copied: the List reads the worker's own allocation at the
+    // Installed, not copied: the List reads the read's own allocation at the
     // same address, and has a tagged typed-heap allocation owner.
-    const delivered = stagedBytes(staging.items.items[0].raw);
-    try std.testing.expectEqual(worker_ptr, delivered.elements_ptr.?);
-    try std.testing.expect(delivered.isSeamlessSlice());
+    try std.testing.expectEqual(read_ptr, large.bytes.elements_ptr.?);
+    try std.testing.expect(large.bytes.isSeamlessSlice());
 
     // The same delivery for a file four million times smaller costs the frame
     // thread exactly the same, which is the property being claimed.
     const small_bytes = try std.testing.allocator.dupe(u8, "four bytes worth, near enough");
     counter.allocated_bytes = 0;
-    stageByteListRead(&staging, &roc_host, 2, RESPONSE_FILE_READ, std.testing.allocator, small_bytes);
+    const small = installReadBytes(std.testing.allocator, small_bytes);
     try std.testing.expectEqual(large_cost, counter.allocated_bytes);
 
-    // The control. A 64 KiB small-file response moves its payload through
-    // the Roc allocator, so the number above is a result and not a broken meter.
+    // The control. `Files.read_text!` copies its whole payload through the Roc
+    // allocator, so the number above is a result and not a broken meter.
     const inline_bytes = try std.testing.allocator.alloc(u8, MAX_INLINE_READ_BYTES);
     defer std.testing.allocator.free(inline_bytes);
     @memset(inline_bytes, 'a');
     counter.allocated_bytes = 0;
-    staging.fileRead(&roc_host, 3, 0, inline_bytes);
+    const copied = abi.RocStr.fromSlice(inline_bytes, &roc_host);
     try std.testing.expect(counter.allocated_bytes >= MAX_INLINE_READ_BYTES);
+    copied.decref(&roc_host);
 
-    staging.release(&roc_host);
+    large.bytes.decref(&roc_host);
+    small.bytes.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 }
@@ -7815,20 +6741,15 @@ test "seamless byte lists retain their typed slot through List and Str ARC in ev
 
     for (orders) |order| {
         const owned = try std.testing.allocator.dupe(u8, payload);
-        var staging = ResponseStaging{};
-        stageByteListRead(&staging, &roc_host, 1, RESPONSE_FILE_READ, std.testing.allocator, owned);
-        const whole = stagedBytes(staging.items.items[0].raw);
+        const installed = installReadBytes(std.testing.allocator, owned);
+        const whole = installed.bytes;
 
-        // The staged response owns the first list reference. Give the three
-        // aliases below their own references before that response drops.
+        // The read owns the first list reference. Give the three aliases below
+        // their own references before it drops.
         whole.incref(3);
         try std.testing.expectEqual(owned.ptr, whole.elements_ptr.?);
         try std.testing.expect(whole.isSeamlessSlice());
         try std.testing.expectEqualStrings(payload, whole.items());
-
-        // Completing the original read leaves the List aliases as the sole
-        // owners of the typed resource slot.
-        staging.release(&roc_host);
         try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.active());
 
         // `List.sublist` produces this exact shape: visible bytes move while
@@ -7881,14 +6802,12 @@ test "an empty file transfers to the canonical empty list without a resource slo
     }
 
     const owned = try std.testing.allocator.alloc(u8, 0);
-    var staging = ResponseStaging{};
-    stageByteListRead(&staging, &roc_host, 1, RESPONSE_FILE_READ, std.testing.allocator, owned);
-    const empty = stagedBytes(staging.items.items[0].raw);
-    try std.testing.expect(empty.isEmpty());
-    try std.testing.expect(!empty.isSeamlessSlice());
+    const installed = installReadBytes(std.testing.allocator, owned);
+    try std.testing.expect(installed.bytes.isEmpty());
+    try std.testing.expect(!installed.bytes.isSeamlessSlice());
 
     // Canonical empties do not retain a typed resource slot.
-    staging.release(&roc_host);
+    installed.bytes.decref(&roc_host);
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.retiredCount());
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
@@ -7908,7 +6827,7 @@ test "byte-list delivery reservations bound reads before they can start" {
     while (file_bytes_delivery_reservations.count != 0) file_bytes_delivery_reservations.release();
 }
 
-test "a full byte-list heap refuses ReadFile before it opens the path" {
+test "a full byte-list heap refuses a read before it opens the path" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
     defer {
@@ -7917,629 +6836,104 @@ test "a full byte-list heap refuses ReadFile before it opens the path" {
         file_bytes_heap.deinitAll();
     }
 
-    // One response per read, and an input carries at most its own budget, so
-    // each read gets a staging area of its own rather than sharing one. The
-    // responses are kept rather than released, because releasing one is now
-    // what frees its bytes -- the heap only fills while the app is still holding.
-    var held: [MAX_LIVE_FILE_BYTE_LISTS]RawResponse = undefined;
+    // The reads are kept rather than released: dropping one is what frees its
+    // bytes, so the heap only fills while the app is still holding.
+    var held: [MAX_LIVE_FILE_BYTE_LISTS]abi.RocListWith(u8, false) = undefined;
     var filled: usize = 0;
     while (filled < MAX_LIVE_FILE_BYTE_LISTS) : (filled += 1) {
         const owned = try std.testing.allocator.dupe(u8, "held");
-        var staging = ResponseStaging{};
-        stageByteListRead(&staging, &roc_host, filled, RESPONSE_FILE_READ, std.testing.allocator, owned);
-        try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-        held[filled] = staging.items.items[0].raw;
-        staging.items.clearRetainingCapacity();
-        staging.items.deinit(allocatorFromHost(&roc_host));
+        const installed = installReadBytes(std.testing.allocator, owned);
+        try std.testing.expectEqual(@as(u8, 0), installed.err);
+        held[filled] = installed.bytes;
     }
     try std.testing.expectEqual(MAX_LIVE_FILE_BYTE_LISTS, file_bytes_heap.active());
 
-    // This must report `Busy`, not `NotFound`, and must not consume headless
-    // operation credit: admission happens before either I/O path can begin.
-    var headless_reads = HeadlessReadBudget{};
-    var before_open = ResponseStaging{};
-    submitRead(&before_open, &roc_host, 998, testing_tmp_prefix ++ "definitely-not-here.txt", true, &headless_reads);
-    try std.testing.expectEqual(READ_ERR_BUSY, before_open.items.items[0].raw.err);
-    try std.testing.expectEqual(@as(usize, 0), headless_reads.operations);
+    // This must report `Busy`, not `NotFound`: admission happens before the
+    // path is opened, so a doomed read never starts.
+    const refused = readByteListWaiting(&roc_host, testing_tmp_prefix ++ "definitely-not-here.txt", .read);
+    try std.testing.expectEqual(READ_ERR_BUSY, refused.err);
+    try std.testing.expectEqual(@as(usize, 0), refused.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
-    before_open.release(&roc_host);
-
-    // Low-level installation remains defensive for callers which already own
-    // bytes. The normal `submitRead` path above never starts this doomed read.
-    const refused = try std.testing.allocator.dupe(u8, "no slot for this");
-    var full = ResponseStaging{};
-    stageByteListRead(&full, &roc_host, 999, RESPONSE_FILE_READ, std.testing.allocator, refused);
-    try std.testing.expectEqual(RESPONSE_FILE_READ, full.items.items[0].raw.kind);
-    try std.testing.expectEqual(READ_ERR_BUSY, full.items.items[0].raw.err);
-    try std.testing.expectEqual(@as(usize, 0), full.items.items[0].raw.bytes.len());
     try std.testing.expectEqual(MAX_LIVE_FILE_BYTE_LISTS, file_bytes_heap.active());
-    full.release(&roc_host);
+
+    // Installation stays defensive for a caller that already owns bytes: the
+    // buffer is freed rather than leaked when there is no slot for it.
+    const doomed = try std.testing.allocator.dupe(u8, "no slot for this");
+    const no_slot = installReadBytes(std.testing.allocator, doomed);
+    try std.testing.expectEqual(READ_ERR_BUSY, no_slot.err);
+    try std.testing.expectEqual(@as(usize, 0), no_slot.bytes.len());
+    try std.testing.expectEqual(MAX_LIVE_FILE_BYTE_LISTS, file_bytes_heap.active());
 
     for (held) |item| item.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 }
 
-test "a headless read delivers bytes by the same path a worker result does" {
-    // Headless runs the read on this thread for determinism, but it must still
-    // hand back bytes rather than a string, or CI would exercise a different
-    // feature from the one a desktop run does.
+test "a parked read delivers bytes and releases its reservation either way" {
+    // The waiting path is the only read path now, and it must hand back bytes
+    // rather than a string whether it succeeded or not -- and must not strand
+    // its delivery reservation on the failure.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = routingTestHost(&roc_env);
     defer {
+        file_bytes_delivery_reservations.clearAfterWorkStops();
         drainRetiredResourcesUpTo(std.math.maxInt(usize));
         file_bytes_heap.deinitAll();
     }
 
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const payload = "read on the frame thread, delivered as bytes";
+    const payload = "read on a coroutine, delivered as bytes";
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bytes.txt", .data = payload });
 
     var path_buffer: [capture.path_capacity]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/bytes.txt", .{tmp.sub_path});
 
-    var staging = ResponseStaging{};
-    readFileNow(&staging, &roc_host, 3, path, true, null, false);
-    try std.testing.expectEqual(RESPONSE_FILE_READ, staging.items.items[0].raw.kind);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqual(@as(usize, payload.len), stagedBytes(staging.items.items[0].raw).len());
-    try std.testing.expectEqualStrings(payload, stagedBytes(staging.items.items[0].raw).items());
-
-    // A read that fails still answers on the byte-list path -- an app waiting for
-    // `FileRead` must never be answered with `SmallFileRead`.
-    readFileNow(&staging, &roc_host, 4, testing_tmp_prefix ++ "definitely-not-here.txt", true, null, false);
-    try std.testing.expectEqual(RESPONSE_FILE_READ, staging.items.items[1].raw.kind);
-    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
-
-    staging.release(&roc_host);
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
-}
-
-test "headless ReadFile releases its delivery reservation on success and NotFound" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    defer {
-        file_bytes_delivery_reservations.clearAfterWorkStops();
-        drainRetiredResourcesUpTo(std.math.maxInt(usize));
-        file_bytes_heap.deinitAll();
-    }
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bytes.txt", .data = "inline result" });
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/bytes.txt", .{tmp.sub_path});
-
-    var budget = HeadlessReadBudget{};
-    var staging = ResponseStaging{};
-    submitRead(&staging, &roc_host, 1, path, true, &budget);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
+    const read = readByteListWaiting(&roc_host, path, .read);
+    try std.testing.expectEqual(@as(u8, 0), read.err);
+    try std.testing.expectEqualStrings(payload, read.bytes.items());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
-    submitRead(&staging, &roc_host, 2, testing_tmp_prefix ++ "definitely-not-here.txt", true, &budget);
-    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
+    const missing = readByteListWaiting(&roc_host, testing_tmp_prefix ++ "definitely-not-here.txt", .read);
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
+    try std.testing.expectEqual(@as(usize, 0), missing.bytes.len());
     try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
 
-    staging.release(&roc_host);
+    // A listing rides the same path, and answers with the encoded entries.
+    var dir_buffer: [capture.path_capacity]u8 = undefined;
+    const dir_path = try std.fmt.bufPrint(&dir_buffer, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
+    const listed = readByteListWaiting(&roc_host, dir_path, .list);
+    try std.testing.expectEqual(@as(u8, 0), listed.err);
+    try std.testing.expectEqualStrings("bytes.txt", listed.bytes.items()[1 .. listed.bytes.len() - 1]);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, listed.bytes.items()[0]);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+
+    read.bytes.decref(&roc_host);
+    listed.bytes.decref(&roc_host);
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
 }
 
-test "headless reads admit 32 mixed filesystem operations and terminally refuse the rest" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    defer {
-        resetPendingMappersForTest(&roc_host);
-        drainRetiredResourcesUpTo(std.math.maxInt(usize));
-        file_bytes_heap.deinitAll();
-    }
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "tiny.txt", .data = "tiny" });
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const present = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/tiny.txt", .{tmp.sub_path});
-    const missing = testing_tmp_prefix ++ "definitely-not-here.txt";
-
-    const request_count = MAX_HEADLESS_READS_PER_INPUT + 3;
-    var requests: [request_count]RequestToHost = undefined;
-    for (&requests, 0..) |*request, id| {
-        const path = if (id % 3 == 0) present else missing;
-        request.* = .{
-            .kind = if (id % 2 == 0) REQUEST_READ_FILE else REQUEST_READ_SMALL_FILE,
-            .path = abi.RocStr.fromSlice(path, &roc_host),
-            .millis = 0,
-            .deliver = testCallback(&roc_host),
-        };
-    }
-
-    var staging = ResponseStaging{};
-    submitRequests(&staging, &roc_host, abi.RocList(RequestToHost).fromSlice(&requests, &roc_host));
-    try std.testing.expectEqual(request_count, staging.count());
-    for (staging.items.items[0..MAX_HEADLESS_READS_PER_INPUT]) |item| {
-        try std.testing.expect(item.raw.err == 0 or item.raw.err == READ_ERR_NOT_FOUND);
-    }
-    for (staging.items.items[MAX_HEADLESS_READS_PER_INPUT..]) |item| {
-        try std.testing.expectEqual(READ_ERR_BUSY, item.raw.err);
-    }
-    staging.release(&roc_host);
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
-}
-
-test "headless read byte credit admits one 16 MiB byte list then reports Busy" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    defer {
-        drainRetiredResourcesUpTo(std.math.maxInt(usize));
-        file_bytes_heap.deinitAll();
-    }
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const payload = try std.testing.allocator.alloc(u8, MAX_HEADLESS_READ_BYTES_PER_INPUT);
-    defer std.testing.allocator.free(payload);
-    @memset(payload, 'b');
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "largest-allowed.bin", .data = payload });
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/largest-allowed.bin", .{tmp.sub_path});
-
-    var budget = HeadlessReadBudget{};
-    try std.testing.expect(budget.begin());
-    var staging = ResponseStaging{};
-    readFileNow(&staging, &roc_host, 1, path, true, &budget, false);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_INPUT, budget.bytes);
-
-    // The next request is refused before opening the file. It still gets the
-    // same typed terminal response the app would receive in a real frame.
-    submitRead(&staging, &roc_host, 2, path, true, &budget);
-    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[1].raw.err);
-    staging.release(&roc_host);
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
-}
-
-test "a budget-limited headless read exhausts its credit before later retries" {
+test "a screenshot path that escapes the output directory is refused, not rewritten" {
+    // The sandbox check runs before anything else, so the refusal is reported
+    // rather than a file appearing beside the example source. It also runs
+    // before the effect needs a frame to capture, so this holds with no window.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "larger-than-credit.txt", .data = "0123456789" });
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/larger-than-credit.txt", .{tmp.sub_path});
+    defer capture_screenshot_pending = false;
 
-    var budget = HeadlessReadBudget{ .bytes = MAX_HEADLESS_READ_BYTES_PER_INPUT - 4 };
-    try std.testing.expect(budget.begin());
-    var staging = ResponseStaging{};
-    readFileNow(&staging, &roc_host, 1, path, false, &budget, false);
-    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[0].raw.err);
-    try std.testing.expectEqual(MAX_HEADLESS_READ_BYTES_PER_INPUT, budget.bytes);
-
-    // This cannot perform a second partial read: exhausted byte credit is
-    // admitted as a terminal Busy before the path is opened.
-    submitRead(&staging, &roc_host, 2, path, false, &budget);
-    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[1].raw.err);
-    try std.testing.expectEqual(@as(usize, 1), budget.operations);
-    staging.release(&roc_host);
-}
-
-test "taking an input's responses hands them over and empties the staging area" {
-    // The list belongs to Roc after this, so releasing the staging area must
-    // not free the same payloads a second time -- and anything staged after the
-    // handover is a response for the *next* input, not this one.
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-
-    var staging = ResponseStaging{};
-    staging.fileRead(&roc_host, 1, 0, "contents long enough to reach the heap");
-
-    const list = staging.take(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), list.items().len);
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-
-    // Stands in for Roc consuming the input.
-    for (list.allocationItems()) |item| item.decref(&roc_host);
-    list.decref(&roc_host);
-
-    staging.delayElapsed(&roc_host, 2, 0);
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    staging.release(&roc_host);
-}
-
-test "a screenshot request that escapes the output directory is refused, not rewritten" {
-    defer {
-        capture_screenshot_ticket = null;
-        capture_screenshot_pending = false;
-    }
-
-    // The sandbox check runs first, so the refusal becomes a response rather
-    // than a file appearing beside the example source.
-    const refusal = beginScreenshotTask(4, "../escaped.png") orelse return error.TestExpectedRefusal;
-    try std.testing.expectEqual(capture.err_path_escapes, refusal);
-    try std.testing.expectEqual(@as(?u64, null), capture_screenshot_ticket);
-
-    // A valid path is accepted. Tests run headless, where there is no
-    // framebuffer to read, so it is answered at once instead of at frame end.
-    const accepted = beginScreenshotTask(5, "scene.png") orelse return error.TestExpectedImmediateAnswer;
-    try std.testing.expectEqual(capture.err_none, accepted);
-    try std.testing.expectEqual(@as(?u64, null), capture_screenshot_ticket);
-}
-
-test "a serviced screenshot request answers on the next input" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer {
-        capture_screenshot_ticket = null;
-        capture_screenshot_done = null;
-        resetPendingMappersForTest(&roc_host);
-    }
-
-    // The frame that asked carries no response for it: the write happens at
-    // the end of that frame, after its input has already gone to Roc.
-    capture_screenshot_ticket = 9;
-    var staging = ResponseStaging{};
-    try std.testing.expect(pending_mappers.insert(9, testCallback(&roc_host)));
-    stageCaptureResults(&staging, &roc_host);
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-
-    reportScreenshotResult(capture.err_write_failed);
-    stageCaptureResults(&staging, &roc_host);
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(RESPONSE_SCREENSHOT_FINISHED, staging.items.items[0].raw.kind);
-    try std.testing.expectEqual(@as(u64, 9), staging.items.items[0].raw.ticket);
-    try std.testing.expectEqual(capture.err_write_failed, staging.items.items[0].raw.err);
-
-    // Exactly one response per accepted request, so the next input reports none
-    // and the callback has been given back to Roc.
-    stageCaptureResults(&staging, &roc_host);
-    try std.testing.expectEqual(@as(usize, 1), staging.count());
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    staging.release(&roc_host);
-}
-
-test "a clipboard read is serviced in the cycle it was dispatched in" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = abi.makeRocHost(&roc_env);
-    defer {
-        headless_clipboard_len = 0;
-        headless_clipboard_set = false;
-    }
-
-    headless_clipboard_len = 0;
-    headless_clipboard_set = false;
-
-    var empty = ResponseStaging{};
-    var roc_string_bytes: usize = 0;
-    stageClipboardRead(&empty, &roc_host, 1, &roc_string_bytes, null);
-    try std.testing.expectEqual(RESPONSE_CLIPBOARD_READ, empty.items.items[0].raw.kind);
-    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, empty.items.items[0].raw.err);
-    empty.release(&roc_host);
-
-    const text = "pasted from the scripted clipboard";
-    @memcpy(headless_clipboard[0..text.len], text);
-    headless_clipboard_len = text.len;
-    headless_clipboard_set = true;
-
-    var staging = ResponseStaging{};
-    stageClipboardRead(&staging, &roc_host, 2, &roc_string_bytes, null);
-    try std.testing.expectEqual(@as(u64, 2), staging.items.items[0].raw.ticket);
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqualStrings(text, staging.items.items[0].raw.contents.asSlice());
-    staging.release(&roc_host);
-
-    // A valid clipboard remains valid when the frame's shared string-copy
-    // budget is spent; it is deferred to the app as Busy, not copied anyway.
-    var exhausted = ResponseStaging{};
-    roc_string_bytes = MAX_SYNC_ROC_STRING_BYTES_PER_INPUT - text.len + 1;
-    stageClipboardRead(&exhausted, &roc_host, 3, &roc_string_bytes, null);
-    try std.testing.expectEqual(READ_ERR_BUSY, exhausted.items.items[0].raw.err);
-    exhausted.release(&roc_host);
-}
-
-test "a saturated worker refuses with Busy rather than running work inline" {
-    // Running it here would stall the frame, which is what the split exists to
-    // prevent. A refusal is still a response, so the app is never left
-    // waiting for a callback result that will never arrive.
-    var worker = EffectWorker{};
-    worker.allocator = std.testing.allocator;
-    try std.testing.expectEqual(EffectWorker.Submission.unavailable, worker.submitReadFile(1, "x", false));
-
-    worker.accepting = true;
-    var accepted: usize = 0;
-    while (accepted < EffectWorker.capacity) : (accepted += 1) {
-        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(accepted, "x", false));
-    }
-    try std.testing.expectEqual(EffectWorker.Submission.busy, worker.submitReadFile(9999, "x", false));
-}
-
-test "worker small-read delivery is independently bounded by reservations" {
-    // Worker responses are drained before dispatch. The request submission string-copy
-    // budget must not be used to silently drop them; their separate bound is
-    // the worker/reservation capacity times the per-read string cap.
     try std.testing.expectEqual(
-        MAX_REQUESTS_IN_FLIGHT * MAX_INLINE_READ_BYTES,
-        MAX_WORKER_SMALL_READ_DELIVERY_BYTES_PER_INPUT,
+        capture.err_path_escapes,
+        hostedCaptureScreenshot(&roc_host, abi.RocStr.fromSlice("../escaped.png", &roc_host)),
     );
-}
 
-test "worker queues carry only native tickets and data" {
-    // This compile-time check protects the thread boundary: callbacks are Roc
-    // values and belong only in the frame-thread pending table and response
-    // envelope, never in a request/result that can cross to the worker.
-    try std.testing.expect(@hasField(EffectWorker.Request, "ticket"));
-    try std.testing.expect(@hasField(EffectWorker.Result, "ticket"));
-    try std.testing.expect(!@hasField(EffectWorker.Request, "deliver"));
-    try std.testing.expect(!@hasField(EffectWorker.Result, "deliver"));
-    try std.testing.expect(!@hasField(RequestToHost, "id"));
-    try std.testing.expect(!@hasField(RequestToHost, "ticket"));
-}
-
-/// Where `std.testing.tmpDir` puts its directory, relative to the test's cwd.
-///
-/// The worker resolves paths against `cwd`, so a test file has to be named the
-/// way the worker will look for it.
-const testing_tmp_prefix = ".zig-cache/tmp/";
-
-/// Spin until the worker answers, or give up.
-///
-/// The deadline is the assertion: with a lost wakeup the worker sleeps forever
-/// and nothing ever arrives, so "it answered at all" is the property under test.
-fn awaitWorkerResult(worker: *EffectWorker) !EffectWorker.Result {
-    var waited: usize = 0;
-    while (waited < 5_000) : (waited += 1) {
-        if (worker.takeResult()) |result| return result;
-        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
-    }
-    return error.WorkerNeverAnswered;
-}
-
-/// Spin until the worker has gone to sleep at least `count` times.
-fn awaitWorkerParked(worker: *EffectWorker, count: u64) !void {
-    var waited: usize = 0;
-    while (waited < 5_000) : (waited += 1) {
-        if (worker.parks.load(.acquire) >= count) return;
-        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
-    }
-    return error.WorkerNeverParked;
-}
-
-test "shutdown flushes accepted writes and abandons pending reads" {
-    var worker = EffectWorker{};
-    worker.allocator = std.testing.allocator;
-    worker.accepting = true;
-
-    // Interleaved on purpose: the flush has to walk past the reads rather than
-    // stopping at the first one it does not want.
-    const pixels = try std.testing.allocator.alloc(u8, 4);
-    @memset(pixels, 0xff);
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(1, "a", false));
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitWritePng(2, "shot.png", pixels, 1, 1));
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(3, "b", false));
-
-    worker.should_stop.store(true, .release);
-    const io = mainThreadIo();
-
-    // The app was told the host had taken this screenshot, so the write is
-    // still handed out to be done. Nothing else is.
-    const flushed = worker.awaitRequest(io) orelse return error.WriteWasAbandoned;
-    try std.testing.expectEqual(EffectWorker.Kind.write_png, flushed.kind);
-    try std.testing.expectEqual(@as(u64, 2), flushed.ticket);
-    try std.testing.expectEqual(@as(?EffectWorker.Request, null), worker.awaitRequest(io));
-
-    // A read owns no memory of its own, so abandoning it leaks nothing; the
-    // write's pixels belong to whoever runs it, which here is this test.
-    std.testing.allocator.free(flushed.pixels);
-}
-
-test "a submission wakes a blocked worker" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-
-    // A real file, so the result the worker posts owns real storage. A value
-    // built with `std.mem.zeroes` would carry a null buffer and could not tell
-    // a correct free from a missing one.
-    const payload = "the frame thread never read this";
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "read.txt", .data = payload });
-
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/read.txt", .{tmp.sub_path});
-
-    var worker = EffectWorker{};
-    worker.start(std.testing.allocator);
-    defer worker.stop();
-    try std.testing.expect(worker.thread != null);
-
-    // Wait for the worker to be genuinely asleep first. Without this the
-    // submission can land before the worker ever looks at the ring, and the
-    // test would pass even with no wakeup at all.
-    try awaitWorkerParked(&worker, 1);
-
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(7, path, false));
-
-    const result = try awaitWorkerResult(&worker);
-    defer std.testing.allocator.free(result.bytes.?);
-    try std.testing.expectEqual(@as(u64, 7), result.ticket);
-    try std.testing.expectEqual(@as(u8, 0), result.err);
-    try std.testing.expectEqualStrings(payload, result.bytes.?);
-}
-
-test "worker byte-list terminal results release their delivery reservations" {
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    effect_worker = .{ .allocator = std.testing.allocator, .accepting = true };
-    defer {
-        effect_worker.stop();
-        effect_worker = .{};
-        file_bytes_delivery_reservations.clearAfterWorkStops();
-        drainRetiredResourcesUpTo(std.math.maxInt(usize));
-        file_bytes_heap.deinitAll();
-    }
-
-    // One successful worker result moves its buffer into a slot; a failed one
-    // has no buffer. Both were admitted `ReadFile`s, so each has to return one
-    // promised delivery slot when its terminal response is staged.
-    try std.testing.expect(file_bytes_delivery_reservations.reserve());
-    try std.testing.expect(file_bytes_delivery_reservations.reserve());
-    const bytes = try std.testing.allocator.dupe(u8, "worker-owned byte-list bytes");
-    effect_worker.results[0] = .{
-        .kind = .read_file,
-        .ticket = 1,
-        .bytes = bytes,
-        .deliver_bytes = true,
-    };
-    effect_worker.results[1] = .{
-        .kind = .read_file,
-        .ticket = 2,
-        .err = READ_ERR_NOT_FOUND,
-        .deliver_bytes = true,
-    };
-    effect_worker.result_write.store(2, .release);
-
-    var staging = ResponseStaging{};
-    stageWorkerResults(&staging, &roc_host);
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
-    try std.testing.expectEqual(@as(usize, 2), staging.count());
-    try std.testing.expectEqual(@as(u8, 0), staging.items.items[0].raw.err);
-    try std.testing.expectEqual(READ_ERR_NOT_FOUND, staging.items.items[1].raw.err);
-
-    // Worker-ring refusal and the exhausted-headless-budget refusal take this
-    // same terminal path after reserving but before a result can exist.
-    try std.testing.expect(file_bytes_delivery_reservations.reserve());
-    stageReservedReadError(&staging, &roc_host, 3, RESPONSE_FILE_READ, READ_ERR_BUSY);
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
-    try std.testing.expectEqual(READ_ERR_BUSY, staging.items.items[2].raw.err);
-
-    staging.release(&roc_host);
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
-}
-
-test "worker shutdown clears abandoned byte-list delivery reservations" {
-    effect_worker = .{ .allocator = std.testing.allocator, .accepting = true };
-    defer {
-        effect_worker.stop();
-        effect_worker = .{};
-        file_bytes_delivery_reservations.clearAfterWorkStops();
-    }
-
-    try std.testing.expect(file_bytes_delivery_reservations.reserve());
+    // A valid path gets past the sandbox. Tests run headless, where there is
+    // no framebuffer to read, so the effect answers without writing a file of
+    // zeroes rather than parking for a frame that cannot arrive.
     try std.testing.expectEqual(
-        EffectWorker.Submission.accepted,
-        effect_worker.submitReadFile(1, "a read abandoned at shutdown", true),
+        capture.err_none,
+        hostedCaptureScreenshot(&roc_host, abi.RocStr.fromSlice("scene.png", &roc_host)),
     );
-    try std.testing.expectEqual(@as(usize, 1), file_bytes_delivery_reservations.count);
-
-    // This is the same order as `runNormalApp`: stopping first frees every
-    // unreported result, then the next app lifetime is allowed to start fresh.
-    effect_worker.stop();
-    file_bytes_delivery_reservations.clearAfterWorkStops();
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
-    beginPendingMappers();
-}
-
-test "a byte-list read is filled by the worker and installed by the frame thread" {
-    // End to end across the thread boundary: the buffer Roc ends up with is
-    // the one the worker allocated, and the frame thread only moves it through
-    // the pending callback and the Roc response list.
-    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
-    var roc_host = routingTestHost(&roc_env);
-    defer {
-        endPendingMappers(&roc_host);
-        drainRetiredResourcesUpTo(std.math.maxInt(usize));
-        file_bytes_heap.deinitAll();
-    }
-    resetPendingMappersForTest(&roc_host);
-    beginPendingMappers();
-    test_callback_drops = 0;
-
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const payload = "allocated off the frame thread and never copied onto it";
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bytes.txt", .data = payload });
-
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/bytes.txt", .{tmp.sub_path});
-
-    var worker = EffectWorker{};
-    worker.start(std.testing.allocator);
-    defer worker.stop();
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(11, path, true));
-
-    const result = try awaitWorkerResult(&worker);
-    try std.testing.expect(result.deliver_bytes);
-    try std.testing.expectEqualStrings(payload, result.bytes.?);
-    const worker_ptr = result.bytes.?.ptr;
-
-    var staging = ResponseStaging{};
-    try std.testing.expect(pending_mappers.insert(result.ticket, testCallback(&roc_host)));
-    stageByteListRead(&staging, &roc_host, result.ticket, RESPONSE_FILE_READ, worker.allocator, result.bytes.?);
-    try std.testing.expectEqual(@as(usize, 0), pending_mappers.count);
-    try std.testing.expect(staging.items.items[0].deliver != null);
-
-    const responses = staging.take(&roc_host);
-    try std.testing.expectEqual(@as(usize, 0), staging.count());
-    try std.testing.expectEqual(@as(usize, 1), responses.items().len);
-    const delivered = stagedBytes(responses.items()[0].raw);
-
-    // This is the List a callback retains in the app's model. Give it its own
-    // ARC owner before Roc consumes the returned response envelope.
-    delivered.incref(1);
-
-    // This mirrors the platform adapter: it consumes every response envelope
-    // and then its containing Roc list. The callback drops exactly once; the
-    // model's retained List remains the sole file-byte owner.
-    for (responses.allocationItems()) |item| item.decref(&roc_host);
-    responses.decref(&roc_host);
-    staging.release(&roc_host);
-
-    // The retained model owner survives the full response transfer and still
-    // reads the worker's allocation. The exhaustive alias/drop-order test above
-    // covers sublists and Str conversions.
-    try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
-    try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.active());
-    try std.testing.expectEqual(worker_ptr, delivered.elements_ptr.?);
-    try std.testing.expect(delivered.isSeamlessSlice());
-    try std.testing.expectEqualStrings(payload, delivered.items());
-
-    delivered.decref(&roc_host);
-    try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.retiredCount());
-    drainRetiredResourcesUpTo(std.math.maxInt(usize));
-    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
-}
-
-test "shutting down with work still queued terminates and frees what it produced" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "read.txt", .data = "queued work" });
-
-    var path_buffer: [capture.path_capacity]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/read.txt", .{tmp.sub_path});
-
-    var worker = EffectWorker{};
-    worker.start(std.testing.allocator);
-
-    var queued: u64 = 0;
-    while (queued < EffectWorker.capacity) : (queued += 1) {
-        try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitReadFile(queued, path, false));
-    }
-
-    // Wait for the first answer without consuming it, so the shutdown below has
-    // finished buffers to release and not just an empty ring.
-    var waited: usize = 0;
-    while (worker.result_write.load(.acquire) == 0 and waited < 5_000) : (waited += 1) {
-        std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
-    }
-    try std.testing.expect(worker.result_write.load(.acquire) > 0);
-
-    // Nothing was ever drained, so every buffer the worker allocated is still
-    // owned here. `std.testing.allocator` fails this test if `stop` leaks one,
-    // and hangs it if the worker misses the shutdown signal.
-    worker.stop();
-    try std.testing.expect(worker.thread == null);
-    try std.testing.expect(worker.takeResult() == null);
 }
 
 test "phases restore what they interrupted rather than falling back to idle" {
@@ -8550,14 +6944,14 @@ test "phases restore what they interrupted rather than falling back to idle" {
     startup.leave();
     try std.testing.expectEqual(Phase.idle, active_phase);
 
-    // Commands run inside the update call that produced them, so a nested scope
+    // A hosted effect runs inside the callback that called it, so a nested scope
     // has to land back in update and not in idle -- otherwise the phase after
     // a command would be wrong for the rest of the call.
-    const update = PhaseScope.enter(.apply);
+    const update = PhaseScope.enter(.update);
     const nested = PhaseScope.enter(.render);
     try std.testing.expectEqual(Phase.render, active_phase);
     nested.leave();
-    try std.testing.expectEqual(Phase.apply, active_phase);
+    try std.testing.expectEqual(Phase.update, active_phase);
     update.leave();
     try std.testing.expectEqual(Phase.idle, active_phase);
 }
@@ -8572,7 +6966,7 @@ test "each fresh input schedules one update and optional presentation" {
     try std.testing.expectEqual(@as(u8, 1), presented.presentations);
 }
 
-test "a startup-only loader called from render! is rejected" {
+test "a loader called from render! is rejected" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
 
@@ -8590,12 +6984,12 @@ test "a startup-only loader called from render! is rejected" {
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
-    try std.testing.expect(violation.allowed.eql(during_startup));
+    try std.testing.expect(violation.allowed.eql(during_load));
     try std.testing.expectEqual(Phase.render, violation.actual);
 }
 
 test "a drawing primitive called from update is rejected" {
-    const phase = PhaseScope.enter(.apply);
+    const phase = PhaseScope.enter(.update);
     defer phase.leave();
     last_phase_violation = null;
     defer last_phase_violation = null;
@@ -8606,7 +7000,7 @@ test "a drawing primitive called from update is rejected" {
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.with_blend_mode!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_render));
-    try std.testing.expectEqual(Phase.apply, violation.actual);
+    try std.testing.expectEqual(Phase.update, violation.actual);
 }
 
 test "allocating a render texture during a frame is rejected" {
@@ -8622,7 +7016,7 @@ test "allocating a render texture during a frame is rejected" {
 
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Draw.RenderTexture.load!", violation.operation);
-    try std.testing.expect(violation.allowed.eql(during_startup));
+    try std.testing.expect(violation.allowed.eql(during_load));
 }
 
 test "asking how big the drawing surface is is refused outside the frame" {
@@ -8632,7 +7026,7 @@ test "asking how big the drawing surface is is refused outside the frame" {
     last_phase_violation = null;
     defer last_phase_violation = null;
 
-    for ([_]Phase{ .idle, .startup, .apply }) |phase| {
+    for ([_]Phase{ .idle, .startup, .update }) |phase| {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
@@ -8648,10 +7042,10 @@ test "an operation allowed in several phases is accepted in each of them" {
     last_phase_violation = null;
     defer last_phase_violation = null;
 
-    for ([_]Phase{ .startup, .apply }) |phase| {
+    for ([_]Phase{ .startup, .update }) |phase| {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
-        enforcePhase("Mouse.set_cursor", during_apply);
+        enforcePhase("Mouse.set_cursor!", during_update);
         try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
 
@@ -8660,13 +7054,13 @@ test "an operation allowed in several phases is accepted in each of them" {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
-        enforcePhase("Mouse.set_cursor", during_apply);
+        enforcePhase("Mouse.set_cursor!", during_update);
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
         try std.testing.expectEqual(phase, violation.actual);
     }
 }
 
-test "uploading pixels is refused from render, and taken while applying" {
+test "uploading pixels is refused from render, and taken during update" {
     last_phase_violation = null;
     defer last_phase_violation = null;
 
@@ -8676,29 +7070,28 @@ test "uploading pixels is refused from render, and taken while applying" {
     {
         const scope = PhaseScope.enter(.render);
         defer scope.leave();
-        enforcePhase("Assets.update_texture!", during_apply);
+        enforcePhase("Assets.update_texture!", during_update);
         const violation = last_phase_violation orelse return error.UploadWasNotRejected;
         try std.testing.expectEqual(Phase.render, violation.actual);
     }
 
-    // Startup and apply both have authority to upload. Neither path may turn a
-    // structurally valid command into a capacity-based no-op.
-    for ([_]Phase{ .startup, .apply }) |phase| {
+    // Startup and update both have authority to upload. Neither may turn a
+    // structurally valid call into a capacity-based no-op.
+    for ([_]Phase{ .startup, .update }) |phase| {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
-        enforcePhase("Assets.update_texture!", during_apply);
+        enforcePhase("Assets.update_texture!", during_update);
         try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
     }
 }
 
-test "window-size suggestions and frame-rate caps are taken while applying" {
-    // Both of these used to be startup-only, so an app could neither resize
-    // itself in response to its own layout nor drop its frame cap while
-    // running. raylib resizes a live window and re-caps a running loop as
-    // readily as it does before the first frame, so the restriction bought
-    // nothing and cost two commands. Headless keeps the calls off raylib while
-    // still exercising the guard and the size bookkeeping.
+test "window-size suggestions and frame-rate caps are taken during update" {
+    // raylib resizes a live window and re-caps a running loop as readily as it
+    // does before the first frame, so both effects are reachable from `update!`
+    // and a task: an app can resize itself in response to its own layout, and
+    // drop its frame cap while running. Headless keeps the calls off raylib
+    // while still exercising the guard and the size bookkeeping.
     last_phase_violation = null;
     defer last_phase_violation = null;
     const restore_width = headless_screen_width;
@@ -8706,7 +7099,7 @@ test "window-size suggestions and frame-rate caps are taken while applying" {
     defer headless_screen_width = restore_width;
     defer headless_screen_height = restore_height;
 
-    for ([_]Phase{ .startup, .apply }) |phase| {
+    for ([_]Phase{ .startup, .update }) |phase| {
         const scope = PhaseScope.enter(phase);
         defer scope.leave();
         last_phase_violation = null;
@@ -8725,15 +7118,15 @@ test "window-size suggestions and frame-rate caps are taken while applying" {
     last_phase_violation = null;
     hostedSetTargetFps(45);
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-    try std.testing.expectEqualStrings("Window.set_target_fps", violation.operation);
-    try std.testing.expect(violation.allowed.eql(during_apply));
+    try std.testing.expectEqualStrings("Window.set_target_fps!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_update));
 }
 
 test "a rejection names every phase the operation was allowed in" {
     var buffer: [160]u8 = undefined;
     try std.testing.expectEqualStrings(
-        "init! or a command returned by update",
-        describePhases(during_apply, &buffer),
+        "init! or update! or a task",
+        describePhases(during_update, &buffer),
     );
     try std.testing.expectEqualStrings("render!", describePhases(during_render, &buffer));
 }
@@ -8767,6 +7160,9 @@ fn initModel() RocResult {
 /// Environment variable that turns per-frame Roc allocator metering on.
 const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
 
+/// Environment variable that logs every task's spawn, park, resume, and finish.
+const TRACE_TASKS_ENV: []const u8 = "ROC_RAY_TRACE_TASKS";
+
 /// Per-frame Roc allocator traffic, reported when `ROC_RAY_ALLOC_STATS=1`.
 ///
 /// A frame that mutates a uniquely referenced collection in the model pays
@@ -8787,10 +7183,9 @@ const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
 /// resize. `resize`/`remap` are forwarded so host-side Zig containers still
 /// work, and nothing Roc does reaches them.
 ///
-/// Counters are plain integers, not atomics. Only the frame thread's allocator
-/// is metered -- the effect worker keeps the unwrapped allocator it was started
-/// with -- and this is a diagnostic, so a skewed count is the worst a stray
-/// cross-thread allocation could cost.
+/// Counters are plain integers, not atomics, and nothing needs them to be:
+/// every Roc value is allocated and freed on the frame thread, tasks included,
+/// because a task runs on its own coroutine stack on that same thread.
 const AllocMeter = struct {
     inner: std.mem.Allocator,
     alloc_bytes: u64 = 0,
@@ -8909,7 +7304,7 @@ fn reportCycleAllocStats(cycle_index: u64) void {
 }
 
 fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: AppConfig) c_int {
-    beginPendingMappers();
+    beginAppLifetime();
     var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var window_title = makeTempCString(allocator, &title_stack, app_config.title.asSlice()) catch {
         std.log.err("failed to allocate app window title", .{});
@@ -8960,16 +7355,24 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     configureCapture(app_config);
     defer finalizeCapture();
 
-    // Only the windowed host runs a worker: headless executes every effect
-    // inline so its output stays bit-identical run to run for CI. A stopped
-    // worker cannot publish another result, so release callbacks immediately
-    // afterwards and before capture/resource teardown touches their captures.
-    effect_worker.start(allocator);
-    defer {
-        effect_worker.stop();
-        file_bytes_delivery_reservations.clearAfterWorkStops();
-        endPendingMappers(roc_host);
-    }
+    // A read parks its own coroutine on the event loop, so there is no worker
+    // thread to start. What is left of the lifetime is the byte-list delivery
+    // reservations, cleared before capture and resource teardown can touch the
+    // buffers they bound.
+    defer file_bytes_delivery_reservations.clearAfterWorkStops();
+
+    var app_tasks = AppTasks.init(allocator, hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
+        std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
+        return 1;
+    };
+    defer app_tasks.deinit();
+    app_tasks.activate();
+    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // the same handle the task registry holds. Withdrawn before the registry
+    // tears the runtime down, so a late send reports a stopped app instead of
+    // reaching a dead event loop.
+    if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
+    defer http_effect.deactivate();
 
     const init_result = initModel();
     if (init_result.isErr()) {
@@ -8982,13 +7385,15 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     var exit_code: i32 = 0;
     var cycle_count: u64 = 0;
 
-    // Outlives the cycle: a request submitted at the end of one input answers in
-    // the next, so its response waits here in between.
-    var staging = ResponseStaging{};
+    // Outlives the cycle: a task that finishes while `update!` is running
+    // answers on the next input, so its message waits here in between.
+    var staging = TaskResultStaging{};
     defer staging.release(roc_host);
 
     reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
+        app_tasks.pump(cycle_count, .yield);
+        stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
         // Sample raylib's monotonic clock (seconds since window init) at the
@@ -9030,13 +7435,9 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
         last_frame_nanos = now_ns;
         last_wall_nanos = real_ns;
-        stageWorkerResults(&staging, roc_host);
-        expireTimers(&staging, roc_host, real_ns);
-        stageCaptureResults(&staging, roc_host);
-
-        // One call, before the drawing scope opens. `update` is pure, so it
-        // could not draw in any case; the platform applies its commands before
-        // this returns, which is where the effects they replace used to run.
+        // One call, before the drawing scope opens. `update!` changes host
+        // state directly and spawns tasks while it runs; drawing is refused by
+        // the phase guard.
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
             .window = windowState(),
@@ -9046,7 +7447,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
                 .monotonic_nanos = real_ns,
                 .elapsed_seconds = frame_time,
             },
-            .responses = staging.take(roc_host),
+            .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
         });
         if (update_result.tag == .Err) {
@@ -9054,9 +7455,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
             break;
         }
-        const next = update_result.payload_ok();
-        boxed_model = next.model;
-        submitRequests(&staging, roc_host, next.requests);
+        boxed_model = update_result.payload_ok();
+        // Newly spawned tasks run to their first park before the frame is
+        // drawn, so their waiting overlaps rendering.
+        app_tasks.pump(cycle_count, .yield);
 
         // This graphical backend schedules one optional presentation for every
         // cycle. A backend that omits it still calls update once for the fresh
@@ -9085,19 +7487,27 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 }
 
 fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int {
-    beginPendingMappers();
+    beginAppLifetime();
     resetHeadlessRuntime(app_config);
     defer deinitResources();
-    defer {
-        // Headless reads finish inline, but keep the same lifetime cleanup as
-        // the worker path so a failed or early-exiting run cannot poison the
-        // next app lifetime.
-        file_bytes_delivery_reservations.clearAfterWorkStops();
-        endPendingMappers(roc_host);
-    }
+    // A failed or early-exiting run must not poison the next app lifetime.
+    defer file_bytes_delivery_reservations.clearAfterWorkStops();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
+
+    var app_tasks = AppTasks.init(allocatorFromHost(roc_host), hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
+        std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
+        return 1;
+    };
+    defer app_tasks.deinit();
+    app_tasks.activate();
+    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // the same handle the task registry holds. Withdrawn before the registry
+    // tears the runtime down, so a late send reports a stopped app instead of
+    // reaching a dead event loop.
+    if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
+    defer http_effect.deactivate();
 
     const init_result = initModel();
     if (init_result.isErr()) {
@@ -9110,13 +7520,18 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var exit_code: i32 = 0;
     var cycle_count: u64 = 0;
 
-    // Outlives the cycle: a request submitted at the end of one input answers in
-    // the next, so its response waits here in between.
-    var staging = ResponseStaging{};
+    // Outlives the cycle: a task that finishes while `update!` is running
+    // answers on the next input, so its message waits here in between.
+    var staging = TaskResultStaging{};
     defer staging.release(roc_host);
 
     reportStartupAllocStats();
     while (cycle_count < frames) : (cycle_count += 1) {
+        // A headless run has no frame pacing and no real clock, but task
+        // timers are real time. While a task is live, pace the cycle to the
+        // simulated 60 Hz so "18 cycles later" means what it means windowed.
+        app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
+        stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
@@ -9134,13 +7549,9 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // same output twice, and a wall clock would be the one thing in the
         // input that differed between runs.
         last_wall_nanos = timestamp_nanos;
-        stageWorkerResults(&staging, roc_host);
-        expireTimers(&staging, roc_host, timestamp_nanos);
-        stageCaptureResults(&staging, roc_host);
-
-        // One call, before the drawing scope opens. `update` is pure, so it
-        // could not draw in any case; the platform applies its commands before
-        // this returns, which is where the effects they replace used to run.
+        // One call, before the drawing scope opens. `update!` changes host
+        // state directly and spawns tasks while it runs; drawing is refused by
+        // the phase guard.
         const update_result = updateOnce(&boxed_model, .{
             .devices = input_snapshot,
             .window = windowState(),
@@ -9150,7 +7561,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
                 .monotonic_nanos = timestamp_nanos,
                 .elapsed_seconds = frame_time,
             },
-            .responses = staging.take(roc_host),
+            .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
         });
         if (update_result.tag == .Err) {
@@ -9158,9 +7569,8 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             if (TRACE_HOST) std.log.debug("[HOST] update returned Err({d})", .{exit_code});
             break;
         }
-        const next = update_result.payload_ok();
-        boxed_model = next.model;
-        submitRequests(&staging, roc_host, next.requests);
+        boxed_model = update_result.payload_ok();
+        app_tasks.pump(cycle_count, .yield);
 
         // Headless examples schedule semantic presentation to cover render and
         // resource paths. The host-cycle contract itself permits omission.
@@ -9228,9 +7638,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // dbg/expect/crashed handlers below, so the I/O backend (only used by the
     // generated DefaultHandlers) is left as a no-op freestanding implementation.
     // Metering is opt-in: with ROC_RAY_ALLOC_STATS unset this returns the same
-    // allocator, so a normal run has no wrapper and no counters. The effect
-    // worker keeps the unwrapped `allocator`, so only frame-thread traffic is
-    // counted.
+    // allocator, so a normal run has no wrapper and no counters. Everything
+    // Roc allocates runs on the frame thread, tasks included, so what is
+    // counted here is all of it.
     var roc_env = abi.RocEnv{
         .allocator = meteredAllocator(allocator),
         .roc_io = abi.RocIo.freestanding(),
@@ -9352,6 +7762,49 @@ test "listing names what went wrong: a missing path and a file are different" {
     try std.testing.expect(encoded == null);
 }
 
+test "a write creates the directories above it and replaces the whole file" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try std.testing.expectEqual(
+        @as(u8, 0),
+        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "the first contents"),
+    );
+    const first = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
+    defer std.testing.allocator.free(first);
+    try std.testing.expectEqualStrings("the first contents", first);
+
+    // Shorter than what is already there: a whole-file write has to shrink the
+    // file rather than leave the tail of the previous contents behind.
+    try std.testing.expectEqual(
+        @as(u8, 0),
+        writeFileWaitingIn(tmp.dir, std.testing.io, "saves/slot1/state.json", "second"),
+    );
+    const second = try tmp.dir.readFileAlloc(std.testing.io, "saves/slot1/state.json", std.testing.allocator, .limited(1024));
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualStrings("second", second);
+}
+
+test "a write whose parent is a file is refused by name" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "plain.txt", .data = "x" });
+
+    try std.testing.expectEqual(
+        READ_ERR_NOT_FOUND,
+        writeFileWaitingIn(tmp.dir, std.testing.io, "plain.txt/nested.txt", "x"),
+    );
+}
+
+test "a write names the failures an app can act on differently" {
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.FileNotFound));
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, writeErrorCode(error.NotDir));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, writeErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
+    try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
+}
+
 test "a directory past the entry cap is refused rather than allocated" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -9370,19 +7823,4 @@ test "a directory past the entry cap is refused rather than allocated" {
         encodeListingIn(tmp.parent_dir, std.testing.io, std.testing.allocator, &tmp.sub_path, &encoded),
     );
     try std.testing.expect(encoded == null);
-}
-
-test "a submitted listing carries the response its answer belongs in" {
-    var worker: EffectWorker = .{ .allocator = std.testing.allocator, .accepting = true };
-    try std.testing.expectEqual(EffectWorker.Submission.accepted, worker.submitListDir(7, "src"));
-
-    // The submission is what is under test here; the request is drained rather
-    // than run, because running it needs the worker thread's own IO. What
-    // matters is that it is queued as a byte-delivering operation whose answer
-    // is routed to `DirListed` rather than to `FileRead`.
-    const request = worker.takeRequest().?;
-    try std.testing.expectEqual(EffectWorker.Kind.list_dir, request.kind);
-    try std.testing.expectEqual(@as(u64, 7), request.ticket);
-    try std.testing.expect(request.deliver_bytes);
-    try std.testing.expectEqual(RESPONSE_DIR_LISTED, request.response);
 }

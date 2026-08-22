@@ -1,9 +1,15 @@
-## Assets module - host-owned textures and other resources.
+## Host-owned textures and the store they are loaded from.
 ##
 ## Textures use the shared `rrt.Texture` representation, re-exported here as
-## `Assets.Texture`. Load or generate them during initialization, keep them in
-## the model, then draw or update them through this module. Releasing the final
-## handle reference unloads the native texture automatically.
+## `Assets.Texture`. Load or generate them in `init!`, keep them in the model,
+## then draw or update them through this module. Releasing the final handle
+## reference unloads the native texture automatically, so there is no `unload`
+## to remember.
+##
+## Every effect in this module changes host state: each is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`, where a decode or an upload
+## would land in the middle of drawing a frame. Loading per frame is a cost
+## rather than an error -- pay it once at startup.
 import Color
 import AssetsHost
 import rrt.Texture as RrtTexture
@@ -48,11 +54,10 @@ Assets := [].{
 		## Resource-free store value for pure tests.
 		##
 		## The handle never resolves to an open directory, so every load made
-		## through it fails the way a load through a released store does. A store
-		## is only useful during startup -- every loader that takes one is
-		## startup-only -- so this exists for the app that keeps one in its model
-		## anyway, to let a pure `expect` build that model. Do not use it to test
-		## asset resolution or resource lifetime.
+		## through it fails the way a load through a released store does. It
+		## exists for the app that keeps a store in its model, to let a pure
+		## `expect` build that model. Do not use it to test asset resolution or
+		## resource lifetime.
 		stub : Store
 		stub = Store.(AssetsHost.Store.stub)
 	}
@@ -127,8 +132,12 @@ Assets := [].{
 		color_b : Color.Rgba,
 	}
 
-	## Load an image relative to an explicit store. `path` must be relative;
-	## absolute paths, NUL, and lexical `..` escapes fail before file I/O.
+	## Load an image relative to an explicit store.
+	##
+	## `path` must be relative; absolute paths, NUL, and lexical `..` escapes
+	## fail before file I/O. This reads the file on the calling thread rather
+	## than parking, so a large load during `update!` costs that frame; prefer
+	## `init!`.
 	load_texture! : Store, Str => Try(Texture, [AssetPathInvalid, AssetNotFound, AssetReadFailed, TextureLoadFailed, ResourceLimit, ..])
 	load_texture! = |Store.(store), path| {
 		result = AssetsHost.load_store_texture!({ store, path })
@@ -175,10 +184,6 @@ Assets := [].{
 	update_texture! = |texture, pixels|
 		whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
 
-	## Replace every pixel, as a command a pure `update` can return.
-	update_texture : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
-	update_texture = |texture, pixels| UpdateTexture({ texture, pixels })
-
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
@@ -193,27 +198,13 @@ Assets := [].{
 			}),
 		)
 
-	## Replace one rectangle, as a command a pure `update` can return.
-	update_texture_region : Texture, Region -> [UpdateTextureRegion({ texture : Texture, region : Region }), ..]
-	update_texture_region = |texture, region| UpdateTextureRegion({ texture, region })
-
 	## Change how this texture is sampled when scaled.
 	set_texture_filter! : Texture, TextureFilter => {}
 	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
-	## Change how this texture is sampled when scaled, as a command a pure
-	## `update` can return.
-	set_texture_filter : Texture, TextureFilter -> [SetTextureFilter({ texture : Texture, filter : TextureFilter }), ..]
-	set_texture_filter = |texture, filter| SetTextureFilter({ texture, filter })
-
 	## Change how out-of-range texture coordinates are wrapped.
 	set_texture_wrap! : Texture, TextureWrap => {}
 	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
-
-	## Change how out-of-range texture coordinates are wrapped, as a command a
-	## pure `update` can return.
-	set_texture_wrap : Texture, TextureWrap -> [SetTextureWrap({ texture : Texture, wrap : TextureWrap }), ..]
-	set_texture_wrap = |texture, wrap| SetTextureWrap({ texture, wrap })
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

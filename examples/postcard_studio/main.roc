@@ -5,14 +5,15 @@ import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
+import rr.Task
 import rr.Text
 
 ## A tiny postcard maker: choose a colourway, move the sun, and export the
 ## composition as `postcards/sunrise.png`.
 ##
-## The screenshot request is used at a realistic boundary: the editor stays
-## responsive while the host encodes the current frame, then reports the
-## result back as a message.
+## The screenshot is taken from a task, at a realistic boundary: the editor
+## stays responsive while the task parks on the host encoding the current
+## frame, and the outcome arrives as a message on a later cycle.
 Model : {
 	copy : Box({ title : Text.Prepared, subtitle : Text.Prepared, help : Text.Prepared, idle : Text.Prepared, saving : Text.Prepared, saved : Text.Prepared, failed : Text.Prepared }),
 	theme : U64,
@@ -22,7 +23,7 @@ Model : {
 
 Msg : [PostcardSaved(Try({}, Capture.ScreenshotError))]
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
@@ -51,8 +52,8 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	copy = Box.unbox(model.copy)
 	resolved = List.fold(
@@ -79,9 +80,15 @@ update = |model, program_input| {
 		status: if save copy.saving else resolved.status,
 	}
 
-	App.next(next)
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
-		.with_requests(if save [Capture.screenshot("sunrise.png", |result| PostcardSaved(result))] else [])
+	if save {
+		Task.spawn!(program_input, || PostcardSaved(Capture.screenshot!("sunrise.png")))
+	}
+
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok(next)
+	}
 }
 
 Palette : { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }

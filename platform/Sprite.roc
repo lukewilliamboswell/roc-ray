@@ -1,8 +1,9 @@
-## Sprite module - pure helpers for texture sprites and simple animations.
+## Pure helpers for texture sprites and simple animations.
 ##
-## Drawing still goes through Draw/Assets. This module provides a compact
-## game-facing shape for sprites, spritesheet frame rectangles, and animation
-## state.
+## A compact game-facing shape for sprites, spritesheet frame rectangles, and
+## animation state. Everything here but `Sprite.draw!` is pure, so an app can
+## advance animation and compute frame rectangles in `update!`; the draw itself
+## takes a `Draw.Frame` and is legal in `render!` only.
 import Assets
 import Color
 import Draw
@@ -84,7 +85,8 @@ Sprite := {
 		tint: sprite.tint,
 	}
 
-	## Draw the sprite using its current transform and tint.
+	## Draw the sprite using its current transform and tint. Legal in `render!`
+	## only.
 	draw! : Sprite, Draw.Frame => {}
 	draw! = |sprite, frame| frame.texture!(sprite.to_texture_draw())
 

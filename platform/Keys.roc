@@ -8,6 +8,7 @@
 ## Receivers are documented in the [roc-ray-types docs](../types/),
 ## which is where the nominal is declared.
 import rrt.Keys as RrtKeys
+import HostHost
 
 Keys := [].{
 
@@ -45,12 +46,14 @@ Keys := [].{
 	key_released : { keys : List(U8), ..state }, Key -> Bool
 	key_released = RrtKeys.key_released
 
-	## Set which key closes the window, as a command.
+	## Set which key closes the window.
 	##
 	## `NoExitKey` stops any key from closing it; raylib defaults to
 	## `ExitKey(KeyEscape)`. The window close button is unaffected either way,
 	## so an app that disables the exit key should still handle shutdown itself
-	## through `App.exit`.
-	set_exit_key : ExitKey -> [SetExitKey(ExitKey), ..]
-	set_exit_key = |key| SetExitKey(key)
+	## by returning `Err(Exit(code))` from `update!`.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	set_exit_key! : ExitKey => {}
+	set_exit_key! = |key| HostHost.set_exit_key!(exit_key_code(key))
 }

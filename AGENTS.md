@@ -25,33 +25,37 @@
 - Keep application domain state and policy in Roc. The host may retain the
   opaque model between callbacks, but must not inspect it, mutate it, or infer
   application decisions from it.
-- Classify every application/host interaction as one of the five protocols in
-  `design.md`: startup authority, `App.Input`, `App.Command`,
-  `App.Request`, or `Draw.Frame`. Adding another interaction shape is an
+- Classify every application/host interaction as one of the four protocols in
+  `design.md`: startup authority, `App.Input`, a direct host effect called from
+  `update!` or a task, or `Draw.Frame`. Adding another interaction shape is an
   architecture change, not an ordinary feature.
-- Preserve the pure `update` transition and serial application callbacks. Host
-  workers must not execute Roc application code or share Roc values across
-  threads unsafely.
-- Keep commands ordered, current-cycle, and response-free. Keep requests inert,
-  finite in response cardinality, and accountable for exactly one terminal
-  response during an orderly application lifetime. Never silently discard a
-  command, request response, or non-lossy input event.
+- Keep application callbacks and task bodies serial and on the frame thread.
+  Host workers must not execute Roc application code or hold a Roc value; give
+  them bytes the host owns.
+- Keep a synchronous effect current-cycle. Keep a task accountable for exactly
+  one message during an orderly application lifetime. Never silently discard a
+  task's message or a non-lossy input event.
+- Give every hosted effect a deliberate phase set and keep its public
+  documentation in step with it. Nothing that waits may be reachable from
+  `update!` or `render!`; a violation is a programmer error that must fail
+  immediately and name the effect, the phase, and the fix.
 - Keep rendering derived from the resulting model and scoped by `Draw.Frame`.
-  Rendering must not become a second model transition or a route to general
-  host work.
+  Rendering must not become a second update or a route to general host work.
 - Establish bounds before admitting host-retained work. Define what is counted,
   reservation and release points, saturation behavior, retained payload size,
   and shutdown behavior. Do not introduce an implicit unbounded queue, cache,
   registry, worker set, or callback set.
 - Keep programmer errors distinct from runtime outcomes. Make invalid values
-  unrepresentable where practical, reject structurally invalid transitions
-  before applying commands, and return mutable external conditions as typed
-  data. Do not silently repair, substitute, retry, downgrade, or ignore a
-  condition that can change application meaning.
+  unrepresentable where practical, reject a structurally invalid call before it
+  reaches the host, and return mutable external conditions as typed data. Do
+  not silently repair, substitute, retry, downgrade, or ignore a condition that
+  can change application meaning.
 - Represent host authority with typed opaque capabilities. Do not expose native
-  pointers, transport tickets, untyped IDs, arbitrary native calls, or
-  effectful closures. Resource and memory safety must not depend on an
-  application remembering manual cleanup.
+  pointers, transport tickets, untyped IDs, or arbitrary native calls. An
+  effectful closure is a task body and nothing else: no API may take a closure
+  the host will run at an unspecified time, on another thread, or outside a
+  phase. Resource and memory safety must not depend on an application
+  remembering manual cleanup.
 - Preserve honest capability profiles. Structurally unsupported facilities are
   absent from a target; runtime unavailability of a supported facility is a
   typed outcome.
@@ -64,13 +68,13 @@
 - Use the terms defined in `design.md` according to their direction, timing,
   ownership, and cardinality. In particular, distinguish host cycles,
   simulation steps, and presentation frames.
-- For the intended public model, use `Input`, `Transition`, `Command`,
-  `Request`, `Message`, and `Frame`; use `update` for the pure transition
-  function, `next` for a transition containing a next model, and `apply` for
-  ordered command interpretation.
-- Do not introduce `Step`, `Action`, `Task`, `Update`, `static`, or `commit` as
-  alternate public names for those concepts. Existing uses are migration work,
-  not naming precedent.
+- For the public model, use `Input`, `Task`, `Message`, and `Frame`; use
+  `update!` for the effectful step that folds an input into the next model,
+  *effect* for a direct host call it makes, *waiting effect* for one that parks
+  a task, and *phase* for the callback (`init!`, `update!`, `render!`, a task)
+  the host checks an effect against.
+- Do not introduce `Step`, `Action`, `Update`, `static`, or `commit` as
+  alternate public names for those concepts.
 - Choose new terms by their established meaning and by what a user can infer
   from the name. Prefer familiar qualified language over novel vocabulary, but
   do not reuse a familiar word with reversed direction or surprising lifecycle
@@ -89,11 +93,11 @@
   profile, test, example, and user-facing document. Keep transport
   representations private.
 - Verify architectural behavior, not only the successful path. Test ordering,
-  saturation, refusal, response cardinality, ownership transfer, shutdown,
-  phase enforcement, and target-profile behavior as applicable.
-- Preserve unrelated user changes and do not broaden the task merely because a
-  nearby implementation differs from the design. Report additional migration
-  work separately.
+  saturation, refusal, message cardinality, ownership transfer, cancellation,
+  shutdown, phase enforcement, and target-profile behavior as applicable.
+- Preserve unrelated user changes and do not broaden the work merely because a
+  nearby implementation differs from the design. Report what else is needed
+  separately.
 
 ## Keep this file enduring
 
@@ -110,4 +114,4 @@
   plans, status, and temporary findings in issues or pull requests.
 - Add or change an instruction here only when it should govern unrelated future
   work across the repository. If an instruction is likely to expire when one
-  feature, migration, or bug is finished, it does not belong here.
+  feature or bug is finished, it does not belong here.

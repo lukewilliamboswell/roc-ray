@@ -4,7 +4,7 @@ import rr.App
 
 Model : { args : List(Str) }
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 config_flag : Str
 config_flag = "--cli-args-config"
@@ -25,15 +25,15 @@ init! = App.init_for_args(config_for_args, |startup| Ok({ args: App.args!(startu
 
 Msg : []
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	passed =
 		List.len(model.args) == 3
 			and List.contains(model.args, config_flag)
 				and List.contains(model.args, passthrough_flag)
 					and program_input.window.size == { width: 321, height: 123 }
 
-	App.next(model).with_commands([App.exit(if passed 0 else 1)])
+	Err(Exit(if passed 0 else 1))
 }
 
 render! : Model, _ => Try({}, [Exit(I64), ..])

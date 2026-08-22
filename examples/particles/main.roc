@@ -17,8 +17,8 @@ import rr.Text
 ## `frame.texture_instances!` hands the host one list and lets it loop, so the
 ## whole fountain costs one crossing however many particles are in it.
 ##
-## The simulation stays in `update`, which is pure: it advances the particles
-## and projects them onto the flat `Draw.TextureInstance` records the batch
+## The simulation is pure and runs in `update!`: it advances the particles and
+## projects them onto the flat `Draw.TextureInstance` records the batch
 ## transports. `render!` only hands that retained list to the host, so the
 ## particle record can stay whatever the application wants it to be.
 ##
@@ -45,7 +45,7 @@ Particle : {
 
 Msg : []
 
-program = { init!, update, render! }
+program = { init!, update!, render! }
 
 particle_count : U64
 particle_count = 4000
@@ -141,8 +141,8 @@ init! = App.init(
 	},
 )
 
-update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-update = |model, program_input| {
+update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+update! = |model, program_input| {
 	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
 	dt = F32.min(program_input.time.elapsed_seconds, 0.05)
@@ -157,8 +157,11 @@ update = |model, program_input| {
 
 	particles = List.map(model.particles, |particle| step_particle(particle, emitter, spread, dt))
 
-	App.next({ ..model, particles: particles, instances: List.map(particles, to_instance) })
-		.with_commands(if input.key_pressed(KeyEscape) [App.exit(0)] else [])
+	if input.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, particles: particles, instances: List.map(particles, to_instance) })
+	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

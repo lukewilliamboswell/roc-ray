@@ -1,7 +1,44 @@
-## Application startup configuration and model initialization.
+## The shape of a RocRay program: its three callbacks, its startup
+## configuration, and the input each cycle folds in.
 ##
-## Use `App.init` when startup needs effects such as loading host-owned assets.
-## The callback runs after the window, renderer, and audio device are ready.
+## An app provides three callbacks:
+##
+## ```roc
+## program = { init!, update!, render! }
+## ```
+##
+## `init!` runs once, after the window, renderer, and audio device are ready.
+## It reads startup configuration, loads the resources the app will hold, and
+## returns the first model. Use `App.init` to pair a `Config` with it.
+##
+## `update!` runs once per host cycle. It receives the model and one
+## `App.Input`, calls host effects directly, starts tasks, and returns the next
+## model -- or `Err(Exit(code))` to stop the app.
+##
+## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
+## change the model or reach host work of any other kind.
+##
+## Where an effect may be called: the host knows which callback it is inside,
+## and every effect documents the phases it is legal in. Three rules cover
+## nearly all of them. An effect that changes host state -- the cursor, the
+## window, audio, a recording, a loaded resource -- is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`. An effect that draws is
+## legal only in `render!`, inside the frame scope the host opens around it.
+## An effect that waits -- `Files.read_text!`, `Http.send!`, `Task.sleep!` --
+## is legal in `init!`, where it blocks startup, and in tasks, where it parks
+## the task while the frame loop keeps drawing, and is refused in `update!`
+## and `render!`.
+##
+## Calling an effect from a phase it does not permit is a programmer error, not
+## a runtime outcome: it stops the app at once with a message naming the
+## effect, the phase it was called from, and where it belongs.
+##
+## How messages arrive: work that waits belongs on a task.
+## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
+## host an effectful closure to run on its own stack. When the closure returns,
+## its value is delivered as a message on `input.messages` in a later cycle, in
+## the order the tasks finished. A task cannot read or write the model, so its
+## message is the only thing it can say. See `Task`.
 import HostHost
 import Keys
 import Mouse
@@ -16,15 +53,15 @@ AppRecording := [NoRecording, Record(RrtCapture.Recording)].{
 	is_eq : _
 }
 
-## `Delay` uses wall time. Animation and physics should use `input.time`.
 import Devices
 import Window
 import Time
 import Audio
-import Assets
 import Capture
-import Color
 import Files
+import AppHost
+import AppTransport
+import TaskHost
 
 App := [].{
 
@@ -35,9 +72,6 @@ App := [].{
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
 	ExitKey : Keys.ExitKey
 
-	## Whether the host starts recording before the first frame. `Record` makes
-	## an app capture itself with no runtime code, which is how a visualization
-	## can be rendered straight to a file.
 	## Validated startup configuration. Its fields cannot be updated directly;
 	## use its receiver updates so startup invariants are preserved.
 	Config :: {
@@ -126,8 +160,10 @@ App := [].{
 
 		## Return a config that starts recording before the first frame.
 		##
-		## The recording finalizes when it reaches its frame cap, when
-		## a `Capture.stop` command is applied, or when the app exits.
+		## This is how an app captures itself with no runtime code at all, so a
+		## visualization can be rendered straight to a file. The recording
+		## finalizes when it reaches its frame cap, when `Capture.stop!` is
+		## called, or when the app exits.
 		with_recording : Config, Capture.Recording -> Config
 		with_recording = |cfg, value| { ..cfg, recording: Record(value) }
 
@@ -181,16 +217,20 @@ App := [].{
 		recording = |cfg| cfg.recording
 	}
 
-	## Opaque, zero-sized authority supplied only while the host runs `init!`.
+	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
 	##
-	## Startup provides one-shot system effects but no input, window, or timing
-	## observations. Seed models that require devices with `Devices.empty`; the first
-	## `App.Input` supplies the first sampled values. After initialization,
-	## request effects with `App.Command` or `App.Request` values.
+	## Every effect that takes a `Startup` is legal only in `init!`. Startup
+	## provides one-shot system effects but no input, window, or timing
+	## observations: seed models that require devices with `Devices.empty`, and
+	## the first `App.Input` supplies the first sampled values. After
+	## initialization, change host state by calling effects from `update!`, and
+	## ask for work that waits with `Task.spawn!`.
 	Startup : HostHost.Startup
 
 	## Exit the application with the given exit code.
-	## The exit happens after startup completes to allow proper cleanup.
+	##
+	## The exit happens after startup completes, so `init!` finishes and the
+	## host shuts down in the ordinary way. Legal only in `init!`.
 	exit! : Startup, I32 => {}
 	exit! = |_startup, code| HostHost.exit!(code)
 
@@ -199,11 +239,16 @@ App := [].{
 	## The first element is `argv[0]`, followed by application-owned arguments
 	## in order. The host removes its reserved `--host-*` switches before this
 	## list reaches the app. The value is stable for the process lifetime.
+	##
+	## Legal only in `init!`. `App.init_for_args` is the other way to read
+	## argv, before the window exists.
 	args! : Startup => List(Str)
 	args! = |_startup| HostHost.args!()
 
 	## Read an environment variable by key.
-	## Returns Ok with the value if found, or Err NotFound if not set.
+	##
+	## Answers `Err(NotFound)` when the variable is not set. Legal only in
+	## `init!`.
 	read_env! : Startup, Str => Try(Str, [NotFound, ..])
 	read_env! = |_startup, key|
 		match HostHost.read_env!(key) {
@@ -211,8 +256,11 @@ App := [].{
 			Err(NotFound) => Err(NotFound)
 		}
 
-	## Read a UTF-8 text file from disk.
-	## Call as `App.read_file!(startup, path)`.
+	## Read a UTF-8 text file from disk, blocking until it is read.
+	##
+	## Call as `App.read_file!(startup, path)`. Legal only in `init!`; use
+	## `Files.read_text!` inside a task to read a file while the app runs, and
+	## for the fuller error report.
 	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
 	read_file! = |_startup, path| {
 		result = HostHost.read_file!(path)
@@ -227,6 +275,8 @@ App := [].{
 
 	## Get varying startup entropy in the inclusive range `[min, max]`.
 	##
+	## Legal only in `init!`.
+	##
 	## For simulation or gameplay, call this once and initialize the exposed
 	## `roc-random` package with, for example,
 	## `Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2000000000)))`.
@@ -236,11 +286,11 @@ App := [].{
 	random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
 
 	## Suggest positive initial window dimensions to the window manager.
-	## Returns Err NotSupported on platforms that don't support window resizing.
-	## Call as `App.suggest_window_size!(startup, size)`.
 	##
-	## A running app resizes itself with the `Window.suggest_size` command, which
-	## reaches the same host call; only this spelling can report a refusal.
+	## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
+	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`;
+	## a running app resizes itself with `Window.suggest_size!`, which reaches
+	## the same host call, and only this spelling can report a refusal.
 	suggest_window_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 	suggest_window_size! = |_startup, size|
 		if size.width <= 0 or size.height <= 0 {
@@ -252,11 +302,12 @@ App := [].{
 			}
 		}
 
-	## Suggest the smallest window size the user can drag the window down to. Each
-	## negative dimension is clamped to `0`, which leaves that axis
+	## Suggest the smallest window size the user can drag the window down to.
+	##
+	## Each negative dimension is clamped to `0`, which leaves that axis
 	## unconstrained. The minimum only applies to a resizable window, so pair it
-	## with `App.default.with_resizable(Bool.True)`.
-	## Call as `App.suggest_window_min_size!(startup, size)`.
+	## with `App.default.with_resizable(Bool.True)`. Call as
+	## `App.suggest_window_min_size!(startup, size)`. Legal only in `init!`.
 	suggest_window_min_size! : Startup, { width : I32, height : I32 } => {}
 	suggest_window_min_size! = |_startup, size|
 		HostHost.suggest_window_min_size!({
@@ -264,27 +315,33 @@ App := [].{
 			height: if size.height > 0 size.height else 0,
 		})
 
-	## Set raylib's CPU-side frame-rate cap. Values at or below zero render
-	## uncapped. This neither selects a software renderer nor controls VSync.
-	## Call as `App.set_target_fps!(startup, fps)`.
+	## Set raylib's CPU-side frame-rate cap.
 	##
-	## A running app changes the cap with the `Window.set_target_fps` command.
+	## Values at or below zero render uncapped. This neither selects a software
+	## renderer nor controls VSync. Call as `App.set_target_fps!(startup, fps)`.
+	## Legal only in `init!`; a running app changes the cap with
+	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
 	set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
 
 	## Set which key closes the window, or `NoExitKey` to stop any key from
-	## closing it. raylib defaults to `ExitKey(KeyEscape)`. The window close
-	## button is unaffected either way, so an app that disables the exit key
-	## should still handle shutdown through `App.exit`.
-	## Call as `App.set_exit_key!(startup, NoExitKey)`.
+	## closing it.
+	##
+	## raylib defaults to `ExitKey(KeyEscape)`. The window close button is
+	## unaffected either way, so an app that disables the exit key should still
+	## handle shutdown itself by returning `Err(Exit(code))`. Call as
+	## `App.set_exit_key!(startup, NoExitKey)`. Legal only in `init!`.
 	set_exit_key! : Startup, ExitKey => {}
 	set_exit_key! = |_startup, key| HostHost.set_exit_key!(Keys.exit_key_code(key))
 
 	## Read UTF-8 text from the system clipboard.
-	## Returns `Err(Unavailable)` when the clipboard is empty, holds non-text
+	##
+	## Answers `Err(Unavailable)` when the clipboard is empty, holds non-text
 	## content, or the windowing backend refuses the request -- the underlying
-	## platform does not distinguish these cases.
-	## Call as `App.get_clipboard_text!(startup)`.
+	## platform does not distinguish these cases. Call as
+	## `App.get_clipboard_text!(startup)`. Legal only in `init!`; a running app
+	## reads the clipboard with `Window.read_clipboard!`, which names the
+	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
 	get_clipboard_text! = |_startup|
 		match HostHost.get_clipboard_text!() {
@@ -293,15 +350,20 @@ App := [].{
 		}
 
 	## Replace the system clipboard contents with UTF-8 text.
-	## Call as `App.set_clipboard_text!(startup, text)`.
+	##
+	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`;
+	## a running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
 	set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
 
-	## Apply cursor visibility/capture atomically through one tagged operation.
+	## Apply cursor visibility and capture atomically through one tagged
+	## operation. Legal only in `init!`; `Mouse.set_cursor_mode!` is the same
+	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
 	set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
-	## Set the native operating-system cursor shape.
+	## Set the native operating-system cursor shape. Legal only in `init!`;
+	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
 	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
 
@@ -347,11 +409,11 @@ App := [].{
 	init_for_args : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
 	init_for_args = |config_for_args, callback!| { config: config_for_args, run!: callback! }
 
-	## Everything the host observed since the previous cycle.
+	## Everything the host observed for one cycle, handed to `update!`.
 	##
-	## `messages` contains all request responses received for this cycle, in the
-	## order the host observed their responses. Independent asynchronous requests
-	## may complete in any order; their submission order does not constrain it.
+	## `messages` contains every task message delivered for this cycle, in the
+	## order the tasks finished. Independent tasks may finish in any order; the
+	## order they were spawned in does not constrain it.
 	## `capture` contains the recording status sampled for this cycle.
 	Input(msg) := {
 		devices : Devices.Snapshot,
@@ -388,7 +450,7 @@ App := [].{
 		} -> Input(msg)
 		from_fields = |sampled| Input.(sampled)
 
-		## A neutral input for testing an app's real `update` from an `expect`.
+		## A neutral input for testing an app's pure update logic from an `expect`.
 		##
 		## Nothing is pressed, the window is an ordinary focused
 		## `default_test_size`, the clock reads zero on its first cycle, no
@@ -396,9 +458,11 @@ App := [].{
 		## `with_*` receivers, which is what makes a test say only the one thing
 		## it is about:
 		##
-		##     expect
-		##         input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
-		##         List.map(update(model, input).fields().commands, App.command_description) == [Exit(0)]
+		## ```roc
+		## expect
+		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
+		##     decide(model, input) == Quit
+		## ```
 		##
 		## Building the model this is called with is the other half: every host
 		## resource an app can hold has a resource-free `stub`
@@ -406,9 +470,10 @@ App := [].{
 		## `rrt.Texture.stub`, ...), so a `Model` full of assets can be written
 		## down in a pure test.
 		##
-		## Assert on what came back with `App.command_description` and
-		## `App.request_description`. A `Transition` holds response mappers and host resources,
-		## so `==` cannot be used on one directly.
+		## `update!` itself is effectful, and an `expect` cannot call it. Keep
+		## the decisions in pure functions -- which message to fold in, whether
+		## to quit, what work to start -- and test those; `update!` is the thin
+		## shell that performs them.
 		for_tests : {} -> Input(msg)
 		for_tests = |{}|
 			Input.(
@@ -434,454 +499,42 @@ App := [].{
 		with_time : Input(msg), Time.Cycle -> Input(msg)
 		with_time = |Input.(sampled), time| Input.({ ..sampled, time: time })
 
-		## Deliver request responses on this input, in the order the host observed
-		## them. These are the app's own messages, not `Request` values.
+		## Deliver task messages on this input, in the order the tasks finished.
 		with_messages : Input(msg), List(msg) -> Input(msg)
 		with_messages = |Input.(sampled), messages| Input.({ ..sampled, messages: messages })
 
-		## Deliver one more request response on this input, after any already there.
+		## Deliver one more task message on this input, after any already there.
 		with_message : Input(msg), msg -> Input(msg)
 		with_message = |Input.(sampled), message| Input.({ ..sampled, messages: List.append(sampled.messages, message) })
 
 		## Replace this input's sampled recording status.
 		with_capture : Input(msg), Capture.Status -> Input(msg)
 		with_capture = |Input.(sampled), capture| Input.({ ..sampled, capture: capture })
+
+		## Start a task whose message this input's own type pins.
+		##
+		## `Task.spawn!(input, || ...)` is the documented form and calls this;
+		## `input.spawn!(|| ...)` reads better when the input is already at
+		## hand. Both need the input for the same reason: it is the witness
+		## that ties the closure's return type to the app's `Msg`. See
+		## `Task.spawn!` for what the input is doing there.
+		spawn! : Input(msg), (() => msg) => {}
+		spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
+
+		## Start a task that answers in a component's own message type, wrapped
+		## into this input's.
+		##
+		## `Task.spawn_with!(input, task!, wrap)` is the documented form and
+		## calls this. See it for the component idiom this exists for.
+		spawn_with! : Input(msg), (() => a), (a -> msg) => {}
+		spawn_with! = |input, task!, wrap| Input.spawn!(input, || wrap(task!()))
 	}
 
 	## The window size `Input.for_tests` reports. Ordinary rather than special:
 	## a test that depends on the size should say so with `with_window`.
 	default_test_size : { width : I32, height : I32 }
 	default_test_size = { width: 800, height: 600 }
-
-	## A value paired with work for the platform.
-	##
-	## `Transition` is the application-facing update result. Use `App.next` to
-	## start one, then its receiver methods to add work. It is applicative, so a
-	## record whose fields are `Transition` values can use the record-builder form:
-	##
-	##     { game: game_update, ui: ui_update }.App
-	##
-	## This combines fields and appends their work from left to right.
-	## `commands` run this cycle, in order, before `render!`. `requests` go to the
-	## host in list order and answer on a later `Input`. While the app remains
-	## running, every submitted request gets exactly one terminal response, including
-	## `Err(Busy)` when current host capacity cannot complete it; independent
-	## asynchronous responses have no specified order. App termination drops pending
-	## response mappers because no later input can observe them.
-	##
-	## Changing a collection in the model is an in-place write. The model reaches
-	## `update` uniquely referenced -- the box it arrived in is consumed -- so
-	## writing to one of its lists mutates it rather than allocating a new one:
-	## measured at under a hundred bytes per frame for a one-million-element
-	## `List(F32)` (`test/model_inplace`, checked by
-	## `scripts/test_model_allocation.py`). A collection held in the model can
-	## therefore change every frame without a size-proportional cost. Earlier
-	## compiler pins copied it once per frame instead.
-	Transition(model, msg) := [
-		Transition(
-			{
-				model : model,
-				commands : List(Command),
-				requests : List(Request(msg)),
-			},
-		),
-	].{
-
-		## Inspect the model and work. This is for the platform adapter; app code
-		## should prefer `next`, receiver builders, and record builders.
-		fields : Transition(model, msg) -> {
-			model : model,
-			commands : List(Command),
-			requests : List(Request(msg)),
-		}
-		fields = |update|
-			match update {
-				Transition(fields) => fields
-			}
-
-		## Transform the model while retaining its ordered host work.
-		map : Transition(a, msg), (a -> b) -> Transition(b, msg)
-		map = |transition, transform| {
-			transition_fields = transition.fields()
-			Transition.(Transition({ model: transform(transition_fields.model), commands: transition_fields.commands, requests: transition_fields.requests }))
-		}
-
-		## Lift a transition.s messages into an enclosing application's message type.
-		##
-		## The model and the commands are carried through unchanged; every request is
-		## mapped with `Request.map`, so each request still asks the host for exactly
-		## the same work and only its response mapper is wrapped. This is the piece that
-		## lets a reusable component own requests: the component's `update` returns
-		## `Transition(ChildModel, ChildMsg)`, and the parent lifts the whole result
-		## in one call rather than unpacking the request list.
-		##
-		##     # The component, which knows nothing about its parent:
-		##     Counter.update : Counter.Model, App.Input(Counter.Msg) -> App.Transition(Counter.Model, Counter.Msg)
-		##     Counter.update = |model, _input|
-		##         App.next({ ..model, ticks: model.ticks + 1 })
-		##             .with_request(Time.delay(200, |_| Tick))
-		##
-		##     # The parent, whose `Msg` wraps the component's. `counter_input`
-		##     # is the parent's own helper, narrowing `input.messages` to the
-		##     # ones it wrapped.
-		##     Msg : [Counter(Counter.Msg), Quit]
-		##
-		##     update = |model, input|
-		##         Counter.update(model.counter, counter_input(input))
-		##             .map(|counter| { ..model, counter })
-		##             .map_msg(|inner| Counter(inner))
-		##
-		## A lifted update is an ordinary `Transition`, so a parent that owns two
-		## components combines them with the record-builder form:
-		##
-		##     Model : { left : Counter.Model, right : Counter.Model }
-		##     Msg : [Left(Counter.Msg), Right(Counter.Msg)]
-		##
-		##     update = |model, input|
-		##         {
-		##             left: Counter.update(model.left, left_input(input)).map_msg(|inner| Left(inner)),
-		##             right: Counter.update(model.right, right_input(input)).map_msg(|inner| Right(inner)),
-		##         }.App
-		##
-		## That builds the model from both components' values and appends their
-		## work, left to right, into one `Transition(Model, Msg)`.
-		map_msg : Transition(model, a), (a -> b) -> Transition(model, b)
-		map_msg = |transition, transform| {
-			transition_fields = transition.fields()
-			Transition.(
-				Transition({
-					model: transition_fields.model,
-					commands: transition_fields.commands,
-					requests: List.map(transition_fields.requests, |request| map_request(request, transform)),
-				}),
-			)
-		}
-
-		## Append one command after commands already requested by this update.
-		with_command : Transition(model, msg), Command -> Transition(model, msg)
-		with_command = |transition, command| {
-			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, List.append(transition_fields.commands, command), transition_fields.requests)
-		}
-
-		## Append commands after commands already requested by this update.
-		with_commands : Transition(model, msg), List(Command) -> Transition(model, msg)
-		with_commands = |transition, commands| {
-			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, List.concat(transition_fields.commands, commands), transition_fields.requests)
-		}
-
-		## Append one deferred request after requests already requested by this update.
-		with_request : Transition(model, msg), Request(msg) -> Transition(model, msg)
-		with_request = |transition, request| {
-			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, transition_fields.commands, List.append(transition_fields.requests, request))
-		}
-
-		## Append deferred requests after requests already requested by this update.
-		with_requests : Transition(model, msg), List(Request(msg)) -> Transition(model, msg)
-		with_requests = |transition, requests| {
-			transition_fields = transition.fields()
-			App.from_parts(transition_fields.model, transition_fields.commands, List.concat(transition_fields.requests, requests))
-		}
-	}
-
-	## Start a transition with no host work.
-	##
-	## This and `map2` live on `App` so `Transition` participates in Roc's
-	## record-builder syntax: `{ field: update }.App`.
-	next : model -> Transition(model, msg)
-	next = |model| Transition.(Transition({ model, commands: [], requests: [] }))
-
-	## Start a transition with all of its ordered host work.
-	##
-	## Most code reads better with `next(...).with_command(...)`; this is useful
-	## when a helper already computes both lists.
-	from_parts : model, List(Command), List(Request(msg)) -> Transition(model, msg)
-	from_parts = |model, commands, requests| Transition.(Transition({ model, commands, requests }))
-
-	## Transform a transition.s model while retaining its ordered host work.
-	map : Transition(a, msg), (a -> b) -> Transition(b, msg)
-	map = Transition.map
-
-	## Combine transition results from left to right for record builders and explicit use.
-	map2 : Transition(a, msg), Transition(b, msg), (a, b -> c) -> Transition(c, msg)
-	map2 = |left, right, combine| {
-		left_fields = left.fields()
-		right_fields = right.fields()
-		Transition.(
-			Transition({
-				model: combine(left_fields.model, right_fields.model),
-				commands: List.concat(left_fields.commands, right_fields.commands),
-				requests: List.concat(left_fields.requests, right_fields.requests),
-			}),
-		)
-	}
-
-	## Something the platform does on the app's behalf during this cycle.
-	##
-	## Commands run in list order before rendering and produce no response.
-	## Because `update` is pure and `render!` may only draw, this union is the
-	## whole of what a running app can change about host state: every hosted
-	## effect reachable after `init!` has a variant here, or a documented reason
-	## in `docs/command-coverage.md` for why it does not.
-	##
-	## Set shader uniforms during `Frame.with_shader!`, where their order relative
-	## to draw calls is explicit.
-	Command : [
-		Exit(I64),
-		SetCursor(Mouse.Cursor),
-		SetCursorMode(Mouse.CursorMode),
-		SetClipboardText(Str),
-		SetExitKey(Keys.ExitKey),
-		SuggestWindowSize({ width : I32, height : I32 }),
-		SuggestWindowMinSize({ width : I32, height : I32 }),
-		SetTargetFps(I32),
-
-		## Play a sound at a stated volume, pitch, and pan.
-		##
-		## There is deliberately no command that sets one of those on a `Sound`
-		## and leaves it there: raylib holds them on the sound resource, so a
-		## later play by anyone would inherit them.
-		PlaySound(Audio.Playback),
-		StopSound(Audio.Sound),
-		PauseSound(Audio.Sound),
-		ResumeSound(Audio.Sound),
-		PlayMusic(Audio.Music),
-		StopMusic(Audio.Music),
-		PauseMusic(Audio.Music),
-		ResumeMusic(Audio.Music),
-		SetMusicVolume({ music : Audio.Music, volume : F32 }),
-		SetMusicPitch({ music : Audio.Music, pitch : F32 }),
-		SetMusicPan({ music : Audio.Music, pan : F32 }),
-		SetMusicLooping({ music : Audio.Music, looping : Bool }),
-		SeekMusic({ music : Audio.Music, seconds : F32 }),
-		SetMasterVolume(F32),
-
-		## Replace a texture's pixels.
-		##
-		## Upload commands are structurally prevalidated with the complete command
-		## list, then each is invoked exactly once in its original order.
-		UpdateTexture({ texture : Assets.Texture, pixels : List(Color.Rgba) }),
-		UpdateTextureRegion({ texture : Assets.Texture, region : Assets.Region }),
-		SetTextureFilter({ texture : Assets.Texture, filter : Assets.TextureFilter }),
-		SetTextureWrap({ texture : Assets.Texture, wrap : Assets.TextureWrap }),
-		SetMouseSource(Mouse.Source),
-
-		## Arm a recording, or finalize the one that is running.
-		##
-		## The outcome is reported through `input.capture`.
-		StartRecording(Capture.Recording),
-		StopRecording,
-	]
-
-	## The dimensions a description keeps for a texture. The handle is left out: it is
-	## an opaque host resource, and nothing pure can say anything about it.
-	TextureDescription : { width : F32, height : F32 }
-
-	## What an `Command` says, with its host resources left out.
-	##
-	## An `Command` can carry a live host resource -- a texture handle, a sound, a
-	## music stream -- and those are opaque boxed values that structural equality
-	## cannot look inside. So an app cannot compare the commands its `update`
-	## returned against expected ones directly. `command_description` drops the
-	## resources and keeps the parameters, which is what a test wants to assert
-	## on anyway. This is the supported way to test `update`:
-	##
-	##     expect
-	##         List.map(update(model, input).fields().commands, App.command_description)
-	##             == [PlaySound({ volume: 1, pitch: 0.8, pan: 0 })]
-	##
-	## A description deliberately does not say *which* resource a command names,
-	## because a resource has no identity a pure test could name it by. Two
-	## different sounds paused in the same cycle have the same description. A texture
-	## keeps its dimensions, because those are ordinary data on the value.
-	##
-	MouseSourceDescription : [Hardware, Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 })]
-
-	CommandDescription : [
-		Exit(I64),
-		SetCursor(Mouse.Cursor),
-		SetCursorMode(Mouse.CursorMode),
-		SetClipboardText(Str),
-		SetExitKey(Keys.ExitKey),
-		SuggestWindowSize({ width : I32, height : I32 }),
-		SuggestWindowMinSize({ width : I32, height : I32 }),
-		SetTargetFps(I32),
-		PlaySound({ volume : F32, pitch : F32, pan : F32 }),
-		StopSound,
-		PauseSound,
-		ResumeSound,
-		PlayMusic,
-		StopMusic,
-		PauseMusic,
-		ResumeMusic,
-		SetMusicVolume(F32),
-		SetMusicPitch(F32),
-		SetMusicPan(F32),
-		SetMusicLooping(Bool),
-		SeekMusic(F32),
-		SetMasterVolume(F32),
-		UpdateTexture({ texture : TextureDescription, pixel_count : U64 }),
-		UpdateTextureRegion({ texture : TextureDescription, x : I32, y : I32, width : I32, height : I32, pixel_count : U64 }),
-		SetTextureFilter({ texture : TextureDescription, filter : Assets.TextureFilter }),
-		SetTextureWrap({ texture : TextureDescription, wrap : Assets.TextureWrap }),
-		SetMouseSource(MouseSourceDescription),
-		StartRecording(Capture.Recording),
-		StopRecording,
-	]
-
-	## Reduce one command to comparable data. See `CommandDescription`.
-	command_description : Command -> CommandDescription
-	command_description = |command|
-		match command {
-			Exit(code) => Exit(code)
-			SetCursor(cursor) => SetCursor(cursor)
-			SetCursorMode(mode) => SetCursorMode(mode)
-			SetClipboardText(text) => SetClipboardText(text)
-			SetExitKey(key) => SetExitKey(key)
-			SuggestWindowSize(size) => SuggestWindowSize(size)
-			SuggestWindowMinSize(size) => SuggestWindowMinSize(size)
-			SetTargetFps(fps) => SetTargetFps(fps)
-			PlaySound(settings) => PlaySound({ volume: settings.volume, pitch: settings.pitch, pan: settings.pan })
-			StopSound(_sound) => StopSound
-			PauseSound(_sound) => PauseSound
-			ResumeSound(_sound) => ResumeSound
-			PlayMusic(_music) => PlayMusic
-			StopMusic(_music) => StopMusic
-			PauseMusic(_music) => PauseMusic
-			ResumeMusic(_music) => ResumeMusic
-			SetMusicVolume(request) => SetMusicVolume(request.volume)
-			SetMusicPitch(request) => SetMusicPitch(request.pitch)
-			SetMusicPan(request) => SetMusicPan(request.pan)
-			SetMusicLooping(request) => SetMusicLooping(request.looping)
-			SeekMusic(request) => SeekMusic(request.seconds)
-			SetMasterVolume(volume) => SetMasterVolume(volume)
-			UpdateTexture(request) =>
-				UpdateTexture({
-					texture: texture_description(request.texture),
-					pixel_count: List.len(request.pixels),
-				})
-
-			UpdateTextureRegion(request) =>
-				UpdateTextureRegion({
-					texture: texture_description(request.texture),
-					x: request.region.x,
-					y: request.region.y,
-					width: request.region.width,
-					height: request.region.height,
-					pixel_count: List.len(request.region.pixels),
-				})
-
-			SetTextureFilter(request) => SetTextureFilter({ texture: texture_description(request.texture), filter: request.filter })
-			SetTextureWrap(request) => SetTextureWrap({ texture: texture_description(request.texture), wrap: request.wrap })
-			SetMouseSource(source) =>
-				SetMouseSource(
-					match source {
-						Hardware => Hardware
-						Virtual(pointer) => Virtual(pointer)
-					},
-				)
-			StartRecording(recording) => StartRecording(recording)
-			StopRecording => StopRecording
-		}
-
-	## Validate every structurally checkable command before the apply phase begins.
-	##
-	## A malformed texture upload is a programmer error. The adapter checks the
-	## complete list before invoking its first command, so a bad transition cannot
-	## knowingly apply only a prefix. Runtime capacity is not validation and never
-	## causes a structurally valid command to be skipped.
-	## Ask the host to shut down with an exit code.
-	##
-	## The exit happens once this cycle is finished, so the frame that asked for
-	## it is still drawn -- and, if a recording is running, still captured.
-	exit : I64 -> [Exit(I64), ..]
-	exit = |code| Exit(code)
-
-	## Work for the host to do, answered later. Returning one never blocks.
-	##
-	## A request owns the typed function that turns its one terminal result into the
-	## application's message. The platform retains that function privately until
-	## the matching host response arrives. Request tickets are transport-only and
-	## are not part of the supported application API.
-	##
-	## Platform wrappers capture only the response mapper supplied here, never the model
-	## or request-only data. The mapper itself retains every value it captures,
-	## however, so prefer small stable context or generation values over capturing
-	## an entire model for work that may remain pending.
-	##
-	## `ReadText` returns a UTF-8 `Str` and rejects files above its inline
-	## copy limit. `ReadBytes` returns ordinary Roc bytes for files up to the
-	## host's 16 MiB per-file limit. The worker allocation becomes a seamless
-	## `List(U8)` view, so delivery allocates and copies no payload bytes.
-	## `Screenshot` captures the end of the frame that submitted it.
-	Request(msg) : [
-		ReadText({ path : Str, callback : Try(Str, Files.ReadTextError) -> msg }),
-		ReadBytes({ path : Str, callback : Try(List(U8), Files.ReadBytesError) -> msg }),
-		Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }),
-		Screenshot({ path : Str, callback : Try({}, Capture.ScreenshotError) -> msg }),
-		ReadClipboard({ callback : Try(Str, Window.ClipboardReadError) -> msg }),
-		ListDirectory({ path : Str, callback : Try(List(Files.Entry), Files.ListError) -> msg }),
-	]
-
-	## What a `Request` asks for, with its response mapper left out.
-	##
-	## A `Request` holds a function, so `==` cannot compare two of them and no test
-	## can assert on one directly. `RequestDescription` is the same request as ordinary
-	## data -- no functions, no host resources -- so it derives `==` and prints
-	## in a failing `expect`.
-	RequestDescription : [
-		ReadText({ path : Str }),
-		ReadBytes({ path : Str }),
-		Delay({ millis : U64 }),
-		Screenshot({ path : Str }),
-		ReadClipboard,
-		ListDirectory({ path : Str }),
-	]
-
-	## Describe what a request asks the host for, without its response mapper.
-	##
-	## This is the supported way to assert on the requests an `update` returned:
-	##
-	##     result = update(model, input)
-	##     expect List.map(result.fields().requests, App.request_description) == [
-	##         Delay({ millis: 200 }),
-	##         ReadText({ path: "save.json" }),
-	##     ]
-	##
-	## Comparing `Request` values themselves is not possible -- each one owns a
-	## response-mapping function, and equality cannot inspect a function. Deriving `==`
-	## over a union that reaches a host-resource `Box` is refused for its own
-	## reason, as a "type does not support equality" error naming every variant.
-	## Reducing the request to its request first sidesteps both.
-	##
-	## `Request.map` and `Transition.map_msg` rewrite only the response mapper, so a mapped
-	## request keeps the description it had. That is the property to lean on when testing
-	## a component through its parent.
-	request_description : Request(msg) -> RequestDescription
-	request_description = |request|
-		match request {
-			ReadText({ path, callback: _ }) => ReadText({ path: path })
-			ReadBytes({ path, callback: _ }) => ReadBytes({ path: path })
-			Delay({ millis, callback: _ }) => Delay({ millis: millis })
-			Screenshot({ path, callback: _ }) => Screenshot({ path: path })
-			ReadClipboard({ callback: _ }) => ReadClipboard
-			ListDirectory({ path, callback: _ }) => ListDirectory({ path: path })
-		}
-
 }
-
-map_request : App.Request(a), (a -> b) -> App.Request(b)
-map_request = |request, transform|
-	match request {
-		ReadText({ path, callback }) => ReadText({ path, callback: |result| transform(callback(result)) })
-		ReadBytes({ path, callback }) => ReadBytes({ path, callback: |result| transform(callback(result)) })
-		Delay({ millis, callback }) => Delay({ millis, callback: |result| transform(callback(result)) })
-		Screenshot({ path, callback }) => Screenshot({ path, callback: |result| transform(callback(result)) })
-		ReadClipboard({ callback }) => ReadClipboard({ callback: |result| transform(callback(result)) })
-		ListDirectory({ path, callback }) => ListDirectory({ path, callback: |result| transform(callback(result)) })
-	}
 
 default_width : I32
 default_width = 800
@@ -925,628 +578,29 @@ expect App.default.output_dir() == "."
 expect App.default.with_output_dir("captures").output_dir() == "captures"
 expect App.default.recording() == NoRecording
 expect App.default.with_recording(RrtCapture.default).recording() == Record(RrtCapture.default)
-texture_description : Assets.Texture -> App.TextureDescription
-texture_description = |texture| { width: texture.width, height: texture.height }
 
-## Walk every command and reject the first structural upload error.
-validate_commands_from : List(App.Command), U64 -> Try({}, [PixelCountMismatch, RegionOutOfBounds])
-validate_commands_from = |commands, index|
-	if index >= List.len(commands) {
-		Ok({})
-	} else {
-		match List.get(commands, index) {
-			Ok(command) => {
-				validate_command(command)?
-				validate_commands_from(commands, index + 1)
-			}
-
-			# Unreachable: the index is bounded above.
-			Err(_) => Ok({})
-		}
-	}
-
-## Validate the dimensions and pixel count of one upload command.
-validate_command : App.Command -> Try({}, [PixelCountMismatch, RegionOutOfBounds])
-validate_command = |command|
-	match command {
-		UpdateTexture(request) =>
-			if U64.to_f32(List.len(request.pixels)) != request.texture.width * request.texture.height {
-				Err(PixelCountMismatch)
-			} else {
-				Ok({})
-			}
-
-		UpdateTextureRegion(request) => {
-			region = request.region
-			# Sizes are compared as F32 because that is what a texture reports
-			# its own size in, and adding in F32 also means a huge `x + width`
-			# cannot wrap the way I32 addition would.
-			width = I32.to_f32(region.width)
-			height = I32.to_f32(region.height)
-			if region.width <= 0 or region.height <= 0 or region.x < 0 or region.y < 0 {
-				Err(RegionOutOfBounds)
-			} else if I32.to_f32(region.x) + width > request.texture.width or I32.to_f32(region.y) + height > request.texture.height {
-				Err(RegionOutOfBounds)
-			} else if U64.to_f32(List.len(region.pixels)) != width * height {
-				Err(PixelCountMismatch)
-			} else {
-				Ok({})
-			}
-		}
-
-		_ => Ok({})
-	}
-
-## `kind` code for a finished small-file read. Mirrored in `src/host_native.zig`.
-completion_small_file_read : U8
-completion_small_file_read = 0
-
-## `kind` code for an elapsed delay. Mirrored in `src/host_native.zig`.
-completion_delay : U8
-completion_delay = 1
-
-## `kind` code for a serviced screenshot. Mirrored in `src/host_native.zig`.
-completion_screenshot_finished : U8
-completion_screenshot_finished = 2
-
-## `kind` code for a clipboard read. Mirrored in `src/host_native.zig`.
-completion_clipboard_read : U8
-completion_clipboard_read = 3
-
-## `kind` code for an ordinary byte-list read. Mirrored in
-## `src/host_native.zig`.
-completion_file_read : U8
-completion_file_read = 4
-
-## `kind` code for a serviced directory listing. Mirrored in `src/host_native.zig`.
-completion_dir_listed : U8
-completion_dir_listed = 5
-
-## `kind` code for a small-file read request. Mirrored in `src/host_native.zig`.
-request_read_small_file : U8
-request_read_small_file = 0
-
-## `kind` code for a delay request. Mirrored in `src/host_native.zig`.
-request_delay : U8
-request_delay = 1
-
-## `kind` code for a screenshot request. Mirrored in `src/host_native.zig`.
-request_screenshot : U8
-request_screenshot = 2
-
-## `kind` code for a clipboard-read request. Mirrored in `src/host_native.zig`.
-request_read_clipboard : U8
-request_read_clipboard = 3
-
-## `kind` code for an ordinary byte-list read request. Mirrored in `src/host_native.zig`.
-request_read_file : U8
-request_read_file = 4
-
-## `kind` code for a directory listing request. Mirrored in `src/host_native.zig`.
-request_list_dir : U8
-request_list_dir = 5
-
-## Entry kinds in an encoded listing. Mirrored in `src/host_native.zig`.
-dir_entry_file : U8
-dir_entry_file = 1
-
-dir_entry_dir : U8
-dir_entry_dir = 2
-
-## The host refused to list the path because it is not a directory. Mirrored in
-## `src/host_native.zig`.
-read_err_not_a_directory : U8
-read_err_not_a_directory = 7
-
-## Decode the host's listing-error code. Mirrored in `src/host_native.zig`.
-list_error : U8 -> Files.ListError
-list_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == read_err_busy {
-		Busy
-	} else if code == 4 {
-		Unavailable
-	} else if code == read_err_too_large {
-		TooLarge
-	} else if code == read_err_not_a_directory {
-		NotADirectory
-	} else {
-		ReadFailed
-	}
-
-## Decode a listing's bytes into entries.
-##
-## The encoding is one entry after another, each a kind byte, the entry's name,
-## and a NUL. A name cannot contain a NUL on any platform the host runs on, so
-## the terminator is unambiguous and the whole listing is one host allocation
-## that reached Roc without being copied.
-##
-## Truncated input -- a kind byte with no terminator after it -- ends the
-## listing rather than being guessed at. The host writes the terminator, so
-## that cannot happen; answering with the entries that were whole is what keeps
-## this total.
-decode_listing : List(U8) -> List(Files.Entry)
-decode_listing = |bytes| decode_entries(bytes, 0, [])
-
-decode_entries : List(U8), U64, List(Files.Entry) -> List(Files.Entry)
-decode_entries = |bytes, at, found|
-	if at >= List.len(bytes) {
-		found
-	} else {
-		match List.get(bytes, at) {
-			Err(_) => found
-			Ok(code) =>
-				match index_of_nul(bytes, at + 1) {
-					Err(_) => found
-					Ok(end) =>
-						decode_entries(
-							bytes,
-							end + 1,
-							List.append(found, { name: entry_name(bytes, at + 1, end), kind: entry_kind(code) }),
-						)
-					}
-			}
-	}
-
-## Copy one entry's name out of the listing.
-##
-## The copy is the point. A sublist of a host-delivered list is a seamless view
-## onto the host's buffer, so a name retained that way would pin the whole
-## listing for as long as the app held it. `release_excess_capacity` gives the
-## name storage of its own -- and it has to happen before `from_utf8_lossy`,
-## which may share the storage it is given.
-entry_name : List(U8), U64, U64 -> Str
-entry_name = |bytes, start, end|
-	Str.from_utf8_lossy(List.release_excess_capacity(List.sublist(bytes, { start: start, len: end - start })))
-
-entry_kind : U8 -> Files.EntryKind
-entry_kind = |code|
-	if code == dir_entry_file {
-		File
-	} else if code == dir_entry_dir {
-		Dir
-	} else {
-		Other
-	}
-
-index_of_nul : List(U8), U64 -> Try(U64, [NotFound])
-index_of_nul = |bytes, at|
-	match List.get(bytes, at) {
-		Err(_) => Err(NotFound)
-		Ok(byte) =>
-			if byte == 0 {
-				Ok(at)
-			} else {
-				index_of_nul(bytes, at + 1)
-			}
-		}
-
-## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
-##
-## Named rather than spelled inline, so the same code path every other decoder
-## takes is testable the same way they are.
-clipboard_error : U8 -> [Unavailable, TooLarge, Busy]
-clipboard_error = |code|
-	if code == read_err_too_large {
-		TooLarge
-	} else if code == read_err_busy {
-		Busy
-	} else {
-		Unavailable
-	}
-
-## `status` code for a running recording. Mirrored in `src/capture.zig`.
-capture_status_active : U8
-capture_status_active = 1
-
-## `status` code for a recording that stopped early. Mirrored in `src/capture.zig`.
-capture_status_failed : U8
-capture_status_failed = 2
-
-## `status` code for a recording that ran to its end and wrote its file.
-## Mirrored in `src/capture.zig`.
-capture_status_finished : U8
-capture_status_finished = 3
-
-## Error code for content the host declined to copy into a `Str`.
-## Mirrored in `src/host_native.zig`.
-read_err_too_large : U8
-read_err_too_large = 5
-
-## Error code for work the host would not start. Mirrored in
-## `src/host_native.zig`.
-read_err_busy : U8
-read_err_busy = 3
-
-## Error code for bytes that cannot become a `Str`. Mirrored in
-## `src/host_native.zig`.
-read_err_not_utf8 : U8
-read_err_not_utf8 = 6
-
-## Decode the host's read-error code for a byte-list read. Mirrored in
-## `src/host_native.zig`.
-read_error : U8 -> Files.ReadBytesError
-read_error = |code|
-	if code == 1 {
-		NotFound
-	} else if code == read_err_busy {
-		Busy
-	} else if code == 4 {
-		Unavailable
-	} else if code == read_err_too_large {
-		TooLarge
-	} else {
-		ReadFailed
-	}
-
-## Decode the host's read-error code for a string-delivered read.
-##
-## The same codes plus one, rather than a second table: the two reads fail for
-## the same reasons and only differ in what they were asked to produce.
-small_file_error : U8 -> Files.ReadTextError
-small_file_error = |code|
-	if code == read_err_not_utf8 {
-		NotUtf8
-	} else {
-		match read_error(code) {
-			NotFound => NotFound
-			Busy => Busy
-			Unavailable => Unavailable
-			TooLarge => TooLarge
-			ReadFailed => ReadFailed
-		}
-	}
-
-## Decode the host's capture-error code for a screenshot.
-##
-## These are `src/capture.zig`'s codes, the same ones `Capture.screenshot!`
-## names, so a path that escapes the output directory is still reported as the
-## sandbox refusing it rather than as a failed write.
-screenshot_error : U8 -> Capture.ScreenshotError
-screenshot_error = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		3 => AlreadyPending
-		7 => WriteFailed
-		10 => Busy
-		11 => Unavailable
-		_ => WriteFailed
-	}
-
-## Name every failure code a recording can latch -- a start the host refused as
-## well as a running recording that stopped early.
-capture_failure : U8 -> Capture.FailureReason
-capture_failure = |code|
-	match code {
-		1 => PathInvalid
-		2 => PathEscapesOutputDir
-		3 => AlreadyRecording
-		5 => UnsupportedFormat
-		6 => BudgetExceeded
-		7 => OutOfMemory
-		8 => WriteFailed
-		9 => EncodeFailed
-		_ => Unknown
-	}
-
-## A component's own message type, which knows nothing about the application
-## that embeds it.
-string_result_message : Try(Str, Files.ReadTextError) -> Str
-string_result_message = |result|
-	match result {
-		Ok(contents) => contents
-		Err(_) => "failed"
-	}
-
-unit_result_message : Try({}, [Busy]) -> Str
-unit_result_message = |result|
-	match result {
-		Ok({}) => "elapsed"
-		Err(Busy) => "busy"
-	}
-
-ChildMessage : [Loaded(Str), LoadFailed, Elapsed, Overloaded]
-
-## The embedding application's message type, which wraps the component's.
-ParentMessage : [Child(ChildMessage)]
-
-child_small_file_message : Try(Str, Files.ReadTextError) -> ChildMessage
-child_small_file_message = |result|
-	match result {
-		Ok(contents) => Loaded(contents)
-		Err(_) => LoadFailed
-	}
-
-child_delay_message : Try({}, [Busy]) -> ChildMessage
-child_delay_message = |result|
-	match result {
-		Ok({}) => Elapsed
-		Err(Busy) => Overloaded
-	}
-
-## What a component returns, before its parent knows anything about it.
-child_update : App.Transition(U64, ChildMessage)
-child_update =
-	App.next(7)
-		.with_command(SetClipboardText("child"))
-		.with_request(Time.delay(9, child_delay_message))
-		.with_request(Files.read_text("child.txt", child_small_file_message))
-
-parent_update : App.Transition(U64, ParentMessage)
-parent_update = child_update.map_msg(|child| Child(child))
-
-## `map_msg` touches only the messages. The value, the commands, and the requests'
-## requests and order are all the component's.
-expect parent_update.fields().model == 7
-expect List.len(parent_update.fields().commands) == 1
-expect List.map(parent_update.fields().requests, App.request_description) == [Delay({ millis: 9 }), ReadText({ path: "child.txt" })]
-
-## `RequestDescription` is ordinary data, so `==` works on it where it cannot work on a
-## `Request`. This is the assertion an app's own tests are meant to make.
-expect App.request_description(Files.read_text("save.json", string_result_message)) == ReadText({ path: "save.json" })
-expect App.request_description(Files.read_bytes("level.bin", |_| "file")) == ReadBytes({ path: "level.bin" })
-expect App.request_description(Time.delay(250, unit_result_message)) == Delay({ millis: 250 })
-expect App.request_description(Capture.screenshot("scene.png", |_| "screenshot")) == Screenshot({ path: "scene.png" })
-expect App.request_description(Window.read_clipboard(|_| "clipboard")) == ReadClipboard
-expect App.request_description(Files.list("assets", |_| "listed")) == ListDirectory({ path: "assets" })
-
-# --- Directory listings -----------------------------------------------------
-
-## The encoding the host writes, spelled out: a kind byte, a name, a NUL, and
-## the next entry straight after it.
-listing_sample : List(U8)
-listing_sample =
-	List.concat(
-		List.concat([dir_entry_file], List.concat(Str.to_utf8("a.txt"), [0])),
-		List.concat([dir_entry_dir], List.concat(Str.to_utf8("nested"), [0])),
-	)
-
-expect
-	decode_listing(listing_sample)
-		== [
-			{ name: "a.txt", kind: File },
-			{ name: "nested", kind: Dir },
-		]
-
-## An empty directory is no bytes, which is no entries rather than a failure.
-expect decode_listing([]) == []
-
-## An entry kind the host has not defined is `Other` rather than a crash: it is
-## how symbolic links, devices and sockets already arrive.
-expect decode_listing([9, 120, 0]) == [{ name: "x", kind: Other }]
-
-## A name that is not UTF-8 still names something, so it is replaced rather than
-## dropped -- a walk that skipped such entries would silently miss files.
-expect List.len(decode_listing([dir_entry_file, 0xff, 0])) == 1
-
-## A truncated listing ends at the last whole entry. The host always writes the
-## terminator, so this is about `decode_listing` being total, not about input
-## that occurs.
-expect decode_listing(List.concat(listing_sample, [dir_entry_file, 122])) == decode_listing(listing_sample)
-
-## An entry with an empty name is still an entry.
-expect decode_listing([dir_entry_dir, 0]) == [{ name: "", kind: Dir }]
-
-expect list_error(1) == NotFound
-expect list_error(read_err_not_a_directory) == NotADirectory
-expect list_error(read_err_busy) == Busy
-expect list_error(4) == Unavailable
-expect list_error(read_err_too_large) == TooLarge
-expect list_error(2) == ReadFailed
-
-## Every code the host can send decodes to something, and only `0` means success
-## -- which never reaches here.
-expect List.all([1, 2, 3, 4, 5, 6, 7, 8, 200], |code| list_error_is_named(code))
-
-list_error_is_named : U8 -> Bool
-list_error_is_named = |code|
-	match list_error(code) {
-		NotFound => Bool.True
-		NotADirectory => Bool.True
-		Busy => Bool.True
-		Unavailable => Bool.True
-		TooLarge => Bool.True
-		ReadFailed => Bool.True
-	}
-
-## The equality discriminates, rather than agreeing with everything.
-expect App.request_description(Time.delay(250, unit_result_message)) != Delay({ millis: 251 })
-expect App.request_description(Files.read_text("a.txt", string_result_message)) != App.request_description(Files.read_text("b.txt", string_result_message))
-
-## Mapping rewrites the response mapper and nothing else, so the description is an identity
-## a parent can assert on without knowing the component's message type.
-expect App.request_description(map_request(Time.delay(250, unit_result_message), |inner| Loaded(inner))) == Delay({ millis: 250 })
-expect App.request_description(map_request(Window.read_clipboard(|_| "clipboard"), |inner| Loaded(inner))) == ReadClipboard
-
-## A file is arbitrary bytes and a `Str` is UTF-8. Only the read that answers
-## with a string can report this, which is why the two reads no longer share one
-## error type.
-expect small_file_error(read_err_not_utf8) == NotUtf8
-expect small_file_error(1) == NotFound
-expect small_file_error(2) == ReadFailed
-expect small_file_error(4) == Unavailable
-expect small_file_error(read_err_too_large) == TooLarge
-expect read_error(1) == NotFound
-expect read_error(2) == ReadFailed
-expect read_error(4) == Unavailable
-expect read_error(read_err_too_large) == TooLarge
-expect screenshot_error(2) == PathEscapesOutputDir
-expect screenshot_error(99) == WriteFailed
-expect screenshot_error(3) == AlreadyPending
-expect clipboard_error(4) == Unavailable
-
-## Another process decides how much text the clipboard holds, so the host
-## thread refuses to copy an unbounded one rather than stalling on it.
-expect clipboard_error(read_err_too_large) == TooLarge
-
-## Saturation is its own answer everywhere it can happen. A clipboard the host
-## would not read yet is not an `Unavailable` one, and a screenshot it would
-## not start is not one this app already had outstanding. Each of those would
-## send an app looking for a fault that is not there, instead of asking again
-## next cycle.
-expect clipboard_error(read_err_busy) == Busy
-expect small_file_error(read_err_busy) == Busy
-expect read_error(read_err_busy) == Busy
-expect screenshot_error(10) == Busy
-
-## A screenshot the worker had no room for is refused rather than encoded on
-## the host. Both of these mean the file was not written, and the
-## difference between them is whether asking again is worth anything.
-expect screenshot_error(11) == Unavailable
-
-## A resource-free texture with the dimensions the upload tests need. Its handle
-## never resolves to a host resource, which is fine: nothing here uploads.
-four_by_four : Assets.Texture
-four_by_four = { ..Assets.Texture.stub, width: 4, height: 4 }
-
-sixteen_pixels : List(Color.Rgba)
-sixteen_pixels = List.repeat(Color.white, 16)
-
-## One upload of exactly 64 bytes: sixteen pixels covering a four-by-four
-## texture, which is what `validate_commands` wants a whole-texture upload to be.
-sixty_four_byte_upload : App.Command
-sixty_four_byte_upload = Assets.update_texture(four_by_four, sixteen_pixels)
-
-## Uploads and non-upload commands can be validated together without applying
-## any prefix of the transition.
-mixed_commands : List(App.Command)
-mixed_commands = [
-	App.exit(0),
-	sixty_four_byte_upload,
-	sixty_four_byte_upload,
-	Window.set_target_fps(30),
-	sixty_four_byte_upload,
-]
-
-expect validate_commands_from(mixed_commands, 0) == Ok({})
-
-## A whole-texture upload whose pixel list does not match its texture is a
-## programmer error rather than a budget problem, and is reported as one no
-## matter how much budget is left.
-expect validate_commands_from([Assets.update_texture(four_by_four, [])], 0) == Err(PixelCountMismatch)
-
-## Validation examines the complete list before apply begins, including an
-## invalid upload after an otherwise valid command.
-expect validate_commands_from([App.exit(0), Assets.update_texture(four_by_four, [])], 0) == Err(PixelCountMismatch)
-
-## Shapes are what an app asserts `update` returned. Every one of these is
-## plain data, so `==` works on them; the equivalent `Command` values cannot be
-## compared at all, because equality would have to look inside a host resource.
-expect App.command_description(App.exit(3)) == Exit(3)
-expect App.command_description(Mouse.set_cursor(PointingHand)) == SetCursor(PointingHand)
-expect App.command_description(Mouse.set_cursor_mode(Locked)) == SetCursorMode(Locked)
-expect App.command_description(Window.set_clipboard_text("copied")) == SetClipboardText("copied")
-expect App.command_description(Keys.set_exit_key(NoExitKey)) == SetExitKey(NoExitKey)
-expect App.command_description(Window.suggest_size({ width: 640, height: 480 })) == SuggestWindowSize({ width: 640, height: 480 })
-expect App.command_description(Window.suggest_min_size({ width: 320, height: 240 })) == SuggestWindowMinSize({ width: 320, height: 240 })
-expect App.command_description(Window.set_target_fps(30)) == SetTargetFps(30)
-expect App.command_description(Audio.set_master_volume(0.25)) == SetMasterVolume(0.25)
-expect App.command_description(Mouse.set_source(Mouse.virtual_at({ x: 10, y: 20 }))) == SetMouseSource(Virtual({ x: 10, y: 20, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 }))
-expect App.command_description(Capture.stop) == StopRecording
-expect App.command_description(Capture.start(Capture.default)) == StartRecording(Capture.default)
-
-## The two halves meet here. An command built from a resource-free `stub` reduces
-## to exactly the description a loaded resource's would, because a description says what was
-## asked for and never of what -- which is what lets an app whose model holds
-## sounds and music assert on what its `update` returned.
-expect App.command_description(Audio.Sound.stub.play()) == PlaySound({ volume: 1, pitch: 1, pan: 0 })
-expect App.command_description(Audio.Sound.stub.playback().with_pitch(0.8).play()) == PlaySound({ volume: 1, pitch: 0.8, pan: 0 })
-expect App.command_description(Audio.Sound.stub.stop()) == StopSound
-expect App.command_description(Audio.Sound.stub.pause()) == PauseSound
-expect App.command_description(Audio.Music.stub.play()) == PlayMusic
-expect App.command_description(Audio.Music.stub.set_volume(0.5)) == SetMusicVolume(0.5)
-expect App.command_description(Audio.Music.stub.set_looping(Bool.True)) == SetMusicLooping(Bool.True)
-expect App.command_description(Audio.Music.stub.seek(12.5)) == SeekMusic(12.5)
-
-## A texture keeps its dimensions and loses its handle, and the pixels become
-## the one number a pure test can check them by.
-expect App.command_description(sixty_four_byte_upload) == UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 })
-expect
-	App.command_description(Assets.update_texture_region(four_by_four, { x: 1, y: 2, width: 2, height: 1, pixels: [] }))
-		== UpdateTextureRegion({ texture: { width: 4, height: 4 }, x: 1, y: 2, width: 2, height: 1, pixel_count: 0 })
-
-expect App.command_description(Assets.set_texture_filter(four_by_four, Bilinear)) == SetTextureFilter({ texture: { width: 4, height: 4 }, filter: Bilinear })
-expect App.command_description(Assets.set_texture_wrap(four_by_four, MirrorClamp)) == SetTextureWrap({ texture: { width: 4, height: 4 }, wrap: MirrorClamp })
-
-## Every `CommandDescription` variant, written as data. The variants that carry a
-## sound or a music stream in `Command` reach here with nothing left to carry,
-## which is the trade: a description says what was asked for, never of what.
-every_description : List(App.CommandDescription)
-every_description = [
-	Exit(0),
-	SetCursor(PointingHand),
-	SetCursorMode(Hidden),
-	SetClipboardText("copied"),
-	SetExitKey(NoExitKey),
-	SuggestWindowSize({ width: 640, height: 480 }),
-	SuggestWindowMinSize({ width: 320, height: 240 }),
-	SetTargetFps(30),
-	PlaySound({ volume: 1, pitch: 0.8, pan: 0 }),
-	StopSound,
-	PauseSound,
-	ResumeSound,
-	PlayMusic,
-	StopMusic,
-	PauseMusic,
-	ResumeMusic,
-	SetMusicVolume(0.5),
-	SetMusicPitch(1.25),
-	SetMusicPan(-0.25),
-	SetMusicLooping(Bool.True),
-	SeekMusic(12.5),
-	SetMasterVolume(0.8),
-	UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
-	UpdateTextureRegion({ texture: { width: 4, height: 4 }, x: 1, y: 2, width: 2, height: 1, pixel_count: 2 }),
-	SetTextureFilter({ texture: { width: 4, height: 4 }, filter: Bilinear }),
-	SetTextureWrap({ texture: { width: 4, height: 4 }, wrap: MirrorClamp }),
-	SetMouseSource(Hardware),
-	StartRecording(Capture.default),
-	StopRecording,
-]
-
-## Derived equality reaches every variant, including the ones whose `Command`
-## counterpart holds a host resource. This is the acceptance test for descriptions:
-## if this compiles and passes, an app can assert on what its `update` returned.
-expect every_description == every_description
-
-## One variant per `Command` variant, and no equality that quietly says yes.
-expect List.len(every_description) == 29
-expect (every_description == List.append(every_description, StopRecording)) == Bool.False
-
-## A whole cycle's commands, reduced and compared in one expression -- the form
-## the `CommandDescription` documentation recommends, checked here so the
-## recommendation cannot go stale.
-expect
-	List.map(mixed_commands, App.command_description)
-		== [
-			Exit(0),
-			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
-			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
-			SetTargetFps(30),
-			UpdateTexture({ texture: { width: 4, height: 4 }, pixel_count: 16 }),
-		]
-
-# --- Constructing a Input, so a pure test can call an app's real `update` ------
+# --- Constructing a Input, so a pure test can exercise an app's update logic ------
 
 ## A component's model and message, so the recipe `Input.for_tests` documents is
-## exercised here rather than only described. Nothing about this app is special:
-## it is a pure `update` of the description the platform requires.
+## exercised here rather than only described. `counter_step` is the pure core
+## an app keeps behind its effectful `update!`: it folds the messages in and
+## decides what to do, and `update!` performs the decision.
 CounterModel : { ticks : U64, quitting : Bool }
 
 CounterMessage : [Tick]
 
+CounterStep : [Quit, Continue(CounterModel)]
+
 fresh_counter : CounterModel
 fresh_counter = { ticks: 0, quitting: Bool.False }
 
-counter_update : CounterModel, App.Input(CounterMessage) -> App.Transition(CounterModel, CounterMessage)
-counter_update = |model, input| {
+counter_step : CounterModel, App.Input(CounterMessage) -> CounterStep
+counter_step = |model, input| {
 	ticked = List.fold(input.messages, model, |acc, _message| { ..acc, ticks: acc.ticks + 1 })
 	if input.devices.key_pressed(KeyEscape) {
-		App.next({ ..ticked, quitting: Bool.True }).with_command(App.exit(0))
+		Quit
 	} else {
-		App.next(ticked).with_request(Time.delay(16, |_result| Tick))
+		Continue(ticked)
 	}
 }
 
@@ -1591,21 +645,11 @@ expect
 		.messages
 		== [Tick]
 
-## Escape asks the platform to shut down, and asks for no further work.
-expect {
-	escaped = counter_update(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape)))
-	List.map(escaped.fields().commands, App.command_description) == [Exit(0)]
-		and List.is_empty(escaped.fields().requests)
-			and escaped.fields().model.quitting
-}
+## Escape decides to shut down.
+expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape))) == Quit
 
-## An ordinary input asks for one delay and no commands.
-expect {
-	idle = counter_update(fresh_counter, neutral_input)
-	List.map(idle.fields().requests, App.request_description) == [Delay({ millis: 16 })]
-		and List.is_empty(idle.fields().commands)
-}
+## An ordinary input carries on.
+expect counter_step(fresh_counter, neutral_input) == Continue(fresh_counter)
 
 ## Delivered messages are folded in, in the order the input carries them.
-expect counter_update(fresh_counter, neutral_input.with_messages([Tick, Tick, Tick])).fields().model.ticks == 3
-expect counter_update(fresh_counter, neutral_input).fields().model.ticks == 0
+expect counter_step(fresh_counter, neutral_input.with_messages([Tick, Tick, Tick])) == Continue({ ticks: 3, quitting: Bool.False })

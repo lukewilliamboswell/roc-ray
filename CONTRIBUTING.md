@@ -20,6 +20,11 @@ Install:
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 
+`scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
+come first on it. A local debug build of the compiler is not a substitute: it
+trips SpecConstr invariants on this platform's code and fails in ways that look
+like platform bugs.
+
 Build the native hosts and platform inputs:
 
 ```bash
@@ -84,7 +89,7 @@ scripts/all_tests.py --only pong,snake
 It checks formatting and types, runs Roc tests, builds the apps and exercises
 their headless paths. `--only` takes example names (repeatable, or comma
 separated) and is the way to iterate on one example without waiting for the
-other sixteen.
+rest.
 
 ### How the apps reach the platform
 
@@ -95,19 +100,16 @@ bundles the roc-ray-types package and the platform into a scratch directory,
 Three things follow:
 
 - Examples are checked and built in the shape they ship in. `roc bundle` drops a
-  relative dependency without complaining, and the app it breaks fails with
-  INVALID PACKAGE DEPENDENCY; that used to surface only in a separate bundle
-  test at the end of a run, and now surfaces in `roc check`.
+  relative dependency without complaining, and the app it breaks fails
+  `roc check` with INVALID PACKAGE DEPENDENCY.
 - Every reference to roc-ray-types resolves one freshly built artifact: the
   platform's, the four examples that name the package themselves
   (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
   halves of `test/package_interop`. Building an app against a package build
-  nobody produced is no longer expressible. `test/package_interop` is built
-  every run to keep that honest.
+  nobody produced is not expressible. `test/package_interop` is built every run
+  to keep that honest.
 - No tracked file is ever rewritten, so `git status` stays clean however a run
-  ends -- including a `kill -9` part way through a build. There is no longer an
-  incidental platform reference change to avoid committing, and no reason to
-  reach for `git checkout -- examples/` after an interrupted run.
+  ends -- including a `kill -9` part way through a build.
 
 Built executables land in the scratch directory rather than beside each
 `main.roc`; pass `--copy-executables` if you want them in place, and use
@@ -260,7 +262,14 @@ the `roc-ray-types` package at `www/<version>/types/`. Both are required.
 `roc docs` attaches a nominal's receivers to the module that *declares* it, so
 the platform's re-export modules carry the signatures while `Camera2D.with_zoom`,
 `Mouse.State.position` and the rest live only on the package's pages. Each
-re-export module links across.
+re-export module links across. Put a receiver's user-facing documentation on
+the module that declares the nominal, or it will not render anywhere.
+
+The renderer takes paragraphs, `backtick` code spans, and fenced code blocks
+opened with ```` ```roc ````. It does not take markdown headings, bullet lists,
+`**bold**`, or four-space indented code: each of those reaches the page as
+literal text. Write examples in fences and structure a long module comment with
+short paragraphs.
 
 Build and validate both locally:
 
@@ -299,15 +308,81 @@ to both. `zig build lint` enforces this and points at the first line that
 drifted; without it a missing entry only surfaces when someone links against the
 Wayland bundle.
 
-A hosted effect the host admits during the apply phase --
-`enforcePhase(name, during_apply)` in `src/host_native.zig` -- needs a
-`App.Command` that reaches it, because `update` is pure and `render!` only
-draws, so a command is the whole of what a running app can change about host
-state. Add the variant, its `run_command!` arm, and a receiver-form constructor
-on the owning type; none of that crosses the ABI. If the effect deliberately has
-no command, write down why. Either way the name goes in
-[`docs/command-coverage.md`](docs/command-coverage.md), and `zig build lint` fails
-until it does.
+Every hosted effect carries a phase set in `src/host_native.zig` --
+`enforcePhase(name, during_update)` and friends -- that says which app
+callbacks may reach it: `during_load` and `during_update` for anything that
+changes host state (`init!`, `update!`, tasks), `during_render` for drawing,
+`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`,
+`constant_time_anywhere` for a query with nothing to allocate and no I/O to do.
+A call from the wrong phase stops the app with a message naming the effect, the
+phase, and the fix, so choose the set deliberately and keep the public wrapper's
+doc comment in step with it.
+
+An effect in `during_wait` does its I/O through `waitingIo()` rather than
+`mainThreadIo()`, and wraps the call in a `WaitScope` so the phase is restored
+when it resumes. On a task that parks the coroutine and the frame loop keeps
+running; in `init!` it parks the frame loop's own task and pumps the event loop
+until the answer is in, which is the blocking behaviour startup wants.
+
+`during_frame_wait` is `during_wait` without `init!`, for a waiting effect
+whose answer is a frame that has to be drawn first. `Capture.screenshot!` is
+the one that needs it: it parks until the framebuffer has been read back at the
+end of a frame, and `init!` runs before the frame loop has drawn one, so a
+screenshot asked for there would wait for a frame that cannot arrive while it
+holds the frame thread. Reach for this set only when an effect genuinely waits
+on the frame loop's own progress; anything else that waits belongs in
+`during_wait`.
+
+An effect that reports a failure by code, rather than by tag union, shares the
+numbering with the effects it fails alongside. `Files` is the worked example:
+`NotFound`, `Unavailable` and the generic failure have the same code for a read
+and for a write, so one code never means two things across the boundary, and
+the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
+`PermissionDenied`, `NoSpace` -- are numbered past that shared table. Keep the
+Roc-side decoder and `src/host_native.zig` in step; each constant says where
+its counterpart lives.
+
+`roc test` cannot reach a new effect through `update!`: an `expect` cannot call
+an effectful function, and the phase guard would refuse the effects inside one
+anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
+half, a headless example run for the whole path -- and shape the public wrapper
+so an app can keep its decisions in pure functions (`apply_message : Model, Msg
+-> Model` and friends) that `update!` only performs. Those pure functions are
+what an app's own `expect`s exercise, using `App.Input.for_tests` and the
+resource `stub`s.
+
+### Pin `msg` with a witness
+
+**Any platform function whose signature mentions `msg` and reaches a hosted
+effect must pin `msg` with an `App.Input(msg)` parameter** (or something else
+equally concrete that the app already holds). That is why `Task.spawn!` takes
+an input it never reads:
+
+```roc
+spawn! : App.Input(msg), (() => msg) => {}
+spawn! = |input, task!| App.Input.spawn!(input, task!)
+```
+
+Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else
+`msg` is an ordinary type variable, so without a witness it generalizes: the
+call site's closure is compiled at whatever type its own body implies --
+`|| Woke` becomes `[Woke]`, a single-tag union with no discriminant -- while
+`run_task_for_host!` decodes the bytes as the app's real `Msg`. The result is a
+wrong tag, a payload read through the wrong variant's layout, or an abort in
+`roc_dealloc` when the misread variant holds a `Str` or a `List`. The witness
+unifies the two and the whole class of failure goes away.
+
+`Task.spawn_with!` takes the same witness and adds a wrapper, so a component
+can answer in its own message type while the parent lifts it:
+`Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))`. The input still
+pins `msg` -- through the wrapper's result rather than the closure's -- so the
+rule is unchanged. The wrapper is a lambda because a bare tag name is not a
+function in Roc.
+
+This is an API rule, not a workaround for a compiler defect. `test/task_delivery`
+guards it: it spawns one task per `Msg` variant and exits non-zero unless every
+message comes back with the right tag and payload. `scripts/all_tests.py` runs
+it.
 
 The Zig ABI types in `src/roc_platform_abi.zig` are generated by `roc glue`.
 After changing hosted functions in `platform/main.roc`, regenerate them with a
@@ -340,6 +415,18 @@ Host-backed resources use typed, generation-checked slots. Successful hosted
 effects must release transferred references exactly once, including failure and
 scope-unwind paths. The headless backend should continue to exercise lifecycle
 behavior without requiring GPU objects.
+
+A new `src/*.zig` module whose only caller is a hosted export needs a
+`test { _ = the_module; }` in `src/host_native.zig`. The exports are compiled
+out under `zig test`, so nothing references the module, Zig never analyses it,
+and its tests are silently absent from the run -- the suite reports the same
+number of passes it did before, with a broken assertion sitting in the file.
+`src/http_effect.zig` is the worked example.
+
+A Debug host archive carries the whole of `std.crypto` for the HTTP client's
+TLS and bundles past roc's default 100 MB transitive-dependency budget, so
+bundling one by hand needs `--max-transitive-mb=512`, which the scripts already
+pass.
 
 ## Performance work
 
@@ -383,9 +470,7 @@ Changing one element of a list in the model is an in-place write: the box the
 model arrived in is consumed, so the list is uniquely referenced at the write
 and a frame costs only the model box. `test/model_inplace` is the probe and
 `scripts/test_model_allocation.py` runs in `all_tests.py`, holding steady-state
-per-frame allocation under a 16 KiB budget. Up to `nightly-2026-08-19-edec830`
-this instead copied the whole list every frame; `--characterize` re-runs the
-assertions that described that, and is expected to fail now.
+per-frame allocation under a 16 KiB budget.
 
 ## Bundles and targets
 

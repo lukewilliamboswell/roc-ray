@@ -48,8 +48,16 @@ CASES = (
         ("package module is private", "`rr.AppHost`"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "app_transport_type.roc",
-        ("type not exposed", "The type RawResponse"),
+        ROOT / "test" / "compile_fail" / "files_host_module.roc",
+        ("package module is private", "`rr.FilesHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "http_host_module.roc",
+        ("package module is private", "`rr.HttpHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "task_host_module.roc",
+        ("package module is private", "`rr.TaskHost`"),
     ),
     (
         ROOT / "test" / "compile_fail" / "program_module_removed.roc",
@@ -64,8 +72,8 @@ CASES = (
         ("cannot use opaque nominal type", "instance of Texture.Handle"),
     ),
     (
-        ROOT / "test" / "compile_fail" / "capture_stop_effect.roc",
-        ("does not exist", "rr.Capture.stop! does not exist"),
+        ROOT / "test" / "compile_fail" / "transition_removed.roc",
+        ("does not exist", "rr.App.next does not exist"),
     ),
 )
 

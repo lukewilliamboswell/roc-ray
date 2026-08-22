@@ -628,7 +628,7 @@ const x11_clipboard_syms = [_][]const u8{
 /// Windows system libraries that raylib depends on (need import libs for cross-compilation)
 /// These are generated from MinGW DEF files (ZPL licensed) bundled with Zig
 const windows_import_libs = [_][]const u8{
-    "gdi32", "user32", "winmm", "opengl32", "shell32",
+    "gdi32", "user32", "winmm", "opengl32", "shell32", "ws2_32", "crypt32", "shlwapi",
 };
 
 /// Generate X11 stub libraries for Linux cross-compilation

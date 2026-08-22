@@ -663,8 +663,11 @@ fn immediateQuery(comptime Record: type, roc_host: *RocHost, code: i64, text: []
 pub fn open(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostOpenArgs,
-) abi.SqliteHostOpenRetRecord {
+    path_arg: abi.RocStr,
+    mode: u8,
+    busy_timeout_ms: u64,
+    max_result_bytes: u64,
+) abi.SqliteHostOpen {
     _ = rt;
     const allocator = workerAllocator();
 
@@ -676,7 +679,7 @@ pub fn open(
         };
     }
 
-    const path = dupeZ(allocator, args.arg0) orelse return .{
+    const path = dupeZ(allocator, path_arg) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("not enough memory to open this database", roc_host),
         .db = invalidHandle(),
@@ -684,7 +687,7 @@ pub fn open(
     defer allocator.free(path);
 
     var handle: ?*anyopaque = null;
-    const rc = rocray_sqlite_open(path.ptr, @intCast(args.arg1), @intCast(@min(args.arg2, std.math.maxInt(c_int))), &handle);
+    const rc = rocray_sqlite_open(path.ptr, @intCast(mode), @intCast(@min(busy_timeout_ms, std.math.maxInt(c_int))), &handle);
     if (rc != SQLITE_OK) {
         var message = abi.RocStr.empty();
         if (rocray_sqlite_errmsg(handle)) |text| {
@@ -700,7 +703,7 @@ pub fn open(
         .db = handle,
         .mutex = .{},
         .in_flight = false,
-        .max_result_bytes = args.arg3,
+        .max_result_bytes = max_result_bytes,
     }) orelse {
         _ = rocray_sqlite_close(handle);
         return .{
@@ -717,9 +720,9 @@ pub fn open(
 pub fn close(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostCloseArgs,
-) abi.SqliteHostCloseRetRecord {
-    const resource = db_heap.get(args.arg0.*) orelse return .{
+    db_arg: *u64,
+) abi.SqliteHostClose {
+    const resource = db_heap.get(db_arg.*) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
     };
@@ -751,26 +754,27 @@ pub fn close(
     if (rt) |runtime| {
         var blocking = runtime.spawnBlocking(Closer.run, .{&job}) catch {
             Closer.run(&job);
-            return toRocStatus(abi.SqliteHostCloseRetRecord, roc_host, &result);
+            return toRocStatus(abi.SqliteHostClose, roc_host, &result);
         };
         blocking.join();
     } else {
         Closer.run(&job);
     }
 
-    return toRocStatus(abi.SqliteHostCloseRetRecord, roc_host, &result);
+    return toRocStatus(abi.SqliteHostClose, roc_host, &result);
 }
 
 /// `Sqlite.prepare!`: compile one statement for reuse.
 pub fn prepare(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostPrepareArgs,
-) abi.SqliteHostPrepareRetRecord {
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+) abi.SqliteHostPrepare {
     _ = rt;
     const allocator = workerAllocator();
 
-    const resource = db_heap.get(args.arg0.*) orelse return .{
+    const resource = db_heap.get(db_arg.*) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
         .stmt = invalidHandle(),
@@ -781,7 +785,7 @@ pub fn prepare(
         .stmt = invalidHandle(),
     };
 
-    const sql = dupeZ(allocator, args.arg1) orelse return .{
+    const sql = dupeZ(allocator, sql_arg) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("not enough memory to prepare this statement", roc_host),
         .stmt = invalidHandle(),
@@ -814,7 +818,7 @@ pub fn prepare(
         };
     }
 
-    const stored = stmt_heap.insert(0, .{ .stmt = compiled, .db_token = args.arg0.* }) orelse {
+    const stored = stmt_heap.insert(0, .{ .stmt = compiled, .db_token = db_arg.* }) orelse {
         if (compiled) |rejected| _ = rocray_sqlite_finalize(rejected);
         return .{
             .err = ERR_TOO_MANY_STATEMENTS,
@@ -830,19 +834,20 @@ pub fn prepare(
 pub fn runStmt(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostRun_stmtArgs,
-) abi.SqliteHostRun_stmtRetRecord {
-    const Record = abi.SqliteHostRun_stmtRetRecord;
+    stmt_arg: *u64,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) abi.SqliteHostRun_stmt {
+    const Record = abi.SqliteHostRun_stmt;
     const allocator = workerAllocator();
 
-    const stmt_resource = stmt_heap.get(args.arg0.*) orelse
+    const stmt_resource = stmt_heap.get(stmt_arg.*) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "statement handle is closed");
     const stmt = stmt_resource.stmt orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "statement handle is closed");
     const resource = db_heap.get(stmt_resource.db_token) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "database handle is closed");
 
-    const bindings = copyBindings(allocator, args.arg1) orelse
+    const bindings = copyBindings(allocator, bindings_arg) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "not enough memory to bind this statement");
     defer {
         freeBindings(allocator, bindings);
@@ -867,19 +872,21 @@ pub fn runStmt(
 pub fn runOnce(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostRun_onceArgs,
-) abi.SqliteHostRun_onceRetRecord {
-    const Record = abi.SqliteHostRun_onceRetRecord;
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) abi.SqliteHostRun_once {
+    const Record = abi.SqliteHostRun_once;
     const allocator = workerAllocator();
 
-    const resource = db_heap.get(args.arg0.*) orelse
+    const resource = db_heap.get(db_arg.*) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "database handle is closed");
 
-    const sql = dupeZ(allocator, args.arg1) orelse
+    const sql = dupeZ(allocator, sql_arg) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "not enough memory to run this query");
     defer allocator.free(sql);
 
-    const bindings = copyBindings(allocator, args.arg2) orelse
+    const bindings = copyBindings(allocator, bindings_arg) orelse
         return immediateQuery(Record, roc_host, @intCast(SQLITE_MISUSE), "not enough memory to bind this query");
     defer {
         freeBindings(allocator, bindings);
@@ -904,17 +911,18 @@ pub fn runOnce(
 pub fn execScript(
     roc_host: *RocHost,
     rt: ?*zio.Runtime,
-    args: abi.SqliteHostExec_scriptArgs,
-) abi.SqliteHostExec_scriptRetRecord {
-    const Record = abi.SqliteHostExec_scriptRetRecord;
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+) abi.SqliteHostExec_script {
+    const Record = abi.SqliteHostExec_script;
     const allocator = workerAllocator();
 
-    const resource = db_heap.get(args.arg0.*) orelse return .{
+    const resource = db_heap.get(db_arg.*) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("database handle is closed", roc_host),
     };
 
-    const sql = dupeZ(allocator, args.arg1) orelse return .{
+    const sql = dupeZ(allocator, sql_arg) orelse return .{
         .err = @intCast(SQLITE_MISUSE),
         .message = abi.RocStr.fromSlice("not enough memory to run this script", roc_host),
     };

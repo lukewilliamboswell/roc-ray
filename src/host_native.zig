@@ -878,77 +878,96 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
 /// parks in `join()`, so the frame loop keeps running. The phase handling
 /// mirrors `hostedHttpSend` -- the frame loop enters phases of its own while
 /// this is parked, so the task must see its own phase again when the answer
-/// arrives. Roc's own arguments are decref'd by the effect; everything the
-/// worker reads was copied out of them first.
-fn hostedSqliteOpen(args: abi.SqliteHostOpenArgs) callconv(.c) abi.SqliteHostOpenRetRecord {
+/// arrives. Roc's own arguments are decref'd here; everything a worker reads
+/// was copied out of them first.
+fn hostedSqliteOpen(
+    path_arg: abi.RocStr,
+    mode: u8,
+    busy_timeout_ms: u64,
+    max_result_bytes: u64,
+) callconv(.c) abi.SqliteHostOpen {
     enforcePhase("Sqlite.Db.open!", during_wait);
     const roc_host = activeHost();
-    defer args.arg0.decref(roc_host);
+    defer path_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.open", 0);
     defer AppTasks.traceResume("sqlite.open");
-    return sqlite_effect.open(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.open(
+        roc_host,
+        AppTasks.currentRuntime(),
+        path_arg,
+        mode,
+        busy_timeout_ms,
+        max_result_bytes,
+    );
 }
 
-fn hostedSqliteClose(args: abi.SqliteHostCloseArgs) callconv(.c) abi.SqliteHostCloseRetRecord {
+fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.SqliteHostClose {
     enforcePhase("Sqlite.Db.close!", during_wait);
     const roc_host = activeHost();
-    defer releaseResourceBox(roc_host, args.arg0);
+    defer releaseResourceBox(roc_host, db_arg);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.close", 0);
     defer AppTasks.traceResume("sqlite.close");
-    return sqlite_effect.close(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
 }
 
-fn hostedSqlitePrepare(args: abi.SqliteHostPrepareArgs) callconv(.c) abi.SqliteHostPrepareRetRecord {
+fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostPrepare {
     enforcePhase("Sqlite.prepare!", during_wait);
     const roc_host = activeHost();
-    defer releaseResourceBox(roc_host, args.arg0);
-    defer args.arg1.decref(roc_host);
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.prepare", 0);
     defer AppTasks.traceResume("sqlite.prepare");
-    return sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
 }
 
-fn hostedSqliteRunStmt(args: abi.SqliteHostRun_stmtArgs) callconv(.c) abi.SqliteHostRun_stmtRetRecord {
+fn hostedSqliteRunStmt(
+    stmt_arg: *u64,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_stmt {
     enforcePhase("Sqlite.Stmt.query!", during_wait);
     const roc_host = activeHost();
-    defer releaseResourceBox(roc_host, args.arg0);
-    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(args.arg1, roc_host);
+    defer releaseResourceBox(roc_host, stmt_arg);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.run", 0);
     defer AppTasks.traceResume("sqlite.run");
-    return sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
 }
 
-fn hostedSqliteRunOnce(args: abi.SqliteHostRun_onceArgs) callconv(.c) abi.SqliteHostRun_onceRetRecord {
+fn hostedSqliteRunOnce(
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_once {
     enforcePhase("Sqlite.query!", during_wait);
     const roc_host = activeHost();
-    defer releaseResourceBox(roc_host, args.arg0);
-    defer args.arg1.decref(roc_host);
-    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(args.arg2, roc_host);
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.run", 0);
     defer AppTasks.traceResume("sqlite.run");
-    return sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
 }
 
-fn hostedSqliteExecScript(args: abi.SqliteHostExec_scriptArgs) callconv(.c) abi.SqliteHostExec_scriptRetRecord {
+fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostExec_script {
     enforcePhase("Sqlite.exec_script!", during_wait);
     const roc_host = activeHost();
-    defer releaseResourceBox(roc_host, args.arg0);
-    defer args.arg1.decref(roc_host);
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
     const scope = WaitScope.enter();
     defer scope.leave();
     AppTasks.tracePark("sqlite.script", 0);
     defer AppTasks.traceResume("sqlite.script");
-    return sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), args);
+    return sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
 }
 
 var active_phase: Phase = .idle;

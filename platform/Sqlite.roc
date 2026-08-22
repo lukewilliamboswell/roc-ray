@@ -216,6 +216,13 @@ Sqlite := [].{
 
 		## Open or create a database under `default_config`.
 		##
+		## The parent directory must already exist. Unlike `Files.write_text!`,
+		## which builds the tree on its way, opening a database does not create
+		## one: a database file is normally placed beside an application rather
+		## than into a directory the application is inventing, and a mistyped
+		## path should be `SqliteErr(CanNotOpen, _)` rather than a new empty
+		## tree. Create it with a write if the app owns that decision.
+		##
 		## Legal in `init!`, where it blocks startup, and in tasks, where it
 		## parks the task; refused in `update!` and `render!`.
 		open! : Str => Try(Db, OpenErr)
@@ -283,6 +290,10 @@ Sqlite := [].{
 	## crossed the boundary at once, so reading a column is a lookup rather
 	## than an effect. Decode with the receivers below.
 	Row := { names : List(Str), values : List(Value) }.{
+
+		## Two rows are equal when their names and values are. Worth having so
+		## a decoded result can be compared to an expected one in a test.
+		is_eq : _
 
 		## This row's column names, in the order the query selected them.
 		names : Row -> List(Str)

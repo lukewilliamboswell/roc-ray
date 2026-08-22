@@ -18,6 +18,14 @@ const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
 
+// `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
+// exports are compiled out under `zig test` (see the `!builtin.is_test` gate
+// below), so nothing would reference the module and its own tests would never
+// be collected. Reference it here instead.
+test {
+    _ = http_effect;
+}
+
 // Import backend
 const raylib = @import("backend_raylib.zig");
 

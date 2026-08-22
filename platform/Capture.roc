@@ -82,16 +82,18 @@ Capture := [].{
 	## the frame thread. This call waits for that write, so it parks the task
 	## until the file exists and answers with the write's own outcome.
 	##
-	## Legal **only** in a task, where it parks the task; refused in `init!`,
+	## Legal only in a task, where it parks the task; refused in `init!`,
 	## `update!`, and `render!`. Every other waiting effect also works in
 	## `init!`, where it blocks; a screenshot cannot, because what it waits for
 	## is the end of a frame and `init!` runs before the frame loop has drawn
 	## one. Spawn a task from `update!` instead -- on the first cycle if the
 	## shot is meant to be of the first frame:
 	##
-	##     if input.time.cycle_count == 0 {
-	##         Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
-	##     }
+	## ```roc
+	## if input.time.cycle_count == 0 {
+	##     Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
+	## }
+	## ```
 	##
 	## A headless run has no framebuffer at all and answers `Ok({})` without
 	## writing, so a screenshotting app still runs under `--host-headless`.

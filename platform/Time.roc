@@ -29,7 +29,9 @@ Time := [].{
 
 	## Convert a nanosecond duration to seconds.
 	##
+	## ```roc
 	## expect Time.to_seconds(500_000_000) == 0.5
+	## ```
 	to_seconds : U64 -> F32
 	to_seconds = RrtTime.to_seconds
 
@@ -39,7 +41,9 @@ Time := [].{
 	## Handy for deriving a delta over more than one cycle from
 	## `Time.Cycle.simulation_nanos`:
 	##
-	##     dt = Time.delta_seconds(model.last_tick, input.time.simulation_nanos)
+	## ```roc
+	## dt = Time.delta_seconds(model.last_tick, input.time.simulation_nanos)
+	## ```
 	delta_seconds : U64, U64 -> F32
 	delta_seconds = RrtTime.delta_seconds
 }

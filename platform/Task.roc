@@ -6,18 +6,20 @@
 ## wait -- `Task.sleep!`, `Files.read_text!`, `Http.send!` -- park the task
 ## rather than the frame.
 ##
-##     update! = |model, input| {
-##         if input.devices.key_pressed(KeyEnter) {
-##             Task.spawn!(
-##                 input,
-##                 || {
-##                     Task.sleep!(300)
-##                     Woke
-##                 },
-##             )
-##         }
-##         Ok(model)
+## ```roc
+## update! = |model, input| {
+##     if input.devices.key_pressed(KeyEnter) {
+##         Task.spawn!(
+##             input,
+##             || {
+##                 Task.sleep!(300)
+##                 Woke
+##             },
+##         )
 ##     }
+##     Ok(model)
+## }
+## ```
 ##
 ## Because a task is straight-line code, a multi-step operation is an ordinary
 ## function -- load, then parse, then fetch, with `?` propagating failures --
@@ -68,12 +70,14 @@ Task := [].{
 	## splits that in two: the closure answers in the component's own message
 	## type, and the parent supplies the constructor that lifts it.
 	##
-	##     # Counter.roc -- knows nothing about the app's Msg
-	##     Msg : [Loaded(U64), LoadFailed]
-	##     load! : () => Msg
+	## ```roc
+	## # Counter.roc -- knows nothing about the app's Msg
+	## Msg : [Loaded(U64), LoadFailed]
+	## load! : () => Msg
 	##
-	##     # the app -- Msg : [CounterMsg(Counter.Msg), ...]
-	##     Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
+	## # the app -- Msg : [CounterMsg(Counter.Msg), ...]
+	## Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))
+	## ```
 	##
 	## A bare tag name is not a function, so the wrapper is written as the
 	## lambda `|m| CounterMsg(m)` rather than as `CounterMsg`.

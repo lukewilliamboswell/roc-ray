@@ -3,7 +3,9 @@
 ##
 ## An app provides three callbacks:
 ##
-##     program = { init!, update!, render! }
+## ```roc
+## program = { init!, update!, render! }
+## ```
 ##
 ## `init!` runs once, after the window, renderer, and audio device are ready.
 ## It reads startup configuration, loads the resources the app will hold, and
@@ -16,33 +18,27 @@
 ## `render!` receives that model and a `Draw.Frame`, and draws. It cannot
 ## change the model or reach host work of any other kind.
 ##
-## ## Where an effect may be called
-##
-## The host knows which callback it is inside, and every effect documents the
-## phases it is legal in. Three rules cover nearly all of them:
-##
-## - An effect that **changes host state** -- the cursor, the window, audio, a
-##   recording, a loaded resource -- is legal in `init!`, `update!`, and tasks,
-##   and refused in `render!`.
-## - An effect that **draws** is legal only in `render!`, inside the frame
-##   scope the host opens around it.
-## - An effect that **waits** -- `Files.read_text!`, `Http.send!`,
-##   `Task.sleep!` -- is legal in `init!`, where it blocks startup, and in
-##   tasks, where it parks the task while the frame loop keeps drawing. It is
-##   refused in `update!` and `render!`.
+## Where an effect may be called: the host knows which callback it is inside,
+## and every effect documents the phases it is legal in. Three rules cover
+## nearly all of them. An effect that changes host state -- the cursor, the
+## window, audio, a recording, a loaded resource -- is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`. An effect that draws is
+## legal only in `render!`, inside the frame scope the host opens around it.
+## An effect that waits -- `Files.read_text!`, `Http.send!`, `Task.sleep!` --
+## is legal in `init!`, where it blocks startup, and in tasks, where it parks
+## the task while the frame loop keeps drawing, and is refused in `update!`
+## and `render!`.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
 ## a runtime outcome: it stops the app at once with a message naming the
 ## effect, the phase it was called from, and where it belongs.
 ##
-## ## How messages arrive
-##
-## Work that waits belongs on a task. `Task.spawn!(input, || ...)`, from
-## `update!` or from another task, hands the host an effectful closure to run
-## on its own stack. When the closure returns, its value is delivered as a
-## message on `input.messages` in a later cycle, in the order the tasks
-## finished. A task cannot read or write the model, so its message is the only
-## thing it can say. See `Task`.
+## How messages arrive: work that waits belongs on a task.
+## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
+## host an effectful closure to run on its own stack. When the closure returns,
+## its value is delivered as a message on `input.messages` in a later cycle, in
+## the order the tasks finished. A task cannot read or write the model, so its
+## message is the only thing it can say. See `Task`.
 import HostHost
 import Keys
 import Mouse
@@ -462,9 +458,11 @@ App := [].{
 		## `with_*` receivers, which is what makes a test say only the one thing
 		## it is about:
 		##
-		##     expect
-		##         input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
-		##         decide(model, input) == Quit
+		## ```roc
+		## expect
+		##     input = App.Input.for_tests({}).with_devices(Devices.none.with_key_pressed(KeyEscape))
+		##     decide(model, input) == Quit
+		## ```
 		##
 		## Building the model this is called with is the other half: every host
 		## resource an app can hold has a resource-free `stub`

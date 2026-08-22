@@ -6,38 +6,38 @@
 ## [basic-cli](https://github.com/roc-lang/basic-cli/blob/main/platform/Http.roc).
 ## This module adds the effects and the small JSON and UTF-8 conveniences.
 ##
-## ## Declaring the package
-##
 ## An app that names `Request` or `Response` declares the `http` package in its
 ## own header, beside the platform:
 ##
-##     app [Model, program] {
-##         rr: platform "https://.../roc-ray/platform.tar.zst",
-##         http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
-##     }
+## ```roc
+## app [Model, program] {
+##     rr: platform "https://.../roc-ray/platform.tar.zst",
+##     http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
+## }
 ##
-##     import rr.Http
-##     import http.Request
+## import rr.Http
+## import http.Request
+## ```
 ##
 ## `Http.get!` and `Http.get_utf8!` take a URL and hand back decoded data, so
 ## an app that uses only those needs no package dependency of its own.
 ##
-## ## Sending
-##
 ## `Http.send!` waits, so it belongs inside `Task.spawn!`:
 ##
-##     update! = |model, input| {
-##         if input.devices.key_pressed(KeyR) {
-##             Task.spawn!(
-##                 input,
-##                 || match Http.get_utf8!("http://127.0.0.1:8000/data.json") {
-##                     Ok(body) => Loaded(body)
-##                     Err(err) => Failed(Inspect.to_str(err))
-##                 },
-##             )
-##         }
-##         Ok(model)
+## ```roc
+## update! = |model, input| {
+##     if input.devices.key_pressed(KeyR) {
+##         Task.spawn!(
+##             input,
+##             || match Http.get_utf8!("http://127.0.0.1:8000/data.json") {
+##                 Ok(body) => Loaded(body)
+##                 Err(err) => Failed(Inspect.to_str(err))
+##             },
+##         )
 ##     }
+##     Ok(model)
+## }
+## ```
 ##
 ## The task parks on the host's socket while the frame loop keeps drawing, and
 ## the closure's return value arrives on a later `Input.messages`. `send!` is
@@ -46,8 +46,6 @@
 ##
 ## Up to three redirects are followed, and the `Response` is the one at the end
 ## of that chain.
-##
-## ## Limits
 ##
 ## Every send carries a deadline and a hard cap on the response body, taken
 ## from `Http.default_config`: thirty seconds, and eight megabytes. Pass a
@@ -62,14 +60,10 @@
 ## bounds is how much of this process's memory a remote server can choose to
 ## use.
 ##
-## ## What is and is not an error
-##
 ## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
 ## carrying that status; only a failure to complete the exchange is `HttpErr`.
 ##
-## ## TLS
-##
-## `https` URLs are served by Zig's `std.crypto.tls` against the operating
+## TLS: `https` URLs are served by Zig's `std.crypto.tls` against the operating
 ## system's certificate store -- on Linux the usual `/etc/ssl` bundle. Nothing
 ## here configures a custom certificate authority or turns verification off. A
 ## store that cannot be loaded fails the send with `HttpErr(Other(...))` saying

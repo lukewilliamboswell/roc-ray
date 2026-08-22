@@ -6,22 +6,26 @@
 ## are refused in `update!` and `render!`, with a message naming the effect and
 ## the fix.
 ##
-##     update! = |model, input| {
-##         if input.devices.key_pressed(KeyEnter) {
-##             Task.spawn!(input, || SaveLoaded(Files.read_text!("save.json")))
-##         }
-##         Ok(model)
+## ```roc
+## update! = |model, input| {
+##     if input.devices.key_pressed(KeyEnter) {
+##         Task.spawn!(input, || SaveLoaded(Files.read_text!("save.json")))
 ##     }
+##     Ok(model)
+## }
+## ```
 ##
 ## Because a task is ordinary straight-line code, a multi-step load is a
 ## function rather than a state machine spread over `Msg` and `update!`:
 ##
-##     load_level! : Str => Msg
-##     load_level! = |dir| {
-##         manifest = Files.read_text!("${dir}/level.json") ? |_e| LevelFailed
-##         tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
-##         LevelLoaded({ manifest, tiles })
-##     }
+## ```roc
+## load_level! : Str => Msg
+## load_level! = |dir| {
+##     manifest = Files.read_text!("${dir}/level.json") ? |_e| LevelFailed
+##     tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
+##     LevelLoaded({ manifest, tiles })
+## }
+## ```
 ##
 ## Paths are used as the app gives them, resolved against the process working
 ## directory, and nothing here is sandboxed. `Capture` is the one part of this
@@ -118,8 +122,6 @@ Files := [].{
 	## `write_text!("saves/slot1.json", ...)` does not need a separate step to
 	## make `saves/`.
 	##
-	## ## Paths
-	##
 	## The path is used as the app gave it, resolved against the process
 	## working directory, exactly as `read_text!` resolves one. `Files` is not
 	## sandboxed in either direction: an app that can read `/etc/hosts` can
@@ -130,18 +132,20 @@ Files := [].{
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	##
-	##     update! = |model, input| {
-	##         if input.devices.key_pressed(KeyS) {
-	##             Task.spawn!(
-	##                 input,
-	##                 || match Files.write_text!("saves/slot1.json", encode(model)) {
-	##                     Ok({}) => Saved
-	##                     Err(err) => SaveFailed(err)
-	##                 },
-	##             )
-	##         }
-	##         Ok(model)
+	## ```roc
+	## update! = |model, input| {
+	##     if input.devices.key_pressed(KeyS) {
+	##         Task.spawn!(
+	##             input,
+	##             || match Files.write_text!("saves/slot1.json", encode(model)) {
+	##                 Ok({}) => Saved
+	##                 Err(err) => SaveFailed(err)
+	##             },
+	##         )
 	##     }
+	##     Ok(model)
+	## }
+	## ```
 	write_text! : Str, Str => Try({}, WriteError)
 	write_text! = |path, contents| write_result(FilesHost.write_text!(path, contents))
 

@@ -6625,7 +6625,6 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
     return roc_host;
 }
 
-
 test "completing a large read transfers the read's allocation without copying" {
     // The claim under test, stated as a measurement: finishing a read costs the
     // frame thread nothing proportional to the file. The result has only the
@@ -7516,9 +7515,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         // A headless run has no frame pacing and no real clock, but task
         // timers are real time. While a task is live, pace the cycle to the
         // simulated 60 Hz so "18 cycles later" means what it means windowed.
-        // ROC_RAY_SPIKE_YIELD_ONLY: pump with a bare yield even while a task
-        // is live, to measure whether zio.yield alone polls timers.
-        app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0 and hostGetEnv("ROC_RAY_SPIKE_YIELD_ONLY") == null) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
+        app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
         stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);

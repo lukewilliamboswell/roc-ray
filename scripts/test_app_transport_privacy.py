@@ -52,6 +52,30 @@ CASES = (
         ("package module is private", "`rr.FilesHost`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "capture_host_module.roc",
+        ("package module is private", "`rr.CaptureHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "draw_host_module.roc",
+        ("package module is private", "`rr.DrawHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "assets_host_module.roc",
+        ("package module is private", "`rr.AssetsHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "audio_host_module.roc",
+        ("package module is private", "`rr.AudioHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "mouse_host_module.roc",
+        ("package module is private", "`rr.MouseHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "tilemap_host_module.roc",
+        ("package module is private", "`rr.TilemapHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "http_host_module.roc",
         ("package module is private", "`rr.HttpHost`"),
     ),

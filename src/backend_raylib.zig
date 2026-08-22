@@ -1787,6 +1787,40 @@ pub fn captureFramebuffer() ?CaptureImage {
     return .{ .image = image };
 }
 
+/// Read an offscreen render target into a CPU image, upright and with alpha.
+///
+/// `LoadImageFromTexture` reads the colour attachment through `glGetTexImage`,
+/// which keeps the alpha the app drew. `rlReadScreenPixels` -- what
+/// `captureFramebuffer` and the downscaler use -- forces alpha opaque, which is
+/// right for a window's frame and wrong for an offscreen composition that may
+/// be exported with transparency.
+///
+/// A render target stores its rows bottom-up: the same inversion
+/// `drawDownscaleLevel` compensates for with a negative source height. Flipped
+/// here rather than left to the caller, so every consumer sees the row order
+/// the rest of the capture path already assumes.
+///
+/// The pending batch is flushed first for the reason `captureFramebuffer`
+/// gives: raylib may still be holding the draws that filled the target.
+pub fn readRenderTexture(target: RenderTexture) ?CaptureImage {
+    flushRenderBatch();
+    var image = rl.LoadImageFromTexture(target.texture);
+    if (!rl.IsImageValid(image)) return null;
+    // `LoadRenderTexture` always allocates an RGBA8 attachment, so this
+    // converts nothing today. It is here because `CaptureImage.pixels` computes
+    // its length as four bytes per pixel, and a future attachment format would
+    // otherwise be read as a buffer overrun rather than as a conversion.
+    if (image.format != rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+        rl.ImageFormat(&image, rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        if (image.format != rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+            rl.UnloadImage(image);
+            return null;
+        }
+    }
+    rl.ImageFlipVertical(&image);
+    return .{ .image = image };
+}
+
 /// Draw a pointer glyph at a position, for compositing into a recording.
 ///
 /// The operating system cursor is not part of the framebuffer, so a capture

@@ -17,10 +17,10 @@ import http.Response
 ##
 ## The whole request is one ordinary-looking line inside `Task.spawn!`:
 ##
-##     Task.spawn!(input, || fetch!(url))
+##     Task.spawn!(input, || fetch!(id, url))
 ##
-## `Http.get_utf8!` inside that closure looks synchronous and is: it returns
-## the body, or an error, and nothing else happens in that task until it does.
+## `Http.send!` inside that closure looks synchronous and is: it returns the
+## response, or an error, and nothing else happens in that task until it does.
 ## What it does *not* do is stall the frame. The host runs the closure on its
 ## own coroutine and parks it on the socket, so the ring keeps spinning and the
 ## elapsed counter keeps climbing for however long the server takes. That is
@@ -33,7 +33,16 @@ import http.Response
 Model : {
 	url : Str,
 	state : State,
-	cycle : U64,
+
+	## Which fetch the panel is showing.
+	##
+	## R can start a second fetch while the first is still in flight, and
+	## independent tasks finish in whatever order they finish in -- the newer
+	## one may well answer first. So each reply carries the id of the fetch it
+	## belongs to, and a straggler from an abandoned one is dropped rather than
+	## overwriting a fresher answer. An app whose work cannot overlap needs none
+	## of this: the `Msg` variant is identity enough.
+	fetch : U64,
 	elapsed : F32,
 	started_waiting : F32,
 	title : Text.Prepared,
@@ -47,7 +56,7 @@ State : [
 	Failed(Str),
 ]
 
-Msg : [Arrived(U16, Str), Broke(Str)]
+Msg : [Arrived(U64, U16, Str), Broke(U64, Str)]
 
 default_url : Str
 default_url = "https://www.roc-lang.org/"
@@ -73,7 +82,7 @@ init! = App.init_for_args(
 		Ok({
 			url,
 			state: Waiting,
-			cycle: 0,
+			fetch: 0,
 			elapsed: 0,
 			started_waiting: 0,
 			title: Text.from("Fetching while the frame keeps moving", font).size(24).prepare!()?,
@@ -106,14 +115,20 @@ chosen_url = |args, from_env| {
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
 	elapsed = model.elapsed + input.time.elapsed_seconds
-	state = List.fold(input.messages, model.state, |current, message| apply(current, message, elapsed - model.started_waiting))
 
 	# Cycle 0 starts the first fetch; R starts another one. Both are the same
 	# call, and both return immediately -- the task runs after `update!` does.
-	refetch = model.cycle == 0 or input.devices.key_pressed(KeyR)
+	refetch = input.time.cycle_count == 0 or input.devices.key_pressed(KeyR)
+	fetch = if refetch model.fetch + 1 else model.fetch
+
+	# Folded against the id being waited for, so whatever an abandoned fetch
+	# delivers on this cycle goes the same way the fetch itself did.
+	state = List.fold(input.messages, model.state, |current, message| apply(current, message, fetch, elapsed - model.started_waiting))
+
 	if refetch {
 		url = model.url
-		Task.spawn!(input, || fetch!(url))
+		id = fetch
+		Task.spawn!(input, || fetch!(id, url))
 	}
 
 	if input.devices.key_pressed(KeyEscape) {
@@ -121,7 +136,7 @@ update! = |model, input| {
 	} else {
 		Ok({
 			..model,
-			cycle: model.cycle + 1,
+			fetch,
 			elapsed,
 			state: if refetch Waiting else state,
 			started_waiting: if refetch elapsed else model.started_waiting,
@@ -136,33 +151,35 @@ update! = |model, input| {
 ## string: `get_utf8!` takes an already-validated `Url`, which is what a quoted
 ## literal in the source becomes. `send!` does the parsing itself and reports
 ## `InvalidUrl` when the string is not one.
-fetch! : Str => Msg
-fetch! = |url|
+fetch! : U64, Str => Msg
+fetch! = |id, url|
 	match Http.send!(Request.from_method(GET).with_uri(url)) {
 		Ok(response) =>
 			match Str.from_utf8(Response.body(response)) {
-				Ok(body) => Arrived(Response.status(response), body)
-				Err(_) => Broke("the response body was not valid UTF-8")
+				Ok(body) => Arrived(id, Response.status(response), body)
+				Err(_) => Broke(id, "the response body was not valid UTF-8")
 			}
-		Err(InvalidUrl(_)) => Broke("that is not a URL this platform will fetch")
-		Err(HttpErr(Timeout)) => Broke("the request timed out")
-		Err(HttpErr(NetworkError)) => Broke("the request failed at the network layer")
-		Err(HttpErr(BadBody)) => Broke("the reply was not a well-formed HTTP response")
-		Err(HttpErr(Other(bytes))) => Broke(Str.from_utf8(bytes) ?? "the request failed")
+		Err(InvalidUrl(_)) => Broke(id, "that is not a URL this platform will fetch")
+		Err(HttpErr(Timeout)) => Broke(id, "the request timed out")
+		Err(HttpErr(NetworkError)) => Broke(id, "the request failed at the network layer")
+		Err(HttpErr(BadBody)) => Broke(id, "the reply was not a well-formed HTTP response")
+		Err(HttpErr(Other(bytes))) => Broke(id, Str.from_utf8(bytes) ?? "the request failed")
 	}
 
-## Fold one delivered message into the panel's state.
-apply : State, Msg, F32 -> State
-apply = |_state, message, waited|
+## Fold one delivered message into the panel's state, if it belongs to the fetch
+## being waited for. A reply from an abandoned one leaves the state alone.
+apply : State, Msg, U64, F32 -> State
+apply = |state, message, current, waited|
 	match message {
-		Arrived(status, body) =>
+		Arrived(id, status, body) if id == current =>
 			Loaded({
 				status,
 				lines: List.map(List.take_first(Str.split_on(body, "\n"), preview_lines), clip),
 				bytes: List.len(Str.to_utf8(body)),
 				waited_ms: F32.floor_to_u64_try(waited * 1000) ?? 0,
 			})
-		Broke(reason) => Failed(reason)
+		Broke(id, reason) if id == current => Failed(reason)
+		_ => state
 	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -246,11 +263,16 @@ clip = |line|
 		Str.from_utf8(List.take_first(Str.to_utf8(line), preview_columns)) ?? line
 	}
 
-expect match apply(Waiting, Arrived(200, "one\ntwo\nthree"), 0.5) {
+expect match apply(Waiting, Arrived(1, 200, "one\ntwo\nthree"), 1, 0.5) {
 	Loaded({ status, lines, bytes, waited_ms }) =>
 		status == 200 and lines == ["one", "two", "three"] and bytes == 13 and waited_ms == 500
 	_ => Bool.False
 }
+
+## A reply from a fetch that R has already superseded is dropped, whether it
+## arrives before or after the one being waited for.
+expect apply(Waiting, Arrived(1, 200, "stale"), 2, 0.5) == Waiting
+expect apply(Failed("first"), Broke(1, "second"), 2, 0.5) == Failed("first")
 
 expect clip("short") == "short"
 expect List.len(Str.to_utf8(clip(Str.repeat("x", 200)))) == preview_columns

@@ -98,6 +98,8 @@ platform ""
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
 		"roc_capture_screenshot": CaptureHost.screenshot!,
 		"roc_capture_screenshot_texture": CaptureHost.screenshot_texture!,
+		"roc_capture_pixel_at": CaptureHost.pixel_at!,
+		"roc_capture_read_region": CaptureHost.read_region!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
 		"roc_host_entropy": HostHost.entropy!,

@@ -16,6 +16,7 @@ const host_resource = @import("host_resource.zig");
 const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
+const http_effect = @import("http_effect.zig");
 
 // Import backend
 const raylib = @import("backend_raylib.zig");
@@ -1119,7 +1120,6 @@ const PhaseSet = std.EnumSet(Phase);
 /// one-off setup work with the window already open.
 const during_startup = PhaseSet.initOne(.startup);
 
-
 /// Drawing, and anything that changes how the draws after it are interpreted.
 /// Only defined inside the frame scope the host opens around `render!`.
 const during_render = PhaseSet.initOne(.render);
@@ -1479,6 +1479,20 @@ fn readByteListWaiting(roc_host: *RocHost, path: []const u8, kind: ByteListWait)
         return .{ .err = READ_ERR_BUSY, .bytes = empty };
     };
     return .{ .err = 0, .bytes = seamlessByteList(resource, bytes) };
+}
+
+/// `Http.send!`: run one HTTP exchange, parking the task while it waits.
+///
+/// The phase handling mirrors `hostedTaskSleep`: the request parks this
+/// coroutine, the frame loop runs in between and sets phases of its own, and
+/// the task must see `.task` again when the response arrives.
+fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Response {
+    enforcePhase("Http.send!", during_wait);
+    const roc_host = activeHost();
+    const resume_phase = active_phase;
+    active_phase = .idle;
+    defer active_phase = resume_phase;
+    return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
 }
 
 var active_phase: Phase = .idle;
@@ -6262,6 +6276,7 @@ comptime {
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
+        @export(&hostedHttpSend, .{ .name = "roc_http_send" });
     }
 }
 
@@ -9445,6 +9460,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     };
     defer app_tasks.deinit();
     app_tasks.activate();
+    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // the same handle the task registry holds. Withdrawn before the registry
+    // tears the runtime down, so a late send reports a stopped app instead of
+    // reaching a dead event loop.
+    if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
+    defer http_effect.deactivate();
 
     const init_result = initModel();
     if (init_result.isErr()) {
@@ -9586,6 +9607,12 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     };
     defer app_tasks.deinit();
     app_tasks.activate();
+    // `Http.send!` drives std.http.Client over the same runtime, so it needs
+    // the same handle the task registry holds. Withdrawn before the registry
+    // tears the runtime down, so a late send reports a stopped app instead of
+    // reaching a dead event loop.
+    if (app_tasks.rt) |rt| http_effect.activate(rt, hostGetEnv(TRACE_TASKS_ENV) != null);
+    defer http_effect.deactivate();
 
     const init_result = initModel();
     if (init_result.isErr()) {

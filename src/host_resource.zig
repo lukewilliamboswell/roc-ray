@@ -20,6 +20,35 @@ const debug_refcount_poison: isize = if (@sizeOf(usize) == 8)
 else
     @bitCast(@as(usize, 0xdead_beef));
 
+/// Every typed host resource, and the byte its lifecycle tokens carry.
+///
+/// This enum is the sole authority for those numbers: a heap declares itself
+/// with a member rather than an integer, so two resources cannot silently pick
+/// the same one. Tokens are never persisted, so the values only have to stay
+/// stable within a build -- but they are pinned anyway, because a token that
+/// changes meaning between two branches is exactly the collision this prevents.
+pub const Kind = enum(u8) {
+    sound = 1,
+    music,
+    font,
+    texture,
+    render_texture,
+    shader,
+    prepared_text,
+    file_bytes,
+    store,
+    udp_socket,
+    sqlite_db,
+    sqlite_stmt,
+
+    comptime {
+        // Zero is the reserved "not a token" byte; `decodeToken` rejects it.
+        for (std.enums.values(Kind)) |kind| {
+            if (@intFromEnum(kind) == 0) @compileError("host resource kind must be non-zero");
+        }
+    }
+};
+
 /// Result of asking a typed heap to handle a Roc allocation-base pointer.
 pub const DeallocRoute = enum {
     not_owned,
@@ -33,7 +62,7 @@ pub fn HostResourceHeap(
     comptime Payload: type,
     comptime T: type,
     comptime capacity: usize,
-    comptime kind: u8,
+    comptime kind: Kind,
     comptime write_token: fn (*Payload, u64) void,
     comptime read_token: fn (*const Payload) u64,
     comptime destroy: fn (*T) void,
@@ -41,11 +70,14 @@ pub fn HostResourceHeap(
     comptime {
         if (capacity == 0) @compileError("host resource heap capacity must be non-zero");
         if (capacity > token_index_mask) @compileError("host resource heap exceeds token index space");
-        if (kind == 0) @compileError("host resource heap kind must be non-zero");
     }
 
     return struct {
         const Self = @This();
+
+        /// Which resource this heap owns. Read by the host's coverage check.
+        pub const resource_kind: Kind = kind;
+
         const Slot = struct {
             refcount: isize,
             payload: Payload,
@@ -209,22 +241,34 @@ pub fn HostResourceHeap(
     };
 }
 
-fn encodeToken(index: usize, generation: u64, comptime kind: u8) u64 {
+fn encodeToken(index: usize, generation: u64, comptime kind: Kind) u64 {
     return (generation << token_generation_shift) |
-        (@as(u64, kind) << token_index_bits) |
+        (@as(u64, @intFromEnum(kind)) << token_index_bits) |
         @as(u64, @intCast(index + 1));
 }
 
-fn decodeToken(token: u64) ?struct { index: usize, kind: u8, generation: u64 } {
+/// A kind byte that names no `Kind` is not a token this host ever emitted, so
+/// it fails here rather than reaching a heap that would have to decide.
+fn decodeToken(token: u64) ?struct { index: usize, kind: Kind, generation: u64 } {
     const encoded_index = token & token_index_mask;
     const encoded_kind = (token >> token_index_bits) & token_kind_mask;
     const generation = token >> token_generation_shift;
-    if (encoded_index == 0 or encoded_kind == 0 or generation == 0) return null;
-    return .{ .index = @intCast(encoded_index - 1), .kind = @intCast(encoded_kind), .generation = generation };
+    if (encoded_index == 0 or generation == 0) return null;
+    const kind = std.enums.fromInt(Kind, encoded_kind) orelse return null;
+    return .{ .index = @intCast(encoded_index - 1), .kind = kind, .generation = generation };
 }
 
 test "zero is not a resource token" {
     try std.testing.expect(decodeToken(0) == null);
+}
+
+test "a kind byte no resource claims is not a resource token" {
+    // The token layout has room for kind bytes that name nothing, and every
+    // one of them means the word was never a handle this host handed out.
+    const unclaimed_kind: u64 = 0xfe;
+    const token = (@as(u64, 1) << token_generation_shift) |
+        (unclaimed_kind << token_index_bits) | 1;
+    try std.testing.expect(decodeToken(token) == null);
 }
 
 test "resource heaps never emit or resolve zero, including after slot reuse" {
@@ -237,7 +281,7 @@ test "resource heaps never emit or resolve zero, including after slot reuse" {
         }
         fn destroy(_: *u8) void {}
     };
-    const Heap = HostResourceHeap(u64, u8, 1, 4, Token.write, Token.read, Token.destroy);
+    const Heap = HostResourceHeap(u64, u8, 1, .texture, Token.write, Token.read, Token.destroy);
     var heap: Heap = .{};
 
     try std.testing.expect(heap.get(0) == null);
@@ -275,7 +319,7 @@ test "final Roc deallocation destroys and reuses a resource slot" {
             return payload.*;
         }
     };
-    const Heap = HostResourceHeap(u64, Resource, 1, 1, Token.write, Token.read, Counter.destroy);
+    const Heap = HostResourceHeap(u64, Resource, 1, .sound, Token.write, Token.read, Counter.destroy);
     var heap: Heap = .{};
 
     const first = heap.insert(0, .{ .value = 2 }).?;
@@ -324,7 +368,7 @@ test "a slot the app released is reusable before the budget gets to it" {
             return payload.*;
         }
     };
-    const Heap = HostResourceHeap(u64, Resource, 1, 1, Token.write, Token.read, Counter.destroy);
+    const Heap = HostResourceHeap(u64, Resource, 1, .sound, Token.write, Token.read, Counter.destroy);
     var heap: Heap = .{};
     Counter.destroyed = 0;
 
@@ -358,7 +402,7 @@ test "a retirement queue longer than the budget drains across frames" {
             return payload.*;
         }
     };
-    const Heap = HostResourceHeap(u64, Resource, 8, 1, Token.write, Token.read, Counter.destroy);
+    const Heap = HostResourceHeap(u64, Resource, 8, .sound, Token.write, Token.read, Counter.destroy);
     var heap: Heap = .{};
     Counter.destroyed = 0;
 
@@ -397,7 +441,7 @@ test "shutdown destroys resources still waiting on the retirement queue" {
             return payload.*;
         }
     };
-    const Heap = HostResourceHeap(u64, Resource, 2, 1, Token.write, Token.read, Counter.destroy);
+    const Heap = HostResourceHeap(u64, Resource, 2, .sound, Token.write, Token.read, Counter.destroy);
     var heap: Heap = .{};
     Counter.destroyed = 0;
 
@@ -425,7 +469,7 @@ test "deallocation routing rejects foreign and misaligned pointers" {
             return payload.*;
         }
     };
-    const Heap = HostResourceHeap(u64, u64, 1, 1, Token.write, Token.read, noDestroy);
+    const Heap = HostResourceHeap(u64, u64, 1, .sound, Token.write, Token.read, noDestroy);
     var heap: Heap = .{};
     const handle = heap.insert(0, 42).?;
     var foreign: usize = 0;
@@ -452,7 +496,7 @@ test "boxed payload keeps immutable metadata beside its lifecycle token" {
     const noDestroy = struct {
         fn call(_: *u8) void {}
     }.call;
-    const Heap = HostResourceHeap(Payload, u8, 1, 1, Token.write, Token.read, noDestroy);
+    const Heap = HostResourceHeap(Payload, u8, 1, .sound, Token.write, Token.read, noDestroy);
     var heap: Heap = .{};
 
     const payload = heap.insert(.{ .token = 0, .width = 64, .height = 32 }, 7).?;
@@ -473,8 +517,8 @@ test "resource kind prevents cross-type scalar token lookup" {
         }
         fn destroy(_: *u8) void {}
     };
-    const SoundHeap = HostResourceHeap(u64, u8, 1, 1, Token.write, Token.read, Token.destroy);
-    const MusicHeap = HostResourceHeap(u64, u8, 1, 2, Token.write, Token.read, Token.destroy);
+    const SoundHeap = HostResourceHeap(u64, u8, 1, .sound, Token.write, Token.read, Token.destroy);
+    const MusicHeap = HostResourceHeap(u64, u8, 1, .music, Token.write, Token.read, Token.destroy);
     var sounds: SoundHeap = .{};
     var music: MusicHeap = .{};
 

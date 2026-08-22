@@ -1780,14 +1780,14 @@ fn readU64Token(payload: *const u64) u64 {
     return payload.*;
 }
 
-const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, writeU64Token, readU64Token, destroySound);
-const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
-const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
-const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, 4, writeU64Token, readU64Token, destroyTexture);
-const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, 5, writeU64Token, readU64Token, destroyRenderTexture);
-const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
-const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
-const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
+const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, .sound, writeU64Token, readU64Token, destroySound);
+const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, .music, writeU64Token, readU64Token, destroyMusic);
+const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, .font, writeU64Token, readU64Token, destroyFont);
+const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, .texture, writeU64Token, readU64Token, destroyTexture);
+const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, .render_texture, writeU64Token, readU64Token, destroyRenderTexture);
+const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, .shader, writeU64Token, readU64Token, destroyShader);
+const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, .prepared_text, writeU64Token, readU64Token, destroyPreparedText);
+const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, .store, writeU64Token, readU64Token, destroyStore);
 
 /// How many UDP sockets an app may hold open at once.
 ///
@@ -1797,7 +1797,7 @@ const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writ
 /// it is `ResourceLimit` rather than an unbounded descriptor count.
 const MAX_LIVE_UDP_SOCKETS: usize = 8;
 
-const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX_LIVE_UDP_SOCKETS, 10, writeU64Token, readU64Token, destroyUdpSocket);
+const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX_LIVE_UDP_SOCKETS, .udp_socket, writeU64Token, readU64Token, destroyUdpSocket);
 
 /// Bytes a finished read handed over, and the allocator that owns them.
 ///
@@ -1819,7 +1819,7 @@ fn destroyFileBytes(resource: *FileBytesResource) void {
 /// resources. The payload itself is deliberately a word-sized token: a
 /// seamless primitive `List` may use the payload address as its ARC allocation
 /// pointer, while the token keeps the heap's usual structural validation.
-const FileBytesHeap = host_resource.HostResourceHeap(u64, FileBytesResource, MAX_LIVE_FILE_BYTE_LISTS, 8, writeU64Token, readU64Token, destroyFileBytes);
+const FileBytesHeap = host_resource.HostResourceHeap(u64, FileBytesResource, MAX_LIVE_FILE_BYTE_LISTS, .file_bytes, writeU64Token, readU64Token, destroyFileBytes);
 var file_bytes_heap: FileBytesHeap = .{};
 
 /// Make the sole heap reference for `resource` into the delivered byte list.
@@ -1885,6 +1885,38 @@ var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
 var udp_socket_heap: UdpSocketHeap = .{};
+
+/// Every typed resource heap the host owns: what a Roc deallocation is offered
+/// to, and what the kind-coverage check below reads.
+const resource_heaps = .{
+    &sound_heap,
+    &music_heap,
+    &font_heap,
+    &texture_heap,
+    &render_texture_heap,
+    &shader_heap,
+    &prepared_text_heap,
+    &file_bytes_heap,
+    &store_heap,
+    &udp_socket_heap,
+    &sqlite_effect.stmt_heap,
+    &sqlite_effect.db_heap,
+};
+
+comptime {
+    // `Kind` is the only place a resource number is written down, and this is
+    // what keeps that true in both directions: a kind nobody declares a heap
+    // for, or two heaps declaring the same one, fails the build here.
+    for (std.enums.values(host_resource.Kind)) |kind| {
+        var heaps_with_kind: usize = 0;
+        for (resource_heaps) |heap| {
+            if (@TypeOf(heap.*).resource_kind == kind) heaps_with_kind += 1;
+        }
+        if (heaps_with_kind != 1) {
+            @compileError("each host resource kind needs exactly one heap: " ++ @tagName(kind));
+        }
+    }
+}
 
 var prepared_text_prepare_calls: usize = 0;
 var prepared_text_draw_calls: usize = 0;
@@ -1957,7 +1989,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap, &udp_socket_heap, &sqlite_effect.stmt_heap, &sqlite_effect.db_heap }) |heap| {
+    inline for (resource_heaps) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,

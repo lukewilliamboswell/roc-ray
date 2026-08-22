@@ -212,12 +212,10 @@ tasks" assertion held. No leak reported by the tracking allocator.
 
 ## Recommended next step
 
-Step 2 of the proposal: make `update!` effectful, expose `Task.spawn!` as a
-hosted effect (the host already holds closures opaquely and the phase
-guard already has a `task` phase), and move the synchronous commands to
-direct calls. After that, retire the effect worker by turning `Files.*`
-into `rt.io()` calls that park (step 3/4). The coroutine side needs no
-further proving; what remains is API work.
+Step 3/4 of the proposal: retire the effect worker by turning `Files.*`,
+the clipboard read, and screenshots into `rt.io()` calls that park on a
+task, then delete `App.Request` (step 6) and add `Http`/`Path` (step 7).
+The coroutine side needs no further proving; what remains is API work.
 
 ## Regression results (final tree)
 
@@ -231,3 +229,105 @@ further proving; what remains is API work.
 * `zig-pkg/`: Zig 0.16's `zig fetch --save` vendors the dependency there,
   and a plain `zig build` refetches it when the directory is absent
   (verified by moving it aside), so it is gitignored rather than committed.
+
+# Step 2: effectful `update!`, `Task.spawn!`, no command layer
+
+Same branch, 2026-08-22, on top of the spike. Reference compiler is still the
+pinned release nightly.
+
+## What changed
+
+* `program = { init!, update!, render! }` with
+  `update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])`.
+  `update_for_host!` now returns only the boxed model; the host reads
+  `payload_ok()` as a `RocBox` and nothing else.
+* `Task.spawn! : (() => msg) => {}` is a hosted effect. `TaskHost.spawn! :
+  Box(() => msg) => {}` is polymorphic in `msg`; the pinned compiler accepts
+  a type variable in a hosted signature and `roc glue` lowers the boxed
+  closure to `RocErasedCallable`, the same type the spike's
+  `SubmittedTask.run` had. `Transition.with_task` and `spawnAll` are gone;
+  `Tasks.spawnCurrent` takes one closure from the hosted call.
+* `App.request! : Request(msg) => {}` is a hosted effect
+  (`AppHost.submit_request! : SubmittedRequest(msg) => {}`). The request
+  record is owned by the call: its callback moves into the pending table or
+  a terminal `Busy` envelope, its path string is released by the host. The
+  per-input budgets that used to be locals of one list dispatch
+  (`synchronous_tasks`, `roc_string_bytes`, `headless_reads`) are host state
+  reset at the top of each cycle, and the staging area is published to the
+  hosted call through `active_request_staging` for the life of the loop.
+  The old `submitRequests(list)` is kept for the host unit tests and now
+  loops over the single-request path.
+* `Request(msg)` moved into `AppHost` (`App.Request` is an alias) to break
+  the `App -> AppTransport -> App` import cycle that `App.request!` would
+  otherwise create. `App.map_request` replaces `Transition.map_msg` for
+  components that own requests.
+* Deleted: `App.Command` (29 variants), `App.Transition` and its receivers,
+  `App.next`/`from_parts`/`map`/`map2`, `command_description`,
+  `CommandApply.roc`, `AppTransport.validate_commands`, the command-coverage
+  lint in `ci/tidy.zig`, `docs/command-coverage.md`, and every pure command
+  constructor (`Window.set_clipboard_text`, `Audio.Sound.play`, ...).
+* Added direct effects: `Window.set_clipboard_text!`, `suggest_size!`,
+  `suggest_min_size!`, `set_target_fps!`; `Mouse.set_cursor!`,
+  `set_cursor_mode!`, `set_source!`; `Keys.set_exit_key!`; `Capture.start!`,
+  `Capture.stop!` (the compile_fail fixture that checked `Capture.stop!`
+  did *not* exist is replaced by `transition_removed.roc`, which checks
+  `App.next` does not).
+* Phase guard: `apply` → `update`. `during_update = {startup, update,
+  task}` for host-state changes; `during_load` is the same set, so loaders
+  (textures, fonts, shaders, sounds, tilemaps, render textures) are now
+  legal from `update!` and tasks; `during_spawn = {update, task}` for
+  `Task.spawn!` and `App.request!`; `during_startup` shrank to the
+  `App.Startup` capabilities. Rejection hints were rewritten per set.
+
+## What was verified (release nightly on PATH)
+
+* `scripts/all_tests.py` (all 20 examples): **All tests passed** -- fmt,
+  check, test, build, headless runs, CLI args probe, model allocation probe
+  (88 bytes/frame, in place), package interop, Wayland bundle build.
+  `cave_climb`'s build is skipped by the script itself as "unusually slow",
+  which predates this work.
+* `zig build test -Droc-tests=false`: 168/168, privacy fixtures all
+  verified, lint and tidy clean. `zig build` for all four targets.
+  `scripts/roc_platform_abi.py --check`: verified.
+* `examples/task_sleep` via `Task.spawn!` from inside `update!`,
+  `ROC_RAY_TRACE_TASKS=1 ./main --host-headless --host-headless-frames=120`:
+
+      [TASK 1] spawned on cycle 0
+      [TASK 1] started on cycle 0
+      [TASK] sleep parking 300 ms on cycle 0
+      [TASK] sleep resumed on cycle 18
+      [TASK 1] finished on cycle 18
+      [TASK] delivering 1 result(s) as messages on cycle 18
+      [TASK] 240 pumps, mean 1252342 ns; 204 idle pumps, mean 311 ns
+
+* Sync effects from `update!`: a scratch app calling
+  `Window.set_target_fps!(30)`, `Window.set_clipboard_text!(...)`, and
+  `Keys.set_exit_key!(NoExitKey)` on cycle 0 and exiting on cycle 2 ran
+  headless with exit 0. `input_inspector` and `responsive_ui` do the same
+  in the suite.
+* Phase guard from `render!`: the same app with `Window.set_target_fps!(30)`
+  in `render!` stops with
+
+      roc-ray: Window.set_target_fps! is only valid during init! or update!
+      or a task, but it was called during render!. It changes host state
+      rather than drawing: call it from init!, update!, or a task, not from
+      render!.
+
+## Things that bit
+
+* `?` inside `update!` with a different error union than the body's
+  `Err(Exit(0))` is refused ("error types from all `?` operators and the
+  function body must be compatible"), even with an open `..` on the
+  annotation. `generated_assets` maps its upload errors to a `crash`
+  instead, which is what the platform did for a malformed upload before.
+* The locally built *debug* `roc` on `PATH` is the same commit as the
+  pinned release and passes the scripts' version check, but it trips the
+  SpecConstr record-update invariant on `live_plot`, `snake`, and
+  `top_down` after the port (record spreads inside the now-effectful
+  `update!`). The release binary builds all three. Put the release nightly
+  first on `PATH` when running `scripts/all_tests.py`.
+* Else-less `if` statements in effectful code (`if cond { effect!() }`)
+  are accepted, which keeps `update!` bodies short.
+* Components lose `map_msg`: a child's `Task.spawn!` closure must return
+  the parent's `Msg`. `App.map_request` covers requests; the
+  `Task.spawn_with!` helper the proposal suggests is not written.

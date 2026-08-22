@@ -64,10 +64,11 @@
 - Use the terms defined in `design.md` according to their direction, timing,
   ownership, and cardinality. In particular, distinguish host cycles,
   simulation steps, and presentation frames.
-- For the intended public model, use `Input`, `Transition`, `Command`,
-  `Request`, `Message`, and `Frame`; use `update` for the pure transition
-  function, `next` for a transition containing a next model, and `apply` for
-  ordered command interpretation.
+- For the intended public model, use `Input`, `Request`, `Task`, `Message`,
+  and `Frame`; use `update!` for the effectful step that folds an input into
+  the next model, *effect* for a direct host call it makes, and *phase* for
+  the callback (`init!`, `update!`, `render!`, a task) the host checks an
+  effect against.
 - Do not introduce `Step`, `Action`, `Task`, `Update`, `static`, or `commit` as
   alternate public names for those concepts. Existing uses are migration work,
   not naming precedent.

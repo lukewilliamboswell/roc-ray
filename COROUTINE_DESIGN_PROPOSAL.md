@@ -1,9 +1,9 @@
 # Effectful update and coroutine-backed tasks for roc-ray
 
-Status: proposal, 2026-08-22. **Step 1 of the migration (section 10) is
-spiked on branch `spike-coro`** -- see "Spike status" below and
-`docs/spike-coro-findings.md` for the measurements. Steps 2-7 are not
-started.
+Status: proposal, 2026-08-22. **Steps 1 and 2 of the migration (section
+10) are implemented on branch `spike-coro`** -- see "Spike status" below and
+`docs/spike-coro-findings.md` for the measurements. Steps 3-7 are not
+started; `App.Request` and `RequestQueue` remain until step 6.
 
 ## Spike status (2026-08-22, branch `spike-coro`)
 
@@ -35,8 +35,49 @@ spreads). The spike keeps shapes that satisfy both, with `TODO(compiler)`
 markers; they can be simplified whenever convenient since the release
 compiler is the reference.
 
-Not done in the spike, by design: `update!` is still pure, so spawning is
-data on `Transition` rather than a `Task.spawn!` effect. That is step 2.
+### Step 2 status (2026-08-22)
+
+`update!` is effectful and the command layer is gone:
+
+* `update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])`; exit is
+  `Err(Exit(code))`, matching `render!`. `update_for_host!` returns only the
+  boxed model.
+* `Task.spawn! : (() => msg) => {}` is a hosted effect (`roc_task_spawn`).
+  The closure is boxed in `Task.roc`; the hosted signature is polymorphic in
+  `msg`, which the pinned compiler accepts and `roc glue` erases to the same
+  `RocErasedCallable` the spike used. `Transition.with_task` is gone.
+* `App.request! : Request(msg) => {}` is a hosted effect
+  (`roc_app_submit_request`) so requests survive without `Transition`. The
+  `Request(msg)` union moved to `AppHost` so `AppTransport` can name it
+  without importing `App`; `App.Request` is an alias. `App.map_request`
+  replaces `Transition.map_msg` for components that own requests.
+* Deleted: `App.Command`, `App.Transition` and every receiver, `App.next`,
+  `from_parts`, `map`, `map2`, `command_description`, `CommandApply.roc`,
+  the command-coverage lint and `docs/command-coverage.md`, the
+  prevalidation in `AppTransport`.
+* Direct effects added where the commands used to point: `Window.set_clipboard_text!`,
+  `Window.suggest_size!`, `Window.suggest_min_size!`, `Window.set_target_fps!`,
+  `Mouse.set_cursor!`, `Mouse.set_cursor_mode!`, `Mouse.set_source!`,
+  `Keys.set_exit_key!`, `Capture.start!`, `Capture.stop!`. Audio and Assets
+  already had their `!` forms; their pure command constructors are gone.
+* Phase guard: `apply` is renamed `update`; `during_update = {startup,
+  update, task}` for state changes, `during_load` (same set) for loaders --
+  textures, fonts, shaders, sounds, tilemaps can now be loaded from
+  `update!` or a task, not only `init!`; `during_spawn = {update, task}` for
+  `Task.spawn!` and `App.request!`; `during_startup` is now only the
+  `App.Startup` capabilities. Every rejection message names the fix.
+* Every example, `test/cli_args`, `test/model_inplace`,
+  `test/package_interop`, `test/asset_store_compile`, and the `compile_fail`
+  fixtures are ported. Pure cores stayed pure: the games return the sounds
+  they want as `List(Audio.Playback)` (or a small `Cue` union) and `update!`
+  plays them, so their `expect`s are unchanged.
+* The per-input request budgets (synchronous clipboard reads, headless read
+  counts) became host state reset each cycle, since requests now arrive one
+  at a time while `update!` runs instead of as one list afterwards.
+
+Section 4.4's `map_msg` regression is real: a child component's tasks must
+produce the parent's `Msg`, and requests go through `App.map_request`. The
+`Task.spawn_with!` helper suggested there is not written yet.
 
 
 This document proposes replacing the pure `update` / `Transition` /

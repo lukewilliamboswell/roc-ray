@@ -50,44 +50,55 @@ A RocRay program has three callbacks. The model is the app state that survives
 from one host cycle to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
-- `update` receives that model and a read-only `App.Input` -- this cycle's
-  device snapshot, window snapshot, timing, interval events, and request
-  response messages -- and returns a `App.Transition`. It is pure.
-- `render!` receives the model and a `Frame` used for drawing.
+- `update!` receives that model and a read-only `App.Input` -- this cycle's
+  device snapshot, window snapshot, timing, and request response messages --
+  and returns the next model, or `Err(Exit(code))` to stop. It is effectful:
+  it calls host effects directly (`Window.set_clipboard_text!`,
+  `Audio.Sound.play!`, ...) and starts deferred work with `Task.spawn!` and
+  `App.request!`.
+- `render!` receives the model and a `Frame` used for drawing. It only draws;
+  an effect that changes host state stops the app with a message naming the
+  phase it belongs in.
 
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
-### Deferred requests
+### Tasks and requests
 
-`update` can also return work that finishes later. Give each request constructor a
-typed callback that turns its terminal result into your app's `Msg`, then fold
-the resulting `input.messages` into the model on a later host cycle:
+Work that finishes later never blocks the frame. A **task** is an effectful
+closure that runs on its own coroutine alongside the frame loop; its return
+value arrives as a message on a later `input.messages`. An effect that waits
+inside it -- `Task.sleep!` today -- parks the task, not the frame:
+
+```roc
+Msg : [Woke]
+
+Task.spawn!(|| {
+    Task.sleep!(300)
+    Woke
+})
+```
+
+A **request** is the same idea for the host's file, clipboard, and screenshot
+work: give the constructor a typed callback that turns its terminal result
+into your `Msg`, hand it to `App.request!`, and fold the message in when it
+arrives:
 
 ```roc
 Msg : [ConfigLoaded({ path : Str, result : Try(Str, Files.ReadTextError) })]
 
-requests = [Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result }))]
-
-App.next(model)
-    .with_requests(requests)
+App.request!(Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result })))
 ```
-
-`App.next` starts a transition with no work. Its receiver methods append
-commands or requests in order; use `App.from_parts(model, commands, requests)` when
-a helper has already assembled both lists. Independent component updates can
-also be combined with Roc's record-builder form, for example
-`{ game: game_transition, ui: ui_transition }.App`; its commands and requests retain
-that left-to-right field order.
 
 The host owns private transport tickets; apps do not allocate IDs, match
 raw responses, or maintain a request batch. It preserves the host-observed order of
 messages within an input. A request that cannot complete with current host capacity
 still calls its callback with its operation's `Busy` result, so an app may show
-an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads and
-[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request.
+an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads,
+[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request, and
+[`task_sleep/main.roc`](examples/task_sleep/main.roc) for a task.
 
 ## Start your own project
 

@@ -1,5 +1,13 @@
 # RocRay architecture
 
+> **Status (2026-08-22):** the `App.Transition` / `App.Command` design
+> described below has been superseded on branch `spike-coro` by an effectful
+> `update!` with direct host effects, `Task.spawn!` coroutine tasks, and a
+> runtime phase guard -- see `COROUTINE_DESIGN_PROPOSAL.md`. `App.Request`
+> and its response messages still work as described here until step 6 of that
+> proposal replaces them. The sections on commands, the apply phase, and the
+> command-coverage invariant describe the previous design.
+
 ## Purpose of this document
 
 This document defines RocRay's intended end-state architecture. It is a design

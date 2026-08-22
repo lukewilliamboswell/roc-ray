@@ -8,15 +8,14 @@ import rr.Audio
 import rr.App
 import rr.Math
 
-# Pong v2 - first to 5 wins, then SPACE to restart.
-#
-# Player controls the LEFT paddle with W / S; the RIGHT paddle is a simple AI.
-# Motion is in pixels/second scaled by the input's elapsed seconds (frame-rate
-# independent).
-# Serves leave at a random angle. When someone reaches `win_score`, the game
-# freezes on a win screen until SPACE is pressed (edge-detected, so holding it
-# doesn't instantly restart again).
-
+## Two-paddle Pong: W and S drive the left paddle, an AI tracks the ball on the
+## right, first to five wins and SPACE serves a new match.
+##
+## Everything moves in pixels per second scaled by the cycle's elapsed seconds,
+## so the game plays the same at any frame rate. The step is pure and returns
+## the sounds the frame made; `update!` plays them and checks for Escape. Serve
+## angles are drawn from a `Random.State` held in the model, so a run replays
+## exactly from its seed.
 Model : {
 	ball_x : F32,
 	ball_y : F32,
@@ -308,4 +307,52 @@ draw_field! = |frame, model| {
 	frame.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
 	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
 	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
+}
+
+## A model with no host resources behind it, so the steppers above can be
+## exercised from an `expect`. The stubs are a font that measures nothing and
+## sounds that play nothing, which is all a pure test asks of them.
+test_model : Model
+test_model = {
+	ball_x: screen_w * 0.5,
+	ball_y: screen_h * 0.5,
+	ball_vx: init_vx,
+	ball_vy: 0,
+	left_y: 250,
+	right_y: 250,
+	left_score: 0,
+	right_score: 0,
+	hit_sound: Audio.Sound.stub,
+	wall_sound: Audio.Sound.stub,
+	score_sound: Audio.Sound.stub,
+	font: Draw.Font.stub,
+	rng: Random.seed(1),
+}
+
+expect !game_over(test_model)
+expect game_over({ ..test_model, right_score: win_score })
+
+## The empty list is the no-op, so a caller can concatenate unconditionally.
+expect List.is_empty(play_if(Bool.False, Audio.Sound.stub))
+expect List.len(play_if(Bool.True, Audio.Sound.stub)) == 1
+
+## The top wall reflects the ball and asks for one sound.
+expect {
+	stepped = step_playing({ ..test_model, ball_y: ball_r, ball_vy: -100 }, Devices.none, 0.1)
+	stepped.model.ball_vy > 0 and List.len(stepped.sounds) == 1
+}
+
+## A ball past the right edge scores for the left player and re-serves from the
+## centre.
+expect {
+	stepped = step_playing({ ..test_model, ball_x: screen_w - 5 }, Devices.none, 0.1)
+	stepped.model.left_score == 1 and stepped.model.ball_x == screen_w * 0.5
+}
+
+## The win screen holds until SPACE, and SPACE starts a whole new match rather
+## than resuming the old one.
+expect {
+	finished = { ..test_model, left_score: win_score }
+	step_game_over(finished, Devices.none).model.left_score == win_score
+		and step_game_over(finished, Devices.none.with_key_pressed(KeySpace)).model.left_score == 0
 }

@@ -46,4 +46,10 @@ CaptureHost := [].{
 
 	## Finalize the running recording and write its file.
 	stop_recording! : () => StopResult
+
+	## Capture the framebuffer at the end of this frame and write it as a PNG.
+	##
+	## Waits: the calling task parks until the file has been written, so the
+	## returned code is the write's own outcome rather than a promise.
+	screenshot! : Str => U8
 }

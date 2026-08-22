@@ -92,6 +92,7 @@ platform ""
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
+		"roc_capture_screenshot": CaptureHost.screenshot!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,

@@ -1340,6 +1340,101 @@ fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetReco
     return hostedFilesList(activeHost(), path_arg);
 }
 
+/// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
+///
+/// The readback has to happen on the frame thread inside the drawing scope, so
+/// the effect registers the request, parks the task, and is woken by
+/// `serviceCaptureRequests` with the pixels. Encoding a 1080p PNG is tens of
+/// milliseconds, so it runs on zio's blocking pool -- which parks the task
+/// again rather than stalling the frame, and never touches Roc.
+fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase("Capture.screenshot!", during_wait);
+    defer path_arg.decref(roc_host);
+    const path = path_arg.asSlice();
+
+    const validation = capture.validateRelativePath(path);
+    if (validation != capture.err_none) return validation;
+
+    // No framebuffer to read, so the request is answered without writing a
+    // file of zeroes. Headless runs exist to produce identical output twice.
+    if (headlessMode()) return capture.err_none;
+
+    // A screenshot needs the end of a frame, and `init!` runs before the frame
+    // loop does: parking here would wait for a frame that cannot arrive.
+    const rt = AppTasks.currentRuntime() orelse return capture.err_unavailable;
+    if (active_phase != .task) return capture.err_unavailable;
+
+    if (screenshot_wait != null or capture_screenshot_pending or capture_screenshot_done != null) {
+        return capture.err_already_recording;
+    }
+    if (!storeCapturePath(&capture_screenshot_path, &capture_screenshot_path_len, path)) {
+        return capture.err_path_invalid;
+    }
+
+    var resolved_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+        return capture.err_write_failed;
+    var resolved_copy: [capture.path_capacity]u8 = undefined;
+    @memcpy(resolved_copy[0..resolved.len], resolved);
+
+    var wait = ScreenshotWait{};
+    screenshot_wait = &wait;
+    capture_screenshot_pending = true;
+
+    {
+        const scope = WaitScope.enter();
+        defer scope.leave();
+        AppTasks.tracePark("screenshot", 0);
+        defer AppTasks.traceResume("screenshot");
+        wait.ready.wait() catch {
+            // Cancelled at shutdown before the frame ended. Nothing was
+            // captured, so there is nothing to free.
+            screenshot_wait = null;
+            capture_screenshot_pending = false;
+            return capture.err_unavailable;
+        };
+    }
+    screenshot_wait = null;
+    if (wait.err != capture.err_none) return wait.err;
+
+    const allocator = allocatorFromHost(roc_host);
+    defer allocator.free(wait.pixels);
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    var blocking = rt.spawnBlocking(encodeAndWritePng, .{
+        allocator,
+        wait.pixels,
+        wait.width,
+        wait.height,
+        resolved_copy[0..resolved.len],
+    }) catch return capture.err_out_of_memory;
+    return blocking.join();
+}
+
+/// Encode RGBA pixels as a PNG and write the file. Runs on zio's blocking
+/// pool: plain Zig values in, an error code out, and no Roc call anywhere.
+fn encodeAndWritePng(
+    allocator: std.mem.Allocator,
+    pixels: []const u8,
+    width: u32,
+    height: u32,
+    path: []const u8,
+) u8 {
+    const encoded = png.encodeRgba(allocator, pixels, width, height) catch |err| return switch (err) {
+        error.OutOfMemory => capture.err_out_of_memory,
+        else => capture.err_write_failed,
+    };
+    defer allocator.free(encoded);
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return writeWholeFile(threaded.io(), path, encoded);
+}
+
+fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedCaptureScreenshot(activeHost(), path_arg);
+}
+
 /// Which of the two byte-list producing waits to run. They share everything
 /// after the syscall: the same admission, the same ownership transfer, and the
 /// same list on the way out.
@@ -1473,6 +1568,23 @@ var capture_screenshot_ticket: ?u64 = null;
 var capture_screenshot_done: ?ScreenshotOutcome = null;
 const ScreenshotOutcome = struct { ticket: u64, err: u8 };
 
+/// The task waiting for `Capture.screenshot!` to finish, and its answer.
+///
+/// One slot, because the host reads the framebuffer back once per frame and
+/// keeps one pending path. A second concurrent screenshot is `AlreadyPending`
+/// rather than silently replacing the first.
+const ScreenshotWait = struct {
+    /// Signalled by the frame loop once the readback has been handed to the
+    /// waiting task, which then encodes and writes it.
+    ready: zio.ResetEvent = .init,
+    /// The captured pixels, owned by the waiting task once `ready` is set.
+    pixels: []u8 = &.{},
+    width: u32 = 0,
+    height: u32 = 0,
+    /// Non-zero when the frame loop could not produce a readback at all.
+    err: u8 = 0,
+};
+var screenshot_wait: ?*ScreenshotWait = null;
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -6142,6 +6254,7 @@ comptime {
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
+        @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
         @export(&hostedSuggestWindowSize, .{ .name = "roc_host_suggest_window_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSuggestWindowMinSize, .{ .name = "roc_host_suggest_window_min_size" });
@@ -7031,13 +7144,24 @@ fn serviceCaptureRequests() void {
 
     var image = raylib.captureFramebuffer() orelse {
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
-        if (wants_screenshot) reportScreenshotResult(capture.err_out_of_memory);
+        if (wants_screenshot) {
+            if (screenshot_wait) |wait| {
+                wait.err = capture.err_out_of_memory;
+                wait.ready.set();
+            } else {
+                reportScreenshotResult(capture.err_out_of_memory);
+            }
+        }
         return;
     };
     defer image.deinit();
 
     if (wants_screenshot) {
-        writeScreenshot(image, capture_screenshot_path[0..capture_screenshot_path_len]);
+        if (screenshot_wait) |wait| {
+            handOverScreenshot(wait, image);
+        } else {
+            writeScreenshot(image, capture_screenshot_path[0..capture_screenshot_path_len]);
+        }
     }
 
     if (!wants_frame) return;
@@ -7048,6 +7172,26 @@ fn serviceCaptureRequests() void {
 
     writeRecordingFrame(image);
     finishRecordingAtFrameCap();
+}
+
+/// Copy the readback out for the task parked on `Capture.screenshot!`.
+///
+/// The pixels are copied rather than moved because the readback buffer belongs
+/// to the graphics backend, which frees it on this thread as soon as the
+/// drawing scope closes. A memcpy is the price of the encode happening
+/// somewhere other than the frame thread.
+fn handOverScreenshot(wait: *ScreenshotWait, image: raylib.CaptureImage) void {
+    const source = image.pixels();
+    const pixels = allocatorFromHost(activeHost()).alloc(u8, source.len) catch {
+        wait.err = capture.err_out_of_memory;
+        wait.ready.set();
+        return;
+    };
+    @memcpy(pixels, source);
+    wait.pixels = pixels;
+    wait.width = image.width();
+    wait.height = image.height();
+    wait.ready.set();
 }
 
 /// Hand a screenshot to the worker, or refuse it.

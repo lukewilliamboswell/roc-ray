@@ -8747,6 +8747,13 @@ comptime {
     }
 }
 
+/// Arguments for CaptureHost.screenshot!
+/// Roc signature: Str => U8
+/// Refcounted fields are owned by the hosted function.
+pub const CaptureHostScreenshotArgs = extern struct {
+    arg0: RocStr,
+};
+
 /// Arguments for HostHost.exit!
 /// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
@@ -11076,6 +11083,13 @@ pub extern fn roc_capture_start_recording(arg0: CaptureHostStart_recordingArgs) 
 /// Hosted symbol for CaptureHost.stop_recording!
 /// Roc signature: {} => { bytes : U64, err : U8, frames : U64 }
 pub extern fn roc_capture_stop_recording() callconv(.c) __AnonStruct_7c66fb01c50d182a;
+
+/// Hosted symbol for CaptureHost.screenshot!
+/// Roc signature: Str => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_screenshot(arg0: RocStr) callconv(.c) u8;
 
 /// Hosted symbol for HostHost.exit!
 /// Roc signature: I32 => {}

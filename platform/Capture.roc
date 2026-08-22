@@ -68,6 +68,30 @@ Capture := [].{
 
 	ScreenshotError : [PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
 
+	## Write one PNG of the app's rendered output.
+	##
+	## The framebuffer is read back at the end of the frame that asked -- after
+	## the draw batch is flushed and before the buffers are swapped, so the
+	## pixels are the ones just drawn -- and the PNG is encoded and written off
+	## the frame thread. This call waits for that write, so it parks the task
+	## until the file exists and answers with the write's own outcome.
+	##
+	## Valid inside a task. In `init!` there is no frame to capture yet, so a
+	## windowed run answers `Unavailable`; a headless run has no framebuffer at
+	## all and answers `Ok({})` without writing.
+	##
+	## Only one screenshot can be in flight: a second one while the first is
+	## still waiting for its frame is `AlreadyPending`.
+	screenshot! : Str => Try({}, ScreenshotError)
+	screenshot! = |path| {
+		err = CaptureHost.screenshot!(path)
+		if err == 0 {
+			Ok({})
+		} else {
+			Err(screenshot_error(err))
+		}
+	}
+
 	screenshot : Str, (Try({}, ScreenshotError) -> msg) -> [Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }), ..]
 	screenshot = |path, callback| Screenshot({ path, callback })
 
@@ -145,3 +169,28 @@ expect failure_reason(8) == WriteFailed
 expect failure_reason(9) == EncodeFailed
 expect failure_reason(0) == Unknown
 expect failure_reason(200) == Unknown
+
+## Decode the host's capture-error code for a screenshot.
+##
+## These are `src/capture.zig`'s codes, the same ones a recording's
+## `FailureReason` names, so a path that escapes the output directory is still
+## reported as the sandbox refusing it rather than as a failed write.
+screenshot_error : U8 -> Capture.ScreenshotError
+screenshot_error = |code|
+	match code {
+		1 => PathInvalid
+		2 => PathEscapesOutputDir
+		3 => AlreadyPending
+		7 => WriteFailed
+		10 => Busy
+		11 => Unavailable
+		_ => WriteFailed
+	}
+
+expect screenshot_error(1) == PathInvalid
+expect screenshot_error(2) == PathEscapesOutputDir
+expect screenshot_error(3) == AlreadyPending
+expect screenshot_error(7) == WriteFailed
+expect screenshot_error(10) == Busy
+expect screenshot_error(11) == Unavailable
+expect screenshot_error(99) == WriteFailed

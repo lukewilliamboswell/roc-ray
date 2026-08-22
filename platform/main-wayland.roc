@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -143,10 +143,16 @@ platform ""
 		"roc_udp_bind": UdpHost.bind!,
 		"roc_udp_send": UdpHost.send!,
 		"roc_udp_receive": UdpHost.receive!,
+		"roc_sqlite_open": SqliteHost.open!,
+		"roc_sqlite_close": SqliteHost.close!,
+		"roc_sqlite_prepare": SqliteHost.prepare!,
+		"roc_sqlite_run_stmt": SqliteHost.run_stmt!,
+		"roc_sqlite_run_once": SqliteHost.run_once!,
+		"roc_sqlite_exec_script": SqliteHost.exec_script!,
 	}
 	targets: {
 		inputs_dir: "targets/",
-		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, "libc.so", "crtn.o"] },
+		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, "libc.so", "crtn.o"] },
 	}
 
 import Draw
@@ -183,6 +189,7 @@ import Random
 import TaskHost
 import Task
 import HttpHost
+import SqliteHost
 import Http
 import UdpHost
 import Udp
@@ -191,6 +198,7 @@ import Stdout
 import Stderr
 import StdioHost
 import TimeHost
+import Sqlite
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the

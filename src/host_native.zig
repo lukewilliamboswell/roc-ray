@@ -18,6 +18,7 @@ const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
 const udp_effect = @import("udp_effect.zig");
+const sqlite_effect = @import("sqlite_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -25,6 +26,7 @@ const udp_effect = @import("udp_effect.zig");
 // be collected. Reference it here instead.
 test {
     _ = http_effect;
+    _ = sqlite_effect;
 }
 
 // Import backend
@@ -1358,6 +1360,104 @@ fn udpRocSlices(
     return list;
 }
 
+/// The `Sqlite` effects.
+///
+/// Each one waits: the query runs on zio's blocking pool and this coroutine
+/// parks in `join()`, so the frame loop keeps running. The phase handling
+/// mirrors `hostedHttpSend` -- the frame loop enters phases of its own while
+/// this is parked, so the task must see its own phase again when the answer
+/// arrives. Roc's own arguments are decref'd here; everything a worker reads
+/// was copied out of them first.
+fn hostedSqliteOpen(
+    path_arg: abi.RocStr,
+    mode: u8,
+    busy_timeout_ms: u64,
+    max_result_bytes: u64,
+) callconv(.c) abi.SqliteHostOpen {
+    enforcePhase("Sqlite.Db.open!", during_wait);
+    const roc_host = activeHost();
+    defer path_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.open", 0);
+    defer AppTasks.traceResume("sqlite.open");
+    return sqlite_effect.open(
+        roc_host,
+        AppTasks.currentRuntime(),
+        path_arg,
+        mode,
+        busy_timeout_ms,
+        max_result_bytes,
+    );
+}
+
+fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.SqliteHostClose {
+    enforcePhase("Sqlite.Db.close!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.close", 0);
+    defer AppTasks.traceResume("sqlite.close");
+    return sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+}
+
+fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostPrepare {
+    enforcePhase("Sqlite.prepare!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.prepare", 0);
+    defer AppTasks.traceResume("sqlite.prepare");
+    return sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+}
+
+fn hostedSqliteRunStmt(
+    stmt_arg: *u64,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_stmt {
+    enforcePhase("Sqlite.Stmt.query!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, stmt_arg);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.run", 0);
+    defer AppTasks.traceResume("sqlite.run");
+    return sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+}
+
+fn hostedSqliteRunOnce(
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_once {
+    enforcePhase("Sqlite.query!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.run", 0);
+    defer AppTasks.traceResume("sqlite.run");
+    return sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+}
+
+fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostExec_script {
+    enforcePhase("Sqlite.exec_script!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.script", 0);
+    defer AppTasks.traceResume("sqlite.script");
+    return sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+}
+
 var active_phase: Phase = .idle;
 
 /// Enter a phase for one call, restoring the prior phase to preserve nesting.
@@ -1857,7 +1957,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap, &udp_socket_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap, &udp_socket_heap, &sqlite_effect.stmt_heap, &sqlite_effect.db_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -6051,6 +6151,11 @@ fn deinitResources() void {
     std.debug.assert(store_heap.active() == 0);
     std.debug.assert(udp_socket_heap.active() == 0);
     udp_socket_heap.deinitAll();
+    std.debug.assert(sqlite_effect.stmt_heap.active() == 0);
+    std.debug.assert(sqlite_effect.db_heap.active() == 0);
+    sqlite_effect.stmt_heap.deinitAll();
+    sqlite_effect.db_heap.deinitAll();
+    sqlite_effect.shutdown();
     file_bytes_heap.deinitAll();
     store_heap.deinitAll();
     shader_heap.deinitAll();
@@ -6070,6 +6175,13 @@ comptime {
         @export(&exportedRocDbg, .{ .name = "roc_dbg" });
         @export(&exportedRocExpectFailed, .{ .name = "roc_expect_failed" });
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
+
+        @export(&hostedSqliteOpen, .{ .name = "roc_sqlite_open" });
+        @export(&hostedSqliteClose, .{ .name = "roc_sqlite_close" });
+        @export(&hostedSqlitePrepare, .{ .name = "roc_sqlite_prepare" });
+        @export(&hostedSqliteRunStmt, .{ .name = "roc_sqlite_run_stmt" });
+        @export(&hostedSqliteRunOnce, .{ .name = "roc_sqlite_run_once" });
+        @export(&hostedSqliteExecScript, .{ .name = "roc_sqlite_exec_script" });
 
         @export(&exportedAssetsOpenStoreRaw, .{ .name = "roc_assets_open_store_raw" });
         @export(&exportedAssetsLoadStoreTextureRaw, .{ .name = "roc_assets_load_store_texture_raw" });
@@ -6752,6 +6864,13 @@ fn drainRetiredResources() void {
 fn drainRetiredResourcesUpTo(limit: usize) void {
     var budget = limit;
     budget -= udp_socket_heap.drainRetired(budget);
+    // Statements before connections: a connection whose statements are gone
+    // closes outright instead of becoming a zombie that lingers a frame.
+    budget -= sqlite_effect.stmt_heap.drainRetired(budget);
+    // One connection per drain. Closing may checkpoint a WAL file, which is
+    // real disk work, and this runs on the frame thread; `Sqlite.Db.close!` is
+    // how an app pays a large one on a task instead.
+    budget -= sqlite_effect.db_heap.drainRetired(@min(budget, 1));
     budget -= store_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);

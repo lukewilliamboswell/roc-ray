@@ -40,6 +40,7 @@ the smallest version to the largest.
 | [Capture Screenshot](capture_screenshot/main.roc) | A screenshot encoded and written off the frame thread, and the output-directory sandbox refusing a path that escapes it |
 | [HTTP Fetch](http_fetch/main.roc) | An HTTP GET on a task, re-fetchable mid-flight, with each reply carrying the id of the fetch it belongs to |
 | [UDP Cursor](udp_cursor/main.roc) | Two instances showing each other's pointer: a receiving task restarted each time it answers, and sends made straight from `update!` |
+| [SQLite Scores](sqlite_scores/main.roc) | A high-score board that survives a restart: the write and the re-read share one task, so the model is told what the database holds rather than guessing |
 
 ## Small apps worth copying
 

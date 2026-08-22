@@ -2157,3 +2157,50 @@ longjmp:
 raise:
     mov x0, #0
     ret
+
+# Added for the vendored SQLite (vendor/sqlite): its unix VFS and its
+# serialized threading mode reach these, and nothing else in the host did.
+# Link-time definitions only, as above -- the real libc/libm resolves them
+# at runtime.
+
+.balign 8
+.globl localtime
+.type localtime, %function
+localtime:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl utimes
+.type utimes, %function
+utimes:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl pthread_mutexattr_init
+.type pthread_mutexattr_init, %function
+pthread_mutexattr_init:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl pthread_mutexattr_settype
+.type pthread_mutexattr_settype, %function
+pthread_mutexattr_settype:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl pthread_mutexattr_destroy
+.type pthread_mutexattr_destroy, %function
+pthread_mutexattr_destroy:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl pthread_mutex_trylock
+.type pthread_mutex_trylock, %function
+pthread_mutex_trylock:
+    mov x0, #0
+    ret

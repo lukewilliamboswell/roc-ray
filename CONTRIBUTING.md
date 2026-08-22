@@ -505,7 +505,7 @@ bundling, so `bundle.sh` rewrites the staged header to a real URL: the release
 pinned in `.types-version`, or `--types-url-base` when the package is being
 served locally.
 
-## Vendored encoders
+## Vendored C libraries
 
 Screenshots go through raylib's own PNG writer, but GIF and video need encoders
 the vendored raylib does not have. Both are vendored as *source* and compiled by
@@ -525,6 +525,12 @@ to re-vendor per platform, and no per-OS CI runner in the loop:
   `vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
   `config/README.md` explains what it produces -- that is the one thing to run
   when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
+- `vendor/sqlite/` -- the SQLite amalgamation (public domain), behind `Sqlite`.
+  One source file and no configure step, so upgrading is a two-file copy;
+  `vendor/sqlite/README.md` pins the version and SHA-256 and explains the
+  compile flags that are decisions rather than tuning. `SQLITE_THREADSAFE=1`,
+  `SQLITE_OMIT_LOAD_EXTENSION` and `SQLITE_DQS=0` are the three worth knowing
+  about before changing anything.
 
 `zig build graphical-smoke` runs the pixel-level rendering and capture checks
 under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
@@ -539,7 +545,11 @@ static archive, copied into `platform/targets/<target>/` and named in the
 `targets:` block of `platform/main.roc`, exactly as `libraylib.a` is.
 
 libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
-added to the glibc link stubs in `platform/targets/*/libc_stub.s`.
+added to the glibc link stubs in `platform/targets/*/libc_stub.s`. SQLite's unix
+VFS and its serialized threading mode added ten more there and in
+`libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
+library: the stub files are hand-written assembly, and a missing symbol shows up
+as a link error naming it, not as a build failure in the library itself.
 
 Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
 Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.

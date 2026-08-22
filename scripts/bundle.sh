@@ -309,10 +309,10 @@ case "$package" in
         cp "$platform_dir/main.roc" "$stage_dir/main.roc"
         rewrite_types_dep "$stage_dir/main.roc"
 
-        copy_target_files x64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
-        copy_target_files arm64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libm.so libX11.so libc.so crtn.o
-        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib bcryptprimitives.lib
+        copy_target_files x64mac libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a
+        copy_target_files arm64mac libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a
+        copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libsqlite3.a libm.so libX11.so libc.so crtn.o
+        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib sqlite3.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib bcryptprimitives.lib
 
         if [[ -d "$platform_dir/targets/macos-sysroot" ]]; then
             cp -R "$platform_dir/targets/macos-sysroot" "$stage_dir/targets/"
@@ -323,7 +323,7 @@ case "$package" in
         cp "$platform_dir/main-wayland.roc" "$stage_dir/main.roc"
         rewrite_types_dep "$stage_dir/main.roc"
 
-        copy_target_files x64glibc Scrt1.o crti.o libhost.a libmsf_gif.a libvpx.a libm.so libc.so crtn.o
+        copy_target_files x64glibc Scrt1.o crti.o libhost.a libmsf_gif.a libvpx.a libsqlite3.a libm.so libc.so crtn.o
 
         wayland_raylib="$root_dir/vendor/raylib/linux-x64-wayland/libraylib.a"
         if [[ ! -f "$wayland_raylib" ]]; then

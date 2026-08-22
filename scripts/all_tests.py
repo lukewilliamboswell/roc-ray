@@ -412,6 +412,48 @@ def run_udp_probe(
     return failures
 
 
+def run_sqlite_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a value written to a database comes back as itself.
+
+    Nothing else in the suite runs a query, so a binding that bound the wrong
+    column, a decoder that read the wrong cell, a payload offset off by one, or
+    an error that arrived as success would pass every other stage. The probe
+    writes one row holding all five `Value` kinds, reads it back, compares each
+    one, reuses a prepared statement, and walks the error paths an app is most
+    likely to hit.
+
+    It runs from the staged scratch directory and only touches `probe_out/`
+    beneath it, so it never writes into the tree. Exit 3 means a property did
+    not hold.
+    """
+    fixture = root / "test" / "sqlite" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning sqlite probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "sqlite")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build sqlite probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build sqlite probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run sqlite probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run sqlite probe"]
+
+
 def run_model_allocation_check(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -618,7 +660,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
 
             expected_target = (
                 'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
-                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
+                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, '
                 '"libc.so", "crtn.o"] }'
             )
             if expected_target not in main_text:
@@ -633,6 +675,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
             "targets/x64glibc/libraylib.a",
             "targets/x64glibc/libmsf_gif.a",
             "targets/x64glibc/libvpx.a",
+            "targets/x64glibc/libsqlite3.a",
             "targets/x64glibc/libm.so",
             "targets/x64glibc/libc.so",
         }
@@ -968,6 +1011,7 @@ def _run_example_stages(
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
         failed.extend(run_udp_probe(root, packages, args.verbose))
+        failed.extend(run_sqlite_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

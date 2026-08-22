@@ -1,9 +1,22 @@
 ## Immediate-mode 2D drawing, text, textures, cameras, and render effects.
 ##
-## The host owns the outer frame scope and passes an opaque `Frame` capability
-## to `render!`. Draw through that receiver so drawing cannot happen before
-## BeginDrawing or after EndDrawing. Nested helpers keep raylib's begin/end
-## state transitions paired.
+## `render!` is handed a `Frame`, and everything drawn is drawn through it:
+##
+## ```roc
+## render! = |model, frame| {
+##     frame.clear!(Color.from_hex_rgb(0x0d1425))
+##     frame.rectangle!({ x: 40, y: 40, width: 200, height: 90, style: Draw.filled(Color.white) })
+##     frame.circle!({ center: model.pointer, radius: 18, style: Draw.outlined(Color.red, 3) })
+##     Ok({})
+## }
+## ```
+##
+## The `Frame` is a capability rather than a value: the host opens the frame
+## scope around `render!` and closes it afterwards, so nothing can draw before
+## the frame begins or after it ends, and the nested scopes -- `with_camera!`,
+## `with_shader!`, `with_scissor!`, `with_render_texture!`, `with_blend_mode!`
+## -- restore what they changed however their callback ends. Do not keep a
+## `Frame` in the model; pass the callback's own frame down through helpers.
 ##
 ## Every effect that takes a `Frame` -- every shape, every texture, every
 ## scope, and every uniform `set!` -- is legal in `render!` only. The loaders
@@ -14,6 +27,16 @@
 ## in `render!`. Create them in `init!`, keep them in the model, and hand the
 ## values to `render!`; per-frame drawing and uniform updates then allocate
 ## nothing.
+##
+## Most shapes come in two spellings: `frame.circle!(cfg)` and
+## `Draw.circle!(frame, cfg)` are the same call. Prefer the receiver; the free
+## function is kept because it composes in a pipeline where the frame is not
+## the value at hand.
+##
+## Text has a fuller home in `Text`, which measures, wraps, aligns and prepares
+## it. `Draw.text!` and the `Draw.align_*` constants are the older, simpler
+## set: they draw a string with no layout pass. Reach for `Text` when the
+## position depends on the size of what is drawn.
 import Assets
 import Camera
 import Color
@@ -201,17 +224,19 @@ Draw := [].{
 		## render target's size instead, because that is what the callback's
 		## coordinates are relative to.
 		##
-		## This is the size of a *drawing surface*, so it is `F32` where
+		## This is the size of the drawing surface, so it is `F32` where
 		## `Window.Snapshot.size` is `I32`: it feeds rectangles, text anchors and
-		## centre points directly, and a render target's dimensions are already
-		## `F32` on `Texture`. `Window.Snapshot.size` stays `I32` because it is
-		## also the thing `Window.suggest_size` sets.
+		## centre points directly, and a render target's dimensions are already `F32`
+		## on `Texture`. `Window.Snapshot.size` stays `I32` because it is also the
+		## thing `Window.suggest_size` sets.
 		##
-		## Reach for this when laying something out against the surface -- a HUD
-		## in a corner, a title centred across the top. Layout decisions that
-		## `update` also has to make, such as which arrangement to use or what
-		## the pointer is over, belong on `input.window` where the rest of
-		## application logic can see them.
+		## Reach for this when laying something out against the surface -- a HUD in a
+		## corner, a title centred across the top. Layout decisions that `update!`
+		## also has to make, such as which arrangement to use or what the pointer is
+		## over, belong on `input.window` where the rest of application logic can see
+		## them.
+		##
+		## Legal in `render!` only.
 		size! : Frame => FrameSize
 		size! = |_frame| DrawHost.frame_size!()
 	}
@@ -226,7 +251,7 @@ Draw := [].{
 	##
 	## Named here as well so drawing code can keep a texture in its model
 	## without importing `Assets`; `Draw.Texture`, `Assets.Texture` and the
-	## companion package's `rrt.Texture` are one type, not three.
+	## companion package's `Texture` are one type, not three.
 	Texture : Assets.Texture
 
 	## Two-dimensional vector used by drawing records.
@@ -328,8 +353,10 @@ Draw := [].{
 		style : ShapeStyle,
 	}
 
-	## Compatibility alias for ConvexPolygon. Prefer `ConvexPolygon` and
-	## `convex_polygon!` in new code so the fill constraint is visible at call sites.
+	## Deprecated: use `ConvexPolygon`.
+	##
+	## The same type under its older name. `ConvexPolygon` says the constraint
+	## the host relies on, so it is visible at the call site.
 	Polygon : ConvexPolygon
 
 	## Position, size, and color for the FPS counter.
@@ -371,18 +398,36 @@ Draw := [].{
 		for_host : Font -> DrawHost.Font
 		for_host = |Font.(font)| font.raw
 
+		## The pixel size this font's glyph atlas was rasterized at.
+		##
+		## Drawing at this size is one atlas texel per screen pixel. Drawing much
+		## larger scales the atlas up rather than re-rasterizing, so load the
+		## font again at the size wanted instead.
 		base_size : Font -> F32
 		base_size = |Font.(font)| font.base_size_value
 
+		## Extra vertical space between lines, on top of the drawn size. Adding
+		## it to the text size is the distance from one baseline to the next.
 		line_spacing : Font -> F32
 		line_spacing = |Font.(font)| font.line_spacing_value
 
+		## Every glyph the font rasterized, with its advance and its box. This is
+		## the table `measure` walks; an app rarely needs it directly.
 		glyphs : Font -> List(RrtFont.GlyphMetrics)
 		glyphs = |Font.(font)| font.glyph_values
 
+		## Where a codepoint sits in `glyphs`, or the fallback glyph's index when
+		## the font has no glyph for it. Answers an index rather than a `Try`, so
+		## measurement stays total.
 		get_glyph_index : Font, U32 -> U64
 		get_glyph_index = |Font.(font), codepoint| glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
 
+		## The size a string will occupy at a given size and letter spacing,
+		## following raylib's own measurement rules.
+		##
+		## Pure: it reads the metric snapshot taken when the font loaded and
+		## never calls the host, so a layout pass can run in `update!`, in a
+		## helper, or in an `expect`. `Text` is the fuller interface built on it.
 		measure : Font, RrtFont.Measure -> RrtFont.Size
 		measure = |font, cfg| RrtFont.measure(font, cfg)
 
@@ -393,7 +438,7 @@ Draw := [].{
 		## built-in font, and `Text.prepare!` refuses it. Its metric snapshot is a
 		## fiction rather than a measurement -- no glyphs, no line spacing, and a
 		## `base_size` of 1 so that `measure` stays finite instead of dividing by
-		## zero. Put it in a model to reach the app's real `update` from an
+		## zero. Put it in a model to reach the app's real `update!` from an
 		## `expect`. Do not use it to test drawing, layout, or resource lifetime.
 		stub : Font
 		stub = Font.(
@@ -452,11 +497,19 @@ Draw := [].{
 		size : I32,
 	}
 
-	## Resolved texture draw configuration.
+	## Resolved texture draw configuration: which texture, which part of it,
+	## where it goes, and how it is rotated and tinted.
+	##
+	## `TextureDrawConfig` in the signature is the module-private record this
+	## aliases; `Draw.TextureDraw` is the name to write. Build one with
+	## `texture_draw`, `texture_at`, or the `TextureDrawBuilder` combinators.
 	TextureDraw : TextureDrawConfig
 
 	## One instance of a batched texture draw. These are the fields of
 	## `TextureDraw` minus the texture, which the batch supplies once.
+	##
+	## `TextureInstanceConfig` in the signature is the module-private record
+	## this aliases; `Draw.TextureInstance` is the name to write.
 	TextureInstance : TextureInstanceConfig
 
 	## Four ordered corners of a projected planar surface.
@@ -613,7 +666,8 @@ Draw := [].{
 		##
 		## The handle never resolves to a host resource, so entering a scope with
 		## it is refused the way a released target is. Its color attachment is
-		## `rrt.Texture.stub` with zero dimensions; copy it with the dimensions
+		## the package's `Texture.stub` with zero dimensions; copy it with the
+		## dimensions
 		## the test needs. Do not use it to test drawing, offscreen scopes, or
 		## resource lifetime.
 		stub : RenderTexture
@@ -642,15 +696,15 @@ Draw := [].{
 		## Compile shader stage files resolved through an explicit asset store.
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-		from_store! : Assets.Store, LoadShader => Try(Shader, [AssetPathInvalid, AssetNotFound, AssetReadFailed, ShaderLoadFailed, ResourceLimit, ..])
+		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
 		from_store! = |store, cfg| {
 			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
 			if result.err == 1 {
-				Err(AssetPathInvalid)
+				Err(PathInvalid)
 			} else if result.err == 2 {
-				Err(AssetNotFound)
+				Err(NotFound)
 			} else if result.err == 3 {
-				Err(AssetReadFailed)
+				Err(ReadFailed)
 			} else if result.err == 4 {
 				Err(ShaderLoadFailed)
 			} else if result.err != 0 {
@@ -662,38 +716,49 @@ Draw := [].{
 
 		## Resolve a scalar floating-point uniform once.
 		##
-		## Resolving a uniform is a lookup against the compiled program, so it
-		## belongs beside the load: legal in `init!`, `update!`, and tasks, and
-		## refused in `render!`. Setting one is the opposite -- `set!` on the
-		## resolved handle is legal in `render!` only.
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`. Resolving a
+		## uniform is a lookup against the compiled program, so it belongs beside the
+		## load. Setting one is the opposite: `set!` on the resolved handle is legal
+		## in `render!` only.
 		uniform_f32! : Shader, Str => Try(F32Uniform, [UniformNotFound, ..])
 		uniform_f32! = |Shader.(shader), name| Ok(F32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a scalar integer uniform once. Same phases as `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_i32! : Shader, Str => Try(I32Uniform, [UniformNotFound, ..])
 		uniform_i32! = |Shader.(shader), name| Ok(I32Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a two-component vector uniform once. Same phases as
 		## `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_vec2! : Shader, Str => Try(Vec2Uniform, [UniformNotFound, ..])
 		uniform_vec2! = |Shader.(shader), name| Ok(Vec2Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a three-component vector uniform once. Same phases as
 		## `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_vec3! : Shader, Str => Try(Vec3Uniform, [UniformNotFound, ..])
 		uniform_vec3! = |Shader.(shader), name| Ok(Vec3Uniform.(uniform_host!(shader, name)?))
 
 		## Resolve a four-component vector uniform once. Same phases as
 		## `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_vec4! : Shader, Str => Try(Vec4Uniform, [UniformNotFound, ..])
 		uniform_vec4! = |Shader.(shader), name| Ok(Vec4Uniform.(uniform_host!(shader, name)?))
 
-		## Resolve a color-valued vec4 uniform once. Same phases as
-		## `uniform_f32!`.
+		## Resolve a color-valued vec4 uniform once. Same phases as `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_color! : Shader, Str => Try(ColorUniform, [UniformNotFound, ..])
 		uniform_color! = |Shader.(shader), name| Ok(ColorUniform.(uniform_host!(shader, name)?))
 
 		## Resolve a sampled-texture uniform once. Same phases as `uniform_f32!`.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		uniform_texture! : Shader, Str => Try(TextureUniform, [UniformNotFound, ..])
 		uniform_texture! = |Shader.(shader), name| Ok(TextureUniform.(uniform_host!(shader, name)?))
 
@@ -702,13 +767,12 @@ Draw := [].{
 		## The handle never resolves to a host resource, so entering a scope with
 		## it is refused the way a released shader is, and setting a uniform
 		## derived from it does nothing. Put it in a model to reach the app's
-		## real `update` from an `expect`. Do not use it to test compilation,
+		## real `update!` from an `expect`. Do not use it to test compilation,
 		## uniforms, or resource lifetime.
 		stub : Shader
 		stub = Shader.(DrawHost.Shader.stub)
 	}
 
-	## Shader source strings. An empty string selects the default stage.
 	## Store-relative shader stage names. An empty path selects raylib's default
 	## stage; non-empty paths are resolved only through `Shader.from_store!`.
 	LoadShader : {
@@ -716,43 +780,88 @@ Draw := [].{
 		fragment_path : Str,
 	}
 
+	## Shader stages as GLSL source strings rather than store paths, for
+	## `Shader.from_source!`. An empty string selects raylib's default stage,
+	## which is what a fragment-only 2D post-processing effect wants.
 	LoadShaderSource : {
 		vertex_source : Str,
 		fragment_source : Str,
 	}
 
+	## Which font file format `FontBytes` carries. The bytes are decoded by
+	## format rather than by sniffing them, so a mislabelled file fails to load
+	## instead of loading as something else.
 	FontFormat := [Ttf, Otf]
+
+	## An authored font embedded with a compile-time file import, plus the pixel
+	## size to rasterize its glyph atlas at. `size` is baked into the atlas, so
+	## drawing at a much larger size scales that atlas up rather than
+	## re-rasterizing; load the font again at the size you need instead.
 	FontBytes : { format : FontFormat, bytes : List(U8), size : I32 }
 
-	## Typed uniform handles are zero-cost nominal wrappers over the cached host
-	## location plus its owning shader. Their distinct types prevent using the
-	## wrong setter without adding a tag, allocation, or host lookup.
+	## A resolved `F32` uniform location, from `Shader.uniform_f32!`.
+	##
+	## The typed uniform handles are zero-cost nominal wrappers over the cached
+	## host location plus its owning shader. Their distinct types prevent using
+	## the wrong setter without adding a tag, allocation, or host lookup.
 	F32Uniform :: DrawHost.Uniform.{
+
+		## Send a scalar float to this uniform for the draws that follow.
+		##
+		## Legal in `render!` only.
 		set! : F32Uniform, F32 => {}
 		set! = |F32Uniform.(uniform), value| DrawHost.set_shader_float!({ uniform, value })
 	}
 
+	## A resolved `I32` uniform location, from `Shader.uniform_i32!`.
 	I32Uniform :: DrawHost.Uniform.{
+
+		## Send a scalar integer to this uniform for the draws that follow.
+		##
+		## Legal in `render!` only.
 		set! : I32Uniform, I32 => {}
 		set! = |I32Uniform.(uniform), value| DrawHost.set_shader_int!({ uniform, value })
 	}
 
+	## A resolved two-component uniform location, from `Shader.uniform_vec2!`.
 	Vec2Uniform :: DrawHost.Uniform.{
+
+		## Send a two-component vector to this uniform for the draws that follow.
+		##
+		## Legal in `render!` only.
 		set! : Vec2Uniform, Vector2 => {}
 		set! = |Vec2Uniform.(uniform), value| DrawHost.set_shader_vec2!({ uniform, value })
 	}
 
+	## A resolved `Vec3` uniform location, from `Shader.uniform_vec3!`.
 	Vec3Uniform :: DrawHost.Uniform.{
+
+		## Send a three-component vector to this uniform for the draws that follow.
+		##
+		## Legal in `render!` only.
 		set! : Vec3Uniform, Vec3 => {}
 		set! = |Vec3Uniform.(uniform), value| DrawHost.set_shader_vec3!({ uniform, value })
 	}
 
+	## A resolved `Vec4` uniform location, from `Shader.uniform_vec4!`.
 	Vec4Uniform :: DrawHost.Uniform.{
+
+		## Send a four-component vector to this uniform for the draws that follow.
+		##
+		## Legal in `render!` only.
 		set! : Vec4Uniform, Vec4 => {}
 		set! = |Vec4Uniform.(uniform), value| DrawHost.set_shader_vec4!({ uniform, value })
 	}
 
+	## A resolved color uniform location, from `Shader.uniform_color!`. GLSL has
+	## no color type, so this is a `vec4` whose components the setter normalizes
+	## from the 0-to-255 bytes of an `Rgba` to the 0-to-1 floats a shader reads.
 	ColorUniform :: DrawHost.Uniform.{
+
+		## Send a color to this uniform for the draws that follow, normalized to
+		## the 0-to-1 range GLSL uses.
+		##
+		## Legal in `render!` only.
 		set! : ColorUniform, Color.Rgba => {}
 		set! = |ColorUniform.(uniform), color| DrawHost.set_shader_vec4!({
 			uniform,
@@ -763,13 +872,23 @@ Draw := [].{
 	TextureUniform :: DrawHost.Uniform.{
 
 		## Bind any sampled texture view, including a render-target attachment.
+		##
+		## Legal in `render!` only.
+		##
+		## This is the one to reach for. `set_texture!` is the same call named
+		## for the ordinary case, and exists only because binding a plain
+		## texture is what most shaders want and `set!` does not say so.
 		set! : TextureUniform, Texture => {}
 		set! = |TextureUniform.(uniform), texture| DrawHost.set_shader_texture!({
 			uniform,
 			texture,
 		})
 
-		## Convenience setter for an ordinary mutable texture.
+		## Bind an ordinary texture, as `set!` does. Prefer `set!`, which also
+		## accepts a render-target attachment; this spelling reads better when
+		## the value at hand is plainly a texture.
+		##
+		## Legal in `render!` only.
 		set_texture! : TextureUniform, Texture => {}
 		set_texture! = |uniform, texture| uniform.set!(texture)
 	}
@@ -845,6 +964,11 @@ Draw := [].{
 	default_spacing = 1
 
 	## Top-left text anchor.
+	##
+	## These nine constants and `align_offset` are the older alignment set, for
+	## `Draw.text_at!`. `Text.align_top_left` and its siblings are the ones to
+	## reach for: they are the same nine anchors, and they are what
+	## `Text.Prepared.draw!` takes.
 	align_top_left : TextAlign
 	align_top_left = { horizontal: Left, vertical: Top }
 
@@ -933,26 +1057,38 @@ Draw := [].{
 	}
 
 	## Clear the active drawing target to a solid color.
+	##
+	## Legal in `render!` only.
 	clear! : Frame, Color.Rgba => {}
 	clear! = |_frame, color| DrawHost.clear!(color)
 
 	## Draw a vertical rectangle gradient.
+	##
+	## Legal in `render!` only.
 	rectangle_gradient_v! : Frame, RectangleGradientV => {}
 	rectangle_gradient_v! = |_frame, cfg| DrawHost.rectangle_gradient_v!(cfg)
 
 	## Draw a horizontal rectangle gradient.
+	##
+	## Legal in `render!` only.
 	rectangle_gradient_h! : Frame, RectangleGradientH => {}
 	rectangle_gradient_h! = |_frame, cfg| DrawHost.rectangle_gradient_h!(cfg)
 
 	## Draw a radial circle gradient.
+	##
+	## Legal in `render!` only.
 	circle_gradient! : Frame, CircleGradient => {}
 	circle_gradient! = |_frame, cfg| DrawHost.circle_gradient!(cfg)
 
 	## Draw raylib's current frames-per-second counter.
+	##
+	## Legal in `render!` only.
 	fps! : Frame, Fps => {}
 	fps! = |_frame, cfg| DrawHost.fps!(cfg)
 
 	## Draw a filled and/or outlined axis-aligned rectangle.
+	##
+	## Legal in `render!` only.
 	rectangle! : Frame, Rectangle => {}
 	rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
@@ -967,6 +1103,8 @@ Draw := [].{
 	}
 
 	## Draw a filled and/or outlined rounded rectangle.
+	##
+	## Legal in `render!` only.
 	rounded_rectangle! : Frame, RoundedRectangle => {}
 	rounded_rectangle! = |_frame, cfg| {
 		match cfg.style.fill {
@@ -981,6 +1119,8 @@ Draw := [].{
 	}
 
 	## Draw a filled and/or outlined circle.
+	##
+	## Legal in `render!` only.
 	circle! : Frame, Circle => {}
 	circle! = |_frame, cfg| {
 		match cfg.style.fill {
@@ -995,6 +1135,8 @@ Draw := [].{
 	}
 
 	## Draw a stroked line segment. `NoStroke` performs no drawing.
+	##
+	## Legal in `render!` only.
 	line! : Frame, Line => {}
 	line! = |_frame, cfg|
 		match cfg.stroke {
@@ -1003,6 +1145,8 @@ Draw := [].{
 		}
 
 	## Draw a filled and/or outlined triangle.
+	##
+	## Legal in `render!` only.
 	triangle! : Frame, Triangle => {}
 	triangle! = |_frame, cfg| {
 		match cfg.style.fill {
@@ -1016,12 +1160,17 @@ Draw := [].{
 		}
 	}
 
-	## Compatibility alias for `convex_polygon!`.
+	## Deprecated: use `convex_polygon!`.
+	##
+	## Legal in `render!` only.
 	polygon! : Frame, Polygon => {}
 	polygon! = |frame, cfg| frame.convex_polygon!(cfg)
 
 	## Draw a convex filled polygon and/or an ordered polygon outline. The host
-	## triangulates the fill without allocating; fewer than three points do not fill.
+	## triangulates the fill without allocating; fewer than three points do not
+	## fill.
+	##
+	## Legal in `render!` only.
 	convex_polygon! : Frame, ConvexPolygon => {}
 	convex_polygon! = |_frame, cfg| {
 		match cfg.style.fill {
@@ -1038,15 +1187,15 @@ Draw := [].{
 	## Load a font relative to an explicit asset store.
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
-	load_store_font! : Assets.Store, LoadFont => Try(Font, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit, ..])
+	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
 		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })
 		if result.err == 1 {
-			Err(AssetPathInvalid)
+			Err(PathInvalid)
 		} else if result.err == 2 {
-			Err(AssetNotFound)
+			Err(NotFound)
 		} else if result.err == 3 {
-			Err(AssetReadFailed)
+			Err(ReadFailed)
 		} else if result.err == 4 {
 			Err(FontLoadFailed)
 		} else if result.err != 0 {
@@ -1083,7 +1232,10 @@ Draw := [].{
 	texture_view_at : Texture, Math.Vec2 -> TextureDraw
 	texture_view_at = |texture, pos| TextureDrawBuilder.run(TextureDrawBuilder.pos(pos), texture)
 
-	## Draw a texture with explicit source, destination, origin, rotation, and tint.
+	## Draw a texture with explicit source, destination, origin, rotation, and
+	## tint.
+	##
+	## Legal in `render!` only.
 	texture! : Frame, TextureDraw => {}
 	texture! = |_frame, cfg| {
 		DrawHost.draw_texture!({
@@ -1096,17 +1248,22 @@ Draw := [].{
 		})
 	}
 
-	## Compatibility alias for `texture!`.
+	## Deprecated: use `texture!`.
+	##
+	## Legal in `render!` only.
 	draw_texture! : Frame, TextureDraw => {}
 	draw_texture! = |frame, cfg| frame.texture!(cfg)
 
-	## Draw many instances of one texture, in list order, with a single hosted call.
+	## Draw many instances of one texture, in list order, with a single hosted
+	## call.
 	##
 	## `texture!` crosses the Roc/host boundary once per sprite, and that crossing
 	## is what caps how many sprites a frame can afford. This crosses once for the
 	## whole batch and lets the host loop over it, so the cost per instance is the
 	## `DrawTexturePro` call alone. Build the list from application state and pass
 	## it straight through; an empty list does not cross at all.
+	##
+	## Legal in `render!` only.
 	texture_instances! : Frame, Texture, List(TextureInstance) => {}
 	texture_instances! = |_frame, texture, instances| {
 		if List.len(instances) == 0 {
@@ -1118,6 +1275,8 @@ Draw := [].{
 
 	## Project a texture onto a validated planar quad with exact homogeneous UV
 	## interpolation. This remains one hosted call and preserves active shaders.
+	##
+	## Legal in `render!` only.
 	projective_texture! : Frame, ProjectiveTexture => {}
 	projective_texture! = |_frame, cfg| DrawHost.draw_texture_quad!({
 		texture: cfg.texture,
@@ -1134,6 +1293,8 @@ Draw := [].{
 	})
 
 	## Project a sampled texture view onto a validated planar quad.
+	##
+	## Legal in `render!` only.
 	projective_texture_view! : Frame, ProjectiveTextureView => {}
 	projective_texture_view! = |_frame, cfg| DrawHost.draw_texture_quad!({
 		texture: cfg.texture,
@@ -1162,18 +1323,26 @@ Draw := [].{
 	render_texture : RenderTexture -> Texture
 	render_texture = |target| target.texture()
 
-	## Render textures use OpenGL framebuffer coordinates, so their color
-	## attachment is vertically inverted when sampled on screen.
+	## The source rectangle that samples a render target's colour attachment.
+	##
+	## Its height is negative. Render textures use OpenGL framebuffer
+	## coordinates, so the attachment is vertically inverted when sampled on
+	## screen, and a negative-height source is how a draw flips it back.
 	render_texture_source : RenderTexture -> Math.Rect
 	render_texture_source = |target| target.source()
 
 	## Compile shader stages from source strings. Empty strings select the default
 	## stage, which is useful for fragment-only 2D post-processing.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	load_shader_source! : LoadShaderSource => Try(Shader, [ShaderLoadFailed, ResourceLimit, ..])
 	load_shader_source! = |cfg| Shader.from_source!(cfg)
 
 	## Scope offscreen rendering so BeginTextureMode/EndTextureMode stay paired.
-	## Callback errors are returned only after the native target has been restored.
+	## Callback errors are returned only after the native target has been
+	## restored.
+	##
+	## Legal in `render!` only.
 	with_render_texture! : Frame, RenderTexture, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_render_texture! = |frame, RenderTexture.(target), callback| {
 		status = DrawHost.begin_render_texture!(target)
@@ -1188,8 +1357,10 @@ Draw := [].{
 		}
 	}
 
-	## Scope shader application so the default shader is always restored.
-	## Callback errors are returned only after the previous shader has been restored.
+	## Scope shader application so the default shader is always restored. Callback
+	## errors are returned only after the previous shader has been restored.
+	##
+	## Legal in `render!` only.
 	with_shader! : Frame, Shader, (Frame => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])) => Try(result, [ScopeLimit, ScopeUnavailable, ..errors])
 	with_shader! = |frame, Shader.(shader), callback| {
 		status = DrawHost.begin_shader!(shader)
@@ -1206,6 +1377,8 @@ Draw := [].{
 
 	## Scope one of raylib's built-in blend equations. Custom blend factors are
 	## deliberately excluded until they can be represented without global state.
+	##
+	## Legal in `render!` only.
 	with_blend_mode! : Frame, BlendMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_blend_mode! = |frame, mode, callback| {
 		status = DrawHost.begin_blend!(blend_mode_code(mode))
@@ -1221,6 +1394,8 @@ Draw := [].{
 	}
 
 	## Draw the callback in world space using this camera.
+	##
+	## Legal in `render!` only.
 	with_camera! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_camera! = |frame, camera, callback| {
 		status = DrawHost.begin_camera!(camera)
@@ -1235,12 +1410,19 @@ Draw := [].{
 		}
 	}
 
-	## Compatibility alias for `with_camera!`.
+	## Deprecated: use `with_camera!`.
+	##
+	## Legal in `render!` only.
 	with_mode_2d! : Frame, CameraMode, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_mode_2d! = |frame, camera, callback| frame.with_camera!(camera, callback)
 
-	## Restrict callback drawing to screen-space `bounds`, then always close the
-	## scissor before returning. Use this instead of manually pairing the raw effects.
+	## Restrict callback drawing to screen-space `bounds`, and close the scissor
+	## however the callback ends, error included.
+	##
+	## `bounds` is in the same logical coordinates as every other drawing call,
+	## so it is a rectangle on the surface rather than in framebuffer pixels.
+	##
+	## Legal in `render!` only.
 	with_scissor! : Frame, Math.Rect, (Frame => Try(result, [ScopeLimit, ..errors])) => Try(result, [ScopeLimit, ..errors])
 	with_scissor! = |frame, bounds, callback| {
 		# Reconstruct the internal transport record at the hosted boundary. Keeping
@@ -1261,6 +1443,8 @@ Draw := [].{
 	}
 
 	## Draw text using explicit font, spacing, color, and anchor alignment.
+	##
+	## Legal in `render!` only.
 	text! : Frame, Text => {}
 	text! = |_frame, cfg| {
 		align = Draw.align_factor(cfg.align)
@@ -1277,6 +1461,8 @@ Draw := [].{
 	}
 
 	## Draw top-left aligned text with the built-in font and default spacing.
+	##
+	## Legal in `render!` only.
 	debug_text! : Frame, DebugText => {}
 	debug_text! = |_frame, cfg|
 		DrawHost.text_aligned!({
@@ -1291,6 +1477,8 @@ Draw := [].{
 		})
 
 	## Draw simple top-left aligned text with the built-in font.
+	##
+	## Legal in `render!` only.
 	text_at! : Frame, SimpleText => {}
 	text_at! = |_frame, cfg|
 		DrawHost.text_aligned!({
@@ -1305,6 +1493,8 @@ Draw := [].{
 		})
 
 	## Draw simple text centered on its position.
+	##
+	## Legal in `render!` only.
 	text_centered! : Frame, SimpleText => {}
 	text_centered! = |_frame, cfg|
 		DrawHost.text_aligned!({
@@ -1445,7 +1635,7 @@ expect match Draw.ProjectiveQuad.from_corners({
 }
 
 ## The resource-free stubs are pure values an app puts in a model to reach its
-## own `update` from an `expect`. What they must never do is pass for a loaded
+## own `update!` from an `expect`. What they must never do is pass for a loaded
 ## resource, so what is checked here is that they are inert.
 ##
 ## A `Texture`, a `Shader`, and a `RenderTexture` each hold a `Box` and cannot be
@@ -1461,8 +1651,9 @@ expect List.is_empty(Draw.Font.stub.glyphs())
 expect Draw.Font.stub.measure({ text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
 expect Draw.Font.stub.measure({ text: "inert", size: 20, spacing: 0 }) == { width: 0, height: 20 }
 
-## A stub render target's colour attachment is `rrt.Texture.stub`, so it has no
-## area and its vertically flipped source rectangle has none either.
+## A stub render target's colour attachment is the `roc-ray-types` package's
+## `Texture.stub`, so it has no area and its vertically flipped source
+## rectangle has none either.
 expect Draw.RenderTexture.stub.texture().width == 0
 expect Draw.RenderTexture.stub.texture().height == 0
 expect Draw.RenderTexture.stub.source().width == 0

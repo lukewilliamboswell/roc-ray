@@ -32,6 +32,7 @@
 ## platform with an output root, and it confines captures only; see
 ## `write_text!`.
 import FilesHost
+import Time
 
 Files := [].{
 
@@ -49,6 +50,21 @@ Files := [].{
 
 	## Why `list!` produced no directory entries.
 	ListError : [NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
+
+	## What one path is, how big it is, and when it last changed.
+	##
+	## `size_bytes` is the file's length; for a directory it is whatever the
+	## filesystem reports for the directory itself, which is not the size of
+	## what is inside it. `modified` is wall-clock time, so it is comparable
+	## with `Time.now!` and with a `modified` this app recorded earlier, and it
+	## is not comparable with `input.time`.
+	Metadata : { kind : EntryKind, size_bytes : U64, modified : Time.Timestamp }
+
+	## Why `metadata!` could not describe the path.
+	##
+	## There is no `Busy`: a stat holds no host-owned payload, so there is no
+	## delivery slot for it to run out of.
+	MetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
 
 	## Why a write did not leave the file on disk.
 	##
@@ -111,6 +127,61 @@ Files := [].{
 			Ok(decode_listing(result.bytes))
 		} else {
 			Err(list_error(result.err))
+		}
+	}
+
+	## What one path is, how big it is, and when it last changed.
+	##
+	## Symbolic links are followed, so a link to a file is `File` and a link to
+	## nothing is `NotFound`. That differs from `list!`, which reports the kind
+	## the directory itself records and so calls a symbolic link `Other`;
+	## `metadata!` answers about the thing at the end of the path, which is
+	## what an app deciding whether to read it wants to know.
+	##
+	## Polling `modified` is how an app hot-reloads a shader, a level, or a
+	## dataset it did not write. Do it inside a task, and sleep between stats,
+	## so the watching costs a parked task rather than a stat every frame:
+	##
+	## ```roc
+	## watch! : Str, Time.Timestamp => Msg
+	## watch! = |path, seen| {
+	##     var $answer = None
+	##     while $answer == None {
+	##         Task.sleep!(250)
+	##         $answer = match Files.metadata!(path) {
+	##             Ok(meta) if meta.modified != seen => Some(Changed(path, meta.modified))
+	##             Ok(_) => None
+	##             Err(NotFound) => None
+	##             Err(other) => Some(WatchFailed(other))
+	##         }
+	##     }
+	##     Option.unwrap($answer)
+	## }
+	## ```
+	##
+	## A loop rather than a recursive call, because a task runs on a
+	## fixed-size coroutine stack. `NotFound` keeps waiting rather than giving
+	## up: an editor saving a file often replaces it, so the path can be
+	## missing for a moment. `update!` spawns the watcher again when it handles
+	## `Changed`, and each live watcher holds one of the host's task slots for
+	## as long as it watches.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
+	metadata! : Str => Try(Metadata, MetadataError)
+	metadata! = |path| {
+		result = FilesHost.metadata!(path)
+		if result.err == 0 {
+			# The host normalizes the instant before it crosses, so the only
+			# way this fails is a host that is wrong about its own contract.
+			# Saying so is more use than reporting it as a filesystem error an
+			# app could act on.
+			match Time.Timestamp.from_parts({ seconds: result.modified_seconds, nanosecond: result.modified_nanosecond }) {
+				Ok(modified) => Ok({ kind: entry_kind(result.kind), size_bytes: result.size_bytes, modified: modified })
+				Err(InvalidNanosecond) => crash("roc-ray: Files.metadata! received a modification time the host had not normalized")
+			}
+		} else {
+			Err(metadata_error(result.err))
 		}
 	}
 
@@ -380,3 +451,26 @@ expect decode_listing([2, 's', 'r', 'c', 0, 1, 'a', '.', 't', 0]) == [
 ## A kind byte with no terminator after it ends the listing rather than being
 ## guessed at, so a truncated buffer still yields the entries that were whole.
 expect decode_listing([1, 'a', 0, 2, 'b']) == [{ name: "a", kind: File }]
+
+## Decode the host's metadata-error code. Mirrored in `src/host_native.zig`.
+##
+## A stat can be refused for a reason a read cannot: a directory on the way to
+## the path may be one this process may not look inside, which is
+## `PermissionDenied` rather than the file being absent.
+metadata_error : U8 -> Files.MetadataError
+metadata_error = |code|
+	if code == 1 {
+		NotFound
+	} else if code == 4 {
+		Unavailable
+	} else if code == write_err_permission_denied {
+		PermissionDenied
+	} else {
+		ReadFailed
+	}
+
+expect metadata_error(1) == NotFound
+expect metadata_error(2) == ReadFailed
+expect metadata_error(4) == Unavailable
+expect metadata_error(8) == PermissionDenied
+expect metadata_error(99) == ReadFailed

@@ -157,6 +157,20 @@ const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
 /// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
 const WRITE_ERR_NO_SPACE: u8 = 9;
+/// Nothing is reading the other end of the stream. Mirrored in `StdioHost.roc`.
+///
+/// Only a standard stream can report this, and it is not necessarily a fault:
+/// `myapp | head -1` ends this way every time, which is why it is a code of its
+/// own rather than a generic write failure the app cannot recognize.
+const WRITE_ERR_BROKEN_PIPE: u8 = 10;
+
+/// The most one `Stdout` or `Stderr` call will write.
+///
+/// A stream write borrows the app's own bytes and copies nothing, so this is
+/// not bounding host memory; it bounds how long one call can hold a task
+/// parked against a reader that is not draining. A payload past it is
+/// `TooLarge` with nothing written, rather than a write that half-arrives.
+const MAX_STREAM_WRITE_BYTES: usize = 1024 * 1024;
 
 /// How many entries one listing may report, and how many bytes it may encode
 /// them into.
@@ -226,6 +240,23 @@ fn writeErrorCode(err: anyerror) u8 {
         error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
         error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_PERMISSION_DENIED,
         error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// Name a failed stream write in the app's vocabulary.
+///
+/// A stream is already open, so the path failures a file write can have cannot
+/// happen here; what a stream has instead is a reader that went away, which is
+/// how an ordinary `myapp | head -1` pipeline ends and is worth telling apart
+/// from a genuine failure. A write cancelled at shutdown is `UNAVAILABLE`: the
+/// host declined to finish it, which is a refusal rather than a fault.
+fn streamWriteErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.BrokenPipe => WRITE_ERR_BROKEN_PIPE,
+        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
+        error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
+        error.Canceled => READ_ERR_UNAVAILABLE,
         else => READ_ERR_FAILED,
     };
 }
@@ -624,6 +655,66 @@ fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetReco
     return hostedFilesList(activeHost(), path_arg);
 }
 
+/// Name a failed stat in the app's vocabulary.
+///
+/// A stat can be refused for a reason a read cannot: a directory on the way to
+/// the path may be one this process may not look inside, which is a permission
+/// the app can ask the user about rather than a path it should fix.
+fn statErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
+        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
+        error.Canceled => READ_ERR_UNAVAILABLE,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// The listing kind byte for what a stat found at the end of a path.
+///
+/// Symbolic links do not appear: a stat follows them, so what is reported is
+/// the kind of the thing the link points at.
+fn statEntryKind(kind: std.Io.File.Kind) u8 {
+    return switch (kind) {
+        .file => DIR_ENTRY_FILE,
+        .directory => DIR_ENTRY_DIR,
+        else => DIR_ENTRY_OTHER,
+    };
+}
+
+/// Stat one path on the waiting path, parked rather than blocking.
+///
+/// Shaped exactly like a read: the phase guard, the park, and the trace are
+/// the same, and the difference is only that the answer is five numbers rather
+/// than a payload, so there is no delivery slot to reserve and nothing to
+/// bound but the wait itself.
+fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) abi.FilesHostMetadataRetRecord {
+    const stat = base.statFile(io, path, .{ .follow_symlinks = true }) catch |err|
+        return .{ .err = statErrorCode(err), .kind = 0, .size_bytes = 0, .modified_seconds = 0, .modified_nanosecond = 0 };
+    const modified = timestampFromNanos(stat.mtime.nanoseconds);
+    return .{
+        .err = 0,
+        .kind = statEntryKind(stat.kind),
+        .size_bytes = stat.size,
+        .modified_seconds = modified.seconds,
+        .modified_nanosecond = modified.nanosecond,
+    };
+}
+
+/// `Files.metadata!`: what one path is, how big it is, and when it changed.
+fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    enforcePhase("Files.metadata!", during_wait);
+    defer path_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("stat", 0);
+    defer AppTasks.traceResume("stat");
+    return statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+}
+
+fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    return hostedFilesMetadata(activeHost(), path_arg);
+}
+
 /// Replace a whole file on the waiting path, parked rather than blocking.
 ///
 /// Missing parent directories are created, which is what `writeWholeFile` does
@@ -689,6 +780,149 @@ fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: ab
 
 fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
     return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
+}
+
+/// Split a wall-clock reading into the normalized parts `Time.Timestamp` holds.
+///
+/// The seconds are floored rather than truncated, so the fractional part is
+/// always the nanoseconds elapsed within the instant's own second on both
+/// sides of the epoch. A reading a signed 64-bit count of seconds cannot hold
+/// saturates: no real clock reaches it, and an app is better served by an
+/// instant at the end of time than by a wrapped one in the middle of it.
+fn timestampFromNanos(nanos: i128) abi.TimeHostNowRetRecord {
+    const whole = @divFloor(nanos, std.time.ns_per_s);
+    const seconds = std.math.cast(i64, whole) orelse {
+        return .{
+            .seconds = if (whole < 0) std.math.minInt(i64) else std.math.maxInt(i64),
+            .nanosecond = 0,
+        };
+    };
+    return .{ .seconds = seconds, .nanosecond = @intCast(nanos - whole * std.time.ns_per_s) };
+}
+
+/// `Time.now!`: what time it is in the world.
+///
+/// Reading the clock changes nothing and waits for nothing, but it is refused
+/// during `render!` all the same. Wall time is not the timeline this platform
+/// paces: an animation driven from it would ignore the fixed step a capture
+/// records under, and `render!` is handed the model rather than an input, so
+/// the instant a frame draws is one the model already decided on.
+/// The reading itself is `Clock.real`, which is settable and can jump when the
+/// administrator or NTP moves it. That is what a calendar is; the timeline
+/// that only moves forward is `input.time`, and the two are deliberately
+/// different values. Reading a clock does not block, so this takes no
+/// `WaitScope` and needs none of the parking machinery a waiting effect has.
+fn hostedTimeNow() callconv(.c) abi.TimeHostNowRetRecord {
+    enforcePhase("Time.now!", during_update);
+    return timestampFromNanos(std.Io.Clock.real.now(waitingIo()).nanoseconds);
+}
+
+/// The stream a `StdioHost` call names. Mirrored in `StdioHost.roc`.
+const STDIO_STREAM_STDOUT: u8 = 1;
+
+/// The descriptor one of those numbers stands for.
+///
+/// The number is written by `Stdout` and `Stderr` rather than by the app, so
+/// there is no third case to report: anything that is not standard output is
+/// standard error.
+fn streamFile(stream: u8) std.Io.File {
+    return if (stream == STDIO_STREAM_STDOUT) std.Io.File.stdout() else std.Io.File.stderr();
+}
+
+/// Write a payload to a standard stream on the waiting path.
+///
+/// `head` and `tail` are written in that order and are one payload: `line!`
+/// passes the app's string and a newline, so a line crosses in one call and
+/// nothing can land between the text and its terminator.
+///
+/// Written through std's threaded implementation on zio's blocking pool for
+/// the same reason `writeFileWaiting` is: it is the one backend that behaves
+/// identically for a terminal, a pipe, a file redirect, and a Windows console
+/// handle. The pool parks the calling task the way the event loop would, and
+/// the worker touches only the borrowed payload bytes, which the parked task
+/// keeps alive until it returns.
+fn writeStreamWaiting(stream: u8, head: []const u8, tail: []const u8) u8 {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("stdio", 0);
+    defer AppTasks.traceResume("stdio");
+    const allocator = allocatorFromHost(activeHost());
+    const rt = AppTasks.currentRuntime() orelse return writeStreamBlocking(allocator, stream, head, tail);
+    var blocking = rt.spawnBlocking(writeStreamBlocking, .{ allocator, stream, head, tail }) catch
+        return READ_ERR_FAILED;
+    return blocking.join();
+}
+
+/// The stream write itself, on whichever thread the caller chose.
+fn writeStreamBlocking(allocator: std.mem.Allocator, stream: u8, head: []const u8, tail: []const u8) u8 {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return writeStreamIn(streamFile(stream), threaded.io(), head, tail);
+}
+
+/// `writeStreamWaiting` against an explicit file and `Io`, so a test can point
+/// it at a pipe or a temporary file instead of the process's own streams.
+///
+/// A stream write is allowed to be short -- a pipe accepts what fits in its
+/// buffer and no more -- so this loops until the whole payload is out. That is
+/// what lets the app be told `Ok({})` means every byte arrived. A write that
+/// reports no progress at all is treated as a failure rather than looped on
+/// forever.
+fn writeStreamIn(file: std.Io.File, io: std.Io, head: []const u8, tail: []const u8) u8 {
+    var remaining_head = head;
+    var remaining_tail = tail;
+    while (remaining_head.len + remaining_tail.len > 0) {
+        const written = std.Io.File.writeStreaming(file, io, remaining_head, &.{remaining_tail}, 1) catch |err|
+            return streamWriteErrorCode(err);
+        if (written == 0) return READ_ERR_FAILED;
+        const from_head = @min(written, remaining_head.len);
+        remaining_head = remaining_head[from_head..];
+        remaining_tail = remaining_tail[@min(written - from_head, remaining_tail.len)..];
+    }
+    return 0;
+}
+
+/// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
+fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!", during_wait);
+    defer text_arg.decref(roc_host);
+    const bytes = text_arg.asSlice();
+    if (bytes.len > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
+    return writeStreamWaiting(stream, bytes, &.{});
+}
+
+fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedStdioWriteText(activeHost(), stream, text_arg);
+}
+
+/// `Stdout.line!` and `Stderr.line!`: the app's string and one newline.
+///
+/// The newline is the host's byte rather than a copy of the app's string with
+/// one appended, so a line costs no allocation and cannot be interleaved with
+/// another write halfway through.
+fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!", during_wait);
+    defer text_arg.decref(roc_host);
+    const bytes = text_arg.asSlice();
+    if (bytes.len + 1 > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
+    return writeStreamWaiting(stream, bytes, "\n");
+}
+
+fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedStdioWriteLine(activeHost(), stream, text_arg);
+}
+
+/// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
+fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!", during_wait);
+    defer bytes_arg.decref(roc_host);
+    const bytes = bytes_arg.items();
+    if (bytes.len > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
+    return writeStreamWaiting(stream, bytes, &.{});
+}
+
+fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    return hostedStdioWriteBytes(activeHost(), stream, bytes_arg);
 }
 
 /// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
@@ -5282,6 +5516,21 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     try std.testing.expectEqualStrings("copied", unchanged.payload.ok.asSlice());
 }
 
+/// `App.Startup.entropy!`: one draw from the operating system's entropy.
+///
+/// The only thing in this host that makes a run differ from the last one by
+/// itself. It answers with real entropy in headless runs too: an app that must
+/// reproduce says so by writing a constant seed, and a host that quietly
+/// handed out the same number every run would take that choice away instead of
+/// making it. Obtaining it does not block, so this needs none of the parking
+/// machinery a waiting effect has.
+fn hostedEntropy() callconv(.c) u64 {
+    enforcePhase("App.Startup.entropy!", during_startup);
+    var bytes: [8]u8 = undefined;
+    std.Io.random(waitingIo(), &bytes);
+    return std.mem.readInt(u64, &bytes, .little);
+}
+
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     enforcePhase("App.Startup.random_i32!", during_startup);
     if (active_headless) return headlessRandomI32(min, max);
@@ -5732,11 +5981,13 @@ comptime {
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&exportedArgs, .{ .name = "roc_host_args" });
+        @export(&hostedEntropy, .{ .name = "roc_host_entropy" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
         @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&exportedFilesList, .{ .name = "roc_files_list" });
+        @export(&exportedFilesMetadata, .{ .name = "roc_files_metadata" });
         @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
         @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
@@ -5760,6 +6011,10 @@ comptime {
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
         @export(&hostedHttpSend, .{ .name = "roc_http_send" });
+        @export(&hostedTimeNow, .{ .name = "roc_time_now" });
+        @export(&exportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
+        @export(&exportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
+        @export(&exportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
     }
 }
 
@@ -8008,6 +8263,224 @@ test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
     try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
+}
+
+test "a stat reports what a path is, how big it is, and when it changed" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "notes.txt", .data = "twelve bytes" });
+    try tmp.dir.createDirPath(std.testing.io, "assets");
+
+    const file = statPathIn(tmp.dir, std.testing.io, "notes.txt");
+    try std.testing.expectEqual(@as(u8, 0), file.err);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, file.kind);
+    try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.size_bytes);
+
+    // The modification time is wall-clock, so it is a plausible instant rather
+    // than a counter starting at the app's own start. Anything after 2020 is
+    // enough to catch a monotonic clock leaking in here by mistake.
+    try std.testing.expect(file.modified_seconds > 1_577_836_800);
+    try std.testing.expect(file.modified_nanosecond < 1_000_000_000);
+
+    const dir = statPathIn(tmp.dir, std.testing.io, "assets");
+    try std.testing.expectEqual(@as(u8, 0), dir.err);
+    try std.testing.expectEqual(DIR_ENTRY_DIR, dir.kind);
+
+    // A failed stat answers with the reason and zeroes, so an app cannot read
+    // a size or a time out of an answer that has neither.
+    const missing = statPathIn(tmp.dir, std.testing.io, "absent.txt");
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
+    try std.testing.expectEqual(@as(u64, 0), missing.size_bytes);
+    try std.testing.expectEqual(@as(i64, 0), missing.modified_seconds);
+}
+
+test "a stat rewrites a modification a hot-reload loop can compare" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "one" });
+    const before = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    // Polling `modified` is the whole hot-reload story, so rewriting the file
+    // has to move the instant an app is comparing against.
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "two but longer" });
+    const after = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    try std.testing.expect(after.size_bytes > before.size_bytes);
+    const moved = after.modified_seconds > before.modified_seconds or
+        (after.modified_seconds == before.modified_seconds and after.modified_nanosecond >= before.modified_nanosecond);
+    try std.testing.expect(moved);
+}
+
+test "a stat names the refusals apart from the failures" {
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.FileNotFound));
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.NotDir));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, statErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, statErrorCode(error.Canceled));
+    try std.testing.expectEqual(READ_ERR_FAILED, statErrorCode(error.Unexpected));
+
+    // A stat follows links, so what an app is told is the kind of the thing at
+    // the end of the path and never `sym_link`.
+    try std.testing.expectEqual(DIR_ENTRY_FILE, statEntryKind(.file));
+    try std.testing.expectEqual(DIR_ENTRY_DIR, statEntryKind(.directory));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.named_pipe));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.sym_link));
+}
+
+test "startup entropy varies, and is refused once the app is running" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    {
+        const scope = PhaseScope.enter(.startup);
+        defer scope.leave();
+        var drawn: [4]u64 = undefined;
+        for (&drawn) |*slot| slot.* = hostedEntropy();
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+
+        // Four identical draws would mean the host is handing out a constant
+        // dressed as entropy, which is exactly the bug this effect exists to
+        // fix: a headless run used to reseed from a fixed counter and call the
+        // result random.
+        var varied = false;
+        for (drawn[1..]) |value| {
+            if (value != drawn[0]) varied = true;
+        }
+        try std.testing.expect(varied);
+    }
+
+    // Seeding is a startup decision, kept in the model afterwards, so reaching
+    // for fresh entropy mid-run is a mistake worth naming.
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+    last_phase_violation = null;
+    _ = hostedEntropy();
+    const violation = last_phase_violation orelse return error.EntropyWasNotRejected;
+    try std.testing.expectEqual(Phase.update, violation.actual);
+}
+
+test "a wall-clock reading is normalized on both sides of the epoch" {
+    try std.testing.expectEqual(@as(i64, 0), timestampFromNanos(0).seconds);
+    try std.testing.expectEqual(@as(u32, 0), timestampFromNanos(0).nanosecond);
+
+    try std.testing.expectEqual(@as(i64, 1), timestampFromNanos(1_500_000_000).seconds);
+    try std.testing.expectEqual(@as(u32, 500_000_000), timestampFromNanos(1_500_000_000).nanosecond);
+
+    // One nanosecond before the epoch is the last nanosecond of 1969, not a
+    // negative fraction of second zero. Truncating instead of flooring here
+    // would make the two sides of 1970 disagree about what a second is.
+    try std.testing.expectEqual(@as(i64, -1), timestampFromNanos(-1).seconds);
+    try std.testing.expectEqual(@as(u32, 999_999_999), timestampFromNanos(-1).nanosecond);
+
+    // No real clock reaches this, but a reading that cannot be represented
+    // saturates rather than wrapping into the middle of history.
+    const beyond = @as(i128, std.math.maxInt(i64)) * std.time.ns_per_s + std.time.ns_per_s;
+    try std.testing.expectEqual(std.math.maxInt(i64), timestampFromNanos(beyond).seconds);
+    try std.testing.expectEqual(std.math.minInt(i64), timestampFromNanos(-beyond).seconds);
+}
+
+test "reading the clock is refused while drawing" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Not because it costs anything, but because a frame that reads the
+    // calendar is a frame animating on a timeline the platform does not pace.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    enforcePhase("Time.now!", during_update);
+    const violation = last_phase_violation orelse return error.ClockReadWasNotRejected;
+    try std.testing.expectEqual(Phase.render, violation.actual);
+}
+
+test "a stream write joins its two parts and loops until every byte is out" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const file = try tmp.dir.createFile(std.testing.io, "out.txt", .{});
+    defer file.close(std.testing.io);
+
+    // A line is one write of two parts -- the app's string and the host's
+    // newline -- so nothing can be interleaved between the text and its
+    // terminator.
+    try std.testing.expectEqual(@as(u8, 0), writeStreamIn(file, std.testing.io, "first", "\n"));
+
+    // A payload large enough that the underlying write is allowed to be short.
+    // `Ok({})` claims every byte arrived, so the loop is what makes that true.
+    const bulk = try std.testing.allocator.alloc(u8, MAX_STREAM_WRITE_BYTES);
+    defer std.testing.allocator.free(bulk);
+    @memset(bulk, 'x');
+    try std.testing.expectEqual(@as(u8, 0), writeStreamIn(file, std.testing.io, bulk, &.{}));
+
+    const written = try tmp.dir.readFileAlloc(
+        std.testing.io,
+        "out.txt",
+        std.testing.allocator,
+        .limited(MAX_STREAM_WRITE_BYTES + 64),
+    );
+    defer std.testing.allocator.free(written);
+    try std.testing.expectEqual(MAX_STREAM_WRITE_BYTES + "first\n".len, written.len);
+    try std.testing.expectEqualStrings("first\n", written[0.."first\n".len]);
+}
+
+test "a stream write names the reader going away apart from a failure" {
+    try std.testing.expectEqual(WRITE_ERR_BROKEN_PIPE, streamWriteErrorCode(error.BrokenPipe));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, streamWriteErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, streamWriteErrorCode(error.NoSpaceLeft));
+    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, streamWriteErrorCode(error.DiskQuota));
+
+    // Shutdown cancels a parked write. The host declined to finish it, which
+    // is a refusal the app can recognize rather than a failure of the stream.
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, streamWriteErrorCode(error.Canceled));
+    try std.testing.expectEqual(READ_ERR_FAILED, streamWriteErrorCode(error.Unexpected));
+}
+
+test "writing to a stream waits, so a frame phase is refused by name" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    for ([_]Phase{ .update, .render, .idle }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_wait);
+        const violation = last_phase_violation orelse return error.StreamWriteWasNotRejected;
+        try std.testing.expectEqual(phase, violation.actual);
+    }
+
+    for ([_]Phase{ .startup, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_wait);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+}
+
+test "a stream payload past the cap writes nothing and still releases the string" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    const scope = PhaseScope.enter(.startup);
+    defer scope.leave();
+
+    const oversized = try std.testing.allocator.alloc(u8, MAX_STREAM_WRITE_BYTES + 1);
+    defer std.testing.allocator.free(oversized);
+    @memset(oversized, 'x');
+
+    // Refused before anything reaches the stream, so the app is never told a
+    // truncated write succeeded. The string is still the host's to release:
+    // the testing allocator fails this test if the early return skips it.
+    try std.testing.expectEqual(
+        READ_ERR_TOO_LARGE,
+        hostedStdioWriteText(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized, &roc_host)),
+    );
+
+    // A line adds the newline to what is counted, so the largest string a
+    // line can carry is one byte shorter than the largest `write!` can.
+    try std.testing.expectEqual(
+        READ_ERR_TOO_LARGE,
+        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..MAX_STREAM_WRITE_BYTES], &roc_host)),
+    );
 }
 
 test "a directory past the entry cap is refused rather than allocated" {

@@ -42,7 +42,15 @@ HostHost := [].{
 	## Read a whole UTF-8 file, blocking the caller.
 	read_file! : Str => ReadFileResult
 
-	## Startup entropy in the inclusive range `[min, max]`.
+	## One draw from the operating system's entropy source.
+	##
+	## Never fails: the implementation falls back to a less secure mechanism
+	## rather than reporting that entropy is unavailable, because what this
+	## seeds is a game's generator rather than a key.
+	entropy! : () => U64
+
+	## A number in the inclusive range `[min, max]`, from the backend's own
+	## generator rather than from the operating system.
 	random_i32! : I32, I32 => I32
 
 	## Replace the clipboard with UTF-8 text.

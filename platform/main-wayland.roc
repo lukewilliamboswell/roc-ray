@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Url]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Url, Stdout, Stderr]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -90,6 +90,7 @@ platform ""
 		"roc_files_read_text": FilesHost.read_text!,
 		"roc_files_read_bytes": FilesHost.read_bytes!,
 		"roc_files_list": FilesHost.list!,
+		"roc_files_metadata": FilesHost.metadata!,
 		"roc_files_write_text": FilesHost.write_text!,
 		"roc_files_write_bytes": FilesHost.write_bytes!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
@@ -99,6 +100,7 @@ platform ""
 		"roc_capture_screenshot_texture": CaptureHost.screenshot_texture!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
+		"roc_host_entropy": HostHost.entropy!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_read_clipboard": HostHost.read_clipboard!,
 		"roc_host_random_i32": HostHost.random_i32!,
@@ -134,6 +136,10 @@ platform ""
 		"roc_draw_set_shader_vec3_raw": DrawHost.set_shader_vec3!,
 		"roc_draw_set_shader_vec4_raw": DrawHost.set_shader_vec4!,
 		"roc_http_send": HttpHost.send!,
+		"roc_time_now": TimeHost.now!,
+		"roc_stdio_write_text": StdioHost.write_text!,
+		"roc_stdio_write_line": StdioHost.write_line!,
+		"roc_stdio_write_bytes": StdioHost.write_bytes!,
 	}
 	targets: {
 		inputs_dir: "targets/",
@@ -176,6 +182,10 @@ import Task
 import HttpHost
 import Http
 import Url
+import Stdout
+import Stderr
+import StdioHost
+import TimeHost
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the

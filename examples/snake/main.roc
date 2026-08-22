@@ -101,8 +101,10 @@ init! = App.init(
 			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 })?,
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
 			# Entropy is asked for once, here. From this point randomness is
-			# model state that `update!` advances without an effect.
-			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
+			# model state that `update!` advances without an effect, so this
+			# whole run reproduces from the one number below. Replace it with
+			# a constant to get the same game every time.
+			rng: Random.seed(U64.to_u32_wrap(App.entropy!(startup))),
 		}
 
 		Ok(new_game(seed))

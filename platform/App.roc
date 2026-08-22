@@ -273,15 +273,37 @@ App := [].{
 		}
 	}
 
-	## Get varying startup entropy in the inclusive range `[min, max]`.
+	## Draw one number from the operating system's entropy source.
+	##
+	## This is the only thing in the platform that makes a run differ from the
+	## last one by itself, and it is deliberately the app's decision:
+	##
+	## ```roc
+	## seed = Random.seed(U64.to_u32_wrap(startup.entropy!()))
+	## ```
+	##
+	## Keep the returned `Random.State` in the model and draw with pure
+	## `Random.Generator` values during `update!`, so the run is reproducible
+	## from its seed. A run that must reproduce writes a constant seed instead
+	## and never calls this; a run that should vary calls it once. Nothing else
+	## about the platform is affected either way, because the generator's state
+	## is the model's rather than the host's.
+	##
+	## The entropy is real in every mode, including headless: determinism comes
+	## from an app choosing a fixed seed, not from the host quietly handing out
+	## the same "random" number on every run.
 	##
 	## Legal only in `init!`.
+	entropy! : Startup => U64
+	entropy! = |_startup| HostHost.entropy!()
+
+	## Get a varying startup number in the inclusive range `[min, max]`.
 	##
-	## For simulation or gameplay, call this once and initialize the exposed
-	## `roc-random` package with, for example,
-	## `Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2000000000)))`.
-	## Keep that `Random.State` in the model and use pure `Random.Generator`
-	## values during `update`, so draws are reproducible from the initial seed.
+	## Legal only in `init!`. `entropy!` is the one to seed a generator from:
+	## it draws on the operating system rather than on the backend's own
+	## generator, and it says what it is for. This remains for a one-off value
+	## in a range, such as a jittered start position that nothing else depends
+	## on.
 	random_i32! : Startup, I32, I32 => I32
 	random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
 

@@ -858,6 +858,17 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         print("\nSkipping roc fmt (--runtime-only)")
     else:
         print("\nRunning roc fmt --check...")
+        print("  Formatting platform modules...", end=" ", flush=True)
+        platform_modules = sorted((root / "platform").glob("*.roc"))
+        if run_cmd(
+            ["roc", "fmt", "--check", *map(str, platform_modules)],
+            "fmt platform",
+            args.verbose,
+        ):
+            print("ok")
+        else:
+            print("FAILED")
+            failed.append("roc fmt platform")
         for example in examples:
             name = example_name(example)
             print(f"  Formatting {name}...", end=" ", flush=True)

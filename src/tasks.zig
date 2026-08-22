@@ -1,4 +1,4 @@
-//! Coroutine-backed app tasks (spike; see COROUTINE_DESIGN_PROPOSAL.md).
+//! Coroutine-backed app tasks.
 //!
 //! One zio executor, on the frame thread, runs every task. A task is a boxed
 //! Roc closure `() => Msg` handed over by the `Task.spawn!` effect; it runs on

@@ -5,7 +5,7 @@
 //! that means the frame loop keeps drawing while the request is in flight;
 //! inside `init!` there is no other task to run, so the frame thread waits.
 //! Either way the code here reads as if it were synchronous, which is the
-//! whole point of the coroutine scheme (COROUTINE_DESIGN_PROPOSAL.md, 5.3).
+//! point of running tasks on coroutines.
 //!
 //! `host_native.zig` owns the phase guard and the Roc entry point; this file
 //! owns the exchange and the conversion between Roc values and Zig slices.
@@ -258,7 +258,7 @@ fn runWithDeadline(exchange: *Exchange, timeout: zio.Timeout) ExchangeError!void
 /// connection pool and the TLS trust store, and one that outlived the send
 /// would have to be torn down from outside any coroutine, where its `io` calls
 /// are not valid. The cost is a handshake per request, and on HTTPS a rescan
-/// of the system certificate store; see docs/http.md.
+/// of the system certificate store.
 fn run(exchange: *Exchange) ExchangeError!void {
     var client: std.http.Client = .{ .allocator = exchange.arena, .io = exchange.io };
     defer client.deinit();

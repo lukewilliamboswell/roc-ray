@@ -449,8 +449,8 @@ const during_wait = PhaseSet.initMany(&.{ .startup, .task });
 /// screenshot asked for there would park for a frame that cannot arrive while
 /// it holds the frame thread. That is a programming error with a fix -- spawn
 /// a task from `update!` -- rather than a condition to report, so it is
-/// refused by name here instead of coming back as `Unavailable`, which is what
-/// it used to do and which says nothing about what to do instead.
+/// refused by name here rather than coming back as an `Unavailable` that says
+/// nothing about what to do instead.
 const during_frame_wait = PhaseSet.initOne(.task);
 
 /// The host-side hooks the task registry needs: Roc entry points and the
@@ -7073,12 +7073,11 @@ test "uploading pixels is refused from render, and taken during update" {
 }
 
 test "window-size suggestions and frame-rate caps are taken during update" {
-    // Both of these used to be startup-only, so an app could neither resize
-    // itself in response to its own layout nor drop its frame cap while
-    // running. raylib resizes a live window and re-caps a running loop as
-    // readily as it does before the first frame, so the restriction bought
-    // nothing and cost two effects. Headless keeps the calls off raylib while
-    // still exercising the guard and the size bookkeeping.
+    // raylib resizes a live window and re-caps a running loop as readily as it
+    // does before the first frame, so both effects are reachable from `update!`
+    // and a task: an app can resize itself in response to its own layout, and
+    // drop its frame cap while running. Headless keeps the calls off raylib
+    // while still exercising the guard and the size bookkeeping.
     last_phase_violation = null;
     defer last_phase_violation = null;
     const restore_width = headless_screen_width;

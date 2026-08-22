@@ -5,8 +5,13 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## Everything `render!` needs must live here now: it is handed no input, so
-## anything read from input or the clock has to be recorded by `update` first.
+## The whole app loop, with nothing else in the way: prepare text once in
+## `init!`, fold each cycle's input into the model in `update!`, draw the model
+## in `render!`, and leave with `Err(Exit(0))`.
+##
+## `render!` is handed a frame and the model, and no input, so anything it needs
+## to know about the pointer or the clock has to be in the model. That is what
+## this one holds.
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
@@ -39,11 +44,9 @@ init! = App.init(
 	},
 )
 
-## Fold one cycle of observations into the model.
-##
-## No `!`: this is a pure function, so it cannot read input or exit by itself.
-## It is handed everything the host saw and returns the next model plus the work
-## it wants done -- here, an `Exit` command on the frame Escape is pressed.
+## Nothing here waits, so there is no task to spawn and no message to fold in.
+## An app that reads a file or fetches a URL gives `Msg` the variants those
+## tasks answer with; see the `task_sleep` and `async_read` examples.
 Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])

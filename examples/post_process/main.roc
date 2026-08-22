@@ -6,6 +6,15 @@ import rr.Color
 import rr.Draw
 import rr.Math
 
+## Render a scene to an offscreen texture, then draw that texture through a
+## fragment shader.
+##
+## Both are scopes: `with_render_texture!` redirects the draws inside it, and
+## `with_shader!` applies to the draws inside that. `size!` answers for whatever
+## surface the scope is drawing to, so the same call gives the target's size
+## inside and the window's size outside. The shader's uniform location is
+## resolved once in `init!` and written in `render!`, immediately before the
+## draw it applies to.
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
@@ -35,8 +44,9 @@ init! = App.init(
 	},
 )
 
+## Nothing here waits, so there is no task to spawn and no message to fold in.
 ## The shader clock is the only state this example advances, and the input
-## carries it, so `update` reads it off the input and stores it. Writing it into
+## carries it, so `update!` reads it off the input and stores it. Writing it into
 ## the shader is `render!`'s job: the uniform only means anything relative to
 ## the draws it precedes.
 Msg : []

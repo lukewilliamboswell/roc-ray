@@ -9,6 +9,14 @@ import rr.Mouse
 import rr.Gamepad
 import rr.App
 
+## A diagnostic that draws the whole `Devices.Snapshot`: keys down, pressed and
+## released, mouse buttons and motion, gamepad sticks, and typed codepoints.
+##
+## Every host effect it uses -- the clipboard, the cursor mode, the exit key, a
+## minimum window size -- answers immediately, so all of them are ordinary calls
+## from `update!` and the answers land on the cycle that asked. Escape is handed
+## back to the app with `with_exit_key(NoExitKey)` so it can be shown lighting
+## up like any other key; Q quits.
 Model : {
 	font : Draw.Font,
 
@@ -28,9 +36,9 @@ Model : {
 
 program = { init!, update!, render! }
 
-## Nothing here answers on a later cycle, so this app has no messages. Reading
-## the clipboard used to be a request; it is now an ordinary call whose result
-## is folded into the same frame that asked for it.
+## Nothing here waits, so there is no task to spawn and no message to fold in.
+## A clipboard read is an ordinary call whose result is folded into the same
+## cycle that asked for it.
 Msg : []
 
 ## What a clipboard read can come back with.

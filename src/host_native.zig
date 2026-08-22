@@ -17,6 +17,7 @@ const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
+const udp_effect = @import("udp_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -1168,6 +1169,16 @@ fn destroyStore(resource: *StoreResource) void {
     resource.root.close(mainThreadIo());
 }
 
+/// Close the descriptor when the last Roc reference to a socket is gone.
+///
+/// This is the whole lifecycle: there is no `close!` effect, so dropping the
+/// handle -- from the model, from a task closure, at shutdown -- is what closes
+/// the socket. A task still parked in `receive` cannot reach here, because it
+/// holds a reference of its own for as long as it is parked.
+fn destroyUdpSocket(resource: *udp_effect.Socket) void {
+    resource.inner.close();
+}
+
 fn writeU64Token(payload: *u64, token: u64) void {
     payload.* = token;
 }
@@ -1184,6 +1195,16 @@ const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResou
 const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
 const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
 const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
+
+/// How many UDP sockets an app may hold open at once.
+///
+/// Small on purpose: a game binds one socket, or two when it also runs a
+/// discovery or telemetry channel. Each slot carries its own 64 KiB receive
+/// staging buffer, which is what the cap is really bounding, and a bind past
+/// it is `ResourceLimit` rather than an unbounded descriptor count.
+const MAX_LIVE_UDP_SOCKETS: usize = 8;
+
+const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX_LIVE_UDP_SOCKETS, 10, writeU64Token, readU64Token, destroyUdpSocket);
 
 /// Bytes a finished read handed over, and the allocator that owns them.
 ///
@@ -1270,6 +1291,7 @@ var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
+var udp_socket_heap: UdpSocketHeap = .{};
 
 var prepared_text_prepare_calls: usize = 0;
 var prepared_text_draw_calls: usize = 0;
@@ -1342,7 +1364,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap }) |heap| {
+    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap, &udp_socket_heap }) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -5518,6 +5540,8 @@ fn deinitResources() void {
     std.debug.assert(sound_heap.active() == 0);
     std.debug.assert(file_bytes_heap.active() == 0);
     std.debug.assert(store_heap.active() == 0);
+    std.debug.assert(udp_socket_heap.active() == 0);
+    udp_socket_heap.deinitAll();
     file_bytes_heap.deinitAll();
     store_heap.deinitAll();
     shader_heap.deinitAll();
@@ -6207,6 +6231,7 @@ fn drainRetiredResources() void {
 /// Destroy up to `limit` retired resources across every heap.
 fn drainRetiredResourcesUpTo(limit: usize) void {
     var budget = limit;
+    budget -= udp_socket_heap.drainRetired(budget);
     budget -= store_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);

@@ -44,6 +44,10 @@ pub fn Tasks(comptime Hooks: type) type {
         /// Closures waiting for a live slot, oldest first.
         queued: std.ArrayListUnmanaged(Queued) = .empty,
         finished: std.ArrayListUnmanaged(Finished) = .empty,
+        /// The results the last `takeFinished` handed to the frame loop.
+        /// Two buffers take turns rather than one being freed and allocated
+        /// again every frame a task completes on.
+        delivered: std.ArrayListUnmanaged(Finished) = .empty,
         next_id: u64 = 1,
         cycle: u64 = 0,
         trace: bool = false,
@@ -231,30 +235,40 @@ pub fn Tasks(comptime Hooks: type) type {
         ///
         /// A zero-length sleep parks the main task on a timer that is already
         /// due, which is the one public way to make the executor run its loop.
-        /// One such turn does half the job: the loop polls, readies the tasks
-        /// whose I/O completed, and returns to the main task before running
-        /// them, because the same poll fired the timer. The second turn runs
-        /// them. A task that then parks on an operation the kernel can finish
-        /// at once needs the pair again, so the pairs repeat while some task
-        /// resumed or finished in the last one, up to a bound that keeps a
-        /// pathological task from holding the frame.
+        /// One such turn does only part of the job: the loop polls, readies
+        /// the tasks whose I/O completed, and returns to the main task before
+        /// running them, because the same poll fired the timer. The next turn
+        /// runs them, and a task that then submits another operation -- the
+        /// drain half of `Udp.receive!` does exactly that -- needs the pair
+        /// again before it can finish. So the turns repeat while any task
+        /// starts, resumes or finishes, and for `quiet_turns` beyond that.
         fn turnUntilQuiet(self: *Self) void {
-            var pairs: usize = 0;
+            var turns: usize = 0;
             var quiet: usize = 0;
-            while (pairs < max_turn_pairs and quiet < 2) : (pairs += 1) {
+            while (turns < max_turns and quiet < quiet_turns) : (turns += 1) {
                 const before = self.progress;
                 zio.sleep(.zero) catch {};
-                zio.sleep(.zero) catch {};
-                // One quiet pair is not proof of rest: an operation a task
-                // just submitted completes on the poll after the one that
-                // submitted it, and a readied task is invisible from here
-                // until it runs. Two quiet pairs in a row are.
                 quiet = if (self.progress == before) quiet + 1 else 0;
             }
         }
 
-        /// Turn pairs one pump will spend chasing tasks that keep resuming.
-        const max_turn_pairs: usize = 6;
+        /// Turns of no visible progress before a pump concludes the tasks are
+        /// at rest.
+        ///
+        /// Not one, and not two: progress is only visible when a task's Roc
+        /// code runs, and a completion the kernel already has takes several
+        /// turns to reach that point -- the poll that reaps it, the turn that
+        /// runs the task, the poll for the operation it submits next, and the
+        /// turn that runs it again. Measured at five for a `Udp.receive!`
+        /// whose datagram arrived while the last frame was being drawn, which
+        /// is the case a game's peer traffic is made of. Stopping short of
+        /// that is what left the receive to be delivered a frame or two later
+        /// than the frame it was ready in.
+        const quiet_turns: usize = 6;
+
+        /// Turns one pump will spend chasing tasks that keep resuming. The
+        /// bound is what keeps a pathological task from holding the frame.
+        const max_turns: usize = 12;
 
         /// Release the join handles of tasks that have finished.
         fn reap(self: *Self) void {
@@ -270,20 +284,27 @@ pub fn Tasks(comptime Hooks: type) type {
         }
 
         /// The finished tasks' results in completion order, for the host to
-        /// stage as responses. Ownership moves to the caller; the list is
-        /// emptied.
+        /// stage as responses. The results are the caller's to move; the
+        /// slice itself is on loan until `releaseTaken`, and tasks that
+        /// finish meanwhile collect into the other buffer.
+        ///
+        /// The slice is not the caller's to free, and deliberately so: it is
+        /// the shorter `items` of a list whose allocation is capacity-sized,
+        /// and an allocator handed that back would be freeing at a size it
+        /// never allocated at.
         pub fn takeFinished(self: *Self) []const Finished {
             if (self.trace and self.finished.items.len != 0) {
                 std.log.info("[TASK] delivering {d} result(s) as messages on cycle {d}", .{ self.finished.items.len, self.cycle });
             }
-            const items = self.finished.items;
-            self.finished = .empty;
-            return items;
+            std.mem.swap(std.ArrayListUnmanaged(Finished), &self.finished, &self.delivered);
+            return self.delivered.items;
         }
 
-        /// Release a slice returned by `takeFinished` once its items are moved.
+        /// Give back a slice returned by `takeFinished` once its items are
+        /// moved. The buffer stays here for the next frame to fill.
         pub fn releaseTaken(self: *Self, taken: []const Finished) void {
-            self.allocator.free(taken);
+            std.debug.assert(taken.len == self.delivered.items.len);
+            self.delivered.clearRetainingCapacity();
         }
 
         /// Cancel every live task, run each to completion on the cancelled
@@ -317,6 +338,9 @@ pub fn Tasks(comptime Hooks: type) type {
             self.live.deinit(self.allocator);
             self.queued.deinit(self.allocator);
             self.finished.deinit(self.allocator);
+            // Empty by now: whoever took the results gave the buffer back
+            // before the app could exit. Only its capacity is left to drop.
+            self.delivered.deinit(self.allocator);
             if (current == self) current = null;
         }
     };

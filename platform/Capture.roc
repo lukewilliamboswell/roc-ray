@@ -9,8 +9,8 @@
 ## file-writing capability the platform grants.
 ##
 ## Recording starts and stops through `Capture.start!` and `Capture.stop!`,
-## screenshots use `App.Request`, and recording state is available as
-## `input.capture` each cycle.
+## a single frame is written by `Capture.screenshot!`, and recording state is
+## available as `input.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.

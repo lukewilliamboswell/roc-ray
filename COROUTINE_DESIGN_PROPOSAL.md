@@ -1,9 +1,18 @@
 # Effectful update and coroutine-backed tasks for roc-ray
 
-Status: proposal, 2026-08-22. **Steps 1 and 2 of the migration (section
-10) are implemented on branch `spike-coro`** -- see "Spike status" below and
-`docs/spike-coro-findings.md` for the measurements. Steps 3-7 are not
-started; `App.Request` and `RequestQueue` remain until step 6.
+Status: proposal, 2026-08-22. **Steps 1, 2, and the effects of step 4 are
+implemented on branch `spike-coro`** -- see "Spike status" below and
+`docs/spike-coro-findings.md` for the measurements. `App.Request` and
+`RequestQueue` remain until step 6.
+
+**Blocked.** Message delivery is broken on the branch: a `Task.spawn!`
+closure's `Msg`, and a `Request`'s callback result, both reach `update!`
+with the wrong tag and a misread payload. It arrived with step 2's move of
+submission into hosted signatures that carry a type variable, and it means
+steps 4's port and step 6's deletion cannot be finished -- an app ported off
+`Request` onto tasks would receive nothing usable. `main` is unaffected.
+The bisection, the shapes that do not fix it, and the two ways forward are
+in `docs/spike-coro-findings.md`.
 
 ## Spike status (2026-08-22, branch `spike-coro`)
 
@@ -593,6 +602,7 @@ enough to keep an enum layer for it. What exists instead:
 | Task stack overflow is a segfault | Low | Guard page + handler naming the task; configurable size |
 | Every example rewritten | Certain | Mechanical; mostly deletion |
 | Assumption: all Roc call state is on the native stack | Closed | Verified by the spike: a Roc call parked mid-effect and resumed 18 frames later with the frame loop running in between |
+| A `Msg` cannot cross a hosted signature that carries a type variable | **Open, blocking** | Found in step 4; already breaks `App.request!` on the branch. Fix upstream, or keep `msg` out of hosted signatures and build every erased callable inside `update_for_host!` (see `docs/spike-coro-findings.md`) |
 
 ## 10. Migration plan
 
@@ -611,9 +621,13 @@ enough to keep an enum layer for it. What exists instead:
    Port `async_read`. `ROC_RAY_TRACE_TASKS` already exists.
 4. **Retire the effect worker**: `Files.*`, clipboard read, screenshot
    become `std.Io` calls against `rt.io()` that park on a task. Port
-   remaining examples.
+   remaining examples. *Effects done on `spike-coro`; the port is blocked on
+   message delivery (see Status).* The worker still services the `Request`
+   path, so it is not retired yet.
 5. **CI on all four targets**; link stubs the `roc build` path needs.
 6. **Delete** `Request` and everything under it. Regenerate the ABI.
+   *Blocked: `Task.spawn!` cannot yet carry a message, so nothing can be
+   ported off `Request`.*
 7. **Add what the critique asked for**: `Http.fetch!` (`std.http.Client`
    over `rt.io()`; zio has an `http_client` example), `Files.write_*!`,
    `Path`.

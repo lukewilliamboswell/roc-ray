@@ -331,3 +331,130 @@ pinned release nightly.
 * Components lose `map_msg`: a child's `Task.spawn!` closure must return
   the parent's `Msg`. `App.map_request` covers requests; the
   `Task.spawn_with!` helper the proposal suggests is not written.
+
+## Step 4: waiting effects, and the delivery defect that stops step 6
+
+Same branch, 2026-08-22, on top of step 2. Reference compiler is the pinned
+release nightly.
+
+### What landed
+
+`Files.read_text!`, `Files.read_bytes!`, `Files.list!`,
+`Window.read_clipboard!`, and `Capture.screenshot!` exist as ordinary
+effects. The three file effects and the screenshot are `wait` effects
+(`during_wait` = init | task): their Zig implementation goes through
+`rt.io()`, so on a task the coroutine parks on the event loop and the frame
+loop keeps running, and in `init!` the same call parks the frame loop's own
+task and pumps until the answer is in. `Window.read_clipboard!` is a plain
+state read -- raylib only answers on the window's thread and the read is a
+pointer copy -- so it is `during_update` and never parks.
+
+Measured, from a scratch app:
+
+* `Files.read_text!("README.md")` in `init!` produced 10860 bytes, matching
+  `wc -c`. `Files.read_bytes!("src/roc_platform_abi.zig")` produced 430055
+  bytes with no payload copy: the buffer the read filled moves into a
+  seamless `List(U8)`. A missing path produced `NotFound`.
+  `Files.list!("examples")` produced 23 entries.
+* `Files.read_text!` from `update!`:
+
+      roc-ray: Files.read_text! is only valid during init! or a task, but
+      it was called during update!. It waits: call it inside Task.spawn!,
+      where it parks the task, or in init!, where it blocks.
+
+* `Capture.screenshot!("probe.png")` inside `Task.spawn!`, windowed: the
+  task parked, the frame loop kept going, `Ok({})` came back, and
+  `probe.png` is a 3459-byte 800x600 8-bit RGBA PNG. The readback still
+  happens at end-of-frame inside the drawing scope; the encode and the write
+  run on `rt.spawnBlocking`, which parks the task again rather than spending
+  the encode on the frame thread.
+
+Preserved: the 16 MiB per-file ceiling, the 64 KiB ceiling on a read
+delivered as a `Str`, UTF-8 validation before a `Str` is built, the
+live-byte-list reservation, and the zero-copy `List(U8)`. Dropped: the
+per-input headless read budgets, which bounded one dispatch over a request
+list and have no meaning for a read that spans cycles.
+
+### What did not land, and why
+
+**No example is ported to `Task.spawn!`, and step 6 is not started.** A
+task's message does not survive delivery: it reaches `update!` with the
+wrong tag and a misread payload. So does a `Request`'s. This is not a step-4
+regression -- it is already true at the tip of step 2 -- and it makes the
+point of steps 4 and 6 unreachable until it is fixed.
+
+Bisected with `examples/async_read`, which reads a small file as a `Str` and
+a large one as bytes and shows both:
+
+| Tree | `read_text` result | `read_bytes` result |
+|---|---|---|
+| `main` (0551b28), requests returned as data from a pure `update` | `"10583 bytes copied into a Str"` | `"419691 ordinary bytes held by Roc ARC"` |
+| `spike-coro` (ca6c32a), `App.request!` as a hosted effect | `"reading..."` -- never delivered | `"429308 ordinary bytes held by Roc ARC"` |
+
+Both messages arrive on `spike-coro` -- `List.len(input.messages) == 2` --
+but both take the `BytesReadFinished` branch. Submitting only the text read
+still produces a `BytesReadFinished`, carrying a `List(U8)` of 21720 bytes
+for a 10860-byte file: the tag is not written, and the payload is read
+through the wrong variant's layout.
+
+`Task.spawn!` fails the same way, and worse. With `Msg : [Other(U64)]` and
+`Task.spawn!(|| Other(77))`, the box the host receives has refcount 1 and a
+payload that was never written -- the same uninitialised bytes on every run.
+The spike missed this because `examples/task_sleep` has `Msg : [Woke]`,
+which is zero-sized: there is nothing in it to corrupt.
+`scripts/all_tests.py` missed it because a headless run only asserts the
+exit code, so an example whose messages never arrive still passes.
+
+The common factor is step 2's move of submission into **hosted signatures
+that carry a type variable** -- `AppHost.submit_request! : SubmittedRequest(msg) => {}`
+and `TaskHost.spawn! : Box(() => msg) => {}`. On `main` the erased response
+mapper was built and consumed inside `update_for_host!`, where `Msg` is
+concrete, and it worked. Disassembling `run_task_for_host` shows the erased
+call going through the dynamic path -- `roc_boxy_init_embedded`,
+`roc_boxy_register_proc`, `roc_boxy_call_erased` -- rather than a
+monomorphised call, and emitting two `decref`s of the same argument box.
+
+Shapes tried that do **not** fix it, so nobody repeats them:
+
+* `run_task_for_host! : Box(() => Msg) => Box(Msg)` -- the "direct shape"
+  the step-1 `TODO(compiler)` note suggested. The release compiler builds
+  it; the message is still wrong.
+* Returning `Box(msg)` from the erased closure rather than `msg` by value.
+* Giving the erased closure an argument (`(U64) => ...`), and making it pure
+  (`(U64) -> ...`).
+* Boxing the closure at the app's own call site instead of inside
+  `Task.spawn!`.
+* Delivering the message through a second hosted effect
+  (`TaskHost.deliver! : Box(msg) => {}`) so that nothing is returned across
+  the `provides` boundary.
+* Calling `callable_fn_ptr` from Zig directly, with the documented
+  erased-callable ABI, instead of going through `run_task_for_host!`.
+* Let-binding `AppTransport.normalize`'s result before the hosted call.
+
+One separate glue bug found on the way: `roc glue` renders `List(Box(msg))`
+as `RocListWith(RocBox, false)` -- a one-word list header -- while Roc's own
+code releases it as a list of refcounted elements, with a two-word header.
+The host then frees eight bytes off the allocation base, which faults inside
+the allocator. Building the list as `RocList(RocBox)` and handing back the
+`false`-typed struct avoids it, but the generated type is wrong either way.
+
+### Recommended next step
+
+Fix delivery before anything else in the migration. Until it is fixed,
+`App.request!` is quietly broken on `spike-coro` for every app whose `Msg`
+has more than one shape, and `Task.spawn!` cannot carry a message at all.
+Two directions:
+
+1. Reduce it to a `test/` case in the roc repo -- a hosted signature with a
+   type variable, an erased callable built on one side of it and called on
+   the other -- and fix it upstream. That is the direction that keeps the
+   design in section 3.
+2. If it cannot be fixed soon, keep `msg` out of hosted signatures entirely:
+   make `update_for_host!`, where `Msg` is concrete, the only place an
+   erased callable is built or called, which is what `main` does today. That
+   costs `App.request!` and `Task.spawn!` their effect form and pushes the
+   design back toward returning deferred work as data.
+
+Step 4's effects are independent of this and are already useful from
+`init!`: an app can read its config, its atlas, and its level manifest at
+startup with no first-frame state machine.

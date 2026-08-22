@@ -23,6 +23,8 @@ This script runs:
 - headless runs   - Run each built example for a few frames
 - cli args        - Build and run the argv bridge probe
 - model alloc     - Measure what a frame costs a large collection in the model
+- http client     - Serve a known file on localhost, fetch it from a task, and
+                    check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
                     served types URL, which is the case this all exists for
 - wayland bundle  - Bundle, inspect and build the Linux-only Wayland package
@@ -60,6 +62,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundles  # noqa: E402  (needs the sys.path entry above)
+import test_http_client  # noqa: E402  (needs the sys.path entry above)
 
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX = platform.system() == "Linux"
@@ -68,6 +71,9 @@ IS_LINUX = platform.system() == "Linux"
 LOCAL_PLATFORM_REF = local_bundles.LOCAL_PLATFORM_REF
 RELEASE_PLATFORM_REF_RE = local_bundles.RELEASE_PLATFORM_REF_RE
 _rewrite_platform_ref = local_bundles.rewrite_platform_ref
+# See `local_bundles.PACKAGE_LIMIT_ARGS`: a locally built platform bundle is
+# bigger than roc's default transitive-dependency budget.
+LIMITS = local_bundles.PACKAGE_LIMIT_ARGS
 
 # Examples to skip in the bundled-platform build test, mapping example name ->
 # reason. Use this when a specific example can't build against the bundled
@@ -209,7 +215,7 @@ def run_cli_args_integration(
     print("\nRunning CLI argument integration probe...", end=" ", flush=True)
     staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cli_args")
     if not run_cmd(
-        ["roc", "build", staged.name], "build CLI argument probe", verbose, cwd=staged.parent
+        ["roc", "build", staged.name, *LIMITS], "build CLI argument probe", verbose, cwd=staged.parent
     ):
         print("FAILED")
         return ["build CLI argument probe"]
@@ -255,7 +261,7 @@ def run_model_allocation_check(
     print("\nMeasuring model collection allocation per frame...", end=" ", flush=True)
     staged = local_bundles.stage_app(entry, packages, packages.scratch_dir / "model_inplace")
     if not run_cmd(
-        ["roc", "build", staged.name], "build model allocation probe", verbose, cwd=staged.parent
+        ["roc", "build", staged.name, *LIMITS], "build model allocation probe", verbose, cwd=staged.parent
     ):
         print("FAILED (build)")
         return ["model allocation probe build"]
@@ -304,7 +310,7 @@ def run_package_interop_test(
     failed: list[str] = []
     for command in ("check", "build"):
         print(f"  {command.capitalize()}ing {entry.name}...", end=" ", flush=True)
-        if run_cmd(["roc", command, staged.name], f"interop {command}", verbose, cwd=staged.parent):
+        if run_cmd(["roc", command, staged.name, *LIMITS], f"interop {command}", verbose, cwd=staged.parent):
             print("ok")
         else:
             print("FAILED")
@@ -390,7 +396,7 @@ def run_wayland_bundle_test(root: Path, example: Path, verbose: bool) -> list[st
             )
             command = "build" if IS_LINUX else "check"
             ok = run_cmd(
-                ["roc", command, staged.name],
+                ["roc", command, staged.name, *LIMITS],
                 f"wayland bundle {command} {name}",
                 verbose,
                 cwd=staged.parent,
@@ -712,7 +718,7 @@ def _run_example_stages(
             name = example_name(example)
             print(f"  Checking {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "check", staged[example].name],
+                ["roc", "check", staged[example].name, *LIMITS],
                 f"check {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -730,7 +736,7 @@ def _run_example_stages(
                 name = example_name(example)
                 print(f"  Testing {name}...", end=" ", flush=True)
                 if run_cmd(
-                    ["roc", "test", staged[example].name],
+                    ["roc", "test", staged[example].name, *LIMITS],
                     f"test {name}",
                     args.verbose,
                     cwd=staged[example].parent,
@@ -754,7 +760,7 @@ def _run_example_stages(
 
             print(f"  Building {name}...", end=" ", flush=True)
             if run_cmd(
-                ["roc", "build", staged[example].name],
+                ["roc", "build", staged[example].name, *LIMITS],
                 f"build {name}",
                 args.verbose,
                 cwd=staged[example].parent,
@@ -783,6 +789,7 @@ def _run_example_stages(
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
+        failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 
     return failed
 

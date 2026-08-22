@@ -124,6 +124,19 @@ IS_WINDOWS = platform_module.system() == "Windows"
 SCRATCH_PREFIX = "rr-local-bundles-"
 STALE_SCRATCH_SECONDS = 24 * 60 * 60
 
+# `roc` refuses a direct dependency whose transitive packages decompress to more
+# than 100 MB, and a roc-ray platform bundle built by a plain `zig build` is over
+# that: a Debug host archive carries the whole of `std.crypto` for the HTTP
+# client's TLS, four times over, which is about 90 MB of the 125 MB bundle. The
+# `-Doptimize=ReleaseFast` archives a release actually ships are around 10 MB, so
+# this is a property of a locally built platform rather than of a published one.
+#
+# Every roc invocation that resolves a locally bundled platform therefore raises
+# the limit. It is raised, not removed, so a genuine runaway dependency is still
+# caught. Undocumented in `roc build --help` and `roc test --help`, but accepted
+# by both.
+PACKAGE_LIMIT_ARGS = ["--max-transitive-mb=512"]
+
 # The platform reference in an app header: `app [..] { rr: platform "<ref>" }`.
 # Deliberately broader than the release-flow regex in release_helpers.py so that
 # an already-rewritten header (a localhost URL from an outer CI step, say) is

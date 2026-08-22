@@ -1,10 +1,10 @@
 ## Filesystem reads and writes, and their typed terminal outcomes.
 ##
-## These effects wait. Inside `Task.spawn!` they park the task on the host's
-## event loop and the frame loop keeps drawing; in `init!` they block until the
-## answer is in, which is what loading assets at startup wants. Calling one from
-## `update!` or `render!` is a programmer error and stops the app with a message
-## naming the effect and the fix.
+## These effects wait. Every one of them is legal in `init!`, where it blocks
+## startup until the answer is in -- which is what loading assets wants -- and
+## in tasks, where it parks the task while the frame loop keeps drawing. They
+## are refused in `update!` and `render!`, with a message naming the effect and
+## the fix.
 ##
 ##     update! = |model, input| {
 ##         if input.devices.key_pressed(KeyEnter) {
@@ -61,9 +61,8 @@ Files := [].{
 	## what `read_bytes!` will read: a file past the cap is `TooLarge`, and one
 	## that is not valid UTF-8 is `NotUtf8` rather than an invalid `Str`.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	read_text! : Str => Try(Str, ReadTextError)
 	read_text! = |path| {
 		result = FilesHost.read_text!(path)
@@ -81,9 +80,8 @@ Files := [].{
 	## source allocation. `List.release_excess_capacity` copies out the part
 	## worth keeping when that matters.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	read_bytes! : Str => Try(List(U8), ReadBytesError)
 	read_bytes! = |path| {
 		result = FilesHost.read_bytes!(path)
@@ -100,9 +98,8 @@ Files := [].{
 	## Recursion is the app's to drive: only the app knows which subtrees are
 	## worth descending into, and a host-side walk would be one unbounded wait.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	list! : Str => Try(List(Entry), ListError)
 	list! = |path| {
 		result = FilesHost.list!(path)
@@ -130,9 +127,8 @@ Files := [].{
 	## to `Capture`, whose paths are computed by recording machinery rather
 	## than written out by the app, and it confines captures only.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	##
 	##     update! = |model, input| {
 	##         if input.devices.key_pressed(KeyS) {
@@ -156,9 +152,8 @@ Files := [].{
 	## Nothing about the bytes is inspected, so this is the call for a PNG, a
 	## save blob, or anything else that is not text.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	write_bytes! : Str, List(U8) => Try({}, WriteError)
 	write_bytes! = |path, bytes| write_result(FilesHost.write_bytes!(path, bytes))
 

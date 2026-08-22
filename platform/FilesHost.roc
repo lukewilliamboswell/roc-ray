@@ -4,7 +4,8 @@
 ## applications use `Files`, which maps these flat primitive codes onto tag
 ## unions and hides the numbering.
 ##
-## Every effect here waits. On a task the host parks the coroutine on its event
+## Every effect here waits, so each carries the `during_wait` phase set in
+## `src/host_native.zig`. On a task the host parks the coroutine on its event
 ## loop and the frame loop keeps running; in `init!` the same call blocks while
 ## the loop is pumped, which is what startup asset loading wants.
 ##

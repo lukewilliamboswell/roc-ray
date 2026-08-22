@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-19-edec830" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
 
 import rr.App
 import rr.Color
@@ -7,31 +7,25 @@ import rr.Draw
 ## A measurement app: does a large collection in the model survive a frame
 ## without being copied?
 ##
-## It does not. Run it under `ROC_RAY_ALLOC_STATS=1` and read the per-frame
-## allocator line: writing one element of a million-`F32` list in the model
-## allocates 4,000,000 bytes a frame, every frame. `scripts/test_model_allocation.py`
-## is the same measurement as a check.
+## It does, as of `nightly-2026-08-21-90da19f`. Run it under
+## `ROC_RAY_ALLOC_STATS=1` and read the per-frame allocator line: writing one
+## element of a million-`F32` list in the model allocates well under a hundred
+## bytes a frame -- the model box, and nothing proportional to the list.
+## `scripts/test_model_allocation.py` is the same measurement as a check.
 ##
-## Where the second reference comes from, since it is not the host: the host
-## clears its own slot before the call (`takeModel`), and the list's refcount
-## measured at `update_for_host` entry is 1. It reads 3 by the time the copy is
-## allocated. Both increfs happen in Roc-compiled code below `update_for_host`.
-## The compiler's rule for `Box.unbox` is `retainsResultBorrowingArgs`
-## (`src/base/LowLevel.zig`): it never consumes the box, so either the payload
-## is increfed or the box is kept alive across every use of the payload. Either
-## way the box and the unboxed model are both live when `update` runs, so
-## `List.set` takes the copy-on-write path (`makeUnique`, refcount != 1). The
-## compiler does have a rewrite that consumes the box instead -- `box_reuse`,
-## for a straight-line `unbox -> produce -> box -> ret` -- but the adapter has
-## branches and effects between those points and does not match it. The
-## interaction is a documented open item in the compiler's own design notes: a
-## borrow whose lifetime extends past a uniqueness-checked mutation of its
-## lender forces the runtime copy path.
-##
-## So this is not an app-level mistake, and the controls below show it: the
-## same write to a list that never came through the model is in place, and a
-## second write to the model's list in the same frame is free, because by then
-## the copy is unique.
+## It did not always. Up to `nightly-2026-08-19-edec830` the same write cost
+## 4,000,000 bytes a frame. The host was never the second reference: it clears
+## its own slot before the call (`takeModel`), and the list's refcount measured
+## at `update_for_host` entry was 1. It read 3 by the time the copy was
+## allocated, both increfs from Roc-compiled code below `update_for_host`. The
+## compiler's rule for `Box.unbox` was `retainsResultBorrowingArgs`
+## (`src/base/LowLevel.zig`): it never consumed the box, so the box and the
+## unboxed model were both live when `update` ran and `List.set` took the
+## copy-on-write path (`makeUnique`, refcount != 1). The adapter branches and
+## runs effects between the unbox and the rebox, so the `box_reuse` rewrite --
+## which handles a straight-line `unbox -> produce -> box -> ret` -- did not
+## match it. The compiler now consumes the box here, and the controls below
+## agree with the headline number rather than contrasting with it.
 ##
 ## `ROC_RAY_MODEL_PATTERN` selects which pattern the frame exercises. The first
 ## two are what an app would really write; the rest are controls that separate

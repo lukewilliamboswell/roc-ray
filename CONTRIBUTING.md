@@ -379,12 +379,13 @@ That is how the cost of holding a collection in the model was measured:
 scripts/test_model_allocation.py --report
 ```
 
-Changing one element of a list in the model allocates a whole new list, every
-frame -- the model is still referenced by the box it arrived in, so the write
-is copy-on-write rather than in place. `test/model_inplace` is the probe,
-`scripts/test_model_allocation.py` runs in `all_tests.py` to keep the number
-from drifting in either direction, and its `--require-in-place` mode is the
-invariant we want and do not have.
+Changing one element of a list in the model is an in-place write: the box the
+model arrived in is consumed, so the list is uniquely referenced at the write
+and a frame costs only the model box. `test/model_inplace` is the probe and
+`scripts/test_model_allocation.py` runs in `all_tests.py`, holding steady-state
+per-frame allocation under a 16 KiB budget. Up to `nightly-2026-08-19-edec830`
+this instead copied the whole list every frame; `--characterize` re-runs the
+assertions that described that, and is expected to fail now.
 
 ## Bundles and targets
 

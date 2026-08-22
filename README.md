@@ -59,6 +59,15 @@ from one host cycle to the next:
   an effect that changes host state stops the app with a message naming the
   phase it belongs in.
 
+Three rules say where an effect belongs, and the host enforces all three at
+runtime. Anything that **changes host state** -- the cursor, the window, audio,
+a recording, a texture's pixels -- runs from `init!`, `update!`, or a task.
+Anything that **draws** runs only from `render!`. Anything that **waits** on a
+file, a socket, or the clock runs only from `init!`, where it blocks startup on
+purpose, or from a task, where it parks that task and the frame keeps going.
+Break one and the app stops immediately with a message naming the effect, the
+phase it was called from, and where it belongs.
+
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
@@ -140,7 +149,11 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
 - Window and frame timing, startup entropy, the
   [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
-  file and environment access.
+  environment access.
+- File reads and directory listings, and an HTTP client over the shared
+  [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
+  types, with TLS through the system certificate store. Both wait, so both run
+  on a task while the frame keeps drawing.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.

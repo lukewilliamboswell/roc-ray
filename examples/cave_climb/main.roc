@@ -17,6 +17,15 @@ import rr.Sprite
 import rr.Tilemap
 import Cave
 
+## A platformer with two mouse-driven tools: a laser that bounces off mirrors
+## and a grapple hook on a spring.
+##
+## Tilemap collision, gravity, and jumping come from `Physics`, with
+## `map_to_world` bridging Tiled's Y-down space and the Y-up physics space. Both
+## tools are pure recursive functions over the level, so a bounce path or a
+## latch point can be worked out without touching the host. Domain shapes live
+## in the sibling `Cave` module, which keeps this file to loading, simulation,
+## and drawing.
 GameState : Cave.GameState
 
 LaserSegment : Cave.LaserSegment

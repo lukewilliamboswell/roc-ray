@@ -6500,7 +6500,7 @@ test "a drop past the per-cycle cap is reported rather than silently truncated" 
     for (&paths) |*slot| slot.* = "/home/example/drop.png";
 
     const sampled = droppedFilesSnapshot(&roc_host, &paths, .{ .x = 0, .y = 0 });
-    sampled.files.deinit(&roc_host);
+    defer sampled.files.deinit(&roc_host);
     try std.testing.expectEqual(raylib.DROPPED_FILES_CAPACITY, sampled.files.len());
     try std.testing.expect(sampled.overflowed);
 

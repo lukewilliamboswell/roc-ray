@@ -1,10 +1,10 @@
-## Deferred work that runs alongside the frame loop.
+## Work that waits, running alongside the frame loop.
 ##
 ## A task is an effectful closure handed to `Task.spawn!` from `update!` (or
-## from another task). The host runs it on its own coroutine stack, on the
-## frame thread, and delivers its return value on a later `Input.messages`.
-## Effects that wait -- `Task.sleep!`, `Files.read_text!`, `Http.send!` --
-## park the task rather than the frame.
+## from another task). The host runs it on its own stack, on the frame thread,
+## and delivers its return value on a later `Input.messages`. Effects that
+## wait -- `Task.sleep!`, `Files.read_text!`, `Http.send!` -- park the task
+## rather than the frame.
 ##
 ##     update! = |model, input| {
 ##         if input.devices.key_pressed(KeyEnter) {
@@ -19,31 +19,44 @@
 ##         Ok(model)
 ##     }
 ##
-## A task shares the frame thread, so a long pure computation inside one
-## stalls the frame just as it would inside `update!`.
+## Because a task is straight-line code, a multi-step operation is an ordinary
+## function -- load, then parse, then fetch, with `?` propagating failures --
+## rather than a state machine spread across message variants. A task cannot
+## read or write the model, so whatever the model must learn has to be in the
+## message it returns.
+##
+## Tasks buy overlap for waiting, not for computing. They share the frame
+## thread and yield only at a waiting effect, so a long pure computation inside
+## one stalls the frame exactly as it would inside `update!`.
+##
+## Thirty-two tasks run at once. A spawn past that is queued and started in
+## submission order as a slot frees, so spawning never fails and no closure is
+## dropped. At shutdown live tasks are cancelled, queued closures are dropped,
+## and messages that were produced but never delivered are released.
 import App
 import TaskHost
 
 Task := [].{
 
 	## Start a task. Its message arrives on a later `Input.messages`, in the
-	## order tasks complete.
+	## order the tasks finished.
 	##
 	## The first argument is the `App.Input` that `update!` was handed. It is
 	## never read: it is a *witness* that pins the closure's return type to the
 	## app's own `Msg`. Without it `msg` stays free at the call site, the
 	## closure compiles at whatever type its body alone implies -- often a
-	## single-tag union with no discriminant -- and the host decodes the result
-	## as the app's real `Msg`, producing the wrong tag or a misread payload.
-	## Only `main.roc` can name the `requires` bound `Msg`, so an `App.Input`
-	## is how every other module names it.
+	## single-tag union with no discriminant -- while the host decodes the
+	## result as the app's real `Msg`, producing the wrong tag or a misread
+	## payload. Only the platform's entry module can name the `requires` bound
+	## `Msg`, so an `App.Input` is how every other module names it. Pass the
+	## input the callback already has; there is nothing to construct.
 	##
 	## A task closure may capture the input, so a task can spawn more tasks.
 	##
 	## `input.spawn!(|| ...)` is the same effect written as a receiver.
 	##
-	## Valid during `update!` and inside a task. Calling it from `init!` or
-	## `render!` is a programmer error and stops the app.
+	## Legal in `update!` and in tasks; refused in `init!`, which never sees the
+	## answering input, and in `render!`.
 	spawn! : App.Input(msg), (() => msg) => {}
 	spawn! = |input, task!| App.Input.spawn!(input, task!)
 
@@ -65,9 +78,9 @@ Task := [].{
 	## A bare tag name is not a function, so the wrapper is written as the
 	## lambda `|m| CounterMsg(m)` rather than as `CounterMsg`.
 	##
-	## The wrapper runs on the task's own coroutine, right after the closure
-	## returns and before the message is handed back, so it is ordinary pure
-	## code and not a second scheduled step.
+	## The wrapper runs on the task's own stack, right after the closure returns
+	## and before the message is handed back, so it is ordinary pure code and
+	## not a second scheduled step.
 	##
 	## `input.spawn_with!(task!, wrap)` is the same effect written as a
 	## receiver. Everything `spawn!` says about the `App.Input` witness, about
@@ -78,9 +91,8 @@ Task := [].{
 
 	## Wait at least `millis` without stalling the frame.
 	##
-	## Valid inside a task, where it parks the coroutine, and inside `init!`,
-	## where it blocks. Calling it from `update!` or `render!` is a programmer
-	## error and stops the app.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
 	sleep! : U64 => {}
 	sleep! = |millis| TaskHost.sleep!(millis)
 }

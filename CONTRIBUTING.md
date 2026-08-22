@@ -346,6 +346,20 @@ effects must release transferred references exactly once, including failure and
 scope-unwind paths. The headless backend should continue to exercise lifecycle
 behavior without requiring GPU objects.
 
+A new `src/*.zig` module whose only caller is a hosted export needs a
+`test { _ = the_module; }` in `src/host_native.zig`. The exports are compiled
+out under `zig test`, so nothing references the module, Zig never analyses it,
+and its tests are silently absent from the run -- the suite reports the same
+number of passes it did before, with a broken assertion sitting in the file.
+`src/http_effect.zig` is the worked example.
+
+A platform bundled from a plain `zig build` decompresses to more than roc's
+default 100 MB transitive-dependency budget, because a Debug host archive
+carries the whole of `std.crypto` for the HTTP client's TLS. The test harness
+passes `--max-transitive-mb=512` (see `scripts/local_bundles.py`); bundling a
+Debug platform by hand needs the same flag. A `-Doptimize=ReleaseFast` host,
+which is what a release ships, is a tenth the size.
+
 ## Performance work
 
 Profile a Roc compiler build on Linux:

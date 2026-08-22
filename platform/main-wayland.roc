@@ -5,7 +5,7 @@ platform ""
 				config : List(Str) -> App.Config,
 				run! : App.Startup => Try(model, [Exit(I64), ..]),
 			},
-			update : model, App.Input(msg) -> App.Transition(model, msg),
+			update! : model, App.Input(msg) => Try(model, [Exit(I64), ..]),
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
@@ -103,6 +103,8 @@ platform ""
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_task_sleep": TaskHost.sleep!,
+		"roc_task_spawn": TaskHost.spawn!,
+		"roc_app_submit_request": AppHost.submit_request!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
 		"roc_tilemap_draw_raw": TilemapHost.draw!,
 		"roc_draw_begin_camera": DrawHost.begin_camera!,
@@ -148,7 +150,6 @@ import App
 import AppConfig
 import Capture
 import CaptureHost
-import CommandApply
 import Assets
 import AssetsHost
 import Math
@@ -248,49 +249,33 @@ init_for_host! = ||
 		Err(_) => Err(-1)
 	}
 
-## Advance the model by one cycle and hand the host back any work it wants done.
+## Advance the model by one cycle.
 ##
 ## Called once per fresh host-cycle input, whether or not that cycle presents.
-## Applies commands before returning flattened requests for host submission.
-## The separate `render_for_host!` callback is optional for the cycle and, when
-## invoked, receives this resulting model. The host assigns private
-## tickets while it takes each returned callback envelope into its pending set.
+## `update!` is effectful: synchronous host effects run inline, in program
+## order, and deferred work reaches the host through the `Task.spawn!` and
+## `App.request!` effects while this call is in progress. The separate
+## `render_for_host!` callback is optional for the cycle and, when invoked,
+## receives this resulting model.
 ##
 ## Writing to a collection held in the model is an in-place write. The box
 ## arrives holding the model's only reference -- measured at refcount 1 on entry
-## -- and unboxing here consumes it, so `update` runs with the model's lists
+## -- and unboxing here consumes it, so `update!` runs with the model's lists
 ## uniquely referenced and mutates them rather than copying. Measured on
 ## `nightly-2026-08-21-90da19f` at under a hundred bytes per frame for a
 ## million-element `List(F32)` by `test/model_inplace` under
 ## `scripts/test_model_allocation.py`, which checks that budget. Earlier pins
 ## copied the whole list every frame; `--characterize` describes that behaviour.
-update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try({ model : Box(Model), requests : List(AppHost.SubmittedRequest(Msg)), tasks : List(AppHost.SubmittedTask(Msg)) }, I64)
+update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
 update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
 	messages = receive_responses(responses)
 	input = app_input_from_raw(devices, window, time, capture, messages)
 	model = Box.unbox(boxed_model)
-	next = (program.update)(model, input)
-	next_fields = next.fields()
-	# A malformed upload is a programmer error, and every one of them is
-	# knowable before any command runs. Check the whole list first so the app
-	# stops without having applied half a cycle.
-	validate_commands(next_fields.commands)
-	apply_commands!(next_fields.commands, 0)
-	Ok({
-		model: Box.box(next_fields.model),
-		requests: submit_requests(next_fields.requests),
-		tasks: submit_tasks(next_fields.tasks),
-	})
-}
-
-## Box each task closure so the host can hold it opaquely until it runs.
-submit_tasks : List(() => msg) -> List(AppHost.SubmittedTask(msg))
-submit_tasks = |tasks| {
-	var $submitted = List.with_capacity(List.len(tasks))
-	for task! in tasks {
-		$submitted = List.append($submitted, { run: Box.box(task!) })
+	match (program.update!)(model, input) {
+		Ok(next) => Ok(Box.box(next))
+		Err(Exit(code)) => Err(code)
+		Err(_) => Err(-1)
 	}
-	$submitted
 }
 
 ## Run one task to completion on the host's coroutine and hand back its message.
@@ -330,134 +315,6 @@ receive_responses = |responses| {
 	}
 	$messages
 }
-
-## Flatten outgoing requests in one pass. `with_capacity` avoids reallocations;
-## each normalized request moves its callback envelope and request-only data to
-## the host without retaining the application model in Roc.
-submit_requests : List(App.Request(msg)) -> List(AppHost.SubmittedRequest(msg))
-submit_requests = |requested| {
-	var $requests = List.with_capacity(List.len(requested))
-	for request in requested {
-		$requests = List.append($requests, AppTransport.normalize(request))
-	}
-	$requests
-}
-
-## Stop the cycle before any command runs if one of its uploads is malformed.
-##
-validate_commands : List(App.Command) -> {}
-validate_commands = |commands|
-	match AppTransport.validate_commands(commands) {
-		Ok({}) => {}
-		Err(PixelCountMismatch) => refuse_upload(PixelCountMismatch)
-		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
-	}
-
-## Name the programmer error an upload was refused for, and stop.
-##
-## These are cheap to find before returning the command -- `AppTransport.validate_commands`
-## reports both -- and there is no sensible way to carry on past one: the app
-## asked to write pixels somewhere they do not fit.
-refuse_upload : [PixelCountMismatch, RegionOutOfBounds] -> {}
-refuse_upload = |reason|
-	match reason {
-		PixelCountMismatch => {
-			crash "roc-ray: an UpdateTexture command carried a pixel list that is not exactly width * height for its texture."
-		}
-
-		RegionOutOfBounds => {
-			crash "roc-ray: an UpdateTextureRegion command named a rectangle that is not inside its texture."
-		}
-	}
-
-## Apply every command exactly once in list order.
-apply_commands! : List(App.Command), U64 => {}
-apply_commands! = |commands, index|
-	if index >= List.len(commands) {
-		{}
-	} else {
-		match List.get(commands, index) {
-			Ok(command) => {
-				apply_command!(command)
-				apply_commands!(commands, index + 1)
-			}
-
-			# Unreachable: the index is bounded above.
-			Err(_) => {}
-		}
-	}
-
-## Apply one command through the effect it stands for.
-##
-## Commands are interpreted within the platform and do not cross the host ABI,
-## and none of them reports anything back: a command that could fail either
-## stops the app (a malformed upload, refused above). Outcomes an app needs to observe arrive on a
-## later `Input` instead -- `input.capture` for recordings, a request for reads.
-apply_command! : App.Command => {}
-apply_command! = |command|
-	match command {
-		# Deferred rather than immediate, matching `host.exit!`: the host
-		# finishes this cycle -- including the draw, and including capturing it
-		# -- and shuts down afterwards.
-		Exit(code) => HostHost.exit!(I64.to_i32_wrap(code))
-		SetCursor(cursor) => MouseHost.set_cursor!(Mouse.cursor_code(cursor))
-		SetCursorMode(mode) => MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
-		SetClipboardText(text) => HostHost.set_clipboard_text!(text)
-		SetExitKey(key) => HostHost.set_exit_key!(Keys.exit_key_code(key))
-		# A window with no area has no drawing space to report back, so a
-		# non-positive dimension is ignored rather than passed on.
-		SuggestWindowSize(size) =>
-			if size.width > 0 and size.height > 0 {
-				match HostHost.suggest_window_size!(size) {
-					Ok({}) => {}
-					Err(NotSupported) => {}
-				}
-			} else {
-				{}
-			}
-
-		SuggestWindowMinSize(size) =>
-			HostHost.suggest_window_min_size!({
-				width: if size.width > 0 size.width else 0,
-				height: if size.height > 0 size.height else 0,
-			})
-
-		SetTargetFps(fps) => HostHost.set_target_fps!(fps)
-		PlaySound(settings) => settings.play!()
-		StopSound(sound) => sound.stop!()
-		PauseSound(sound) => sound.pause!()
-		ResumeSound(sound) => sound.resume!()
-		PlayMusic(music) => music.play!()
-		StopMusic(music) => music.stop!()
-		PauseMusic(music) => music.pause!()
-		ResumeMusic(music) => music.resume!()
-		SetMusicVolume(request) => request.music.set_volume!(request.volume)
-		SetMusicPitch(request) => request.music.set_pitch!(request.pitch)
-		SetMusicPan(request) => request.music.set_pan!(request.pan)
-		SetMusicLooping(request) => request.music.set_looping!(request.looping)
-		SeekMusic(request) => request.music.seek!(request.seconds)
-		SetMasterVolume(volume) => Audio.set_master_volume!(volume)
-		UpdateTexture(request) => settle_upload(Assets.update_texture!(request.texture, request.pixels))
-		UpdateTextureRegion(request) => settle_upload(Assets.update_texture_region!(request.texture, request.region))
-		SetTextureFilter(request) => Assets.set_texture_filter!(request.texture, request.filter)
-		SetTextureWrap(request) => Assets.set_texture_wrap!(request.texture, request.wrap)
-		SetMouseSource(source) => CommandApply.set_mouse_source!(source)
-		StartRecording(recording) => CommandApply.start_recording!(recording)
-		StopRecording => CommandApply.stop_recording!()
-	}
-
-## Take the host's answer to an upload that was already cleared to run.
-## Structural errors should have been rejected by complete prevalidation.
-## Capacity refusal is never converted into a silent command no-op.
-## Reaching one here means the texture's real dimensions are not the ones the
-## `Texture` value carries -- an upload aimed at something that cannot take it.
-settle_upload : Try({}, [PixelCountMismatch, RegionOutOfBounds, ..]) -> {}
-settle_upload = |result|
-	match result {
-		Ok({}) => {}
-		Err(RegionOutOfBounds) => refuse_upload(RegionOutOfBounds)
-		Err(_) => refuse_upload(PixelCountMismatch)
-	}
 
 ## Optionally present the current model, then hand the same box back.
 ##

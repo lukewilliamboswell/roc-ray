@@ -1,17 +1,12 @@
-## Private application/host conversion and command prevalidation.
+## Private application/host request conversion.
 ## This module is intentionally absent from the package exposes list.
-import App
 import AppHost
-import Assets
 import Capture
 import Files
 import Window
 
 AppTransport := [].{
-	validate_commands : List(App.Command) -> Try({}, [PixelCountMismatch, RegionOutOfBounds])
-	validate_commands = |commands| validate_commands_from(commands, 0)
-
-	normalize : App.Request(msg) -> AppHost.SubmittedRequest(msg)
+	normalize : AppHost.Request(msg) -> AppHost.SubmittedRequest(msg)
 	normalize = |operation|
 		match operation {
 			ReadText(request) => { kind: request_read_small_file, path: request.path, millis: 0, deliver: deliver_text(request.callback) }
@@ -97,54 +92,6 @@ deliver_clipboard = |callback| Box.box(
 		Box.box(callback(if raw.err == 0 Ok(raw.contents) else Err(clipboard_error(raw.err))))
 	},
 )
-
-validate_commands_from : List(App.Command), U64 -> Try({}, [PixelCountMismatch, RegionOutOfBounds])
-validate_commands_from = |commands, index|
-	if index >= List.len(commands) {
-		Ok({})
-	} else {
-		match List.get(commands, index) {
-			Ok(command) => {
-				validate_command(command)?
-				validate_commands_from(commands, index + 1)
-			}
-
-			# Unreachable: the index is bounded above.
-			Err(_) => Ok({})
-		}
-	}
-
-## Validate the dimensions and pixel count of one upload command.
-validate_command : App.Command -> Try({}, [PixelCountMismatch, RegionOutOfBounds])
-validate_command = |command|
-	match command {
-		UpdateTexture(request) =>
-			if U64.to_f32(List.len(request.pixels)) != request.texture.width * request.texture.height {
-				Err(PixelCountMismatch)
-			} else {
-				Ok({})
-			}
-
-		UpdateTextureRegion(request) => {
-			region = request.region
-			# Sizes are compared as F32 because that is what a texture reports
-			# its own size in, and adding in F32 also means a huge `x + width`
-			# cannot wrap the way I32 addition would.
-			width = I32.to_f32(region.width)
-			height = I32.to_f32(region.height)
-			if region.width <= 0 or region.height <= 0 or region.x < 0 or region.y < 0 {
-				Err(RegionOutOfBounds)
-			} else if I32.to_f32(region.x) + width > request.texture.width or I32.to_f32(region.y) + height > request.texture.height {
-				Err(RegionOutOfBounds)
-			} else if U64.to_f32(List.len(region.pixels)) != width * height {
-				Err(PixelCountMismatch)
-			} else {
-				Ok({})
-			}
-		}
-
-		_ => Ok({})
-	}
 
 ## `kind` code for a finished small-file read. Mirrored in `src/host_native.zig`.
 completion_small_file_read : U8

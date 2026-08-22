@@ -34,8 +34,8 @@
 ##     load_request : Str -> App.Request(Msg)
 ##     load_request = |path| App.read_small_file(path, |result| Loaded(path, result))
 ##
-##     update : Model, App.Input(Msg) -> App.Transition(Model, Msg)
-##     update = |model, input| {
+##     update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+##     update! = |model, input| {
 ##         # 1. Fold this input's messages into the model.
 ##         settled = List.fold(input.messages, model, handle)
 ##
@@ -44,9 +44,11 @@
 ##         #    both answer with an empty list, so there is no state to test
 ##         #    first.
 ##         ready = settled.queue.take_ready()
+##         for request in ready.requests {
+##             App.request!(request)
+##         }
 ##
-##         App.next({ ..settled, queue: ready.queue })
-##             .with_requests(ready.requests)
+##         Ok({ ..settled, queue: ready.queue })
 ##     }
 ##
 ##     handle : Model, Msg -> Model
@@ -135,9 +137,9 @@ import Time
 
 ## Deferred requests an app makes ready for submission a few at a time.
 ##
-## The bookkeeping is wrapped for the same reason `App.Transition`'s is: the
-## fields are not reachable by field access, so a queue is read and written
-## through its receivers and the pacing arithmetic lives in exactly one place.
+## The bookkeeping is wrapped so the fields are not reachable by field access:
+## a queue is read and written through its receivers and the pacing arithmetic
+## lives in exactly one place.
 ## `queued` is the FIFO backlog, `in_flight` counts requests ready but not yet
 ## reported through `response_received`, and `max_in_flight` is the ceiling `take_ready`
 ## will not exceed.
@@ -183,7 +185,10 @@ RequestQueue := [].{
 		## model, which has already counted them as in flight:
 		##
 		##     ready = model.queue.take_ready()
-		##     App.next({ ..model, queue: ready.queue }).with_requests(ready.requests)
+		##     for request in ready.requests {
+		##         App.request!(request)
+		##     }
+		##     Ok({ ..model, queue: ready.queue })
 		##
 		## Call it on every update. When the backlog is empty or the budget is full
 		## it answers with no requests and an unchanged queue, so there is no condition

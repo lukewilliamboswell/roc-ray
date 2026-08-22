@@ -8,14 +8,16 @@
 ## containing `..` -- is refused rather than rewritten. Capture is the only
 ## file-writing capability the platform grants.
 ##
-## Recording starts and stops through commands, screenshots use `App.Request`,
-## and recording state is available as `input.capture` each cycle.
+## Recording starts and stops through `Capture.start!` and `Capture.stop!`,
+## screenshots use `App.Request`, and recording state is available as
+## `input.capture` each cycle.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Recording` here and in the package are the
 ## same nominal type.
 import rrt.Capture as RrtCapture
+import CaptureHost
 
 Capture := [].{
 
@@ -74,22 +76,43 @@ Capture := [].{
 	default : Recording
 	default = RrtCapture.default
 
-	## Begin recording, as a command a pure `update` can return.
+	## Begin recording. Valid during `init!`, `update!`, and tasks.
 	##
-	## Frames accumulate until the recording hits its frame cap, a
-	## `Capture.stop` command is applied, or the app exits -- all three finalize
-	## the file.
+	## Frames accumulate until the recording hits its frame cap, `Capture.stop!`
+	## is called, or the app exits -- all three finalize the file.
 	##
-	## A rejected start appears as `Failed` in `input.capture` on the next cycle.
-	start : Recording -> [StartRecording(Recording), ..]
-	start = |recording| StartRecording(recording)
+	## A rejected start appears as `Failed` in `input.capture` on the next cycle;
+	## the call itself reports nothing, so the recording's outcome is observed
+	## the same way whichever phase started it.
+	start! : Recording => {}
+	start! = |recording| {
+		ratio = RrtCapture.scale_ratio(recording.scale())
+		_refusal = CaptureHost.start_recording!({
+			path: recording.path(),
+			format: RrtCapture.format_code(recording.format()),
+			fps: recording.fps(),
+			max_frames: recording.max_frames(),
+			scale_numerator: ratio.numerator,
+			scale_denominator: ratio.denominator,
+			every_nth: recording.every_nth(),
+			timing: RrtCapture.timing_code(recording.timing()),
+			cursor: RrtCapture.cursor_code(recording.cursor()),
+			quality: RrtCapture.quality_code(recording.quality()),
+		})
+		{}
+	}
 
-	## Finish the current recording and write its file, as a command.
+	## Finish the current recording and write its file. Valid during `init!`,
+	## `update!`, and tasks -- not `render!`, where an encode and a file write
+	## would land in the middle of drawing a frame.
 	##
 	## Stopping while idle does nothing. The next input reports the frame count and
 	## file size as `Finished`.
-	stop : [StopRecording, ..]
-	stop = StopRecording
+	stop! : () => {}
+	stop! = || {
+		_finished = CaptureHost.stop_recording!()
+		{}
+	}
 
 }
 

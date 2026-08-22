@@ -7,6 +7,7 @@
 ## Use `focused` and `minimized` to pause input or skip expensive work while the
 ## window is inactive.
 import rrt.Window as RrtWindow
+import HostHost
 
 Window := [].{
 
@@ -15,12 +16,19 @@ Window := [].{
 
 	## Suggest a new logical window size to the window manager.
 	##
-	## Non-positive dimensions are ignored. A valid suggestion is issued once in
-	## command order, but the backend or window manager controls the resulting
-	## geometry. Observe the latest accepted size through a later `Snapshot`;
-	## this command does not promise that the following presentation has changed.
-	suggest_size : { width : I32, height : I32 } -> [SuggestWindowSize({ width : I32, height : I32 }), ..]
-	suggest_size = |size| SuggestWindowSize(size)
+	## Non-positive dimensions are ignored. The backend or window manager
+	## controls the resulting geometry: observe the latest accepted size through
+	## a later `Snapshot`. Valid during `init!`, `update!`, and tasks.
+	suggest_size! : { width : I32, height : I32 } => {}
+	suggest_size! = |size|
+		if size.width > 0 and size.height > 0 {
+			match HostHost.suggest_window_size!(size) {
+				Ok({}) => {}
+				Err(NotSupported) => {}
+			}
+		} else {
+			{}
+		}
 
 	## Suggest the smallest size the window can be dragged down to.
 	##
@@ -28,25 +36,29 @@ Window := [].{
 	## unconstrained. A minimum only binds on a resizable window, so pair it
 	## with `App.default.with_resizable(Bool.True)`. The window manager may apply
 	## target-specific constraints; `Snapshot` remains the authoritative sample.
-	suggest_min_size : { width : I32, height : I32 } -> [SuggestWindowMinSize({ width : I32, height : I32 }), ..]
-	suggest_min_size = |size| SuggestWindowMinSize(size)
+	suggest_min_size! : { width : I32, height : I32 } => {}
+	suggest_min_size! = |size|
+		HostHost.suggest_window_min_size!({
+			width: if size.width > 0 size.width else 0,
+			height: if size.height > 0 size.height else 0,
+		})
 
 	ClipboardReadError : [Unavailable, TooLarge, Busy]
 
 	read_clipboard : (Try(Str, ClipboardReadError) -> msg) -> [ReadClipboard({ callback : Try(Str, ClipboardReadError) -> msg }), ..]
 	read_clipboard = |callback| ReadClipboard({ callback: callback })
 
-	## Set raylib's CPU-side frame-rate cap, as a command.
+	## Set raylib's CPU-side frame-rate cap.
 	##
 	## Values at or below zero render uncapped. This neither selects a software
-	## renderer nor controls VSync.
-	set_target_fps : I32 -> [SetTargetFps(I32), ..]
-	set_target_fps = |fps| SetTargetFps(fps)
+	## renderer nor controls VSync. Valid during `init!`, `update!`, and tasks.
+	set_target_fps! : I32 => {}
+	set_target_fps! = |fps| HostHost.set_target_fps!(fps)
 
-	## Replace the system clipboard contents, as a command.
+	## Replace the system clipboard contents.
 	##
-	## Reading it back is a `Window.read_clipboard` request instead, because a read has an
-	## answer to deliver.
-	set_clipboard_text : Str -> [SetClipboardText(Str), ..]
-	set_clipboard_text = |text| SetClipboardText(text)
+	## Reading it back is a `Window.read_clipboard` request instead, because a
+	## read has an answer to deliver. Valid during `init!`, `update!`, and tasks.
+	set_clipboard_text! : Str => {}
+	set_clipboard_text! = |text| HostHost.set_clipboard_text!(text)
 }

@@ -175,10 +175,6 @@ Assets := [].{
 	update_texture! = |texture, pixels|
 		whole_texture_result(AssetsHost.update_texture!({ texture, pixels }))
 
-	## Replace every pixel, as a command a pure `update` can return.
-	update_texture : Texture, List(Color.Rgba) -> [UpdateTexture({ texture : Texture, pixels : List(Color.Rgba) }), ..]
-	update_texture = |texture, pixels| UpdateTexture({ texture, pixels })
-
 	## Replace one rectangle of a texture, paying only for that rectangle.
 	update_texture_region! : Texture, Region => Try({}, [PixelCountMismatch, RegionOutOfBounds, ..])
 	update_texture_region! = |texture, region|
@@ -193,27 +189,13 @@ Assets := [].{
 			}),
 		)
 
-	## Replace one rectangle, as a command a pure `update` can return.
-	update_texture_region : Texture, Region -> [UpdateTextureRegion({ texture : Texture, region : Region }), ..]
-	update_texture_region = |texture, region| UpdateTextureRegion({ texture, region })
-
 	## Change how this texture is sampled when scaled.
 	set_texture_filter! : Texture, TextureFilter => {}
 	set_texture_filter! = |texture, filter| AssetsHost.set_texture_filter!(texture, filter_code(filter))
 
-	## Change how this texture is sampled when scaled, as a command a pure
-	## `update` can return.
-	set_texture_filter : Texture, TextureFilter -> [SetTextureFilter({ texture : Texture, filter : TextureFilter }), ..]
-	set_texture_filter = |texture, filter| SetTextureFilter({ texture, filter })
-
 	## Change how out-of-range texture coordinates are wrapped.
 	set_texture_wrap! : Texture, TextureWrap => {}
 	set_texture_wrap! = |texture, wrap| AssetsHost.set_texture_wrap!(texture, wrap_code(wrap))
-
-	## Change how out-of-range texture coordinates are wrapped, as a command a
-	## pure `update` can return.
-	set_texture_wrap : Texture, TextureWrap -> [SetTextureWrap({ texture : Texture, wrap : TextureWrap }), ..]
-	set_texture_wrap = |texture, wrap| SetTextureWrap({ texture, wrap })
 
 	expect filter_code(Bilinear) == 1
 	expect wrap_code(MirrorClamp) == 3

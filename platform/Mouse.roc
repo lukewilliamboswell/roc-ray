@@ -8,6 +8,8 @@
 ## Receivers are documented in the [roc-ray-types docs](../types/),
 ## which is where the nominal is declared.
 import rrt.Mouse as RrtMouse
+import MouseHost
+import CaptureHost
 
 Mouse := [].{
 
@@ -28,20 +30,25 @@ Mouse := [].{
 	virtual_click_at : { x : F32, y : F32 } -> Source
 	virtual_click_at = RrtMouse.virtual_click_at
 
-	set_source : Source -> [SetMouseSource(Source), ..]
-	set_source = |source| SetMouseSource(source)
+	## Hand pointer input to a scripted source, or back to the hardware mouse.
+	## Valid during `init!`, `update!`, and tasks.
+	set_source! : Source => {}
+	set_source! = |source|
+		match source {
+			Hardware => CaptureHost.set_virtual_mouse!({ active: Bool.False, x: 0, y: 0, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
+			Virtual(state) => CaptureHost.set_virtual_mouse!({ active: Bool.True, x: state.x, y: state.y, left: state.left, middle: state.middle, right: state.right, wheel: state.wheel })
+		}
 
 	## Cursor visibility and capture policy, applied atomically as one tagged
-	## operation by `Mouse.set_cursor_mode` or `App.set_cursor_mode!(startup, mode)`.
+	## operation by `Mouse.set_cursor_mode!`.
 	CursorMode : [Visible, Hidden, Locked]
 
 	## Flatten a cursor shape to the raylib code the host passes to
 	## `SetMouseCursor`, the way `Keys.exit_key_code` flattens an exit key.
 	##
-	## Apps do not need this: `Mouse.set_cursor(shape)` and
-	## `App.set_cursor!(startup, cursor)` both take the shape itself. The platform uses it to
-	## apply a `SetCursor` command without having to keep a second copy of the
-	## numbering.
+	## Apps do not need this: `Mouse.set_cursor!(shape)` takes the shape
+	## itself. The platform uses it to flatten the shape for the host without
+	## keeping a second copy of the numbering.
 	cursor_code : Cursor -> U8
 	cursor_code = |cursor|
 		match cursor {
@@ -63,7 +70,7 @@ Mouse := [].{
 	expect Mouse.cursor_code(NotAllowed) == 10
 
 	## Flatten a cursor mode to the code the host applies. Apps take the tag
-	## itself; the platform uses this to apply a `SetCursorMode` command.
+	## itself; the platform uses this for `Mouse.set_cursor_mode!`.
 	cursor_mode_code : CursorMode -> U8
 	cursor_mode_code = |mode|
 		match mode {
@@ -75,13 +82,13 @@ Mouse := [].{
 	expect Mouse.cursor_mode_code(Visible) == 0
 	expect Mouse.cursor_mode_code(Locked) == 2
 
-	## Ask for the native cursor shape, as a command a pure `update` can return.
-	set_cursor : Cursor -> [SetCursor(Cursor), ..]
-	set_cursor = |cursor| SetCursor(cursor)
+	## Set the native cursor shape. Valid during `init!`, `update!`, and tasks.
+	set_cursor! : Cursor => {}
+	set_cursor! = |cursor| MouseHost.set_cursor!(cursor_code(cursor))
 
-	## Ask for cursor visibility/capture, as a command.
-	set_cursor_mode : CursorMode -> [SetCursorMode(CursorMode), ..]
-	set_cursor_mode = |mode| SetCursorMode(mode)
+	## Set cursor visibility and capture. Valid during `init!`, `update!`, and tasks.
+	set_cursor_mode! : CursorMode => {}
+	set_cursor_mode! = |mode| MouseHost.set_cursor_mode!(cursor_mode_code(mode))
 
 	## Current cursor position in logical drawing coordinates.
 	position : { x : F32, y : F32, ..state } -> { x : F32, y : F32 }

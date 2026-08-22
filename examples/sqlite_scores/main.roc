@@ -73,6 +73,9 @@ top_ten = "SELECT name, score, CAST(played_at AS INTEGER) AS played_s FROM runs 
 insert_run : Str
 insert_run = "INSERT INTO runs VALUES (:name, :score, :played_at)"
 
+clear_runs : Str
+clear_runs = "DELETE FROM runs"
+
 ## A small fixed cast, so the example needs no text entry.
 runner_names : List(Str)
 runner_names = ["ada", "grace", "alan", "edsger", "barbara", "ken", "donald", "margaret", "linus", "tim"]
@@ -211,6 +214,24 @@ record_run! = |db, insert, name, score| {
 		}
 }
 
+## Wipe every run, then read the board back.
+##
+## The same round trip as a write: the task does not answer "cleared", it
+## answers with what the table now holds, so an app that shows an empty board
+## is showing one the database agrees is empty. A one-shot `execute!` serves
+## here because the statement runs rarely and has nothing to bind.
+reset_board! : Sqlite.Db => Msg
+reset_board! = |db| {
+	match Sqlite.execute!({ db, query: clear_runs, bindings: [] }) {
+		Err(err) => Failed(describe(err))
+		Ok(_outcome) =>
+			match read_board!(db) {
+				Ok(rows) => Refreshed(rows)
+				Err(reason) => Failed(reason)
+			}
+		}
+}
+
 ## Fractional seconds since the Unix epoch, which is what the REAL column
 ## holds. Keeping the subsecond part is why the column is a REAL rather than an
 ## INTEGER, even though the board only ever shows whole seconds.
@@ -278,13 +299,7 @@ update! = |model, input| {
 		Ok({ ..folded, rng: run.state, status: Working, pending: Bool.True })
 	} else if input.devices.key_pressed(KeyR) {
 		db = folded.db
-		Task.spawn!(
-			input,
-			|| match read_board!(db) {
-				Ok(rows) => Refreshed(rows)
-				Err(reason) => Failed(reason)
-			},
-		)
+		Task.spawn!(input, || reset_board!(db))
 		Ok({ ..folded, status: Working, pending: Bool.True })
 	} else {
 		Ok(folded)
@@ -297,7 +312,7 @@ render! = |model, frame| {
 	frame.text_at!({ pos: { x: 40, y: 32 }, text: "High scores", size: 30, color: Color.white })
 	frame.text_at!({
 		pos: { x: 40, y: 74 },
-		text: "SPACE records a run   R reloads   ESC quits",
+		text: "SPACE records a run   R resets the board   ESC quits",
 		size: 18,
 		color: Color.from_hex_rgb(0x8a93a5),
 	})

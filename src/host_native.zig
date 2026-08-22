@@ -7050,6 +7050,97 @@ test "a screenshot path that escapes the output directory is refused, not rewrit
     );
 }
 
+test "an offscreen export refuses an escaping path and releases the target either way" {
+    // Same sandbox as a screenshot, checked before the target is even resolved,
+    // so a refused path costs no readback. The target's reference is consumed
+    // on every path, which is what the drained heap at the end shows.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    const target = storeRenderTexture(.headless).?;
+    abi.increfBox(@ptrCast(target), 1);
+
+    try std.testing.expectEqual(capture.err_path_escapes, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("../escaped.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    }));
+
+    // A headless target has no pixels: every draw into it was a no-op, so the
+    // export answers without writing a file of zeroes, exactly as a screenshot
+    // does with no framebuffer.
+    try std.testing.expectEqual(capture.err_none, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    }));
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(u64, 0), still_budget.in_flight);
+}
+
+test "an offscreen export of a handle that resolves to nothing is unavailable" {
+    // A released target, the `stub` a pure test holds, or a handle of the wrong
+    // kind. Reported rather than fatal, because that is how every other
+    // unresolved render-target handle is already reported -- and it is checked
+    // before the headless answer, so an app sees the same outcome windowed.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 },
+    }));
+
+    const shader = storeShader(.headless).?;
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = @ptrCast(shader), .height = 8, .width = 16 },
+    }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+}
+
+test "an offscreen export called from update! is rejected" {
+    // It waits, so it belongs where waiting is defined: a task, or `init!`,
+    // where it blocks. Unlike a screenshot it waits for nothing on the frame
+    // loop, which is why `init!` is in the set at all.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    last_phase_violation = null;
+    defer {
+        last_phase_violation = null;
+        phase.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    const target = storeRenderTexture(.headless).?;
+    _ = hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    });
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Capture.screenshot_texture!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_wait));
+    try std.testing.expectEqual(Phase.update, violation.actual);
+}
+
 test "phases restore what they interrupted rather than falling back to idle" {
     try std.testing.expectEqual(Phase.idle, active_phase);
 

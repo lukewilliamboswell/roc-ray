@@ -9,6 +9,7 @@ const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const capture = @import("capture.zig");
+const png = @import("png.zig");
 const rl = backend.rl;
 
 const Point = struct { x: f32, y: f32 };
@@ -19,6 +20,7 @@ const blue = Color{ .r = 0, .g = 121, .b = 241, .a = 255 };
 const yellow = Color{ .r = 253, .g = 249, .b = 0, .a = 255 };
 const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
 const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+const transparent = Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
@@ -383,6 +385,77 @@ fn downscaleRoundTrip() !void {
     try expectPixel(reused.image, 50, 30, blue);
 }
 
+/// Export an offscreen target larger than the window and read the file back.
+///
+/// The point of `Capture.screenshot_texture!` is output that is not capped at
+/// the window, so the target here is twice the window in each axis. Four things
+/// fail silently without these assertions:
+///
+///  - The image really is the target's size. A readback that fell back to the
+///    framebuffer would produce a plausible 128x96 PNG.
+///  - The rows come out upright. A render target stores them bottom-up, so a
+///    missing flip puts the red corner at the bottom and nothing else changes.
+///  - Alpha survives. The framebuffer path forces it opaque, which would make
+///    an exported sprite or figure unusable on any other background.
+///  - `png.encodeRgba` -- the encoder the export uses, not raylib's -- writes a
+///    file with those dimensions that a decoder actually accepts.
+fn renderTargetExportRoundTrip() !void {
+    const width: c_int = 256;
+    const height: c_int = 192;
+    const target = backend.loadRenderTexture(width, height) orelse return error.RenderTextureUnavailable;
+    defer backend.unloadRenderTexture(target);
+
+    // Drawn in a frame of its own, the way an app fills a target during
+    // `render!`, so the readback below sees a completed frame rather than a
+    // batch raylib has not submitted.
+    rl.BeginDrawing();
+    backend.beginTextureMode(target);
+    backend.clearBackground(transparent);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 64, .height = 64, .color = red });
+    backend.drawRectangle(.{ .x = 192, .y = 0, .width = 64, .height = 64, .color = green });
+    backend.drawRectangle(.{ .x = 0, .y = 128, .width = 64, .height = 64, .color = blue });
+    backend.endTextureMode();
+    rl.EndDrawing();
+
+    var image = backend.readRenderTexture(target) orelse return error.RenderTextureReadFailed;
+    defer image.deinit();
+
+    if (image.width() != 256 or image.height() != 192) return error.RenderTextureSizeMismatch;
+    if (image.width() <= @as(u32, @intCast(rl.GetScreenWidth()))) return error.RenderTextureNotLargerThanWindow;
+    if (image.height() <= @as(u32, @intCast(rl.GetScreenHeight()))) return error.RenderTextureNotLargerThanWindow;
+    if (image.pixels().len != image.width() * image.height() * 4) return error.RenderTextureStrideMismatch;
+
+    try expectPixel(image.image, 8, 8, red);
+    try expectPixel(image.image, 200, 8, green);
+    try expectPixel(image.image, 8, 180, blue);
+    try expectPixel(image.image, 128, 96, transparent);
+
+    const allocator = std.heap.page_allocator;
+    const encoded = try png.encodeRgba(allocator, image.pixels(), image.width(), image.height());
+    defer allocator.free(encoded);
+
+    // The IHDR dimensions, at their fixed offsets: eight signature bytes, a
+    // four-byte length, the "IHDR" type, then width and height.
+    if (!std.mem.eql(u8, encoded[0..8], &[_]u8{ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a })) return error.PngSignatureMismatch;
+    if (!std.mem.eql(u8, encoded[12..16], "IHDR")) return error.PngHeaderMissing;
+    if (std.mem.readInt(u32, encoded[16..20], .big) != 256) return error.PngWidthMismatch;
+    if (std.mem.readInt(u32, encoded[20..24], .big) != 192) return error.PngHeightMismatch;
+
+    const path = "roc-ray-render-texture-smoke.png";
+    const io = std.Io.Threaded.global_single_threaded.io();
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = encoded });
+    defer std.Io.Dir.cwd().deleteFile(io, path) catch {};
+
+    const decoded = rl.LoadImage(path);
+    defer rl.UnloadImage(decoded);
+    if (!rl.IsImageValid(decoded)) return error.RenderTextureDecodeFailed;
+    if (decoded.width != width or decoded.height != height) return error.RenderTextureDecodeSizeMismatch;
+    try expectPixel(decoded, 8, 8, red);
+    try expectPixel(decoded, 200, 8, green);
+    try expectPixel(decoded, 8, 180, blue);
+    try expectPixel(decoded, 128, 96, transparent);
+}
+
 /// Render representative primitives and assert exact framebuffer pixels.
 pub fn main() !void {
     rl.SetConfigFlags(rl.FLAG_WINDOW_HIDDEN | rl.FLAG_WINDOW_UNDECORATED);
@@ -584,4 +657,5 @@ pub fn main() !void {
 
     try captureRoundTrip();
     try downscaleRoundTrip();
+    try renderTargetExportRoundTrip();
 }

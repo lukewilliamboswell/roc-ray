@@ -20,6 +20,11 @@ Install:
   `roc` on `PATH`
 - Python 3 and `zstd` for the full test and bundle checks
 
+`scripts/all_tests.py` resolves `roc` from `PATH`, so the pinned nightly has to
+come first on it. A local debug build of the compiler is not a substitute: it
+trips SpecConstr invariants on this platform's code and fails in ways that look
+like platform bugs.
+
 Build the native hosts and platform inputs:
 
 ```bash
@@ -84,7 +89,7 @@ scripts/all_tests.py --only pong,snake
 It checks formatting and types, runs Roc tests, builds the apps and exercises
 their headless paths. `--only` takes example names (repeatable, or comma
 separated) and is the way to iterate on one example without waiting for the
-other sixteen.
+rest.
 
 ### How the apps reach the platform
 
@@ -300,16 +305,35 @@ Every hosted effect carries a phase set in `src/host_native.zig` --
 `enforcePhase(name, during_update)` and friends -- that says which app
 callbacks may reach it: `during_load` and `during_update` for anything that
 changes host state (`init!`, `update!`, tasks), `during_render` for drawing,
-`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`.
-A call from the wrong phase stops the app with a message
-naming the effect, the phase, and the fix, so choose the set deliberately and
-keep the public wrapper's doc comment in step with it.
+`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`,
+`constant_time_anywhere` for a query with nothing to allocate and no I/O to do.
+A call from the wrong phase stops the app with a message naming the effect, the
+phase, and the fix, so choose the set deliberately and keep the public wrapper's
+doc comment in step with it.
 
 An effect in `during_wait` does its I/O through `waitingIo()` rather than
 `mainThreadIo()`, and wraps the call in a `WaitScope` so the phase is restored
 when it resumes. On a task that parks the coroutine and the frame loop keeps
 running; in `init!` it parks the frame loop's own task and pumps the event loop
 until the answer is in, which is the blocking behaviour startup wants.
+
+`during_frame_wait` is `during_wait` without `init!`, for a waiting effect
+whose answer is a frame that has to be drawn first. `Capture.screenshot!` is
+the one that needs it: it parks until the framebuffer has been read back at the
+end of a frame, and `init!` runs before the frame loop has drawn one, so a
+screenshot asked for there would wait for a frame that cannot arrive while it
+holds the frame thread. Reach for this set only when an effect genuinely waits
+on the frame loop's own progress; anything else that waits belongs in
+`during_wait`.
+
+An effect that reports a failure by code, rather than by tag union, shares the
+numbering with the effects it fails alongside. `Files` is the worked example:
+`NotFound`, `Unavailable` and the generic failure have the same code for a read
+and for a write, so one code never means two things across the boundary, and
+the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
+`PermissionDenied`, `NoSpace` -- are numbered past that shared table. Keep the
+Roc-side decoder and `src/host_native.zig` in step; each constant says where
+its counterpart lives.
 
 `roc test` cannot reach a new effect through `update!`: an `expect` cannot call
 an effectful function, and the phase guard would refuse the effects inside one
@@ -340,6 +364,13 @@ call site's closure is compiled at whatever type its own body implies --
 wrong tag, a payload read through the wrong variant's layout, or an abort in
 `roc_dealloc` when the misread variant holds a `Str` or a `List`. The witness
 unifies the two and the whole class of failure goes away.
+
+`Task.spawn_with!` takes the same witness and adds a wrapper, so a component
+can answer in its own message type while the parent lifts it:
+`Task.spawn_with!(input, Counter.load!, |m| CounterMsg(m))`. The input still
+pins `msg` -- through the wrapper's result rather than the closure's -- so the
+rule is unchanged. The wrapper is a lambda because a bare tag name is not a
+function in Roc.
 
 This is an API rule, not a workaround for a compiler defect. `test/task_delivery`
 guards it: it spawns one task per `Msg` variant and exits non-zero unless every

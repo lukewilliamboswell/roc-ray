@@ -101,8 +101,8 @@ Three things follow:
   platform's, the four examples that name the package themselves
   (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
   halves of `test/package_interop`. Building an app against a package build
-  nobody produced is no longer expressible. `test/package_interop` is built
-  every run to keep that honest.
+  nobody produced is not expressible. `test/package_interop` is built every run
+  to keep that honest.
 - No tracked file is ever rewritten, so `git status` stays clean however a run
   ends -- including a `kill -9` part way through a build.
 

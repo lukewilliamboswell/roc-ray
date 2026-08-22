@@ -261,8 +261,8 @@ architecture change, not a feature.
    value and returns it.
 3. **Tasks report by message.** During an orderly lifetime a task delivers
    exactly one message, on `Input.messages`, and never delivers again. Messages
-   arrive in the order their tasks finished, which independent tasks do not
-   otherwise constrain.
+   arrive in the order their tasks finished; the order they were spawned in
+   does not constrain that.
 4. **Waiting happens only in startup or on a task.** No effect reachable from
    `update!` or `render!` may wait on the filesystem, the network, a device, a
    peer, or the clock.
@@ -274,10 +274,11 @@ architecture change, not a feature.
 6. **Scheduling is cooperative.** A task yields only at a waiting effect. Long
    pure computation inside a task holds the frame exactly as it would inside
    `update!`; the platform buys overlap for waiting, not for computing.
-7. **Shutdown cancels and drains.** No further `Input` exists after the last
-   cycle, so live tasks are cancelled, run to their end on the cancelled path,
-   and their messages are released along with any already staged. Forced
-   process termination is outside this guarantee.
+7. **Shutdown cancels and drains.** No `Input` exists after the last cycle, so
+   nothing produced afterwards can be delivered. Live tasks are cancelled -- a
+   parked waiting effect returns at once on the cancelled path -- closures that
+   never started are dropped, and staged messages are released rather than
+   leaked. Forced process termination is outside this guarantee.
 8. **A phase violation is a programmer error.** Every effect declares the
    phases it is legal in. Reaching one from another phase fails immediately,
    naming the effect, the phase it was called from, and where it belongs.
@@ -426,7 +427,7 @@ functions:
 
 This runtime guard replaces a type-level purity guarantee. It buys direct,
 readable effect calls and straight-line tasks; it costs a class of error that
-the compiler no longer catches. The trade is deliberate, and it is why
+the compiler does not catch. The trade is deliberate, and it is why
 violations fail loudly and immediately, in application vocabulary, naming the
 effect, the phase it was reached from, and the phase it belongs in.
 

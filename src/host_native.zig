@@ -19,6 +19,7 @@ const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
 const udp_effect = @import("udp_effect.zig");
 const sqlite_effect = @import("sqlite_effect.zig");
+const stdio_effect = @import("stdio_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -160,21 +161,6 @@ const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
 /// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
 const WRITE_ERR_NO_SPACE: u8 = 9;
-/// Nothing is reading the other end of the stream. Mirrored in `StdioHost.roc`.
-///
-/// Only a standard stream can report this, and it is not necessarily a fault:
-/// `myapp | head -1` ends this way every time, which is why it is a code of its
-/// own rather than a generic write failure the app cannot recognize.
-const WRITE_ERR_BROKEN_PIPE: u8 = 10;
-
-/// The most one `Stdout` or `Stderr` call will write.
-///
-/// A stream write borrows the app's own bytes and copies nothing, so this is
-/// not bounding host memory; it bounds how long one call can hold a task
-/// parked against a reader that is not draining. A payload past it is
-/// `TooLarge` with nothing written, rather than a write that half-arrives.
-const MAX_STREAM_WRITE_BYTES: usize = 1024 * 1024;
-
 /// How many entries one listing may report, and how many bytes it may encode
 /// them into.
 ///
@@ -243,23 +229,6 @@ fn writeErrorCode(err: anyerror) u8 {
         error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
         error.AccessDenied, error.PermissionDenied, error.ReadOnlyFileSystem => WRITE_ERR_PERMISSION_DENIED,
         error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
-        else => READ_ERR_FAILED,
-    };
-}
-
-/// Name a failed stream write in the app's vocabulary.
-///
-/// A stream is already open, so the path failures a file write can have cannot
-/// happen here; what a stream has instead is a reader that went away, which is
-/// how an ordinary `myapp | head -1` pipeline ends and is worth telling apart
-/// from a genuine failure. A write cancelled at shutdown is `UNAVAILABLE`: the
-/// host declined to finish it, which is a refusal rather than a fault.
-fn streamWriteErrorCode(err: anyerror) u8 {
-    return switch (err) {
-        error.BrokenPipe => WRITE_ERR_BROKEN_PIPE,
-        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
-        error.NoSpaceLeft, error.DiskQuota, error.FileTooBig => WRITE_ERR_NO_SPACE,
-        error.Canceled => READ_ERR_UNAVAILABLE,
         else => READ_ERR_FAILED,
     };
 }
@@ -823,75 +792,30 @@ fn hostedTimeNow() callconv(.c) abi.TimeHostNowRetRecord {
 /// The stream a `StdioHost` call names. Mirrored in `StdioHost.roc`.
 const STDIO_STREAM_STDOUT: u8 = 1;
 
-/// The descriptor one of those numbers stands for.
+/// The ring one of those numbers stands for.
 ///
 /// The number is written by `Stdout` and `Stderr` rather than by the app, so
 /// there is no third case to report: anything that is not standard output is
 /// standard error.
-fn streamFile(stream: u8) std.Io.File {
-    return if (stream == STDIO_STREAM_STDOUT) std.Io.File.stdout() else std.Io.File.stderr();
+fn streamRing(stream: u8) u8 {
+    return if (stream == STDIO_STREAM_STDOUT) stdio_effect.stdout_index else stdio_effect.stderr_index;
 }
 
-/// Write a payload to a standard stream on the waiting path.
+/// Copy one payload into a stream's queue. See `src/stdio_effect.zig`.
 ///
-/// `head` and `tail` are written in that order and are one payload: `line!`
-/// passes the app's string and a newline, so a line crosses in one call and
-/// nothing can land between the text and its terminator.
-///
-/// Written through std's threaded implementation on zio's blocking pool for
-/// the same reason `writeFileWaiting` is: it is the one backend that behaves
-/// identically for a terminal, a pipe, a file redirect, and a Windows console
-/// handle. The pool parks the calling task the way the event loop would, and
-/// the worker touches only the borrowed payload bytes, which the parked task
-/// keeps alive until it returns.
-fn writeStreamWaiting(stream: u8, head: []const u8, tail: []const u8) u8 {
-    const scope = WaitScope.enter();
-    defer scope.leave();
-    AppTasks.tracePark("stdio", 0);
-    defer AppTasks.traceResume("stdio");
-    const allocator = allocatorFromHost(activeHost());
-    const rt = AppTasks.currentRuntime() orelse return writeStreamBlocking(allocator, stream, head, tail);
-    var blocking = rt.spawnBlocking(writeStreamBlocking, .{ allocator, stream, head, tail }) catch
-        return READ_ERR_FAILED;
-    return blocking.join();
-}
-
-/// The stream write itself, on whichever thread the caller chose.
-fn writeStreamBlocking(allocator: std.mem.Allocator, stream: u8, head: []const u8, tail: []const u8) u8 {
-    var threaded: std.Io.Threaded = .init(allocator, .{});
-    defer threaded.deinit();
-    return writeStreamIn(streamFile(stream), threaded.io(), head, tail);
-}
-
-/// `writeStreamWaiting` against an explicit file and `Io`, so a test can point
-/// it at a pipe or a temporary file instead of the process's own streams.
-///
-/// A stream write is allowed to be short -- a pipe accepts what fits in its
-/// buffer and no more -- so this loops until the whole payload is out. That is
-/// what lets the app be told `Ok({})` means every byte arrived. A write that
-/// reports no progress at all is treated as a failure rather than looped on
-/// forever.
-fn writeStreamIn(file: std.Io.File, io: std.Io, head: []const u8, tail: []const u8) u8 {
-    var remaining_head = head;
-    var remaining_tail = tail;
-    while (remaining_head.len + remaining_tail.len > 0) {
-        const written = std.Io.File.writeStreaming(file, io, remaining_head, &.{remaining_tail}, 1) catch |err|
-            return streamWriteErrorCode(err);
-        if (written == 0) return READ_ERR_FAILED;
-        const from_head = @min(written, remaining_head.len);
-        remaining_head = remaining_head[from_head..];
-        remaining_tail = remaining_tail[@min(written - from_head, remaining_tail.len)..];
-    }
-    return 0;
+/// `head` and `tail` are one payload in that order, so a line reserves its
+/// text and its newline together and nothing another write queues can land
+/// between them. The copy happens here, on the frame thread, while the Roc
+/// value is still alive; the caller releases it as this returns.
+fn queueStreamWrite(stream: u8, head: []const u8, tail: []const u8) u8 {
+    return stdio_effect.write(streamRing(stream), head, tail);
 }
 
 /// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
 fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!", during_wait);
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!", during_update);
     defer text_arg.decref(roc_host);
-    const bytes = text_arg.asSlice();
-    if (bytes.len > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
-    return writeStreamWaiting(stream, bytes, &.{});
+    return queueStreamWrite(stream, text_arg.asSlice(), &.{});
 }
 
 fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
@@ -901,14 +825,11 @@ fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
 /// `Stdout.line!` and `Stderr.line!`: the app's string and one newline.
 ///
 /// The newline is the host's byte rather than a copy of the app's string with
-/// one appended, so a line costs no allocation and cannot be interleaved with
-/// another write halfway through.
+/// one appended, so a line costs no allocation and is queued as one payload.
 fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!", during_wait);
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!", during_update);
     defer text_arg.decref(roc_host);
-    const bytes = text_arg.asSlice();
-    if (bytes.len + 1 > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
-    return writeStreamWaiting(stream, bytes, "\n");
+    return queueStreamWrite(stream, text_arg.asSlice(), "\n");
 }
 
 fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
@@ -917,11 +838,9 @@ fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
 
 /// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
 fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
-    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!", during_wait);
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!", during_update);
     defer bytes_arg.decref(roc_host);
-    const bytes = bytes_arg.items();
-    if (bytes.len > MAX_STREAM_WRITE_BYTES) return READ_ERR_TOO_LARGE;
-    return writeStreamWaiting(stream, bytes, &.{});
+    return queueStreamWrite(stream, bytes_arg.items(), &.{});
 }
 
 fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
@@ -8963,6 +8882,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         active_roc_host = null;
     }
 
+    // Standard output and standard error are queued effects: a write copies
+    // its payload into a host-owned ring and returns, and one host thread does
+    // the blocking writing. Armed before the startup config callback, which is
+    // the first Roc code to run, and drained by a `defer` registered here so it
+    // outlives the app lifetime and every other teardown. That is what lets an
+    // application print and then exit in the same `update!`.
+    stdio_effect.activate(allocator, mainThreadIo(), .stdout(), .stderr());
+    defer stdio_effect.shutdown();
+
     // Startup, not idle: reading an environment variable to decide the window
     // size is a reasonable thing for a config to do, and it works today. It is
     // still before `InitWindow`, so a texture load here would fail for its own
@@ -9222,96 +9150,154 @@ test "reading the clock is refused while drawing" {
     try std.testing.expectEqual(Phase.render, violation.actual);
 }
 
-test "a stream write joins its two parts and loops until every byte is out" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+/// A pipe standing in for the process's standard output, so a host test can
+/// read back what the writer thread actually wrote. POSIX only; the tests that
+/// use it skip elsewhere.
+const StdioTestPipe = struct {
+    read_end: std.Io.File,
+    write_end: std.Io.File,
 
-    const file = try tmp.dir.createFile(std.testing.io, "out.txt", .{});
-    defer file.close(std.testing.io);
-
-    // A line is one write of two parts -- the app's string and the host's
-    // newline -- so nothing can be interleaved between the text and its
-    // terminator.
-    try std.testing.expectEqual(@as(u8, 0), writeStreamIn(file, std.testing.io, "first", "\n"));
-
-    // A payload large enough that the underlying write is allowed to be short.
-    // `Ok({})` claims every byte arrived, so the loop is what makes that true.
-    const bulk = try std.testing.allocator.alloc(u8, MAX_STREAM_WRITE_BYTES);
-    defer std.testing.allocator.free(bulk);
-    @memset(bulk, 'x');
-    try std.testing.expectEqual(@as(u8, 0), writeStreamIn(file, std.testing.io, bulk, &.{}));
-
-    const written = try tmp.dir.readFileAlloc(
-        std.testing.io,
-        "out.txt",
-        std.testing.allocator,
-        .limited(MAX_STREAM_WRITE_BYTES + 64),
-    );
-    defer std.testing.allocator.free(written);
-    try std.testing.expectEqual(MAX_STREAM_WRITE_BYTES + "first\n".len, written.len);
-    try std.testing.expectEqualStrings("first\n", written[0.."first\n".len]);
-}
-
-test "a stream write names the reader going away apart from a failure" {
-    try std.testing.expectEqual(WRITE_ERR_BROKEN_PIPE, streamWriteErrorCode(error.BrokenPipe));
-    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, streamWriteErrorCode(error.AccessDenied));
-    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, streamWriteErrorCode(error.NoSpaceLeft));
-    try std.testing.expectEqual(WRITE_ERR_NO_SPACE, streamWriteErrorCode(error.DiskQuota));
-
-    // Shutdown cancels a parked write. The host declined to finish it, which
-    // is a refusal the app can recognize rather than a failure of the stream.
-    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, streamWriteErrorCode(error.Canceled));
-    try std.testing.expectEqual(READ_ERR_FAILED, streamWriteErrorCode(error.Unexpected));
-}
-
-test "writing to a stream waits, so a frame phase is refused by name" {
-    last_phase_violation = null;
-    defer last_phase_violation = null;
-
-    for ([_]Phase{ .update, .render, .idle }) |phase| {
-        const scope = PhaseScope.enter(phase);
-        defer scope.leave();
-        last_phase_violation = null;
-        enforcePhase("Stdout.line!", during_wait);
-        const violation = last_phase_violation orelse return error.StreamWriteWasNotRejected;
-        try std.testing.expectEqual(phase, violation.actual);
+    fn open() !StdioTestPipe {
+        const fds = try std.Io.Threaded.pipe2(.{ .CLOEXEC = true });
+        return .{
+            .read_end = .{ .handle = fds[0], .flags = .{ .nonblocking = false } },
+            .write_end = .{ .handle = fds[1], .flags = .{ .nonblocking = false } },
+        };
     }
 
-    for ([_]Phase{ .startup, .task }) |phase| {
-        const scope = PhaseScope.enter(phase);
-        defer scope.leave();
-        last_phase_violation = null;
-        enforcePhase("Stdout.line!", during_wait);
-        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    fn readExactly(self: *StdioTestPipe, out: []u8) !void {
+        var filled: usize = 0;
+        while (filled < out.len) {
+            const got = try std.posix.read(self.read_end.handle, out[filled..]);
+            if (got == 0) return error.EndOfStream;
+            filled += got;
+        }
     }
-}
+};
 
-test "a stream payload past the cap writes nothing and still releases the string" {
+test "a stream payload past the whole queue is refused and still releases the string" {
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
     roc_host.roc_dealloc = &nativeRocDealloc;
 
-    const scope = PhaseScope.enter(.startup);
+    const scope = PhaseScope.enter(.update);
     defer scope.leave();
 
-    const oversized = try std.testing.allocator.alloc(u8, MAX_STREAM_WRITE_BYTES + 1);
+    const oversized = try std.testing.allocator.alloc(u8, stdio_effect.ring_capacity + 1);
     defer std.testing.allocator.free(oversized);
     @memset(oversized, 'x');
 
-    // Refused before anything reaches the stream, so the app is never told a
-    // truncated write succeeded. The string is still the host's to release:
-    // the testing allocator fails this test if the early return skips it.
+    // Larger than the whole queue, so no amount of draining could ever make
+    // room: `TooLarge` rather than `BufferFull`, and nothing is queued. The
+    // string is still the host's to release -- the testing allocator fails
+    // this test if the early return skips it.
     try std.testing.expectEqual(
-        READ_ERR_TOO_LARGE,
+        stdio_effect.ERR_TOO_LARGE,
         hostedStdioWriteText(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized, &roc_host)),
     );
 
-    // A line adds the newline to what is counted, so the largest string a
-    // line can carry is one byte shorter than the largest `write!` can.
+    // A line queues the newline with its text, so the longest string a line
+    // can carry is one byte shorter than the longest `write!` can.
     try std.testing.expectEqual(
-        READ_ERR_TOO_LARGE,
-        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..MAX_STREAM_WRITE_BYTES], &roc_host)),
+        stdio_effect.ERR_TOO_LARGE,
+        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..stdio_effect.ring_capacity], &roc_host)),
     );
+}
+
+test "writing to a stream is queued, so update! is allowed and render! is not" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Drawing is the one phase a queued write is refused from: `render!` only
+    // draws, and output it produced would not be part of the model that frame
+    // came from.
+    for ([_]Phase{ .render, .idle }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_update);
+        const violation = last_phase_violation orelse return error.StreamWriteWasNotRejected;
+        try std.testing.expectEqual(phase, violation.actual);
+    }
+
+    // The queue is what makes `update!` legal: the call copies and returns,
+    // and the writing happens on the host's own thread.
+    for ([_]Phase{ .startup, .update, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_update);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+}
+
+test "a queued write with no drainer running is unavailable" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+
+    // No app lifetime, so no writer thread. Output that nothing will ever
+    // drain is refused rather than accepted and forgotten.
+    try std.testing.expectEqual(
+        stdio_effect.ERR_UNAVAILABLE,
+        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice("nobody home", &roc_host)),
+    );
+}
+
+test "lines queued from update! reach the stream in order, and shutdown drains the rest" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    var pipe = try StdioTestPipe.open();
+    defer std.Io.Threaded.closeFd(pipe.read_end.handle);
+
+    stdio_effect.activate(std.testing.allocator, mainThreadIo(), pipe.write_end, pipe.write_end);
+
+    {
+        const scope = PhaseScope.enter(.update);
+        defer scope.leave();
+
+        var line: usize = 0;
+        while (line < 16) : (line += 1) {
+            var digits: [8]u8 = undefined;
+            const text = std.fmt.bufPrint(&digits, "line {d}", .{line}) catch unreachable;
+            try std.testing.expectEqual(
+                @as(u8, 0),
+                hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(text, &roc_host)),
+            );
+        }
+
+        // Bytes go out as they are: no newline, no encoding check.
+        const raw = [_]u8{ 'r', 'a', 'w', '\n' };
+        try std.testing.expectEqual(
+            @as(u8, 0),
+            hostedStdioWriteBytes(&roc_host, STDIO_STREAM_STDOUT, abi.RocListWith(u8, false).fromSlice(&raw, &roc_host)),
+        );
+    }
+
+    // The app is over with output still queued -- the "print, then exit in the
+    // same update!" case. Shutdown is what gets it out of the process.
+    stdio_effect.shutdown();
+    std.Io.Threaded.closeFd(pipe.write_end.handle);
+
+    var expected: std.ArrayListUnmanaged(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    var line: usize = 0;
+    while (line < 16) : (line += 1) {
+        try expected.print(std.testing.allocator, "line {d}\n", .{line});
+    }
+    try expected.appendSlice(std.testing.allocator, "raw\n");
+
+    const seen = try std.testing.allocator.alloc(u8, expected.items.len);
+    defer std.testing.allocator.free(seen);
+    try pipe.readExactly(seen);
+    try std.testing.expectEqualStrings(expected.items, seen);
 }
 
 test "a directory past the entry cap is refused rather than allocated" {

@@ -7,22 +7,19 @@ import rr.Draw
 import rr.Stdout
 import rr.Text
 
-## A task that waits without stalling the frame, and one that reports.
+## A task that waits without stalling the frame, and printing that does not.
 ##
 ## On the first cycle `update!` spawns one task: an effectful closure that calls
-## `Task.sleep!(300)` and then answers `Woke`. The host runs it on its
-## own coroutine stack; the sleep parks that stack, the frame loop keeps going,
-## and the closure's return value arrives on `Input.messages` ~18 cycles later
-## at 60 Hz. Meanwhile the circle keeps orbiting.
+## `Task.sleep!(300)` and then answers `Woke`. The host runs it on its own
+## coroutine stack; the sleep parks that stack, the frame loop keeps going, and
+## the closure's return value arrives on `Input.messages` ~18 cycles later at
+## 60 Hz. Meanwhile the circle keeps orbiting.
 ##
-## `Woke` starts a second task, and that one prints a line to standard output.
-## Writing to a stream waits for the same reason a file read does -- a pipe
-## whose reader is slow blocks the writer -- so it is refused in `update!` and
-## belongs in a task. The app exits when the printing task's own message comes
-## back, not when it spawns it: a task still parked at shutdown is cancelled,
-## so exiting in the same `update!` that spawned the report would race the
-## report to the terminal. That is what makes this the shape a headless CI run
-## should use to say what it verified.
+## The printing is the contrast. `Stdout.line!` is a queued effect: it copies
+## into a host-owned queue and returns, so it belongs in `update!` alongside the
+## rest of the app's decisions rather than in a task of its own. Exiting in the
+## same `update!` that printed is safe, because the host drains what is queued
+## before the process ends. Waiting is what needs a task; writing does not.
 Model : {
 	state : State,
 	cycle : U64,
@@ -30,11 +27,11 @@ Model : {
 	title : Text.Prepared,
 }
 
-## How far the app has got. `Reporting` is spawned-but-unanswered, and only
-## `Reported` means the line is out of the process.
-State : [Waiting, Woke({ arrived_on : U64 }), Reporting({ arrived_on : U64 }), Reported({ arrived_on : U64 })]
+## How far the app has got: waiting on the sleeper, or holding the cycle its
+## message arrived on.
+State : [Waiting, Woke({ arrived_on : U64 })]
 
-Msg : [Woke, Reported]
+Msg : [Woke]
 
 sleep_millis : U64
 sleep_millis = 300
@@ -69,34 +66,32 @@ update! = |model, input| {
 				Woke
 			},
 		)
+		# Printed from `update!` too, one line before any of the waiting starts.
+		_ = Stdout.line!(start_line)
 	}
 
-	# The sleeper's message is the trigger for the report, and spawning is what
-	# moves the state on, so the line is printed exactly once.
-	state = match settled {
+	match settled {
 		Woke({ arrived_on }) => {
-			line = report_line(arrived_on)
-			Task.spawn!(
-				input,
-				|| {
-					_ = Stdout.line!(line)
-					Reported
-				},
-			)
-			Reporting({ arrived_on: arrived_on })
+			# The line is queued here and written by the host's own thread, so
+			# exiting on the next expression does not race it out of the
+			# process: shutdown drains the queue.
+			_ = Stdout.line!(report_line(arrived_on))
+			Err(Exit(0))
 		}
-		other => other
-	}
-
-	if input.devices.key_pressed(KeyEscape) or is_reported(state) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, state, cycle, elapsed: model.elapsed + input.time.elapsed_seconds })
-	}
+		Waiting =>
+			if input.devices.key_pressed(KeyEscape) {
+				Err(Exit(0))
+			} else {
+				Ok({ ..model, state: settled, cycle, elapsed: model.elapsed + input.time.elapsed_seconds })
+			}
+		}
 }
 
-## What the reporting task writes. Built in `update!`, where it is pure, and
-## captured by the closure that does the waiting.
+## What `update!` prints on the cycle it spawns the sleeper.
+start_line : Str
+start_line = "task_sleep: sleeping ${U64.to_str(sleep_millis)} ms on a task while the frame loop keeps drawing"
+
+## What `update!` prints once the sleeper's message comes back.
 report_line : U64 -> Str
 report_line = |arrived_on|
 	"task_sleep: slept ${U64.to_str(sleep_millis)} ms, message arrived on cycle ${U64.to_str(arrived_on)}"
@@ -111,35 +106,16 @@ apply_message = |state, message, cycle|
 				Waiting => Woke({ arrived_on: cycle })
 				already => already
 			}
-		Reported =>
-			match state {
-				Waiting => Waiting
-				Woke(when) => Reported(when)
-				Reporting(when) => Reported(when)
-				Reported(when) => Reported(when)
-			}
 		}
-
-## Only the printing task's own message ends the run, so the line is out of the
-## process before the host tears the app down.
-is_reported : State -> Bool
-is_reported = |state|
-	match state {
-		Reported(_) => Bool.True
-		_ => Bool.False
-	}
 
 expect match apply_message(Waiting, Woke, 18) {
 	Woke({ arrived_on }) => arrived_on == 18
 	_ => Bool.False
 }
 
-## The cycle the sleeper woke on survives the report, so the app still reports
-## the cycle it measured rather than the cycle the printing finished on.
-expect apply_message(Reporting({ arrived_on: 18 }), Reported, 25) == Reported({ arrived_on: 18 })
-
-expect !(is_reported(Reporting({ arrived_on: 18 })))
-expect is_reported(Reported({ arrived_on: 18 }))
+## The cycle the sleeper woke on is the first one that arrived, so a second
+## message could not move it.
+expect apply_message(Woke({ arrived_on: 18 }), Woke, 25) == Woke({ arrived_on: 18 })
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
@@ -156,6 +132,4 @@ describe = |state|
 	match state {
 		Waiting => Str.concat(Str.concat("task sleeping ", U64.to_str(sleep_millis)), " ms...")
 		Woke({ arrived_on }) => Str.concat(Str.concat("task finished: message arrived on cycle ", U64.to_str(arrived_on)), " (spawned on cycle 0)")
-		Reporting({ arrived_on }) => Str.concat("printing the report for cycle ", U64.to_str(arrived_on))
-		Reported({ arrived_on }) => Str.concat("reported cycle ", U64.to_str(arrived_on))
 	}

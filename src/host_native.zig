@@ -655,6 +655,66 @@ fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetReco
     return hostedFilesList(activeHost(), path_arg);
 }
 
+/// Name a failed stat in the app's vocabulary.
+///
+/// A stat can be refused for a reason a read cannot: a directory on the way to
+/// the path may be one this process may not look inside, which is a permission
+/// the app can ask the user about rather than a path it should fix.
+fn statErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
+        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
+        error.Canceled => READ_ERR_UNAVAILABLE,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// The listing kind byte for what a stat found at the end of a path.
+///
+/// Symbolic links do not appear: a stat follows them, so what is reported is
+/// the kind of the thing the link points at.
+fn statEntryKind(kind: std.Io.File.Kind) u8 {
+    return switch (kind) {
+        .file => DIR_ENTRY_FILE,
+        .directory => DIR_ENTRY_DIR,
+        else => DIR_ENTRY_OTHER,
+    };
+}
+
+/// Stat one path on the waiting path, parked rather than blocking.
+///
+/// Shaped exactly like a read: the phase guard, the park, and the trace are
+/// the same, and the difference is only that the answer is five numbers rather
+/// than a payload, so there is no delivery slot to reserve and nothing to
+/// bound but the wait itself.
+fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) abi.FilesHostMetadataRetRecord {
+    const stat = base.statFile(io, path, .{ .follow_symlinks = true }) catch |err|
+        return .{ .err = statErrorCode(err), .kind = 0, .size_bytes = 0, .modified_seconds = 0, .modified_nanosecond = 0 };
+    const modified = timestampFromNanos(stat.mtime.nanoseconds);
+    return .{
+        .err = 0,
+        .kind = statEntryKind(stat.kind),
+        .size_bytes = stat.size,
+        .modified_seconds = modified.seconds,
+        .modified_nanosecond = modified.nanosecond,
+    };
+}
+
+/// `Files.metadata!`: what one path is, how big it is, and when it changed.
+fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    enforcePhase("Files.metadata!", during_wait);
+    defer path_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("stat", 0);
+    defer AppTasks.traceResume("stat");
+    return statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+}
+
+fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    return hostedFilesMetadata(activeHost(), path_arg);
+}
+
 /// Replace a whole file on the waiting path, parked rather than blocking.
 ///
 /// Missing parent directories are created, which is what `writeWholeFile` does
@@ -5799,6 +5859,7 @@ comptime {
         @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&exportedFilesList, .{ .name = "roc_files_list" });
+        @export(&exportedFilesMetadata, .{ .name = "roc_files_metadata" });
         @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
         @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
@@ -7981,6 +8042,67 @@ test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.NoSpaceLeft));
     try std.testing.expectEqual(WRITE_ERR_NO_SPACE, writeErrorCode(error.DiskQuota));
     try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
+}
+
+test "a stat reports what a path is, how big it is, and when it changed" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "notes.txt", .data = "twelve bytes" });
+    try tmp.dir.createDirPath(std.testing.io, "assets");
+
+    const file = statPathIn(tmp.dir, std.testing.io, "notes.txt");
+    try std.testing.expectEqual(@as(u8, 0), file.err);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, file.kind);
+    try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.size_bytes);
+
+    // The modification time is wall-clock, so it is a plausible instant rather
+    // than a counter starting at the app's own start. Anything after 2020 is
+    // enough to catch a monotonic clock leaking in here by mistake.
+    try std.testing.expect(file.modified_seconds > 1_577_836_800);
+    try std.testing.expect(file.modified_nanosecond < 1_000_000_000);
+
+    const dir = statPathIn(tmp.dir, std.testing.io, "assets");
+    try std.testing.expectEqual(@as(u8, 0), dir.err);
+    try std.testing.expectEqual(DIR_ENTRY_DIR, dir.kind);
+
+    // A failed stat answers with the reason and zeroes, so an app cannot read
+    // a size or a time out of an answer that has neither.
+    const missing = statPathIn(tmp.dir, std.testing.io, "absent.txt");
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
+    try std.testing.expectEqual(@as(u64, 0), missing.size_bytes);
+    try std.testing.expectEqual(@as(i64, 0), missing.modified_seconds);
+}
+
+test "a stat rewrites a modification a hot-reload loop can compare" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "one" });
+    const before = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    // Polling `modified` is the whole hot-reload story, so rewriting the file
+    // has to move the instant an app is comparing against.
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "two but longer" });
+    const after = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    try std.testing.expect(after.size_bytes > before.size_bytes);
+    const moved = after.modified_seconds > before.modified_seconds or
+        (after.modified_seconds == before.modified_seconds and after.modified_nanosecond >= before.modified_nanosecond);
+    try std.testing.expect(moved);
+}
+
+test "a stat names the refusals apart from the failures" {
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.FileNotFound));
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.NotDir));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, statErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, statErrorCode(error.Canceled));
+    try std.testing.expectEqual(READ_ERR_FAILED, statErrorCode(error.Unexpected));
+
+    // A stat follows links, so what an app is told is the kind of the thing at
+    // the end of the path and never `sym_link`.
+    try std.testing.expectEqual(DIR_ENTRY_FILE, statEntryKind(.file));
+    try std.testing.expectEqual(DIR_ENTRY_DIR, statEntryKind(.directory));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.named_pipe));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.sym_link));
 }
 
 test "a wall-clock reading is normalized on both sides of the epoch" {

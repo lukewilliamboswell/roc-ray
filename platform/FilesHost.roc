@@ -30,9 +30,26 @@ FilesHost := [].{
 		bytes : List(U8),
 	}
 
+	## One finished `stat`. Every field but `err` is zero when `err` is not.
+	##
+	## Flat scalars rather than a payload: a stat allocates nothing and hands
+	## nothing back but numbers, so nothing here is owned by either side.
+	## `modified_seconds` and `modified_nanosecond` are the normalized parts
+	## `Time.Timestamp` holds.
+	MetadataResult : {
+		err : U8,
+		kind : U8,
+		size_bytes : U64,
+		modified_seconds : I64,
+		modified_nanosecond : U32,
+	}
+
 	## Read a bounded UTF-8 file. The host validates the encoding, so a file
 	## that is not text is reported rather than delivered as an invalid `Str`.
 	read_text! : Str => TextResult
+
+	## Stat one path, following symbolic links.
+	metadata! : Str => MetadataResult
 
 	## Read a bounded file as bytes, without copying its payload.
 	read_bytes! : Str => BytesResult

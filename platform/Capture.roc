@@ -1,7 +1,10 @@
 ## Screenshots and recordings of the app's rendered output.
 ##
-## Frames are captured from the framebuffer at the end of each frame. Supported
-## outputs are PNG image sequences, GIF, and WebM.
+## Recorded frames are captured from the framebuffer at the end of each frame,
+## and so are the size of the window. Supported outputs are PNG image sequences,
+## GIF, and WebM. A still image can also be exported from an offscreen
+## `Draw.RenderTexture` of any size, which is how output larger than the window
+## is produced.
 ##
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
@@ -18,6 +21,7 @@
 ## same nominal type.
 import rrt.Capture as RrtCapture
 import CaptureHost
+import Draw
 
 Capture := [].{
 
@@ -107,6 +111,60 @@ Capture := [].{
 			Ok({})
 		} else {
 			Err(screenshot_error(err))
+		}
+	}
+
+	## Why an offscreen export did not become a file.
+	##
+	## `TargetUnavailable` is a render target that no longer resolves to a host
+	## resource -- a released one, or the `Draw.RenderTexture.stub` a pure test
+	## holds. `BudgetExceeded` is an image too large for the host to hold at all,
+	## so retrying will not help; `Busy` is one that would fit were other exports
+	## not in flight, so a later frame may take it. `Unavailable` is the app
+	## shutting down before the write started.
+	TextureExportError : [
+		PathInvalid,
+		PathEscapesOutputDir,
+		TargetUnavailable,
+		BudgetExceeded,
+		Busy,
+		OutOfMemory,
+		ReadbackFailed,
+		WriteFailed,
+		Unavailable,
+	]
+
+	## Write one PNG of what a render target holds, at the target's own size.
+	##
+	## This is how an app exports an image larger than its window: draw the
+	## composition into a `Draw.RenderTexture` of the size the output needs and
+	## export the target rather than the frame. Transparency survives, unlike a
+	## `screenshot!`, whose framebuffer readback is always opaque.
+	##
+	## Legal in `init!`, where it blocks, and in tasks, where it parks; refused
+	## in `update!` and `render!`. Nothing here waits on the frame loop, which is
+	## why `init!` is allowed where a `screenshot!` cannot be -- but drawing into
+	## a target is only possible during `render!`, so a target no `render!` has
+	## drawn into holds undefined pixels.
+	##
+	## The pixels are the ones the last completed `render!` left in the target,
+	## so an app that draws its composition every frame exports what it last
+	## showed. The path is resolved under the output directory exactly as
+	## `screenshot!` resolves one.
+	##
+	## A headless run has no pixels to read and answers `Ok({})` without writing,
+	## so an exporting app still runs under `--host-headless`.
+	##
+	## ```roc
+	## Task.spawn!(input, || Exported(Capture.screenshot_texture!(poster, "poster.png")))
+	## ```
+	screenshot_texture! : Draw.RenderTexture, Str => Try({}, TextureExportError)
+	screenshot_texture! = |target, path| {
+		err = CaptureHost.screenshot_texture!({ target, path })
+		if err == 0 {
+			Ok({})
+		} else {
+			Err(texture_export_error(err))
 		}
 	}
 
@@ -212,3 +270,36 @@ expect screenshot_error(7) == WriteFailed
 expect screenshot_error(10) == Busy
 expect screenshot_error(11) == Unavailable
 expect screenshot_error(99) == WriteFailed
+
+## Decode the host's capture-error code for an offscreen export.
+##
+## The same `src/capture.zig` codes again, so a path refused by the sandbox
+## reads the same here as it does for a screenshot or a recording. An unnamed
+## code is drift between this module and the host rather than a state an app can
+## do anything about, so it reports as a failed write.
+texture_export_error : U8 -> Capture.TextureExportError
+texture_export_error = |code|
+	match code {
+		1 => PathInvalid
+		2 => PathEscapesOutputDir
+		6 => BudgetExceeded
+		7 => OutOfMemory
+		8 => WriteFailed
+		10 => Busy
+		11 => Unavailable
+		12 => ReadbackFailed
+		13 => TargetUnavailable
+		_ => WriteFailed
+	}
+
+expect texture_export_error(1) == PathInvalid
+expect texture_export_error(2) == PathEscapesOutputDir
+expect texture_export_error(6) == BudgetExceeded
+expect texture_export_error(7) == OutOfMemory
+expect texture_export_error(8) == WriteFailed
+expect texture_export_error(10) == Busy
+expect texture_export_error(11) == Unavailable
+expect texture_export_error(12) == ReadbackFailed
+expect texture_export_error(13) == TargetUnavailable
+expect texture_export_error(0) == WriteFailed
+expect texture_export_error(99) == WriteFailed

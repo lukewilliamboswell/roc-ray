@@ -3,6 +3,8 @@
 ## This module is intentionally not exposed by the platform package. Public
 ## applications use `Capture`, which maps these flat primitive codes onto tag
 ## unions and hides the numbering.
+import Draw
+
 CaptureHost := [].{
 
 	## A recording request flattened to primitives the host ABI can carry.
@@ -52,4 +54,21 @@ CaptureHost := [].{
 	## Waits: the calling task parks until the file has been written, so the
 	## returned code is the write's own outcome rather than a promise.
 	screenshot! : Str => U8
+
+	## A render target and the path its pixels are written to.
+	##
+	## The target crosses as the public `Draw.RenderTexture` rather than as its
+	## transport handle, the same way `DrawHost.LoadStoreShader` carries an
+	## `Assets.Store`: the host resolves the handle it already knows.
+	TextureShot : {
+		target : Draw.RenderTexture,
+		path : Str,
+	}
+
+	## Read a render target back and write it as a PNG.
+	##
+	## Waits: the readback itself is synchronous, because it needs the graphics
+	## context the frame thread holds. The calling task parks for the encode and
+	## the write, so the returned code is the write's own outcome.
+	screenshot_texture! : TextureShot => U8
 }

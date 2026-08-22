@@ -792,6 +792,111 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
     return hostedCaptureScreenshot(activeHost(), path_arg);
 }
 
+/// `Capture.screenshot_texture!`: one PNG of what a render target holds.
+///
+/// Unlike a screenshot this waits for nothing on the frame loop. The readback
+/// needs the graphics context, which lives on this thread, and Roc only ever
+/// runs on this thread -- so the pixels are taken synchronously, here, from
+/// whatever the last completed `render!` left in the target. Only the encode
+/// and the write park, on zio's blocking pool, which is why `init!` is a legal
+/// place to call this and is not for `Capture.screenshot!`.
+fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.CaptureHostScreenshot_textureArgs) callconv(.c) u8 {
+    enforcePhase("Capture.screenshot_texture!", during_wait);
+    defer args.path.decref(roc_host);
+    const path = args.path.asSlice();
+
+    var pixels: []u8 = &.{};
+    var width: u32 = 0;
+    var height: u32 = 0;
+    var reserved: u64 = 0;
+
+    // Everything that touches the graphics context or the target's reference,
+    // in one scope: the box is released here, before anything parks, because
+    // nothing after this point needs the resource.
+    const readback = readback: {
+        defer releaseResourceBox(roc_host, args.target.handle);
+
+        const validation = capture.validateRelativePath(path);
+        if (validation != capture.err_none) break :readback validation;
+
+        // Resolved before the headless answer, so a released or `stub` target
+        // is reported the same way whether or not there is a window.
+        const resource = render_texture_heap.get(args.target.handle.*) orelse
+            break :readback capture.err_target_unavailable;
+
+        // A headless render target has no pixels at all -- every draw into it
+        // was a no-op -- so there is nothing to write. Answering `Ok` with no
+        // file is what `Capture.screenshot!` does for the same reason, and it
+        // keeps an exporting app runnable under `--host-headless`.
+        const target = switch (resource.*) {
+            .headless => break :readback capture.err_none,
+            .native => |native| native,
+        };
+        if (headlessMode()) break :readback capture.err_none;
+
+        // The target's own dimensions, not the ones the Roc value carries: the
+        // readback is sized by what the GPU actually holds.
+        const admitted = still_budget.admit(
+            @intCast(@max(target.texture.width, 0)),
+            @intCast(@max(target.texture.height, 0)),
+            &reserved,
+        );
+        if (admitted != capture.err_none) break :readback admitted;
+
+        const image = raylib.readRenderTexture(target) orelse {
+            still_budget.release(reserved);
+            break :readback capture.err_readback_failed;
+        };
+        defer image.deinit();
+
+        // Copied out of raylib's allocation so the encode can happen off this
+        // thread while raylib's buffer is freed on it.
+        const source = image.pixels();
+        const copy = allocatorFromHost(roc_host).alloc(u8, source.len) catch {
+            still_budget.release(reserved);
+            break :readback capture.err_out_of_memory;
+        };
+        @memcpy(copy, source);
+        pixels = copy;
+        width = image.width();
+        height = image.height();
+        break :readback capture.err_none;
+    };
+    if (readback != capture.err_none) return readback;
+    // Headless, or a unit test with no graphics context: admitted, read
+    // nothing, wrote nothing.
+    if (pixels.len == 0) return capture.err_none;
+
+    const allocator = allocatorFromHost(roc_host);
+    defer allocator.free(pixels);
+    defer still_budget.release(reserved);
+
+    var resolved_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+        return capture.err_write_failed;
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("export", 0);
+    defer AppTasks.traceResume("export");
+    // No runtime means `init!` on a host whose task runtime never started, so
+    // the encode happens inline the way a file write does there.
+    const rt = AppTasks.currentRuntime() orelse
+        return encodeAndWritePng(allocator, pixels, width, height, resolved);
+    var blocking = rt.spawnBlocking(encodeAndWritePng, .{
+        allocator,
+        pixels,
+        width,
+        height,
+        resolved,
+    }) catch return capture.err_out_of_memory;
+    return blocking.join();
+}
+
+fn exportedCaptureScreenshotTexture(args: abi.CaptureHostScreenshot_textureArgs) callconv(.c) u8 {
+    return hostedCaptureScreenshotTexture(activeHost(), args);
+}
+
 /// Which of the two byte-list producing waits to run. They share everything
 /// after the syscall: the same admission, the same ownership transfer, and the
 /// same list on the way out.
@@ -967,6 +1072,12 @@ const ScreenshotWait = struct {
     err: u8 = 0,
 };
 var screenshot_wait: ?*ScreenshotWait = null;
+/// Readback memory held by `Capture.screenshot_texture!` calls in flight.
+///
+/// Several tasks can export at once -- nothing serializes them the way the
+/// single end-of-frame readback serializes screenshots -- so this is what keeps
+/// their combined footprint bounded. See `capture.StillBudget`.
+var still_budget: capture.StillBudget = .{};
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -1651,6 +1762,7 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
+    still_budget.reset();
     capture_screenshot_path_len = 0;
     capture_recording_path_len = 0;
     capture_output_dir_len = 0;
@@ -5639,6 +5751,7 @@ comptime {
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
         @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
+        @export(&exportedCaptureScreenshotTexture, .{ .name = "roc_capture_screenshot_texture" });
         @export(&hostedSuggestWindowSize, .{ .name = "roc_host_suggest_window_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSuggestWindowMinSize, .{ .name = "roc_host_suggest_window_min_size" });
@@ -5925,6 +6038,7 @@ fn configureCapture(app_config: AppConfig) void {
     virtual_mouse_wheel = 0;
 
     capture_screenshot_pending = false;
+    still_budget.reset();
     capture_recording_bytes = 0;
     capture_clock_offset_ns = 0;
     capture_clock_last_real_ns = 0;

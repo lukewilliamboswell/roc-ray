@@ -1579,6 +1579,96 @@ comptime {
     }
 }
 
+/// Element type for __AnonStruct_ae8e8c7ef6b24769
+pub const __AnonStruct_ae8e8c7ef6b24769 = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    target: DrawRenderTexture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.target.incref(amount);
+    }
+} else extern struct {
+    path: RocStr,
+    target: DrawRenderTexture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.target.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(__AnonStruct_ae8e8c7ef6b24769) != 40) @compileError("__AnonStruct_ae8e8c7ef6b24769 size mismatch");
+        if (@alignOf(__AnonStruct_ae8e8c7ef6b24769) != 8) @compileError("__AnonStruct_ae8e8c7ef6b24769 alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(__AnonStruct_ae8e8c7ef6b24769) != 24) @compileError("__AnonStruct_ae8e8c7ef6b24769 size mismatch");
+        if (@alignOf(__AnonStruct_ae8e8c7ef6b24769) != 4) @compileError("__AnonStruct_ae8e8c7ef6b24769 alignment mismatch");
+    }
+}
+
+/// Element type for Draw.RenderTexture
+pub const DrawRenderTexture = if (@sizeOf(usize) == 4) extern struct {
+    handle: *u64,
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.handle), amount);
+    }
+} else extern struct {
+    handle: *u64,
+    height: f32,
+    width: f32,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        decrefBoxWith(@ptrCast(value.handle), @alignOf(u64), false, null, roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        increfBox(@ptrCast(value.handle), amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(DrawRenderTexture) != 16) @compileError("DrawRenderTexture size mismatch");
+        if (@alignOf(DrawRenderTexture) != 8) @compileError("DrawRenderTexture alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(DrawRenderTexture) != 12) @compileError("DrawRenderTexture size mismatch");
+        if (@alignOf(DrawRenderTexture) != 4) @compileError("DrawRenderTexture alignment mismatch");
+    }
+}
+
 /// Element type for Camera.Camera2D
 pub const CameraCamera2D = if (@sizeOf(usize) == 4) extern struct {
     offset: MathVec2,
@@ -8855,6 +8945,54 @@ pub const CaptureHostScreenshotArgs = extern struct {
     arg0: RocStr,
 };
 
+/// Arguments for CaptureHost.screenshot_texture!
+/// Roc signature: { path : Str, target : Draw.RenderTexture } => U8
+/// Refcounted fields are owned by the hosted function.
+pub const CaptureHostScreenshot_textureArgs = if (@sizeOf(usize) == 4) extern struct {
+    path: RocStr,
+    target: DrawRenderTexture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.target.incref(amount);
+    }
+} else extern struct {
+    path: RocStr,
+    target: DrawRenderTexture,
+    /// Recursively decrement Roc-owned fields.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        const value = self;
+        value.path.decref(roc_host);
+        value.target.decref(roc_host);
+    }
+
+    /// Increment Roc-owned fields.
+    pub fn incref(self: @This(), amount: isize) void {
+        const value = self;
+        value.path.incref(amount);
+        value.target.incref(amount);
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(CaptureHostScreenshot_textureArgs) != 40) @compileError("CaptureHostScreenshot_textureArgs size mismatch");
+        if (@alignOf(CaptureHostScreenshot_textureArgs) != 8) @compileError("CaptureHostScreenshot_textureArgs alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(CaptureHostScreenshot_textureArgs) != 24) @compileError("CaptureHostScreenshot_textureArgs size mismatch");
+        if (@alignOf(CaptureHostScreenshot_textureArgs) != 4) @compileError("CaptureHostScreenshot_textureArgs alignment mismatch");
+    }
+}
+
 /// Arguments for HostHost.exit!
 /// Roc signature: I32 => {}
 /// Refcounted fields are owned by the hosted function.
@@ -9830,6 +9968,7 @@ pub const FilesHostList = __AnonStruct_5b08b74ffdd2f118;
 pub const CaptureHostSet_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
 pub const CaptureHostStart_recordingArg0 = __AnonStruct_96bd4e483c462501;
 pub const CaptureHostStop_recording = __AnonStruct_7c66fb01c50d182a;
+pub const CaptureHostScreenshot_textureArg0 = __AnonStruct_ae8e8c7ef6b24769;
 pub const HostHostRead_clipboard = __AnonStruct_e98c7d72bcd7a610;
 pub const HostHostRead_file = __AnonStruct_1504326a3d41a158;
 pub const HostHostSuggest_window_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
@@ -9980,6 +10119,18 @@ pub const __AnonStruct_96bd4e483c462501Release = struct {
 
 pub const __AnonStruct_7c66fb01c50d182aRelease = struct {
     pub fn release(value: __AnonStruct_7c66fb01c50d182a, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const __AnonStruct_ae8e8c7ef6b24769Release = struct {
+    pub fn release(value: __AnonStruct_ae8e8c7ef6b24769, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+pub const DrawRenderTextureRelease = struct {
+    pub fn release(value: DrawRenderTexture, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -10698,6 +10849,8 @@ fn rocReleasePolicy(comptime T: type) type {
     if (T == __AnonStruct_82ca12cef4f5714b) return __AnonStruct_82ca12cef4f5714bRelease;
     if (T == __AnonStruct_71f03d460dd53e7d) return __AnonStruct_71f03d460dd53e7dRelease;
     if (T == __AnonStruct_96bd4e483c462501) return __AnonStruct_96bd4e483c462501Release;
+    if (T == __AnonStruct_ae8e8c7ef6b24769) return __AnonStruct_ae8e8c7ef6b24769Release;
+    if (T == DrawRenderTexture) return DrawRenderTextureRelease;
     if (T == DrawHostRenderTexture) return DrawHostRenderTextureRelease;
     if (T == __AnonStruct_83bbf23095f15134) return __AnonStruct_83bbf23095f15134Release;
     if (T == __AnonStruct_5cba559c3a07b56a) return __AnonStruct_5cba559c3a07b56aRelease;
@@ -11239,6 +11392,13 @@ pub extern fn roc_capture_stop_recording() callconv(.c) __AnonStruct_7c66fb01c50
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_capture_screenshot(arg0: RocStr) callconv(.c) u8;
+
+/// Hosted symbol for CaptureHost.screenshot_texture!
+/// Roc signature: { path : Str, target : Draw.RenderTexture } => U8
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+pub extern fn roc_capture_screenshot_texture(arg0: CaptureHostScreenshot_textureArgs) callconv(.c) u8;
 
 /// Hosted symbol for HostHost.exit!
 /// Roc signature: I32 => {}

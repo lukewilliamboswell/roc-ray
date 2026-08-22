@@ -55,6 +55,19 @@ Task := [].{
 	##
 	## A task closure may capture the input, so a task can spawn more tasks.
 	##
+	## When the task starts is the host's choice. It may run up to its first
+	## waiting effect before `spawn!` returns, or in the host's turn after
+	## `update!` returns; either way it has reached its first wait, or finished,
+	## before `render!` of the same cycle. Its code and its synchronous effects
+	## can therefore interleave with the rest of the `update!` that spawned it,
+	## so do not assume an order between the two. The only order a task promises
+	## is its message's: on a later cycle, after every task that finished first.
+	##
+	## When the same kind of work can be in flight more than once, a reply can
+	## arrive after a newer one. Put a generation counter or id in the message
+	## and drop replies that do not match the latest; `examples/http_fetch`
+	## shows the shape.
+	##
 	## `input.spawn!(|| ...)` is the same effect written as a receiver.
 	##
 	## Legal in `update!` and in tasks; refused in `init!`, which never sees the

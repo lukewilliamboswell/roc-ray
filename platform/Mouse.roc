@@ -1,12 +1,13 @@
 ## Mouse helpers for `input.devices.mouse`.
 ##
+## Pass `input.devices.mouse` directly to these helpers; there is nothing to
+## construct, and the receivers read the same either way:
+## `input.devices.mouse.position()`.
+##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Snapshot` here and in the package are the same
 ## nominal type and its receivers are available either way.
-##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
 import rrt.Mouse as RrtMouse
 import MouseHost
 import CaptureHost
@@ -14,6 +15,9 @@ import CaptureHost
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.
+	##
+	## Declared in the `roc-ray-types` package's `Mouse` and re-exported here,
+	## which is also where its receivers are documented.
 	Snapshot : RrtMouse.Snapshot
 
 	## Native operating-system cursor shapes.
@@ -22,11 +26,21 @@ Mouse := [].{
 	## Standard mouse buttons sampled by the platform.
 	Button : RrtMouse.Button
 
+	## Where pointer input comes from: `Hardware`, or a `Virtual` pointer whose
+	## position and buttons the app states itself.
+	##
+	## A virtual source is how a run drives its own pointer -- a scripted demo,
+	## a recorded walkthrough, a headless test that has to click something. The
+	## host reports it through `input.devices.mouse` exactly as it reports the
+	## hardware one, so nothing downstream can tell the difference.
 	Source : RrtMouse.Source
 
+	## A virtual pointer at a position, with no button held.
 	virtual_at : { x : F32, y : F32 } -> Source
 	virtual_at = RrtMouse.virtual_at
 
+	## A virtual pointer at a position with the left button held, so the next
+	## input reports a press there.
 	virtual_click_at : { x : F32, y : F32 } -> Source
 	virtual_click_at = RrtMouse.virtual_click_at
 

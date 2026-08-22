@@ -13,7 +13,8 @@
 ## ```
 Color := [].{
 
-	## An 8-bit sRGB color with alpha.
+	## An 8-bit sRGB color with alpha. `Color.Rgba` on the platform is this same
+	## type, re-exported.
 	Rgba := {
 		r : U8,
 		g : U8,

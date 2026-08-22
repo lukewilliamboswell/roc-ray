@@ -9,12 +9,27 @@
 ##
 ## Use `focused` and `minimized` to pause input or skip expensive work while the
 ## window is inactive.
+##
+## The two verbs mean different things. A `suggest_*` call asks the window
+## manager for something it may decline, reshape, or apply later --
+## `suggest_size!`, `suggest_min_size!`, `suggest_position!`,
+## `suggest_monitor!` -- so nothing here reports what happened and the next
+## `Snapshot` is the authoritative answer. A `set_*` call changes something the
+## host itself owns -- `set_target_fps!`, `set_clipboard_text!` -- and takes
+## effect as asked.
 import rrt.Window as RrtWindow
 import HostHost
 
 Window := [].{
 
 	## Window geometry and visibility sampled once for this cycle.
+	##
+	## `size` is the logical drawing size, `focused` says whether the window has
+	## keyboard focus, and `minimized` says whether it is minimized. A minimized
+	## window still runs the frame loop.
+	##
+	## Declared in the `roc-ray-types` package's `Window` and re-exported here;
+	## `App.Input` carries one as `input.window`.
 	Snapshot : RrtWindow.Snapshot
 
 	## Suggest a new logical window size to the window manager.

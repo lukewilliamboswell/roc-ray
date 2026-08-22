@@ -13,11 +13,14 @@
 ## rotations and intersections that 2D vectors cannot express.
 Math := [].{
 
-	## Two-dimensional floating-point vector.
+	## Two-dimensional floating-point vector. `Math.Vec2` and `Draw.Vector2` on
+	## the platform are this same type, re-exported.
 	Vec2 := {
 		x : F32,
 		y : F32,
 	}.{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
@@ -28,6 +31,8 @@ Math := [].{
 		width : F32,
 		height : F32,
 	}.{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
@@ -36,6 +41,8 @@ Math := [].{
 		center : Vec2,
 		radius : F32,
 	}.{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 

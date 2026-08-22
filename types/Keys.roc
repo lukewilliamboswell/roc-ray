@@ -125,11 +125,15 @@ Keys := [].{
 		KeyKpEqual,
 		Raw(U64),
 	].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
 	ExitKey := [NoExitKey, ExitKey(Key)].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 

@@ -20,7 +20,7 @@
 ##
 ## One query is one crossing. basic-cli's SQLite reads a column at a time,
 ## which is affordable when each read is an ordinary function call and ruinous
-## here, where each one would be a *waiting* effect that parks the task: a
+## here, where each one would be a waiting effect that parks the task: a
 ## hundred-row, five-column query would park it six hundred times. So a query
 ## answers with its whole result, and `Sqlite` decodes it.
 ##

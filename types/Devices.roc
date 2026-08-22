@@ -77,7 +77,7 @@ Devices := [].{
 
 		## Say that one key is held, as `Devices.none.with_key_down(KeyW)`.
 		##
-		## Each `with_key_*` states the *complete* state of the key it names,
+		## Each `with_key_*` states the complete state of the key it names,
 		## replacing whatever that key had, because the host samples exactly one
 		## of held, pressed, or released per key per cycle. Different keys are
 		## independent bytes, so these compose:

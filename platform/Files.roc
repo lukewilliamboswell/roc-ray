@@ -47,12 +47,36 @@ Files := [].{
 	EntryKind : [File, Dir, Other]
 
 	## Why `read_text!` produced no UTF-8 string.
+	##
+	## `NotFound` is no file at that path. `TooLarge` is a file past
+	## `read_text!`'s 64 kibibyte ceiling, which is a refusal rather than a
+	## failure: nothing went wrong and the file is there. `NotUtf8` is a file
+	## that was read and is not valid UTF-8, reported rather than delivered as
+	## an invalid `Str`. `Busy` is the host's thirty-two file-delivery slots all
+	## being held by byte lists an app has retained; nothing was read, and the
+	## same call later can succeed. `Unavailable` is the app shutting down
+	## while the read was parked.
+	##
+	## `ReadFailed` is every other refusal, and a permission the process does
+	## not have is one of them: the host does not distinguish it from a read
+	## that failed for any other reason. `metadata!` does, so a path that may be
+	## unreadable can be stat'd first to tell the two apart.
 	ReadTextError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
 
 	## Why `read_bytes!` produced no byte list.
+	##
+	## The same tags as `ReadTextError` minus `NotUtf8`, since nothing about
+	## the bytes is inspected, and with a much larger ceiling: `TooLarge` here
+	## is a file past 16 mebibytes. `ReadFailed` covers a permission denial in
+	## exactly the same way.
 	ReadBytesError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## Why `list!` produced no directory entries.
+	##
+	## `NotADirectory` is a path that is there and is a file. `TooLarge` is a
+	## directory whose listing would exceed 8192 entries or one mebibyte of
+	## encoded names, whichever binds first. The rest mean what they mean for a
+	## read, `ReadFailed` included.
 	ListError : [NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## What one path is, how big it is, and when it last changed.
@@ -66,11 +90,20 @@ Files := [].{
 
 	## Why `metadata!` could not describe the path.
 	##
+	## `NotFound` is nothing at that path, including a path a component of
+	## which is a file rather than a directory, and a name this filesystem
+	## cannot represent. `PermissionDenied` is a directory on the way to the
+	## path this process may not look inside -- the one failure a stat can name
+	## that a read cannot. `Unavailable` is the app shutting down while the
+	## stat was parked, and `ReadFailed` is every other refusal.
+	##
 	## There is no `Busy`: a stat holds no host-owned payload, so there is no
 	## delivery slot for it to run out of.
 	MetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
 
-	## Why a write did not leave the file on disk.
+	## Why a write did not leave the file on disk. This is `Files`' own
+	## `WriteError`; `Stdout` and `Stderr` declare a different one under the
+	## same name, for the different things a stream write can refuse.
 	##
 	## `NotFound` means a component of the path is a file rather than a
 	## directory, or names something that cannot be created; the missing
@@ -82,8 +115,9 @@ Files := [].{
 	## Read a bounded UTF-8 file into a `Str`.
 	##
 	## The whole file is copied into the string, so this is capped well below
-	## what `read_bytes!` will read: a file past the cap is `TooLarge`, and one
-	## that is not valid UTF-8 is `NotUtf8` rather than an invalid `Str`.
+	## what `read_bytes!` will read: at most 64 kibibytes, and a file past that
+	## is `TooLarge` rather than truncated. One that is not valid UTF-8 is
+	## `NotUtf8` rather than an invalid `Str`.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
@@ -99,10 +133,16 @@ Files := [].{
 
 	## Read a bounded file as ordinary Roc bytes.
 	##
-	## The delivered list owns host-backed storage through Roc ARC without the
-	## payload being copied, so retaining a sublist can retain the complete
-	## source allocation. `List.release_excess_capacity` copies out the part
-	## worth keeping when that matters.
+	## At most 16 mebibytes, and a file past that is `TooLarge`. The ceiling is
+	## far above `read_text!`'s because nothing is copied: the buffer the read
+	## filled is the buffer Roc gets.
+	##
+	## That is also why there is a second bound. The delivered list owns
+	## host-backed storage through Roc ARC, and at most 32 such allocations are
+	## live at once; a read made while all 32 are held answers `Busy` without
+	## touching the disk. Retaining a sublist retains the complete source
+	## allocation and so holds a slot, which `List.release_excess_capacity`
+	## releases by copying out the part worth keeping.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
@@ -121,6 +161,12 @@ Files := [].{
 	## Entry order is the filesystem's observed order and is not sorted.
 	## Recursion is the app's to drive: only the app knows which subtrees are
 	## worth descending into, and a host-side walk would be one unbounded wait.
+	##
+	## A listing is bounded at 8192 entries and at one mebibyte of encoded
+	## names, whichever binds first; a directory past either is `TooLarge`
+	## rather than a partial listing. It is delivered through the same 32
+	## file-byte slots a byte read uses, so it can answer `Busy` for the same
+	## reason.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.

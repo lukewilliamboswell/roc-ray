@@ -6,22 +6,32 @@
 ## through `Capture` and never depends on this package directly.
 
 CaptureFormat := [Png, Gif, WebM].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 CaptureScale := [Full, Half, Quarter, Ratio({ numerator : U32, denominator : U32 })].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 CaptureTiming := [RealTime, FixedStep].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 CaptureCursor := [NoCursor, DrawCursor].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 CaptureQuality := [Fast, Balanced, Best].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -33,6 +43,9 @@ Capture := [].{
 	## write a single animated file, encoded incrementally as frames arrive --
 	## so memory stays bounded by one frame and the length of a recording is
 	## limited only by `max_frames` and by disk space.
+	##
+	## `CaptureFormat` in the signature is the module-private nominal this
+	## aliases; `Capture.Format` is the name to write.
 	Format : CaptureFormat
 
 	## How far each captured frame is downscaled from the framebuffer.
@@ -78,6 +91,8 @@ Capture := [].{
 		cursor : CaptureCursor,
 		quality : CaptureQuality,
 	}.{
+
+		## Compare two of these values.
 		is_eq : _
 
 		## Return a recording written to a different path.

@@ -51,7 +51,9 @@ import StdioHost
 
 Stdout := [].{
 
-	## Why a write was not queued.
+	## Why a write to standard output was not queued. This is this module's
+	## own `WriteError`; `Files` declares a different one under the same
+	## name, for the different things a file write can refuse.
 	##
 	## `BufferFull` is the queue having no room for this payload right now, and
 	## nothing was queued; the drainer is behind, and the same call may succeed

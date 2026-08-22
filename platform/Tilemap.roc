@@ -6,8 +6,34 @@
 ## in `render!`; every `draw_*!` here takes a `Draw.Frame` and is legal in
 ## `render!` only.
 ##
+## ```roc
+## raw = Tilemap.load_tmx!("assets/level.tmx")?
+## tilemap = Tilemap.from_raw(raw)
+##     .with_origin({ x: 0, y: 0 })
+##     .with_tileset_texture(1, tiles)
+##     .build()?
+## ```
+##
+## ```roc
+## tilemap.draw_all!(frame)
+## ```
+##
+## The builder is where a parsed map becomes a drawable one. Tiled records a
+## tileset by its image path; `with_tileset_texture` says which loaded texture
+## each first GID means, and `build` refuses a map with a tileset left
+## unbound rather than drawing it blank. `layer_role` and `object_role` attach
+## the app's own meaning -- which layers are solid, which objects are spawns --
+## so the rest of the app asks about roles instead of about layer names.
+##
 ## Grid queries and coordinate conversions are pure, so an app can use them
 ## from `update!` for collision and picking.
+##
+## Signatures here name `TilemapRawMap`, `TilemapRawObject`, `TilemapBuilder`
+## and their siblings. Those are module-private nominals, one per public alias;
+## the names to write are the short ones on this page -- `Tilemap.RawMap`,
+## `Tilemap.RawObject`, `Tilemap.Builder`. A nominal has to be declared outside
+## the module object to be aliased inside it, which is why the two spellings
+## exist.
 import Assets
 import Camera
 import Draw
@@ -34,6 +60,8 @@ TilemapTextureBinding : {
 }
 
 TilemapLayerRole := [Drawn, Solid, Hidden].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -42,6 +70,8 @@ TilemapLayerRole := [Drawn, Solid, Hidden].{
 TilemapDrawRole : [Drawn, Solid]
 
 TilemapObjectRole := [Spawn, Collectible, Hazard, Goal, Checkpoint, Decoration, Exit, Unknown].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -189,16 +219,25 @@ Tilemap :: {
 
 	## Decoded Tiled tile-transform flags.
 	Flip : TilemapFlip
+
+	## A tileset with its texture binding resolved, as `build` left it.
 	ResolvedTileset : TilemapResolvedTileset
 
-	## Application-level behavior assigned to a named layer.
+	## Application-level behavior assigned to a named layer: `Drawn`, `Solid`,
+	## or `Hidden`.
 	LayerRole : TilemapLayerRole
+
+	## The two layer roles ordinary role-based drawing accepts. `Hidden` layers
+	## are drawn only by name.
 	DrawRole : TilemapDrawRole
 
 	## Application-level behavior assigned to an object name or type.
 	ObjectRole : TilemapObjectRole
 
-	## Immutable tilemap configuration builder.
+	## Immutable tilemap configuration builder, from `from_raw`.
+	##
+	## `TilemapBuilder` in the signature is the module-private nominal this
+	## aliases; `Tilemap.Builder` is the name to write.
 	Builder : TilemapBuilder
 
 	## Empty parsed map value, useful as a deliberate fallback.

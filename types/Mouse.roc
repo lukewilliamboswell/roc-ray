@@ -66,6 +66,8 @@ Mouse := [].{
 		ResizeAll,
 		NotAllowed,
 	].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
@@ -85,11 +87,17 @@ Mouse := [].{
 	Button := [Left, Right, Middle, Side, Extra, Forward, Back]
 
 	## Select hardware pointer samples or deterministic application-provided samples.
+	## Where pointer input comes from: `Hardware`, or a `Virtual` pointer whose
+	## position and buttons the app states itself. `Mouse.set_source!` on the
+	## platform is what switches between them.
 	Source := [Hardware, Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 })]
 
+	## A virtual pointer at a position, with no button held.
 	virtual_at : { x : F32, y : F32 } -> Source
 	virtual_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
 
+	## A virtual pointer at a position with the left button held, so the next
+	## input reports a press there.
 	virtual_click_at : { x : F32, y : F32 } -> Source
 	virtual_click_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
 

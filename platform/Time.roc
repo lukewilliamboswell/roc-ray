@@ -29,6 +29,14 @@ import TimeHost
 Time := [].{
 
 	## When one cycle happened, and how much time it covers.
+	##
+	## `cycle_count` counts cycles from `0`, `simulation_nanos` is the
+	## simulation clock the platform advances, `monotonic_nanos` is the host's
+	## own monotonic clock at the sample, and `elapsed_seconds` is the time this
+	## cycle covers, which is what animation and simulation multiply by.
+	##
+	## Declared in the `roc-ray-types` package's `Time` and re-exported here;
+	## `App.Input` carries one as `input.time`.
 	Cycle : RrtTime.Cycle
 
 	## The cycle an app starts on: count zero, no elapsed time.
@@ -75,6 +83,8 @@ Time := [].{
 		seconds : I64,
 		nanosecond : U32,
 	}.{
+
+		## Compare two of these values.
 		is_eq : _
 
 		## The Unix epoch, `1970-01-01T00:00:00Z`.

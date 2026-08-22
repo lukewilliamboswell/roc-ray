@@ -20,6 +20,8 @@ Gamepad := [].{
 
 	## One of the four gamepad slots sampled by the platform.
 	Id := [One, Two, Three, Four].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 

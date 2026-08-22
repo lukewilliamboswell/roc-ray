@@ -1,12 +1,15 @@
-## Keys module - keyboard state and key constants.
+## Keyboard state and the key constants that name it.
+##
+## Read a key through the snapshot `App.Input` carries --
+## `input.devices.key_pressed(KeySpace)` -- rather than through the packed
+## bytes. `set_source!` and `set_text!` are the other half: they let a run
+## drive its own keyboard, which is what a scripted demo or a headless test
+## needs.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so `Key` here and in the package are the
 ## same nominal type and values pass between them freely.
-##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
 import rrt.Keys as RrtKeys
 import HostHost
 import CaptureHost
@@ -14,6 +17,9 @@ import CaptureHost
 Keys := [].{
 
 	## Named raylib keyboard keys plus a validated backend-specific escape hatch.
+	##
+	## Declared in the `roc-ray-types` package's `Keys` and re-exported here,
+	## which is also where its receivers are documented.
 	Key : RrtKeys.Key
 
 	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.

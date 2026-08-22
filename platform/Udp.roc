@@ -86,11 +86,14 @@ Udp := [].{
 
 	## Per-receive limits.
 	##
-	## `timeout_ms` is how long to wait for the *first* datagram; `0` waits
+	## `timeout_ms` is how long to wait for the first datagram; `0` waits
 	## forever, which only makes sense in a task the app is content to leave
 	## parked until shutdown. `max_datagrams` caps the batch, and the host
 	## clamps it to sixty-four -- past that the rest simply stay buffered for
 	## the next receive.
+	##
+	## A plain record; build one with `{ ..Udp.default_receive, timeout_ms: 200 }`
+	## rather than a chain of `with_*` calls.
 	ReceiveConfig : { timeout_ms : U64, max_datagrams : U32 }
 
 	## One second, and up to sixty-four datagrams.

@@ -23,15 +23,32 @@
 ## nearly all of them. An effect that changes host state -- the cursor, the
 ## window, audio, a recording, a loaded resource -- is legal in `init!`,
 ## `update!`, and tasks, and refused in `render!`. An effect that draws is
-## legal only in `render!`, inside the frame scope the host opens around it.
+## legal in `render!` only, inside the frame scope the host opens around it.
 ## An effect that waits -- `Files.read_text!`, `Http.send!`, `Task.sleep!` --
 ## is legal in `init!`, where it blocks startup, and in tasks, where it parks
-## the task while the frame loop keeps drawing, and is refused in `update!`
-## and `render!`.
+## the task; it is refused in `update!` and `render!`.
+##
+## Two effects sit outside those three rules. `Capture.screenshot!` is legal
+## only in a task: it waits for a frame that has to be drawn first, and `init!`
+## runs before the frame loop has gone around once. `Assets.load_texture!`
+## loads rather than waits -- it reads the file on the calling thread instead
+## of parking -- so it is legal in `update!`, where a large load costs that
+## frame. Load textures in `init!`.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
 ## a runtime outcome: it stops the app at once with a message naming the
 ## effect, the phase it was called from, and where it belongs.
+##
+## Saturation is a runtime outcome and is reported three different ways,
+## because three different things are full. `ResourceLimit` is one of the
+## host's fixed resource tables -- textures, sounds, fonts, shaders, prepared
+## text -- and is answered by releasing something the app no longer holds.
+## `Busy` is a delivery slot rather than a resource: `Files` has 32 for the
+## byte lists it hands over, and `Cmd` bounds how many children run at once, so
+## the same call later can succeed with nothing released.
+## `Sqlite.TooManyConnections` is the eight-connection cap on open databases.
+## None of the three is a retry loop's cue on its own; each says which of the
+## three kinds of room ran out.
 ##
 ## How messages arrive: work that waits belongs on a task.
 ## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
@@ -39,6 +56,20 @@
 ## its value is delivered as a message on `input.messages` in a later cycle, in
 ## the order the tasks finished. A task cannot read or write the model, so its
 ## message is the only thing it can say. See `Task`.
+##
+## Testing: `update!` is effectful and an `expect` cannot call it, so the
+## decisions live in pure functions and those are what a test exercises. Three
+## naming conventions supply the values such a test needs.
+## `App.Input.for_tests({})` is the composite input, neutral in every field and
+## customized one field at a time with the `with_*` receivers; `for_tests` is
+## what any composite input value is called. `Devices.none` and
+## `Devices.empty` are the device snapshots, and `none`/`empty` is what a
+## neutral device sample is called -- build a test's input from `none`, which
+## is writable, and seed a model with `empty`. Every host resource an app can
+## hold has a resource-free `stub` -- `Draw.Font.stub`, `Audio.Sound.stub`,
+## `Assets.Store.stub`, `Text.Prepared.stub` -- so a `Model` full of assets can
+## be written down in a pure test. A `stub` reaches the host and is treated as
+## a released resource, so it is never a way to test loading or lifetime.
 import HostHost
 import Keys
 import Mouse
@@ -46,10 +77,14 @@ import MouseHost
 import rrt.Capture as RrtCapture
 
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 AppRecording := [NoRecording, Record(RrtCapture.Recording)].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -65,11 +100,20 @@ import TaskHost
 
 App := [].{
 
-	## Mutually exclusive frame pacing strategy. Config normalization maps a
-	## non-positive `Capped` value to `Uncapped` before a Config can be created.
+	## Mutually exclusive frame pacing strategy: `VSync`, `Capped(fps)`, or
+	## `Uncapped`. Config normalization maps a non-positive `Capped` value to
+	## `Uncapped` before a `Config` can be created.
+	##
+	## The signature names the module-private nominal this is an alias of;
+	## `App.FramePacing` is the name to write.
 	FramePacing : AppFramePacing
 
-	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	## Which key, if any, closes the window: `ExitKey(key)` or `NoExitKey`, which
+	## disables the behaviour.
+	##
+	## This is `Keys.ExitKey`, re-exported. The signature renders as
+	## `ExitKey : ExitKey` because the alias and the nominal share a name; they
+	## are one type, and a value passes between the two spellings freely.
 	ExitKey : Keys.ExitKey
 
 	## Validated startup configuration. Its fields cannot be updated directly;
@@ -219,6 +263,10 @@ App := [].{
 
 	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
 	##
+	## The signature renders as `Startup : Startup` because this is an alias of
+	## an identically named private nominal. There is nothing to construct: the
+	## host hands one to the `init!` callback and that is the only one there is.
+	##
 	## Every effect that takes a `Startup` is legal only in `init!`. Startup
 	## provides one-shot system effects but no input, window, or timing
 	## observations: seed models that require devices with `Devices.empty`, and
@@ -258,7 +306,7 @@ App := [].{
 
 	## Read a UTF-8 text file from disk, blocking until it is read.
 	##
-	## Call as `App.read_file!(startup, path)`. Legal only in `init!`; use
+	## Call as `App.read_file!(startup, path)`. Legal only in `init!`. Use
 	## `Files.read_text!` inside a task to read a file while the app runs, and
 	## for the fuller error report.
 	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
@@ -310,8 +358,8 @@ App := [].{
 	## Suggest positive initial window dimensions to the window manager.
 	##
 	## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
-	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`;
-	## a running app resizes itself with `Window.suggest_size!`, which reaches
+	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`.
+	## A running app resizes itself with `Window.suggest_size!`, which reaches
 	## the same host call, and only this spelling can report a refusal.
 	suggest_window_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 	suggest_window_size! = |_startup, size|
@@ -341,7 +389,7 @@ App := [].{
 	##
 	## Values at or below zero render uncapped. This neither selects a software
 	## renderer nor controls VSync. Call as `App.set_target_fps!(startup, fps)`.
-	## Legal only in `init!`; a running app changes the cap with
+	## Legal only in `init!`. A running app changes the cap with
 	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
 	set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
@@ -361,7 +409,7 @@ App := [].{
 	## Answers `Err(Unavailable)` when the clipboard is empty, holds non-text
 	## content, or the windowing backend refuses the request -- the underlying
 	## platform does not distinguish these cases. Call as
-	## `App.get_clipboard_text!(startup)`. Legal only in `init!`; a running app
+	## `App.get_clipboard_text!(startup)`. Legal only in `init!`. A running app
 	## reads the clipboard with `Window.read_clipboard!`, which names the
 	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
@@ -373,18 +421,18 @@ App := [].{
 
 	## Replace the system clipboard contents with UTF-8 text.
 	##
-	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`;
-	## a running app writes it with `Window.set_clipboard_text!`.
+	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`.
+	## A running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
 	set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
 
 	## Apply cursor visibility and capture atomically through one tagged
-	## operation. Legal only in `init!`; `Mouse.set_cursor_mode!` is the same
+	## operation. Legal only in `init!`. `Mouse.set_cursor_mode!` is the same
 	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
 	set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
-	## Set the native operating-system cursor shape. Legal only in `init!`;
+	## Set the native operating-system cursor shape. Legal only in `init!`.
 	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
 	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
@@ -519,7 +567,7 @@ App := [].{
 		## Building the model this is called with is the other half: every host
 		## resource an app can hold has a resource-free `stub`
 		## (`Draw.Font.stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
-		## `rrt.Texture.stub`, ...), so a `Model` full of assets can be written
+		## `Assets.Texture.stub`, ...), so a `Model` full of assets can be written
 		## down in a pure test.
 		##
 		## `update!` itself is effectful, and an `expect` cannot call it. Keep
@@ -577,18 +625,22 @@ App := [].{
 		## Start a task whose message this input's own type pins.
 		##
 		## `Task.spawn!(input, || ...)` is the documented form and calls this;
-		## `input.spawn!(|| ...)` reads better when the input is already at
-		## hand. Both need the input for the same reason: it is the witness
-		## that ties the closure's return type to the app's `Msg`. See
-		## `Task.spawn!` for what the input is doing there.
+		## `input.spawn!(|| ...)` reads better when the input is already at hand.
+		## Both need the input for the same reason: it is the witness that ties the
+		## closure's return type to the app's `Msg`. See `Task.spawn!` for what the
+		## input is doing there.
+		##
+		## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 		spawn! : Input(msg), (() => msg) => {}
 		spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 
-		## Start a task that answers in a component's own message type, wrapped
-		## into this input's.
+		## Start a task that answers in a component's own message type, wrapped into
+		## this input's.
 		##
-		## `Task.spawn_with!(input, task!, wrap)` is the documented form and
-		## calls this. See it for the component idiom this exists for.
+		## `Task.spawn_with!(input, task!, wrap)` is the documented form and calls
+		## this. See it for the component idiom this exists for.
+		##
+		## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 		spawn_with! : Input(msg), (() => a), (a -> msg) => {}
 		spawn_with! = |input, task!, wrap| Input.spawn!(input, || wrap(task!()))
 	}

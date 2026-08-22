@@ -226,6 +226,10 @@ Sqlite := [].{
 	## `max_result_bytes` caps the text and blob payload of one query. A query
 	## that would exceed it fails with `ResultTooLarge` rather than returning
 	## part of its rows.
+	##
+	## A plain record; build one with
+	## `{ ..Sqlite.default_config, mode: ReadOnly }` rather than a chain of
+	## `with_*` calls.
 	Config : { mode : Mode, busy_timeout_ms : U64, max_result_bytes : U64 }
 
 	## Read/write/create, a five second busy timeout, sixteen megabytes of

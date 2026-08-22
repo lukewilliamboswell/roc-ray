@@ -4,6 +4,30 @@
 ## model. Sound and music are distinct types, so they cannot be mixed by
 ## accident. Their final Roc reference automatically unloads the host resource.
 ##
+## ```roc
+## init! = App.init(
+##     App.default,
+##     |_startup| Ok({ blip: Audio.gen_tone!({ freq: 440, ms: 120 })? }),
+## )
+## ```
+##
+## ```roc
+## if input.devices.key_pressed(KeySpace) {
+##     model.blip.playback().with_volume(0.4).play!()
+## }
+## ```
+##
+## `load_sound!` and `load_music!` take a path used as the app gives it,
+## resolved against the process working directory. There is no `Assets.Store`
+## here: an audio path is not resolved through a store handle and is not
+## confined to one, so a packaged app should build the path from something it
+## controls rather than from the directory it happened to be launched in.
+##
+## A `Sound` is decoded into memory and played from there, so it suits short
+## effects. A `Music` is streamed from the file, so it suits a long track; the
+## platform advances every active stream once per frame, with nothing for the
+## app to pump.
+##
 ## Every effect here that loads a resource or changes what the mixer is doing
 ## is legal in `init!`, `update!`, and tasks, and refused in `render!`. The
 ## four queries that only read a scalar the device already has --
@@ -95,8 +119,8 @@ Audio := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		##
-		## The three transport calls go straight to the host rather than through
-		## `Sound`, because `Sound.play!` is defined as this operation.
+		## Volume, pitch, and pan are all set before the sound starts, so this
+		## play cannot inherit what an earlier play left on the same sound.
 		play! : Playback => {}
 		play! = |Playback.(settings)| {
 			AudioHost.set_sound_volume!(settings.sound.resource, settings.volume)

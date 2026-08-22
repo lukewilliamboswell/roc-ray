@@ -39,8 +39,13 @@ Camera := [].{
 	}
 
 	## Immutable camera value accepted by drawing and coordinate transforms.
-	## Its representation is opaque so non-finite transform fields or a
-	## non-invertible zero zoom cannot bypass the sanitizing below.
+	## `Camera.Camera2D` and `Draw.CameraMode` on the platform are this same
+	## type, re-exported.
+	##
+	## Its representation is opaque so non-finite transform fields, or a zero
+	## zoom that has no inverse, cannot bypass the sanitizing every constructor
+	## applies. The module header states what is rewritten and what is left
+	## alone.
 	Camera2D :: {
 		target : Math.Vec2,
 		offset : Math.Vec2,

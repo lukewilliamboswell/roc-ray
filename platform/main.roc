@@ -9,7 +9,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random, Task, Http, Url]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Url]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -110,7 +110,6 @@ platform ""
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_task_sleep": TaskHost.sleep!,
 		"roc_task_spawn": TaskHost.spawn!,
-		"roc_app_submit_request": AppHost.submit_request!,
 		"roc_tilemap_load_tmx_raw": TilemapHost.load_tmx!,
 		"roc_tilemap_draw_raw": TilemapHost.draw!,
 		"roc_draw_begin_camera": DrawHost.begin_camera!,
@@ -171,7 +170,6 @@ import TilemapHost
 import Physics
 import AppHost
 import AppTransport
-import RequestQueue
 import Random
 import TaskHost
 import Task
@@ -211,14 +209,14 @@ InputFromHost : {
 ## cross the boundary unchanged rather than being mirrored by a second copy that
 ## could drift. Only `input` needs reshaping, and only to rename one field.
 ##
-## Unions do not cross this boundary, so request results and recording state arrive
-## as flat records. The host owns each pending callback envelope and returns it
-## with its raw terminal result; Roc invokes it before rebuilding `App.Input`.
+## Unions do not cross this boundary, so the recording state arrives as a flat
+## record. Each finished task arrives as an erased thunk holding its message;
+## Roc calls it before rebuilding `App.Input`.
 InputFromHostCycle(msg) : {
 	devices : InputFromHost,
 	window : Window.Snapshot,
 	time : Time.Cycle,
-	responses : List(AppHost.PendingResponse(msg)),
+	task_results : List(TaskHost.FinishedTask(msg)),
 	capture : AppHost.RawCaptureStatus,
 }
 
@@ -242,7 +240,7 @@ input_from_raw = |raw| {
 	mouse: raw.mouse,
 }
 
-## Rebuild a public `App.Input` after resolving private host responses.
+## Rebuild a public `App.Input` after unwrapping this cycle's task messages.
 app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg) -> App.Input(msg)
 app_input_from_raw = |devices, window, time, capture, messages| {
 	devices: input_from_raw(devices),
@@ -267,8 +265,8 @@ init_for_host! = ||
 ##
 ## Called once per fresh host-cycle input, whether or not that cycle presents.
 ## `update!` is effectful: synchronous host effects run inline, in program
-## order, and deferred work reaches the host through the `Task.spawn!` and
-## `App.request!` effects while this call is in progress. The separate
+## order, and deferred work reaches the host through the `Task.spawn!` effect
+## while this call is in progress. The separate
 ## `render_for_host!` callback is optional for the cycle and, when invoked,
 ## receives this resulting model.
 ##
@@ -281,8 +279,8 @@ init_for_host! = ||
 ## `scripts/test_model_allocation.py`, which checks that budget. Earlier pins
 ## copied the whole list every frame; `--characterize` describes that behaviour.
 update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
-update_for_host! = |boxed_model, { devices, window, time, responses, capture }| {
-	messages = receive_responses(responses)
+update_for_host! = |boxed_model, { devices, window, time, task_results, capture }| {
+	messages = receive_task_results(task_results)
 	input = app_input_from_raw(devices, window, time, capture, messages)
 	model = Box.unbox(boxed_model)
 	match (program.update!)(model, input) {
@@ -298,34 +296,27 @@ update_for_host! = |boxed_model, { devices, window, time, responses, capture }| 
 ## closure parks that stack and this call returns later, after the frame loop
 ## has gone around as many times as it needed to.
 ##
-## The message comes back wrapped as a response mapper -- the same
-## `Box(RawResponse -> Box(msg))` every request callback uses -- so the host
-## stages it as an ordinary `PendingResponse` and `receive_responses` delivers
-## it with code that already exists.
-##
-## TODO(compiler): the direct shape -- `task_results : List(Box(msg))` on the
-## input, unboxed in a loop -- trips a debug-only postcheck invariant in
-## SpecConstr ("known constructor match had no matching branch") whenever
-## `Msg : []`. The pinned release nightly builds it; a debug build of the same
-## commit aborts. Keep this shape until that invariant is understood upstream,
-## then deliver task results directly and drop the wrapper closure.
-run_task_for_host! : Box(() => Msg) => Box(AppHost.RawResponse -> Box(Msg))
+## The message comes back wrapped in an erased thunk rather than as a
+## `Box(Msg)`, because `roc glue` renders a `List(Box(msg))` with a one-word
+## list header while Roc releases it as a list of refcounted elements. See
+## `TaskHost.FinishedTask`.
+run_task_for_host! : Box(() => Msg) => Box({} -> Box(Msg))
 run_task_for_host! = |boxed| {
 	run! = Box.unbox(boxed)
 	message = Box.box(run!())
-	Box.box(|_raw| message)
+	Box.box(|{}| message)
 }
 
-## Invoke every returned response envelope in the host's observed order.
+## Unwrap every finished task's message, in the order the tasks completed.
 ##
-## The host removes an accepted envelope before returning it, so its own ticket
-## table detects unknown or duplicate responses. This list is pre-sized and
-## preserves that delivery order without intermediate result lists.
-receive_responses : List(AppHost.PendingResponse(msg)) -> List(msg)
-receive_responses = |responses| {
-	var $messages = List.with_capacity(List.len(responses))
-	for response in responses {
-		$messages = List.append($messages, AppTransport.receive_response(response))
+## The list is pre-sized and preserves that order without intermediate result
+## lists.
+receive_task_results : List(TaskHost.FinishedTask(msg)) -> List(msg)
+receive_task_results = |results| {
+	var $messages = List.with_capacity(List.len(results))
+	for result in results {
+		deliver = Box.unbox(result.deliver)
+		$messages = List.append($messages, Box.unbox(deliver({})))
 	}
 	$messages
 }

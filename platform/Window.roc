@@ -62,9 +62,6 @@ Window := [].{
 		}
 	}
 
-	read_clipboard : (Try(Str, ClipboardReadError) -> msg) -> [ReadClipboard({ callback : Try(Str, ClipboardReadError) -> msg }), ..]
-	read_clipboard = |callback| ReadClipboard({ callback: callback })
-
 	## Set raylib's CPU-side frame-rate cap.
 	##
 	## Values at or below zero render uncapped. This neither selects a software
@@ -74,8 +71,8 @@ Window := [].{
 
 	## Replace the system clipboard contents.
 	##
-	## Reading it back is a `Window.read_clipboard` request instead, because a
-	## read has an answer to deliver. Valid during `init!`, `update!`, and tasks.
+	## Read it back with `Window.read_clipboard!`. Valid during `init!`,
+	## `update!`, and tasks.
 	set_clipboard_text! : Str => {}
 	set_clipboard_text! = |text| HostHost.set_clipboard_text!(text)
 }

@@ -25,17 +25,15 @@
 - Keep application domain state and policy in Roc. The host may retain the
   opaque model between callbacks, but must not inspect it, mutate it, or infer
   application decisions from it.
-- Classify every application/host interaction as one of the five protocols in
-  `design.md`: startup authority, `App.Input`, `App.Command`,
-  `App.Request`, or `Draw.Frame`. Adding another interaction shape is an
+- Classify every application/host interaction as one of the four protocols in
+  `design.md`: startup authority, `App.Input`, a direct host effect called from
+  `update!` or a task, or `Draw.Frame`. Adding another interaction shape is an
   architecture change, not an ordinary feature.
-- Preserve the pure `update` transition and serial application callbacks. Host
-  workers must not execute Roc application code or share Roc values across
-  threads unsafely.
-- Keep commands ordered, current-cycle, and response-free. Keep requests inert,
-  finite in response cardinality, and accountable for exactly one terminal
-  response during an orderly application lifetime. Never silently discard a
-  command, request response, or non-lossy input event.
+- Keep application callbacks serial and on one thread. Host workers must not
+  execute Roc application code or share Roc values across threads unsafely.
+- Keep a synchronous effect current-cycle. Keep a task accountable for exactly
+  one message during an orderly application lifetime. Never silently discard a
+  task's message or a non-lossy input event.
 - Keep rendering derived from the resulting model and scoped by `Draw.Frame`.
   Rendering must not become a second model transition or a route to general
   host work.
@@ -44,9 +42,8 @@
   and shutdown behavior. Do not introduce an implicit unbounded queue, cache,
   registry, worker set, or callback set.
 - Keep programmer errors distinct from runtime outcomes. Make invalid values
-  unrepresentable where practical, reject structurally invalid transitions
-  before applying commands, and return mutable external conditions as typed
-  data. Do not silently repair, substitute, retry, downgrade, or ignore a
+  unrepresentable where practical, reject a structurally invalid call before it
+  reaches the host, and return mutable external conditions as typed data. Do not silently repair, substitute, retry, downgrade, or ignore a
   condition that can change application meaning.
 - Represent host authority with typed opaque capabilities. Do not expose native
   pointers, transport tickets, untyped IDs, arbitrary native calls, or

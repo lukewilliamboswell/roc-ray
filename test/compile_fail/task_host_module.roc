@@ -2,6 +2,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 
 import rr.App
 import rr.Draw
+import rr.TaskHost
 
 Model : {}
 
@@ -11,8 +12,6 @@ init! : App.Init(Model, [])
 init! = App.init(App.default, |_startup| Ok({}))
 
 Msg : []
-
-Leaked : App.RawResponse
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, _input| Ok(model)

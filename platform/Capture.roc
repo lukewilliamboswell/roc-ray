@@ -92,9 +92,6 @@ Capture := [].{
 		}
 	}
 
-	screenshot : Str, (Try({}, ScreenshotError) -> msg) -> [Screenshot({ path : Str, callback : Try({}, ScreenshotError) -> msg }), ..]
-	screenshot = |path, callback| Screenshot({ path, callback })
-
 	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-input timing
 	## and balanced encoder quality.
 	default : Recording

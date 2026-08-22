@@ -16,9 +16,6 @@ Time := [].{
 	first_cycle : Cycle
 	first_cycle = RrtTime.first_cycle
 
-	delay : U64, (Try({}, [Busy]) -> msg) -> [Delay({ millis : U64, callback : Try({}, [Busy]) -> msg }), ..]
-	delay = |millis, callback| Delay({ millis, callback })
-
 	## Convert a nanosecond duration to seconds.
 	##
 	## expect Time.to_seconds(500_000_000) == 0.5

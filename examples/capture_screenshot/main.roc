@@ -12,8 +12,10 @@ import rr.Text
 ##
 ## Every capture path is relative to the directory set with `with_output_dir`.
 ## A path that would escape it -- absolute, or containing `..` -- is refused
-## rather than quietly rewritten, because writing files is the only filesystem
-## capability the platform grants an app.
+## rather than quietly rewritten. `Capture` is the one path-sandboxed writer the
+## platform grants; `Files.write_text!` and `Files.write_bytes!` write wherever
+## the process may write, so this confinement is `Capture`'s own promise rather
+## than the platform's only way of putting bytes on disk.
 ##
 ## The filename carries the wall-clock instant the app started, so a second run
 ## does not overwrite the first one's picture. `Time.now!` is the only clock

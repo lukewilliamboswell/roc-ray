@@ -30,7 +30,7 @@ roc build examples/snake/main.roc --output snake
 `update!` calls host effects directly, and most of them answer at once. Work
 that has to wait goes in `Task.spawn!(input, || ...)` instead: the closure runs
 on its own coroutine while the frame loop keeps drawing, and its return value
-arrives as a `Msg` on a later `input.messages`. These five are that idea, from
+arrives as a `Msg` on a later `input.messages`. These six are that idea, from
 the smallest version to the largest.
 
 | Example | What it is |

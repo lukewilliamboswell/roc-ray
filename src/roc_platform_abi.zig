@@ -11447,6 +11447,10 @@ pub extern fn roc_host_exit(arg0: i32) callconv(.c) void;
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_host_args() callconv(.c) RocList(RocStr);
 
+/// Hosted symbol for HostHost.entropy!
+/// Roc signature: {} => U64
+pub extern fn roc_host_entropy() callconv(.c) u64;
+
 /// Hosted symbol for HostHost.get_clipboard_text!
 /// Roc signature: {} => Try(Str, [Unavailable])
 /// The result is owned by Roc: return exactly one owned reference.

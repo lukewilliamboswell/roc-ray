@@ -5404,6 +5404,21 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     try std.testing.expectEqualStrings("copied", unchanged.payload.ok.asSlice());
 }
 
+/// `App.Startup.entropy!`: one draw from the operating system's entropy.
+///
+/// The only thing in this host that makes a run differ from the last one by
+/// itself. It answers with real entropy in headless runs too: an app that must
+/// reproduce says so by writing a constant seed, and a host that quietly
+/// handed out the same number every run would take that choice away instead of
+/// making it. Obtaining it does not block, so this needs none of the parking
+/// machinery a waiting effect has.
+fn hostedEntropy() callconv(.c) u64 {
+    enforcePhase("App.Startup.entropy!", during_startup);
+    var bytes: [8]u8 = undefined;
+    std.Io.random(waitingIo(), &bytes);
+    return std.mem.readInt(u64, &bytes, .little);
+}
+
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
     enforcePhase("App.Startup.random_i32!", during_startup);
     if (active_headless) return headlessRandomI32(min, max);
@@ -5854,6 +5869,7 @@ comptime {
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&exportedArgs, .{ .name = "roc_host_args" });
+        @export(&hostedEntropy, .{ .name = "roc_host_entropy" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
         @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
@@ -8103,6 +8119,38 @@ test "a stat names the refusals apart from the failures" {
     try std.testing.expectEqual(DIR_ENTRY_DIR, statEntryKind(.directory));
     try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.named_pipe));
     try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.sym_link));
+}
+
+test "startup entropy varies, and is refused once the app is running" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    {
+        const scope = PhaseScope.enter(.startup);
+        defer scope.leave();
+        var drawn: [4]u64 = undefined;
+        for (&drawn) |*slot| slot.* = hostedEntropy();
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+
+        // Four identical draws would mean the host is handing out a constant
+        // dressed as entropy, which is exactly the bug this effect exists to
+        // fix: a headless run used to reseed from a fixed counter and call the
+        // result random.
+        var varied = false;
+        for (drawn[1..]) |value| {
+            if (value != drawn[0]) varied = true;
+        }
+        try std.testing.expect(varied);
+    }
+
+    // Seeding is a startup decision, kept in the model afterwards, so reaching
+    // for fresh entropy mid-run is a mistake worth naming.
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+    last_phase_violation = null;
+    _ = hostedEntropy();
+    const violation = last_phase_violation orelse return error.EntropyWasNotRejected;
+    try std.testing.expectEqual(Phase.update, violation.actual);
 }
 
 test "a wall-clock reading is normalized on both sides of the epoch" {

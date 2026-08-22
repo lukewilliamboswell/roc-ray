@@ -99,6 +99,7 @@ platform ""
 		"roc_capture_screenshot": CaptureHost.screenshot!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
+		"roc_host_entropy": HostHost.entropy!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_read_clipboard": HostHost.read_clipboard!,
 		"roc_host_random_i32": HostHost.random_i32!,

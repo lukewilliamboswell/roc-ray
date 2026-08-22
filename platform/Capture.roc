@@ -66,6 +66,12 @@ Capture := [].{
 		Unknown,
 	]
 
+	## Why a screenshot did not become a file.
+	##
+	## `Unavailable` is the host having no capture facility to use at all --
+	## the app is shutting down and the wait was cancelled before the frame
+	## ended. It is not what a call from the wrong callback gets: that is a
+	## programmer error and stops the app. See `screenshot!`.
 	ScreenshotError : [PathInvalid, PathEscapesOutputDir, AlreadyPending, WriteFailed, Busy, Unavailable]
 
 	## Write one PNG of the app's rendered output.
@@ -76,9 +82,21 @@ Capture := [].{
 	## the frame thread. This call waits for that write, so it parks the task
 	## until the file exists and answers with the write's own outcome.
 	##
-	## Valid inside a task. In `init!` there is no frame to capture yet, so a
-	## windowed run answers `Unavailable`; a headless run has no framebuffer at
-	## all and answers `Ok({})` without writing.
+	## Valid **only** inside a task, and this is the one waiting effect that is.
+	## `Files.read_text!` and the rest also work in `init!`, where they block;
+	## a screenshot cannot, because what it waits for is the end of a frame and
+	## `init!` runs before the frame loop has drawn one. Calling it from
+	## `init!`, `update!` or `render!` is a programmer error and stops the app
+	## with a message naming the effect and the fix. Spawn a task from
+	## `update!` instead -- on the first cycle if the shot is meant to be of
+	## the first frame:
+	##
+	##     if input.time.cycle_count == 0 {
+	##         Task.spawn!(input, || Shot(Capture.screenshot!("frame0.png")))
+	##     }
+	##
+	## A headless run has no framebuffer at all and answers `Ok({})` without
+	## writing, so a screenshotting app still runs under `--host-headless`.
 	##
 	## Only one screenshot can be in flight: a second one while the first is
 	## still waiting for its frame is `AlreadyPending`.

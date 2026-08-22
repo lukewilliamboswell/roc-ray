@@ -440,6 +440,17 @@ const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .update, .render,
 /// block. Never during a frame.
 const during_wait = PhaseSet.initMany(&.{ .startup, .task });
 
+/// Waiting effects whose answer is a frame that has to be drawn first.
+///
+/// `during_wait` minus `init!`. A screenshot is read back at the end of a
+/// frame, and `init!` runs before the frame loop has gone around once, so a
+/// screenshot asked for there would park for a frame that cannot arrive while
+/// it holds the frame thread. That is a programming error with a fix -- spawn
+/// a task from `update!` -- rather than a condition to report, so it is
+/// refused by name here instead of coming back as `Unavailable`, which is what
+/// it used to do and which says nothing about what to do instead.
+const during_frame_wait = PhaseSet.initOne(.task);
+
 /// The host-side hooks the task registry needs: Roc entry points and the
 /// phase guard, kept here because `active_phase` is file-private.
 const TaskHooks = struct {
@@ -670,8 +681,12 @@ fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, 
 /// `serviceCaptureRequests` with the pixels. Encoding a 1080p PNG is tens of
 /// milliseconds, so it runs on zio's blocking pool -- which parks the task
 /// again rather than stalling the frame, and never touches Roc.
+///
+/// A task is the only place this works: waiting for the end of a frame from
+/// `init!` would wait for a frame the frame loop has not started yet. See
+/// `during_frame_wait`.
 fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) u8 {
-    enforcePhase("Capture.screenshot!", during_wait);
+    enforcePhase("Capture.screenshot!", during_frame_wait);
     defer path_arg.decref(roc_host);
     const path = path_arg.asSlice();
 
@@ -682,8 +697,10 @@ fn hostedCaptureScreenshot(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c
     // file of zeroes. Headless runs exist to produce identical output twice.
     if (headlessMode()) return capture.err_none;
 
-    // A screenshot needs the end of a frame, and `init!` runs before the frame
-    // loop does: parking here would wait for a frame that cannot arrive.
+    // No runtime at all: a unit test, or a runtime that would not start. The
+    // phase guard has already refused every callback but a task, and under
+    // `zig test` it only records the violation, so this second check is what
+    // keeps a test from parking on a frame loop that is not running.
     const rt = AppTasks.currentRuntime() orelse return capture.err_unavailable;
     if (active_phase != .task) return capture.err_unavailable;
 
@@ -897,6 +914,8 @@ fn enforcePhase(operation: []const u8, allowed: PhaseSet) void {
             " Deferred work answers on a later input: start it from update! or from another task."
         else if (allowed.eql(during_wait))
             " It waits: call it inside Task.spawn!, where it parks the task, or in init!, where it blocks."
+        else if (allowed.eql(during_frame_wait))
+            " It waits for the end of a frame, so it only works inside Task.spawn!: init! runs before the first frame is drawn."
         else
             "",
     });

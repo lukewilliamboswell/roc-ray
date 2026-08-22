@@ -1472,6 +1472,7 @@ var capture_screenshot_ticket: ?u64 = null;
 /// A serviced screenshot request whose response has not reached Roc yet.
 var capture_screenshot_done: ?ScreenshotOutcome = null;
 const ScreenshotOutcome = struct { ticket: u64, err: u8 };
+
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -5517,6 +5518,44 @@ fn exportedGetClipboardText() callconv(.c) ClipboardTextResult {
     return hostedGetClipboardText(activeHost());
 }
 
+/// `Window.read_clipboard!`: the clipboard as text, or why not.
+///
+/// The windowing backend only answers on the thread that owns the window, and
+/// the read is a pointer copy rather than I/O, so there is nothing to move off
+/// the frame thread and nothing to wait for -- this is a state read, legal
+/// wherever host state is read, and it never parks.
+///
+/// The clipboard is arbitrary content from outside the app: another process
+/// decides how big it is, and turning it into a `Str` is a copy and a UTF-8
+/// scan on this thread. Cap it where a text read is capped, and for the same
+/// reason.
+fn hostedReadClipboard(roc_host: *RocHost) callconv(.c) abi.HostHostRead_clipboardRetRecord {
+    enforcePhase("Window.read_clipboard!", during_update);
+
+    if (headlessMode()) {
+        if (!headless_clipboard_set) return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
+        return .{
+            .err = 0,
+            .contents = abi.RocStr.fromSlice(headless_clipboard[0..headless_clipboard_len], roc_host),
+        };
+    }
+
+    // The pointer belongs to the windowing backend: it is null when the
+    // clipboard is empty or holds non-text content, must never be freed, and is
+    // invalidated by the next clipboard call -- so copy it out now.
+    const text = raylib.getClipboardText() orelse
+        return .{ .err = READ_ERR_UNAVAILABLE, .contents = abi.RocStr.empty() };
+    const contents = std.mem.span(text);
+    if (contents.len > MAX_INLINE_READ_BYTES) {
+        return .{ .err = READ_ERR_TOO_LARGE, .contents = abi.RocStr.empty() };
+    }
+    return .{ .err = 0, .contents = abi.RocStr.fromSlice(contents, roc_host) };
+}
+
+fn exportedReadClipboard() callconv(.c) abi.HostHostRead_clipboardRetRecord {
+    return hostedReadClipboard(activeHost());
+}
+
 fn hostedSetClipboardText(roc_host: *RocHost, text_arg: abi.RocStr) callconv(.c) void {
     enforcePhase("Window.set_clipboard_text!", during_update);
     // Roc transfers ownership of refcounted args to the hosted fn; release it
@@ -6094,6 +6133,7 @@ comptime {
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
         @export(&hostedAppSubmitRequest, .{ .name = "roc_app_submit_request" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
+        @export(&exportedReadClipboard, .{ .name = "roc_host_read_clipboard" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
         @export(&exportedReadFileRaw, .{ .name = "roc_host_read_file_raw" });

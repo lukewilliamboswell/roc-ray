@@ -95,6 +95,7 @@ platform ""
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
+		"roc_host_read_clipboard": HostHost.read_clipboard!,
 		"roc_host_random_i32": HostHost.random_i32!,
 		"roc_host_read_env": HostHost.read_env!,
 		"roc_host_read_file_raw": HostHost.read_file!,

@@ -18,6 +18,15 @@ HostHost := [].{
 	exit! : I32 => {}
 	args! : () => List(Str)
 	get_clipboard_text! : () => Try(Str, [Unavailable])
+
+	## A clipboard read with the refusal codes `Window.ClipboardReadError`
+	## names. `contents` is the clipboard when `err` is `0`.
+	ClipboardResult : {
+		err : U8,
+		contents : Str,
+	}
+
+	read_clipboard! : () => ClipboardResult
 	read_env! : Str => Try(Str, [NotFound])
 	read_file! : Str => ReadFileResult
 	random_i32! : I32, I32 => I32

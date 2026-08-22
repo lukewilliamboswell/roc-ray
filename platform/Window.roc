@@ -45,6 +45,23 @@ Window := [].{
 
 	ClipboardReadError : [Unavailable, TooLarge, Busy]
 
+	## Read the system clipboard as text.
+	##
+	## The windowing backend only answers on the thread that owns the window and
+	## the read is a pointer copy rather than I/O, so this does not wait and is
+	## valid during `init!`, `update!`, and tasks -- not `render!`, which only
+	## draws. Content that is not text, or is larger than the host will copy
+	## into a `Str`, is refused rather than truncated.
+	read_clipboard! : () => Try(Str, ClipboardReadError)
+	read_clipboard! = || {
+		result = HostHost.read_clipboard!()
+		if result.err == 0 {
+			Ok(result.contents)
+		} else {
+			Err(clipboard_error(result.err))
+		}
+	}
+
 	read_clipboard : (Try(Str, ClipboardReadError) -> msg) -> [ReadClipboard({ callback : Try(Str, ClipboardReadError) -> msg }), ..]
 	read_clipboard = |callback| ReadClipboard({ callback: callback })
 
@@ -62,3 +79,19 @@ Window := [].{
 	set_clipboard_text! : Str => {}
 	set_clipboard_text! = |text| HostHost.set_clipboard_text!(text)
 }
+
+## Decode the host's clipboard-error code. Mirrored in `src/host_native.zig`.
+clipboard_error : U8 -> Window.ClipboardReadError
+clipboard_error = |code|
+	if code == 5 {
+		TooLarge
+	} else if code == 3 {
+		Busy
+	} else {
+		Unavailable
+	}
+
+expect clipboard_error(5) == TooLarge
+expect clipboard_error(3) == Busy
+expect clipboard_error(4) == Unavailable
+expect clipboard_error(0) == Unavailable

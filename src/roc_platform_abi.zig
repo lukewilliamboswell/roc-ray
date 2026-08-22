@@ -6366,6 +6366,27 @@ comptime {
     }
 }
 
+/// Return type record for HostHost.read_clipboard!
+/// Fields ordered by compiler-emitted ABI offsets.
+pub const HostHostRead_clipboardRetRecord = if (@sizeOf(usize) == 4) extern struct {
+    contents: RocStr,
+    err: u8,
+} else extern struct {
+    contents: RocStr,
+    err: u8,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(HostHostRead_clipboardRetRecord) != 32) @compileError("HostHostRead_clipboardRetRecord size mismatch");
+        if (@alignOf(HostHostRead_clipboardRetRecord) != 8) @compileError("HostHostRead_clipboardRetRecord alignment mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(HostHostRead_clipboardRetRecord) != 16) @compileError("HostHostRead_clipboardRetRecord size mismatch");
+        if (@alignOf(HostHostRead_clipboardRetRecord) != 4) @compileError("HostHostRead_clipboardRetRecord alignment mismatch");
+    }
+}
+
 /// Return type record for HostHost.read_file!
 /// Fields ordered by compiler-emitted ABI offsets.
 pub const HostHostRead_fileRetRecord = if (@sizeOf(usize) == 4) extern struct {
@@ -9687,6 +9708,7 @@ pub const FilesHostList = __AnonStruct_5b08b74ffdd2f118;
 pub const CaptureHostSet_virtual_mouseArg0 = __AnonStruct_e20342da83229f51;
 pub const CaptureHostStart_recordingArg0 = __AnonStruct_96bd4e483c462501;
 pub const CaptureHostStop_recording = __AnonStruct_7c66fb01c50d182a;
+pub const HostHostRead_clipboard = __AnonStruct_e98c7d72bcd7a610;
 pub const HostHostRead_file = __AnonStruct_1504326a3d41a158;
 pub const HostHostSuggest_window_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
 pub const HostHostSuggest_window_min_sizeArg0 = __AnonStruct_bc8fa73ca49a5ac0;
@@ -11068,6 +11090,11 @@ pub extern fn roc_host_args() callconv(.c) RocList(RocStr);
 /// Roc signature: {} => Try(Str, [Unavailable])
 /// The result is owned by Roc: return exactly one owned reference.
 pub extern fn roc_host_get_clipboard_text() callconv(.c) HostHostGet_clipboard_textResult;
+
+/// Hosted symbol for HostHost.read_clipboard!
+/// Roc signature: {} => { contents : Str, err : U8 }
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_host_read_clipboard() callconv(.c) __AnonStruct_e98c7d72bcd7a610;
 
 /// Hosted symbol for HostHost.random_i32!
 /// Roc signature: I32, I32 => I32

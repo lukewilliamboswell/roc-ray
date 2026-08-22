@@ -265,6 +265,11 @@ pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
 }
 
+/// Forget every mouse button's held and edge bits, as `clearKeyState` does.
+pub fn clearMouseButtonState() void {
+    mouse_button_state = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
+}
+
 /// Advance the packed mouse button state from caller-supplied down flags.
 ///
 /// Used by the virtual mouse in place of `updateMouseButtonState`. It runs the

@@ -5615,10 +5615,13 @@ fn resetVirtualInput() void {
     virtual_mouse_has_last = false;
     virtual_mouse_buttons = @splat(false);
     virtual_mouse_wheel = 0;
+    virtual_mouse_x = 0;
+    virtual_mouse_y = 0;
     virtual_keys_active = false;
     virtual_key_down = @splat(false);
     virtual_text_len = 0;
     raylib.clearKeyState();
+    raylib.clearMouseButtonState();
 }
 
 fn hostedCaptureSetVirtualKeys(host: *RocHost, args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
@@ -6496,12 +6499,15 @@ const InputState = struct {
     /// Sample input for a headless cycle, where there is no hardware to ask.
     ///
     /// Only scripted input exists here, and it runs through the same edge
-    /// detector a windowed run uses, so a headless test sees the pressed and
-    /// released bits a real keyboard would have produced. With nothing
-    /// scripted the array is all false, which is what no keyboard looks like.
+    /// detectors a windowed run uses, so a headless test sees the pressed and
+    /// released bits real devices would have produced. With nothing scripted
+    /// both arrays are all false, which is what no keyboard and no mouse look
+    /// like -- so an app that scripts neither sees what it always saw.
     fn updateHeadless(self: *InputState) void {
         raylib.updateKeyboardStateFrom(&virtual_key_down);
         self.keys.update(raylib.getKeyState());
+        raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
+        self.mouse_buttons.update(raylib.getMouseButtonState());
     }
 };
 
@@ -8508,11 +8514,25 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
         input.updateHeadless();
         const text_input: []const u32 = takeVirtualText() orelse &.{};
+        // A headless run has no pointer, so a scripted one is the only pointer
+        // there is. Everything a windowed run derives from it -- position,
+        // delta, the wheel's single frame of movement -- is derived here the
+        // same way, and stays at the origin when nothing is scripted.
+        const mouse_pos = if (virtual_mouse_active)
+            raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
+        else
+            raylib.Vec2{ .x = 0, .y = 0 };
+        const mouse_delta = if (virtual_mouse_active) virtualMouseDelta() else raylib.Vec2{ .x = 0, .y = 0 };
+        const mouse_wheel = raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel };
+        if (virtual_mouse_active) {
+            recordVirtualMousePosition();
+            virtual_mouse_wheel = 0;
+        }
         const input_snapshot = input.hostState(
-            0,
-            0,
-            .{ .x = 0, .y = 0 },
-            .{ .x = 0, .y = 0 },
+            mouse_pos.x,
+            mouse_pos.y,
+            mouse_delta,
+            mouse_wheel,
             text_input,
         );
 

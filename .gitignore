@@ -73,6 +73,7 @@ app
 
 host/libhost.h
 
+zig-pkg/
 zig-cache/
 zig-out/
 build

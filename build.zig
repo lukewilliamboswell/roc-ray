@@ -280,6 +280,7 @@ pub fn build(b: *std.Build) void {
         });
         native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
         native_tests.root_module.link_libc = true;
+        native_tests.root_module.addImport("zio", zioModule(b, native_target, optimize));
         const run_native_tests = b.addRunArtifact(native_tests);
         test_step.dependOn(&run_native_tests.step);
 
@@ -372,6 +373,20 @@ pub fn build(b: *std.Build) void {
         roc_tests.step.dependOn(&copy_all.step);
         test_step.dependOn(&roc_tests.step);
     }
+}
+
+/// The zio module for one target.
+///
+/// `task-migration` off: tasks stay on the executor that spawned them, which
+/// with one executor means the frame thread. Work stealing would be a way for
+/// Roc code to run on another thread, and nothing in the host is safe for that.
+fn zioModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    const dep = b.dependency("zio", .{
+        .target = target,
+        .optimize = optimize,
+        .@"task-migration" = false,
+    });
+    return dep.module("zio");
 }
 
 /// Detect which RocTarget matches the native platform
@@ -858,6 +873,12 @@ fn buildHostLib(
 
     host_lib.root_module.addIncludePath(raylib_include_path);
     host_lib.root_module.addLibraryPath(raylib_lib_path);
+
+    // Coroutine runtime for deferred app tasks (spike: see
+    // COROUTINE_DESIGN_PROPOSAL.md). Configured to a single executor on the
+    // frame thread at runtime; task migration is compiled out so the
+    // scheduler cannot move a Roc call onto another thread.
+    host_lib.root_module.addImport("zio", zioModule(b, target, optimize));
 
     // Vendored single-header GIF encoder (MIT or public domain), so recordings
     // need no external encoder. It is its own archive rather than C added to

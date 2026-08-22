@@ -1,0 +1,219 @@
+//! Coroutine-backed app tasks (spike; see COROUTINE_DESIGN_PROPOSAL.md).
+//!
+//! One zio executor, on the frame thread, runs every task. A task is a boxed
+//! Roc closure `() => Msg`; it runs on its own coroutine stack, parks on the
+//! host when it waits, and its message is collected by the frame loop in
+//! completion order. No Roc value ever runs on another thread.
+const std = @import("std");
+const zio = @import("zio");
+const abi = @import("roc_platform_abi.zig");
+
+
+/// A finished task's message, wrapped as the response mapper the host's
+/// staging already delivers: `Box(RawResponse -> Box(msg))`.
+pub const TaskResult = abi.RocErasedCallable;
+
+/// Behaviour the host supplies: the Roc entry points and the phase guard.
+pub fn Tasks(comptime Hooks: type) type {
+    return struct {
+        const Self = @This();
+
+        const Live = struct {
+            id: u64,
+            started_cycle: u64,
+            handle: zio.JoinHandle(void),
+        };
+
+        pub const Finished = struct { id: u64, result: TaskResult };
+
+        allocator: std.mem.Allocator,
+        rt: ?*zio.Runtime = null,
+        live: std.ArrayListUnmanaged(Live) = .empty,
+        finished: std.ArrayListUnmanaged(Finished) = .empty,
+        next_id: u64 = 1,
+        cycle: u64 = 0,
+        trace: bool = false,
+        /// Count of tasks abandoned (cancelled and dropped) at shutdown.
+        abandoned: u64 = 0,
+        /// Nanoseconds the last pump took, for the per-frame overhead number.
+        last_pump_ns: u64 = 0,
+        /// Totals over the run, reported at shutdown when tracing.
+        pump_count: u64 = 0,
+        pump_total_ns: u64 = 0,
+        /// Pumps that took no task work at all (the idle cost of the scheme).
+        idle_pump_count: u64 = 0,
+        idle_pump_total_ns: u64 = 0,
+
+        /// Pointer to the live registry, for the task body and the sleep effect.
+        var current: ?*Self = null;
+
+        pub fn init(allocator: std.mem.Allocator, trace: bool) !Self {
+            const rt = try zio.Runtime.init(allocator, .{
+                .executors = .exact(1),
+                .enable_main_executor = true,
+            });
+            return Self{ .allocator = allocator, .rt = rt, .trace = trace };
+        }
+
+        pub fn activate(self: *Self) void {
+            current = self;
+        }
+
+        pub fn liveCount(self: *const Self) usize {
+            return self.live.items.len;
+        }
+
+        /// Spawn every task `update` returned and release the list.
+        pub fn spawnAll(self: *Self, roc_host: *abi.RocHost, submitted: abi.RocList(abi.Update_for_hostOkTasks)) void {
+            defer {
+                if (submitted.hasOneRef()) {
+                    for (submitted.allocationItems()) |item| item.decref(roc_host);
+                }
+                submitted.decref(roc_host);
+            }
+            const unique = submitted.isUnique();
+            const mutable: []abi.Update_for_hostOkTasks = if (unique) @constCast(submitted.items()) else &.{};
+            for (submitted.items(), 0..) |task, index| {
+                const run = if (unique) blk: {
+                    const moved = mutable[index].run;
+                    mutable[index].run = null;
+                    break :blk moved;
+                } else blk: {
+                    abi.increfErasedCallable(task.run, 1);
+                    break :blk task.run;
+                };
+                self.spawn(roc_host, run);
+            }
+        }
+
+        fn spawn(self: *Self, roc_host: *abi.RocHost, run: abi.RocErasedCallable) void {
+            const rt = self.rt orelse {
+                abi.decrefErasedCallable(run, roc_host);
+                return;
+            };
+            const id = self.next_id;
+            self.next_id += 1;
+            self.live.ensureUnusedCapacity(self.allocator, 1) catch @panic("roc-ray: out of memory spawning a task");
+            const handle = rt.spawn(body, .{ id, run }) catch |err| {
+                std.log.err("roc-ray: could not spawn task {d}: {s}", .{ id, @errorName(err) });
+                abi.decrefErasedCallable(run, roc_host);
+                return;
+            };
+            self.live.appendAssumeCapacity(.{ .id = id, .started_cycle = self.cycle, .handle = handle });
+            if (self.trace) std.log.info("[TASK {d}] spawned on cycle {d}", .{ id, self.cycle });
+        }
+
+        /// The coroutine body: run the Roc closure to completion on this stack.
+        fn body(id: u64, run: abi.RocErasedCallable) void {
+            const self = current orelse unreachable;
+            if (self.trace) std.log.info("[TASK {d}] started on cycle {d}", .{ id, self.cycle });
+            Hooks.enterTaskPhase();
+            const result = Hooks.runTask(run);
+            Hooks.leaveTaskPhase();
+            if (self.trace) std.log.info("[TASK {d}] finished on cycle {d}", .{ id, self.cycle });
+            self.finished.append(self.allocator, .{ .id = id, .result = result }) catch {
+                std.log.err("roc-ray: out of memory storing task {d}'s result; dropping it", .{id});
+                Hooks.dropResult(result);
+            };
+        }
+
+        /// Called from inside a waiting effect on a task coroutine, around the park.
+        pub fn tracePark(id_hint: []const u8, millis: u64) void {
+            const self = current orelse return;
+            if (self.trace) std.log.info("[TASK] {s} parking {d} ms on cycle {d}", .{ id_hint, millis, self.cycle });
+        }
+
+        pub fn traceResume(id_hint: []const u8) void {
+            const self = current orelse return;
+            if (self.trace) std.log.info("[TASK] {s} resumed on cycle {d}", .{ id_hint, self.cycle });
+        }
+
+        /// Give the executor one turn: run every ready task until it parks or
+        /// finishes, and poll the event loop so parked tasks can wake.
+        pub const PumpMode = union(enum) {
+            /// Yield from the frame loop's main task and return as soon as it
+            /// is ready again.
+            yield,
+            /// Block the frame loop for this long, running tasks and the event
+            /// loop meanwhile (headless pacing).
+            sleep_ns: u64,
+        };
+
+        pub fn pump(self: *Self, cycle: u64, mode: PumpMode) void {
+            self.cycle = cycle;
+            if (self.rt == null) return;
+            var stopwatch = zio.Stopwatch.start();
+            switch (mode) {
+                .yield => zio.yield() catch {},
+                .sleep_ns => |ns| zio.sleep(.fromNanoseconds(@intCast(ns))) catch {},
+            }
+            self.last_pump_ns = @intCast(stopwatch.read().toNanoseconds());
+            self.pump_count += 1;
+            self.pump_total_ns += self.last_pump_ns;
+            if (self.live.items.len == 0 and mode == .yield) {
+                self.idle_pump_count += 1;
+                self.idle_pump_total_ns += self.last_pump_ns;
+            }
+            self.reap();
+        }
+
+        /// Release the join handles of tasks that have finished.
+        fn reap(self: *Self) void {
+            var index: usize = 0;
+            while (index < self.live.items.len) {
+                if (self.live.items[index].handle.hasResult()) {
+                    var removed = self.live.swapRemove(index);
+                    removed.handle.join();
+                } else {
+                    index += 1;
+                }
+            }
+        }
+
+        /// The finished tasks' results in completion order, for the host to
+        /// stage as responses. Ownership moves to the caller; the list is
+        /// emptied.
+        pub fn takeFinished(self: *Self) []const Finished {
+            if (self.trace and self.finished.items.len != 0) {
+                std.log.info("[TASK] delivering {d} result(s) as messages on cycle {d}", .{ self.finished.items.len, self.cycle });
+            }
+            const items = self.finished.items;
+            self.finished = .empty;
+            return items;
+        }
+
+        /// Release a slice returned by `takeFinished` once its items are moved.
+        pub fn releaseTaken(self: *Self, taken: []const Finished) void {
+            self.allocator.free(taken);
+        }
+
+        /// Cancel every live task, run each to completion on the cancelled
+        /// path, drop any undelivered results, then tear the runtime down.
+        pub fn deinit(self: *Self) void {
+            if (self.rt) |rt| {
+                for (self.live.items) |*item| {
+                    if (self.trace) std.log.info("[TASK {d}] cancelling at shutdown", .{item.id});
+                    item.handle.cancel();
+                    self.abandoned += 1;
+                }
+                self.live.clearRetainingCapacity();
+                for (self.finished.items) |item| Hooks.dropResult(item.result);
+                self.finished.clearRetainingCapacity();
+                if (self.abandoned != 0) std.log.warn("roc-ray: {d} task(s) abandoned at shutdown", .{self.abandoned});
+                if (self.trace and self.pump_count != 0) {
+                    std.log.info("[TASK] {d} pumps, mean {d} ns; {d} idle pumps, mean {d} ns", .{
+                        self.pump_count,
+                        self.pump_total_ns / self.pump_count,
+                        self.idle_pump_count,
+                        if (self.idle_pump_count == 0) 0 else self.idle_pump_total_ns / self.idle_pump_count,
+                    });
+                }
+                rt.deinit();
+                self.rt = null;
+            }
+            self.live.deinit(self.allocator);
+            self.finished.deinit(self.allocator);
+            if (current == self) current = null;
+        }
+    };
+}

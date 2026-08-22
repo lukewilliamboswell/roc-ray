@@ -206,9 +206,9 @@ sequenceDiagram
         Host->>Host: give tasks a turn; collect finished messages
         Host->>App: update!(model, App.Input with those messages)
         App->>Host: direct effects, in program order
-        App->>Task: Task.spawn!(input, closure)
+        App->>Task: Task.spawn!(input, closure); it may start at once
         App-->>Host: next model, or Err(Exit(code))
-        Host->>Host: give tasks a turn; new tasks reach their first wait
+        Host->>Host: give tasks a turn; every new task has reached its first wait
         opt Presentation is scheduled
             Host->>App: render!(next model, Draw.Frame)
             App-->>Host: ordered draw operations
@@ -362,6 +362,15 @@ another task. The host runs it on its own stack. A waiting effect inside it
 parks that stack; the frame loop resumes and keeps rendering, and a later cycle
 resumes the task where it left off. When the closure returns, its value is
 staged and delivered as a message on the next `App.Input`.
+
+When a task starts is the host's choice: it may run up to its first waiting
+effect before `Task.spawn!` returns, or in the host's turn after `update!`
+returns. Either way it has reached its first wait, or finished, before
+`render!` of the same cycle. A task's code and its synchronous effects can
+therefore interleave with the rest of the `update!` that spawned it, and
+application code must not assume an order between the two. The only ordering
+a task promises is its message: on a later cycle, after every task that
+finished before it.
 
 This is what makes a multi-step operation readable: inside a task, a waiting
 effect returns its answer, so a load-then-parse-then-fetch sequence is

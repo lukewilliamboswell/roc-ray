@@ -27,12 +27,17 @@ Model : {
 	saved : Text.Prepared,
 	save_failed : Text.Prepared,
 	refused : Text.Prepared,
-	result : Text.Prepared,
 
-	## Whether any screenshot has reported back yet. The file is encoded and
-	## written off the frame thread, so how many frames that takes is not
-	## something this app gets to assume.
-	settled : Bool,
+	## Which of those four to draw. A tag rather than the prepared text itself,
+	## so folding a finished screenshot in stays pure and can be tested.
+	outcome : Outcome,
+}
+
+## How far the app has got. `NoCapture` until a task answers: the file is
+## encoded and written off the frame thread, so how many frames that takes is
+## not something this app gets to assume.
+Outcome := [NoCapture, Saved, SaveFailed, Refused].{
+	is_eq : _
 }
 
 ## Each task returns its own message variant, so two screenshots completing on
@@ -50,16 +55,14 @@ init! = App.init(
 	|_startup|
 		{
 			font = Draw.default_font!()
-			idle = Text.from("no capture yet", font).size(16).prepare!()?
 			Ok({
 				title: Text.from("Screenshot demo", font).size(28).prepare!()?,
 				help: Text.from("S = save, E = try to escape the sandbox, ESC = quit", font).size(16).prepare!()?,
-				idle: idle,
+				idle: Text.from("no capture yet", font).size(16).prepare!()?,
 				saved: Text.from("saved shots/scene.png", font).size(16).prepare!()?,
 				save_failed: Text.from("could not write shots/scene.png", font).size(16).prepare!()?,
 				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)", font).size(16).prepare!()?,
-				result: idle,
-				settled: Bool.False,
+				outcome: NoCapture,
 			})
 		},
 )
@@ -73,7 +76,7 @@ init! = App.init(
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	input = program_input.devices
-	next = apply_messages(model, program_input.messages)
+	outcome = apply_messages(model.outcome, program_input.messages)
 
 	# `..` cannot reach outside the output directory, so this comes back as
 	# PathEscapesOutputDir rather than writing beside the example source.
@@ -85,7 +88,7 @@ update! = |model, program_input| {
 	# on whichever later input the task finished by. Wait for it rather than for
 	# a frame number: that is the whole difference between a task and a direct
 	# effect. The frame cap is only so an unattended run cannot hang.
-	settled = next.settled
+	settled = outcome != NoCapture
 
 	if escape_requested {
 		Task.spawn!(program_input, || EscapingScreenshotFinished(Capture.screenshot!("../escaped.png")))
@@ -97,30 +100,51 @@ update! = |model, program_input| {
 	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {
 		Err(Exit(0))
 	} else {
-		Ok(next)
+		Ok({ ..model, outcome })
 	}
 }
 
-## Apply every callback in host-observed order with one `List.fold` over the
-## received message buffer.
-apply_messages : Model, List(Msg) -> Model
-apply_messages = |model, messages| List.fold(messages, model, apply_message)
+## Fold every message this cycle delivered, in the order the tasks finished.
+apply_messages : Outcome, List(Msg) -> Outcome
+apply_messages = |outcome, messages| List.fold(messages, outcome, apply_message)
 
-apply_message : Model, Msg -> Model
-apply_message = |model, message|
+## The latest answer wins: two screenshots can finish on one cycle, and the app
+## has one line to report them on.
+apply_message : Outcome, Msg -> Outcome
+apply_message = |_outcome, message|
 	match message {
-		EscapingScreenshotFinished(Err(PathEscapesOutputDir)) => { ..model, result: model.refused, settled: Bool.True }
-		EscapingScreenshotFinished(_) => { ..model, result: model.save_failed, settled: Bool.True }
-		SavedScreenshotFinished(Ok(_)) => { ..model, result: model.saved, settled: Bool.True }
-		SavedScreenshotFinished(Err(_)) => { ..model, result: model.save_failed, settled: Bool.True }
+		EscapingScreenshotFinished(Err(PathEscapesOutputDir)) => Refused
+		EscapingScreenshotFinished(_) => SaveFailed
+		SavedScreenshotFinished(Ok(_)) => Saved
+		SavedScreenshotFinished(Err(_)) => SaveFailed
 	}
+
+## The sandbox refusal is its own outcome: the path was rejected before
+## anything was written, which is not the same as a write that failed.
+expect apply_message(NoCapture, EscapingScreenshotFinished(Err(PathEscapesOutputDir))) == Refused
+expect apply_message(NoCapture, EscapingScreenshotFinished(Err(WriteFailed))) == SaveFailed
+expect apply_message(NoCapture, SavedScreenshotFinished(Ok({}))) == Saved
+expect apply_message(NoCapture, SavedScreenshotFinished(Err(WriteFailed))) == SaveFailed
+
+## Nothing delivered leaves the outcome alone, which is what keeps the app
+## waiting rather than exiting on a frame number.
+expect apply_messages(NoCapture, []) == NoCapture
+
+## Both tasks can finish on one cycle; they are folded in the order they did.
+expect apply_messages(NoCapture, [SavedScreenshotFinished(Ok({})), EscapingScreenshotFinished(Err(PathEscapesOutputDir))]) == Refused
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x121420))
 	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
 	model.help.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
-	model.result.draw!(frame, { pos: { x: 32, y: 300 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
+	result = match model.outcome {
+		NoCapture => model.idle
+		Saved => model.saved
+		SaveFailed => model.save_failed
+		Refused => model.refused
+	}
+	result.draw!(frame, { pos: { x: 32, y: 300 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
 
 	frame.circle!({
 		center: { x: 320, y: 190 },

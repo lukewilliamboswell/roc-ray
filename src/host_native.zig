@@ -639,7 +639,22 @@ fn writeFileWaiting(path: []const u8, bytes: []const u8) u8 {
     defer scope.leave();
     AppTasks.tracePark("write", 0);
     defer AppTasks.traceResume("write");
-    return writeFileWaitingIn(std.Io.Dir.cwd(), waitingIo(), path, bytes);
+    // Written through std's threaded implementation on zio's blocking pool
+    // rather than through the runtime's own file backend: creating
+    // directories and files through that backend fails on Windows. The pool
+    // parks the calling task the same way the event loop would, and the
+    // worker touches only the host-visible path and payload bytes.
+    const allocator = allocatorFromHost(activeHost());
+    const rt = AppTasks.currentRuntime() orelse return writeFileBlocking(allocator, path, bytes);
+    var blocking = rt.spawnBlocking(writeFileBlocking, .{ allocator, path, bytes }) catch return READ_ERR_FAILED;
+    return blocking.join();
+}
+
+/// The write itself, on whichever thread the caller chose.
+fn writeFileBlocking(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) u8 {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    return writeFileWaitingIn(std.Io.Dir.cwd(), threaded.io(), path, bytes);
 }
 
 /// `writeFileWaiting` against an explicit base directory, so a test can point

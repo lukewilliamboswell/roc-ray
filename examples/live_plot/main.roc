@@ -52,10 +52,10 @@ import rr.Text
 ## with ordinary equality. The queue depth in the masthead is the backlog being
 ## real.
 ##
-## **Parsing is incremental.** `update` is pure and runs inside the frame, so it
-## may not scan a 400 KB file in one go. `scan_chunk` walks a bounded window of
-## one file per cycle and answers with the points it found and where to resume.
-## The frame time does not depend on how big the files are, only on the budget.
+## **Parsing is incremental.** `update!` runs inside the frame, so it may not
+## scan a 400 KB file in one go. `scan_chunk` walks a bounded window of one file
+## per cycle and answers with the points it found and where to resume. The frame
+## time does not depend on how big the files are, only on the budget.
 ##
 ## **Drawing is batched and bounded.** Every point is one `Draw.TextureInstance`
 ## in a single list, drawn with one `frame.texture_instances!` call from one
@@ -167,7 +167,7 @@ Model : {
 
 	## The logical window size this cycle. `render!` is handed the model and a
 	## frame but not the input, so laying the furniture out means sampling the
-	## size in `update`, where the input is.
+	## size in `update!`, where the input is.
 	screen : Math.Vec2,
 
 	## Wrapped animation clock for the sweep, in seconds.
@@ -321,7 +321,7 @@ Sample : {
 	lines : U64,
 }
 
-## How much of one file a single `update` is allowed to scan.
+## How much of one file a single `update!` is allowed to scan.
 Budget : {
 	max_lines : U64,
 	max_bytes : U64,
@@ -676,14 +676,14 @@ grow_run = |runs, added|
 # Incremental parsing
 # ---------------------------------------------------------------------------
 
-## What one `update` may scan.
+## What one `update!` may scan.
 ##
 ## Both halves matter. `max_lines` bounds how many points a cycle appends, which
 ## is what keeps the growing instance list from being rebuilt in one huge step.
 ## `max_bytes` bounds the scan itself, because a line budget alone does not:
 ## a generated file with one 300 KB line has a single line in it, and scanning
-## for its end would cost a frame. `update` is pure and runs inside the frame,
-## so its cost has to be bounded by something the input cannot inflate.
+## for its end would cost a frame. `update!` runs inside the frame, so its cost
+## has to be bounded by something the input cannot inflate.
 scan_budget : Budget
 scan_budget = { max_lines: 2_048, max_bytes: 65_536 }
 
@@ -1400,7 +1400,7 @@ follow_scroll : List(Lane), Math.Rect, F32 -> F32
 follow_scroll = |lanes, area, zoom| clamp_scroll(world_height(lanes) - visible_height(area, zoom) * tail_room, lanes, area, zoom)
 
 ## Build the camera for a scroll position. The builders sanitize rather than
-## refuse, so this is a plain expression and `update` stays total.
+## refuse, so this is a plain expression and `update!` stays total.
 camera_at : Math.Rect, F32, F32 -> Camera.Camera2D
 camera_at = |area, zoom, scroll|
 	Camera.new({ target: { x: world_width / 2, y: scroll }, offset: Math.center(area), rotation: 0, zoom: zoom })
@@ -2770,9 +2770,9 @@ rounded = |value|
 # Tests
 # ---------------------------------------------------------------------------
 #
-# `update` cannot be called from an `expect`: a `Model` holds a render texture,
+# `update!` cannot be called from an `expect`: a `Model` holds a render texture,
 # a font and prepared text, and those are host resources that only `init!` can
-# produce. So every decision `update` makes lives in a function that does not
+# produce. So every decision `update!` makes lives in a function that does not
 # need one -- `classify`, `scan_chunk`, `trim`, `sample_rates`, `zoom_at` -- and
 # those are what is tested here.
 

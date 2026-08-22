@@ -8,8 +8,8 @@ import rr.Text
 
 ## A task that waits without stalling the frame.
 ##
-## On the first cycle `update` returns one task: an effectful closure that
-## calls `Task.sleep!(300)` and then answers `Woke`. The host runs it on its
+## On the first cycle `update!` spawns one task: an effectful closure that calls
+## `Task.sleep!(300)` and then answers `Woke`. The host runs it on its
 ## own coroutine stack; the sleep parks that stack, the frame loop keeps going,
 ## and the closure's return value arrives on `Input.messages` ~18 cycles later
 ## at 60 Hz. Meanwhile the circle keeps orbiting.

@@ -17,8 +17,8 @@ import rr.Text
 ## `frame.texture_instances!` hands the host one list and lets it loop, so the
 ## whole fountain costs one crossing however many particles are in it.
 ##
-## The simulation stays in `update`, which is pure: it advances the particles
-## and projects them onto the flat `Draw.TextureInstance` records the batch
+## The simulation is pure and runs in `update!`: it advances the particles and
+## projects them onto the flat `Draw.TextureInstance` records the batch
 ## transports. `render!` only hands that retained list to the host, so the
 ## particle record can stay whatever the application wants it to be.
 ##

@@ -141,7 +141,7 @@ init! = App.init(
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
 			font: Draw.default_font!(),
 			# Entropy is asked for once, here. From this point randomness is
-			# model state that `update` advances without an effect.
+			# model state that `update!` advances without an effect.
 			rng: Random.seed(I32.to_u32_wrap(App.random_i32!(startup, 0, 2_000_000_000))),
 		}
 
@@ -149,7 +149,7 @@ init! = App.init(
 	},
 )
 
-## Whether the match is over is a function of the scores, so both `update` and
+## Whether the match is over is a function of the scores, so both `update!` and
 ## `render!` ask rather than storing a flag that could drift out of step.
 game_over : Model -> Bool
 game_over = |model| model.left_score >= win_score or model.right_score >= win_score
@@ -157,7 +157,7 @@ game_over = |model| model.left_score >= win_score or model.right_score >= win_sc
 ## A frame's outcome: the model it produced, and the sounds it wants heard.
 ##
 ## Both steppers return this shape even when one of them can never make a sound,
-## so `update` joins them without caring which branch it took.
+## so `update!` joins them without caring which branch it took.
 Stepped : {
 	model : Model,
 	sounds : List(Audio.Playback),

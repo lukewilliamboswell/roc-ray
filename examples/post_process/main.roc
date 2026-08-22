@@ -20,7 +20,7 @@ Model : {
 	shader : Draw.Shader,
 
 	## The uniform's location, resolved once, and the value to write into it.
-	## The value lives in the model because `update` computes it; the write
+	## The value lives in the model because `update!` computes it; the write
 	## happens in `render!` because a uniform is a statement about the draws
 	## that follow it, and only `render!` knows where those are.
 	time_uniform : Draw.F32Uniform,

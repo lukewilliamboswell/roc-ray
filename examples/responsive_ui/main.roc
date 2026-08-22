@@ -31,7 +31,7 @@ UiCopy : {
 	help : Text.Prepared,
 }
 
-## The window size is deliberately absent. `update` needs it to decide what the
+## The window size is deliberately absent. `update!` needs it to decide what the
 ## pointer is over, and reads it off the input; `render!` needs it to draw the
 ## same layout, and asks the frame. Neither reason is a reason to remember it.
 Model : {
@@ -160,7 +160,7 @@ draw_preview! = |frame, bounds, selection, ui, screen, simulation_nanos| {
 	}
 }
 
-## Layout is a pure function of the surface size, so `update` (deciding what the
+## Layout is a pure function of the surface size, so `update!` (deciding what the
 ## pointer is over) and `render!` (drawing it) derive the same value rather than
 ## storing it -- one less thing that can disagree with itself.
 ##

@@ -95,9 +95,8 @@ bundles the roc-ray-types package and the platform into a scratch directory,
 Three things follow:
 
 - Examples are checked and built in the shape they ship in. `roc bundle` drops a
-  relative dependency without complaining, and the app it breaks fails with
-  INVALID PACKAGE DEPENDENCY; that used to surface only in a separate bundle
-  test at the end of a run, and now surfaces in `roc check`.
+  relative dependency without complaining, and the app it breaks fails
+  `roc check` with INVALID PACKAGE DEPENDENCY.
 - Every reference to roc-ray-types resolves one freshly built artifact: the
   platform's, the four examples that name the package themselves
   (`cave_climb`, `generated_assets`, `projective_texture`, `top_down`), and both
@@ -105,9 +104,7 @@ Three things follow:
   nobody produced is no longer expressible. `test/package_interop` is built
   every run to keep that honest.
 - No tracked file is ever rewritten, so `git status` stays clean however a run
-  ends -- including a `kill -9` part way through a build. There is no longer an
-  incidental platform reference change to avoid committing, and no reason to
-  reach for `git checkout -- examples/` after an interrupted run.
+  ends -- including a `kill -9` part way through a build.
 
 Built executables land in the scratch directory rather than beside each
 `main.roc`; pass `--copy-executables` if you want them in place, and use
@@ -314,6 +311,15 @@ when it resumes. On a task that parks the coroutine and the frame loop keeps
 running; in `init!` it parks the frame loop's own task and pumps the event loop
 until the answer is in, which is the blocking behaviour startup wants.
 
+`roc test` cannot reach a new effect through `update!`: an `expect` cannot call
+an effectful function, and the phase guard would refuse the effects inside one
+anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
+half, a headless example run for the whole path -- and shape the public wrapper
+so an app can keep its decisions in pure functions (`apply_message : Model, Msg
+-> Model` and friends) that `update!` only performs. Those pure functions are
+what an app's own `expect`s exercise, using `App.Input.for_tests` and the
+resource `stub`s.
+
 ### Pin `msg` with a witness
 
 **Any platform function whose signature mentions `msg` and reaches a hosted
@@ -379,12 +385,10 @@ and its tests are silently absent from the run -- the suite reports the same
 number of passes it did before, with a broken assertion sitting in the file.
 `src/http_effect.zig` is the worked example.
 
-A platform bundled from a plain `zig build` decompresses to more than roc's
-default 100 MB transitive-dependency budget, because a Debug host archive
-carries the whole of `std.crypto` for the HTTP client's TLS. The test harness
-passes `--max-transitive-mb=512` (see `scripts/local_bundles.py`); bundling a
-Debug platform by hand needs the same flag. A `-Doptimize=ReleaseFast` host,
-which is what a release ships, is a tenth the size.
+A Debug host archive carries the whole of `std.crypto` for the HTTP client's
+TLS and bundles past roc's default 100 MB transitive-dependency budget, so
+bundling one by hand needs `--max-transitive-mb=512`, which the scripts already
+pass.
 
 ## Performance work
 
@@ -428,9 +432,7 @@ Changing one element of a list in the model is an in-place write: the box the
 model arrived in is consumed, so the list is uniquely referenced at the write
 and a frame costs only the model box. `test/model_inplace` is the probe and
 `scripts/test_model_allocation.py` runs in `all_tests.py`, holding steady-state
-per-frame allocation under a 16 KiB budget. Up to `nightly-2026-08-19-edec830`
-this instead copied the whole list every frame; `--characterize` re-runs the
-assertions that described that, and is expected to fail now.
+per-frame allocation under a 16 KiB budget.
 
 ## Bundles and targets
 

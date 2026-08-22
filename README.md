@@ -147,20 +147,23 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
 - Explicit executable-relative, working-directory, or external disk asset
   stores with optional manifest identity validation; see the `Assets` module docs.
 - Keyboard, mouse, Unicode text, gamepad, and cursor input.
-- Window and frame timing, startup entropy, the
-  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
-  environment access.
-- File reads and directory listings, and an HTTP client over the shared
+- Window and frame timing, wall-clock timestamps, startup entropy, the
+  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package,
+  command-line arguments, and environment access.
+- File reads, writes, directory listings, and metadata; standard output and
+  error for headless and batch runs; an embedded SQLite database; UDP sockets;
+  and an HTTP client over the shared
   [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
-  types, with TLS through the system certificate store. Both wait, so both run
-  on a task while the frame keeps drawing.
+  types, with TLS through the system certificate store. Everything that waits
+  runs on a task while the frame keeps drawing.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.
 - Resizable, fullscreen, VSync, capped, or uncapped native windows on macOS,
   Linux, and Windows.
 - Screenshots and recordings an app takes of itself, written as PNG, animated
-  GIF, or VP8 video in a WebM container.
+  GIF, or VP8 video in a WebM container, and PNG export of an offscreen render
+  texture at any size.
 
 Browse the [API reference](https://lukewilliamboswell.github.io/roc-ray/) for
 individual functions and types.

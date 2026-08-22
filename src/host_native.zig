@@ -10,6 +10,8 @@ const ffi = @import("roc_ffi.zig");
 const capture = @import("capture.zig");
 const capture_vp8 = @import("capture_vp8.zig");
 const gif_encoder = @import("gif_encoder.zig");
+const zio = @import("zio");
+const tasks_mod = @import("tasks.zig");
 const host_resource = @import("host_resource.zig");
 const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
@@ -115,6 +117,7 @@ extern fn init_for_host() callconv(.c) RocResult;
 extern fn update_for_host(arg0: RocBox, arg1: InputFromHost) callconv(.c) UpdateResult;
 extern fn render_for_host(arg0: RocBox) callconv(.c) RocResult;
 extern fn drop_model_for_host(arg0: RocBox) callconv(.c) void;
+extern fn run_task_for_host(arg0: abi.RocErasedCallable) callconv(.c) abi.RocErasedCallable;
 
 /// `kind` codes for a response. Mirrored in the private App transport adapter.
 const RESPONSE_SMALL_FILE_READ: u8 = 0;
@@ -123,6 +126,9 @@ const RESPONSE_SCREENSHOT_FINISHED: u8 = 2;
 const RESPONSE_CLIPBOARD_READ: u8 = 3;
 const RESPONSE_FILE_READ: u8 = 4;
 const RESPONSE_DIR_LISTED: u8 = 5;
+/// A finished task's message. The mapper ignores the raw record, so its
+/// fields carry nothing; the kind is only for traces.
+const RESPONSE_TASK_RESULT: u8 = 6;
 
 /// `kind` codes for a request returned by `update`. Mirrored in the private App transport adapter.
 const REQUEST_READ_SMALL_FILE: u8 = 0;
@@ -1083,6 +1089,8 @@ const Phase = enum {
     apply,
     /// Inside `render_for_host`.
     render,
+    /// On a task coroutine, inside `run_task_for_host`.
+    task,
 
     /// How the phase is named in a rejection, in the app's own vocabulary.
     fn label(self: Phase) []const u8 {
@@ -1091,6 +1099,7 @@ const Phase = enum {
             .startup => "init!",
             .apply => "a command returned by update",
             .render => "render!",
+            .task => "a task",
         };
     }
 };
@@ -1114,7 +1123,57 @@ const during_apply = PhaseSet.initMany(&.{ .startup, .apply });
 /// a font metric, asking whether a sound is still playing, taking a random
 /// number. Valid in every callback, but not outside callbacks. Operations that
 /// copy, allocate, write files, or access a driver do not belong in this set.
-const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .apply, .render });
+const constant_time_anywhere = PhaseSet.initMany(&.{ .startup, .apply, .render, .task });
+
+/// Effects that wait. On a task they park the coroutine; in `init!` they
+/// block. Never during a frame.
+const during_wait = PhaseSet.initMany(&.{ .startup, .task });
+
+/// The host-side hooks the task registry needs: Roc entry points and the
+/// phase guard, kept here because `active_phase` is file-private.
+const TaskHooks = struct {
+    pub fn enterTaskPhase() void {
+        active_phase = .task;
+    }
+    pub fn leaveTaskPhase() void {
+        active_phase = .idle;
+    }
+    pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
+        return run_task_for_host(run);
+    }
+    pub fn dropResult(result: tasks_mod.TaskResult) void {
+        abi.decrefErasedCallable(result, activeHost());
+    }
+};
+
+const AppTasks = tasks_mod.Tasks(TaskHooks);
+
+/// Stage every finished task's message as a response for the next input.
+fn stageTaskResults(app_tasks: *AppTasks, staging: *ResponseStaging, roc_host: *RocHost) void {
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    for (finished) |item| {
+        staging.completeDirect(roc_host, ResponseStaging.plain(RESPONSE_TASK_RESULT, item.id, 0), item.result);
+    }
+}
+
+/// `Task.sleep!`: park the calling task, or block during `init!`.
+///
+/// The phase is saved and cleared across the park: the frame loop runs in
+/// between and sets phases of its own, and the task must see `.task` again
+/// when it resumes.
+fn hostedTaskSleep(millis: u64) callconv(.c) void {
+    enforcePhase("Task.sleep!", during_wait);
+    const resume_phase = active_phase;
+    active_phase = .idle;
+    defer active_phase = resume_phase;
+    AppTasks.tracePark("sleep", millis);
+    zio.sleep(.fromMilliseconds(@intCast(millis))) catch |err| switch (err) {
+        // Cancelled at shutdown: return at once so the task can run to its end.
+        error.Canceled => {},
+    };
+    AppTasks.traceResume("sleep");
+}
 
 var active_phase: Phase = .idle;
 
@@ -5813,6 +5872,7 @@ comptime {
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&exportedArgs, .{ .name = "roc_host_args" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
+        @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
         @export(&exportedGetClipboardText, .{ .name = "roc_host_get_clipboard_text" });
         @export(&hostedRandomI32, .{ .name = "roc_host_random_i32" });
         @export(if (builtin.os.tag == .windows) &exportedReadEnvWindows else &exportedReadEnvPosix, .{ .name = "roc_host_read_env" });
@@ -8767,6 +8827,9 @@ fn initModel() RocResult {
 /// Environment variable that turns per-frame Roc allocator metering on.
 const ALLOC_STATS_ENV: []const u8 = "ROC_RAY_ALLOC_STATS";
 
+/// Environment variable that logs every task's spawn, park, resume, and finish.
+const TRACE_TASKS_ENV: []const u8 = "ROC_RAY_TRACE_TASKS";
+
 /// Per-frame Roc allocator traffic, reported when `ROC_RAY_ALLOC_STATS=1`.
 ///
 /// A frame that mutates a uniquely referenced collection in the model pays
@@ -8971,6 +9034,13 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         endPendingMappers(roc_host);
     }
 
+    var app_tasks = AppTasks.init(allocator, hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
+        std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
+        return 1;
+    };
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
     const init_result = initModel();
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
@@ -8989,6 +9059,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
 
     reportStartupAllocStats();
     while (!raylib.windowShouldClose()) {
+        app_tasks.pump(cycle_count, .yield);
+        stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
         // Sample raylib's monotonic clock (seconds since window init) at the
@@ -9057,6 +9129,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const next = update_result.payload_ok();
         boxed_model = next.model;
         submitRequests(&staging, roc_host, next.requests);
+        app_tasks.spawnAll(roc_host, next.tasks);
+        // Newly spawned tasks run to their first park before the frame is
+        // drawn, so their waiting overlaps rendering.
+        app_tasks.pump(cycle_count, .yield);
 
         // This graphical backend schedules one optional presentation for every
         // cycle. A backend that omits it still calls update once for the fresh
@@ -9099,6 +9175,13 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     var input = InputState.init(roc_host);
     defer input.deinit();
 
+    var app_tasks = AppTasks.init(allocatorFromHost(roc_host), hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
+        std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
+        return 1;
+    };
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
     const init_result = initModel();
     if (init_result.isErr()) {
         const err_code = init_result.getErr();
@@ -9117,6 +9200,13 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
 
     reportStartupAllocStats();
     while (cycle_count < frames) : (cycle_count += 1) {
+        // A headless run has no frame pacing and no real clock, but task
+        // timers are real time. While a task is live, pace the cycle to the
+        // simulated 60 Hz so "18 cycles later" means what it means windowed.
+        // ROC_RAY_SPIKE_YIELD_ONLY: pump with a bare yield even while a task
+        // is live, to measure whether zio.yield alone polls timers.
+        app_tasks.pump(cycle_count, if (app_tasks.liveCount() != 0 and hostGetEnv("ROC_RAY_SPIKE_YIELD_ONLY") == null) .{ .sleep_ns = HEADLESS_FRAME_NANOS } else .yield);
+        stageTaskResults(&app_tasks, &staging, roc_host);
         const callbacks = CycleCallbackSchedule.forInput(true);
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
@@ -9161,6 +9251,8 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         const next = update_result.payload_ok();
         boxed_model = next.model;
         submitRequests(&staging, roc_host, next.requests);
+        app_tasks.spawnAll(roc_host, next.tasks);
+        app_tasks.pump(cycle_count, .yield);
 
         // Headless examples schedule semantic presentation to cover render and
         // resource paths. The host-cycle contract itself permits omission.

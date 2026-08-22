@@ -46,9 +46,11 @@ import rr.Text
 ## so nothing is ever refused -- but this walk would happily ask for five
 ## hundred files at once and hold every one of them in memory. So the app keeps
 ## its own backlog of `Work` and starts at most `max_in_flight` tasks from it.
-## That backlog is plain data rather than a list of opaque requests, so the
-## pacing is testable with ordinary equality. The queue depth in the masthead is
-## the backlog being real.
+## `arrival_limit` bounds the other end, the bytes that have already been
+## delivered and not yet parsed, which no host limit knows anything about. Both
+## bounds are plain data rather than opaque handles, so the pacing is testable
+## with ordinary equality. The queue depth in the masthead is the backlog being
+## real.
 ##
 ## **Parsing is incremental.** `update` is pure and runs inside the frame, so it
 ## may not scan a 400 KB file in one go. `scan_chunk` walks a bounded window of
@@ -78,9 +80,9 @@ import rr.Text
 ##   its summary describes, rather than as line-by-line detail.
 ##
 ## Scrolling to a lane whose points were dropped asks for the file again. That
-## is the point rather than a workaround: re-reading a file is a `Request` like any
-## other, it is paced like any other, and a figure that can throw away detail
-## and fetch it back on demand is one that does not care how large the tree is.
+## is the point rather than a workaround: a re-read is `Work` like any other, it
+## is paced like any other, and a figure that can throw away detail and fetch it
+## back on demand is one that does not care how large the tree is.
 ##
 ## Wheel scrolls, shift-wheel zooms at the pointer, drag pans, `R` returns to
 ## the live edge, `N` switches the x scale, `ESC` quits.

@@ -312,7 +312,7 @@ case "$package" in
         copy_target_files x64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
         copy_target_files arm64mac libhost.a libraylib.a libmsf_gif.a libvpx.a
         copy_target_files x64glibc Scrt1.o crti.o libhost.a libraylib.a libmsf_gif.a libvpx.a libm.so libX11.so libc.so crtn.o
-        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib
+        copy_target_files x64win host.lib raylib.lib msf_gif.lib vpx.lib gdi32.lib user32.lib winmm.lib opengl32.lib shell32.lib ws2_32.lib crypt32.lib shlwapi.lib bcryptprimitives.lib
 
         if [[ -d "$platform_dir/targets/macos-sysroot" ]]; then
             cp -R "$platform_dir/targets/macos-sysroot" "$stage_dir/targets/"

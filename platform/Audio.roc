@@ -4,6 +4,30 @@
 ## model. Sound and music are distinct types, so they cannot be mixed by
 ## accident. Their final Roc reference automatically unloads the host resource.
 ##
+## ```roc
+## init! = App.init(
+##     App.default,
+##     |_startup| Ok({ blip: Audio.gen_tone!({ freq: 440, ms: 120 })? }),
+## )
+## ```
+##
+## ```roc
+## if input.devices.key_pressed(KeySpace) {
+##     model.blip.playback().with_volume(0.4).play!()
+## }
+## ```
+##
+## `load_sound!` and `load_music!` take a path used as the app gives it,
+## resolved against the process working directory. There is no `Assets.Store`
+## here: an audio path is not resolved through a store handle and is not
+## confined to one, so a packaged app should build the path from something it
+## controls rather than from the directory it happened to be launched in.
+##
+## A `Sound` is decoded into memory and played from there, so it suits short
+## effects. A `Music` is streamed from the file, so it suits a long track; the
+## platform advances every active stream once per frame, with nothing for the
+## app to pump.
+##
 ## Every effect here that loads a resource or changes what the mixer is doing
 ## is legal in `init!`, `update!`, and tasks, and refused in `render!`. The
 ## four queries that only read a scalar the device already has --
@@ -22,24 +46,34 @@ Audio := [].{
 
 		## Play this sound at its default volume, pitch, and pan.
 		##
-		## Equivalent to `sound.playback().play!()`, and stated the same way:
-		## the three playback parameters are always set before the sound starts.
+		## Equivalent to `sound.playback().play!()`, and stated the same way: the
+		## three playback parameters are always set before the sound starts.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		play! : Sound => {}
 		play! = |sound| sound.playback().play!()
 
 		## Stop playback and rewind to the beginning.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		stop! : Sound => {}
 		stop! = |sound| AudioHost.stop_sound!(sound.resource)
 
 		## Pause playback at the current position.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		pause! : Sound => {}
 		pause! = |sound| AudioHost.pause_sound!(sound.resource)
 
 		## Resume a paused sound.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		resume! : Sound => {}
 		resume! = |sound| AudioHost.resume_sound!(sound.resource)
 
 		## Whether this sound is currently playing.
+		##
+		## Legal in any callback, `render!` included.
 		is_playing! : Sound => Bool
 		is_playing! = |sound| AudioHost.is_sound_playing!(sound.resource)
 
@@ -85,8 +119,8 @@ Audio := [].{
 		##
 		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		##
-		## The three transport calls go straight to the host rather than through
-		## `Sound`, because `Sound.play!` is defined as this operation.
+		## Volume, pitch, and pan are all set before the sound starts, so this
+		## play cannot inherit what an earlier play left on the same sound.
 		play! : Playback => {}
 		play! = |Playback.(settings)| {
 			AudioHost.set_sound_volume!(settings.sound.resource, settings.volume)
@@ -100,50 +134,74 @@ Audio := [].{
 	Music :: { resource : AudioHost.Music }.{
 
 		## Start or restart playback.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		play! : Music => {}
 		play! = |music| AudioHost.play_music!(music.resource)
 
 		## Stop playback and rewind.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		stop! : Music => {}
 		stop! = |music| AudioHost.stop_music!(music.resource)
 
 		## Pause at the current position.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		pause! : Music => {}
 		pause! = |music| AudioHost.pause_music!(music.resource)
 
 		## Resume paused playback.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		resume! : Music => {}
 		resume! = |music| AudioHost.resume_music!(music.resource)
 
 		## Set stream volume, clamped to 0 through 1.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_volume! : Music, F32 => {}
 		set_volume! = |music, volume| AudioHost.set_music_volume!(music.resource, volume)
 
 		## Set stream pitch multiplier.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_pitch! : Music, F32 => {}
 		set_pitch! = |music, pitch| AudioHost.set_music_pitch!(music.resource, pitch)
 
 		## Set stereo pan, clamped to -1 through 1.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_pan! : Music, F32 => {}
 		set_pan! = |music, pan| AudioHost.set_music_pan!(music.resource, pan)
 
 		## Enable or disable automatic looping.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		set_looping! : Music, Bool => {}
 		set_looping! = |music, looping| AudioHost.set_music_looping!(music.resource, looping)
 
 		## Whether this stream is currently playing.
+		##
+		## Legal in any callback, `render!` included.
 		is_playing! : Music => Bool
 		is_playing! = |music| AudioHost.is_music_playing!(music.resource)
 
 		## Seek to seconds from the start. Negative values are clamped to zero.
+		##
+		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 		seek! : Music, F32 => {}
 		seek! = |music, seconds| AudioHost.seek_music!(music.resource, seconds)
 
 		## Total stream length in seconds, or zero for an invalid resource.
+		##
+		## Legal in any callback, `render!` included.
 		length! : Music => F32
 		length! = |music| AudioHost.music_length!(music.resource)
 
 		## Current playback position in seconds.
+		##
+		## Legal in any callback, `render!` included.
 		time_played! : Music => F32
 		time_played! = |music| AudioHost.music_time_played!(music.resource)
 
@@ -176,20 +234,28 @@ Audio := [].{
 	}
 
 	## Load a short sound effect from disk.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	load_sound! : Str => Try(Sound, [SoundLoadFailed, ResourceLimit, ..])
 	load_sound! = |path| loaded_sound_from_resource(AudioHost.load_sound!(path))
 
 	## Load a streamed music file. Keep the returned value in the app model.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	load_music! : Str => Try(Music, [MusicLoadFailed, ResourceLimit, ..])
 	load_music! = |path| music_from_resource(AudioHost.load_music!(path))
 
-	## Generate a reusable procedural sound. Generation can fail if the fixed
-	## host resource heap is exhausted, so initialization should propagate the
-	## returned error.
+	## Generate a reusable procedural sound. Generation can fail if the fixed host
+	## resource heap is exhausted, so initialization should propagate the returned
+	## error.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	gen_sound! : GenSound => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
 	gen_sound! = |cfg| generated_sound_from_resource(AudioHost.gen_sound!(raw_config(cfg)))
 
 	## Generate a reusable sine tone. `freq` is Hz and `ms` is milliseconds.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	gen_tone! : { freq : F32, ms : I32 } => Try(Sound, [SoundGenerationFailed, ResourceLimit, ..])
 	gen_tone! = |cfg|
 		Audio.gen_sound!({
@@ -205,6 +271,8 @@ Audio := [].{
 		})
 
 	## Set global output volume for all sounds and music, clamped to 0 through 1.
+	##
+	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	set_master_volume! : F32 => {}
 	set_master_volume! = |volume| AudioHost.set_master_volume!(volume)
 

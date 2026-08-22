@@ -755,6 +755,11 @@ fn listFilePaths(allocator: Allocator, io: std.Io) ![][]const u8 {
         for (binary_extensions) |ext| {
             if (std.mem.endsWith(u8, line, ext)) continue :outer;
         }
+        // Vendored code is skipped by every check in `tidyFile`, and the dead-
+        // declaration pass only visits `.zig`, so reading it in buys nothing --
+        // and an amalgamation like vendor/sqlite/sqlite3.c is far larger than
+        // the file buffer, which would abort the run before any check ran.
+        if (std.mem.startsWith(u8, line, "vendor/")) continue :outer;
         try result.append(allocator, try allocator.dupe(u8, line));
     }
 

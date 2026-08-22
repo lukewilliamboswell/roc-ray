@@ -17,6 +17,10 @@ const png = @import("png.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const tmx_loader = @import("tmx_loader.zig");
 const http_effect = @import("http_effect.zig");
+const udp_effect = @import("udp_effect.zig");
+const sqlite_effect = @import("sqlite_effect.zig");
+const stdio_effect = @import("stdio_effect.zig");
+const cmd_effect = @import("cmd_effect.zig");
 
 // `hostedHttpSend` is the only thing that names `http_effect`, and the hosted
 // exports are compiled out under `zig test` (see the `!builtin.is_test` gate
@@ -24,6 +28,8 @@ const http_effect = @import("http_effect.zig");
 // be collected. Reference it here instead.
 test {
     _ = http_effect;
+    _ = sqlite_effect;
+    _ = cmd_effect;
 }
 
 // Import backend
@@ -61,6 +67,9 @@ const UpdateResult = abi.Update_for_hostResult;
 /// unwrap it. The host only moves it; it never calls it.
 const TaskResultEnvelope = abi.Update_for_hostArg1TaskResults;
 const CaptureFromHost = abi.Update_for_hostArg1Capture;
+/// One file dropped onto the window, crossing as the public `App.Dropped`.
+const DroppedFile = abi.Update_for_hostArg1Dropped;
+const DroppedPosition = abi.Update_for_hostArg1DroppedPosition;
 const TilemapRawMap = abi.TilemapHostLoad_tmxMap;
 const TilemapRawLayer = abi.TilemapHostLoad_tmxMapLayers;
 const TilemapRawObject = abi.TilemapHostLoad_tmxMapObjects;
@@ -157,7 +166,6 @@ const READ_ERR_NOT_A_DIRECTORY: u8 = 7;
 const WRITE_ERR_PERMISSION_DENIED: u8 = 8;
 /// The filesystem is full or the process is over quota. Mirrored in `Files.roc`.
 const WRITE_ERR_NO_SPACE: u8 = 9;
-
 /// How many entries one listing may report, and how many bytes it may encode
 /// them into.
 ///
@@ -624,6 +632,66 @@ fn exportedFilesList(path_arg: abi.RocStr) callconv(.c) abi.FilesHostListRetReco
     return hostedFilesList(activeHost(), path_arg);
 }
 
+/// Name a failed stat in the app's vocabulary.
+///
+/// A stat can be refused for a reason a read cannot: a directory on the way to
+/// the path may be one this process may not look inside, which is a permission
+/// the app can ask the user about rather than a path it should fix.
+fn statErrorCode(err: anyerror) u8 {
+    return switch (err) {
+        error.FileNotFound, error.NotDir, error.BadPathName, error.NameTooLong => READ_ERR_NOT_FOUND,
+        error.AccessDenied, error.PermissionDenied => WRITE_ERR_PERMISSION_DENIED,
+        error.Canceled => READ_ERR_UNAVAILABLE,
+        else => READ_ERR_FAILED,
+    };
+}
+
+/// The listing kind byte for what a stat found at the end of a path.
+///
+/// Symbolic links do not appear: a stat follows them, so what is reported is
+/// the kind of the thing the link points at.
+fn statEntryKind(kind: std.Io.File.Kind) u8 {
+    return switch (kind) {
+        .file => DIR_ENTRY_FILE,
+        .directory => DIR_ENTRY_DIR,
+        else => DIR_ENTRY_OTHER,
+    };
+}
+
+/// Stat one path on the waiting path, parked rather than blocking.
+///
+/// Shaped exactly like a read: the phase guard, the park, and the trace are
+/// the same, and the difference is only that the answer is five numbers rather
+/// than a payload, so there is no delivery slot to reserve and nothing to
+/// bound but the wait itself.
+fn statPathIn(base: std.Io.Dir, io: std.Io, path: []const u8) abi.FilesHostMetadataRetRecord {
+    const stat = base.statFile(io, path, .{ .follow_symlinks = true }) catch |err|
+        return .{ .err = statErrorCode(err), .kind = 0, .size_bytes = 0, .modified_seconds = 0, .modified_nanosecond = 0 };
+    const modified = timestampFromNanos(stat.mtime.nanoseconds);
+    return .{
+        .err = 0,
+        .kind = statEntryKind(stat.kind),
+        .size_bytes = stat.size,
+        .modified_seconds = modified.seconds,
+        .modified_nanosecond = modified.nanosecond,
+    };
+}
+
+/// `Files.metadata!`: what one path is, how big it is, and when it changed.
+fn hostedFilesMetadata(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    enforcePhase("Files.metadata!", during_wait);
+    defer path_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("stat", 0);
+    defer AppTasks.traceResume("stat");
+    return statPathIn(std.Io.Dir.cwd(), waitingIo(), path_arg.asSlice());
+}
+
+fn exportedFilesMetadata(path_arg: abi.RocStr) callconv(.c) abi.FilesHostMetadataRetRecord {
+    return hostedFilesMetadata(activeHost(), path_arg);
+}
+
 /// Replace a whole file on the waiting path, parked rather than blocking.
 ///
 /// Missing parent directories are created, which is what `writeWholeFile` does
@@ -689,6 +757,99 @@ fn hostedFilesWriteBytes(roc_host: *RocHost, path_arg: abi.RocStr, bytes_arg: ab
 
 fn exportedFilesWriteBytes(path_arg: abi.RocStr, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
     return hostedFilesWriteBytes(activeHost(), path_arg, bytes_arg);
+}
+
+/// Split a wall-clock reading into the normalized parts `Time.Timestamp` holds.
+///
+/// The seconds are floored rather than truncated, so the fractional part is
+/// always the nanoseconds elapsed within the instant's own second on both
+/// sides of the epoch. A reading a signed 64-bit count of seconds cannot hold
+/// saturates: no real clock reaches it, and an app is better served by an
+/// instant at the end of time than by a wrapped one in the middle of it.
+fn timestampFromNanos(nanos: i128) abi.TimeHostNowRetRecord {
+    const whole = @divFloor(nanos, std.time.ns_per_s);
+    const seconds = std.math.cast(i64, whole) orelse {
+        return .{
+            .seconds = if (whole < 0) std.math.minInt(i64) else std.math.maxInt(i64),
+            .nanosecond = 0,
+        };
+    };
+    return .{ .seconds = seconds, .nanosecond = @intCast(nanos - whole * std.time.ns_per_s) };
+}
+
+/// `Time.now!`: what time it is in the world.
+///
+/// Reading the clock changes nothing and waits for nothing, but it is refused
+/// during `render!` all the same. Wall time is not the timeline this platform
+/// paces: an animation driven from it would ignore the fixed step a capture
+/// records under, and `render!` is handed the model rather than an input, so
+/// the instant a frame draws is one the model already decided on.
+/// The reading itself is `Clock.real`, which is settable and can jump when the
+/// administrator or NTP moves it. That is what a calendar is; the timeline
+/// that only moves forward is `input.time`, and the two are deliberately
+/// different values. Reading a clock does not block, so this takes no
+/// `WaitScope` and needs none of the parking machinery a waiting effect has.
+fn hostedTimeNow() callconv(.c) abi.TimeHostNowRetRecord {
+    enforcePhase("Time.now!", during_update);
+    return timestampFromNanos(std.Io.Clock.real.now(waitingIo()).nanoseconds);
+}
+
+/// The stream a `StdioHost` call names. Mirrored in `StdioHost.roc`.
+const STDIO_STREAM_STDOUT: u8 = 1;
+
+/// The ring one of those numbers stands for.
+///
+/// The number is written by `Stdout` and `Stderr` rather than by the app, so
+/// there is no third case to report: anything that is not standard output is
+/// standard error.
+fn streamRing(stream: u8) u8 {
+    return if (stream == STDIO_STREAM_STDOUT) stdio_effect.stdout_index else stdio_effect.stderr_index;
+}
+
+/// Copy one payload into a stream's queue. See `src/stdio_effect.zig`.
+///
+/// `head` and `tail` are one payload in that order, so a line reserves its
+/// text and its newline together and nothing another write queues can land
+/// between them. The copy happens here, on the frame thread, while the Roc
+/// value is still alive; the caller releases it as this returns.
+fn queueStreamWrite(stream: u8, head: []const u8, tail: []const u8) u8 {
+    return stdio_effect.write(streamRing(stream), head, tail);
+}
+
+/// `Stdout.write!` and `Stderr.write!`: the app's string, with nothing added.
+fn hostedStdioWriteText(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write!" else "Stderr.write!", during_update);
+    defer text_arg.decref(roc_host);
+    return queueStreamWrite(stream, text_arg.asSlice(), &.{});
+}
+
+fn exportedStdioWriteText(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedStdioWriteText(activeHost(), stream, text_arg);
+}
+
+/// `Stdout.line!` and `Stderr.line!`: the app's string and one newline.
+///
+/// The newline is the host's byte rather than a copy of the app's string with
+/// one appended, so a line costs no allocation and is queued as one payload.
+fn hostedStdioWriteLine(roc_host: *RocHost, stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.line!" else "Stderr.line!", during_update);
+    defer text_arg.decref(roc_host);
+    return queueStreamWrite(stream, text_arg.asSlice(), "\n");
+}
+
+fn exportedStdioWriteLine(stream: u8, text_arg: abi.RocStr) callconv(.c) u8 {
+    return hostedStdioWriteLine(activeHost(), stream, text_arg);
+}
+
+/// `Stdout.write_bytes!` and `Stderr.write_bytes!`: bytes, passed through.
+fn hostedStdioWriteBytes(roc_host: *RocHost, stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    enforcePhase(if (stream == STDIO_STREAM_STDOUT) "Stdout.write_bytes!" else "Stderr.write_bytes!", during_update);
+    defer bytes_arg.decref(roc_host);
+    return queueStreamWrite(stream, bytes_arg.items(), &.{});
+}
+
+fn exportedStdioWriteBytes(stream: u8, bytes_arg: abi.RocListWith(u8, false)) callconv(.c) u8 {
+    return hostedStdioWriteBytes(activeHost(), stream, bytes_arg);
 }
 
 /// `Capture.screenshot!`: one PNG of the frame the caller is waiting on.
@@ -792,6 +953,350 @@ fn exportedCaptureScreenshot(path_arg: abi.RocStr) callconv(.c) u8 {
     return hostedCaptureScreenshot(activeHost(), path_arg);
 }
 
+/// `Capture.screenshot_texture!`: one PNG of what a render target holds.
+///
+/// Unlike a screenshot this waits for nothing on the frame loop. The readback
+/// needs the graphics context, which lives on this thread, and Roc only ever
+/// runs on this thread -- so the pixels are taken synchronously, here, from
+/// whatever the last completed `render!` left in the target. Only the encode
+/// and the write park, on zio's blocking pool, which is why `init!` is a legal
+/// place to call this and is not for `Capture.screenshot!`.
+fn hostedCaptureScreenshotTexture(roc_host: *RocHost, args: abi.CaptureHostScreenshot_textureArgs) callconv(.c) u8 {
+    enforcePhase("Capture.screenshot_texture!", during_wait);
+    defer args.path.decref(roc_host);
+    const path = args.path.asSlice();
+
+    var pixels: []u8 = &.{};
+    var width: u32 = 0;
+    var height: u32 = 0;
+    var reserved: u64 = 0;
+
+    // Everything that touches the graphics context or the target's reference,
+    // in one scope: the box is released here, before anything parks, because
+    // nothing after this point needs the resource.
+    const readback = readback: {
+        defer releaseResourceBox(roc_host, args.target.handle);
+
+        const validation = capture.validateRelativePath(path);
+        if (validation != capture.err_none) break :readback validation;
+
+        // Resolved before the headless answer, so a released or `stub` target
+        // is reported the same way whether or not there is a window.
+        const resource = render_texture_heap.get(args.target.handle.*) orelse
+            break :readback capture.err_target_unavailable;
+
+        // A headless render target has no pixels at all -- every draw into it
+        // was a no-op -- so there is nothing to write. Answering `Ok` with no
+        // file is what `Capture.screenshot!` does for the same reason, and it
+        // keeps an exporting app runnable under `--host-headless`.
+        const target = switch (resource.*) {
+            .headless => break :readback capture.err_none,
+            .native => |native| native,
+        };
+        if (headlessMode()) break :readback capture.err_none;
+
+        // The target's own dimensions, not the ones the Roc value carries: the
+        // readback is sized by what the GPU actually holds.
+        const admitted = still_budget.admit(
+            @intCast(@max(target.texture.width, 0)),
+            @intCast(@max(target.texture.height, 0)),
+            &reserved,
+        );
+        if (admitted != capture.err_none) break :readback admitted;
+
+        const image = raylib.readRenderTexture(target) orelse {
+            still_budget.release(reserved);
+            break :readback capture.err_readback_failed;
+        };
+        defer image.deinit();
+
+        // Copied out of raylib's allocation so the encode can happen off this
+        // thread while raylib's buffer is freed on it.
+        const source = image.pixels();
+        const copy = allocatorFromHost(roc_host).alloc(u8, source.len) catch {
+            still_budget.release(reserved);
+            break :readback capture.err_out_of_memory;
+        };
+        @memcpy(copy, source);
+        pixels = copy;
+        width = image.width();
+        height = image.height();
+        break :readback capture.err_none;
+    };
+    if (readback != capture.err_none) return readback;
+    // Headless, or a unit test with no graphics context: admitted, read
+    // nothing, wrote nothing.
+    if (pixels.len == 0) return capture.err_none;
+
+    const allocator = allocatorFromHost(roc_host);
+    defer allocator.free(pixels);
+    defer still_budget.release(reserved);
+
+    var resolved_storage: [capture.path_capacity]u8 = undefined;
+    const resolved = capture.joinOutputPath(&resolved_storage, captureOutputDir(), path) orelse
+        return capture.err_write_failed;
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("export", 0);
+    defer AppTasks.traceResume("export");
+    // No runtime means `init!` on a host whose task runtime never started, so
+    // the encode happens inline the way a file write does there.
+    const rt = AppTasks.currentRuntime() orelse
+        return encodeAndWritePng(allocator, pixels, width, height, resolved);
+    var blocking = rt.spawnBlocking(encodeAndWritePng, .{
+        allocator,
+        pixels,
+        width,
+        height,
+        resolved,
+    }) catch return capture.err_out_of_memory;
+    return blocking.join();
+}
+
+fn exportedCaptureScreenshotTexture(args: abi.CaptureHostScreenshot_textureArgs) callconv(.c) u8 {
+    return hostedCaptureScreenshotTexture(activeHost(), args);
+}
+
+/// The framebuffer the host last presented, kept so a later `update!` has
+/// defined pixels to read.
+///
+/// The back buffer is not it: `EndDrawing` swaps the buffers, and after the
+/// swap what a readback would find is driver-dependent rather than the frame
+/// the player is looking at. So the frame loop copies the frame out while it
+/// still owns it, in the same hook that services a screenshot, and a `Screen`
+/// readback slices this instead of touching the GPU.
+///
+/// The allocator travels with the buffer, exactly as `FileBytesResource`'s
+/// does, because the buffer outlives the call that made it and is freed from a
+/// frame hook with no host argument to ask.
+const ScreenSnapshot = struct {
+    allocator: ?std.mem.Allocator = null,
+    pixels: []u8 = &.{},
+    width: u32 = 0,
+    height: u32 = 0,
+    /// What this snapshot reserved from `still_budget`, returned when it goes.
+    reserved: u64 = 0,
+};
+var screen_snapshot: ScreenSnapshot = .{};
+
+/// Whether any `Screen` readback has run since the last frame ended.
+///
+/// This is what makes the snapshot cost proportional to use. An app that never
+/// reads the screen never pays a readback; one that reads it pays one per
+/// frame; one that stops reading stops paying after the next frame. The
+/// consequence an app sees is that its very first `Screen` read has no
+/// snapshot yet and is `Unavailable`.
+var screen_snapshot_requested = false;
+
+/// Keep this frame's pixels for the next cycle's `Screen` readbacks.
+///
+/// Copied out of the backend's allocation because that one is freed on this
+/// thread as the drawing scope closes, and this has to outlive the frame.
+/// A snapshot that cannot be admitted or allocated simply does not happen: the
+/// next read reports `Unavailable`, which is the same answer it would give
+/// before the first frame.
+fn storeScreenSnapshot(image: raylib.CaptureImage) void {
+    releaseScreenSnapshot();
+
+    var reserved: u64 = 0;
+    if (still_budget.admit(image.width(), image.height(), &reserved) != capture.err_none) return;
+
+    const allocator = allocatorFromHost(activeHost());
+    const source = image.pixels();
+    const copy = allocator.alloc(u8, source.len) catch {
+        still_budget.release(reserved);
+        return;
+    };
+    @memcpy(copy, source);
+    screen_snapshot = .{
+        .allocator = allocator,
+        .pixels = copy,
+        .width = image.width(),
+        .height = image.height(),
+        .reserved = reserved,
+    };
+}
+
+/// Drop the snapshot and give its budget back.
+fn releaseScreenSnapshot() void {
+    if (screen_snapshot.allocator) |allocator| allocator.free(screen_snapshot.pixels);
+    still_budget.release(screen_snapshot.reserved);
+    screen_snapshot = .{};
+}
+
+/// Where one readback's pixels came from, and what it owes when it is done.
+///
+/// A `Screen` read borrows the snapshot the frame loop already holds, so it
+/// owns nothing. A `Target` read has to pull the whole target off the GPU for
+/// this call alone, so it carries both the backend image and the budget
+/// reservation that admitted it.
+const ReadbackPixels = struct {
+    bytes: []const u8,
+    width: u32,
+    height: u32,
+    image: ?raylib.CaptureImage = null,
+    reserved: u64 = 0,
+
+    fn deinit(self: ReadbackPixels) void {
+        // Only a windowed run ever holds an image: without a graphics context
+        // a target readback answers `Unavailable` instead of producing one.
+        // Saying so here rather than only in the optional keeps the backend's
+        // unloader out of a build that has no raylib to unload with, which is
+        // what the unit-test host is.
+        if (!headlessMode()) {
+            if (self.image) |image| image.deinit();
+        }
+        still_budget.release(self.reserved);
+    }
+};
+
+/// Resolve a readback source to pixels, or to the code saying why there are none.
+///
+/// Does not touch the source's render-target reference: both callers own that
+/// for the whole call and release it on every path, so a refused read cannot
+/// keep a target alive and a taken one cannot drop it early.
+fn resolveReadbackSource(source: abi.CaptureHostPixel_atArg0Source, err: *u8) ?ReadbackPixels {
+    if (source.screen) {
+        // Every read re-arms the snapshot, including one that fails for want
+        // of it: that is what makes the read after this one succeed.
+        screen_snapshot_requested = true;
+        if (screen_snapshot.pixels.len == 0) {
+            err.* = capture.err_unavailable;
+            return null;
+        }
+        return .{
+            .bytes = screen_snapshot.pixels,
+            .width = screen_snapshot.width,
+            .height = screen_snapshot.height,
+        };
+    }
+
+    // Resolved before the headless answer, so a released target or the
+    // `Draw.RenderTexture.stub` a pure test holds reads the same either way.
+    const resource = render_texture_heap.get(source.target.handle.*) orelse {
+        err.* = capture.err_target_unavailable;
+        return null;
+    };
+    const target = switch (resource.*) {
+        // A headless target holds nothing: every draw into it was a no-op, so
+        // there is no colour to invent for the app.
+        .headless => {
+            err.* = capture.err_unavailable;
+            return null;
+        },
+        .native => |native| native,
+    };
+    if (headlessMode()) {
+        err.* = capture.err_unavailable;
+        return null;
+    }
+
+    // The target's own dimensions rather than the ones the Roc value carries,
+    // for the reason `Capture.screenshot_texture!` gives: the readback is
+    // sized by what the GPU holds. A target too large for the whole budget and
+    // one that would fit but for other work in flight are both `err_busy`
+    // here; a readback reports one "not now" and the difference between them
+    // is in the documentation rather than in the tag.
+    var reserved: u64 = 0;
+    if (still_budget.admit(
+        @intCast(@max(target.texture.width, 0)),
+        @intCast(@max(target.texture.height, 0)),
+        &reserved,
+    ) != capture.err_none) {
+        err.* = capture.err_busy;
+        return null;
+    }
+
+    const image = raylib.readRenderTexture(target) orelse {
+        still_budget.release(reserved);
+        err.* = capture.err_readback_failed;
+        return null;
+    };
+    return .{
+        .bytes = image.pixels(),
+        .width = image.width(),
+        .height = image.height(),
+        .image = image,
+        .reserved = reserved,
+    };
+}
+
+fn pixelReadFailure(err: u8) abi.CaptureHostPixel_atRetRecord {
+    return .{ .err = err, .r = 0, .g = 0, .b = 0, .a = 0 };
+}
+
+/// `Capture.pixel_at!`: one pixel's colour, with nothing allocated to carry it.
+///
+/// Synchronous rather than waiting. The screen comes from a snapshot the host
+/// already holds and a render target is read through the graphics context this
+/// thread owns, so there is nothing here to park on.
+fn hostedCapturePixelAt(roc_host: *RocHost, args: abi.CaptureHostPixel_atArgs) abi.CaptureHostPixel_atRetRecord {
+    enforcePhase("Capture.pixel_at!", during_update);
+    defer releaseResourceBox(roc_host, args.source.target.handle);
+
+    var err: u8 = capture.err_readback_failed;
+    const pixels = resolveReadbackSource(args.source, &err) orelse return pixelReadFailure(err);
+    defer pixels.deinit();
+
+    const bounds = capture.validatePoint(args.x, args.y, pixels.width, pixels.height);
+    if (bounds != capture.err_none) return pixelReadFailure(bounds);
+
+    const channels = capture.pixelAt(pixels.bytes, pixels.width, args.x, args.y);
+    return .{ .err = capture.err_none, .r = channels[0], .g = channels[1], .b = channels[2], .a = channels[3] };
+}
+
+fn exportedCapturePixelAt(args: abi.CaptureHostPixel_atArgs) callconv(.c) abi.CaptureHostPixel_atRetRecord {
+    return hostedCapturePixelAt(activeHost(), args);
+}
+
+/// `Capture.read_region!`: a rectangle of RGBA8 bytes, handed over rather than
+/// copied.
+///
+/// The order of the checks is the point. A region no source could satisfy is
+/// refused before anything is read, and a delivery slot is reserved before the
+/// readback, so the expensive part never runs for a read that has nowhere to
+/// put its answer -- the same admission `Files.read_bytes!` does before it
+/// opens a path, and for the same reason.
+fn hostedCaptureReadRegion(roc_host: *RocHost, args: abi.CaptureHostRead_regionArgs) abi.CaptureHostRead_regionRetRecord {
+    enforcePhase("Capture.read_region!", during_update);
+    defer releaseResourceBox(roc_host, args.source.target.handle);
+
+    const empty = abi.RocListWith(u8, false).empty();
+    const region = capture.Region{ .x = args.x, .y = args.y, .width = args.width, .height = args.height };
+
+    const bytes = capture.regionBytes(region) orelse
+        return .{ .err = capture.err_region_out_of_bounds, .bytes = empty };
+    if (bytes > capture.max_readback_bytes)
+        return .{ .err = capture.err_region_out_of_bounds, .bytes = empty };
+
+    if (!file_bytes_delivery_reservations.reserve()) return .{ .err = capture.err_busy, .bytes = empty };
+    defer file_bytes_delivery_reservations.release();
+
+    var err: u8 = capture.err_readback_failed;
+    const pixels = resolveReadbackSource(args.source, &err) orelse return .{ .err = err, .bytes = empty };
+    defer pixels.deinit();
+
+    const bounds = capture.validateRegion(region, pixels.width, pixels.height);
+    if (bounds != capture.err_none) return .{ .err = bounds, .bytes = empty };
+
+    const allocator = allocatorFromHost(roc_host);
+    const copy = allocator.alloc(u8, @intCast(bytes)) catch
+        return .{ .err = capture.err_busy, .bytes = empty };
+    capture.copyRegion(copy, pixels.bytes, pixels.width, region);
+
+    // The transfer itself, shared with every other handed-over byte list. Its
+    // only refusal is a full heap, which is the same "no slot" this call
+    // already reserved against and reports as `Busy`.
+    const installed = installReadBytes(allocator, copy);
+    if (installed.err != 0) return .{ .err = capture.err_busy, .bytes = empty };
+    return .{ .err = capture.err_none, .bytes = installed.bytes };
+}
+
+fn exportedCaptureReadRegion(args: abi.CaptureHostRead_regionArgs) callconv(.c) abi.CaptureHostRead_regionRetRecord {
+    return hostedCaptureReadRegion(activeHost(), args);
+}
+
 /// Which of the two byte-list producing waits to run. They share everything
 /// after the syscall: the same admission, the same ownership transfer, and the
 /// same list on the way out.
@@ -868,6 +1373,387 @@ fn hostedHttpSend(request: http_effect.Request) callconv(.c) http_effect.Respons
     active_phase = .idle;
     defer active_phase = resume_phase;
     return http_effect.send(roc_host, allocatorFromHost(roc_host), request);
+}
+
+/// This process's own environment, as `std.process.Environ`.
+///
+/// `Cmd.run!` needs it twice over: it is where a bare program name is resolved
+/// against `PATH`, and it is what a child inherits unless the command replaces
+/// it. `host_environ` is what `platform_main` captured off the process stack;
+/// under `zig test` no `platform_main` ran, so the libc-linked test binary
+/// reads the C runtime's own global instead of running the tests against an
+/// empty environment.
+fn hostProcessEnviron() std.process.Environ {
+    if (comptime builtin.os.tag == .windows) return .{ .block = .global };
+    if (host_environ.len != 0) {
+        const entries: [*:null]const ?[*:0]const u8 = @ptrCast(host_environ.ptr);
+        return .{ .block = .{ .slice = entries[0..host_environ.len :null] } };
+    }
+    if (comptime builtin.link_libc) {
+        var count: usize = 0;
+        while (std.c.environ[count] != null) : (count += 1) {}
+        const entries: [*:null]const ?[*:0]const u8 = @ptrCast(std.c.environ);
+        return .{ .block = .{ .slice = entries[0..count :null] } };
+    }
+    return .empty;
+}
+
+/// A run that started no child, carrying only its code.
+fn cmdRunFailure(code: u8) abi.CmdHostRunRetRecord {
+    return .{
+        .err = code,
+        .exit_code = 0,
+        .stdout = abi.RocListWith(u8, false).empty(),
+        .stderr = abi.RocListWith(u8, false).empty(),
+    };
+}
+
+/// Copy the command out of the Roc record into host-owned storage.
+///
+/// The copy is the point: the child runs on a blocking-pool worker, and a
+/// worker may not read a Roc value. Everything it needs -- the program, the
+/// arguments, the environment pairs, the working directory -- is duplicated
+/// into an arena the frame thread owns and discards when the run returns.
+fn copyCmdSpec(arena: std.mem.Allocator, args: abi.CmdHostRunArgs) ?cmd_effect.Spec {
+    const program = arena.dupe(u8, args.program.asSlice()) catch return null;
+    const working_dir = arena.dupe(u8, args.working_dir.asSlice()) catch return null;
+
+    const arg_items = args.args.items();
+    const copied_args = arena.alloc([]const u8, arg_items.len) catch return null;
+    for (arg_items, copied_args) |item, *slot| {
+        slot.* = arena.dupe(u8, item.asSlice()) catch return null;
+    }
+
+    const env_items = args.envs.items();
+    const copied_envs = arena.alloc(cmd_effect.EnvPair, env_items.len) catch return null;
+    for (env_items, copied_envs) |item, *slot| {
+        slot.* = .{
+            .name = arena.dupe(u8, item.name.asSlice()) catch return null,
+            .value = arena.dupe(u8, item.value.asSlice()) catch return null,
+        };
+    }
+
+    return .{
+        .program = program,
+        .args = copied_args,
+        .envs = copied_envs,
+        .clear_envs = args.clear_envs,
+        .working_dir = working_dir,
+        .timeout_ms = args.timeout_ms,
+        .stdout_limit_bytes = args.stdout_limit_bytes,
+        .stderr_limit_bytes = args.stderr_limit_bytes,
+    };
+}
+
+/// `Cmd.run!`: start one child process and park until it has finished.
+///
+/// A child slot is reserved before anything is copied or started, so a
+/// terminal `Busy` means precisely that no process was created.
+///
+/// The child itself runs through `std.Io.Threaded` on zio's blocking pool
+/// rather than through the runtime's own backend, for the same reason
+/// `writeFileWaiting` does: process creation and reaping are what that backend
+/// does not implement everywhere. The pool parks this coroutine the way the
+/// event loop would, and the worker sees only the host-owned copy `copyCmdSpec`
+/// made.
+///
+/// Both streams cross as ordinary copies rather than through the byte-list
+/// transfer path. A run produces two payloads where that path hands over one
+/// allocation per slot, and both are already bounded by limits the app stated.
+fn hostedCmdRun(roc_host: *RocHost, args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord {
+    enforcePhase("Cmd.run!", during_wait);
+    defer args.decref(roc_host);
+
+    if (!cmd_effect.reserve()) return cmdRunFailure(cmd_effect.ERR_BUSY);
+    defer cmd_effect.release();
+
+    const allocator = allocatorFromHost(roc_host);
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const spec = copyCmdSpec(arena_state.allocator(), args) orelse
+        return cmdRunFailure(cmd_effect.ERR_SPAWN_FAILED);
+
+    const environ = hostProcessEnviron();
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("cmd", spec.timeout_ms);
+    defer AppTasks.traceResume("cmd");
+
+    const outcome = outcome: {
+        // No runtime means `init!` on a host whose task runtime never started,
+        // so the child runs inline the way a file write does there.
+        const rt = AppTasks.currentRuntime() orelse
+            break :outcome cmd_effect.run(allocator, environ, spec);
+        // A pool that would not take the work is reported rather than run
+        // here: this is the frame thread, and a command may wait a deadline
+        // the app chose to be as long as it likes.
+        var blocking = rt.spawnBlocking(cmd_effect.run, .{ allocator, environ, spec }) catch
+            break :outcome cmd_effect.Outcome{
+                .err = cmd_effect.ERR_SPAWN_FAILED,
+                .exit_code = 0,
+                .stdout = &.{},
+                .stderr = &.{},
+            };
+        break :outcome blocking.join();
+    };
+    defer outcome.deinit(allocator);
+
+    return .{
+        .err = outcome.err,
+        .exit_code = outcome.exit_code,
+        .stdout = abi.RocListWith(u8, false).fromSlice(outcome.stdout, roc_host),
+        .stderr = abi.RocListWith(u8, false).fromSlice(outcome.stderr, roc_host),
+    };
+}
+
+fn exportedCmdRun(args: abi.CmdHostRunArgs) callconv(.c) abi.CmdHostRunRetRecord {
+    return hostedCmdRun(activeHost(), args);
+}
+
+/// `Udp.bind!`: open one IPv4 UDP socket and put it in the socket heap.
+///
+/// Binding does not wait for anything -- it makes a descriptor -- so this is an
+/// ordinary effect rather than a waiting one, and an app can start networking
+/// from `update!` when the player asks it to rather than having to spawn a task
+/// for it. The one subtlety is that reaching the event loop to submit the bind
+/// can hand a turn to the executor, which runs other tasks' Roc code; the
+/// `PhaseScope` restore is what keeps the rest of this `update!` in the right
+/// phase afterwards, exactly as `Task.spawn!` does.
+fn hostedUdpBind(host: *RocHost, args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    enforcePhase("Udp.bind!", during_load);
+    defer args.decref(host);
+    const scope = PhaseScope.enter(active_phase);
+    defer scope.leave();
+
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse
+        return udpBindFailure(udp_effect.ERR_INVALID_ADDRESS);
+
+    const socket = switch (udp_effect.bind(ip, args.port)) {
+        .ok => |value| value,
+        .err => |code| return udpBindFailure(code),
+    };
+
+    // The descriptor exists before its slot does, so a full heap closes it
+    // again rather than leaking it. `insert` finishes its own heap's
+    // outstanding destruction first, so a socket the app has already released
+    // is reclaimed here; nothing reaches for the global retirement drain,
+    // which would put a GPU or audio-device call inside this `update!`.
+    const handle = udp_socket_heap.insert(0, socket) orelse {
+        var rejected = socket;
+        destroyUdpSocket(&rejected);
+        return udpBindFailure(udp_effect.ERR_RESOURCE_LIMIT);
+    };
+    return .{
+        .handle = handle,
+        .ip = socket.local_ip,
+        .port = socket.local_port,
+        .err = 0,
+    };
+}
+
+fn exportedUdpBind(args: abi.UdpHostBindArgs) callconv(.c) abi.UdpHostBindRetRecord {
+    return hostedUdpBind(activeHost(), args);
+}
+
+/// A bind that produced no socket. The handle is the shared invalid token, so
+/// `Udp` still gets a structurally valid value to discard.
+fn udpBindFailure(code: u8) abi.UdpHostBindRetRecord {
+    return .{ .handle = invalidResourceHandle(), .ip = 0, .port = 0, .err = code };
+}
+
+/// `Udp.send!`: hand one datagram to the kernel, without waiting.
+///
+/// No `WaitScope` and no event loop: `udp_effect.send` issues the syscall
+/// straight at the non-blocking descriptor. That is what makes this legal in
+/// `update!` -- there is no park for the frame to pay for, and no window in
+/// which another task's Roc code could run in the middle of an update.
+fn hostedUdpSend(host: *RocHost, args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    enforcePhase("Udp.send!", during_update);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse return udp_effect.ERR_UNAVAILABLE;
+    const ip = udp_effect.parseIp4(args.ip.asSlice()) orelse return udp_effect.ERR_INVALID_ADDRESS;
+    return udp_effect.send(socket, ip, args.port, args.bytes.items());
+}
+
+fn exportedUdpSend(args: abi.UdpHostSendArgs) callconv(.c) u8 {
+    return hostedUdpSend(activeHost(), args);
+}
+
+/// `Udp.receive!`: park until a datagram arrives, then deliver the batch.
+///
+/// The phase handling mirrors `hostedTaskSleep`: the receive parks this
+/// coroutine, the frame loop runs in between and sets phases of its own, and
+/// the task must see `.task` again when the datagrams arrive.
+///
+/// The batch is built in host memory first and copied into Roc values only
+/// once it is complete, so a cancelled or failed receive cannot leave a
+/// half-built Roc value behind.
+fn hostedUdpReceive(host: *RocHost, args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    enforcePhase("Udp.receive!", during_wait);
+    defer args.decref(host);
+
+    const socket = udp_socket_heap.get(args.socket.*) orelse
+        return udpReceiveFailure(udp_effect.ERR_UNAVAILABLE);
+
+    const allocator = allocatorFromHost(host);
+    var slices: std.ArrayList(udp_effect.Slice) = .empty;
+    defer slices.deinit(allocator);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(allocator);
+
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("udp receive", args.timeout_ms);
+    const outcome = udp_effect.receive(
+        socket,
+        args.timeout_ms,
+        args.max_datagrams,
+        &slices,
+        &payload,
+        allocator,
+    );
+    AppTasks.traceResume("udp receive");
+
+    const batch = switch (outcome) {
+        .ok => |value| value,
+        .err => |code| return udpReceiveFailure(code),
+    };
+    return .{
+        .err = 0,
+        .payload = abi.RocListWith(u8, false).fromSlice(batch.payload, host),
+        .slices = udpRocSlices(host, batch.slices),
+    };
+}
+
+fn exportedUdpReceive(args: abi.UdpHostReceiveArgs) callconv(.c) abi.UdpHostReceiveRetRecord {
+    return hostedUdpReceive(activeHost(), args);
+}
+
+/// A receive that produced no datagrams, carrying only its code.
+fn udpReceiveFailure(code: u8) abi.UdpHostReceiveRetRecord {
+    return .{
+        .err = code,
+        .payload = abi.RocListWith(u8, false).empty(),
+        .slices = abi.RocListWith(abi.UdpHostReceiveSlices, false).empty(),
+    };
+}
+
+/// Copy the batch index into the Roc list `Udp` decodes.
+fn udpRocSlices(
+    host: *RocHost,
+    slices: []const udp_effect.Slice,
+) abi.RocListWith(abi.UdpHostReceiveSlices, false) {
+    if (slices.len == 0) return abi.RocListWith(abi.UdpHostReceiveSlices, false).empty();
+    const list = abi.RocListWith(abi.UdpHostReceiveSlices, false).allocate(slices.len, host);
+    const elements = list.elements_ptr.?;
+    for (slices, 0..) |slice, index| {
+        elements[index] = .{
+            .ip = slice.ip,
+            .port = slice.port,
+            .start = slice.start,
+            .len = slice.len,
+        };
+    }
+    return list;
+}
+
+/// The `Sqlite` effects.
+///
+/// Each one waits: the query runs on zio's blocking pool and this coroutine
+/// parks in `join()`, so the frame loop keeps running. The phase handling
+/// mirrors `hostedHttpSend` -- the frame loop enters phases of its own while
+/// this is parked, so the task must see its own phase again when the answer
+/// arrives. Roc's own arguments are decref'd here; everything a worker reads
+/// was copied out of them first.
+fn hostedSqliteOpen(
+    path_arg: abi.RocStr,
+    mode: u8,
+    busy_timeout_ms: u64,
+    max_result_bytes: u64,
+) callconv(.c) abi.SqliteHostOpen {
+    enforcePhase("Sqlite.Db.open!", during_wait);
+    const roc_host = activeHost();
+    defer path_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.open", 0);
+    defer AppTasks.traceResume("sqlite.open");
+    return sqlite_effect.open(
+        roc_host,
+        AppTasks.currentRuntime(),
+        path_arg,
+        mode,
+        busy_timeout_ms,
+        max_result_bytes,
+    );
+}
+
+fn hostedSqliteClose(db_arg: *u64) callconv(.c) abi.SqliteHostClose {
+    enforcePhase("Sqlite.Db.close!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.close", 0);
+    defer AppTasks.traceResume("sqlite.close");
+    return sqlite_effect.close(roc_host, AppTasks.currentRuntime(), db_arg);
+}
+
+fn hostedSqlitePrepare(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostPrepare {
+    enforcePhase("Sqlite.prepare!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.prepare", 0);
+    defer AppTasks.traceResume("sqlite.prepare");
+    return sqlite_effect.prepare(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
+}
+
+fn hostedSqliteRunStmt(
+    stmt_arg: *u64,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_stmt {
+    enforcePhase("Sqlite.Stmt.query!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, stmt_arg);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.run", 0);
+    defer AppTasks.traceResume("sqlite.run");
+    return sqlite_effect.runStmt(roc_host, AppTasks.currentRuntime(), stmt_arg, bindings_arg);
+}
+
+fn hostedSqliteRunOnce(
+    db_arg: *u64,
+    sql_arg: abi.RocStr,
+    bindings_arg: abi.RocList(abi.SqliteHostRun_stmtArg1),
+) callconv(.c) abi.SqliteHostRun_once {
+    enforcePhase("Sqlite.query!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    defer abi.decrefListOf__AnonStruct_90c9f98ccd96f8ce(bindings_arg, roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.run", 0);
+    defer AppTasks.traceResume("sqlite.run");
+    return sqlite_effect.runOnce(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg, bindings_arg);
+}
+
+fn hostedSqliteExecScript(db_arg: *u64, sql_arg: abi.RocStr) callconv(.c) abi.SqliteHostExec_script {
+    enforcePhase("Sqlite.exec_script!", during_wait);
+    const roc_host = activeHost();
+    defer releaseResourceBox(roc_host, db_arg);
+    defer sql_arg.decref(roc_host);
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("sqlite.script", 0);
+    defer AppTasks.traceResume("sqlite.script");
+    return sqlite_effect.execScript(roc_host, AppTasks.currentRuntime(), db_arg, sql_arg);
 }
 
 var active_phase: Phase = .idle;
@@ -967,6 +1853,12 @@ const ScreenshotWait = struct {
     err: u8 = 0,
 };
 var screenshot_wait: ?*ScreenshotWait = null;
+/// Readback memory held by `Capture.screenshot_texture!` calls in flight.
+///
+/// Several tasks can export at once -- nothing serializes them the way the
+/// single end-of-frame readback serializes screenshots -- so this is what keeps
+/// their combined footprint bounded. See `capture.StillBudget`.
+var still_budget: capture.StillBudget = .{};
 /// Frames written by the active recording, and their total size on disk.
 var capture_recording_bytes: u64 = 0;
 /// GIF encoder for the active recording, when its format is GIF.
@@ -998,6 +1890,20 @@ var virtual_mouse_buttons: [ffi.MOUSE_BUTTON_COUNT]bool = @splat(false);
 var virtual_mouse_last_x: f32 = 0;
 var virtual_mouse_last_y: f32 = 0;
 var virtual_mouse_has_last: bool = false;
+/// Scripted keyboard state, replacing the hardware keyboard while active.
+///
+/// Held flags only: the same edge detector that runs over hardware runs over
+/// this array, so pressed and released fall out of consecutive frames rather
+/// than being described here. Nothing about the real keyboard changes -- a key
+/// the user is holding is simply not what Roc is told about.
+var virtual_keys_active: bool = false;
+var virtual_key_down: [ffi.KEY_COUNT]bool = @splat(false);
+/// Scripted text queued for the next input, in the order it was entered.
+///
+/// The same bound as the hardware channel, and lossy the same way: a longer
+/// script loses its tail rather than spilling into the following frame.
+var virtual_text: [raylib.TEXT_INPUT_CAPACITY]u32 = @splat(0);
+var virtual_text_len: usize = 0;
 /// Nanoseconds of divergence introduced by fixed-step recordings.
 ///
 /// Fixed-step recording reports exact `1/fps` deltas instead of raylib's
@@ -1012,6 +1918,16 @@ var headless_screen_height: i32 = 600;
 /// to ask, and a constant keeps `--host-headless` output reproducible.
 const HEADLESS_WINDOW_FOCUSED = true;
 const HEADLESS_WINDOW_MINIMIZED = false;
+/// A headless run has no display to enumerate, so it answers with one virtual
+/// monitor the size of the configured window. That keeps an app that places
+/// itself on a monitor, or divides by the DPI scale, on the same code path in
+/// CI as on a desktop, without inventing a geometry the run was never told
+/// about.
+const HEADLESS_MONITOR_NAME = "Headless";
+const HEADLESS_MONITOR_REFRESH_HZ: i32 = 60;
+/// The scale of an ordinary, non-HiDPI display: the headless answer, and the
+/// stand-in for a factor the backend cannot state usefully.
+const DEFAULT_WINDOW_SCALE: f32 = 1;
 var headless_random_state: u32 = 0x4d595df4;
 /// Headless runs never open a window, so there is no system clipboard to talk
 /// to. Back the clipboard effects with a process-local buffer instead of a
@@ -1168,6 +2084,16 @@ fn destroyStore(resource: *StoreResource) void {
     resource.root.close(mainThreadIo());
 }
 
+/// Close the descriptor when the last Roc reference to a socket is gone.
+///
+/// This is the whole lifecycle: there is no `close!` effect, so dropping the
+/// handle -- from the model, from a task closure, at shutdown -- is what closes
+/// the socket. A task still parked in `receive` cannot reach here, because it
+/// holds a reference of its own for as long as it is parked.
+fn destroyUdpSocket(resource: *udp_effect.Socket) void {
+    resource.inner.close();
+}
+
 fn writeU64Token(payload: *u64, token: u64) void {
     payload.* = token;
 }
@@ -1176,14 +2102,24 @@ fn readU64Token(payload: *const u64) u64 {
     return payload.*;
 }
 
-const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, 1, writeU64Token, readU64Token, destroySound);
-const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, 2, writeU64Token, readU64Token, destroyMusic);
-const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, 3, writeU64Token, readU64Token, destroyFont);
-const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, 4, writeU64Token, readU64Token, destroyTexture);
-const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, 5, writeU64Token, readU64Token, destroyRenderTexture);
-const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, 6, writeU64Token, readU64Token, destroyShader);
-const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, 7, writeU64Token, readU64Token, destroyPreparedText);
-const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, 9, writeU64Token, readU64Token, destroyStore);
+const SoundHeap = host_resource.HostResourceHeap(u64, SoundResource, 128, .sound, writeU64Token, readU64Token, destroySound);
+const MusicHeap = host_resource.HostResourceHeap(u64, MusicResource, 16, .music, writeU64Token, readU64Token, destroyMusic);
+const FontHeap = host_resource.HostResourceHeap(u64, FontResource, 32, .font, writeU64Token, readU64Token, destroyFont);
+const TextureHeap = host_resource.HostResourceHeap(u64, TextureResource, 128, .texture, writeU64Token, readU64Token, destroyTexture);
+const RenderTextureHeap = host_resource.HostResourceHeap(u64, RenderTextureResource, 32, .render_texture, writeU64Token, readU64Token, destroyRenderTexture);
+const ShaderHeap = host_resource.HostResourceHeap(u64, ShaderResource, 32, .shader, writeU64Token, readU64Token, destroyShader);
+const PreparedTextHeap = host_resource.HostResourceHeap(u64, PreparedTextResource, 256, .prepared_text, writeU64Token, readU64Token, destroyPreparedText);
+const StoreHeap = host_resource.HostResourceHeap(u64, StoreResource, 16, .store, writeU64Token, readU64Token, destroyStore);
+
+/// How many UDP sockets an app may hold open at once.
+///
+/// Small on purpose: a game binds one socket, or two when it also runs a
+/// discovery or telemetry channel. Each slot carries its own 64 KiB receive
+/// staging buffer, which is what the cap is really bounding, and a bind past
+/// it is `ResourceLimit` rather than an unbounded descriptor count.
+const MAX_LIVE_UDP_SOCKETS: usize = 8;
+
+const UdpSocketHeap = host_resource.HostResourceHeap(u64, udp_effect.Socket, MAX_LIVE_UDP_SOCKETS, .udp_socket, writeU64Token, readU64Token, destroyUdpSocket);
 
 /// Bytes a finished read handed over, and the allocator that owns them.
 ///
@@ -1205,7 +2141,7 @@ fn destroyFileBytes(resource: *FileBytesResource) void {
 /// resources. The payload itself is deliberately a word-sized token: a
 /// seamless primitive `List` may use the payload address as its ARC allocation
 /// pointer, while the token keeps the heap's usual structural validation.
-const FileBytesHeap = host_resource.HostResourceHeap(u64, FileBytesResource, MAX_LIVE_FILE_BYTE_LISTS, 8, writeU64Token, readU64Token, destroyFileBytes);
+const FileBytesHeap = host_resource.HostResourceHeap(u64, FileBytesResource, MAX_LIVE_FILE_BYTE_LISTS, .file_bytes, writeU64Token, readU64Token, destroyFileBytes);
 var file_bytes_heap: FileBytesHeap = .{};
 
 /// Make the sole heap reference for `resource` into the delivered byte list.
@@ -1270,6 +2206,39 @@ var render_texture_heap: RenderTextureHeap = .{};
 var shader_heap: ShaderHeap = .{};
 var prepared_text_heap: PreparedTextHeap = .{};
 var store_heap: StoreHeap = .{};
+var udp_socket_heap: UdpSocketHeap = .{};
+
+/// Every typed resource heap the host owns: what a Roc deallocation is offered
+/// to, and what the kind-coverage check below reads.
+const resource_heaps = .{
+    &sound_heap,
+    &music_heap,
+    &font_heap,
+    &texture_heap,
+    &render_texture_heap,
+    &shader_heap,
+    &prepared_text_heap,
+    &file_bytes_heap,
+    &store_heap,
+    &udp_socket_heap,
+    &sqlite_effect.stmt_heap,
+    &sqlite_effect.db_heap,
+};
+
+comptime {
+    // `Kind` is the only place a resource number is written down, and this is
+    // what keeps that true in both directions: a kind nobody declares a heap
+    // for, or two heaps declaring the same one, fails the build here.
+    for (std.enums.values(host_resource.Kind)) |kind| {
+        var heaps_with_kind: usize = 0;
+        for (resource_heaps) |heap| {
+            if (@TypeOf(heap.*).resource_kind == kind) heaps_with_kind += 1;
+        }
+        if (heaps_with_kind != 1) {
+            @compileError("each host resource kind needs exactly one heap: " ++ @tagName(kind));
+        }
+    }
+}
 
 var prepared_text_prepare_calls: usize = 0;
 var prepared_text_draw_calls: usize = 0;
@@ -1342,7 +2311,7 @@ fn exportedRocAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
 }
 
 fn nativeRocDealloc(host: *RocHost, ptr: *anyopaque, alignment: usize) callconv(.c) void {
-    inline for (.{ &sound_heap, &music_heap, &font_heap, &texture_heap, &render_texture_heap, &shader_heap, &prepared_text_heap, &file_bytes_heap, &store_heap }) |heap| {
+    inline for (resource_heaps) |heap| {
         switch (heap.routeDealloc(ptr)) {
             .not_owned => {},
             .deallocated => return,
@@ -1645,12 +2614,15 @@ fn pathExists(path: []const u8) bool {
 
 fn resetHeadlessRuntime(app_config: AppConfig) void {
     capture_session.reset();
-    virtual_mouse_active = false;
-    virtual_mouse_has_last = false;
-    virtual_mouse_buttons = @splat(false);
-    virtual_mouse_wheel = 0;
+    resetVirtualInput();
 
     capture_screenshot_pending = false;
+    // The snapshot is freed before the budget is zeroed: a reset that only
+    // forgot the reservation would leave the buffer behind for the next app
+    // lifetime to read as if it were its own frame.
+    releaseScreenSnapshot();
+    screen_snapshot_requested = false;
+    still_budget.reset();
     capture_screenshot_path_len = 0;
     capture_recording_path_len = 0;
     capture_output_dir_len = 0;
@@ -4648,6 +5620,138 @@ fn hostedSuggestWindowMinSize(args: abi.HostHostSuggest_window_min_sizeArgs) cal
     raylib.suggestWindowMinSize(nonNegativeCInt(args.width), nonNegativeCInt(args.height));
 }
 
+/// `Window.suggest_position!`: move the window's top-left corner.
+///
+/// Nothing is validated here. Every position is meaningful to some multi-monitor
+/// desktop -- negative coordinates are ordinary on a display left of the primary
+/// one -- and the window manager is the only thing that knows which are not.
+fn hostedSuggestWindowPosition(args: abi.HostHostSuggest_window_positionArgs) callconv(.c) void {
+    enforcePhase("Window.suggest_position!", during_update);
+    if (headlessMode()) return;
+    raylib.suggestWindowPosition(args.x, args.y);
+}
+
+/// `Window.suggest_monitor!`: move the window to a monitor by index.
+///
+/// An index outside the connected set is ignored rather than reported: which
+/// monitors exist can change between the `Window.monitors!` that produced the
+/// index and this call, so a stale index is a race the app cannot prevent, not
+/// a fault it can act on.
+fn hostedSuggestWindowMonitor(monitor: i32) callconv(.c) void {
+    enforcePhase("Window.suggest_monitor!", during_update);
+    if (headlessMode()) return;
+    raylib.suggestWindowMonitor(monitor);
+}
+
+/// A scale factor the app can safely divide by.
+///
+/// The windowing backend answers `0` for a window it has not finished creating,
+/// and a fresh window on a display that has just been unplugged can answer with
+/// a non-finite factor. Both would silently corrupt every size derived from
+/// them, so they become `1`, the scale of an ordinary display.
+fn usableScaleFactor(value: f32) f32 {
+    if (!std.math.isFinite(value) or value <= 0) return DEFAULT_WINDOW_SCALE;
+    return value;
+}
+
+/// A monitor coordinate as an integer, saturating rather than trapping.
+///
+/// The backend states monitor positions as floats even though they are whole
+/// virtual-desktop pixels. A direct conversion is undefined for a value outside
+/// `i32`, and the host must not be the thing that stops working because a
+/// display driver answered strangely. The comparison widens to `f64` because
+/// `i32`'s bounds are exactly representable there and not in `f32`.
+fn monitorCoordinate(value: f32) i32 {
+    if (std.math.isNan(value)) return 0;
+    const widened: f64 = value;
+    if (widened <= @as(f64, std.math.minInt(i32))) return std.math.minInt(i32);
+    if (widened >= @as(f64, std.math.maxInt(i32))) return std.math.maxInt(i32);
+    return @intFromFloat(widened);
+}
+
+/// `Window.scale!`: how many framebuffer pixels one logical unit is.
+///
+/// The backend already holds both factors, so this copies two floats and
+/// allocates nothing -- which is why it is legal during `render!` too, where a
+/// shader or a capture wants the pixel resolution of the surface it is on.
+fn hostedWindowScaleDpi() callconv(.c) abi.HostHostWindow_scale_dpiRetRecord {
+    enforcePhase("Window.scale!", constant_time_anywhere);
+    if (headlessMode()) return .{ .x = DEFAULT_WINDOW_SCALE, .y = DEFAULT_WINDOW_SCALE };
+    const scale = raylib.getWindowScaleDpi();
+    return .{ .x = usableScaleFactor(scale.x), .y = usableScaleFactor(scale.y) };
+}
+
+/// The one virtual monitor a headless run reports.
+///
+/// Sized from the configured window, so `--host-headless` output stays a
+/// function of the app's own configuration rather than of the CI machine.
+fn headlessMonitor(roc_host: *RocHost) abi.HostHostMonitors {
+    return .{
+        .index = 0,
+        .name = abi.RocStr.fromSlice(HEADLESS_MONITOR_NAME, roc_host),
+        .width = headless_screen_width,
+        .height = headless_screen_height,
+        .x = 0,
+        .y = 0,
+        .refresh_hz = HEADLESS_MONITOR_REFRESH_HZ,
+    };
+}
+
+/// One monitor as the windowing backend currently describes it.
+///
+/// The name pointer belongs to the backend: it is null for an index the backend
+/// does not know, must never be freed, and is invalidated by the next backend
+/// call -- so it is copied into a Roc `Str` here. Native monitor names are not
+/// guaranteed to be UTF-8, and a Roc `Str` must be, so an invalid one becomes
+/// the replacement character rather than an invalid string, exactly as argv
+/// does.
+fn nativeMonitor(roc_host: *RocHost, index: i32) abi.HostHostMonitors {
+    const monitor = nonNegativeCInt(index);
+    const position = raylib.getMonitorPosition(monitor);
+    const name = if (raylib.getMonitorName(monitor)) |pointer| std.mem.span(pointer) else "";
+    return .{
+        .index = index,
+        .name = abi.RocStr.fromSlice(
+            if (std.unicode.utf8ValidateSlice(name)) name else "\xEF\xBF\xBD",
+            roc_host,
+        ),
+        .width = @intCast(raylib.getMonitorWidth(monitor)),
+        .height = @intCast(raylib.getMonitorHeight(monitor)),
+        .x = monitorCoordinate(position.x),
+        .y = monitorCoordinate(position.y),
+        .refresh_hz = @intCast(raylib.getMonitorRefreshRate(monitor)),
+    };
+}
+
+/// `Window.monitors!`: every display the windowing backend can see.
+///
+/// The bound is the operating system's own monitor count: the backend is asked
+/// how many there are, exactly that many entries are built, and the host retains
+/// none of them -- the list belongs to Roc as soon as it is returned. Reading
+/// them copies a name per monitor, so this is an ordinary state-changing-phase
+/// effect rather than a `render!` query.
+fn hostedMonitors(roc_host: *RocHost) callconv(.c) abi.RocList(abi.HostHostMonitors) {
+    enforcePhase("Window.monitors!", during_update);
+
+    const count: usize = if (headlessMode()) 1 else @intCast(@max(raylib.getMonitorCount(), 0));
+    if (count == 0) return abi.RocList(abi.HostHostMonitors).empty();
+
+    const list = abi.RocList(abi.HostHostMonitors).allocate(count, roc_host);
+    if (list.elements_ptr) |entries| {
+        for (entries[0..count], 0..) |*entry, index| {
+            entry.* = if (headlessMode())
+                headlessMonitor(roc_host)
+            else
+                nativeMonitor(roc_host, @intCast(index));
+        }
+    }
+    return list;
+}
+
+fn exportedMonitors() callconv(.c) abi.RocList(abi.HostHostMonitors) {
+    return hostedMonitors(activeHost());
+}
+
 fn hostedSetExitKey(key_code: i32) callconv(.c) void {
     enforcePhase("Keys.set_exit_key!", during_update);
     if (active_headless) return;
@@ -4949,6 +6053,74 @@ fn recordVirtualMousePosition() void {
     virtual_mouse_has_last = true;
 }
 
+/// Install the set of keys a scripted keyboard holds down, or release it.
+///
+/// A code the host has no slot for is dropped: `Keys.Key` admits a validated
+/// raw code, and the packed state list is one byte per raylib key code, so a
+/// code past the end names a key this backend cannot report either way.
+fn applyVirtualKeys(active: bool, codes: []const u64) void {
+    virtual_key_down = @splat(false);
+    virtual_keys_active = active;
+    if (!active) return;
+    for (codes) |code| {
+        if (code < ffi.KEY_COUNT) virtual_key_down[@intCast(code)] = true;
+    }
+}
+
+/// Queue scripted codepoints as the next input's text, discarding the excess.
+fn applyVirtualText(codepoints: []const u32) void {
+    const kept = @min(codepoints.len, virtual_text.len);
+    @memcpy(virtual_text[0..kept], codepoints[0..kept]);
+    virtual_text_len = kept;
+}
+
+/// Take the queued scripted text, or null when the frame's text is hardware's.
+///
+/// Taking rather than reading: text arrives on one frame and not the next, so
+/// a script that queued nothing this frame hands the channel back rather than
+/// repeating what it said last time.
+fn takeVirtualText() ?[]const u32 {
+    if (virtual_text_len == 0) return null;
+    const queued = virtual_text[0..virtual_text_len];
+    virtual_text_len = 0;
+    return queued;
+}
+
+/// Forget every scripted input, so one app lifetime cannot inherit another's.
+fn resetVirtualInput() void {
+    virtual_mouse_active = false;
+    virtual_mouse_has_last = false;
+    virtual_mouse_buttons = @splat(false);
+    virtual_mouse_wheel = 0;
+    virtual_mouse_x = 0;
+    virtual_mouse_y = 0;
+    virtual_keys_active = false;
+    virtual_key_down = @splat(false);
+    virtual_text_len = 0;
+    raylib.clearKeyState();
+    raylib.clearMouseButtonState();
+}
+
+fn hostedCaptureSetVirtualKeys(host: *RocHost, args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
+    enforcePhase("Keys.set_source!", during_update);
+    defer args.keys.decref(host);
+    applyVirtualKeys(args.active, args.keys.items());
+}
+
+fn exportedCaptureSetVirtualKeys(args: abi.CaptureHostSet_virtual_keysArgs) callconv(.c) void {
+    hostedCaptureSetVirtualKeys(activeHost(), args);
+}
+
+fn hostedCaptureSetVirtualText(host: *RocHost, text: abi.RocListWith(u32, false)) callconv(.c) void {
+    enforcePhase("Keys.set_text!", during_update);
+    defer text.decref(host);
+    applyVirtualText(text.items());
+}
+
+fn exportedCaptureSetVirtualText(text: abi.RocListWith(u32, false)) callconv(.c) void {
+    hostedCaptureSetVirtualText(activeHost(), text);
+}
+
 fn hostedCaptureStopRecording() callconv(.c) abi.CaptureHostStop_recordingRetRecord {
     enforcePhase("Capture.stop!", during_update);
     const frames = capture_session.captured_frames;
@@ -5168,6 +6340,21 @@ test "headless clipboard round-trips text and refuses oversized writes" {
     const unchanged = hostedGetClipboardText(&roc_host);
     defer unchanged.decref(&roc_host);
     try std.testing.expectEqualStrings("copied", unchanged.payload.ok.asSlice());
+}
+
+/// `App.Startup.entropy!`: one draw from the operating system's entropy.
+///
+/// The only thing in this host that makes a run differ from the last one by
+/// itself. It answers with real entropy in headless runs too: an app that must
+/// reproduce says so by writing a constant seed, and a host that quietly
+/// handed out the same number every run would take that choice away instead of
+/// making it. Obtaining it does not block, so this needs none of the parking
+/// machinery a waiting effect has.
+fn hostedEntropy() callconv(.c) u64 {
+    enforcePhase("App.Startup.entropy!", during_startup);
+    var bytes: [8]u8 = undefined;
+    std.Io.random(waitingIo(), &bytes);
+    return std.mem.readInt(u64, &bytes, .little);
 }
 
 fn hostedRandomI32(min: i32, max: i32) callconv(.c) i32 {
@@ -5491,6 +6678,10 @@ fn updateMusicStreams() void {
 }
 
 fn deinitResources() void {
+    // Frees this app lifetime's last framebuffer snapshot, if it kept one.
+    releaseScreenSnapshot();
+    screen_snapshot_requested = false;
+
     // The final model has been dropped, so everything it held is retired.
     // Destroy it all before the assertions below, which are about whether Roc
     // *released* its handles rather than about when the host got round to the
@@ -5509,6 +6700,7 @@ fn deinitResources() void {
     // before resource teardown. A non-zero value here would make the next app
     // lifetime under-admit reads.
     std.debug.assert(file_bytes_delivery_reservations.count == 0);
+    std.debug.assert(cmd_effect.admittedCount() == 0);
     std.debug.assert(texture_heap.active() == 0);
     std.debug.assert(render_texture_heap.active() == 0);
     std.debug.assert(shader_heap.active() == 0);
@@ -5518,6 +6710,13 @@ fn deinitResources() void {
     std.debug.assert(sound_heap.active() == 0);
     std.debug.assert(file_bytes_heap.active() == 0);
     std.debug.assert(store_heap.active() == 0);
+    std.debug.assert(udp_socket_heap.active() == 0);
+    udp_socket_heap.deinitAll();
+    std.debug.assert(sqlite_effect.stmt_heap.active() == 0);
+    std.debug.assert(sqlite_effect.db_heap.active() == 0);
+    sqlite_effect.stmt_heap.deinitAll();
+    sqlite_effect.db_heap.deinitAll();
+    sqlite_effect.shutdown();
     file_bytes_heap.deinitAll();
     store_heap.deinitAll();
     shader_heap.deinitAll();
@@ -5537,6 +6736,13 @@ comptime {
         @export(&exportedRocDbg, .{ .name = "roc_dbg" });
         @export(&exportedRocExpectFailed, .{ .name = "roc_expect_failed" });
         @export(&exportedRocCrashed, .{ .name = "roc_crashed" });
+
+        @export(&hostedSqliteOpen, .{ .name = "roc_sqlite_open" });
+        @export(&hostedSqliteClose, .{ .name = "roc_sqlite_close" });
+        @export(&hostedSqlitePrepare, .{ .name = "roc_sqlite_prepare" });
+        @export(&hostedSqliteRunStmt, .{ .name = "roc_sqlite_run_stmt" });
+        @export(&hostedSqliteRunOnce, .{ .name = "roc_sqlite_run_once" });
+        @export(&hostedSqliteExecScript, .{ .name = "roc_sqlite_exec_script" });
 
         @export(&exportedAssetsOpenStoreRaw, .{ .name = "roc_assets_open_store_raw" });
         @export(&exportedAssetsLoadStoreTextureRaw, .{ .name = "roc_assets_load_store_texture_raw" });
@@ -5620,11 +6826,13 @@ comptime {
         @export(&hostedDrawTriangleLinesRaw, .{ .name = "roc_draw_triangle_lines_raw" });
         @export(&hostedDrawTriangleRaw, .{ .name = "roc_draw_triangle_raw" });
         @export(&exportedArgs, .{ .name = "roc_host_args" });
+        @export(&hostedEntropy, .{ .name = "roc_host_entropy" });
         @export(&hostedExit, .{ .name = "roc_host_exit" });
         @export(&hostedTaskSleep, .{ .name = "roc_task_sleep" });
         @export(&exportedFilesReadText, .{ .name = "roc_files_read_text" });
         @export(&exportedFilesReadBytes, .{ .name = "roc_files_read_bytes" });
         @export(&exportedFilesList, .{ .name = "roc_files_list" });
+        @export(&exportedFilesMetadata, .{ .name = "roc_files_metadata" });
         @export(&exportedFilesWriteText, .{ .name = "roc_files_write_text" });
         @export(&exportedFilesWriteBytes, .{ .name = "roc_files_write_bytes" });
         @export(&hostedTaskSpawn, .{ .name = "roc_task_spawn" });
@@ -5637,16 +6845,33 @@ comptime {
         @export(&hostedSetExitKey, .{ .name = "roc_host_set_exit_key" });
         @export(&exportedCaptureStartRecording, .{ .name = "roc_capture_start_recording" });
         @export(&hostedCaptureSetVirtualMouse, .{ .name = "roc_capture_set_virtual_mouse" });
+        @export(&exportedCaptureSetVirtualKeys, .{ .name = "roc_capture_set_virtual_keys" });
+        @export(&exportedCaptureSetVirtualText, .{ .name = "roc_capture_set_virtual_text" });
         @export(&hostedCaptureStopRecording, .{ .name = "roc_capture_stop_recording" });
         @export(&exportedCaptureScreenshot, .{ .name = "roc_capture_screenshot" });
+        @export(&exportedCaptureScreenshotTexture, .{ .name = "roc_capture_screenshot_texture" });
+        @export(&exportedCapturePixelAt, .{ .name = "roc_capture_pixel_at" });
+        @export(&exportedCaptureReadRegion, .{ .name = "roc_capture_read_region" });
         @export(&hostedSuggestWindowSize, .{ .name = "roc_host_suggest_window_size" });
         @export(&hostedSetTargetFps, .{ .name = "roc_host_set_target_fps" });
         @export(&hostedSuggestWindowMinSize, .{ .name = "roc_host_suggest_window_min_size" });
+        @export(&hostedSuggestWindowPosition, .{ .name = "roc_host_suggest_window_position" });
+        @export(&hostedSuggestWindowMonitor, .{ .name = "roc_host_suggest_window_monitor" });
+        @export(&hostedWindowScaleDpi, .{ .name = "roc_host_window_scale_dpi" });
+        @export(&exportedMonitors, .{ .name = "roc_host_monitors" });
         @export(&hostedMouseSetCursorModeRaw, .{ .name = "roc_mouse_set_cursor_mode_raw" });
         @export(&hostedMouseSetCursorRaw, .{ .name = "roc_mouse_set_cursor_raw" });
         @export(&exportedTilemapDrawRaw, .{ .name = "roc_tilemap_draw_raw" });
         @export(&exportedTilemapLoadTmxRaw, .{ .name = "roc_tilemap_load_tmx_raw" });
         @export(&hostedHttpSend, .{ .name = "roc_http_send" });
+        @export(&hostedTimeNow, .{ .name = "roc_time_now" });
+        @export(&exportedStdioWriteText, .{ .name = "roc_stdio_write_text" });
+        @export(&exportedStdioWriteLine, .{ .name = "roc_stdio_write_line" });
+        @export(&exportedStdioWriteBytes, .{ .name = "roc_stdio_write_bytes" });
+        @export(&exportedUdpBind, .{ .name = "roc_udp_bind" });
+        @export(&exportedUdpSend, .{ .name = "roc_udp_send" });
+        @export(&exportedUdpReceive, .{ .name = "roc_udp_receive" });
+        @export(&exportedCmdRun, .{ .name = "roc_cmd_run" });
     }
 }
 
@@ -5735,7 +6960,14 @@ const InputState = struct {
     }
 
     fn updateFromRaylib(self: *InputState) void {
-        raylib.updateKeyboardState();
+        // A scripted keyboard goes through the same edge detection as
+        // hardware, so pressed/released this frame behave identically for the
+        // app.
+        if (virtual_keys_active) {
+            raylib.updateKeyboardStateFrom(&virtual_key_down);
+        } else {
+            raylib.updateKeyboardState();
+        }
         self.keys.update(raylib.getKeyState());
 
         // A scripted pointer goes through the same edge detection as hardware,
@@ -5752,7 +6984,120 @@ const InputState = struct {
         self.gamepad_buttons.update(raylib.getGamepadButtonState());
         self.gamepad_axes.update(raylib.getGamepadAxes());
     }
+
+    /// Sample input for a headless cycle, where there is no hardware to ask.
+    ///
+    /// Only scripted input exists here, and it runs through the same edge
+    /// detectors a windowed run uses, so a headless test sees the pressed and
+    /// released bits real devices would have produced. With nothing scripted
+    /// both arrays are all false, which is what no keyboard and no mouse look
+    /// like -- so an app that scripts neither sees what it always saw.
+    fn updateHeadless(self: *InputState) void {
+        raylib.updateKeyboardStateFrom(&virtual_key_down);
+        self.keys.update(raylib.getKeyState());
+        raylib.updateMouseButtonStateFrom(&virtual_mouse_buttons);
+        self.mouse_buttons.update(raylib.getMouseButtonState());
+    }
 };
+
+/// One cycle's file drops on their way to `update!`.
+///
+/// `files` owns its strings; handing it to Roc transfers them, exactly as a
+/// cycle's task results are transferred.
+const DroppedFiles = struct {
+    files: abi.RocList(DroppedFile),
+    overflowed: bool,
+};
+
+/// Copy this cycle's dropped paths into Roc values, latching the pointer.
+///
+/// The window system owns the path strings and frees them the moment the drop
+/// is released, so each one is copied into a `RocStr` here rather than
+/// borrowed. Every file in one drop gets the same position: the pointer was in
+/// one place when the drop landed, and that is the position the app is told
+/// about.
+///
+/// What is counted is paths, not bytes: at most `raylib.DROPPED_FILES_CAPACITY`
+/// of them cross in a cycle. Past that the extra paths are discarded and
+/// `overflowed` is set, so an app that received half a drop can say so rather
+/// than believing it got all of it.
+fn droppedFilesSnapshot(
+    roc_host: *RocHost,
+    paths: []const [*:0]const u8,
+    position: DroppedPosition,
+) DroppedFiles {
+    const capacity = raylib.DROPPED_FILES_CAPACITY;
+    const overflowed = paths.len > capacity;
+    const delivered = @min(paths.len, capacity);
+    if (delivered == 0) return .{ .files = abi.RocList(DroppedFile).empty(), .overflowed = overflowed };
+
+    var buffer: [raylib.DROPPED_FILES_CAPACITY]DroppedFile = undefined;
+    for (paths[0..delivered], buffer[0..delivered]) |path, *slot| {
+        slot.* = .{
+            .path = abi.RocStr.fromSlice(std.mem.span(path), roc_host),
+            .position = position,
+        };
+    }
+    return .{
+        .files = abi.RocList(DroppedFile).fromSlice(buffer[0..delivered], roc_host),
+        .overflowed = overflowed,
+    };
+}
+
+test "an ordinary cycle drops nothing and reports no overflow" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    const sampled = droppedFilesSnapshot(&roc_host, &.{}, .{ .x = 0, .y = 0 });
+    defer sampled.files.deinit(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), sampled.files.len());
+    try std.testing.expect(!sampled.overflowed);
+}
+
+test "dropped paths are copied out and the field clears on the next cycle" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    // The second path is long enough to be a heap RocStr rather than a small
+    // one, so the copy is a real allocation the testing allocator checks.
+    const long_path = "/home/example/pictures/a-rather-long-name-for-a-dropped-image.png";
+    const paths = [_][*:0]const u8{ "/home/example/one.png", long_path };
+    const sampled = droppedFilesSnapshot(&roc_host, &paths, .{ .x = 12.5, .y = 34 });
+    try std.testing.expectEqual(@as(usize, 2), sampled.files.len());
+    try std.testing.expect(!sampled.overflowed);
+    const items = sampled.files.items();
+    try std.testing.expectEqualStrings("/home/example/one.png", items[0].path.asSlice());
+    try std.testing.expectEqualStrings(long_path, items[1].path.asSlice());
+    try std.testing.expectEqual(@as(f32, 12.5), items[1].position.x);
+    try std.testing.expectEqual(@as(f32, 34), items[1].position.y);
+    sampled.files.deinit(&roc_host);
+
+    // The list is built from this cycle's paths and nothing else, so the next
+    // cycle clears it rather than repeating the drop `update!` already saw.
+    const next = droppedFilesSnapshot(&roc_host, &.{}, .{ .x = 12.5, .y = 34 });
+    defer next.files.deinit(&roc_host);
+    try std.testing.expectEqual(@as(usize, 0), next.files.len());
+    try std.testing.expect(!next.overflowed);
+}
+
+test "a drop past the per-cycle cap is reported rather than silently truncated" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var paths: [raylib.DROPPED_FILES_CAPACITY + 3][*:0]const u8 = undefined;
+    for (&paths) |*slot| slot.* = "/home/example/drop.png";
+
+    const sampled = droppedFilesSnapshot(&roc_host, &paths, .{ .x = 0, .y = 0 });
+    defer sampled.files.deinit(&roc_host);
+    try std.testing.expectEqual(raylib.DROPPED_FILES_CAPACITY, sampled.files.len());
+    try std.testing.expect(sampled.overflowed);
+
+    // Exactly at the cap is not an overflow: the app was given the whole drop.
+    const exact = droppedFilesSnapshot(&roc_host, paths[0..raylib.DROPPED_FILES_CAPACITY], .{ .x = 0, .y = 0 });
+    defer exact.files.deinit(&roc_host);
+    try std.testing.expectEqual(raylib.DROPPED_FILES_CAPACITY, exact.files.len());
+    try std.testing.expect(!exact.overflowed);
+}
 
 /// Sample the window for one cycle: logical drawing size, focus, minimization.
 ///
@@ -5919,12 +7264,15 @@ fn updateOnce(boxed_model: *RocBox, input: InputFromHost) UpdateResult {
 /// same way rather than being trusted because it came from config.
 fn configureCapture(app_config: AppConfig) void {
     capture_session.reset();
-    virtual_mouse_active = false;
-    virtual_mouse_has_last = false;
-    virtual_mouse_buttons = @splat(false);
-    virtual_mouse_wheel = 0;
+    resetVirtualInput();
 
     capture_screenshot_pending = false;
+    // The snapshot is freed before the budget is zeroed: a reset that only
+    // forgot the reservation would leave the buffer behind for the next app
+    // lifetime to read as if it were its own frame.
+    releaseScreenSnapshot();
+    screen_snapshot_requested = false;
+    still_budget.reset();
     capture_recording_bytes = 0;
     capture_clock_offset_ns = 0;
     capture_clock_last_real_ns = 0;
@@ -6008,7 +7356,14 @@ fn captureAdjustedClock(real_ns: u64, fixed_step: ?f32) u64 {
 fn serviceCaptureRequests() void {
     const wants_screenshot = capture_screenshot_pending;
     const wants_frame = capture_session.isActive() and capture_session.shouldCaptureFrame();
-    if (!wants_screenshot and !wants_frame) return;
+
+    // A frame that no `Screen` readback asked about drops the snapshot: the
+    // per-frame readback exists only while an app is still reading pixels.
+    const wants_snapshot = screen_snapshot_requested;
+    screen_snapshot_requested = false;
+    if (!wants_snapshot) releaseScreenSnapshot();
+
+    if (!wants_screenshot and !wants_frame and !wants_snapshot) return;
 
     capture_screenshot_pending = false;
 
@@ -6024,7 +7379,7 @@ fn serviceCaptureRequests() void {
     // full resolution, so a frame that has both falls through to the
     // full-resolution readback and the CPU resize below rather than reading
     // twice.
-    if (wants_frame and !wants_screenshot) {
+    if (wants_frame and !wants_screenshot and !wants_snapshot) {
         if (captureScaledFrame()) |scaled| {
             var frame = scaled;
             defer frame.deinit();
@@ -6035,6 +7390,9 @@ fn serviceCaptureRequests() void {
     }
 
     var image = raylib.captureFramebuffer() orelse {
+        // A snapshot that could not be taken must not leave the previous
+        // frame's pixels behind for the app to read as if they were this one's.
+        if (wants_snapshot) releaseScreenSnapshot();
         if (wants_frame) capture_session.fail(capture.err_out_of_memory);
         if (wants_screenshot) {
             if (screenshot_wait) |wait| {
@@ -6045,6 +7403,8 @@ fn serviceCaptureRequests() void {
         return;
     };
     defer image.deinit();
+
+    if (wants_snapshot) storeScreenSnapshot(image);
 
     if (wants_screenshot) {
         if (screenshot_wait) |wait| handOverScreenshot(wait, image);
@@ -6207,6 +7567,14 @@ fn drainRetiredResources() void {
 /// Destroy up to `limit` retired resources across every heap.
 fn drainRetiredResourcesUpTo(limit: usize) void {
     var budget = limit;
+    budget -= udp_socket_heap.drainRetired(budget);
+    // Statements before connections: a connection whose statements are gone
+    // closes outright instead of becoming a zombie that lingers a frame.
+    budget -= sqlite_effect.stmt_heap.drainRetired(budget);
+    // One connection per drain. Closing may checkpoint a WAL file, which is
+    // real disk work, and this runs on the frame thread; `Sqlite.Db.close!` is
+    // how an app pays a large one on a task instead.
+    budget -= sqlite_effect.db_heap.drainRetired(@min(budget, 1));
     budget -= store_heap.drainRetired(budget);
     budget -= file_bytes_heap.drainRetired(budget);
     budget -= prepared_text_heap.drainRetired(budget);
@@ -6409,6 +7777,67 @@ test "releasing the virtual pointer clears its buttons and history" {
     try std.testing.expectEqual(@as(f32, 0), virtual_mouse_wheel);
 }
 
+test "a virtual held key is pressed once and then merely down" {
+    // raylib's KEY_SPACE. The packed state list is indexed by key code, so
+    // this is both the code the app scripts and the slot it lands in.
+    const space = 32;
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{space});
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_HELD | ffi.INPUT_PRESSED, raylib.getKeyState()[space]);
+
+    // Held across a second frame: still down, but no longer a press. An app
+    // acting on `key_pressed` must act exactly once.
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_HELD, raylib.getKeyState()[space]);
+
+    applyVirtualKeys(true, &.{});
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(ffi.INPUT_RELEASED, raylib.getKeyState()[space]);
+
+    raylib.updateKeyboardStateFrom(&virtual_key_down);
+    try std.testing.expectEqual(@as(u8, 0), raylib.getKeyState()[space]);
+}
+
+test "releasing the virtual keyboard drops every held key" {
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{ 32, 65 });
+    try std.testing.expect(virtual_keys_active);
+    try std.testing.expect(virtual_key_down[32]);
+    try std.testing.expect(virtual_key_down[65]);
+
+    applyVirtualKeys(false, &.{});
+    try std.testing.expect(!virtual_keys_active);
+    try std.testing.expect(!virtual_key_down[32]);
+    try std.testing.expect(!virtual_key_down[65]);
+}
+
+test "a key code past the packed state list is dropped rather than written" {
+    defer resetVirtualInput();
+
+    applyVirtualKeys(true, &.{ffi.KEY_COUNT + 10});
+    for (virtual_key_down) |down| try std.testing.expect(!down);
+}
+
+test "scripted text is delivered once and truncated at the frame's bound" {
+    defer resetVirtualInput();
+
+    applyVirtualText(&.{ 'h', 'i' });
+    try std.testing.expectEqualSlices(u32, &.{ 'h', 'i' }, takeVirtualText().?);
+    // Gone on the next frame: real characters arrive once, not every frame
+    // until something else is typed.
+    try std.testing.expectEqual(@as(?[]const u32, null), takeVirtualText());
+
+    var long: [raylib.TEXT_INPUT_CAPACITY + 4]u32 = @splat('x');
+    long[0] = 'a';
+    applyVirtualText(&long);
+    const delivered = takeVirtualText().?;
+    try std.testing.expectEqual(raylib.TEXT_INPUT_CAPACITY, delivered.len);
+    try std.testing.expectEqual(@as(u32, 'a'), delivered[0]);
+}
+
 test "taking a model for render clears the host-owned reference" {
     const model: *anyopaque = @ptrFromInt(@alignOf(usize));
     var boxed_model: RocBox = model;
@@ -6507,6 +7936,223 @@ test "a task message staged but never delivered is released at shutdown" {
     staging.release(&roc_host);
     try std.testing.expectEqual(@as(usize, 1), test_callback_drops);
     try std.testing.expectEqual(@as(usize, 0), staging.count());
+}
+
+/// A task body for the pump tests: an ordinary Zig thunk where the app would
+/// have a Roc closure.
+///
+/// The pointer travels as the erased callable and comes back out of
+/// `takeFinished` as the result, so these tests measure the scheduling and
+/// nothing else -- no interpreter, no Roc values, no refcounts.
+const TestTaskBody = struct {
+    call: *const fn (*TestTaskBody) void,
+    socket: *udp_effect.Socket,
+    /// True once the coroutine has run at all, which is how a test tells
+    /// "parked in the receive" from "never started".
+    started: bool = false,
+    err: u8 = 0,
+    datagrams: usize = 0,
+    bytes: [64]u8 = undefined,
+    len: usize = 0,
+
+    fn erased(self: *TestTaskBody) tasks_mod.TaskResult {
+        return @ptrCast(self);
+    }
+};
+
+/// Wait for one datagram, exactly as `hostedUdpReceive` does, and record it.
+fn testTaskReceive(body: *TestTaskBody) void {
+    body.started = true;
+    var slices: std.ArrayList(udp_effect.Slice) = .empty;
+    defer slices.deinit(std.testing.allocator);
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+
+    switch (udp_effect.receive(body.socket, 2000, 8, &slices, &payload, std.testing.allocator)) {
+        .ok => |batch| {
+            body.datagrams = batch.slices.len;
+            if (batch.slices.len == 0) return;
+            const first = batch.slices[0];
+            body.len = @min(first.len, body.bytes.len);
+            @memcpy(body.bytes[0..body.len], batch.payload[first.start..][0..body.len]);
+        },
+        .err => |code| body.err = code,
+    }
+}
+
+/// The task registry with the Roc entry points replaced by `TestTaskBody`.
+const TestTaskHooks = struct {
+    pub fn enterTaskPhase() void {
+        active_phase = .task;
+    }
+    pub fn leaveTaskPhase() void {
+        active_phase = .idle;
+    }
+    pub fn runTask(run: abi.RocErasedCallable) tasks_mod.TaskResult {
+        const body: *TestTaskBody = @ptrCast(@alignCast(run.?));
+        body.call(body);
+        return run;
+    }
+    pub fn dropResult(result: tasks_mod.TaskResult) void {
+        // The test owns the body; nothing here allocated it.
+        _ = result;
+    }
+    pub fn host() *RocHost {
+        // Only the queue drain asks, and no test below spawns past the cap.
+        unreachable;
+    }
+};
+
+const TestTasks = tasks_mod.Tasks(TestTaskHooks);
+
+/// Two bound loopback sockets on ephemeral ports, for the pump tests.
+const TestSocketPair = struct {
+    sender: udp_effect.Socket,
+    receiver: udp_effect.Socket,
+
+    fn open() !TestSocketPair {
+        const loopback = udp_effect.parseIp4("127.0.0.1").?;
+        const sender = switch (udp_effect.bind(loopback, 0)) {
+            .ok => |socket| socket,
+            .err => |code| {
+                std.debug.print("bind failed with code {d}\n", .{code});
+                return error.BindFailed;
+            },
+        };
+        var pair = TestSocketPair{ .sender = sender, .receiver = undefined };
+        pair.receiver = switch (udp_effect.bind(loopback, 0)) {
+            .ok => |socket| socket,
+            .err => |code| {
+                pair.sender.inner.close();
+                std.debug.print("bind failed with code {d}\n", .{code});
+                return error.BindFailed;
+            },
+        };
+        return pair;
+    }
+
+    fn close(self: *TestSocketPair) void {
+        self.sender.inner.close();
+        self.receiver.inner.close();
+    }
+
+    /// Send one datagram and return once the kernel is holding it.
+    ///
+    /// The precondition the pump tests are about is "a datagram the kernel
+    /// already has", not "a datagram handed to `sendto` a moment ago". The
+    /// two coincide on Linux loopback and need not anywhere else: a stack
+    /// that finishes delivery after `sendto` returns would leave the one
+    /// pump under test polling an empty socket, and the test would be
+    /// measuring the network stack rather than the scheduler. Waiting for
+    /// readability is what makes the precondition established rather than
+    /// assumed.
+    fn ping(self: *TestSocketPair) !void {
+        try std.testing.expectEqual(
+            @as(u8, 0),
+            udp_effect.send(&self.sender, self.receiver.local_ip, self.receiver.local_port, "ping"),
+        );
+        try self.waitReadable();
+    }
+
+    /// Block this thread until the receiver has a datagram to read.
+    ///
+    /// Deliberately `poll` rather than anything of zio's: the event loop is
+    /// exactly what must not run here, because a pump is the only thing
+    /// allowed to advance the task under test.
+    fn waitReadable(self: *TestSocketPair) !void {
+        var fds = [_]zio.os.net.pollfd{.{
+            .fd = self.receiver.inner.handle,
+            .events = zio.os.net.POLL.IN,
+            .revents = 0,
+        }};
+        // A loopback datagram the kernel has already accepted, so anything
+        // but "at once" means a broken machine. The deadline is here so a
+        // broken one fails instead of hanging.
+        const ready = zio.os.net.poll(&fds, 1000) catch |err| {
+            std.debug.print("poll on the receiver failed: {s}\n", .{@errorName(err)});
+            return error.PollFailed;
+        };
+        // Windows is the exception, and not a failure: a receive already
+        // posted against the socket completes into its own buffer, so the
+        // datagram can be gone from the socket before this thread ever sees
+        // it readable. That is the precondition met and consumed, not
+        // missed, and the assertions after the pump tell the two apart.
+        if (ready == 0 and builtin.os.tag != .windows) return error.DatagramNeverArrived;
+    }
+};
+
+test "one yield pump resumes a task whose datagram arrived since the last one" {
+    // The regression this pins: a pump that only yields takes zio's fast path,
+    // which spends a scheduling quantum without ever running the event loop
+    // whenever nothing else is already runnable. The parked receive then sits
+    // unpolled for as many frames as it takes the tick budget to run out, and
+    // a datagram that was in the kernel the whole time is delivered several
+    // cycles late. One pump per frame must be one poll per frame.
+    var app_tasks = try TestTasks.init(std.testing.allocator, false);
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
+    var sockets = try TestSocketPair.open();
+    defer sockets.close();
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    var body = TestTaskBody{ .call = &testTaskReceive, .socket = &sockets.receiver };
+    TestTasks.spawnCurrent(&roc_host, body.erased());
+
+    // Frame one: the task starts and parks with nothing to receive.
+    app_tasks.pump(1, .yield);
+    try std.testing.expect(body.started);
+    try std.testing.expectEqual(@as(usize, 1), app_tasks.liveCount());
+    try std.testing.expectEqual(@as(usize, 0), app_tasks.finished.items.len);
+
+    try sockets.ping();
+
+    // Frame two, and the only pump under test. `ping` did not return until
+    // the kernel had the datagram, so the pump starts with it there and the
+    // task must resume and finish inside it. That the pump can only ever see
+    // what the kernel already holds is the point: every turn it takes is a
+    // non-blocking poll, because a frame must not wait on a peer.
+    app_tasks.pump(2, .yield);
+
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    try std.testing.expectEqual(@as(usize, 1), finished.len);
+    try std.testing.expectEqual(@as(u8, 0), body.err);
+    try std.testing.expectEqual(@as(usize, 1), body.datagrams);
+    try std.testing.expectEqualStrings("ping", body.bytes[0..body.len]);
+}
+
+test "one yield pump finishes a task whose datagram was buffered before it parked" {
+    // The same latency, reached the other way round: the datagram is already
+    // in the kernel when the task first runs. Starting the coroutine, parking
+    // it, polling, resuming it and finishing it all have to happen inside one
+    // pump -- zio submits the receive to the event loop even when the bytes
+    // are already there, so an unpolled pump leaves this parked too.
+    var app_tasks = try TestTasks.init(std.testing.allocator, false);
+    defer app_tasks.deinit();
+    app_tasks.activate();
+
+    var sockets = try TestSocketPair.open();
+    defer sockets.close();
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+
+    try sockets.ping();
+
+    var body = TestTaskBody{ .call = &testTaskReceive, .socket = &sockets.receiver };
+    TestTasks.spawnCurrent(&roc_host, body.erased());
+
+    app_tasks.pump(1, .yield);
+
+    const finished = app_tasks.takeFinished();
+    defer app_tasks.releaseTaken(finished);
+    try std.testing.expectEqual(@as(usize, 1), finished.len);
+    try std.testing.expectEqual(@as(u8, 0), body.err);
+    try std.testing.expectEqual(@as(usize, 1), body.datagrams);
+    try std.testing.expectEqualStrings("ping", body.bytes[0..body.len]);
 }
 
 test "a file that is not text is refused rather than made into a Str" {
@@ -6638,6 +8284,64 @@ fn routingTestHost(env: *abi.RocEnv) RocHost {
     var roc_host = abi.makeRocHost(env);
     roc_host.roc_dealloc = &nativeRocDealloc;
     return roc_host;
+}
+
+test "the socket ceiling is a refusal an app can bind its way back out of" {
+    // The one bound an app can actually reach. `Udp.bind!` past the ceiling has
+    // to report `ResourceLimit` *and* leave no descriptor behind, and releasing
+    // a socket has to make the slot usable again -- otherwise a game that
+    // rebinds when the player changes port dies after eight attempts.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        udp_socket_heap.deinitAll();
+    }
+
+    const rt = zio.Runtime.init(std.testing.allocator, .{
+        .executors = .exact(1),
+        .enable_main_executor = true,
+    }) catch return;
+    defer rt.deinit();
+
+    var handles: [MAX_LIVE_UDP_SOCKETS]*u64 = undefined;
+    for (&handles) |*handle| {
+        const bound = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+        try std.testing.expectEqual(@as(u8, 0), bound.err);
+        handle.* = bound.handle;
+    }
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    const refused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(udp_effect.ERR_RESOURCE_LIMIT, refused.err);
+    try std.testing.expectEqual(MAX_LIVE_UDP_SOCKETS, udp_socket_heap.active());
+
+    // Release one. The slot is retired rather than free, so the next bind is
+    // what finishes the destruction -- which is exactly the case that would
+    // fail if `insert` did not drain its own heap first.
+    releaseResourceBox(&roc_host, handles[0]);
+    const reused = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice("127.0.0.1", &roc_host), .port = 0 });
+    try std.testing.expectEqual(@as(u8, 0), reused.err);
+    handles[0] = reused.handle;
+
+    for (handles) |handle| releaseResourceBox(&roc_host, handle);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
+}
+
+test "a bad address is refused before any descriptor is opened" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    const startup = PhaseScope.enter(.startup);
+    defer startup.leave();
+
+    for ([_][]const u8{ "::1", "localhost", "999.0.0.1", "" }) |text| {
+        const result = hostedUdpBind(&roc_host, .{ .ip = abi.RocStr.fromSlice(text, &roc_host), .port = 0 });
+        try std.testing.expectEqual(udp_effect.ERR_INVALID_ADDRESS, result.err);
+    }
+    try std.testing.expectEqual(@as(usize, 0), udp_socket_heap.active());
 }
 
 test "completing a large read transfers the read's allocation without copying" {
@@ -6936,6 +8640,97 @@ test "a screenshot path that escapes the output directory is refused, not rewrit
     );
 }
 
+test "an offscreen export refuses an escaping path and releases the target either way" {
+    // Same sandbox as a screenshot, checked before the target is even resolved,
+    // so a refused path costs no readback. The target's reference is consumed
+    // on every path, which is what the drained heap at the end shows.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    const target = storeRenderTexture(.headless).?;
+    abi.increfBox(@ptrCast(target), 1);
+
+    try std.testing.expectEqual(capture.err_path_escapes, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("../escaped.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    }));
+
+    // A headless target has no pixels: every draw into it was a no-op, so the
+    // export answers without writing a file of zeroes, exactly as a screenshot
+    // does with no framebuffer.
+    try std.testing.expectEqual(capture.err_none, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    }));
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(u64, 0), still_budget.in_flight);
+}
+
+test "an offscreen export of a handle that resolves to nothing is unavailable" {
+    // A released target, the `stub` a pure test holds, or a handle of the wrong
+    // kind. Reported rather than fatal, because that is how every other
+    // unresolved render-target handle is already reported -- and it is checked
+    // before the headless answer, so an app sees the same outcome windowed.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    defer {
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 },
+    }));
+
+    const shader = storeShader(.headless).?;
+    try std.testing.expectEqual(capture.err_target_unavailable, hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = @ptrCast(shader), .height = 8, .width = 16 },
+    }));
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), shader_heap.active());
+}
+
+test "an offscreen export called from update! is rejected" {
+    // It waits, so it belongs where waiting is defined: a task, or `init!`,
+    // where it blocks. Unlike a screenshot it waits for nothing on the frame
+    // loop, which is why `init!` is in the set at all.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    last_phase_violation = null;
+    defer {
+        last_phase_violation = null;
+        phase.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    const target = storeRenderTexture(.headless).?;
+    _ = hostedCaptureScreenshotTexture(&roc_host, .{
+        .path = abi.RocStr.fromSlice("poster.png", &roc_host),
+        .target = .{ .handle = target, .height = 8, .width = 16 },
+    });
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Capture.screenshot_texture!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_wait));
+    try std.testing.expectEqual(Phase.update, violation.actual);
+}
+
 test "phases restore what they interrupted rather than falling back to idle" {
     try std.testing.expectEqual(Phase.idle, active_phase);
 
@@ -7120,6 +8915,127 @@ test "window-size suggestions and frame-rate caps are taken during update" {
     const violation = last_phase_violation orelse return error.OperationWasNotRejected;
     try std.testing.expectEqualStrings("Window.set_target_fps!", violation.operation);
     try std.testing.expect(violation.allowed.eql(during_update));
+}
+
+test "the DPI scale answers in every callback and never with a factor to divide by" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // An app multiplies a window size by this to learn the resolution a capture
+    // records at, and divides by it to go the other way. The backend answers 0
+    // for a window it has not finished creating, so the factor that crosses has
+    // to be one that survives both.
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(0));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(-2));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(std.math.nan(f32)));
+    try std.testing.expectEqual(@as(f32, 1), usableScaleFactor(std.math.inf(f32)));
+    try std.testing.expectEqual(@as(f32, 2), usableScaleFactor(2));
+
+    // Monitor positions arrive as floats and are used as whole pixels, so a
+    // value no `i32` can hold has to saturate rather than trap the host.
+    try std.testing.expectEqual(@as(i32, -1920), monitorCoordinate(-1920));
+    try std.testing.expectEqual(@as(i32, 0), monitorCoordinate(std.math.nan(f32)));
+    try std.testing.expectEqual(std.math.maxInt(i32), monitorCoordinate(std.math.inf(f32)));
+    try std.testing.expectEqual(std.math.minInt(i32), monitorCoordinate(-std.math.inf(f32)));
+
+    // Copying two floats the backend already holds is what makes this legal
+    // mid-frame, where a shader or a capture is the thing that needs it.
+    for ([_]Phase{ .startup, .update, .render, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        const scale = hostedWindowScaleDpi();
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+        try std.testing.expectEqual(DEFAULT_WINDOW_SCALE, scale.x);
+        try std.testing.expectEqual(DEFAULT_WINDOW_SCALE, scale.y);
+    }
+}
+
+test "a headless run enumerates one monitor the size of its own window" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+    const restore_width = headless_screen_width;
+    const restore_height = headless_screen_height;
+    defer headless_screen_width = restore_width;
+    defer headless_screen_height = restore_height;
+    headless_screen_width = 1280;
+    headless_screen_height = 720;
+
+    {
+        const scope = PhaseScope.enter(.update);
+        defer scope.leave();
+        const monitors = hostedMonitors(&roc_host);
+        defer {
+            for (monitors.allocationItems()) |monitor| monitor.decref(&roc_host);
+            monitors.decref(&roc_host);
+        }
+
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+        try std.testing.expectEqual(@as(usize, 1), monitors.items().len);
+
+        // Sized from the configured window rather than from the CI machine, so
+        // an app that places itself on a monitor answers the same everywhere.
+        const only = monitors.items()[0];
+        try std.testing.expectEqual(@as(i32, 0), only.index);
+        try std.testing.expectEqualStrings(HEADLESS_MONITOR_NAME, only.name.asSlice());
+        try std.testing.expectEqual(@as(i32, 1280), only.width);
+        try std.testing.expectEqual(@as(i32, 720), only.height);
+        try std.testing.expectEqual(@as(i32, 0), only.x);
+        try std.testing.expectEqual(@as(i32, 0), only.y);
+        try std.testing.expectEqual(HEADLESS_MONITOR_REFRESH_HZ, only.refresh_hz);
+    }
+
+    // Enumerating allocates a list and copies a name per monitor, which is why
+    // it stops at the frame while the scale factor above does not.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    last_phase_violation = null;
+    const refused = hostedMonitors(&roc_host);
+    for (refused.allocationItems()) |monitor| monitor.decref(&roc_host);
+    refused.decref(&roc_host);
+
+    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.monitors!", violation.operation);
+    try std.testing.expect(violation.allowed.eql(during_update));
+}
+
+test "window placement suggestions are taken wherever host state changes" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Headless has no window manager to move a window on, so the raylib calls
+    // sit behind `headlessMode()` and what this exercises is the guard --
+    // including that an out-of-range monitor index is an ordinary no-op rather
+    // than a refusal an app would have to handle.
+    for ([_]Phase{ .startup, .update, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        hostedSuggestWindowPosition(.{ .x = -1920, .y = 40 });
+        hostedSuggestWindowMonitor(0);
+        hostedSuggestWindowMonitor(-1);
+        hostedSuggestWindowMonitor(99);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+
+    // Moving the window mid-frame would move the surface being drawn into.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    last_phase_violation = null;
+    hostedSuggestWindowPosition(.{ .x = 0, .y = 0 });
+    const position_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.suggest_position!", position_violation.operation);
+    try std.testing.expect(position_violation.allowed.eql(during_update));
+
+    last_phase_violation = null;
+    hostedSuggestWindowMonitor(0);
+    const monitor_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Window.suggest_monitor!", monitor_violation.operation);
+    try std.testing.expect(monitor_violation.allowed.eql(during_update));
 }
 
 test "a rejection names every phase the operation was allowed in" {
@@ -7360,12 +9276,18 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
     // reservations, cleared before capture and resource teardown can touch the
     // buffers they bound.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
+    defer cmd_effect.clearAfterWorkStops();
 
     var app_tasks = AppTasks.init(allocator, hostGetEnv(TRACE_TASKS_ENV) != null) catch |err| {
         std.log.err("roc-ray: could not start the task runtime: {s}", .{@errorName(err)});
         return 1;
     };
     defer app_tasks.deinit();
+    // Registered after the registry's own teardown, so LIFO runs it first:
+    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // waiting on, so every child is ended before the runtime tries to join
+    // the worker holding one.
+    defer cmd_effect.killLiveChildren();
     app_tasks.activate();
     // `Http.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -7424,7 +9346,10 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             // again on every subsequent frame.
             virtual_mouse_wheel = 0;
         }
-        const text_input = raylib.getTextInput();
+        // Drain raylib's queue either way: a scripted frame that left the
+        // hardware characters behind would deliver them on the next one.
+        const typed_text = raylib.getTextInput();
+        const text_input: []const u32 = takeVirtualText() orelse typed_text;
         const input_snapshot = input.hostState(
             mouse_pos.x,
             mouse_pos.y,
@@ -7432,6 +9357,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             mouse_wheel,
             text_input,
         );
+        // raylib owns the dropped paths only until they are released, so they
+        // are copied into Roc strings first and handed back immediately. The
+        // pointer position is this cycle's, which is where the drop landed.
+        const dropped_paths = raylib.takeDroppedFiles();
+        const dropped = droppedFilesSnapshot(roc_host, dropped_paths, .{ .x = mouse_pos.x, .y = mouse_pos.y });
+        raylib.releaseDroppedFiles();
 
         last_frame_nanos = now_ns;
         last_wall_nanos = real_ns;
@@ -7449,6 +9380,8 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
             },
             .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
+            .dropped = dropped.files,
+            .dropped_overflow = dropped.overflowed,
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
@@ -7492,6 +9425,7 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
     defer deinitResources();
     // A failed or early-exiting run must not poison the next app lifetime.
     defer file_bytes_delivery_reservations.clearAfterWorkStops();
+    defer cmd_effect.clearAfterWorkStops();
 
     var input = InputState.init(roc_host);
     defer input.deinit();
@@ -7501,6 +9435,11 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         return 1;
     };
     defer app_tasks.deinit();
+    // Registered after the registry's own teardown, so LIFO runs it first:
+    // a task parked in `Cmd.run!` cannot be cancelled out of a child it is
+    // waiting on, so every child is ended before the runtime tries to join
+    // the worker holding one.
+    defer cmd_effect.killLiveChildren();
     app_tasks.activate();
     // `Http.send!` drives std.http.Client over the same runtime, so it needs
     // the same handle the task registry holds. Withdrawn before the registry
@@ -7536,12 +9475,28 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
         std.debug.assert(callbacks.updates == 1);
         const frame_time: f32 = if (cycle_count == 0) 0 else HEADLESS_FRAME_TIME;
         const timestamp_nanos = cycle_count * HEADLESS_FRAME_NANOS;
+        input.updateHeadless();
+        const text_input: []const u32 = takeVirtualText() orelse &.{};
+        // A headless run has no pointer, so a scripted one is the only pointer
+        // there is. Everything a windowed run derives from it -- position,
+        // delta, the wheel's single frame of movement -- is derived here the
+        // same way, and stays at the origin when nothing is scripted.
+        const mouse_pos = if (virtual_mouse_active)
+            raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
+        else
+            raylib.Vec2{ .x = 0, .y = 0 };
+        const mouse_delta = if (virtual_mouse_active) virtualMouseDelta() else raylib.Vec2{ .x = 0, .y = 0 };
+        const mouse_wheel = raylib.Vec2{ .x = 0, .y = virtual_mouse_wheel };
+        if (virtual_mouse_active) {
+            recordVirtualMousePosition();
+            virtual_mouse_wheel = 0;
+        }
         const input_snapshot = input.hostState(
-            0,
-            0,
-            .{ .x = 0, .y = 0 },
-            .{ .x = 0, .y = 0 },
-            &.{},
+            mouse_pos.x,
+            mouse_pos.y,
+            mouse_delta,
+            mouse_wheel,
+            text_input,
         );
 
         last_frame_nanos = timestamp_nanos;
@@ -7563,6 +9518,10 @@ fn runHeadlessApp(roc_host: *RocHost, app_config: AppConfig, frames: u64) c_int 
             },
             .task_results = staging.take(roc_host),
             .capture = captureStateForStep(),
+            // A headless run has no window to drop a file onto, and its output
+            // has to be reproducible, so nothing is ever dropped there.
+            .dropped = abi.RocList(DroppedFile).empty(),
+            .dropped_overflow = false,
         });
         if (update_result.tag == .Err) {
             exit_code = @intCast(update_result.payload_err());
@@ -7671,6 +9630,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         active_app_args = &.{};
         active_roc_host = null;
     }
+
+    // Standard output and standard error are queued effects: a write copies
+    // its payload into a host-owned ring and returns, and one host thread does
+    // the blocking writing. Armed before the startup config callback, which is
+    // the first Roc code to run, and drained by a `defer` registered here so it
+    // outlives the app lifetime and every other teardown. That is what lets an
+    // application print and then exit in the same `update!`.
+    stdio_effect.activate(allocator, mainThreadIo(), .stdout(), .stderr());
+    defer stdio_effect.shutdown();
 
     // Startup, not idle: reading an environment variable to decide the window
     // size is a reasonable thing for a config to do, and it works today. It is
@@ -7805,6 +9773,282 @@ test "a write names the failures an app can act on differently" {
     try std.testing.expectEqual(READ_ERR_FAILED, writeErrorCode(error.Unexpected));
 }
 
+test "a stat reports what a path is, how big it is, and when it changed" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "notes.txt", .data = "twelve bytes" });
+    try tmp.dir.createDirPath(std.testing.io, "assets");
+
+    const file = statPathIn(tmp.dir, std.testing.io, "notes.txt");
+    try std.testing.expectEqual(@as(u8, 0), file.err);
+    try std.testing.expectEqual(DIR_ENTRY_FILE, file.kind);
+    try std.testing.expectEqual(@as(u64, "twelve bytes".len), file.size_bytes);
+
+    // The modification time is wall-clock, so it is a plausible instant rather
+    // than a counter starting at the app's own start. Anything after 2020 is
+    // enough to catch a monotonic clock leaking in here by mistake.
+    try std.testing.expect(file.modified_seconds > 1_577_836_800);
+    try std.testing.expect(file.modified_nanosecond < 1_000_000_000);
+
+    const dir = statPathIn(tmp.dir, std.testing.io, "assets");
+    try std.testing.expectEqual(@as(u8, 0), dir.err);
+    try std.testing.expectEqual(DIR_ENTRY_DIR, dir.kind);
+
+    // A failed stat answers with the reason and zeroes, so an app cannot read
+    // a size or a time out of an answer that has neither.
+    const missing = statPathIn(tmp.dir, std.testing.io, "absent.txt");
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, missing.err);
+    try std.testing.expectEqual(@as(u64, 0), missing.size_bytes);
+    try std.testing.expectEqual(@as(i64, 0), missing.modified_seconds);
+}
+
+test "a stat rewrites a modification a hot-reload loop can compare" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "one" });
+    const before = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    // Polling `modified` is the whole hot-reload story, so rewriting the file
+    // has to move the instant an app is comparing against.
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "shader.fs", .data = "two but longer" });
+    const after = statPathIn(tmp.dir, std.testing.io, "shader.fs");
+
+    try std.testing.expect(after.size_bytes > before.size_bytes);
+    const moved = after.modified_seconds > before.modified_seconds or
+        (after.modified_seconds == before.modified_seconds and after.modified_nanosecond >= before.modified_nanosecond);
+    try std.testing.expect(moved);
+}
+
+test "a stat names the refusals apart from the failures" {
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.FileNotFound));
+    try std.testing.expectEqual(READ_ERR_NOT_FOUND, statErrorCode(error.NotDir));
+    try std.testing.expectEqual(WRITE_ERR_PERMISSION_DENIED, statErrorCode(error.AccessDenied));
+    try std.testing.expectEqual(READ_ERR_UNAVAILABLE, statErrorCode(error.Canceled));
+    try std.testing.expectEqual(READ_ERR_FAILED, statErrorCode(error.Unexpected));
+
+    // A stat follows links, so what an app is told is the kind of the thing at
+    // the end of the path and never `sym_link`.
+    try std.testing.expectEqual(DIR_ENTRY_FILE, statEntryKind(.file));
+    try std.testing.expectEqual(DIR_ENTRY_DIR, statEntryKind(.directory));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.named_pipe));
+    try std.testing.expectEqual(DIR_ENTRY_OTHER, statEntryKind(.sym_link));
+}
+
+test "startup entropy varies, and is refused once the app is running" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    {
+        const scope = PhaseScope.enter(.startup);
+        defer scope.leave();
+        var drawn: [4]u64 = undefined;
+        for (&drawn) |*slot| slot.* = hostedEntropy();
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+
+        // Four identical draws would mean the host is handing out a constant
+        // dressed as entropy, which is exactly the bug this effect exists to
+        // fix: a headless run used to reseed from a fixed counter and call the
+        // result random.
+        var varied = false;
+        for (drawn[1..]) |value| {
+            if (value != drawn[0]) varied = true;
+        }
+        try std.testing.expect(varied);
+    }
+
+    // Seeding is a startup decision, kept in the model afterwards, so reaching
+    // for fresh entropy mid-run is a mistake worth naming.
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+    last_phase_violation = null;
+    _ = hostedEntropy();
+    const violation = last_phase_violation orelse return error.EntropyWasNotRejected;
+    try std.testing.expectEqual(Phase.update, violation.actual);
+}
+
+test "a wall-clock reading is normalized on both sides of the epoch" {
+    try std.testing.expectEqual(@as(i64, 0), timestampFromNanos(0).seconds);
+    try std.testing.expectEqual(@as(u32, 0), timestampFromNanos(0).nanosecond);
+
+    try std.testing.expectEqual(@as(i64, 1), timestampFromNanos(1_500_000_000).seconds);
+    try std.testing.expectEqual(@as(u32, 500_000_000), timestampFromNanos(1_500_000_000).nanosecond);
+
+    // One nanosecond before the epoch is the last nanosecond of 1969, not a
+    // negative fraction of second zero. Truncating instead of flooring here
+    // would make the two sides of 1970 disagree about what a second is.
+    try std.testing.expectEqual(@as(i64, -1), timestampFromNanos(-1).seconds);
+    try std.testing.expectEqual(@as(u32, 999_999_999), timestampFromNanos(-1).nanosecond);
+
+    // No real clock reaches this, but a reading that cannot be represented
+    // saturates rather than wrapping into the middle of history.
+    const beyond = @as(i128, std.math.maxInt(i64)) * std.time.ns_per_s + std.time.ns_per_s;
+    try std.testing.expectEqual(std.math.maxInt(i64), timestampFromNanos(beyond).seconds);
+    try std.testing.expectEqual(std.math.minInt(i64), timestampFromNanos(-beyond).seconds);
+}
+
+test "reading the clock is refused while drawing" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Not because it costs anything, but because a frame that reads the
+    // calendar is a frame animating on a timeline the platform does not pace.
+    const scope = PhaseScope.enter(.render);
+    defer scope.leave();
+    enforcePhase("Time.now!", during_update);
+    const violation = last_phase_violation orelse return error.ClockReadWasNotRejected;
+    try std.testing.expectEqual(Phase.render, violation.actual);
+}
+
+/// A pipe standing in for the process's standard output, so a host test can
+/// read back what the writer thread actually wrote. POSIX only; the tests that
+/// use it skip elsewhere.
+const StdioTestPipe = struct {
+    read_end: std.Io.File,
+    write_end: std.Io.File,
+
+    fn open() !StdioTestPipe {
+        const fds = try std.Io.Threaded.pipe2(.{ .CLOEXEC = true });
+        return .{
+            .read_end = .{ .handle = fds[0], .flags = .{ .nonblocking = false } },
+            .write_end = .{ .handle = fds[1], .flags = .{ .nonblocking = false } },
+        };
+    }
+
+    fn readExactly(self: *StdioTestPipe, out: []u8) !void {
+        var filled: usize = 0;
+        while (filled < out.len) {
+            const got = try std.posix.read(self.read_end.handle, out[filled..]);
+            if (got == 0) return error.EndOfStream;
+            filled += got;
+        }
+    }
+};
+
+test "a stream payload past the whole queue is refused and still releases the string" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+
+    const oversized = try std.testing.allocator.alloc(u8, stdio_effect.ring_capacity + 1);
+    defer std.testing.allocator.free(oversized);
+    @memset(oversized, 'x');
+
+    // Larger than the whole queue, so no amount of draining could ever make
+    // room: `TooLarge` rather than `BufferFull`, and nothing is queued. The
+    // string is still the host's to release -- the testing allocator fails
+    // this test if the early return skips it.
+    try std.testing.expectEqual(
+        stdio_effect.ERR_TOO_LARGE,
+        hostedStdioWriteText(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized, &roc_host)),
+    );
+
+    // A line queues the newline with its text, so the longest string a line
+    // can carry is one byte shorter than the longest `write!` can.
+    try std.testing.expectEqual(
+        stdio_effect.ERR_TOO_LARGE,
+        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(oversized[0..stdio_effect.ring_capacity], &roc_host)),
+    );
+}
+
+test "writing to a stream is queued, so update! is allowed and render! is not" {
+    last_phase_violation = null;
+    defer last_phase_violation = null;
+
+    // Drawing is the one phase a queued write is refused from: `render!` only
+    // draws, and output it produced would not be part of the model that frame
+    // came from.
+    for ([_]Phase{ .render, .idle }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_update);
+        const violation = last_phase_violation orelse return error.StreamWriteWasNotRejected;
+        try std.testing.expectEqual(phase, violation.actual);
+    }
+
+    // The queue is what makes `update!` legal: the call copies and returns,
+    // and the writing happens on the host's own thread.
+    for ([_]Phase{ .startup, .update, .task }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
+        enforcePhase("Stdout.line!", during_update);
+        try std.testing.expectEqual(@as(?PhaseViolation, null), last_phase_violation);
+    }
+}
+
+test "a queued write with no drainer running is unavailable" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    const scope = PhaseScope.enter(.update);
+    defer scope.leave();
+
+    // No app lifetime, so no writer thread. Output that nothing will ever
+    // drain is refused rather than accepted and forgotten.
+    try std.testing.expectEqual(
+        stdio_effect.ERR_UNAVAILABLE,
+        hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice("nobody home", &roc_host)),
+    );
+}
+
+test "lines queued from update! reach the stream in order, and shutdown drains the rest" {
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = abi.makeRocHost(&roc_env);
+    roc_host.roc_dealloc = &nativeRocDealloc;
+
+    var pipe = try StdioTestPipe.open();
+    defer std.Io.Threaded.closeFd(pipe.read_end.handle);
+
+    stdio_effect.activate(std.testing.allocator, mainThreadIo(), pipe.write_end, pipe.write_end);
+
+    {
+        const scope = PhaseScope.enter(.update);
+        defer scope.leave();
+
+        var line: usize = 0;
+        while (line < 16) : (line += 1) {
+            var digits: [8]u8 = undefined;
+            const text = std.fmt.bufPrint(&digits, "line {d}", .{line}) catch unreachable;
+            try std.testing.expectEqual(
+                @as(u8, 0),
+                hostedStdioWriteLine(&roc_host, STDIO_STREAM_STDOUT, abi.RocStr.fromSlice(text, &roc_host)),
+            );
+        }
+
+        // Bytes go out as they are: no newline, no encoding check.
+        const raw = [_]u8{ 'r', 'a', 'w', '\n' };
+        try std.testing.expectEqual(
+            @as(u8, 0),
+            hostedStdioWriteBytes(&roc_host, STDIO_STREAM_STDOUT, abi.RocListWith(u8, false).fromSlice(&raw, &roc_host)),
+        );
+    }
+
+    // The app is over with output still queued -- the "print, then exit in the
+    // same update!" case. Shutdown is what gets it out of the process.
+    stdio_effect.shutdown();
+    std.Io.Threaded.closeFd(pipe.write_end.handle);
+
+    var expected: std.ArrayListUnmanaged(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    var line: usize = 0;
+    while (line < 16) : (line += 1) {
+        try expected.print(std.testing.allocator, "line {d}\n", .{line});
+    }
+    try expected.appendSlice(std.testing.allocator, "raw\n");
+
+    const seen = try std.testing.allocator.alloc(u8, expected.items.len);
+    defer std.testing.allocator.free(seen);
+    try pipe.readExactly(seen);
+    try std.testing.expectEqualStrings(expected.items, seen);
+}
+
 test "a directory past the entry cap is refused rather than allocated" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -7823,4 +10067,323 @@ test "a directory past the entry cap is refused rather than allocated" {
         encodeListingIn(tmp.parent_dir, std.testing.io, std.testing.allocator, &tmp.sub_path, &encoded),
     );
     try std.testing.expect(encoded == null);
+}
+
+/// Put a known framebuffer in place of the one a frame loop would have taken.
+///
+/// The snapshot is what a `Screen` readback reads, and a unit test has no
+/// graphics context to fill it, so these tests install one directly. Every
+/// pixel encodes its own coordinates, so a transposed or flipped read cannot
+/// look right by accident.
+fn installTestScreenSnapshot(width: u32, height: u32) !void {
+    const pixels = try std.testing.allocator.alloc(u8, width * height * 4);
+    for (0..height) |y| {
+        for (0..width) |x| {
+            const offset = (y * width + x) * 4;
+            pixels[offset] = @intCast(x);
+            pixels[offset + 1] = @intCast(y);
+            pixels[offset + 2] = 7;
+            pixels[offset + 3] = 255;
+        }
+    }
+    releaseScreenSnapshot();
+    screen_snapshot = .{
+        .allocator = std.testing.allocator,
+        .pixels = pixels,
+        .width = width,
+        .height = height,
+        .reserved = 0,
+    };
+}
+
+/// A readback source naming the screen. The target field still has to carry a
+/// handle, so it carries the same resource-free one `Draw.RenderTexture.stub`
+/// does; nothing resolves it.
+fn screenReadbackSource() abi.CaptureHostPixel_atArg0Source {
+    return .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .screen = true };
+}
+
+test "a screen readback answers with the snapshot's own pixels, top-down" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    try installTestScreenSnapshot(4, 3);
+
+    const read = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 2, .y = 1 });
+    try std.testing.expectEqual(capture.err_none, read.err);
+    try std.testing.expectEqual(@as(u8, 2), read.r);
+    try std.testing.expectEqual(@as(u8, 1), read.g);
+    try std.testing.expectEqual(@as(u8, 7), read.b);
+    try std.testing.expectEqual(@as(u8, 255), read.a);
+
+    // The region and the point agree at the same coordinates, and the bytes
+    // come back row-major from the topmost requested row.
+    const region = hostedCaptureReadRegion(&roc_host, .{
+        .source = screenReadbackSource(),
+        .x = 1,
+        .y = 1,
+        .width = 2,
+        .height = 2,
+    });
+    try std.testing.expectEqual(capture.err_none, region.err);
+    try std.testing.expectEqualSlices(u8, &.{
+        1, 1, 7, 255, 2, 1, 7, 255,
+        1, 2, 7, 255, 2, 2, 7, 255,
+    }, region.bytes.items());
+
+    // The payload is handed over rather than copied, so it occupies a delivery
+    // slot until the app drops it -- and releases the reservation either way.
+    try std.testing.expect(region.bytes.isSeamlessSlice());
+    try std.testing.expectEqual(@as(usize, 1), file_bytes_heap.active());
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+
+    region.bytes.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
+}
+
+test "a readback outside its source is refused rather than clamped" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    try installTestScreenSnapshot(4, 3);
+
+    // Clamping would hand back a plausible colour from the wrong pixel, which
+    // is precisely what a colour picker must not be given.
+    for ([_][2]i32{ .{ 4, 0 }, .{ 0, 3 }, .{ -1, 0 }, .{ 0, -1 } }) |point| {
+        const read = hostedCapturePixelAt(&roc_host, .{
+            .source = screenReadbackSource(),
+            .x = point[0],
+            .y = point[1],
+        });
+        try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
+        try std.testing.expectEqual(@as(u8, 0), read.a);
+    }
+
+    for ([_]capture.Region{
+        .{ .x = 1, .y = 0, .width = 4, .height = 3 },
+        .{ .x = 0, .y = 1, .width = 4, .height = 3 },
+        .{ .x = 0, .y = 0, .width = 0, .height = 1 },
+        .{ .x = 0, .y = 0, .width = 1, .height = -1 },
+    }) |region| {
+        const read = hostedCaptureReadRegion(&roc_host, .{
+            .source = screenReadbackSource(),
+            .x = region.x,
+            .y = region.y,
+            .width = region.width,
+            .height = region.height,
+        });
+        try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
+        try std.testing.expectEqual(@as(usize, 0), read.bytes.len());
+    }
+
+    // A refused read leaves nothing behind: no delivery reservation, no slot,
+    // and no budget.
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
+    try std.testing.expectEqual(@as(u64, 0), still_budget.in_flight);
+}
+
+test "a region past the readback cap never reaches a source" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    // No snapshot at all, so a read that got as far as resolving the source
+    // would report `Unavailable`. It must report the cap instead: the size is
+    // refused before anything is read, because no later frame lifts it.
+    const read = hostedCaptureReadRegion(&roc_host, .{
+        .source = screenReadbackSource(),
+        .x = 0,
+        .y = 0,
+        .width = 8192,
+        .height = 4097,
+    });
+    try std.testing.expectEqual(capture.err_region_out_of_bounds, read.err);
+    try std.testing.expectEqual(@as(usize, 0), read.bytes.len());
+    try std.testing.expect(!screen_snapshot_requested);
+}
+
+test "a screen readback with no presented frame is unavailable and arms the next one" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.startup);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    screen_snapshot_requested = false;
+
+    // `init!` runs before the frame loop has presented anything, and so does
+    // the first `update!`. There is no colour to invent, and the ask is what
+    // makes the following frame keep one.
+    const read = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(capture.err_unavailable, read.err);
+    try std.testing.expect(screen_snapshot_requested);
+
+    const region = hostedCaptureReadRegion(&roc_host, .{
+        .source = screenReadbackSource(),
+        .x = 0,
+        .y = 0,
+        .width = 1,
+        .height = 1,
+    });
+    try std.testing.expectEqual(capture.err_unavailable, region.err);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+}
+
+test "a render-target readback reports what the handle resolves to" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    // The `stub` a pure test holds, and a handle of the wrong kind: neither
+    // names a live target, and both are runtime data rather than a crash.
+    const stubbed = hostedCapturePixelAt(&roc_host, .{
+        .source = .{ .target = .{ .handle = &invalid_texture_box.payload, .height = 0, .width = 0 }, .screen = false },
+        .x = 0,
+        .y = 0,
+    });
+    try std.testing.expectEqual(capture.err_target_unavailable, stubbed.err);
+
+    // A headless target holds nothing: every draw into it was a no-op, so
+    // there is no pixel to report, exactly as there is no file to export.
+    const target = storeRenderTexture(.headless).?;
+    const headless = hostedCapturePixelAt(&roc_host, .{
+        .source = .{ .target = .{ .handle = target, .height = 8, .width = 16 }, .screen = false },
+        .x = 0,
+        .y = 0,
+    });
+    try std.testing.expectEqual(capture.err_unavailable, headless.err);
+
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), render_texture_heap.active());
+    try std.testing.expectEqual(@as(u64, 0), still_budget.in_flight);
+    // The source's reference is consumed on every path, taken or refused.
+    try std.testing.expect(!screen_snapshot_requested);
+}
+
+test "a full byte-list heap refuses a region read before it reads any pixels" {
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.update);
+    defer {
+        phase.leave();
+        releaseScreenSnapshot();
+        screen_snapshot_requested = false;
+        file_bytes_delivery_reservations.clearAfterWorkStops();
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        file_bytes_heap.deinitAll();
+        active_roc_host = null;
+    }
+
+    try installTestScreenSnapshot(4, 3);
+    screen_snapshot_requested = false;
+
+    var held: [MAX_LIVE_FILE_BYTE_LISTS]abi.RocListWith(u8, false) = undefined;
+    var filled: usize = 0;
+    while (filled < MAX_LIVE_FILE_BYTE_LISTS) : (filled += 1) {
+        const owned = try std.testing.allocator.dupe(u8, "held");
+        const installed = installReadBytes(std.testing.allocator, owned);
+        try std.testing.expectEqual(@as(u8, 0), installed.err);
+        held[filled] = installed.bytes;
+    }
+
+    // `Busy` rather than a colour: the slot is reserved before the readback,
+    // so a read with nowhere to deliver never pays for the pixels. The source
+    // is never even resolved, which is what the unasked snapshot shows.
+    const refused = hostedCaptureReadRegion(&roc_host, .{
+        .source = screenReadbackSource(),
+        .x = 0,
+        .y = 0,
+        .width = 2,
+        .height = 2,
+    });
+    try std.testing.expectEqual(capture.err_busy, refused.err);
+    try std.testing.expectEqual(@as(usize, 0), refused.bytes.len());
+    try std.testing.expect(!screen_snapshot_requested);
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_delivery_reservations.count);
+
+    // A single pixel needs no slot, so the same moment still answers it.
+    const point = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    try std.testing.expectEqual(capture.err_none, point.err);
+
+    for (held) |item| item.decref(&roc_host);
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    try std.testing.expectEqual(@as(usize, 0), file_bytes_heap.active());
+}
+
+test "a pixel readback called from render! is rejected" {
+    // Drawing is what `render!` is for; a readback is a stall in the middle of
+    // a frame, and the pixels it would find are the ones this frame has not
+    // finished writing.
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    active_roc_host = &roc_host;
+    const phase = PhaseScope.enter(.render);
+    last_phase_violation = null;
+    defer {
+        last_phase_violation = null;
+        phase.leave();
+        screen_snapshot_requested = false;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        active_roc_host = null;
+    }
+
+    _ = hostedCapturePixelAt(&roc_host, .{ .source = screenReadbackSource(), .x = 0, .y = 0 });
+    const point_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Capture.pixel_at!", point_violation.operation);
+    try std.testing.expect(point_violation.allowed.eql(during_update));
+    try std.testing.expectEqual(Phase.render, point_violation.actual);
+
+    last_phase_violation = null;
+    const region = hostedCaptureReadRegion(&roc_host, .{
+        .source = screenReadbackSource(),
+        .x = 0,
+        .y = 0,
+        .width = 1,
+        .height = 1,
+    });
+    try std.testing.expectEqual(@as(usize, 0), region.bytes.len());
+    const region_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+    try std.testing.expectEqualStrings("Capture.read_region!", region_violation.operation);
+    try std.testing.expect(region_violation.allowed.eql(during_update));
 }

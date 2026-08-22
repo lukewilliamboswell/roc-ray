@@ -54,6 +54,7 @@ The vocabulary deliberately follows established meanings:
 | `update!` | The effectful step that folds one input into the next model |
 | effect | A direct host call made from an application callback or a task |
 | waiting effect | An effect that can wait on the outside world; on a task it parks the task rather than the frame |
+| queued effect | An effect that hands a bounded payload to a host-owned queue and returns at once; the host drains the queue off the frame thread |
 | task | Scheduled work with a lifecycle: an effectful closure started by `Task.spawn!`, running on its own stack until it returns one message |
 | application `Message` or `msg` | The value a finished task returns, delivered in a later `Input` |
 | phase | Which application callback the host is inside; every effect states the phases in which it is legal |
@@ -265,7 +266,8 @@ architecture change, not a feature.
    does not constrain that.
 4. **Waiting happens only in startup or on a task.** No effect reachable from
    `update!` or `render!` may wait on the filesystem, the network, a device, a
-   peer, or the clock.
+   peer, or the clock, for any length of time. An effect that only hands
+   bytes to a bounded queue does not wait; when the queue is full it says so.
 5. **Live tasks are bounded, and spawning never fails.** A fixed number of
    tasks run at once; each owns a stack, which is what the bound is really
    bounding. A spawn past that limit is queued and started in submission order
@@ -275,10 +277,17 @@ architecture change, not a feature.
    pure computation inside a task holds the frame exactly as it would inside
    `update!`; the platform buys overlap for waiting, not for computing.
 7. **Shutdown cancels and drains.** No `Input` exists after the last cycle, so
-   nothing produced afterwards can be delivered. Live tasks are cancelled -- a
-   parked waiting effect returns at once on the cancelled path -- closures that
-   never started are dropped, and staged messages are released rather than
-   leaked. Forced process termination is outside this guarantee.
+   nothing produced afterwards can be delivered. Live tasks are cancelled,
+   closures that never started are dropped, and staged messages are released
+   rather than leaked. A task parked on the event loop -- a socket, a timer --
+   returns at once on the cancelled path. A task parked on work already
+   running on a host worker -- a file write, an image encode, a database
+   query -- cannot be unwound from outside: that work is bounded by the
+   payload it was admitted with, and the host either lets it finish or
+   interrupts it through the facility's own mechanism before tearing tasks
+   down. Queued effects are drained before the process exits, bounded by
+   each queue's capacity. Forced process termination is outside this
+   guarantee.
 8. **A phase violation is a programmer error.** Every effect declares the
    phases it is legal in. Reaching one from another phase fails immediately,
    naming the effect, the phase it was called from, and where it belongs.
@@ -335,14 +344,38 @@ different type.
 Continuously changing sources have two valid shapes. Ambient sources such as
 device input are sampled or buffered into `Input`. Demand-driven sources such
 as a socket or database cursor can instead expose a repeated waiting effect
-inside a task. Neither shape invokes application code from a background thread.
+inside a task. Because a task delivers one message, a waiting effect on a
+continuous source answers with a bounded batch -- everything that had arrived
+by the time it woke, up to a stated cap -- rather than one item; a one-item
+answer would cap the source at one item per cycle. Neither shape invokes
+application code from a background thread.
 
 ### Effects
 
-An effect is a direct host call. Synchronous effects — setting the cursor,
-resizing the window, playing a sound, uploading pixels, starting a recording —
-run in program order at the point they are written, from `init!`, `update!`, or
-a task. They are not available to `render!`, which draws.
+An effect is a direct host call. There are three kinds, distinguished by
+whether the call can wait and by where the work is done.
+
+A *synchronous* effect — setting the cursor, resizing the window, playing a
+sound, uploading pixels, starting a recording, reading the clock — changes host
+state or answers a question in program order at the point it is written, from
+`init!`, `update!`, or a task. It does not wait, and it is not available to
+`render!`, which draws.
+
+A *waiting* effect — a file read, a request, a query, a receive, a sleep — may
+wait on the outside world. It is legal in `init!`, where it blocks startup
+deliberately, and on a task, where it parks that task.
+
+A *queued* effect — writing to standard output, sending a datagram — hands a
+bounded payload to a queue the host owns and returns at once. The host drains
+that queue off the frame thread, on bytes it owns and never on a Roc value.
+Order within one queue is preserved, a payload is queued whole or not at all,
+and saturation is a typed result rather than a wait or a silent drop. The
+eventual outcome of the drained work is not observable from the call; an
+application that must act on that outcome uses a waiting form from a task. It
+is legal in `init!`, `update!`, and a task. A queued effect is how a
+"fire and forget" facility — a log sink, a metrics feed, streamed audio, a
+datagram — reaches the outside world without giving a frame something to wait
+on.
 
 An effect's verb states the strength of its guarantee. `Set` is reserved for a
 state change the capability profile promises to apply; a window-manager hint,
@@ -404,7 +437,8 @@ state also needs a representation in `App.Input`.
 | Need | Mechanism |
 | --- | --- |
 | Latest ambient state or bounded interval events | `App.Input` field |
-| An immediate host state change with no waiting | Effect called from `update!` |
+| An immediate host state change with no waiting | Synchronous effect called from `update!` |
+| Bytes out, where only saturation need be observed | Queued effect called from `update!` |
 | Work that waits, and whose outcome matters | Task, reporting one message |
 | Drawing or draw state ordered within a frame | `render!` and `Draw.Frame` |
 | One-time load or allocation before the first frame | `init!` startup authority |
@@ -422,8 +456,8 @@ and checks every hosted operation against the set of phases that operation
 declares. The sets are few, and are stated as rules rather than as a list of
 functions:
 
-- Anything that **changes host state** is legal in `init!`, `update!`, and a
-  task, and refused in `render!`.
+- Anything that **changes host state** or **queues bytes** is legal in
+  `init!`, `update!`, and a task, and refused in `render!`.
 - Anything that **draws** is legal only in `render!`, inside the frame scope
   the host opens around it.
 - Anything that **waits** is legal only in `init!`, where it blocks startup
@@ -446,8 +480,10 @@ task therefore always observes its own phase, however many cycles it waited.
 
 There is no phase-free escape hatch. A read needed by model logic is input, an
 effect, or a task message. A read meaningful only for drawing belongs to
-`Draw.Frame`. Startup-only facts belong to startup. Implementation cost does
-not decide semantic placement.
+`Draw.Frame`. Startup-only facts belong to startup. A fact `init!` needs that
+the world supplies — the clock, entropy, arguments — is an effect, because
+`init!` receives no `Input`; an input field alone would leave startup without
+it. Implementation cost does not decide semantic placement.
 
 ## State, resources, and ownership
 
@@ -660,7 +696,9 @@ Each released target declares a capability profile. A target may implement a
 strict subset of facilities — for example, a browser need not expose native
 subprocesses or unrestricted files — but every included facility preserves its
 documented semantics. A structurally unsupported facility is absent at build
-time or excluded by selecting a narrower platform bundle. A facility present
+time or excluded by selecting a narrower platform bundle; a native bundle
+otherwise carries every facility, including the libraries behind them, and
+applications pay for what they link rather than choosing a subset. A facility present
 in the profile may still be unavailable at runtime because of mutable facts
 such as permissions, connected devices, capacity, or external failures; those
 are ordinary typed outcomes, not evidence that the capability profile lied.

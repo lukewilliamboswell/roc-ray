@@ -23,15 +23,32 @@
 ## nearly all of them. An effect that changes host state -- the cursor, the
 ## window, audio, a recording, a loaded resource -- is legal in `init!`,
 ## `update!`, and tasks, and refused in `render!`. An effect that draws is
-## legal only in `render!`, inside the frame scope the host opens around it.
+## legal in `render!` only, inside the frame scope the host opens around it.
 ## An effect that waits -- `Files.read_text!`, `Http.send!`, `Task.sleep!` --
 ## is legal in `init!`, where it blocks startup, and in tasks, where it parks
-## the task while the frame loop keeps drawing, and is refused in `update!`
-## and `render!`.
+## the task; it is refused in `update!` and `render!`.
+##
+## Two effects sit outside those three rules. `Capture.screenshot!` is legal
+## only in a task: it waits for a frame that has to be drawn first, and `init!`
+## runs before the frame loop has gone around once. `Assets.load_texture!`
+## loads rather than waits -- it reads the file on the calling thread instead
+## of parking -- so it is legal in `update!`, where a large load costs that
+## frame. Load textures in `init!`.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
 ## a runtime outcome: it stops the app at once with a message naming the
 ## effect, the phase it was called from, and where it belongs.
+##
+## Saturation is a runtime outcome and is reported three different ways,
+## because three different things are full. `ResourceLimit` is one of the
+## host's fixed resource tables -- textures, sounds, fonts, shaders, prepared
+## text -- and is answered by releasing something the app no longer holds.
+## `Busy` is a delivery slot rather than a resource: `Files` has 32 for the
+## byte lists it hands over, and `Cmd` bounds how many children run at once, so
+## the same call later can succeed with nothing released.
+## `Sqlite.TooManyConnections` is the eight-connection cap on open databases.
+## None of the three is a retry loop's cue on its own; each says which of the
+## three kinds of room ran out.
 ##
 ## How messages arrive: work that waits belongs on a task.
 ## `Task.spawn!(input, || ...)`, from `update!` or from another task, hands the
@@ -39,6 +56,20 @@
 ## its value is delivered as a message on `input.messages` in a later cycle, in
 ## the order the tasks finished. A task cannot read or write the model, so its
 ## message is the only thing it can say. See `Task`.
+##
+## Testing: `update!` is effectful and an `expect` cannot call it, so the
+## decisions live in pure functions and those are what a test exercises. Three
+## naming conventions supply the values such a test needs.
+## `App.Input.for_tests({})` is the composite input, neutral in every field and
+## customized one field at a time with the `with_*` receivers; `for_tests` is
+## what any composite input value is called. `Devices.none` and
+## `Devices.empty` are the device snapshots, and `none`/`empty` is what a
+## neutral device sample is called -- build a test's input from `none`, which
+## is writable, and seed a model with `empty`. Every host resource an app can
+## hold has a resource-free `stub` -- `Draw.Font.stub`, `Audio.Sound.stub`,
+## `Assets.Store.stub`, `Text.Prepared.stub` -- so a `Model` full of assets can
+## be written down in a pure test. A `stub` reaches the host and is treated as
+## a released resource, so it is never a way to test loading or lifetime.
 import HostHost
 import Keys
 import Mouse
@@ -46,10 +77,14 @@ import MouseHost
 import rrt.Capture as RrtCapture
 
 AppFramePacing := [VSync, Capped(I32), Uncapped].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
 AppRecording := [NoRecording, Record(RrtCapture.Recording)].{
+
+	## Compare two of these values.
 	is_eq : _
 }
 
@@ -65,11 +100,20 @@ import TaskHost
 
 App := [].{
 
-	## Mutually exclusive frame pacing strategy. Config normalization maps a
-	## non-positive `Capped` value to `Uncapped` before a Config can be created.
+	## Mutually exclusive frame pacing strategy: `VSync`, `Capped(fps)`, or
+	## `Uncapped`. Config normalization maps a non-positive `Capped` value to
+	## `Uncapped` before a `Config` can be created.
+	##
+	## The signature names the module-private nominal this is an alias of;
+	## `App.FramePacing` is the name to write.
 	FramePacing : AppFramePacing
 
-	## Which key, if any, closes the window. `NoExitKey` disables the behaviour.
+	## Which key, if any, closes the window: `ExitKey(key)` or `NoExitKey`, which
+	## disables the behaviour.
+	##
+	## This is `Keys.ExitKey`, re-exported. The signature renders as
+	## `ExitKey : ExitKey` because the alias and the nominal share a name; they
+	## are one type, and a value passes between the two spellings freely.
 	ExitKey : Keys.ExitKey
 
 	## Validated startup configuration. Its fields cannot be updated directly;
@@ -219,6 +263,10 @@ App := [].{
 
 	## Opaque, zero-sized authority the host supplies only while it runs `init!`.
 	##
+	## The signature renders as `Startup : Startup` because this is an alias of
+	## an identically named private nominal. There is nothing to construct: the
+	## host hands one to the `init!` callback and that is the only one there is.
+	##
 	## Every effect that takes a `Startup` is legal only in `init!`. Startup
 	## provides one-shot system effects but no input, window, or timing
 	## observations: seed models that require devices with `Devices.empty`, and
@@ -258,7 +306,7 @@ App := [].{
 
 	## Read a UTF-8 text file from disk, blocking until it is read.
 	##
-	## Call as `App.read_file!(startup, path)`. Legal only in `init!`; use
+	## Call as `App.read_file!(startup, path)`. Legal only in `init!`. Use
 	## `Files.read_text!` inside a task to read a file while the app runs, and
 	## for the fuller error report.
 	read_file! : Startup, Str => Try(Str, [NotFound, ReadFailed, ..])
@@ -273,23 +321,45 @@ App := [].{
 		}
 	}
 
-	## Get varying startup entropy in the inclusive range `[min, max]`.
+	## Draw one number from the operating system's entropy source.
+	##
+	## This is the only thing in the platform that makes a run differ from the
+	## last one by itself, and it is deliberately the app's decision:
+	##
+	## ```roc
+	## seed = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
+	## ```
+	##
+	## Keep the returned `Random.State` in the model and draw with pure
+	## `Random.Generator` values during `update!`, so the run is reproducible
+	## from its seed. A run that must reproduce writes a constant seed instead
+	## and never calls this; a run that should vary calls it once. Nothing else
+	## about the platform is affected either way, because the generator's state
+	## is the model's rather than the host's.
+	##
+	## The entropy is real in every mode, including headless: determinism comes
+	## from an app choosing a fixed seed, not from the host quietly handing out
+	## the same "random" number on every run.
 	##
 	## Legal only in `init!`.
+	entropy! : Startup => U64
+	entropy! = |_startup| HostHost.entropy!()
+
+	## Get a varying startup number in the inclusive range `[min, max]`.
 	##
-	## For simulation or gameplay, call this once and initialize the exposed
-	## `roc-random` package with, for example,
-	## `Random.seed(I32.to_u32_wrap(startup.random_i32!(0, 2000000000)))`.
-	## Keep that `Random.State` in the model and use pure `Random.Generator`
-	## values during `update`, so draws are reproducible from the initial seed.
+	## Legal only in `init!`. `entropy!` is the one to seed a generator from:
+	## it draws on the operating system rather than on the backend's own
+	## generator, and it says what it is for. This remains for a one-off value
+	## in a range, such as a jittered start position that nothing else depends
+	## on.
 	random_i32! : Startup, I32, I32 => I32
 	random_i32! = |_startup, min, max| HostHost.random_i32!(min, max)
 
 	## Suggest positive initial window dimensions to the window manager.
 	##
 	## Answers `Err(NotSupported)` on a target whose windows cannot be resized.
-	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`;
-	## a running app resizes itself with `Window.suggest_size!`, which reaches
+	## Call as `App.suggest_window_size!(startup, size)`. Legal only in `init!`.
+	## A running app resizes itself with `Window.suggest_size!`, which reaches
 	## the same host call, and only this spelling can report a refusal.
 	suggest_window_size! : Startup, { width : I32, height : I32 } => Try({}, [InvalidSize, NotSupported, ..])
 	suggest_window_size! = |_startup, size|
@@ -319,7 +389,7 @@ App := [].{
 	##
 	## Values at or below zero render uncapped. This neither selects a software
 	## renderer nor controls VSync. Call as `App.set_target_fps!(startup, fps)`.
-	## Legal only in `init!`; a running app changes the cap with
+	## Legal only in `init!`. A running app changes the cap with
 	## `Window.set_target_fps!`.
 	set_target_fps! : Startup, I32 => {}
 	set_target_fps! = |_startup, fps| HostHost.set_target_fps!(fps)
@@ -339,7 +409,7 @@ App := [].{
 	## Answers `Err(Unavailable)` when the clipboard is empty, holds non-text
 	## content, or the windowing backend refuses the request -- the underlying
 	## platform does not distinguish these cases. Call as
-	## `App.get_clipboard_text!(startup)`. Legal only in `init!`; a running app
+	## `App.get_clipboard_text!(startup)`. Legal only in `init!`. A running app
 	## reads the clipboard with `Window.read_clipboard!`, which names the
 	## refusals separately.
 	get_clipboard_text! : Startup => Try(Str, [Unavailable, ..])
@@ -351,18 +421,18 @@ App := [].{
 
 	## Replace the system clipboard contents with UTF-8 text.
 	##
-	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`;
-	## a running app writes it with `Window.set_clipboard_text!`.
+	## Call as `App.set_clipboard_text!(startup, text)`. Legal only in `init!`.
+	## A running app writes it with `Window.set_clipboard_text!`.
 	set_clipboard_text! : Startup, Str => {}
 	set_clipboard_text! = |_startup, text| HostHost.set_clipboard_text!(text)
 
 	## Apply cursor visibility and capture atomically through one tagged
-	## operation. Legal only in `init!`; `Mouse.set_cursor_mode!` is the same
+	## operation. Legal only in `init!`. `Mouse.set_cursor_mode!` is the same
 	## change from `update!` or a task.
 	set_cursor_mode! : Startup, Mouse.CursorMode => {}
 	set_cursor_mode! = |_startup, mode| MouseHost.set_cursor_mode!(Mouse.cursor_mode_code(mode))
 
-	## Set the native operating-system cursor shape. Legal only in `init!`;
+	## Set the native operating-system cursor shape. Legal only in `init!`.
 	## `Mouse.set_cursor!` is the same change from `update!` or a task.
 	set_cursor! : Startup, Mouse.Cursor => {}
 	set_cursor! = |_startup, cursor| MouseHost.set_cursor!(Mouse.cursor_code(cursor))
@@ -409,18 +479,44 @@ App := [].{
 	init_for_args : ConfigForArgs, InitCallback(model, errors) -> Init(model, errors)
 	init_for_args = |config_for_args, callback!| { config: config_for_args, run!: callback! }
 
+	## One file dropped onto the window, and where the pointer was when it landed.
+	##
+	## `path` is absolute, as the window system reported it. Nothing in the
+	## platform sandboxes it, so it is read the way any other path is: hand it
+	## to `Files.read_bytes!` inside a task, and the read parks that task while
+	## the frame loop keeps drawing.
+	##
+	## ```roc
+	## Task.spawn!(input, || Opened(Files.read_bytes!(drop.path)))
+	## ```
+	##
+	## `position` is the pointer position the host sampled for the cycle the
+	## drop arrived on, in the same logical coordinates as
+	## `input.devices.mouse.position()`, so an app that has more than one drop
+	## target can tell which one the file landed on.
+	Dropped : { path : Str, position : { x : F32, y : F32 } }
+
 	## Everything the host observed for one cycle, handed to `update!`.
 	##
 	## `messages` contains every task message delivered for this cycle, in the
 	## order the tasks finished. Independent tasks may finish in any order; the
 	## order they were spawned in does not constrain it.
 	## `capture` contains the recording status sampled for this cycle.
+	##
+	## `dropped` contains the files dropped onto the window since the previous
+	## input, in the order the window system reported them. Like a key press it
+	## is an interval event rather than a latest value: it is empty on almost
+	## every cycle, and exactly one call to `update!` sees any given drop. At
+	## most 64 paths are delivered per cycle; a single drop carrying more has
+	## its extra paths discarded, and `dropped_overflow` says so.
 	Input(msg) := {
 		devices : Devices.Snapshot,
 		window : Window.Snapshot,
 		time : Time.Cycle,
 		messages : List(msg),
 		capture : Capture.Status,
+		dropped : List(Dropped),
+		dropped_overflow : Bool,
 	}.{
 
 		## Return the complete structural input for platform-independent libraries.
@@ -430,6 +526,8 @@ App := [].{
 			time : Time.Cycle,
 			messages : List(msg),
 			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
 		}
 		fields = |input| input
 
@@ -447,6 +545,8 @@ App := [].{
 			time : Time.Cycle,
 			messages : List(msg),
 			capture : Capture.Status,
+			dropped : List(Dropped),
+			dropped_overflow : Bool,
 		} -> Input(msg)
 		from_fields = |sampled| Input.(sampled)
 
@@ -467,7 +567,7 @@ App := [].{
 		## Building the model this is called with is the other half: every host
 		## resource an app can hold has a resource-free `stub`
 		## (`Draw.Font.stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
-		## `rrt.Texture.stub`, ...), so a `Model` full of assets can be written
+		## `Assets.Texture.stub`, ...), so a `Model` full of assets can be written
 		## down in a pure test.
 		##
 		## `update!` itself is effectful, and an `expect` cannot call it. Keep
@@ -483,6 +583,8 @@ App := [].{
 					time: Time.first_cycle,
 					messages: [],
 					capture: Idle,
+					dropped: [],
+					dropped_overflow: Bool.False,
 				},
 			)
 
@@ -511,21 +613,34 @@ App := [].{
 		with_capture : Input(msg), Capture.Status -> Input(msg)
 		with_capture = |Input.(sampled), capture| Input.({ ..sampled, capture: capture })
 
+		## Deliver files dropped onto the window on this input.
+		with_dropped : Input(msg), List(Dropped) -> Input(msg)
+		with_dropped = |Input.(sampled), dropped| Input.({ ..sampled, dropped: dropped })
+
+		## Say that this cycle's drop carried more paths than the host delivers,
+		## which is what `input.dropped_overflow` reports.
+		with_dropped_overflow : Input(msg), Bool -> Input(msg)
+		with_dropped_overflow = |Input.(sampled), overflowed| Input.({ ..sampled, dropped_overflow: overflowed })
+
 		## Start a task whose message this input's own type pins.
 		##
 		## `Task.spawn!(input, || ...)` is the documented form and calls this;
-		## `input.spawn!(|| ...)` reads better when the input is already at
-		## hand. Both need the input for the same reason: it is the witness
-		## that ties the closure's return type to the app's `Msg`. See
-		## `Task.spawn!` for what the input is doing there.
+		## `input.spawn!(|| ...)` reads better when the input is already at hand.
+		## Both need the input for the same reason: it is the witness that ties the
+		## closure's return type to the app's `Msg`. See `Task.spawn!` for what the
+		## input is doing there.
+		##
+		## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 		spawn! : Input(msg), (() => msg) => {}
 		spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 
-		## Start a task that answers in a component's own message type, wrapped
-		## into this input's.
+		## Start a task that answers in a component's own message type, wrapped into
+		## this input's.
 		##
-		## `Task.spawn_with!(input, task!, wrap)` is the documented form and
-		## calls this. See it for the component idiom this exists for.
+		## `Task.spawn_with!(input, task!, wrap)` is the documented form and calls
+		## this. See it for the component idiom this exists for.
+		##
+		## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 		spawn_with! : Input(msg), (() => a), (a -> msg) => {}
 		spawn_with! = |input, task!, wrap| Input.spawn!(input, || wrap(task!()))
 	}
@@ -609,10 +724,18 @@ counter_step = |model, input| {
 neutral_input : App.Input(CounterMessage)
 neutral_input = App.Input.for_tests({})
 
+## One dropped file, named once so the drop assertions below read as one idea.
+## An absolute path is what the window system hands over, and `Files` reads it
+## as given.
+dropped_png : App.Dropped
+dropped_png = { path: "/home/user/pictures/holiday.png", position: { x: 120, y: 64 } }
+
 ## Every field of the neutral input, stated. A default nobody can see is a
 ## default nobody can rely on.
 expect neutral_input.messages == []
 expect neutral_input.capture == Idle
+expect neutral_input.dropped == []
+expect !(neutral_input.dropped_overflow)
 expect neutral_input.time == Time.first_cycle
 expect neutral_input.window == { size: { width: 800, height: 600 }, focused: Bool.True, minimized: Bool.False }
 expect !(neutral_input.devices.key_pressed(KeyEscape))
@@ -630,6 +753,10 @@ expect neutral_input.with_time({ ..Time.first_cycle, cycle_count: 7, elapsed_sec
 expect neutral_input.with_window({ size: { width: 320, height: 240 }, focused: Bool.False, minimized: Bool.True }).window.size == { width: 320, height: 240 }
 expect neutral_input.with_capture(Active({ frames: 3, dropped: 0 })).capture == Active({ frames: 3, dropped: 0 })
 expect neutral_input.with_messages([Tick]).window == neutral_input.window
+expect neutral_input.with_dropped([dropped_png]).dropped == [dropped_png]
+expect neutral_input.with_dropped([dropped_png]).dropped_overflow == Bool.False
+expect neutral_input.with_dropped_overflow(Bool.True).dropped_overflow
+expect neutral_input.with_dropped_overflow(Bool.True).dropped == []
 expect neutral_input.with_capture(Finished({ frames: 30, bytes: 4096 })).time == neutral_input.time
 
 ## `from_fields` states the whole sample at once, for a test that would rather
@@ -641,9 +768,25 @@ expect
 		time: Time.first_cycle,
 		messages: [Tick],
 		capture: Idle,
+		dropped: [],
+		dropped_overflow: Bool.False,
 	})
 		.messages
 		== [Tick]
+
+## A drop is stated the same way, and `dropped_overflow` travels with it.
+expect
+	App.Input.from_fields({
+		devices: Devices.none,
+		window: { size: App.default_test_size, focused: Bool.True, minimized: Bool.False },
+		time: Time.first_cycle,
+		messages: [],
+		capture: Idle,
+		dropped: [dropped_png],
+		dropped_overflow: Bool.True,
+	})
+		.dropped
+		== [dropped_png]
 
 ## Escape decides to shut down.
 expect counter_step(fresh_counter, neutral_input.with_devices(Devices.none.with_key_pressed(KeyEscape))) == Quit

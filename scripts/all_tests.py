@@ -29,6 +29,15 @@ This script runs:
                     assert every one of them still answers (test/task_cap).
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
+- udp sockets     - Send datagrams between two loopback sockets and assert the
+                    bytes, the sender address, and that a parked receive lets
+                    the frame loop keep running (test/udp).
+- virtual keys    - Script a keyboard and typed text and assert the edges and
+                    codepoints the next cycle is handed (test/virtual_keys).
+- subprocess      - Run six commands through the machine's own shell from a
+                    task and assert the output, the deadline, the output caps,
+                    the error naming, and that the frame loop kept going
+                    (test/cmd).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -360,6 +369,179 @@ def run_file_write_probe(
     return [] if ok else ["run file write probe"]
 
 
+def run_cmd_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that `Cmd.run!` starts a real program, bounds it, and parks.
+
+    Nothing else in the suite starts a subprocess, so a `run!` that captured
+    nothing, ignored its deadline, confused a missing program with a failing
+    one, or blocked the frame loop instead of parking its task would pass every
+    other stage. The probe runs six commands through the machine's own shell --
+    `/bin/sh`, or `cmd.exe` on Windows, chosen by the app itself -- and asserts
+    on what came back as well as on how many frames were drawn meanwhile.
+
+    Nothing it runs writes a file or reaches the network. Exit 3 means a
+    property did not hold; exit 4 means the task never answered.
+    """
+    fixture = root / "test" / "cmd" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning subprocess probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "cmd")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build cmd probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build cmd probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=400",
+        ],
+        "run cmd probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run cmd probe"]
+
+
+def run_udp_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that datagrams arrive with the right bytes from the right sender.
+
+    Three properties nothing else in the suite covers. First, a datagram sent
+    from one socket reaches another and reports the address it actually came
+    from -- the probe replies to that reported address rather than to the one
+    it already knows, so a receive that named the wrong peer sends the pong
+    into the void and the run times out. Second, `receive!` parks its task
+    instead of blocking: the timeout half asserts that several frames were
+    drawn while a task sat in a 200 ms receive, which a blocking implementation
+    could not manage. Third, each hop is delivered within a few cycles of the
+    task parking on it: a frame loop that does not poll the event loop every
+    frame still completes the round trip, just several frames after the
+    datagrams were ready, and only a bound on the delay catches that. The
+    bound holds here but bites in a window: headless pacing sleeps the frame
+    loop, which polls the event loop whatever the pump does, so a run with a
+    real window is what puts the third property under load.
+
+    Loopback only, on ephemeral ports, so it needs no network and cannot
+    collide with anything else on the machine. Exit 3 means a property did not
+    hold; exit 4 means nothing arrived in time.
+    """
+    fixture = root / "test" / "udp" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning UDP socket probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "udp")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build udp probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build udp probe"]
+
+    failures: list[str] = []
+    for label, extra in (("round trip", []), ("timeout", ["--udp-expect-timeout"])):
+        ok = run_cmd(
+            [
+                str(executable_for(staged)),
+                "--host-headless",
+                "--host-headless-frames=300",
+                *extra,
+            ],
+            f"run udp probe ({label})",
+            verbose,
+            cwd=staged.parent,
+        )
+        if not ok:
+            failures.append(f"run udp probe ({label})")
+    print("ok" if not failures else "FAILED")
+    return failures
+
+
+def run_virtual_keys_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a scripted keyboard arrives as ordinary keyboard input.
+
+    A headless run asserts only an exit code, so an app whose scripted keys
+    never reached it would still pass every other stage. The probe installs a
+    virtual source and queues text on one cycle and asserts what the next cycle
+    was handed: exactly one pressed edge for a newly held key, a plain down
+    while it stays held, released when the script lets go, and the codepoints
+    delivered on one cycle and gone from the next. Exit 3 means a property did
+    not hold; exit 4 means the script never reached its verdict.
+    """
+    fixture = root / "test" / "virtual_keys" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning virtual keyboard probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "virtual_keys")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build virtual keys probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build virtual keys probe"]
+
+    ok = run_cmd(
+        [str(executable_for(staged)), "--host-headless", "--host-headless-frames=8"],
+        "run virtual keys probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run virtual keys probe"]
+
+
+def run_sqlite_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that a value written to a database comes back as itself.
+
+    Nothing else in the suite runs a query, so a binding that bound the wrong
+    column, a decoder that read the wrong cell, a payload offset off by one, or
+    an error that arrived as success would pass every other stage. The probe
+    writes one row holding all five `Value` kinds, reads it back, compares each
+    one, reuses a prepared statement, and walks the error paths an app is most
+    likely to hit.
+
+    It runs from the staged scratch directory and only touches `probe_out/`
+    beneath it, so it never writes into the tree. Exit 3 means a property did
+    not hold.
+    """
+    fixture = root / "test" / "sqlite" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning sqlite probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "sqlite")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build sqlite probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build sqlite probe"]
+
+    ok = run_cmd(
+        [
+            str(executable_for(staged)),
+            "--host-headless",
+            "--host-headless-frames=200",
+        ],
+        "run sqlite probe",
+        verbose,
+        cwd=staged.parent,
+    )
+    print("ok" if ok else "FAILED")
+    return [] if ok else ["run sqlite probe"]
+
+
 def run_model_allocation_check(
     root: Path, packages: local_bundles.ServedPackages, verbose: bool
 ) -> list[str]:
@@ -566,7 +748,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
 
             expected_target = (
                 'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
-                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
+                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, '
                 '"libc.so", "crtn.o"] }'
             )
             if expected_target not in main_text:
@@ -581,6 +763,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
             "targets/x64glibc/libraylib.a",
             "targets/x64glibc/libmsf_gif.a",
             "targets/x64glibc/libvpx.a",
+            "targets/x64glibc/libsqlite3.a",
             "targets/x64glibc/libm.so",
             "targets/x64glibc/libc.so",
         }
@@ -763,6 +946,17 @@ def _run_tests(args: argparse.Namespace, root: Path, examples: list[Path]) -> in
         print("\nSkipping roc fmt (--runtime-only)")
     else:
         print("\nRunning roc fmt --check...")
+        print("  Formatting platform modules...", end=" ", flush=True)
+        platform_modules = sorted((root / "platform").glob("*.roc"))
+        if run_cmd(
+            ["roc", "fmt", "--check", *map(str, platform_modules)],
+            "fmt platform",
+            args.verbose,
+        ):
+            print("ok")
+        else:
+            print("FAILED")
+            failed.append("roc fmt platform")
         for example in examples:
             name = example_name(example)
             print(f"  Formatting {name}...", end=" ", flush=True)
@@ -915,6 +1109,10 @@ def _run_example_stages(
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
+        failed.extend(run_udp_probe(root, packages, args.verbose))
+        failed.extend(run_virtual_keys_probe(root, packages, args.verbose))
+        failed.extend(run_cmd_probe(root, packages, args.verbose))
+        failed.extend(run_sqlite_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

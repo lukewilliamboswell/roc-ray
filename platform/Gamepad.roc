@@ -4,13 +4,16 @@
 ## reusable packages can depend on them without depending on this platform.
 ## This module re-exports them, so the nominal types are shared either way.
 ##
-## Receivers are documented in the [roc-ray-types docs](../types/),
-## which is where the nominal is declared.
+## Pass `input.devices` directly to these helpers; there is nothing to
+## construct.
 import rrt.Gamepad as RrtGamepad
 
 Gamepad := [].{
 
 	## Gamepad input sampled once per host-cycle input for every slot.
+	##
+	## Declared in the `roc-ray-types` package's `Gamepad` and re-exported here,
+	## which is also where its receivers are documented.
 	Snapshot : RrtGamepad.Snapshot
 
 	## The four gamepad slots the platform samples.

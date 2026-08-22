@@ -19,19 +19,24 @@
 ## function rather than a state machine spread over `Msg` and `update!`:
 ##
 ## ```roc
-## load_level! : Str => Msg
+## load_level! : Str => Try(Msg, [LevelFailed])
 ## load_level! = |dir| {
 ##     manifest = Files.read_text!("${dir}/level.json") ? |_e| LevelFailed
 ##     tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
-##     LevelLoaded({ manifest, tiles })
+##     Ok(LevelLoaded({ manifest, tiles }))
 ## }
 ## ```
+##
+## `?` gives up on the first failure, so the function answers with a `Try` and
+## the task closure turns that into the one message it owes:
+## `Task.spawn!(input, || match load_level!(dir) { Ok(msg) => msg, Err(_) => LevelFailed })`.
 ##
 ## Paths are used as the app gives them, resolved against the process working
 ## directory, and nothing here is sandboxed. `Capture` is the one part of this
 ## platform with an output root, and it confines captures only; see
 ## `write_text!`.
 import FilesHost
+import Time
 
 Files := [].{
 
@@ -42,15 +47,63 @@ Files := [].{
 	EntryKind : [File, Dir, Other]
 
 	## Why `read_text!` produced no UTF-8 string.
+	##
+	## `NotFound` is no file at that path. `TooLarge` is a file past
+	## `read_text!`'s 64 kibibyte ceiling, which is a refusal rather than a
+	## failure: nothing went wrong and the file is there. `NotUtf8` is a file
+	## that was read and is not valid UTF-8, reported rather than delivered as
+	## an invalid `Str`. `Busy` is the host's thirty-two file-delivery slots all
+	## being held by byte lists an app has retained; nothing was read, and the
+	## same call later can succeed. `Unavailable` is the app shutting down
+	## while the read was parked.
+	##
+	## `ReadFailed` is every other refusal, and a permission the process does
+	## not have is one of them: the host does not distinguish it from a read
+	## that failed for any other reason. `metadata!` does, so a path that may be
+	## unreadable can be stat'd first to tell the two apart.
 	ReadTextError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge, NotUtf8]
 
 	## Why `read_bytes!` produced no byte list.
+	##
+	## The same tags as `ReadTextError` minus `NotUtf8`, since nothing about
+	## the bytes is inspected, and with a much larger ceiling: `TooLarge` here
+	## is a file past 16 mebibytes. `ReadFailed` covers a permission denial in
+	## exactly the same way.
 	ReadBytesError : [NotFound, ReadFailed, Busy, Unavailable, TooLarge]
 
 	## Why `list!` produced no directory entries.
+	##
+	## `NotADirectory` is a path that is there and is a file. `TooLarge` is a
+	## directory whose listing would exceed 8192 entries or one mebibyte of
+	## encoded names, whichever binds first. The rest mean what they mean for a
+	## read, `ReadFailed` included.
 	ListError : [NotFound, NotADirectory, ReadFailed, Busy, Unavailable, TooLarge]
 
-	## Why a write did not leave the file on disk.
+	## What one path is, how big it is, and when it last changed.
+	##
+	## `size_bytes` is the file's length; for a directory it is whatever the
+	## filesystem reports for the directory itself, which is not the size of
+	## what is inside it. `modified` is wall-clock time, so it is comparable
+	## with `Time.now!` and with a `modified` this app recorded earlier, and it
+	## is not comparable with `input.time`.
+	Metadata : { kind : EntryKind, size_bytes : U64, modified : Time.Timestamp }
+
+	## Why `metadata!` could not describe the path.
+	##
+	## `NotFound` is nothing at that path, including a path a component of
+	## which is a file rather than a directory, and a name this filesystem
+	## cannot represent. `PermissionDenied` is a directory on the way to the
+	## path this process may not look inside -- the one failure a stat can name
+	## that a read cannot. `Unavailable` is the app shutting down while the
+	## stat was parked, and `ReadFailed` is every other refusal.
+	##
+	## There is no `Busy`: a stat holds no host-owned payload, so there is no
+	## delivery slot for it to run out of.
+	MetadataError : [NotFound, PermissionDenied, ReadFailed, Unavailable]
+
+	## Why a write did not leave the file on disk. This is `Files`' own
+	## `WriteError`; `Stdout` and `Stderr` declare a different one under the
+	## same name, for the different things a stream write can refuse.
 	##
 	## `NotFound` means a component of the path is a file rather than a
 	## directory, or names something that cannot be created; the missing
@@ -62,8 +115,9 @@ Files := [].{
 	## Read a bounded UTF-8 file into a `Str`.
 	##
 	## The whole file is copied into the string, so this is capped well below
-	## what `read_bytes!` will read: a file past the cap is `TooLarge`, and one
-	## that is not valid UTF-8 is `NotUtf8` rather than an invalid `Str`.
+	## what `read_bytes!` will read: at most 64 kibibytes, and a file past that
+	## is `TooLarge` rather than truncated. One that is not valid UTF-8 is
+	## `NotUtf8` rather than an invalid `Str`.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
@@ -79,10 +133,16 @@ Files := [].{
 
 	## Read a bounded file as ordinary Roc bytes.
 	##
-	## The delivered list owns host-backed storage through Roc ARC without the
-	## payload being copied, so retaining a sublist can retain the complete
-	## source allocation. `List.release_excess_capacity` copies out the part
-	## worth keeping when that matters.
+	## At most 16 mebibytes, and a file past that is `TooLarge`. The ceiling is
+	## far above `read_text!`'s because nothing is copied: the buffer the read
+	## filled is the buffer Roc gets.
+	##
+	## That is also why there is a second bound. The delivered list owns
+	## host-backed storage through Roc ARC, and at most 32 such allocations are
+	## live at once; a read made while all 32 are held answers `Busy` without
+	## touching the disk. Retaining a sublist retains the complete source
+	## allocation and so holds a slot, which `List.release_excess_capacity`
+	## releases by copying out the part worth keeping.
 	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
@@ -102,6 +162,12 @@ Files := [].{
 	## Recursion is the app's to drive: only the app knows which subtrees are
 	## worth descending into, and a host-side walk would be one unbounded wait.
 	##
+	## A listing is bounded at 8192 entries and at one mebibyte of encoded
+	## names, whichever binds first; a directory past either is `TooLarge`
+	## rather than a partial listing. It is delivered through the same 32
+	## file-byte slots a byte read uses, so it can answer `Busy` for the same
+	## reason.
+	##
 	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
 	## the task; refused in `update!` and `render!`.
 	list! : Str => Try(List(Entry), ListError)
@@ -111,6 +177,69 @@ Files := [].{
 			Ok(decode_listing(result.bytes))
 		} else {
 			Err(list_error(result.err))
+		}
+	}
+
+	## What one path is, how big it is, and when it last changed.
+	##
+	## Symbolic links are followed, so a link to a file is `File` and a link to
+	## nothing is `NotFound`. That differs from `list!`, which reports the kind
+	## the directory itself records and so calls a symbolic link `Other`;
+	## `metadata!` answers about the thing at the end of the path, which is
+	## what an app deciding whether to read it wants to know.
+	##
+	## Polling `modified` is how an app hot-reloads a shader, a level, or a
+	## dataset it did not write. Do it inside a task, and sleep between stats,
+	## so the watching costs a parked task rather than a stat every frame:
+	##
+	## ```roc
+	## watch! : Str, Time.Timestamp => Msg
+	## watch! = |path, seen| {
+	##     var $outcome = Unchanged
+	##     while $outcome == Unchanged {
+	##         Task.sleep!(250)
+	##         $outcome = match Files.metadata!(path) {
+	##             Ok(meta) if meta.modified != seen => Modified(meta.modified)
+	##             Ok(_) => Unchanged
+	##             Err(NotFound) => Unchanged
+	##             Err(other) => Stopped(other)
+	##         }
+	##     }
+	##     match $outcome {
+	##         Modified(at) => Changed(path, at)
+	##         Stopped(err) => WatchFailed(err)
+	##         Unchanged => crash("watch!: the loop only ends once the path changed or the stat failed")
+	##     }
+	## }
+	## ```
+	##
+	## The loop carries a sentinel tag rather than the message itself, so its
+	## `while` condition can compare it, and the `match` after the loop turns
+	## that sentinel into the one message the task owes.
+	##
+	## A loop rather than a recursive call, because a task runs on a
+	## fixed-size coroutine stack. `NotFound` keeps waiting rather than giving
+	## up: an editor saving a file often replaces it, so the path can be
+	## missing for a moment. `update!` spawns the watcher again when it handles
+	## `Changed`, and each live watcher holds one of the host's thirty-two task
+	## slots for as long as it watches.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`.
+	metadata! : Str => Try(Metadata, MetadataError)
+	metadata! = |path| {
+		result = FilesHost.metadata!(path)
+		if result.err == 0 {
+			# The host normalizes the instant before it crosses, so the only
+			# way this fails is a host that is wrong about its own contract.
+			# Saying so is more use than reporting it as a filesystem error an
+			# app could act on.
+			match Time.Timestamp.from_parts({ seconds: result.modified_seconds, nanosecond: result.modified_nanosecond }) {
+				Ok(modified) => Ok({ kind: entry_kind(result.kind), size_bytes: result.size_bytes, modified: modified })
+				Err(InvalidNanosecond) => crash ("roc-ray: Files.metadata! received a modification time the host had not normalized")
+			}
+		} else {
+			Err(metadata_error(result.err))
 		}
 	}
 
@@ -380,3 +509,26 @@ expect decode_listing([2, 's', 'r', 'c', 0, 1, 'a', '.', 't', 0]) == [
 ## A kind byte with no terminator after it ends the listing rather than being
 ## guessed at, so a truncated buffer still yields the entries that were whole.
 expect decode_listing([1, 'a', 0, 2, 'b']) == [{ name: "a", kind: File }]
+
+## Decode the host's metadata-error code. Mirrored in `src/host_native.zig`.
+##
+## A stat can be refused for a reason a read cannot: a directory on the way to
+## the path may be one this process may not look inside, which is
+## `PermissionDenied` rather than the file being absent.
+metadata_error : U8 -> Files.MetadataError
+metadata_error = |code|
+	if code == 1 {
+		NotFound
+	} else if code == 4 {
+		Unavailable
+	} else if code == write_err_permission_denied {
+		PermissionDenied
+	} else {
+		ReadFailed
+	}
+
+expect metadata_error(1) == NotFound
+expect metadata_error(2) == ReadFailed
+expect metadata_error(4) == Unavailable
+expect metadata_error(8) == PermissionDenied
+expect metadata_error(99) == ReadFailed

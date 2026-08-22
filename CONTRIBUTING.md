@@ -342,6 +342,15 @@ the codes only one of them can produce -- `NotUtf8`, `NotADirectory`,
 Roc-side decoder and `src/host_native.zig` in step; each constant says where
 its counterpart lives.
 
+A new private `<X>Host.roc` needs its own privacy fixture. The module is kept
+out of `exposes` so an app cannot import it, and nothing but a test proves that
+stayed true: add `test/compile_fail/<x>_host_module.roc` importing it, and
+register the file in `scripts/test_app_transport_privacy.py` as a `CASES` entry
+pairing that path with the diagnostic strings the compiler must produce -- the
+title `package module is private` and the module's own name -- so `zig build
+test` compiles it and requires that failure. Without the registration the
+fixture is never built and the privacy is unchecked.
+
 `roc test` cannot reach a new effect through `update!`: an `expect` cannot call
 an effectful function, and the phase guard would refuse the effects inside one
 anyway. Cover it from both sides instead -- a Zig test in `src/` for the host
@@ -414,7 +423,9 @@ python3 scripts/test_roc_platform_abi.py
 Host-backed resources use typed, generation-checked slots. Successful hosted
 effects must release transferred references exactly once, including failure and
 scope-unwind paths. The headless backend should continue to exercise lifecycle
-behavior without requiring GPU objects.
+behavior without requiring GPU objects. A new typed resource adds a member to
+`host_resource.Kind` and nowhere else -- heaps name a kind rather than a number,
+and the host fails to build if a kind has no heap or has two.
 
 A new `src/*.zig` module whose only caller is a hosted export needs a
 `test { _ = the_module; }` in `src/host_native.zig`. The exports are compiled
@@ -505,7 +516,7 @@ bundling, so `bundle.sh` rewrites the staged header to a real URL: the release
 pinned in `.types-version`, or `--types-url-base` when the package is being
 served locally.
 
-## Vendored encoders
+## Vendored C libraries
 
 Screenshots go through raylib's own PNG writer, but GIF and video need encoders
 the vendored raylib does not have. Both are vendored as *source* and compiled by
@@ -525,6 +536,12 @@ to re-vendor per platform, and no per-OS CI runner in the loop:
   `vendor/libvpx/config/regenerate.sh` redoes all of it in one command and
   `config/README.md` explains what it produces -- that is the one thing to run
   when upgrading. `scripts/check_libvpx_archives.py` guards the invariants.
+- `vendor/sqlite/` -- the SQLite amalgamation (public domain), behind `Sqlite`.
+  One source file and no configure step, so upgrading is a two-file copy;
+  `vendor/sqlite/README.md` pins the version and SHA-256 and explains the
+  compile flags that are decisions rather than tuning. `SQLITE_THREADSAFE=1`,
+  `SQLITE_OMIT_LOAD_EXTENSION` and `SQLITE_DQS=0` are the three worth knowing
+  about before changing anything.
 
 `zig build graphical-smoke` runs the pixel-level rendering and capture checks
 under a real GL context. CI runs it under `xvfb-run` in a job of its own, on a
@@ -539,7 +556,11 @@ static archive, copied into `platform/targets/<target>/` and named in the
 `targets:` block of `platform/main.roc`, exactly as `libraylib.a` is.
 
 libvpx uses `setjmp`/`longjmp` for encoder error handling, so those symbols were
-added to the glibc link stubs in `platform/targets/*/libc_stub.s`.
+added to the glibc link stubs in `platform/targets/*/libc_stub.s`. SQLite's unix
+VFS and its serialized threading mode added ten more there and in
+`libm_stub.s`. Expect this to be the recurring cost of vendoring a new C
+library: the stub files are hand-written assembly, and a missing symbol shows up
+as a link error naming it, not as a build failure in the library itself.
 
 Release bundles support Intel and Apple Silicon macOS, x64 Linux, and x64
 Windows. The vendored raylib version is recorded in `vendor/raylib/VERSION`.
@@ -556,6 +577,8 @@ Before opening a PR:
 - Keep the change focused and explain the app-author problem it solves.
 - Add or update tests for behavior and failure paths.
 - Run `zig build lint` and `zig build test`.
+- For a new private `<X>Host.roc`, add `test/compile_fail/<x>_host_module.roc`
+  and register it in `scripts/test_app_transport_privacy.py`.
 - Run the graphical smoke test when pixels or drawing state can change.
 - Update examples and docs when public behavior changes.
 - Check `git status --short`, `git diff`, and `git diff --cached` for untracked

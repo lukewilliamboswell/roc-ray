@@ -76,6 +76,18 @@ pub const err_busy: u8 = 10;
 /// remove.
 pub const err_unavailable: u8 = 11;
 
+/// The render target's pixels could not be read back off the GPU.
+pub const err_readback_failed: u8 = 12;
+/// The handle given does not name a live render target.
+///
+/// A released target, or the resource-free `stub` handle a pure test holds.
+/// Runtime data rather than a programmer error, because that is how every other
+/// unresolved render-target handle is already reported.
+pub const err_target_unavailable: u8 = 13;
+/// The rectangle asked for is not entirely inside the source, or is larger
+/// than one readback is allowed to deliver.
+pub const err_region_out_of_bounds: u8 = 14;
+
 /// No recording is active.
 pub const status_idle: u8 = 0;
 /// A recording is running and accepting frames.
@@ -96,6 +108,210 @@ pub const default_memory_budget_bytes: u64 = 256 * 1024 * 1024;
 
 /// Longest path assembled from the output directory and a request.
 pub const path_capacity: usize = 1024;
+
+/// Largest RGBA readback the still exports in flight may hold at once.
+///
+/// A 4K frame is 33 MB, so several fit; an 8192-square atlas is 268 MB and does
+/// not. The unit is the readback itself. The encoder transiently needs about
+/// twice one image again on top of it, so the process high-water mark is this
+/// budget plus twice the largest image in flight.
+pub const still_budget_bytes: u64 = 128 * 1024 * 1024;
+
+/// Bytes one RGBA readback of these dimensions occupies, or null if the
+/// dimensions cannot describe an image at all.
+pub fn stillCaptureBytes(width: u32, height: u32) ?u64 {
+    if (width == 0 or height == 0) return null;
+    return @as(u64, width) *| @as(u64, height) *| 4;
+}
+
+/// How much readback memory the still exports in flight are holding.
+///
+/// Bounds the memory a still export can reach across concurrent tasks, which
+/// nothing else does: each export is its own request with no frame stream and
+/// no recording state to meter it.
+///
+/// The two refusals mean different things and are deliberately different codes.
+/// A request larger than the whole budget can never be admitted, so it is
+/// `err_budget_exceeded` and retrying is pointless. A request that fits but not
+/// right now is `err_busy`, and the same call on a later frame may well be
+/// taken.
+pub const StillBudget = struct {
+    in_flight: u64 = 0,
+    limit: u64 = still_budget_bytes,
+
+    /// Reserve room for one export, writing what was reserved into `reserved`.
+    pub fn admit(self: *StillBudget, width: u32, height: u32, reserved: *u64) u8 {
+        const bytes = stillCaptureBytes(width, height) orelse return err_target_unavailable;
+        if (bytes > self.limit) return err_budget_exceeded;
+        if (bytes > self.limit - self.in_flight) return err_busy;
+        self.in_flight += bytes;
+        reserved.* = bytes;
+        return err_none;
+    }
+
+    /// Give back what one admitted export reserved.
+    pub fn release(self: *StillBudget, bytes: u64) void {
+        self.in_flight -|= bytes;
+    }
+
+    /// Forget every reservation, for a host starting a fresh app lifetime.
+    pub fn reset(self: *StillBudget) void {
+        self.in_flight = 0;
+    }
+};
+
+/// Largest RGBA payload one pixel readback may hand to Roc, in bytes.
+///
+/// The same number as `still_budget_bytes`, and metered by the same
+/// `StillBudget`: a readback and a still export each hold one RGBA image alive
+/// in host memory, so they compete for one budget rather than two. The name is
+/// separate because the two count different things. A still export is metered
+/// by the whole source it reads; a readback is metered by the region asked
+/// for, which is the number the app chose.
+///
+/// 128 MiB is 8192 by 4096 pixels, well past a window and past any region a
+/// per-frame read can afford. A region above it is refused outright rather
+/// than admitted and then starved, because no later frame would make it fit.
+pub const max_readback_bytes: u64 = still_budget_bytes;
+
+/// A rectangle of pixels, in pixels from the top-left of its source.
+///
+/// Signed because it arrives from Roc as `I32` and a negative corner or extent
+/// is a value this module refuses, not one the caller has to have ruled out.
+pub const Region = struct {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+};
+
+/// Bytes one region occupies once delivered as RGBA8, or null if its extents
+/// cannot describe a rectangle at all.
+pub fn regionBytes(region: Region) ?u64 {
+    if (region.width <= 0 or region.height <= 0) return null;
+    return @as(u64, @intCast(region.width)) *| @as(u64, @intCast(region.height)) *| 4;
+}
+
+/// Is one point inside a `width` by `height` source?
+///
+/// Answers `err_region_out_of_bounds` for a point outside it, including every
+/// point of a zero-sized source, so a single-pixel read and a region read
+/// refuse the same coordinates for the same reason.
+pub fn validatePoint(x: i32, y: i32, width: u32, height: u32) u8 {
+    if (x < 0 or y < 0) return err_region_out_of_bounds;
+    if (@as(i64, x) >= @as(i64, width)) return err_region_out_of_bounds;
+    if (@as(i64, y) >= @as(i64, height)) return err_region_out_of_bounds;
+    return err_none;
+}
+
+/// Is `region` entirely inside a `width` by `height` source, and small enough
+/// to deliver?
+///
+/// Both refusals are `err_region_out_of_bounds`: a region past the edge of the
+/// source and a region past `max_readback_bytes` are the same kind of mistake
+/// -- an app asking for pixels the platform will not produce -- and neither
+/// becomes possible on a later frame. The corner and the extent are added in
+/// `i64` so that a pair that overflows `i32` is arithmetic this function does
+/// rather than undefined behaviour.
+pub fn validateRegion(region: Region, width: u32, height: u32) u8 {
+    const bytes = regionBytes(region) orelse return err_region_out_of_bounds;
+    if (bytes > max_readback_bytes) return err_region_out_of_bounds;
+    if (region.x < 0 or region.y < 0) return err_region_out_of_bounds;
+    if (@as(i64, region.x) + @as(i64, region.width) > @as(i64, width)) return err_region_out_of_bounds;
+    if (@as(i64, region.y) + @as(i64, region.height) > @as(i64, height)) return err_region_out_of_bounds;
+    return err_none;
+}
+
+/// Read one RGBA8 pixel out of a top-down source.
+///
+/// The source is the row order every readback in this platform already
+/// produces: `captureFramebuffer` reads the framebuffer upright, and
+/// `readRenderTexture` flips a render target's bottom-up rows before returning
+/// them. Callers must have validated the point first.
+pub fn pixelAt(source: []const u8, width: u32, x: i32, y: i32) [4]u8 {
+    const offset = (@as(usize, @intCast(y)) * width + @as(usize, @intCast(x))) * 4;
+    return .{ source[offset], source[offset + 1], source[offset + 2], source[offset + 3] };
+}
+
+/// Copy one region out of a top-down RGBA8 source into a tightly packed,
+/// row-major, top-down buffer.
+///
+/// Row by row rather than in one block: the source stride is the whole image's
+/// width and the destination's is the region's, so only a full-width region
+/// would be contiguous in both. Callers must have validated the region first,
+/// and `dest` must be exactly `regionBytes(region)` long.
+pub fn copyRegion(dest: []u8, source: []const u8, width: u32, region: Region) void {
+    const row_bytes = @as(usize, @intCast(region.width)) * 4;
+    std.debug.assert(dest.len == row_bytes * @as(usize, @intCast(region.height)));
+    var row: usize = 0;
+    while (row < @as(usize, @intCast(region.height))) : (row += 1) {
+        const source_start = ((@as(usize, @intCast(region.y)) + row) * width + @as(usize, @intCast(region.x))) * 4;
+        const dest_start = row * row_bytes;
+        @memcpy(dest[dest_start..][0..row_bytes], source[source_start..][0..row_bytes]);
+    }
+}
+
+test "a region must lie inside its source" {
+    try std.testing.expectEqual(err_none, validateRegion(.{ .x = 0, .y = 0, .width = 4, .height = 4 }, 4, 4));
+    try std.testing.expectEqual(err_none, validateRegion(.{ .x = 3, .y = 3, .width = 1, .height = 1 }, 4, 4));
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = 1, .y = 0, .width = 4, .height = 4 }, 4, 4));
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = 0, .y = 1, .width = 4, .height = 4 }, 4, 4));
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = -1, .y = 0, .width = 2, .height = 2 }, 4, 4));
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = 0, .y = 0, .width = 0, .height = 4 }, 4, 4));
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = 0, .y = 0, .width = 4, .height = -4 }, 4, 4));
+    // A source with no pixels admits no region at all, not even an empty one.
+    try std.testing.expectEqual(err_region_out_of_bounds, validateRegion(.{ .x = 0, .y = 0, .width = 1, .height = 1 }, 0, 0));
+}
+
+test "a region past the readback cap is refused before anything is read" {
+    // 8192 by 4096 is exactly `max_readback_bytes`; one row more is not.
+    try std.testing.expectEqual(err_none, validateRegion(.{ .x = 0, .y = 0, .width = 8192, .height = 4096 }, 8192, 4096));
+    try std.testing.expectEqual(
+        err_region_out_of_bounds,
+        validateRegion(.{ .x = 0, .y = 0, .width = 8192, .height = 4097 }, 8192, 4097),
+    );
+    // The corner plus the extent overflows `i32`; the check must survive it.
+    try std.testing.expectEqual(
+        err_region_out_of_bounds,
+        validateRegion(.{ .x = 2_000_000_000, .y = 0, .width = 2_000_000_000, .height = 1 }, 64, 64),
+    );
+}
+
+test "a point must lie inside its source" {
+    try std.testing.expectEqual(err_none, validatePoint(0, 0, 2, 3));
+    try std.testing.expectEqual(err_none, validatePoint(1, 2, 2, 3));
+    try std.testing.expectEqual(err_region_out_of_bounds, validatePoint(2, 0, 2, 3));
+    try std.testing.expectEqual(err_region_out_of_bounds, validatePoint(0, 3, 2, 3));
+    try std.testing.expectEqual(err_region_out_of_bounds, validatePoint(-1, 0, 2, 3));
+    try std.testing.expectEqual(err_region_out_of_bounds, validatePoint(0, 0, 0, 0));
+}
+
+test "a copied region keeps row-major top-down order" {
+    // A 4x3 source whose every pixel encodes its own coordinates, so a
+    // transposed, flipped or misstrided copy cannot look right by accident.
+    var source: [4 * 3 * 4]u8 = undefined;
+    for (0..3) |y| {
+        for (0..4) |x| {
+            const offset = (y * 4 + x) * 4;
+            source[offset] = @intCast(x);
+            source[offset + 1] = @intCast(y);
+            source[offset + 2] = 7;
+            source[offset + 3] = 255;
+        }
+    }
+
+    const region = Region{ .x = 1, .y = 1, .width = 2, .height = 2 };
+    var dest: [2 * 2 * 4]u8 = undefined;
+    copyRegion(&dest, &source, 4, region);
+    try std.testing.expectEqualSlices(u8, &.{
+        1, 1, 7, 255, 2, 1, 7, 255,
+        1, 2, 7, 255, 2, 2, 7, 255,
+    }, &dest);
+
+    // The single-pixel read agrees with the region read at the same point.
+    try std.testing.expectEqual([4]u8{ 2, 1, 7, 255 }, pixelAt(&source, 4, 2, 1));
+    try std.testing.expectEqual([4]u8{ 0, 0, 7, 255 }, pixelAt(&source, 4, 0, 0));
+}
 
 /// A resolved capture request, flattened from the Roc-side `Recording`.
 pub const Request = struct {
@@ -828,4 +1044,46 @@ test "reset returns a used session to its startup state" {
     try std.testing.expectEqual(err_none, session.failure);
     try std.testing.expectEqual(@as(u64, 0), session.source_frames);
     try std.testing.expectEqual(@as(u64, 0), session.captured_frames);
+}
+
+test "a still export larger than the whole budget is refused as over budget" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    // 8192 square RGBA is 268 MB against a 128 MB budget.
+    try std.testing.expectEqual(err_budget_exceeded, budget.admit(8192, 8192, &reserved));
+    try std.testing.expectEqual(@as(u64, 0), budget.in_flight);
+    try std.testing.expectEqual(@as(u64, 0), reserved);
+}
+
+test "a still export that fits only because another is in flight is busy, not over budget" {
+    var budget = StillBudget{};
+    var first: u64 = 0;
+    // 4096 square RGBA is 64 MB: two fit exactly, a third does not.
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &first));
+    try std.testing.expectEqual(@as(u64, 64 * 1024 * 1024), first);
+    var second: u64 = 0;
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &second));
+    var third: u64 = 0;
+    try std.testing.expectEqual(err_busy, budget.admit(4096, 4096, &third));
+    try std.testing.expectEqual(@as(u64, 0), third);
+
+    // Releasing one makes room again, so `Busy` really is retryable.
+    budget.release(first);
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &third));
+}
+
+test "a still budget forgets every reservation on reset" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    try std.testing.expectEqual(err_none, budget.admit(1920, 1080, &reserved));
+    try std.testing.expect(budget.in_flight != 0);
+    budget.reset();
+    try std.testing.expectEqual(@as(u64, 0), budget.in_flight);
+}
+
+test "a zero dimension has no readback to admit" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    try std.testing.expectEqual(err_target_unavailable, budget.admit(0, 16, &reserved));
+    try std.testing.expectEqual(err_target_unavailable, budget.admit(16, 0, &reserved));
 }

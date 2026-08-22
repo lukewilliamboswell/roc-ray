@@ -52,8 +52,56 @@ CASES = (
         ("package module is private", "`rr.FilesHost`"),
     ),
     (
+        ROOT / "test" / "compile_fail" / "capture_host_module.roc",
+        ("package module is private", "`rr.CaptureHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "draw_host_module.roc",
+        ("package module is private", "`rr.DrawHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "assets_host_module.roc",
+        ("package module is private", "`rr.AssetsHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "audio_host_module.roc",
+        ("package module is private", "`rr.AudioHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "mouse_host_module.roc",
+        ("package module is private", "`rr.MouseHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "tilemap_host_module.roc",
+        ("package module is private", "`rr.TilemapHost`"),
+    ),
+    (
         ROOT / "test" / "compile_fail" / "http_host_module.roc",
         ("package module is private", "`rr.HttpHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "stdio_host_module.roc",
+        ("package module is private", "`rr.StdioHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "time_host_module.roc",
+        ("package module is private", "`rr.TimeHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "udp_host_module.roc",
+        ("package module is private", "`rr.UdpHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "sqlite_host_module.roc",
+        ("package module is private", "`rr.SqliteHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "cmd_host_module.roc",
+        ("package module is private", "`rr.CmdHost`"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "sqlite_db_manufacture.roc",
+        ("cannot use opaque nominal type", "instance of Sqlite.Db"),
     ),
     (
         ROOT / "test" / "compile_fail" / "task_host_module.roc",

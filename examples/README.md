@@ -30,15 +30,17 @@ roc build examples/snake/main.roc --output snake
 `update!` calls host effects directly, and most of them answer at once. Work
 that has to wait goes in `Task.spawn!(input, || ...)` instead: the closure runs
 on its own coroutine while the frame loop keeps drawing, and its return value
-arrives as a `Msg` on a later `input.messages`. These four are that idea, from
+arrives as a `Msg` on a later `input.messages`. These six are that idea, from
 the smallest version to the largest.
 
 | Example | What it is |
 | --- | --- |
-| [Task Sleep](task_sleep/main.roc) | One task, one `Task.sleep!`, one message back -- the shape of every other task on this page |
-| [Async Read](async_read/main.roc) | Two file reads in flight at once, each with its own `Msg` variant, so neither needs an id |
+| [Task Sleep](task_sleep/main.roc) | One task, one `Task.sleep!`, one message back -- the shape of every other task on this page -- and printing done straight from `update!`, because a stream write queues rather than waits |
+| [Async Read](async_read/main.roc) | Two file reads and a `Files.metadata!` in flight at once, each with its own `Msg` variant, so none of them needs an id |
 | [Capture Screenshot](capture_screenshot/main.roc) | A screenshot encoded and written off the frame thread, and the output-directory sandbox refusing a path that escapes it |
 | [HTTP Fetch](http_fetch/main.roc) | An HTTP GET on a task, re-fetchable mid-flight, with each reply carrying the id of the fetch it belongs to |
+| [UDP Cursor](udp_cursor/main.roc) | Two instances showing each other's pointer: a receiving task restarted each time it answers, and sends made straight from `update!` |
+| [SQLite Scores](sqlite_scores/main.roc) | A high-score board that survives a restart: the write and the re-read share one task, so the model is told what the database holds rather than guessing |
 
 ## Small apps worth copying
 
@@ -49,9 +51,10 @@ the smallest version to the largest.
 | [Snake](snake/main.roc) | A grid-based game with restartable state | Fixed timestep, keyboard control, seeded randomness in the model |
 | [Breakout](breakout/main.roc) | A complete game that can record its own demo | Separating game rules from effects, event-driven sound, CLI modes, capture |
 | [Pixel Workshop](generated_assets/main.roc) | A tiny paint program with a mutable GPU texture | Generated assets, single-cell texture uploads, a pure editor returning edits |
-| [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout shared by `update!` and `render!`, mouse and keyboard navigation, minimum window size |
-| [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor and PNG exporter | Exporting from a task, output directories, status folded from a message |
-| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, direct host effects, clipboard, live window reconfiguration |
+| [Responsive Settings](responsive_ui/main.roc) | A resizable settings screen | Pure layout shared by `update!` and `render!`, mouse and keyboard navigation, minimum window size, DPI scale and monitor placement |
+| [Postcard Studio](postcard_studio/main.roc) | A generative postcard editor that exports at twice the window size | Composing into an offscreen target, exporting a render texture from a task, output directories, status folded from a message |
+| [Input Inspector](input_inspector/main.roc) | A practical device and clipboard diagnostic | Device snapshots, direct host effects, clipboard, live window reconfiguration, an eyedropper reading the pixel under the pointer |
+| [Drop Viewer](drop_viewer/main.roc) | An image viewer whose only control is dropping a file on it | `input.dropped`, reading an absolute path in a task, choosing a decoder from the bytes themselves, a bounded input source reporting its overflow |
 
 ## Larger showcases
 
@@ -77,7 +80,7 @@ recommended starting point for a whole application.
 | [Post Process](post_process/main.roc) | Render textures, blend scopes, shaders, and cached uniform locations |
 | [Particles](particles/main.roc) | Thousands of sprites drawn as one batched instance list rather than one call each |
 | [Capture Plot](capture_plot/main.roc) | A deterministic hidden-window WebM batch render |
-| [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real input path |
+| [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real pointer and keyboard path |
 
 ## What these examples consider good practice
 

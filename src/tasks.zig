@@ -9,7 +9,6 @@ const std = @import("std");
 const zio = @import("zio");
 const abi = @import("roc_platform_abi.zig");
 
-
 /// A finished task's message, wrapped in the erased thunk Roc calls to unwrap
 /// it. The host only moves it; only `receive_task_results` ever calls it.
 pub const TaskResult = abi.RocErasedCallable;
@@ -58,6 +57,7 @@ pub fn Tasks(comptime Hooks: type) type {
         /// Pumps that took no task work at all (the idle cost of the scheme).
         idle_pump_count: u64 = 0,
         idle_pump_total_ns: u64 = 0,
+        progress: u64 = 0,
 
         /// Pointer to the live registry, for the task body and the sleep effect.
         var current: ?*Self = null;
@@ -159,10 +159,12 @@ pub fn Tasks(comptime Hooks: type) type {
         /// The coroutine body: run the Roc closure to completion on this stack.
         fn body(id: u64, run: abi.RocErasedCallable) void {
             const self = current orelse unreachable;
+            self.progress += 1;
             if (self.trace) std.log.info("[TASK {d}] started on cycle {d}", .{ id, self.cycle });
             Hooks.enterTaskPhase();
             const result = Hooks.runTask(run);
             Hooks.leaveTaskPhase();
+            self.progress += 1;
             if (self.trace) std.log.info("[TASK {d}] finished on cycle {d}", .{ id, self.cycle });
             self.finished.append(self.allocator, .{ .id = id, .result = result }) catch {
                 std.log.err("roc-ray: out of memory storing task {d}'s result; dropping it", .{id});
@@ -178,6 +180,7 @@ pub fn Tasks(comptime Hooks: type) type {
 
         pub fn traceResume(id_hint: []const u8) void {
             const self = current orelse return;
+            self.progress += 1;
             if (self.trace) std.log.info("[TASK] {s} resumed on cycle {d}", .{ id_hint, self.cycle });
         }
 
@@ -197,7 +200,7 @@ pub fn Tasks(comptime Hooks: type) type {
             if (self.rt == null) return;
             var stopwatch = zio.Stopwatch.start();
             switch (mode) {
-                .yield => zio.yield() catch {},
+                .yield => self.turnUntilQuiet(),
                 .sleep_ns => |ns| zio.sleep(.fromNanoseconds(@intCast(ns))) catch {},
             }
             self.last_pump_ns = @intCast(stopwatch.read().toNanoseconds());
@@ -216,6 +219,42 @@ pub fn Tasks(comptime Hooks: type) type {
                 self.reap();
             }
         }
+
+        /// Give the executor turns until the tasks stop making progress.
+        ///
+        /// Not `zio.yield()`: its fast path spends a scheduling quantum and
+        /// returns without touching the event loop whenever no other task is
+        /// already runnable, and the frame thread is the executor's main task,
+        /// so one yield per frame polled I/O only every few dozen frames. A
+        /// datagram that arrived during the vsync wait sat unseen for that
+        /// long.
+        ///
+        /// A zero-length sleep parks the main task on a timer that is already
+        /// due, which is the one public way to make the executor run its loop.
+        /// One such turn does half the job: the loop polls, readies the tasks
+        /// whose I/O completed, and returns to the main task before running
+        /// them, because the same poll fired the timer. The second turn runs
+        /// them. A task that then parks on an operation the kernel can finish
+        /// at once needs the pair again, so the pairs repeat while some task
+        /// resumed or finished in the last one, up to a bound that keeps a
+        /// pathological task from holding the frame.
+        fn turnUntilQuiet(self: *Self) void {
+            var pairs: usize = 0;
+            var quiet: usize = 0;
+            while (pairs < max_turn_pairs and quiet < 2) : (pairs += 1) {
+                const before = self.progress;
+                zio.sleep(.zero) catch {};
+                zio.sleep(.zero) catch {};
+                // One quiet pair is not proof of rest: an operation a task
+                // just submitted completes on the poll after the one that
+                // submitted it, and a readied task is invisible from here
+                // until it runs. Two quiet pairs in a row are.
+                quiet = if (self.progress == before) quiet + 1 else 0;
+            }
+        }
+
+        /// Turn pairs one pump will spend chasing tasks that keep resuming.
+        const max_turn_pairs: usize = 6;
 
         /// Release the join handles of tasks that have finished.
         fn reap(self: *Self) void {

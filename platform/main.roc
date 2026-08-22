@@ -9,10 +9,11 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random, Task]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, RequestQueue, Random, Task, Http, Url]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
+		http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
 	}
 	provides {
 		"app_config_for_host": app_config_for_host!,
@@ -130,6 +131,7 @@ platform ""
 		"roc_draw_set_shader_vec2_raw": DrawHost.set_shader_vec2!,
 		"roc_draw_set_shader_vec3_raw": DrawHost.set_shader_vec3!,
 		"roc_draw_set_shader_vec4_raw": DrawHost.set_shader_vec4!,
+		"roc_http_send": HttpHost.send!,
 	}
 	targets: {
 		inputs_dir: "targets/",
@@ -173,6 +175,9 @@ import RequestQueue
 import Random
 import TaskHost
 import Task
+import HttpHost
+import Http
+import Url
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the

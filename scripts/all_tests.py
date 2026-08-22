@@ -29,6 +29,9 @@ This script runs:
                     assert every one of them still answers (test/task_cap).
 - file write      - Write files from a task, read them back, and compare
                     (test/file_write).
+- udp sockets     - Send datagrams between two loopback sockets and assert the
+                    bytes, the sender address, and that a parked receive lets
+                    the frame loop keep running (test/udp).
 - http client     - Serve a known file on localhost, fetch it from a task, and
                     check the response, the size cap, and the timeout
 - package interop - Build test/package_interop with the package pinning the
@@ -358,6 +361,55 @@ def run_file_write_probe(
     )
     print("ok" if ok else "FAILED")
     return [] if ok else ["run file write probe"]
+
+
+def run_udp_probe(
+    root: Path, packages: local_bundles.ServedPackages, verbose: bool
+) -> list[str]:
+    """Check that datagrams arrive with the right bytes from the right sender.
+
+    Two properties nothing else in the suite covers. First, a datagram sent
+    from one socket reaches another and reports the address it actually came
+    from -- the probe replies to that reported address rather than to the one
+    it already knows, so a receive that named the wrong peer sends the pong
+    into the void and the run times out. Second, `receive!` parks its task
+    instead of blocking: the timeout half asserts that several frames were
+    drawn while a task sat in a 200 ms receive, which a blocking implementation
+    could not manage.
+
+    Loopback only, on ephemeral ports, so it needs no network and cannot
+    collide with anything else on the machine. Exit 3 means a property did not
+    hold; exit 4 means nothing arrived in time.
+    """
+    fixture = root / "test" / "udp" / "main.roc"
+    if not fixture.is_file():
+        return []
+
+    print("\nRunning UDP socket probe...", end=" ", flush=True)
+    staged = local_bundles.stage_app(fixture, packages, packages.scratch_dir / "udp")
+    if not run_cmd(
+        ["roc", "build", staged.name, *LIMITS], "build udp probe", verbose, cwd=staged.parent
+    ):
+        print("FAILED")
+        return ["build udp probe"]
+
+    failures: list[str] = []
+    for label, extra in (("round trip", []), ("timeout", ["--udp-expect-timeout"])):
+        ok = run_cmd(
+            [
+                str(executable_for(staged)),
+                "--host-headless",
+                "--host-headless-frames=300",
+                *extra,
+            ],
+            f"run udp probe ({label})",
+            verbose,
+            cwd=staged.parent,
+        )
+        if not ok:
+            failures.append(f"run udp probe ({label})")
+    print("ok" if not failures else "FAILED")
+    return failures
 
 
 def run_model_allocation_check(
@@ -915,6 +967,7 @@ def _run_example_stages(
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))
         failed.extend(run_file_write_probe(root, packages, args.verbose))
+        failed.extend(run_udp_probe(root, packages, args.verbose))
         failed.extend(run_model_allocation_check(root, packages, args.verbose))
         failed.extend(test_http_client.run_http_client_test(packages, args.verbose))
 

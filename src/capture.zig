@@ -76,6 +76,15 @@ pub const err_busy: u8 = 10;
 /// remove.
 pub const err_unavailable: u8 = 11;
 
+/// The render target's pixels could not be read back off the GPU.
+pub const err_readback_failed: u8 = 12;
+/// The handle given does not name a live render target.
+///
+/// A released target, or the resource-free `stub` handle a pure test holds.
+/// Runtime data rather than a programmer error, because that is how every other
+/// unresolved render-target handle is already reported.
+pub const err_target_unavailable: u8 = 13;
+
 /// No recording is active.
 pub const status_idle: u8 = 0;
 /// A recording is running and accepting frames.
@@ -96,6 +105,57 @@ pub const default_memory_budget_bytes: u64 = 256 * 1024 * 1024;
 
 /// Longest path assembled from the output directory and a request.
 pub const path_capacity: usize = 1024;
+
+/// Largest RGBA readback the still exports in flight may hold at once.
+///
+/// A 4K frame is 33 MB, so several fit; an 8192-square atlas is 268 MB and does
+/// not. The unit is the readback itself. The encoder transiently needs about
+/// twice one image again on top of it, so the process high-water mark is this
+/// budget plus twice the largest image in flight.
+pub const still_budget_bytes: u64 = 128 * 1024 * 1024;
+
+/// Bytes one RGBA readback of these dimensions occupies, or null if the
+/// dimensions cannot describe an image at all.
+pub fn stillCaptureBytes(width: u32, height: u32) ?u64 {
+    if (width == 0 or height == 0) return null;
+    return @as(u64, width) *| @as(u64, height) *| 4;
+}
+
+/// How much readback memory the still exports in flight are holding.
+///
+/// Bounds the memory a still export can reach across concurrent tasks, which
+/// nothing else does: each export is its own request with no frame stream and
+/// no recording state to meter it.
+///
+/// The two refusals mean different things and are deliberately different codes.
+/// A request larger than the whole budget can never be admitted, so it is
+/// `err_budget_exceeded` and retrying is pointless. A request that fits but not
+/// right now is `err_busy`, and the same call on a later frame may well be
+/// taken.
+pub const StillBudget = struct {
+    in_flight: u64 = 0,
+    limit: u64 = still_budget_bytes,
+
+    /// Reserve room for one export, writing what was reserved into `reserved`.
+    pub fn admit(self: *StillBudget, width: u32, height: u32, reserved: *u64) u8 {
+        const bytes = stillCaptureBytes(width, height) orelse return err_target_unavailable;
+        if (bytes > self.limit) return err_budget_exceeded;
+        if (bytes > self.limit - self.in_flight) return err_busy;
+        self.in_flight += bytes;
+        reserved.* = bytes;
+        return err_none;
+    }
+
+    /// Give back what one admitted export reserved.
+    pub fn release(self: *StillBudget, bytes: u64) void {
+        self.in_flight -|= bytes;
+    }
+
+    /// Forget every reservation, for a host starting a fresh app lifetime.
+    pub fn reset(self: *StillBudget) void {
+        self.in_flight = 0;
+    }
+};
 
 /// A resolved capture request, flattened from the Roc-side `Recording`.
 pub const Request = struct {
@@ -828,4 +888,46 @@ test "reset returns a used session to its startup state" {
     try std.testing.expectEqual(err_none, session.failure);
     try std.testing.expectEqual(@as(u64, 0), session.source_frames);
     try std.testing.expectEqual(@as(u64, 0), session.captured_frames);
+}
+
+test "a still export larger than the whole budget is refused as over budget" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    // 8192 square RGBA is 268 MB against a 128 MB budget.
+    try std.testing.expectEqual(err_budget_exceeded, budget.admit(8192, 8192, &reserved));
+    try std.testing.expectEqual(@as(u64, 0), budget.in_flight);
+    try std.testing.expectEqual(@as(u64, 0), reserved);
+}
+
+test "a still export that fits only because another is in flight is busy, not over budget" {
+    var budget = StillBudget{};
+    var first: u64 = 0;
+    // 4096 square RGBA is 64 MB: two fit exactly, a third does not.
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &first));
+    try std.testing.expectEqual(@as(u64, 64 * 1024 * 1024), first);
+    var second: u64 = 0;
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &second));
+    var third: u64 = 0;
+    try std.testing.expectEqual(err_busy, budget.admit(4096, 4096, &third));
+    try std.testing.expectEqual(@as(u64, 0), third);
+
+    // Releasing one makes room again, so `Busy` really is retryable.
+    budget.release(first);
+    try std.testing.expectEqual(err_none, budget.admit(4096, 4096, &third));
+}
+
+test "a still budget forgets every reservation on reset" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    try std.testing.expectEqual(err_none, budget.admit(1920, 1080, &reserved));
+    try std.testing.expect(budget.in_flight != 0);
+    budget.reset();
+    try std.testing.expectEqual(@as(u64, 0), budget.in_flight);
+}
+
+test "a zero dimension has no readback to admit" {
+    var budget = StillBudget{};
+    var reserved: u64 = 0;
+    try std.testing.expectEqual(err_target_unavailable, budget.admit(0, 16, &reserved));
+    try std.testing.expectEqual(err_target_unavailable, budget.admit(16, 0, &reserved));
 }

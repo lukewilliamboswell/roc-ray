@@ -51,11 +51,10 @@ from one host cycle to the next:
 
 - `init!` chooses the window configuration and creates the initial model.
 - `update!` receives that model and a read-only `App.Input` -- this cycle's
-  device snapshot, window snapshot, timing, and request response messages --
-  and returns the next model, or `Err(Exit(code))` to stop. It is effectful:
-  it calls host effects directly (`Window.set_clipboard_text!`,
-  `Audio.Sound.play!`, ...) and starts deferred work with `Task.spawn!` and
-  `App.request!`.
+  device snapshot, window snapshot, timing, and the messages finished tasks
+  delivered -- and returns the next model, or `Err(Exit(code))` to stop. It is
+  effectful: it calls host effects directly (`Window.set_clipboard_text!`,
+  `Audio.Sound.play!`, ...) and starts deferred work with `Task.spawn!`.
 - `render!` receives the model and a `Frame` used for drawing. It only draws;
   an effect that changes host state stops the app with a message naming the
   phase it belongs in.
@@ -65,12 +64,13 @@ to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
 store them in the model and reuse them while rendering.
 
-### Tasks and requests
+### Tasks
 
 Work that finishes later never blocks the frame. A **task** is an effectful
 closure that runs on its own coroutine alongside the frame loop; its return
 value arrives as a message on a later `input.messages`. An effect that waits
-inside it -- `Task.sleep!` today -- parks the task, not the frame:
+inside it -- `Task.sleep!`, `Files.read_text!`, `Capture.screenshot!`,
+`Http.send!` -- parks the task, not the frame:
 
 ```roc
 Msg : [Woke]
@@ -85,26 +85,25 @@ The `input` is a witness that pins the closure's message type to your app's
 `Msg`; `Task.spawn!` never reads it. Only the platform's `main.roc` can name
 your `Msg` directly, so an `App.Input(Msg)` is how the rest of the API names it.
 
-A **request** is the same idea for the host's file, clipboard, and screenshot
-work: give the constructor a typed callback that turns its terminal result
-into your `Msg`, hand it to `App.request!`, and fold the message in when it
-arrives:
+Inside the closure a waiting effect returns its answer, so a multi-step load
+reads as straight-line code with `?` rather than a state machine spread over
+`Msg` and `update!`:
 
 ```roc
-Msg : [ConfigLoaded({ path : Str, result : Try(Str, Files.ReadTextError) })]
+Msg : [ConfigLoaded(Try(Str, Files.ReadTextError))]
 
-App.request!(Files.read_text("config.txt", |result| ConfigLoaded({ path: "config.txt", result })))
+Task.spawn!(input, || ConfigLoaded(Files.read_text!("config.txt")))
 ```
 
-The host owns private transport tickets; apps do not allocate IDs, match
-raw responses, or maintain a request batch. It preserves the host-observed order of
-messages within an input. A request that cannot complete with current host capacity
-still calls its callback with its operation's `Busy` result, so an app may show
-an error or explicitly retry it. See [`async_read/main.roc`](examples/async_read/main.roc) for file reads,
-[`input_inspector/main.roc`](examples/input_inspector/main.roc) for a clipboard request, and
-[`task_sleep/main.roc`](examples/task_sleep/main.roc) for a task, and
-[`http_fetch/main.roc`](examples/http_fetch/main.roc) for an HTTP request that
-keeps the frame moving while it waits.
+Apps do not allocate IDs, match raw responses, or maintain a batch. Messages
+arrive in the order the tasks finished, and every task delivers exactly one.
+The host runs 32 tasks at once and queues anything past that, starting each as
+a slot frees, so `Task.spawn!` never refuses. See
+[`async_read/main.roc`](examples/async_read/main.roc) for file reads,
+[`live_plot/main.roc`](examples/live_plot/main.roc) for a paced directory walk,
+[`task_sleep/main.roc`](examples/task_sleep/main.roc) for the smallest task, and
+[`http_fetch/main.roc`](examples/http_fetch/main.roc) for a fetch that keeps the
+frame moving while it waits.
 
 ## Start your own project
 

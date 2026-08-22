@@ -303,8 +303,8 @@ Every hosted effect carries a phase set in `src/host_native.zig` --
 `enforcePhase(name, during_update)` and friends -- that says which app
 callbacks may reach it: `during_load` and `during_update` for anything that
 changes host state (`init!`, `update!`, tasks), `during_render` for drawing,
-`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`
-and `App.request!`. A call from the wrong phase stops the app with a message
+`during_wait` for effects that park a task, `during_spawn` for `Task.spawn!`.
+A call from the wrong phase stops the app with a message
 naming the effect, the phase, and the fix, so choose the set deliberately and
 keep the public wrapper's doc comment in step with it.
 

@@ -1,19 +1,22 @@
 # Effectful update and coroutine-backed tasks for roc-ray
 
-Status: proposal, 2026-08-22. **Steps 1, 2, the effects of step 4, and the
-HTTP client half of step 7 are implemented on branch `spike-coro`** -- see
-"Spike status" below and `docs/spike-coro-findings.md` for the measurements.
-`App.Request` and `RequestQueue` remain until step 6.
+Status: proposal, 2026-08-22. **Steps 1, 2, 4, 6, and the HTTP client half
+of step 7 are implemented on branch `spike-coro`** -- see "Spike status"
+below and `docs/spike-coro-findings.md` for the measurements. `App.Request`,
+`RequestQueue`, and the effect worker are deleted; deferred work is a task.
+Steps 3 and 5 are what is left: `Task.spawn!` is done, so step 3 is only its
+remaining `Task.spawn_with!` convenience, and step 5 is CI on the other three
+targets.
 
-**Blocked on a compiler bug.** An erased closure (`Box(() => msg)` or
-`Box(RawResponse -> Box(msg))`) that crosses a hosted boundary returns
-certain tag-union layouts with the wrong tag, or double-frees on release
-(native codegen only; the interpreter is fine). It is layout-dependent:
-`[A(U64), B(U64)]` and `[Num(U64), Text(Str)]` fail; `[Num(U64), Text(Str),
-Nothing]` and `[Fetched(U16, Str, U64), Failed(Str)]` pass. It affects
-`Task.spawn!` and `App.request!` alike, so step 4's example ports and step 6
-wait on the fix; root-causing is in progress against the roc checkout.
-`main` is unaffected. The bisection is in `docs/spike-coro-findings.md`.
+**The delivery defect is fixed, and it was not a compiler bug.** An earlier
+version of this document blamed native codegen for a task's message arriving
+with the wrong tag. The cause was a hole in the API: `Task.spawn!` and
+`App.request!` both generalized `msg`, so the closure at the call site
+compiled at its own inferred type while `run_task_for_host!` decoded the
+result as the app's real `Msg`. `Task.spawn!` now takes an `App.Input(msg)`
+witness that pins the two together. See "Root cause: the `msg` type hole" in
+`docs/spike-coro-findings.md`; the sections there that call it a compiler bug
+carry a retraction.
 
 ## Spike status (2026-08-22, branch `spike-coro`)
 
@@ -34,7 +37,7 @@ What the spike settled:
 | Stack growth / overflow | zio grows 256 KB → 8 MB on demand; a 40M-deep recursion dies with a named "Coroutine stack overflow!" report. No interference with raylib or the host. |
 | Phase guard | `Task.sleep!` in `render!` → clean panic naming effect, phase, and fix. |
 | Shutdown with a parked task | `cancel()` → the sleep returns `Canceled` → the closure runs to its end → result dropped → `Runtime.deinit` asserts clean. Tracking allocator reports no leak. |
-| Type erasure for `Task.spawn!` | Works as section 5.4 describes: the closure is boxed on the Roc side, held opaquely, only `run_task_for_host!` names `Msg`. |
+| Type erasure for `Task.spawn!` | Works as section 5.4 describes: the closure is boxed on the Roc side, held opaquely, only `run_task_for_host!` names `Msg`. Section 5.4 was incomplete on one point: the *public* signature has to pin `msg` with an `App.Input(msg)` witness, or the call site compiles the closure at its own inferred type. |
 | Cross-compilation with zio in the host | All four targets build; only x64glibc was run. |
 | Headless runs | Task timers are wall-clock, so the headless loop paces to real-time 60 Hz while a task is live. Documented trade. |
 
@@ -56,11 +59,14 @@ compiler is the reference.
   The closure is boxed in `Task.roc`; the hosted signature is polymorphic in
   `msg`, which the pinned compiler accepts and `roc glue` erases to the same
   `RocErasedCallable` the spike used. `Transition.with_task` is gone.
+  *(Superseded: the public signature is now
+  `App.Input(msg), (() => msg) => {}` -- see the banner at the top.)*
 * `App.request! : Request(msg) => {}` is a hosted effect
   (`roc_app_submit_request`) so requests survive without `Transition`. The
   `Request(msg)` union moved to `AppHost` so `AppTransport` can name it
   without importing `App`; `App.Request` is an alias. `App.map_request`
   replaces `Transition.map_msg` for components that own requests.
+  *(Superseded: step 6 deleted all of it.)*
 * Deleted: `App.Command`, `App.Transition` and every receiver, `App.next`,
   `from_parts`, `map`, `map2`, `command_description`, `CommandApply.roc`,
   the command-coverage lint and `docs/command-coverage.md`, the
@@ -86,8 +92,10 @@ compiler is the reference.
   at a time while `update!` runs instead of as one list afterwards.
 
 Section 4.4's `map_msg` regression is real: a child component's tasks must
-produce the parent's `Msg`, and requests go through `App.map_request`. The
-`Task.spawn_with!` helper suggested there is not written yet.
+produce the parent's `Msg`. `App.map_request` covered the request half and is
+gone with it, so a component that starts deferred work now takes a
+`to_parent : ChildMsg -> msg` as 4.4 describes. The `Task.spawn_with!` helper
+suggested there is not written yet.
 
 ### Step 7 status: the HTTP client (2026-08-22)
 
@@ -663,13 +671,21 @@ enough to keep an enum layer for it. What exists instead:
    Port `async_read`. `ROC_RAY_TRACE_TASKS` already exists.
 4. **Retire the effect worker**: `Files.*`, clipboard read, screenshot
    become `std.Io` calls against `rt.io()` that park on a task. Port
-   remaining examples. *Effects done on `spike-coro`; the port is blocked on
-   message delivery (see Status).* The worker still services the `Request`
-   path, so it is not retired yet.
+   remaining examples. *Done on `spike-coro`.* `async_read`,
+   `capture_screenshot` and `postcard_studio` spawn tasks; `live_plot`
+   replaced `RequestQueue` with its own `List(Work)` backlog;
+   `input_inspector` dropped its message type entirely, because
+   `Window.read_clipboard!` never parks and its result feeds the frame that
+   asked.
 5. **CI on all four targets**; link stubs the `roc build` path needs.
-6. **Delete** `Request` and everything under it. Regenerate the ABI.
-   *Blocked: `Task.spawn!` cannot yet carry every message shape, so nothing
-   can be ported off `Request`.*
+6. **Delete** `Request` and everything under it. Regenerate the ABI. *Done
+   on `spike-coro`*: about 2,200 lines out of `host_native.zig` -- the
+   effect worker, the ticket table, the delay timers, the per-cycle request
+   budgets -- and `App.request!`, `App.Request`, `RequestQueue.roc`,
+   `AppHost`'s request records, and all of `AppTransport` bar the
+   recording-status decoding. Task results ride a `TaskResultStaging` of
+   erased message thunks instead of the old response envelopes. The live
+   task cap (32, queueing past it) landed with it.
 7. **Add what the critique asked for**: `Http.send!` (`std.http.Client`
    over `rt.io()`; zio has an `http_client` example) -- *done, out of
    order, see "Step 7 status" above*; `Files.write_*!`, `Path`.

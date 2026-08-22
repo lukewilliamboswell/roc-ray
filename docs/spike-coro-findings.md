@@ -461,6 +461,13 @@ startup with no first-frame state machine.
 
 ### Delivery defect, narrowed (reviewer's reproduction, 2026-08-22)
 
+**Retracted, 2026-08-22:** this section and the one above it call the defect a
+compiler bug in native codegen. It is not. The root cause is below, under
+"Root cause: the `msg` type hole"; the layout-dependence recorded here is real
+but incidental -- it is which wrong reads happened to be survivable. The
+bisection is kept because the shapes it rules out are still worth not
+repeating.
+
 The section above overstates the defect. Re-tested on `spike-coro` with
 ~20 minimal probe apps (`Msg` shape varied, one `Task.spawn!` or
 `App.request!` per probe, exit code encodes what `update!` received):
@@ -486,3 +493,99 @@ The section above overstates the defect. Re-tested on `spike-coro` with
 Root-causing is in progress against the roc checkout. Until it lands,
 `Task.spawn!`/`App.request!` are reliable only for shapes verified by a
 probe; step 4's example ports and step 6 wait on the fix.
+
+## Root cause: the `msg` type hole
+
+Found and fixed 2026-08-22. Not a compiler bug.
+
+`Task.spawn! : (() => msg) => {}` and `App.request! : Request(msg) => {}` both
+generalize `msg`. Nothing in either signature ties the closure to the app's
+`Msg`, so at a call site inside `update!` the closure is compiled at whatever
+type its own body implies:
+
+    Task.spawn!(|| B(5))     # compiled at [B(Dec)] -- one tag, no discriminant
+
+`run_task_for_host! : Box(() => Msg) => ...` then decodes the returned bytes as
+the app's real `Msg`. For a single-tag closure type there is no discriminant to
+read, so the host reads whatever is there: the wrong tag, a payload through the
+wrong variant's layout, or -- when the misread variant holds a `Str` or a
+`List` -- an abort inside `roc_dealloc`. Which of those happened depended on the
+two layouts' relationship, which is exactly the layout-dependence the
+reproduction above measured and mistook for a codegen bug.
+
+The fix is to pin `msg` with a witness the app already holds:
+
+    # platform/Task.roc
+    spawn! : App.Input(msg), (() => msg) => {}
+    spawn! = |input, task!| App.Input.spawn!(input, task!)
+
+`input` is never read. It exists so that `msg` unifies with the app's `Msg` at
+the call site. `Task` imports `App`, and `App` does not import `Task`, so there
+is no cycle; the implementation lives on the `App.Input.spawn!` receiver, which
+also gives `input.spawn!(|| ...)` for free. A task closure can capture the
+input, so a task can spawn further tasks.
+
+The general rule, now in `CONTRIBUTING.md`: **any platform function whose
+signature mentions `msg` and reaches a hosted effect must pin `msg` with an
+`App.Input(msg)` parameter, or something equally concrete.** Only
+`platform/main.roc` can name the `requires` bound `Msg`; everywhere else a
+witness is how it is named.
+
+`test/task_delivery` guards it. Its `Msg` is
+`[Num(U64), Text(Str), Bytes(List(U8)), Nested(Try(Str, [Bad]))]` -- no
+payload-less variant, so nothing in it is zero-sized and safe by accident -- and
+it spawns one task per variant plus one that parks first. Reverting the witness
+and rebuilding it gives exit 3; with the witness it exits 0 and the trace shows
+all six messages arriving.
+
+## Live task cap
+
+`Tasks` keeps 32 tasks running and queues the rest FIFO, starting each as a slot
+frees. `Task.spawn!` never refuses. `test/task_cap` spawns a hundred in one
+`update!` and requires all hundred ids back, summing to 5050.
+
+Writing that probe found a separate, older bug. `rt.spawn` hands control to the
+executor as soon as zio's tick budget says to, so a newly spawned task starts
+*inside* the spawning `update!`; it sets `active_phase = .task`, and clears it
+to `.idle` when it parks. Control returns to the spawner with the frame's phase
+gone, and the fourteenth `Task.spawn!` in one `update!` aborted with
+
+    roc-ray: Task.spawn! is only valid during update! or a task, but it was
+    called during outside any app callback.
+
+`hostedTaskSpawn` now saves and restores the phase around the call. No example
+spawned enough tasks in one cycle to hit it.
+
+## Step 6: the request path is gone
+
+`App.request!`, `App.Request`, `RequestDescription`, `request_description`,
+`map_request`, `AppHost`'s request records, `RequestQueue.roc`, the pure request
+constructors, and all of `AppTransport` bar the recording-status decoding are
+deleted. So is the `EffectWorker` and everything under it: the ticket table, the
+delay timers, the per-cycle request budgets, the headless read budget, and the
+old screenshot ticket. About 2,200 lines out of `src/host_native.zig`.
+
+Task results no longer ride the response path. `update_for_host!` takes
+`task_results : List(TaskHost.FinishedTask(Msg))`, a one-field record holding
+the erased thunk `run_task_for_host!` returns, and the host stages those thunks
+and nothing else.
+
+The thunk stays rather than becoming a plain `Box(Msg)`. The glue bug recorded
+earlier in this document is still open: `roc glue` renders `List(Box(msg))` as
+`RocListWith(RocBox, false)`, a one-word list header, while Roc releases it as a
+list of refcounted elements with a two-word one, so the host frees eight bytes
+off the allocation base. `List(record-holding-an-erased-callable)` is the shape
+that already worked, and glue renders it as a proper `RocList`. The
+`TODO(compiler)` lives on `TaskHost.FinishedTask`.
+
+The byte-list ownership tests were ported rather than dropped:
+`installReadBytes` is factored out of `readByteListWaiting`, so the exhaustive
+seamless-ARC drop-order test, the no-copy measurement, the canonical empty list,
+and the full-heap refusal all run against the live path. The two `Str` rules --
+UTF-8 validation and the 64 KiB ceiling -- are now stated against
+`Files.read_text!` on real files.
+
+One thing found on the way: `scripts/test_app_transport_privacy.py` had been
+truncated to zero bytes by f9ff100, and an empty Python file exits 0, so every
+`test/compile_fail/` fixture had been unchecked since. Restored, with the
+missing `rr.HttpHost` case added.

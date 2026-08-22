@@ -1,12 +1,14 @@
 # RocRay architecture
 
-> **Status (2026-08-22):** the `App.Transition` / `App.Command` design
-> described below has been superseded on branch `spike-coro` by an effectful
-> `update!` with direct host effects, `Task.spawn!` coroutine tasks, and a
-> runtime phase guard -- see `COROUTINE_DESIGN_PROPOSAL.md`. `App.Request`
-> and its response messages still work as described here until step 6 of that
-> proposal replaces them. The sections on commands, the apply phase, and the
-> command-coverage invariant describe the previous design.
+> **Status (2026-08-22):** the `App.Transition` / `App.Command` / `App.Request`
+> design described below has been superseded on branch `spike-coro` by an
+> effectful `update!` with direct host effects, `Task.spawn!` coroutine tasks,
+> and a runtime phase guard -- see `COROUTINE_DESIGN_PROPOSAL.md`. All three
+> are now deleted, along with `RequestQueue`; deferred work is a task, and its
+> return value arrives on `Input.messages` where a request response used to.
+> The sections below on transitions, commands, requests, the apply phase, and
+> the command-coverage invariant describe the previous design and are kept as
+> the record of it.
 
 ## Purpose of this document
 

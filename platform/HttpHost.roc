@@ -2,10 +2,10 @@
 ##
 ## This module is intentionally not exposed by the platform package.
 ##
-## `send!` waits, so it is a task effect: inside `Task.spawn!` it parks the
-## coroutine while the host's `std.http.Client` runs on the zio runtime and the
-## frame loop keeps drawing; inside `init!` it blocks. Calling it from
-## `update!` or `render!` is a programmer error and stops the app.
+## `send!` carries the `during_wait` phase set in `src/host_native.zig`: inside
+## `Task.spawn!` it parks the coroutine while the host's `std.http.Client` runs
+## on the zio runtime and the frame loop keeps drawing; inside `init!` it
+## blocks. It is refused in `update!` and `render!`.
 ##
 ## The wire shape mirrors basic-cli's `RequestToAndFromHost` /
 ## `ResponseToAndFromHost` so an app that knows one knows the other, with two

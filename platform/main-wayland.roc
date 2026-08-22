@@ -264,19 +264,16 @@ init_for_host! = ||
 ##
 ## Called once per fresh host-cycle input, whether or not that cycle presents.
 ## `update!` is effectful: synchronous host effects run inline, in program
-## order, and deferred work reaches the host through the `Task.spawn!` effect
-## while this call is in progress. The separate
-## `render_for_host!` callback is optional for the cycle and, when invoked,
-## receives this resulting model.
+## order, and tasks reach the host through the `Task.spawn!` effect while this
+## call is in progress. The separate `render_for_host!` callback is optional
+## for the cycle and, when invoked, receives the model this one returns.
 ##
 ## Writing to a collection held in the model is an in-place write. The box
-## arrives holding the model's only reference -- measured at refcount 1 on entry
-## -- and unboxing here consumes it, so `update!` runs with the model's lists
-## uniquely referenced and mutates them rather than copying. Measured on
-## `nightly-2026-08-21-90da19f` at under a hundred bytes per frame for a
-## million-element `List(F32)` by `test/model_inplace` under
-## `scripts/test_model_allocation.py`, which checks that budget. Earlier pins
-## copied the whole list every frame; `--characterize` describes that behaviour.
+## arrives holding the model's only reference -- refcount 1 on entry -- and
+## unboxing here consumes it, so `update!` runs with the model's lists uniquely
+## referenced and mutates them rather than copying. `test/model_inplace` holds
+## that to under a hundred bytes per frame for a million-element `List(F32)`,
+## under `scripts/test_model_allocation.py`.
 update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
 update_for_host! = |boxed_model, { devices, window, time, task_results, capture }| {
 	messages = receive_task_results(task_results)
@@ -293,12 +290,15 @@ update_for_host! = |boxed_model, { devices, window, time, task_results, capture 
 ##
 ## The host calls this from the task's own stack; a waiting effect inside the
 ## closure parks that stack and this call returns later, after the frame loop
-## has gone around as many times as it needed to.
+## has gone around as many times as it needed to. This is the only place
+## outside `main.roc`'s `requires` block where a task's message type is named,
+## which is why every public spawn takes an `App.Input(msg)` witness.
 ##
 ## The message comes back wrapped in an erased thunk rather than as a
-## `Box(Msg)`, because `roc glue` renders a `List(Box(msg))` with a one-word
-## list header while every backend allocates and frees it with the two-word
-## refcounted one. `TaskHost.FinishedTask` has the whole account.
+## `Box(Msg)`, to work around a `roc glue` defect that renders a
+## `List(Box(msg))` with a one-word list header while every backend allocates
+## and frees it with the two-word refcounted one. `TaskHost.FinishedTask` has
+## the account.
 run_task_for_host! : Box(() => Msg) => Box({} -> Box(Msg))
 run_task_for_host! = |boxed| {
 	run! = Box.unbox(boxed)
@@ -308,8 +308,8 @@ run_task_for_host! = |boxed| {
 
 ## Unwrap every finished task's message, in the order the tasks completed.
 ##
-## The list is pre-sized and preserves that order without intermediate result
-## lists.
+## That order becomes `Input.messages`, so it is the order `update!` sees. The
+## list is pre-sized and preserves it without intermediate result lists.
 receive_task_results : List(TaskHost.FinishedTask(msg)) -> List(msg)
 receive_task_results = |results| {
 	var $messages = List.with_capacity(List.len(results))

@@ -136,7 +136,7 @@ platform ""
 	}
 	targets: {
 		inputs_dir: "targets/",
-		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, "libc.so", "crtn.o"] },
+		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, "libc.so", "crtn.o"] },
 	}
 
 import Draw

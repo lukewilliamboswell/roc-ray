@@ -566,7 +566,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
 
             expected_target = (
                 'x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", '
-                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", app, '
+                '"libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", app, '
                 '"libc.so", "crtn.o"] }'
             )
             if expected_target not in main_text:
@@ -581,6 +581,7 @@ def _inspect_wayland_bundle(bundle_path: Path) -> list[str]:
             "targets/x64glibc/libraylib.a",
             "targets/x64glibc/libmsf_gif.a",
             "targets/x64glibc/libvpx.a",
+            "targets/x64glibc/libsqlite3.a",
             "targets/x64glibc/libm.so",
             "targets/x64glibc/libc.so",
         }

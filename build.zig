@@ -70,6 +70,14 @@ const RocTarget = enum {
         };
     }
 
+    /// Get the SQLite archive filename for this target
+    fn sqlite3Filename(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64win => "sqlite3.lib",
+            else => "libsqlite3.a",
+        };
+    }
+
     /// libvpx is configured per CPU architecture, not per OS: the generated
     /// headers only vary in which `VPX_ARCH_*`/`HAVE_<simd>` are set, and both
     /// macOS targets share theirs with the Linux/Windows target of the same
@@ -118,6 +126,9 @@ pub fn build(b: *std.Build) void {
         )).step);
         cleanup_step.dependOn(&CleanupStep.create(b, b.path(
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
+        )).step);
+        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.sqlite3Filename() }),
         )).step);
     }
     // Clean legacy locations
@@ -175,6 +186,12 @@ pub fn build(b: *std.Build) void {
         copy_all.addCopyFileToSource(
             build_result.libvpx_archive,
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libvpxFilename() }),
+        );
+
+        // Copy the SQLite archive to platform/targets/{target}/
+        copy_all.addCopyFileToSource(
+            build_result.sqlite3_archive,
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.sqlite3Filename() }),
         );
 
         // Copy libc.so stub for Linux targets
@@ -445,6 +462,7 @@ const BuildResult = struct {
     raylib_archive: std.Build.LazyPath,
     msf_gif_archive: std.Build.LazyPath,
     libvpx_archive: std.Build.LazyPath,
+    sqlite3_archive: std.Build.LazyPath,
     libc_stub: ?std.Build.LazyPath,
     libm_stub: ?std.Build.LazyPath,
     x11_stub: ?std.Build.LazyPath,
@@ -843,6 +861,90 @@ fn buildLibvpx(
     return libvpx;
 }
 
+/// Compiler flags for the vendored SQLite.
+///
+/// The stack protector and stack probes are off for the same reason libvpx
+/// turns them off: the Windows archive is compiled against mingw headers and
+/// linked into an MSVC-target binary, and those options emit calls to
+/// libgcc-only helpers no MSVC CRT provides.
+///
+/// The `SQLITE_*` defines are the recommended build options from
+/// <https://sqlite.org/compile.html>, less the ones that would change
+/// behaviour an app can see. `vendor/sqlite/README.md` explains each choice.
+const sqlite3_flags = [_][]const u8{
+    "-std=c99",
+    "-fno-stack-protector",
+    "-mno-stack-arg-probe",
+    "-Wno-unused-function",
+    // Serialized. The host holds its own per-connection mutex, so mode 2 would
+    // be enough for correctness, but shutdown calls sqlite3_interrupt from the
+    // frame thread while a query runs on a blocking-pool thread, and serialized
+    // mode is what makes that safe without further argument.
+    "-DSQLITE_THREADSAFE=1",
+    // A database file can never cause native code to be loaded.
+    "-DSQLITE_OMIT_LOAD_EXTENSION",
+    "-DSQLITE_OMIT_DEPRECATED",
+    "-DSQLITE_OMIT_SHARED_CACHE",
+    // A double-quoted string is an identifier, never a string literal, so a
+    // mistyped column name is an error instead of quietly becoming text.
+    "-DSQLITE_DQS=0",
+    "-DSQLITE_DEFAULT_MEMSTATUS=0",
+    "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+    "-DSQLITE_LIKE_DOESNT_MATCH_BLOBS",
+    "-DSQLITE_MAX_EXPR_DEPTH=0",
+    "-DSQLITE_USE_ALLOCA",
+    // Kept, unlike most of the extension set: these two are what make a
+    // visualization query worth running in the database rather than in Roc.
+    "-DSQLITE_ENABLE_MATH_FUNCTIONS",
+};
+
+/// Build the vendored SQLite for one target.
+///
+/// Same shape as buildLibvpx: its own static library so the real libc headers
+/// sqlite needs stay off the freestanding host module, and its own C shim so
+/// the Zig side never sees a sqlite type.
+fn buildSqlite3(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    roc_target: RocTarget,
+) *std.Build.Step.Compile {
+    // As with libvpx: MSVC has no libc headers available when cross-compiling
+    // from Linux, and the amalgamation needs a dozen of them. Plain C with no
+    // CRT-specific types in its interface, so build it against mingw's headers
+    // instead; both produce COFF objects with the same C ABI.
+    const sqlite_target = if (roc_target == .x64win)
+        b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu })
+    else
+        target;
+
+    const sqlite3 = b.addLibrary(.{
+        .name = "sqlite3",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = sqlite_target,
+            .optimize = optimize,
+            .strip = optimize != .Debug,
+            .pic = true,
+            // As with the other vendored C: Roc's final link has no UBSan runtime.
+            .sanitize_c = .off,
+            .link_libc = true,
+        }),
+    });
+    sqlite3.root_module.addIncludePath(b.path("vendor/sqlite"));
+    sqlite3.root_module.addCSourceFile(.{
+        .file = b.path("vendor/sqlite/sqlite3.c"),
+        .flags = &sqlite3_flags,
+    });
+    // The narrow C shim the host actually calls; see src/sqlite_effect.zig.
+    sqlite3.root_module.addCSourceFile(.{
+        .file = b.path("vendor/sqlite/shim/rocray_sqlite.c"),
+        .flags = &sqlite3_flags,
+    });
+
+    return sqlite3;
+}
+
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -906,6 +1008,7 @@ fn buildHostLib(
         }),
     });
     const libvpx = buildLibvpx(b, target, optimize, roc_target);
+    const sqlite3 = buildSqlite3(b, target, optimize, roc_target);
 
     msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif"));
     msf_gif.root_module.addIncludePath(b.path("vendor/msf_gif/shim"));
@@ -953,6 +1056,7 @@ fn buildHostLib(
         .raylib_archive = raylib_archive,
         .msf_gif_archive = msf_gif.getEmittedBin(),
         .libvpx_archive = libvpx.getEmittedBin(),
+        .sqlite3_archive = sqlite3.getEmittedBin(),
         .libc_stub = libc_stub,
         .libm_stub = libm_stub,
         .x11_stub = x11_stub,

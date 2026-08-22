@@ -1,7 +1,16 @@
-## Color module - RGBA colors for the Roc raylib platform.
+## RGBA colors.
 ##
-## Channels are 8-bit sRGB values. Alpha is 0 for transparent and 255 for
-## fully opaque.
+## Channels are 8-bit sRGB values. Alpha is `0` for transparent and `255` for
+## fully opaque. A color is a plain value: build one, keep it in the model, and
+## hand it to any drawing call.
+##
+## The named constants cover the common cases, `from_hex_rgb` reads the form a
+## designer hands over, and `with_alpha` makes any of them translucent.
+##
+## ```roc
+## accent = Color.from_hex_rgb(0x2f80ed)
+## glow = Color.with_alpha(accent, 100)
+## ```
 Color := [].{
 
 	## An 8-bit sRGB color with alpha.

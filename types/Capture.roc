@@ -1,8 +1,9 @@
-## Capture module - describing screenshots and recordings.
+## Describing screenshots and recordings.
 ##
 ## These types are pure data: they say what to capture and how, and carry no
 ## effects. The effects that act on them live in the platform's `Capture`
-## module, which re-exports everything declared here.
+## module, which re-exports everything declared here, so an app names them
+## through `Capture` and never depends on this package directly.
 
 CaptureFormat := [Png, Gif, WebM].{
 	is_eq : _

@@ -1,8 +1,14 @@
 ## Pure font metrics and raylib-compatible text measurement.
 ##
-## A platform font can satisfy `font.Measurable` while retaining its native
-## resource privately. Reusable packages need only this module and never call
-## the host while laying out text.
+## `measure` is the whole point: it answers the size a string will occupy at a
+## given font size and letter spacing, following raylib's own rules, without
+## calling the host. A layout pass can therefore run in a pure function, in a
+## test, or in a package that does not depend on the platform.
+##
+## It works on anything that can answer for its glyphs -- a base size, a line
+## spacing, a glyph table, and a codepoint lookup. `Draw.Font` answers all
+## four while keeping its native resource private, which is how a platform font
+## is measured here without this module knowing what a platform is.
 import unicode.Scalar
 
 font.Measurable :
@@ -62,6 +68,8 @@ Font := [].{
 		Font.measure_scalars(font, cfg, font.glyphs(), Scalar.iter(cfg.text), state)
 	}
 
+	## One step of `measure`, folding the next Unicode scalar into the running
+	## line and answering the finished `Size` when the string runs out.
 	measure_scalars : font, Measure, List(GlyphMetrics), Iter(Scalar.LocatedScalar), MeasureState -> Size where [font.Measurable]
 	measure_scalars = |font, cfg, glyphs, scalars, state| {
 		match Iter.next(scalars) {
@@ -104,6 +112,8 @@ Font := [].{
 		}
 	}
 
+	## Turn `measure`'s accumulated state into the `Size` it answers with, once
+	## every scalar has been folded in.
 	finish : font, Measure, MeasureState -> Size where [font.Measurable]
 	finish = |font, cfg, state| {
 		if !state.seen {
@@ -119,9 +129,11 @@ Font := [].{
 		}
 	}
 
+	## The larger of two `F32` values, used to keep the widest line seen so far.
 	max_f32 : F32, F32 -> F32
 	max_f32 = |a, b| if a > b a else b
 
+	## The larger of two `U64` values, used to keep the longest line seen so far.
 	max_u64 : U64, U64 -> U64
 	max_u64 = |a, b| if a > b a else b
 }

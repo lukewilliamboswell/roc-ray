@@ -1,16 +1,18 @@
-## Devices module - one cycle of sampled keyboard, text, mouse and gamepad state.
+## One cycle of sampled keyboard, text, mouse and gamepad state.
 ##
-## A `Snapshot` is an *observation*: it says what the input devices looked like
+## A `Snapshot` is an observation: it says what the input devices looked like
 ## when the host sampled them at the start of a cycle, and nothing else. It
 ## carries no authority to change anything, so it is safe to hold in a model and
-## safe to hand to a pure function.
+## safe to hand to a pure function. `App.Input` carries one as `input.devices`.
 ##
 ## A test writes an observation of its own. `Devices.none` is a neutral snapshot
 ## with the host's packed list lengths, and the `with_key_*` and `with_mouse_*`
 ## receivers state one device's state at a time, so a test can say exactly the
-## thing it is about and nothing else:
+## thing it is about and nothing else.
 ##
-##     Devices.for_tests({}).with_key_pressed(KeySpace)
+## ```roc
+## Devices.none.with_key_pressed(KeySpace)
+## ```
 import Keys
 import Mouse
 import Gamepad
@@ -154,9 +156,11 @@ Devices := [].{
 	## actually samples: 349 key bytes, 7 mouse-button bytes, 4 gamepad
 	## availability bytes, 4 x 18 gamepad button bytes, and 4 x 6 axes. That is
 	## what makes it writable, so the `with_key_*` and `with_mouse_*` receivers
-	## have somewhere to put a bit:
+	## have somewhere to put a bit.
 	##
-	##     devices = Devices.for_tests({}).with_key_pressed(KeyEscape)
+	## ```roc
+	## devices = Devices.none.with_key_pressed(KeyEscape)
+	## ```
 	##
 	## Seed a model with `empty`; build a test's input from `none`.
 	none : Snapshot

@@ -1,8 +1,17 @@
-## Physics module - friendly 3D projective geometric algebra primitives.
+## 3D projective geometric algebra: points, lines, planes, and the motors
+## that move them.
 ##
-## This module uses compact grade-specific PGA storage. The public API stays
-## geometric, but each object stores coefficients for its PGA subspace rather
-## than plain graphics vectors.
+## Reach for `Math` first. Its `Vec2` and `Rect` are what every drawing call
+## takes, and 2D positions, velocities, and axis-aligned boxes belong there.
+## This module is for the problems that algebra cannot state: composing a
+## rotation with a translation as one object, intersecting a line with a plane,
+## or projecting one onto the other, in three dimensions and without special
+## cases for parallel or coincident arguments.
+##
+## Each object stores the coefficients of its own PGA subspace rather than
+## plain graphics vectors, so the storage is compact and grade-specific. The
+## public API stays geometric: construct points, lines and planes, and combine
+## them with joins, meets, and motors.
 import Math
 
 Physics := [].{

@@ -1,7 +1,16 @@
-## Math module - small 2D helpers for examples and simple games.
+## Small 2D vector and rectangle helpers.
 ##
-## Coordinates use the same screen-space convention as Draw: x grows to the
-## right, y grows downward, and rectangles are top-left plus width/height.
+## Coordinates use the same screen-space convention as `Draw`: x grows to the
+## right, y grows downward, and a rectangle is a top-left corner plus a width
+## and a height. These are the types every drawing call takes, so most apps
+## need nothing more than this module for their geometry.
+##
+## ```roc
+## next = model.position.add(model.velocity.scale(input.time.elapsed_seconds))
+## ```
+##
+## `Physics` is the other one: it is 3D projective geometric algebra, for
+## rotations and intersections that 2D vectors cannot express.
 Math := [].{
 
 	## Two-dimensional floating-point vector.

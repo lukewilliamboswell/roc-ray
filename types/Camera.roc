@@ -1,24 +1,31 @@
-## Camera module - pure 2D camera settings for world-space drawing.
+## Pure 2D camera settings for world-space drawing.
 ##
 ## A camera is a value, not a host-owned resource. Build the camera you want
-## for the current frame and pass it to `Draw.with_camera!`.
+## for the current frame and pass it to `Draw.with_camera!`, which applies it
+## for the duration of a nested scope.
+##
+## ```roc
+## camera = Camera.centered(model.player, Math.vec2(800, 600))
+## frame.with_camera!(camera, |world| {
+##     world.circle!({ center: model.player, radius: 12, style: Draw.filled(Color.white) })
+##     Ok({})
+## })?
+## ```
 ##
 ## Every constructor and builder here is total: it answers with a `Camera2D`
 ## rather than a `Try`. A camera has exactly two invariants -- every transform
 ## field is finite, and the zoom is non-zero so `screen_to_world` can invert it
 ## -- and the only inputs that can break them are inputs no caller means to
 ## pass. Rather than make every app carry an unreachable `Err` branch for
-## those, they are sanitized on the way in:
+## those, they are sanitized on the way in. A `target` or `offset` component
+## that is not finite becomes `0`, as does a `rotation` that is not finite; a
+## `zoom` that is zero or not finite becomes `fallback_zoom`, keeping its sign
+## so a mirrored camera stays mirrored.
 ##
-## * a `target` or `offset` component that is not finite becomes `0`
-## * a `rotation` that is not finite becomes `0`
-## * a `zoom` that is zero or not finite becomes `fallback_zoom`, keeping its
-##   sign so a mirrored camera stays mirrored
-##
-## Nothing else is touched. Sanitizing only ever rewrites a value the old
-## validating API would have refused outright, so every camera that used to
-## come back as `Ok` now comes back with its fields unchanged -- negative,
-## axis-mirroring zooms included.
+## Nothing else is touched. Sanitizing only ever rewrites a value a validating
+## API would have refused outright, so a camera built from ordinary numbers
+## comes back with its fields unchanged -- negative, axis-mirroring zooms
+## included.
 import Math
 
 Camera := [].{

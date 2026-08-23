@@ -4,16 +4,26 @@ import rr.App
 import rr.Capture
 import rr.Color
 import rr.Draw
+import rr.Keys
 import rr.Mouse
 import rr.Text
 
-## Record a UI demo driven by a scripted pointer.
+## Record a UI demo driven by a scripted pointer and keyboard.
 ##
-## `Mouse.set_source!` replaces only what the host reports on the
-## input, so the widget code below is ordinary hover and hit-test logic
-## reading `input.mouse` -- it has no idea the pointer is scripted. That is the
+## `Mouse.set_source!` and `Keys.set_source!` replace only what the host reports
+## on the input, so the widget code below is ordinary hover, hit-test and
+## text-entry logic reading `input.mouse`, `input.text_input` and
+## `input.key_pressed` -- it has no idea either device is scripted. That is the
 ## point: the recording exercises the real input path instead of a parallel
-## fake one, so what you see in the GIF is what a real click would do.
+## fake one, so what you see in the GIF is what a real click or keystroke would
+## do.
+##
+## Keys and text are separate channels because they are separate things. A key
+## code says which key is held, and edges fall out of consecutive frames;
+## `Keys.set_text!` says what characters were entered, which on a real keyboard
+## depends on the layout and so cannot be derived from a key code. The field
+## below fills from the text channel and its backspace comes from the key
+## channel.
 ##
 ## The recording asks for `DrawCursor`, because the operating-system cursor is
 ## not part of the framebuffer and would otherwise be missing from the file.
@@ -31,17 +41,28 @@ Model : {
 	clicks : U64,
 	toggled : Bool,
 	slider : F32,
+
+	## Whether the text field has the keyboard. Scripted text arrives whatever
+	## has focus, exactly as hardware text would; it is this app that decides
+	## the field is where it goes.
+	focused : Bool,
+
+	## How many characters of `field_text` the field holds. The script types
+	## that string in order, so a count names the field's contents and the
+	## labels for every reachable one are prepared up front.
+	typed : U64,
 	title : Text.Prepared,
 	increment_label : Text.Prepared,
 	toggle_label : Text.Prepared,
 	counter_labels : List(Text.Prepared),
+	field_labels : List(Text.Prepared),
 }
 
 program = { init!, update!, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
 recorded_frames : U64
-recorded_frames = 150
+recorded_frames = 240
 
 ## Highest click count the demo can reach, so its labels can be prepared once.
 max_clicks : U64
@@ -56,11 +77,36 @@ toggle_button = { x: 260, y: 150, width: 170, height: 56 }
 slider_track : { x : F32, y : F32, width : F32, height : F32 }
 slider_track = { x: 60, y: 260, width: 370, height: 12 }
 
+text_field : { x : F32, y : F32, width : F32, height : F32 }
+text_field = { x: 60, y: 300, width: 370, height: 46 }
+
+## What the script types, one character per typed frame.
+field_text : List(Str)
+field_text = ["r", "o", "c", "-", "r", "a", "y", "!"]
+
+## Frame the first character is entered on, and the gap between characters.
+first_type_frame : U64
+first_type_frame = 165
+
+type_every : U64
+type_every = 6
+
+## Frame the script holds backspace on, deleting the trailing `!`.
+##
+## One frame, so the field's `key_pressed` handling deletes exactly one
+## character however long the recording runs at.
+backspace_frame : U64
+backspace_frame = 215
+
+## Backspace lands after the last character and before the recording ends.
+expect backspace_frame > first_type_frame + (List.len(field_text) - 1) * type_every
+expect backspace_frame < recorded_frames
+
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("RocRay Capture: UI demo")
-		.with_size({ width: 490, height: 320 })
+		.with_size({ width: 490, height: 380 })
 		.with_frame_pacing(Capped(60))
 		.with_visible(Bool.False)
 		.with_output_dir("captures")
@@ -84,10 +130,13 @@ init! = App.init(
 			clicks: 0,
 			toggled: Bool.False,
 			slider: 0,
-			title: Text.from("Scripted pointer", font).size(24).prepare!()?,
+			focused: Bool.False,
+			typed: 0,
+			title: Text.from("Scripted input", font).size(24).prepare!()?,
 			increment_label: Text.from("Increment", font).size(18).prepare!()?,
 			toggle_label: Text.from("Toggle", font).size(18).prepare!()?,
 			counter_labels: prepare_counter_labels!(font, 0, [])?,
+			field_labels: prepare_field_labels!(font, 0, [])?,
 		})
 	},
 )
@@ -101,6 +150,28 @@ prepare_counter_labels! = |font, index, acc|
 		label = Text.from("clicks: ${U64.to_str(index)}", font).size(18).prepare!()?
 		prepare_counter_labels!(font, index + 1, List.append(acc, label))
 	}
+
+## Prepare one label per prefix of `field_text`, for the same reason.
+##
+## The script types that string in order and backspace only ever removes from
+## its end, so every state the field can reach is one of these prefixes.
+prepare_field_labels! : Draw.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_field_labels! = |font, index, acc|
+	if index > List.len(field_text) {
+		Ok(acc)
+	} else {
+		label = Text.from(field_prefix(index), font).size(20).prepare!()?
+		prepare_field_labels!(font, index + 1, List.append(acc, label))
+	}
+
+## The first `count` characters of what the script types.
+field_prefix : U64 -> Str
+field_prefix = |count|
+	List.fold(List.sublist(field_text, { start: 0, len: count }), "", Str.concat)
+
+expect field_prefix(0) == ""
+expect field_prefix(3) == "roc"
+expect field_prefix(List.len(field_text)) == "roc-ray!"
 
 Msg : []
 
@@ -134,11 +205,29 @@ update! = |model, program_input| {
 			model.slider
 		}
 
-	# The scripted pointer is installed here, before anything is drawn, and a
-	# cycle before the host samples it back.
+	# Ordinary focus handling: a click puts the keyboard wherever it landed.
+	focused = if pressed inside(mouse, text_field) else model.focused
+
+	# Ordinary text entry, from the two channels a keyboard has. Codepoints
+	# arrive on `text_input`; backspace is key state, and its edge is produced
+	# by the same detector that gives a hardware key one.
+	typed = field_after_input(
+		model.typed,
+		focused,
+		List.len(input.text_input),
+		input.key_pressed(KeyBackspace),
+	)
+
+	# The scripted devices are installed here, before anything is drawn, and a
+	# cycle before the host samples them back.
 	Mouse.set_source!(
 		if pointer_step.clicking Mouse.virtual_click_at(pointer_step.pos) else Mouse.virtual_at(pointer_step.pos),
 	)
+	Keys.set_source!(if model.frame == backspace_frame Keys.holding([KeyBackspace]) else Keys.holding([]))
+	next_char = typed_char(model.frame)
+	if !Str.is_empty(next_char) {
+		Keys.set_text!(Keys.typing(next_char))
+	}
 
 	if model.frame >= recorded_frames {
 		Err(Exit(0))
@@ -152,9 +241,58 @@ update! = |model, program_input| {
 			clicks: clicks,
 			toggled: toggled,
 			slider: slider,
+			focused: focused,
+			typed: typed,
 		})
 	}
 }
+
+## Fold one cycle of keyboard input into the field's character count.
+##
+## Kept pure so the expects below cover it: the recording is the illustration,
+## not the test.
+field_after_input : U64, Bool, U64, Bool -> U64
+field_after_input = |typed, focused, entered, backspace|
+	if !focused {
+		typed
+	} else {
+		grown = typed + entered
+		filled = if grown > List.len(field_text) List.len(field_text) else grown
+		if backspace and filled > 0 filled - 1 else filled
+	}
+
+## Text arriving while the field is not focused goes nowhere.
+expect field_after_input(0, Bool.False, 2, Bool.False) == 0
+
+expect field_after_input(0, Bool.True, 1, Bool.False) == 1
+expect field_after_input(3, Bool.True, 0, Bool.True) == 2
+expect field_after_input(0, Bool.True, 0, Bool.True) == 0
+
+## The field stops at the string the script types, so `render!` always has a
+## prepared label for the count.
+expect field_after_input(List.len(field_text), Bool.True, 3, Bool.False) == List.len(field_text)
+
+## The character the script enters on a given frame, or "" for frames that
+## type nothing -- which is most of them.
+typed_char : U64 -> Str
+typed_char = |frame|
+	if frame < first_type_frame or (frame - first_type_frame) % type_every != 0 {
+		""
+	} else {
+		match List.get(field_text, (frame - first_type_frame) / type_every) {
+			Ok(character) => character
+			Err(_) => ""
+		}
+	}
+
+expect typed_char(first_type_frame) == "r"
+expect typed_char(first_type_frame + 1) == ""
+expect typed_char(first_type_frame + type_every) == "o"
+expect typed_char(first_type_frame + 7 * type_every) == "!"
+
+## Typing stops when the string runs out rather than wrapping around.
+expect typed_char(first_type_frame + 8 * type_every) == ""
+expect typed_char(0) == ""
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
@@ -167,6 +305,18 @@ render! = |model, frame| {
 	draw_button!(frame, increment_button, over_increment, model.held and over_increment, model.increment_label)
 	draw_button!(frame, toggle_button, over_toggle, model.toggled, model.toggle_label)
 	draw_slider!(frame, model.slider)
+	draw_field_box!(frame, model.focused)
+
+	match List.get(model.field_labels, model.typed) {
+		Ok(label) => {
+			label.draw!(frame, { pos: field_text_origin, color: Color.white, align: Text.align_top_left })
+			if model.focused and caret_visible(model.frame) {
+				draw_caret!(frame, field_text_origin.x + label.bounds().width + 3)
+			}
+		}
+
+		Err(_) => {}
+	}
 
 	match List.get(model.counter_labels, U64.to_u64(model.clicks)) {
 		Ok(label) => label.draw!(frame, { pos: { x: 60, y: 100 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
@@ -175,6 +325,14 @@ render! = |model, frame| {
 
 	Ok({})
 }
+
+## A caret that blinks about twice a second at the recorded frame rate.
+caret_visible : U64 -> Bool
+caret_visible = |frame| (frame / 15) % 2 == 0
+
+expect caret_visible(0)
+expect !caret_visible(15)
+expect caret_visible(30)
 
 ## Where the scripted pointer is on a given frame, and whether it is clicking.
 ##
@@ -203,10 +361,23 @@ pointer_for_frame = |frame| {
 	} else if frame < 135 {
 		# Drag the slider end to end with the button held the whole way.
 		{ pos: ease(slider_left, slider_right, (f - 95) / 40), clicking: Bool.True }
+	} else if frame < 155 {
+		{ pos: ease(slider_right, field_center, (f - 135) / 20), clicking: Bool.False }
 	} else {
-		{ pos: slider_right, clicking: Bool.False }
+		# One click to give the field the keyboard, then the pointer rests
+		# while the typing happens.
+		{ pos: field_center, clicking: frame == 158 }
 	}
 }
+
+## Where the pointer clicks to focus the text field.
+field_center : { x : F32, y : F32 }
+field_center = { x: text_field.x + text_field.width / 2, y: text_field.y + text_field.height / 2 }
+
+## The field is focused before the first character is typed, so no keystroke
+## is thrown away.
+expect 158 < first_type_frame
+expect inside(pointer_for_frame(158).pos, text_field)
 
 ## Smoothstep between two points, so the pointer accelerates and settles like a
 ## hand rather than sliding at a constant speed.
@@ -258,6 +429,37 @@ draw_button! = |frame, box, hovered, active, label| {
 		},
 	)
 }
+
+## Where the field's text starts, and where its caret is measured from.
+field_text_origin : { x : F32, y : F32 }
+field_text_origin = { x: text_field.x + 14, y: text_field.y + 12 }
+
+## Draw the text field's box. A focused field is outlined the way a focused
+## one is anywhere else, so the recording shows the keyboard's whereabouts.
+draw_field_box! : Draw.Frame, Bool => {}
+draw_field_box! = |frame, focused| {
+	outline = if focused Color.from_hex_rgb(0x88c0d0) else Color.with_alpha(Color.white, 60)
+	frame.rounded_rectangle!({
+		x: text_field.x,
+		y: text_field.y,
+		width: text_field.width,
+		height: text_field.height,
+		radius: 8,
+		segments: 8,
+		style: Draw.filled_and_outlined(Color.from_hex_rgb(0x1b2136), outline, 2),
+	})
+}
+
+## Draw the insertion caret at an x within the field.
+draw_caret! : Draw.Frame, F32 => {}
+draw_caret! = |frame, x|
+	frame.rectangle!({
+		x,
+		y: field_text_origin.y,
+		width: 2,
+		height: 22,
+		style: Draw.filled(Color.white),
+	})
 
 draw_slider! : Draw.Frame, F32 => {}
 draw_slider! = |frame, value| {

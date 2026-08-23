@@ -1,3 +1,91 @@
+## RocRay is a Roc platform for raylib: a window, a renderer, input devices,
+## audio, textures, and the effects a game or a visualization needs, behind
+## three callbacks. An app states its `Model` and its `Msg`, provides `init!`,
+## `update!` and `render!`, and the host runs the frame loop around them. Only
+## the host runs Roc, and only on the frame thread, so nothing here is shared
+## between threads.
+##
+## `init!` runs once, with the window, renderer, and audio device already open,
+## and returns the first model. `update!` runs once per host cycle with that
+## model and one `App.Input`; it calls effects directly, starts tasks, and
+## returns the next model -- or `Err(Exit(code))` to stop the app. `render!`
+## receives the model and a `Draw.Frame` and draws. It cannot change the model
+## or reach host work of any other kind.
+##
+## Every effect says which callbacks it may be called from, and three rules
+## cover nearly all of them. An effect that changes host state -- the cursor,
+## the window, audio, a recording, a loaded resource -- is legal in `init!`,
+## `update!`, and tasks, and refused in `render!`. An effect that draws is legal
+## in `render!` only. An effect that waits -- `Files.read_text!`, `Http.send!`,
+## `Task.sleep!` -- is legal in `init!`, where it blocks startup, and in tasks,
+## where it parks the task while the frame loop keeps drawing; it is refused in
+## `update!` and `render!`.
+##
+## Those rules are the summary; each effect's own page is the authority, and
+## one waiting effect has a narrower set than the rule. `Capture.screenshot!`
+## is legal only in a task: what it waits for is the end of a frame, and
+## `init!` returns before the frame loop has drawn one, so there is nothing
+## for it to wait on there.
+##
+## Every loader that reads a file waits, so it belongs in `init!` or in a task:
+## `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
+## `Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!` and
+## `Tilemap.load_tmx!`. The constructors that take bytes the app already holds
+## -- `Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
+## `Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait, and are how a
+## load started on a task finishes in `update!`.
+##
+## Calling an effect from a callback that does not permit it is a programmer
+## error rather than a runtime outcome: the app stops at once with a message
+## naming the effect, the phase it was called from, and where it belongs.
+## Outcomes an app can do something about are typed `Try` results instead.
+##
+## Read `App` first, for the callbacks, the startup config, and the input. Then
+## `Draw` for the frame and the shapes, `Text` for fonts and text layout, and
+## `Devices`, `Keys`, `Mouse` and `Gamepad` for what the player did. Then
+## `Assets` and `Audio` for loaded resources, `Task` for work that waits, and
+## `Files`, `Http`, `Sqlite`, `Udp` and `Cmd` for what a task can do while the
+## frame loop keeps drawing. `Capture` records the window. `Time`, `Color`,
+## `Math`, `Camera`, `Physics`, `Random`, `Sprite`, `Tilemap`, `Url`, `Stdout`
+## and `Stderr` are pure or near-pure helpers to reach for as they come up.
+##
+## A whole app: it opens a window, draws one circle, and exits on escape.
+##
+## ```roc
+## app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
+##
+## import rr.App
+## import rr.Color
+## import rr.Draw
+##
+## Model : { frames : U64 }
+##
+## Msg : []
+##
+## program = { init!, update!, render! }
+##
+## init! : App.Init(Model, [])
+## init! = App.init(App.default.with_title("Hello"), |_startup| Ok({ frames: 0 }))
+##
+## update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
+## update! = |model, input|
+##     if input.devices.key_pressed(KeyEscape) {
+##         Err(Exit(0))
+##     } else {
+##         Ok({ frames: model.frames + 1 })
+##     }
+##
+## render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+## render! = |_model, frame| {
+##     frame.clear!(Color.black)
+##     frame.circle!({ center: { x: 400, y: 300 }, radius: 40, style: Draw.filled(Color.red) })
+##     Ok({})
+## }
+## ```
+##
+## The examples in the repository are the quickest start: copy the one closest
+## to what you want to make. For a project outside the checkout, replace the
+## local platform path with the `platform` declaration from the latest release.
 platform ""
 	requires {
 		[Model : model, Msg : msg] for program : {
@@ -9,7 +97,7 @@ platform ""
 			render! : model, Draw.Frame => Try({}, [Exit(I64), ..]),
 		}
 	}
-	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Url]
+	exposes [App, Devices, Files, Draw, Text, Color, Window, Keys, Mouse, Gamepad, Time, Audio, Assets, Math, Camera, Sprite, Tilemap, Physics, Capture, Random, Task, Http, Udp, Url, Stdout, Stderr, Sqlite, Cmd]
 	packages {
 		rrt: "../types/main.roc",
 		rand: "https://github.com/kili-ilo/roc-random/releases/download/0.9.2/2ZXLX8WRqrosGu1V3VL5aXqgtfTRvJmjFPx8a26ecVmc.tar.zst",
@@ -90,14 +178,21 @@ platform ""
 		"roc_files_read_text": FilesHost.read_text!,
 		"roc_files_read_bytes": FilesHost.read_bytes!,
 		"roc_files_list": FilesHost.list!,
+		"roc_files_metadata": FilesHost.metadata!,
 		"roc_files_write_text": FilesHost.write_text!,
 		"roc_files_write_bytes": FilesHost.write_bytes!,
 		"roc_capture_set_virtual_mouse": CaptureHost.set_virtual_mouse!,
+		"roc_capture_set_virtual_keys": CaptureHost.set_virtual_keys!,
+		"roc_capture_set_virtual_text": CaptureHost.set_virtual_text!,
 		"roc_capture_start_recording": CaptureHost.start_recording!,
 		"roc_capture_stop_recording": CaptureHost.stop_recording!,
 		"roc_capture_screenshot": CaptureHost.screenshot!,
+		"roc_capture_screenshot_texture": CaptureHost.screenshot_texture!,
+		"roc_capture_pixel_at": CaptureHost.pixel_at!,
+		"roc_capture_read_region": CaptureHost.read_region!,
 		"roc_host_exit": HostHost.exit!,
 		"roc_host_args": HostHost.args!,
+		"roc_host_entropy": HostHost.entropy!,
 		"roc_host_get_clipboard_text": HostHost.get_clipboard_text!,
 		"roc_host_read_clipboard": HostHost.read_clipboard!,
 		"roc_host_random_i32": HostHost.random_i32!,
@@ -108,6 +203,10 @@ platform ""
 		"roc_host_suggest_window_size": HostHost.suggest_window_size!,
 		"roc_host_set_target_fps": HostHost.set_target_fps!,
 		"roc_host_suggest_window_min_size": HostHost.suggest_window_min_size!,
+		"roc_host_window_scale_dpi": HostHost.window_scale_dpi!,
+		"roc_host_monitors": HostHost.monitors!,
+		"roc_host_suggest_window_position": HostHost.suggest_window_position!,
+		"roc_host_suggest_window_monitor": HostHost.suggest_window_monitor!,
 		"roc_mouse_set_cursor_mode_raw": MouseHost.set_cursor_mode!,
 		"roc_mouse_set_cursor_raw": MouseHost.set_cursor!,
 		"roc_task_sleep": TaskHost.sleep!,
@@ -133,13 +232,27 @@ platform ""
 		"roc_draw_set_shader_vec3_raw": DrawHost.set_shader_vec3!,
 		"roc_draw_set_shader_vec4_raw": DrawHost.set_shader_vec4!,
 		"roc_http_send": HttpHost.send!,
+		"roc_time_now": TimeHost.now!,
+		"roc_stdio_write_text": StdioHost.write_text!,
+		"roc_stdio_write_line": StdioHost.write_line!,
+		"roc_stdio_write_bytes": StdioHost.write_bytes!,
+		"roc_udp_bind": UdpHost.bind!,
+		"roc_udp_send": UdpHost.send!,
+		"roc_udp_receive": UdpHost.receive!,
+		"roc_sqlite_open": SqliteHost.open!,
+		"roc_sqlite_close": SqliteHost.close!,
+		"roc_sqlite_prepare": SqliteHost.prepare!,
+		"roc_sqlite_run_stmt": SqliteHost.run_stmt!,
+		"roc_sqlite_run_once": SqliteHost.run_once!,
+		"roc_sqlite_exec_script": SqliteHost.exec_script!,
+		"roc_cmd_run": CmdHost.run!,
 	}
 	targets: {
 		inputs_dir: "targets/",
-		x64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", app] },
-		arm64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", app] },
-		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
-		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app] },
+		x64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
+		arm64mac: { inputs: ["libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", app] },
+		x64glibc: { inputs: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libmsf_gif.a", "libvpx.a", "libsqlite3.a", "libm.so", "libX11.so", app, "libc.so", "crtn.o"] },
+		x64win: { inputs: ["host.lib", "raylib.lib", "msf_gif.lib", "vpx.lib", "sqlite3.lib", "gdi32.lib", "user32.lib", "winmm.lib", "opengl32.lib", "shell32.lib", "ws2_32.lib", "crypt32.lib", "shlwapi.lib", "bcryptprimitives.lib", app] },
 	}
 
 import Draw
@@ -176,8 +289,18 @@ import Random
 import TaskHost
 import Task
 import HttpHost
+import SqliteHost
 import Http
+import UdpHost
+import Udp
 import Url
+import Stdout
+import Stderr
+import StdioHost
+import TimeHost
+import Sqlite
+import Cmd
+import CmdHost
 
 ## Internal type for the host boundary, carrying one cycle of sampled input.
 ## Keep this layout-compatible with the public `Devices.Snapshot` record; the
@@ -214,12 +337,18 @@ InputFromHost : {
 ## Unions do not cross this boundary, so the recording state arrives as a flat
 ## record. Each finished task arrives as an erased thunk holding its message;
 ## Roc calls it before rebuilding `App.Input`.
+##
+## `dropped` is the cycle's file drops, already in the public `App.Dropped`
+## shape, and `dropped_overflow` says whether the host discarded paths past its
+## per-cycle cap.
 InputFromHostCycle(msg) : {
 	devices : InputFromHost,
 	window : Window.Snapshot,
 	time : Time.Cycle,
 	task_results : List(TaskHost.FinishedTask(msg)),
 	capture : AppHost.RawCaptureStatus,
+	dropped : List(App.Dropped),
+	dropped_overflow : Bool,
 }
 
 app_config_for_host! : () => AppConfig.HostConfig
@@ -243,13 +372,15 @@ input_from_raw = |raw| {
 }
 
 ## Rebuild a public `App.Input` after unwrapping this cycle's task messages.
-app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg) -> App.Input(msg)
-app_input_from_raw = |devices, window, time, capture, messages| {
+app_input_from_raw : InputFromHost, Window.Snapshot, Time.Cycle, AppHost.RawCaptureStatus, List(msg), List(App.Dropped), Bool -> App.Input(msg)
+app_input_from_raw = |devices, window, time, capture, messages, dropped, dropped_overflow| {
 	devices: input_from_raw(devices),
 	window,
 	time,
 	messages,
 	capture: AppTransport.capture_status(capture),
+	dropped,
+	dropped_overflow,
 }
 
 ## Run the app's startup callback with the platform's startup authority.
@@ -278,9 +409,9 @@ init_for_host! = ||
 ## that to under a hundred bytes per frame for a million-element `List(F32)`,
 ## under `scripts/test_model_allocation.py`.
 update_for_host! : Box(Model), InputFromHostCycle(Msg) => Try(Box(Model), I64)
-update_for_host! = |boxed_model, { devices, window, time, task_results, capture }| {
+update_for_host! = |boxed_model, { devices, window, time, task_results, capture, dropped, dropped_overflow }| {
 	messages = receive_task_results(task_results)
-	input = app_input_from_raw(devices, window, time, capture, messages)
+	input = app_input_from_raw(devices, window, time, capture, messages, dropped, dropped_overflow)
 	model = Box.unbox(boxed_model)
 	match (program.update!)(model, input) {
 		Ok(next) => Ok(Box.box(next))

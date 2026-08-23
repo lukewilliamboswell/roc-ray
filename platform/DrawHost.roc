@@ -5,6 +5,7 @@ import Assets
 import Camera
 import Color
 import Math
+import rrt.Font as RrtFont
 import rrt.Texture
 
 DrawHost := [].{
@@ -15,13 +16,6 @@ DrawHost := [].{
 		for_host = Frame.({})
 	}
 
-	FontResource :: Box(U64).{
-
-		## The invalid token, as a resource-free handle. See `Draw.Font.stub`.
-		stub : FontResource
-		stub = FontResource.(Box.box(0))
-	}
-
 	PreparedText :: Box(U64).{
 
 		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
@@ -29,7 +23,13 @@ DrawHost := [].{
 		stub = PreparedText.(Box.box(0))
 	}
 
-	Font : [DefaultFont, LoadedFont(FontResource)]
+	## Which font a draw call names. Declared in the `roc-ray-types` package's
+	## `Font`, so the handle the host mints and the one a `Draw.Font` carries are
+	## one type.
+	Font : RrtFont.Handle
+
+	## The native font resource a handle carries.
+	FontResource : RrtFont.Resource
 
 	RenderTexture :: Texture.{
 		texture : RenderTexture -> Texture

@@ -162,7 +162,7 @@ fetch! = |id, url|
 		Err(InvalidUrl(_)) => Broke(id, "that is not a URL this platform will fetch")
 		Err(HttpErr(Timeout)) => Broke(id, "the request timed out")
 		Err(HttpErr(NetworkError)) => Broke(id, "the request failed at the network layer")
-		Err(HttpErr(BadBody)) => Broke(id, "the reply was not a well-formed HTTP response")
+		Err(HttpErr(MalformedResponse)) => Broke(id, "the reply was not a well-formed HTTP response")
 		Err(HttpErr(Other(bytes))) => Broke(id, Str.from_utf8(bytes) ?? "the request failed")
 	}
 

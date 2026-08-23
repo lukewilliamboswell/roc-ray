@@ -3,23 +3,36 @@
 ##
 ## Seed a `State` once during `init!`, retain it in the model, and pass the
 ## returned state into the next draw. Keeping simulation randomness in model
-## state makes draws immediate during `update` and reproduces a run from its
+## state makes draws immediate during `update!` and reproduces a run from its
 ## initial seed.
 ##
-## This module is a platform-facing facade only. The PCG implementation,
-## unbiased bounded generators, and generator combinators all live in the
-## external package.
+## ```roc
+## generation = Random.step(model.rng, Random.bounded_i32(0, 799))
+## Ok({ ..model, rng: generation.state, x: generation.value })
+## ```
+##
+## `App.entropy!` is the one thing that makes a run differ from the last one:
+## seed from it for a run that should vary, and from a constant for one that
+## must reproduce.
+##
+## This module is a platform-facing facade only. `State`, `Generator` and
+## `Generation` are the package's own types, re-exported here, and the PCG
+## implementation, the unbiased bounded generators, and the combinators all
+## live in the external package.
 import rand.Random as PackageRandom
 
 Random := [].{
 
-	## State threaded through successive pseudorandom generations.
+	## State threaded through successive pseudorandom generations. This is
+	## `roc-random`'s own `State`, re-exported.
 	State : PackageRandom.State
 
 	## A pure generator that transforms a state into a value and its next state.
+	## This is `roc-random`'s own `Generator`, re-exported.
 	Generator(value) : PackageRandom.Generator(value)
 
-	## A generated value paired with the state for the next draw.
+	## A generated value paired with the state for the next draw. This is
+	## `roc-random`'s own `Generation`, re-exported.
 	Generation(value) : PackageRandom.Generation(value)
 
 	## Initialize the default PCG sequence from a seed.
@@ -66,53 +79,67 @@ Random := [].{
 	bool : Generator(Bool)
 	bool = PackageRandom.bool
 
-	## Generate an integer across the type's full range.
+	## Generate a `U8` across the type's full range.
 	u8 : Generator(U8)
 	u8 = PackageRandom.u8
 
+	## Generate an `I8` across the type's full range.
 	i8 : Generator(I8)
 	i8 = PackageRandom.i8
 
+	## Generate a `U16` across the type's full range.
 	u16 : Generator(U16)
 	u16 = PackageRandom.u16
 
+	## Generate an `I16` across the type's full range.
 	i16 : Generator(I16)
 	i16 = PackageRandom.i16
 
+	## Generate a `U32` across the type's full range.
 	u32 : Generator(U32)
 	u32 = PackageRandom.u32
 
+	## Generate an `I32` across the type's full range.
 	i32 : Generator(I32)
 	i32 = PackageRandom.i32
 
+	## Generate a `U64` across the type's full range.
 	u64 : Generator(U64)
 	u64 = PackageRandom.u64
 
+	## Generate an `I64` across the type's full range.
 	i64 : Generator(I64)
 	i64 = PackageRandom.i64
 
-	## Generate an integer between two inclusive bounds.
+	## Generate a `U8` between two inclusive bounds, without modulo bias.
 	bounded_u8 : U8, U8 -> Generator(U8)
 	bounded_u8 = PackageRandom.bounded_u8
 
+	## Generate an `I8` between two inclusive bounds, without modulo bias.
 	bounded_i8 : I8, I8 -> Generator(I8)
 	bounded_i8 = PackageRandom.bounded_i8
 
+	## Generate a `U16` between two inclusive bounds, without modulo bias.
 	bounded_u16 : U16, U16 -> Generator(U16)
 	bounded_u16 = PackageRandom.bounded_u16
 
+	## Generate an `I16` between two inclusive bounds, without modulo bias.
 	bounded_i16 : I16, I16 -> Generator(I16)
 	bounded_i16 = PackageRandom.bounded_i16
 
+	## Generate a `U32` between two inclusive bounds, without modulo bias.
 	bounded_u32 : U32, U32 -> Generator(U32)
 	bounded_u32 = PackageRandom.bounded_u32
 
+	## Generate an `I32` between two inclusive bounds, without modulo bias.
 	bounded_i32 : I32, I32 -> Generator(I32)
 	bounded_i32 = PackageRandom.bounded_i32
 
+	## Generate a `U64` between two inclusive bounds, without modulo bias.
 	bounded_u64 : U64, U64 -> Generator(U64)
 	bounded_u64 = PackageRandom.bounded_u64
 
+	## Generate an `I64` between two inclusive bounds, without modulo bias.
 	bounded_i64 : I64, I64 -> Generator(I64)
 	bounded_i64 = PackageRandom.bounded_i64
 

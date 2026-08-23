@@ -226,6 +226,27 @@ pub fn updateKeyboardState() void {
     }
 }
 
+/// Advance the packed keyboard state from caller-supplied held flags.
+///
+/// Used by the virtual keyboard in place of `updateKeyboardState`, and by a
+/// headless run, which has no hardware to ask at all. It runs the same
+/// `nextInputState` edge detection, so a scripted key produces real
+/// pressed-this-frame and released-this-frame bits and an app's ordinary
+/// key handling reacts to it exactly as it would to hardware.
+pub fn updateKeyboardStateFrom(down: *const [ffi.KEY_COUNT]bool) void {
+    for (0..ffi.KEY_COUNT) |i| {
+        key_state[i] = nextInputState(key_state[i], down[i]);
+    }
+}
+
+/// Forget every key's held and edge bits.
+///
+/// Called when an app lifetime starts, so a key held when one app exited is
+/// not still held when the next one begins.
+pub fn clearKeyState() void {
+    key_state = [_]u8{0} ** ffi.KEY_COUNT;
+}
+
 /// Get the current packed keyboard state array.
 pub fn getKeyState() *const [ffi.KEY_COUNT]u8 {
     return &key_state;
@@ -242,6 +263,11 @@ pub fn updateMouseButtonState() void {
 /// Get the current packed mouse button state array.
 pub fn getMouseButtonState() *const [ffi.MOUSE_BUTTON_COUNT]u8 {
     return &mouse_button_state;
+}
+
+/// Forget every mouse button's held and edge bits, as `clearKeyState` does.
+pub fn clearMouseButtonState() void {
+    mouse_button_state = [_]u8{0} ** ffi.MOUSE_BUTTON_COUNT;
 }
 
 /// Advance the packed mouse button state from caller-supplied down flags.
@@ -297,6 +323,42 @@ pub fn getGamepadButtonState() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_BUTTON_CO
 /// Get the sampled gamepad axis array.
 pub fn getGamepadAxes() *const [ffi.GAMEPAD_COUNT * ffi.GAMEPAD_AXIS_COUNT]f32 {
     return &gamepad_axes;
+}
+
+/// How many dropped paths one cycle delivers.
+///
+/// raylib puts no ceiling on a single drop: its window callback allocates for
+/// whatever the window system hands over, and the `capacity` field of a
+/// `FilePathList` is only filled in by the directory-listing calls. So the
+/// bound is the host's, and it is stated rather than implied -- a drop of more
+/// than this many files has the extra paths discarded and is reported as an
+/// overflow, never silently truncated.
+pub const DROPPED_FILES_CAPACITY: usize = 64;
+
+/// raylib's own list for the drop currently being read, owned until released.
+var dropped_files: ?rl.FilePathList = null;
+
+/// Borrow the paths from this cycle's drop, if the window saw one.
+///
+/// The C strings belong to raylib and stay valid only until
+/// `releaseDroppedFiles`, so a caller copies what it needs and then releases;
+/// the pair is what raylib's load/unload contract requires. An empty slice
+/// means no file was dropped, which is every cycle but a handful.
+pub fn takeDroppedFiles() []const [*:0]const u8 {
+    std.debug.assert(dropped_files == null);
+    if (!rl.IsFileDropped()) return &.{};
+    const list = rl.LoadDroppedFiles();
+    dropped_files = list;
+    if (list.paths == null or list.count == 0) return &.{};
+    const typed: [*]const [*:0]const u8 = @ptrCast(list.paths);
+    return typed[0..@as(usize, list.count)];
+}
+
+/// Hand this cycle's drop back to raylib. Safe to call when there was none.
+pub fn releaseDroppedFiles() void {
+    const list = dropped_files orelse return;
+    dropped_files = null;
+    rl.UnloadDroppedFiles(list);
 }
 
 /// Drain this frame's queued Unicode input and return a stable scratch slice.
@@ -1147,6 +1209,68 @@ pub fn setExitKey(key: c_int) void {
     rl.SetExitKey(key);
 }
 
+/// Suggest where the window's top-left corner sits, in virtual-desktop pixels.
+///
+/// The window manager may adjust or ignore the request; the position observed
+/// from the window afterward is authoritative.
+pub fn suggestWindowPosition(x: c_int, y: c_int) void {
+    rl.SetWindowPosition(x, y);
+}
+
+/// Suggest that the window move to a monitor index.
+///
+/// raylib bounds-checks the index itself and logs a warning for one outside the
+/// connected set, leaving the window where it is.
+pub fn suggestWindowMonitor(monitor: c_int) void {
+    rl.SetWindowMonitor(monitor);
+}
+
+/// The framebuffer-to-logical scale of the window, one factor per axis.
+///
+/// `1` without `FLAG_WINDOW_HIGHDPI` or on an ordinary display, and the
+/// display's scale factor with it -- so the framebuffer this reports is the
+/// resolution a capture reads back at.
+pub fn getWindowScaleDpi() Vec2 {
+    const scale = rl.GetWindowScaleDPI();
+    return .{ .x = scale.x, .y = scale.y };
+}
+
+/// How many monitors the windowing backend can currently see.
+pub fn getMonitorCount() c_int {
+    return rl.GetMonitorCount();
+}
+
+/// Width of a monitor's current video mode, in pixels.
+pub fn getMonitorWidth(monitor: c_int) c_int {
+    return rl.GetMonitorWidth(monitor);
+}
+
+/// Height of a monitor's current video mode, in pixels.
+pub fn getMonitorHeight(monitor: c_int) c_int {
+    return rl.GetMonitorHeight(monitor);
+}
+
+/// A monitor's top-left corner in virtual-desktop coordinates.
+pub fn getMonitorPosition(monitor: c_int) Vec2 {
+    const position = rl.GetMonitorPosition(monitor);
+    return .{ .x = position.x, .y = position.y };
+}
+
+/// Refresh rate of a monitor's current video mode, in hertz.
+pub fn getMonitorRefreshRate(monitor: c_int) c_int {
+    return rl.GetMonitorRefreshRate(monitor);
+}
+
+/// A monitor's human-readable name, owned by the windowing backend.
+///
+/// Never free it, and copy it before the next backend call: the pointer is null
+/// for an index outside the connected set.
+pub fn getMonitorName(monitor: c_int) ?[*:0]const u8 {
+    const name = rl.GetMonitorName(monitor);
+    if (name == null) return null;
+    return @ptrCast(name);
+}
+
 /// Read UTF-8 text from the system clipboard.
 ///
 /// The returned pointer is owned by the windowing backend: never free it, and
@@ -1264,9 +1388,16 @@ fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
     };
 }
 
-/// Load a sound effect from disk.
-pub fn loadSound(path: [*:0]const u8) ?Sound {
-    const sound = rl.LoadSound(path);
+/// Load a sound effect from encoded file bytes the host already read.
+///
+/// The wave is decoded, uploaded to the audio device, and released again:
+/// `LoadSoundFromWave` copies the samples into its own buffer, so neither the
+/// wave nor the encoded bytes have to outlive this call.
+pub fn loadSoundFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Sound {
+    const wave = rl.LoadWaveFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
+    if (!rl.IsWaveValid(wave)) return null;
+    defer rl.UnloadWave(wave);
+    const sound = rl.LoadSoundFromWave(wave);
     if (!rl.IsSoundValid(sound)) return null;
     return sound;
 }
@@ -1367,9 +1498,13 @@ pub fn setSoundPan(sound: Sound, pan: f32) void {
     rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
 }
 
-/// Load a music stream from disk.
-pub fn loadMusic(path: [*:0]const u8) ?Music {
-    var stream = rl.LoadMusicStream(path);
+/// Load a music stream from encoded file bytes the host already read.
+///
+/// raylib's memory decoders keep a pointer into `bytes` and read from it as
+/// the stream plays, so the caller owns those bytes for the stream's whole
+/// life and must not free them until after `unloadMusic`.
+pub fn loadMusicFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Music {
+    var stream = rl.LoadMusicStreamFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
     if (!rl.IsMusicValid(stream)) return null;
     stream.looping = true;
     return stream;
@@ -1784,6 +1919,40 @@ pub fn captureFramebuffer() ?CaptureImage {
     flushRenderBatch();
     const image = rl.LoadImageFromScreen();
     if (!rl.IsImageValid(image)) return null;
+    return .{ .image = image };
+}
+
+/// Read an offscreen render target into a CPU image, upright and with alpha.
+///
+/// `LoadImageFromTexture` reads the colour attachment through `glGetTexImage`,
+/// which keeps the alpha the app drew. `rlReadScreenPixels` -- what
+/// `captureFramebuffer` and the downscaler use -- forces alpha opaque, which is
+/// right for a window's frame and wrong for an offscreen composition that may
+/// be exported with transparency.
+///
+/// A render target stores its rows bottom-up: the same inversion
+/// `drawDownscaleLevel` compensates for with a negative source height. Flipped
+/// here rather than left to the caller, so every consumer sees the row order
+/// the rest of the capture path already assumes.
+///
+/// The pending batch is flushed first for the reason `captureFramebuffer`
+/// gives: raylib may still be holding the draws that filled the target.
+pub fn readRenderTexture(target: RenderTexture) ?CaptureImage {
+    flushRenderBatch();
+    var image = rl.LoadImageFromTexture(target.texture);
+    if (!rl.IsImageValid(image)) return null;
+    // `LoadRenderTexture` always allocates an RGBA8 attachment, so this
+    // converts nothing today. It is here because `CaptureImage.pixels` computes
+    // its length as four bytes per pixel, and a future attachment format would
+    // otherwise be read as a buffer overrun rather than as a conversion.
+    if (image.format != rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+        rl.ImageFormat(&image, rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        if (image.format != rl.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+            rl.UnloadImage(image);
+            return null;
+        }
+    }
+    rl.ImageFlipVertical(&image);
     return .{ .image = image };
 }
 

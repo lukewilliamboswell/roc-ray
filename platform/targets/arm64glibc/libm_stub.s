@@ -412,3 +412,36 @@ sincos:
 sincosf:
     xor %rax, %rax
     ret
+
+# Added for the vendored SQLite (vendor/sqlite): its unix VFS and its
+# serialized threading mode reach these, and nothing else in the host did.
+# Link-time definitions only, as above -- the real libc/libm resolves them
+# at runtime.
+
+.balign 8
+.globl acosh
+.type acosh, %function
+acosh:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl asinh
+.type asinh, %function
+asinh:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl atanh
+.type atanh, %function
+atanh:
+    mov x0, #0
+    ret
+
+.balign 8
+.globl log2
+.type log2, %function
+log2:
+    mov x0, #0
+    ret

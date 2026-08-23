@@ -3,6 +3,7 @@ app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-202
 import rr.App
 import rr.Capture
 import rr.Task
+import rr.Time
 import rr.Color
 import rr.Draw
 import rr.Text
@@ -11,12 +12,22 @@ import rr.Text
 ##
 ## Every capture path is relative to the directory set with `with_output_dir`.
 ## A path that would escape it -- absolute, or containing `..` -- is refused
-## rather than quietly rewritten, because writing files is the only filesystem
-## capability the platform grants an app.
+## rather than quietly rewritten. `Capture` is the one path-sandboxed writer the
+## platform grants; `Files.write_text!` and `Files.write_bytes!` write wherever
+## the process may write, so this confinement is `Capture`'s own promise rather
+## than the platform's only way of putting bytes on disk.
 ##
-## Press S to write `shots/scene.png`, E to watch an escaping path be refused,
-## ESC to exit. With no keypress it screenshots itself on frame 3 and exits, so
-## the headless CI sweep still runs it.
+## The filename carries the wall-clock instant the app started, so a second run
+## does not overwrite the first one's picture. `Time.now!` is the only clock
+## that knows what day it is; `input.time` is the simulation timeline and would
+## give every run the same name. Reading it once in `init!` and keeping the
+## name in the model is what makes the name stable for the whole run, which is
+## the shape to copy: the calendar is nondeterministic, so an app reads it
+## deliberately at the moments it means to.
+##
+## Press S to write the shot, E to watch an escaping path be refused, ESC to
+## exit. With no keypress it screenshots itself on frame 3 and exits, so the
+## headless CI sweep still runs it.
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
@@ -31,6 +42,9 @@ Model : {
 	## Which of those four to draw. A tag rather than the prepared text itself,
 	## so folding a finished screenshot in stays pure and can be tested.
 	outcome : Outcome,
+
+	## The name this run writes, fixed at startup from the wall clock.
+	shot_path : Str,
 }
 
 ## How far the app has got. `NoCapture` until a task answers: the file is
@@ -55,14 +69,16 @@ init! = App.init(
 	|_startup|
 		{
 			font = Draw.default_font!()
+			shot_path = "scene-${Time.now!().to_file_stamp()}.png"
 			Ok({
 				title: Text.from("Screenshot demo", font).size(28).prepare!()?,
 				help: Text.from("S = save, E = try to escape the sandbox, ESC = quit", font).size(16).prepare!()?,
 				idle: Text.from("no capture yet", font).size(16).prepare!()?,
-				saved: Text.from("saved shots/scene.png", font).size(16).prepare!()?,
-				save_failed: Text.from("could not write shots/scene.png", font).size(16).prepare!()?,
+				saved: Text.from("saved shots/${shot_path}", font).size(16).prepare!()?,
+				save_failed: Text.from("could not write shots/${shot_path}", font).size(16).prepare!()?,
 				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)", font).size(16).prepare!()?,
 				outcome: NoCapture,
+				shot_path: shot_path,
 			})
 		},
 )
@@ -94,7 +110,10 @@ update! = |model, program_input| {
 		Task.spawn!(program_input, || EscapingScreenshotFinished(Capture.screenshot!("../escaped.png")))
 	}
 	if save_requested {
-		Task.spawn!(program_input, || SavedScreenshotFinished(Capture.screenshot!("scene.png")))
+		# Read out of the model before spawning: the closure captures the name,
+		# and a task cannot reach into the model for it.
+		shot_path = model.shot_path
+		Task.spawn!(program_input, || SavedScreenshotFinished(Capture.screenshot!(shot_path)))
 	}
 
 	if input.key_pressed(KeyEscape) or (settled and program_input.time.cycle_count > 4) or program_input.time.cycle_count > 240 {

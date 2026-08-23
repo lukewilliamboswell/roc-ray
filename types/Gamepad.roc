@@ -1,11 +1,14 @@
-## Gamepad helpers for one sampled input snapshot.
+## Gamepad state for one sampled input snapshot.
 ##
-## The host samples up to four gamepads once per host-cycle input. Availability, packed
-## button state, and axes are stored in three flat persistent lists so queries
-## do not cross the host boundary or allocate. Button state uses the same bits
-## as keyboard and mouse input: held = 1, pressed = 2, released = 4.
-## Resolve a pad from the current input snapshot during `update`. Retaining an older
-## snapshot or `View` also retains its sampled lists.
+## The host samples up to four gamepads once per host-cycle input.
+## Availability, packed button state, and axes are stored in three flat
+## persistent lists so queries do not cross the host boundary or allocate.
+## Button state uses the same bits as keyboard and mouse input: held is `1`,
+## pressed is `2`, released is `4`.
+##
+## Pass `input.devices` directly to these helpers, and resolve a pad from the
+## current snapshot during `update!` rather than keeping one. Retaining an
+## older snapshot or `View` also retains its sampled lists.
 Gamepad := [].{
 
 	## Fixed-size gamepad state sampled once per host-cycle input.
@@ -17,6 +20,8 @@ Gamepad := [].{
 
 	## One of the four gamepad slots sampled by the platform.
 	Id := [One, Two, Three, Four].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 

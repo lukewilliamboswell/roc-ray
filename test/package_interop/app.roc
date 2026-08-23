@@ -35,6 +35,10 @@ Model : {
 
 	## What the package measured on the way through.
 	swatch_aspect : F32,
+
+	## What the package read off the whole `App.Input(Msg)`, which it accepted
+	## as one parameterized nominal rather than as an open record.
+	pulse : Events.Pulse,
 }
 
 program = { init!, update!, render! }
@@ -63,13 +67,16 @@ init! = App.init(
 			layout_passes: 1,
 			swatch: Events.retained(sized),
 			swatch_aspect: sized.aspect,
+			pulse: { cycle: 0, messages: 0, clicked: Bool.False },
 		})
 	},
 )
 
-## This is the UI package boundary: it needs only the pure measurable-font
-## contract, so layout can run during update without host authority.
-solve_layout : font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } } where [font.base_size : font -> F32, font.line_spacing : font -> F32, font.glyphs : font -> List(Draw.GlyphMetrics), font.get_glyph_index : font, U32 -> U64]
+## This is the UI package boundary: it names the types package's `Font`
+## directly, so layout can run during update without host authority. The value
+## it is handed is a `Draw.Font` loaded through the platform, which compiles
+## only because the two are one nominal.
+solve_layout : Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
 solve_layout = |font, label| {
 	label_size = Font.measure(font, { text: label, size: 20, spacing: Draw.default_spacing })
 	{ label: label_size, label_pos: { x: 10, y: 10 } }
@@ -140,6 +147,7 @@ update! = |model, program_input| {
 			layout_passes: model.layout_passes + 1,
 			swatch: Events.retained(sized),
 			swatch_aspect: sized.aspect,
+			pulse: Events.pulse(program_input),
 		})
 	}
 }
@@ -156,5 +164,6 @@ render! = |model, frame| {
 	# through a platform call that accepts nothing but the platform's own type.
 	frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
 	frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
+	frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
 	Ok({})
 }

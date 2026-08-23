@@ -9,6 +9,7 @@ const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
 const tilemap_batch = @import("tilemap_batch.zig");
 const capture = @import("capture.zig");
+const png = @import("png.zig");
 const rl = backend.rl;
 
 const Point = struct { x: f32, y: f32 };
@@ -19,6 +20,7 @@ const blue = Color{ .r = 0, .g = 121, .b = 241, .a = 255 };
 const yellow = Color{ .r = 253, .g = 249, .b = 0, .a = 255 };
 const black = Color{ .r = 0, .g = 0, .b = 0, .a = 255 };
 const white = Color{ .r = 255, .g = 255, .b = 255, .a = 255 };
+const transparent = Color{ .r = 0, .g = 0, .b = 0, .a = 0 };
 const additive_mix = Color{ .r = 230, .g = 162, .b = 255, .a = 255 };
 const shader_green = Color{ .r = 0, .g = 255, .b = 0, .a = 255 };
 const projective_blue = Color{ .r = 0, .g = 17, .b = 241, .a = 255 };
@@ -383,6 +385,213 @@ fn downscaleRoundTrip() !void {
     try expectPixel(reused.image, 50, 30, blue);
 }
 
+/// Export an offscreen target larger than the window and read the file back.
+///
+/// The point of `Capture.screenshot_texture!` is output that is not capped at
+/// the window, so the target here is twice the window in each axis. Four things
+/// fail silently without these assertions:
+///
+///  - The image really is the target's size. A readback that fell back to the
+///    framebuffer would produce a plausible 128x96 PNG.
+///  - The rows come out upright. A render target stores them bottom-up, so a
+///    missing flip puts the red corner at the bottom and nothing else changes.
+///  - Alpha survives. The framebuffer path forces it opaque, which would make
+///    an exported sprite or figure unusable on any other background.
+///  - `png.encodeRgba` -- the encoder the export uses, not raylib's -- writes a
+///    file with those dimensions that a decoder actually accepts.
+fn renderTargetExportRoundTrip() !void {
+    const width: c_int = 256;
+    const height: c_int = 192;
+    const target = backend.loadRenderTexture(width, height) orelse return error.RenderTextureUnavailable;
+    defer backend.unloadRenderTexture(target);
+
+    // Drawn in a frame of its own, the way an app fills a target during
+    // `render!`, so the readback below sees a completed frame rather than a
+    // batch raylib has not submitted.
+    rl.BeginDrawing();
+    backend.beginTextureMode(target);
+    backend.clearBackground(transparent);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 64, .height = 64, .color = red });
+    backend.drawRectangle(.{ .x = 192, .y = 0, .width = 64, .height = 64, .color = green });
+    backend.drawRectangle(.{ .x = 0, .y = 128, .width = 64, .height = 64, .color = blue });
+    backend.endTextureMode();
+    rl.EndDrawing();
+
+    var image = backend.readRenderTexture(target) orelse return error.RenderTextureReadFailed;
+    defer image.deinit();
+
+    if (image.width() != 256 or image.height() != 192) return error.RenderTextureSizeMismatch;
+    if (image.width() <= @as(u32, @intCast(rl.GetScreenWidth()))) return error.RenderTextureNotLargerThanWindow;
+    if (image.height() <= @as(u32, @intCast(rl.GetScreenHeight()))) return error.RenderTextureNotLargerThanWindow;
+    if (image.pixels().len != image.width() * image.height() * 4) return error.RenderTextureStrideMismatch;
+
+    try expectPixel(image.image, 8, 8, red);
+    try expectPixel(image.image, 200, 8, green);
+    try expectPixel(image.image, 8, 180, blue);
+    try expectPixel(image.image, 128, 96, transparent);
+
+    const allocator = std.heap.page_allocator;
+    const encoded = try png.encodeRgba(allocator, image.pixels(), image.width(), image.height());
+    defer allocator.free(encoded);
+
+    // The IHDR dimensions, at their fixed offsets: eight signature bytes, a
+    // four-byte length, the "IHDR" type, then width and height.
+    if (!std.mem.eql(u8, encoded[0..8], &[_]u8{ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a })) return error.PngSignatureMismatch;
+    if (!std.mem.eql(u8, encoded[12..16], "IHDR")) return error.PngHeaderMissing;
+    if (std.mem.readInt(u32, encoded[16..20], .big) != 256) return error.PngWidthMismatch;
+    if (std.mem.readInt(u32, encoded[20..24], .big) != 192) return error.PngHeightMismatch;
+
+    const path = "roc-ray-render-texture-smoke.png";
+    const io = std.Io.Threaded.global_single_threaded.io();
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = encoded });
+    defer std.Io.Dir.cwd().deleteFile(io, path) catch {};
+
+    const decoded = rl.LoadImage(path);
+    defer rl.UnloadImage(decoded);
+    if (!rl.IsImageValid(decoded)) return error.RenderTextureDecodeFailed;
+    if (decoded.width != width or decoded.height != height) return error.RenderTextureDecodeSizeMismatch;
+    try expectPixel(decoded, 8, 8, red);
+    try expectPixel(decoded, 200, 8, green);
+    try expectPixel(decoded, 8, 180, blue);
+    try expectPixel(decoded, 128, 96, transparent);
+}
+
+fn expectChannels(label: []const u8, actual: [4]u8, expected: Color) !void {
+    if (actual[0] != expected.r or actual[1] != expected.g or actual[2] != expected.b or actual[3] != expected.a) {
+        std.log.err("{s} expected rgba({d}, {d}, {d}, {d}), got rgba({d}, {d}, {d}, {d})", .{
+            label,     expected.r, expected.g, expected.b, expected.a,
+            actual[0], actual[1],  actual[2],  actual[3],
+        });
+        return error.PixelMismatch;
+    }
+}
+
+/// Assert every pixel of a copied region against one expected colour.
+fn expectRegionUniform(label: []const u8, bytes: []const u8, expected: Color) !void {
+    var offset: usize = 0;
+    while (offset < bytes.len) : (offset += 4) {
+        try expectChannels(label, .{ bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3] }, expected);
+    }
+}
+
+fn expectCode(actual: u8, expected: u8) !void {
+    if (actual != expected) {
+        std.log.err("expected capture code {d}, got {d}", .{ expected, actual });
+        return error.ReadbackCodeMismatch;
+    }
+}
+
+/// Read pixels back the way `Capture.pixel_at!` and `Capture.read_region!` do,
+/// and assert the exact colours and the exact orientation.
+///
+/// The host slices both readbacks with `capture.pixelAt` and
+/// `capture.copyRegion` out of whatever `captureFramebuffer` or
+/// `readRenderTexture` produced, so those three together are the whole path an
+/// app sees. Four things fail silently without these assertions:
+///
+///  - The framebuffer readback is top-down and the render-target readback is
+///    flipped to match. A render target stores its rows bottom-up, so a
+///    missing flip still yields a plausible image of the right size with the
+///    colours in the wrong rows.
+///  - The region is cut with the source's stride, not the region's. A
+///    single-stride copy of a region narrower than its source produces a
+///    sheared image that is still exactly the right length.
+///  - Alpha differs between the two sources by design: the framebuffer
+///    readback forces it opaque and a target keeps what the app drew. A region
+///    that quietly lost a target's transparency would look right in every
+///    opaque assertion.
+///  - The bounds refusals are computed against the source's real dimensions,
+///    which only a live readback knows.
+fn pixelReadbackRoundTrip() !void {
+    const width = rl.GetRenderWidth();
+    const height = rl.GetRenderHeight();
+    if (width != 128 or height != 96) return error.UnexpectedRenderSize;
+
+    rl.BeginDrawing();
+    backend.clearBackground(black);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 32, .height = 32, .color = red });
+    backend.drawRectangle(.{ .x = 32, .y = 0, .width = 32, .height = 32, .color = green });
+    backend.drawRectangle(.{ .x = 0, .y = 64, .width = 32, .height = 32, .color = blue });
+
+    // Taken inside the frame, exactly where the host's capture hook takes the
+    // snapshot a `Screen` readback later slices.
+    var frame = backend.captureFramebuffer() orelse return error.CaptureUnavailable;
+    defer frame.deinit();
+    rl.EndDrawing();
+
+    const screen = frame.pixels();
+    if (screen.len != frame.width() * frame.height() * 4) return error.CaptureStrideMismatch;
+
+    // The single-pixel read, on each drawn block and on the background.
+    try expectChannels("screen (16, 16)", capture.pixelAt(screen, frame.width(), 16, 16), red);
+    try expectChannels("screen (48, 16)", capture.pixelAt(screen, frame.width(), 48, 16), green);
+    try expectChannels("screen (16, 80)", capture.pixelAt(screen, frame.width(), 16, 80), blue);
+    try expectChannels("screen (100, 48)", capture.pixelAt(screen, frame.width(), 100, 48), black);
+
+    // A region straddling the red/green seam. Its rows are narrower than the
+    // framebuffer, so only the source's stride puts the seam in the middle of
+    // each row rather than walking it across them.
+    const seam = capture.Region{ .x = 28, .y = 4, .width = 8, .height = 2 };
+    try expectCode(capture.validateRegion(seam, frame.width(), frame.height()), capture.err_none);
+    var seam_bytes: [8 * 2 * 4]u8 = undefined;
+    capture.copyRegion(&seam_bytes, screen, frame.width(), seam);
+    try expectRegionUniform("seam row 0 left", seam_bytes[0..16], red);
+    try expectRegionUniform("seam row 0 right", seam_bytes[16..32], green);
+    try expectRegionUniform("seam row 1 left", seam_bytes[32..48], red);
+    try expectRegionUniform("seam row 1 right", seam_bytes[48..64], green);
+
+    // A region straddling the black/blue seam, which is what pins the row
+    // order: upside down, these four rows would all be black.
+    const vertical = capture.Region{ .x = 4, .y = 62, .width = 1, .height = 4 };
+    var vertical_bytes: [1 * 4 * 4]u8 = undefined;
+    capture.copyRegion(&vertical_bytes, screen, frame.width(), vertical);
+    try expectRegionUniform("above the blue block", vertical_bytes[0..8], black);
+    try expectRegionUniform("below the blue seam", vertical_bytes[8..16], blue);
+
+    // Bounds against the framebuffer's real size, which is the only place the
+    // refusal can be checked against a source an app really has.
+    try expectCode(capture.validatePoint(127, 95, frame.width(), frame.height()), capture.err_none);
+    try expectCode(capture.validatePoint(128, 95, frame.width(), frame.height()), capture.err_region_out_of_bounds);
+    try expectCode(
+        capture.validateRegion(.{ .x = 120, .y = 0, .width = 16, .height = 1 }, frame.width(), frame.height()),
+        capture.err_region_out_of_bounds,
+    );
+
+    // The other source: an offscreen target, whose rows are stored bottom-up
+    // and whose alpha the app chose.
+    const target = backend.loadRenderTexture(32, 16) orelse return error.RenderTextureUnavailable;
+    defer backend.unloadRenderTexture(target);
+
+    rl.BeginDrawing();
+    backend.beginTextureMode(target);
+    backend.clearBackground(transparent);
+    backend.drawRectangle(.{ .x = 0, .y = 0, .width = 8, .height = 8, .color = red });
+    backend.drawRectangle(.{ .x = 24, .y = 8, .width = 8, .height = 8, .color = green });
+    backend.endTextureMode();
+    rl.EndDrawing();
+
+    var offscreen = backend.readRenderTexture(target) orelse return error.RenderTextureReadFailed;
+    defer offscreen.deinit();
+    if (offscreen.width() != 32 or offscreen.height() != 16) return error.RenderTextureSizeMismatch;
+    const target_pixels = offscreen.pixels();
+
+    // Red was drawn at the target's top-left. Bottom-up rows would put it at
+    // the bottom and leave this transparent.
+    try expectChannels("target (2, 2)", capture.pixelAt(target_pixels, offscreen.width(), 2, 2), red);
+    try expectChannels("target (28, 12)", capture.pixelAt(target_pixels, offscreen.width(), 28, 12), green);
+    // Alpha survives here, where the framebuffer readback forces it opaque.
+    try expectChannels("target (16, 4)", capture.pixelAt(target_pixels, offscreen.width(), 16, 4), transparent);
+
+    const corner = capture.Region{ .x = 0, .y = 0, .width = 4, .height = 4 };
+    try expectCode(capture.validateRegion(corner, offscreen.width(), offscreen.height()), capture.err_none);
+    var corner_bytes: [4 * 4 * 4]u8 = undefined;
+    capture.copyRegion(&corner_bytes, target_pixels, offscreen.width(), corner);
+    try expectRegionUniform("target top-left corner", &corner_bytes, red);
+
+    capture.copyRegion(&corner_bytes, target_pixels, offscreen.width(), .{ .x = 28, .y = 0, .width = 4, .height = 4 });
+    try expectRegionUniform("target top-right corner", &corner_bytes, transparent);
+}
+
 /// Render representative primitives and assert exact framebuffer pixels.
 pub fn main() !void {
     rl.SetConfigFlags(rl.FLAG_WINDOW_HIDDEN | rl.FLAG_WINDOW_UNDECORATED);
@@ -584,4 +793,6 @@ pub fn main() !void {
 
     try captureRoundTrip();
     try downscaleRoundTrip();
+    try renderTargetExportRoundTrip();
+    try pixelReadbackRoundTrip();
 }

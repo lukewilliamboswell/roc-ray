@@ -30,54 +30,51 @@ import rr.Text
 ## Five things have to compose for that to work, and this example exists to show
 ## that they do.
 ##
-## **Discovery is incremental.** `Files.list!` lists one directory and
-## never its children, so a walk is the app's own loop: a listing arrives, its
+## Discovery is incremental. `Files.list!` lists one directory and never its
+## children, so a walk is the app's own loop: a listing arrives, its
 ## subdirectories become more listings and its files become reads, and all of it
 ## goes through the same backlog as everything else. A host-side recursive walk
 ## would be one unbounded operation that no backlog could pace.
 ##
-## **Reads never block the frame.** Each listing and each read runs inside
+## Reads never block the frame. Each listing and each read runs inside
 ## `Task.spawn!`. The task parks on the host's event loop while the frame loop
 ## keeps drawing, and its return value arrives later as an ordinary `Msg`. The
 ## delivered `List(U8)` is a seamless view onto the buffer the host already
 ## allocated, so no file bytes are copied to hand it over.
 ##
-## **Everything is paced.** The host runs 32 tasks at once and queues the rest,
-## so nothing is ever refused -- but this walk would happily ask for five
-## hundred files at once and hold every one of them in memory. So the app keeps
-## its own backlog of `Work` and starts at most `max_in_flight` tasks from it.
+## Everything is paced. The host runs 32 tasks at once and queues the rest, so
+## nothing is ever refused -- but this walk would happily ask for five hundred
+## files at once and hold every one of them in memory. So the app keeps its own
+## backlog of `Work` and starts at most `max_in_flight` tasks from it.
 ## `arrival_limit` bounds the other end, the bytes that have already been
 ## delivered and not yet parsed, which no host limit knows anything about. Both
 ## bounds are plain data rather than opaque handles, so the pacing is testable
 ## with ordinary equality. The queue depth in the masthead is the backlog being
 ## real.
 ##
-## **Parsing is incremental.** `update!` runs inside the frame, so it may not
-## scan a 400 KB file in one go. `scan_chunk` walks a bounded window of one file
-## per cycle and answers with the points it found and where to resume. The frame
+## Parsing is incremental. `update!` runs inside the frame, so it may not scan a
+## 400 KB file in one go. `scan_chunk` walks a bounded window of one file per
+## cycle and answers with the points it found and where to resume. The frame
 ## time does not depend on how big the files are, only on the budget.
 ##
-## **Drawing is batched and bounded.** Every point is one `Draw.TextureInstance`
-## in a single list, drawn with one `frame.texture_instances!` call from one
-## sprite the batch tints per lane.
+## Drawing is batched and bounded. Every point is one `Draw.TextureInstance` in
+## a single list, drawn with one `frame.texture_instances!` call from one sprite
+## the batch tints per lane.
 ##
-## ## What is kept, and what is not
+## That leaves what is kept and what is not. A quarter of a million points is
+## about sixteen megabytes of instances, and the model is copied once per frame,
+## so keeping all of them would cost a gigabyte a second of copying to draw a
+## figure that is mostly off screen. So they are not kept.
 ##
-## A quarter of a million points is about sixteen megabytes of instances, and
-## the model is copied once per frame, so keeping all of them would cost a
-## gigabyte a second of copying to draw a figure that is mostly off screen.
-## So they are not kept.
-##
-## Two tiers, and the split is the whole memory story:
-##
-## - **Every file keeps a summary, forever.** Its path, its length, and the
-##   distribution of its line lengths in twenty buckets. That is a couple of
-##   hundred bytes a file, it is what the gutter and the density strips are
-##   drawn from, and it never grows with how long the app runs.
-## - **Only `point_budget` points are kept.** They are held as runs, one per
-##   file, in the order they were parsed; when the budget is exceeded the oldest
-##   run is dropped. A lane whose points have gone still draws -- as the density
-##   its summary describes, rather than as line-by-line detail.
+## There are two tiers, and the split is the whole memory story. Every file
+## keeps a summary, forever: its path, its length, and the distribution of its
+## line lengths in twenty buckets. That is a couple of hundred bytes a file, it
+## is what the gutter and the density strips are drawn from, and it never grows
+## with how long the app runs. Only `point_budget` points are kept, though. They
+## are held as runs, one per file, in the order they were parsed; when the
+## budget is exceeded the oldest run is dropped. A lane whose points have gone
+## still draws -- as the density its summary describes, rather than as
+## line-by-line detail.
 ##
 ## Scrolling to a lane whose points were dropped asks for the file again. That
 ## is the point rather than a workaround: a re-read is `Work` like any other, it

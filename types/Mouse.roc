@@ -1,8 +1,13 @@
-## Mouse helpers for pointer state sampled into one host-cycle input.
+## Pointer state sampled into one host-cycle input.
 ##
-## The host stores one packed state byte per raylib mouse button code 0-6:
-## bit 0 is held, bit 1 is pressed during the input interval, and bit 2 is released during it.
-## Pass `input.devices.mouse` directly to these helpers.
+## The host stores one packed state byte per raylib mouse button code `0`
+## through `6`: bit 0 is held, bit 1 is pressed during the input interval, and
+## bit 2 is released during it. Read them through the receivers --
+## `input.devices.mouse.position()`, `button_down`, `button_pressed` -- rather
+## than through the bytes.
+##
+## Pass `input.devices.mouse` directly to these helpers; there is nothing to
+## construct.
 Mouse := [].{
 
 	## Mouse input sampled once at the start of the current frame.
@@ -61,6 +66,8 @@ Mouse := [].{
 		ResizeAll,
 		NotAllowed,
 	].{
+
+		## Compare two of these values.
 		is_eq : _
 	}
 
@@ -80,11 +87,17 @@ Mouse := [].{
 	Button := [Left, Right, Middle, Side, Extra, Forward, Back]
 
 	## Select hardware pointer samples or deterministic application-provided samples.
+	## Where pointer input comes from: `Hardware`, or a `Virtual` pointer whose
+	## position and buttons the app states itself. `Mouse.set_source!` on the
+	## platform is what switches between them.
 	Source := [Hardware, Virtual({ x : F32, y : F32, left : Bool, middle : Bool, right : Bool, wheel : F32 })]
 
+	## A virtual pointer at a position, with no button held.
 	virtual_at : { x : F32, y : F32 } -> Source
 	virtual_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.False, middle: Bool.False, right: Bool.False, wheel: 0 })
 
+	## A virtual pointer at a position with the left button held, so the next
+	## input reports a press there.
 	virtual_click_at : { x : F32, y : F32 } -> Source
 	virtual_click_at = |pos| Virtual({ x: pos.x, y: pos.y, left: Bool.True, middle: Bool.False, right: Bool.False, wheel: 0 })
 

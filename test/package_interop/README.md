@@ -11,7 +11,22 @@ same name, so `exposes` and every existing app are unchanged.
 ## What moved, and what cannot
 
 Moved: `Keys`, `Mouse`, `Gamepad`, `Time`, `Math`, `Camera`, `Physics`, `Color`,
-plus the platform-independent `Font`, `Texture`, and `Drawing` contracts.
+`Font`, `Texture`, `Drawing`, `Capture`, and `App.Input(msg)` with `Dropped`,
+`default_test_size`, and `Capture.Status`/`FailureReason` beside it.
+
+`App.Input(msg)` is the first *parameterized* nominal re-exported through an
+alias (`Input(msg) : RrtApp.Input(msg)`), and the `msg` witness survives it:
+`test/task_delivery` spawns one task per `Msg` variant and still gets every
+message back with the right tag and payload. Note that
+`scripts/generate_reexports.py` emits `Name : RrtMod.Name` with no parameter
+list, so it cannot generate that shim -- `platform/App.roc` is hand-written and
+`App` is deliberately not in the generator's `GENERATED` list.
+
+What may *not* move is a wire encoding. `Capture`'s `format_code`,
+`timing_code`, `cursor_code`, `quality_code`, and `scale_ratio` map a tag onto a
+number `src/capture.zig` reads; they live in the private
+`platform/CaptureHost.roc` so that a types release cannot freeze the host's
+numbering.
 
 `Color` needed reshaping first. A module file must declare a nominal matching
 its filename and that declaration cannot be an alias, so a module whose object
@@ -24,15 +39,25 @@ since the types inside them are separate nominals.
 `Sprite` stays put because it has `draw!`; its backing texture is now the shared
 `rrt.Texture` value.
 
+What does not move is *authority*. `App.Startup` is a capability token only the
+platform adapter can mint, so `App.Init` and `App.Config` would be types nobody
+outside the platform could use; the shape the architecture supports instead is
+**the package describes, the app performs** -- the package exposes a plan and a
+pure constructor, or a closure for work that waits, and the app's `init!` or
+`Task.spawn_with!` performs it. `CONTRIBUTING.md` "Make ownership explicit"
+spells the pattern out.
+
 ## Layout
 
 - `input_adapter/` — a package depending **only** on `roc-ray-types`, never on
   the platform.
 - `app.roc` — runs on the platform and passes it the platform's
-  `Devices.Snapshot`, `input.mouse`, `input.gamepads`, and a re-exported
-  `Key`, then feeds the returned key back into `rr.Keys.key_code`.
-  It also retains the previous layout for hit testing, measures the next layout
-  once in `update`, stores it in the model, and renders only stored commands.
+  `Devices.Snapshot`, `input.mouse`, `input.gamepads`, a re-exported `Key`, and
+  the whole `App.Input(Msg)` (`Events.pulse`), then feeds the returned key back
+  into `rr.Keys.key_code`. It also retains the previous layout for hit testing,
+  measures the next layout once in `update` — through a `Font`-typed package
+  function, no `where` clause — stores it in the model, and renders only stored
+  commands.
 
 It compiles only if those are the same nominal types on both sides. Give
 `input_adapter` a look-alike local key type instead and it fails, so this is

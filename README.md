@@ -68,6 +68,22 @@ purpose, or from a task, where it parks that task and the frame keeps going.
 Break one and the app stops immediately with a message naming the effect, the
 phase it was called from, and where it belongs.
 
+Those rules are the summary; each effect's own docs page is the authority,
+and one waiting effect has a narrower set than the rule. `Capture.screenshot!`
+runs only from a task: what it waits for is the end of a frame, and `init!`
+returns before the frame loop has drawn one, so there is nothing for it to
+wait on there.
+
+Every loader that reads a file is a waiting effect, so it belongs in `init!` or
+in a task -- `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
+`Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!`, and
+`Tilemap.load_tmx!`. The constructors that take bytes the app already holds --
+`Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
+`Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait and stay legal in
+`update!`. That pair is the idiom for loading after startup: read the file on a
+task, and build the resource in `update!` when the message arrives, or just
+call the loader inside the task.
+
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived
 textures, sounds, fonts, shaders, and text that does not change during `init!`;
@@ -146,21 +162,26 @@ RocRay provides the pieces needed for much more than a minimal drawing demo:
   exact projective texture drawing.
 - Explicit executable-relative, working-directory, or external disk asset
   stores with optional manifest identity validation; see the `Assets` module docs.
-- Keyboard, mouse, Unicode text, gamepad, and cursor input.
-- Window and frame timing, startup entropy, the
-  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package, and
-  environment access.
-- File reads and directory listings, and an HTTP client over the shared
+- Keyboard, mouse, Unicode text, gamepad, and cursor input, plus files dropped
+  onto the window with the pointer position they landed at.
+- Window and frame timing, wall-clock timestamps, startup entropy, the
+  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package,
+  command-line arguments, and environment access.
+- File reads, writes, directory listings, and metadata; standard output and
+  error for headless and batch runs; an embedded SQLite database; UDP sockets;
+  external programs run as child processes with deadlines and output caps; and
+  an HTTP client over the shared
   [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
-  types, with TLS through the system certificate store. Both wait, so both run
-  on a task while the frame keeps drawing.
+  types, with TLS through the system certificate store. Everything that waits
+  runs on a task while the frame keeps drawing.
 - Generated or loaded sound effects plus streamed music with playback controls.
 - 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
   and TMX tilemaps with culled drawing and object queries.
 - Resizable, fullscreen, VSync, capped, or uncapped native windows on macOS,
   Linux, and Windows.
 - Screenshots and recordings an app takes of itself, written as PNG, animated
-  GIF, or VP8 video in a WebM container.
+  GIF, or VP8 video in a WebM container, and PNG export of an offscreen render
+  texture at any size.
 
 Browse the [API reference](https://lukewilliamboswell.github.io/roc-ray/) for
 individual functions and types.
@@ -189,15 +210,21 @@ App.init(
 ```
 
 `Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
-where the app decides when to capture. `Mouse.set_source` drives a
+where the app decides when to capture. `Mouse.set_source!` drives a
 scripted pointer through the same input path a real one uses, so a recorded walk
 through a UI exercises the app's ordinary hover and click handling.
+
+Pixels also come back the other way. `Capture.pixel_at!` reads one pixel of the
+last presented frame or of a `Draw.RenderTexture`, and `Capture.read_region!`
+reads a rectangle of one as RGBA8 bytes -- an eyedropper, a golden-image check
+a headless run makes itself, or an image-processing pass written in Roc.
 
 Three things worth knowing:
 
 - **Paths are sandboxed.** Every capture path resolves under `with_output_dir`.
   Absolute paths and paths containing `..` are refused rather than rewritten;
-  this is the only file-writing capability the platform grants an app.
+  this is the only path-sandboxed writer the platform grants. `Files.write_text!`
+  and `Files.write_bytes!` write wherever the process itself may write.
 - **Recordings are reproducible.** `FixedStep` timing (the default) reports an
   exact `1/fps` frame delta regardless of how long the readback actually took,
   so a recording plays back smoothly and two runs produce identical output.

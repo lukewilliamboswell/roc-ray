@@ -42,7 +42,15 @@ HostHost := [].{
 	## Read a whole UTF-8 file, blocking the caller.
 	read_file! : Str => ReadFileResult
 
-	## Startup entropy in the inclusive range `[min, max]`.
+	## One draw from the operating system's entropy source.
+	##
+	## Never fails: the implementation falls back to a less secure mechanism
+	## rather than reporting that entropy is unavailable, because what this
+	## seeds is a game's generator rather than a key.
+	entropy! : () => U64
+
+	## A number in the inclusive range `[min, max]`, from the backend's own
+	## generator rather than from the operating system.
 	random_i32! : I32, I32 => I32
 
 	## Replace the clipboard with UTF-8 text.
@@ -61,4 +69,33 @@ HostHost := [].{
 	## Set the smallest window size the user can drag down to. `0` in an axis
 	## leaves it unconstrained.
 	suggest_window_min_size! : { width : I32, height : I32 } => {}
+
+	## The window's framebuffer-to-logical scale, one factor per axis.
+	##
+	## Non-positive or non-finite factors are replaced by `1` before they
+	## cross, so the caller never has to defend against dividing by them.
+	window_scale_dpi! : () => { x : F32, y : F32 }
+
+	## One connected display, flattened for the wire. `Window.Monitor` is the
+	## grouped shape an application sees; the nesting is done in Roc.
+	MonitorInfo : {
+		index : I32,
+		name : Str,
+		width : I32,
+		height : I32,
+		x : I32,
+		y : I32,
+		refresh_hz : I32,
+	}
+
+	## Every display the windowing backend can currently see, in its own order.
+	monitors! : () => List(MonitorInfo)
+
+	## Ask the window manager to move the window's top-left corner to a
+	## position in virtual-desktop coordinates.
+	suggest_window_position! : { x : I32, y : I32 } => {}
+
+	## Ask the window manager to move the window to a monitor index. An index
+	## outside the connected set is ignored.
+	suggest_window_monitor! : I32 => {}
 }

@@ -68,9 +68,11 @@ purpose, or from a task, where it parks that task and the frame keeps going.
 Break one and the app stops immediately with a message naming the effect, the
 phase it was called from, and where it belongs.
 
-One effect sits outside those rules, and says so on its own docs page.
-`Capture.screenshot!` runs only from a task: it waits for a frame that has to
-be drawn first, and `init!` runs before the frame loop has gone around once.
+Those rules are the summary; each effect's own docs page is the authority,
+and one waiting effect has a narrower set than the rule. `Capture.screenshot!`
+runs only from a task: what it waits for is the end of a frame, and `init!`
+returns before the frame loop has drawn one, so there is nothing for it to
+wait on there.
 
 Every loader that reads a file is a waiting effect, so it belongs in `init!` or
 in a task -- `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,

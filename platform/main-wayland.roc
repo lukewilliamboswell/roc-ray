@@ -21,10 +21,11 @@
 ## where it parks the task while the frame loop keeps drawing; it is refused in
 ## `update!` and `render!`.
 ##
-## One effect sits outside those rules, and says so on its own page.
-## `Capture.screenshot!` is legal only in a task: it waits for a frame that has
-## to be drawn first, and `init!` runs before the frame loop has gone around
-## once.
+## Those rules are the summary; each effect's own page is the authority, and
+## one waiting effect has a narrower set than the rule. `Capture.screenshot!`
+## is legal only in a task: what it waits for is the end of a frame, and
+## `init!` returns before the frame loop has drawn one, so there is nothing
+## for it to wait on there.
 ##
 ## Every loader that reads a file waits, so it belongs in `init!` or in a task:
 ## `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,

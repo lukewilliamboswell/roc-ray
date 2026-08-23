@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,18 @@ def main() -> int:
     examples.add_argument("--examples-dir", default="examples")
     examples.add_argument("--repo", default="")
     examples.set_defaults(func=cmd_update_example_urls)
+
+    package = subcommands.add_parser("package-examples")
+    package.add_argument("--release-version", default="")
+    package.add_argument("--release-bundles", default="")
+    package.add_argument("--bundle-url", default="")
+    package.add_argument("--tag", default="")
+    package.add_argument("--examples-dir", default="examples")
+    package.add_argument("--repo", default="")
+    package.add_argument("--output", default="")
+    package.add_argument("--output-dir", default=".release")
+    package.add_argument("--github-output", default="")
+    package.set_defaults(func=cmd_package_examples)
 
     args = parser.parse_args()
     try:
@@ -169,6 +182,15 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
             "```",
         ])
 
+    examples_url = release_asset_url(repo, release_version, f"examples-{release_version}.zip")
+    lines.extend([
+        "",
+        "## Examples",
+        "",
+        f"A [zip of the examples]({examples_url}) pinned to this release is attached to every",
+        "release; unzip and `roc examples/<name>/main.roc`.",
+    ])
+
     docs_url = args.docs_url or os.environ.get("DOCS_URL", "")
     if docs_url:
         lines.extend(["", "## Docs", "", f"- [View docs for {release_version}]({docs_url})"])
@@ -178,23 +200,32 @@ def cmd_make_release_notes(args: argparse.Namespace) -> int:
     return 0
 
 
+def resolve_default_bundle_url(
+    explicit_url: str, release_version: str, release_bundles: str, repo: str
+) -> str:
+    """The published default-bundle URL this release's examples must point at."""
+    if explicit_url:
+        return require_url(explicit_url)
+
+    release_version = release_version or os.environ.get("RELEASE_VERSION", "")
+    if not release_version:
+        raise RuntimeError("release version is required")
+    if not release_bundles:
+        raise RuntimeError("release bundle metadata is required")
+
+    repo = repo or os.environ.get("GITHUB_REPOSITORY", "")
+    if not repo:
+        raise RuntimeError("repo is required")
+
+    bundles = read_json(release_bundles)
+    default_file = artifact_file_for(bundles, "default")
+    return release_asset_url(repo, release_version, default_file)
+
+
 def cmd_update_example_urls(args: argparse.Namespace) -> int:
-    if args.default_url:
-        default_url = require_url(args.default_url)
-    else:
-        release_version = args.release_version or os.environ.get("RELEASE_VERSION", "")
-        if not release_version:
-            raise RuntimeError("release version is required")
-        if not args.release_bundles:
-            raise RuntimeError("release bundle metadata is required")
-
-        repo = args.repo or os.environ.get("GITHUB_REPOSITORY", "")
-        if not repo:
-            raise RuntimeError("repo is required")
-
-        bundles = read_json(args.release_bundles)
-        default_file = artifact_file_for(bundles, "default")
-        default_url = release_asset_url(repo, release_version, default_file)
+    default_url = resolve_default_bundle_url(
+        args.default_url, args.release_version, args.release_bundles, args.repo
+    )
 
     examples_dir = Path(args.examples_dir)
     examples = sorted(examples_dir.glob("*/main.roc"))
@@ -213,6 +244,110 @@ def cmd_update_example_urls(args: argparse.Namespace) -> int:
 
     print(f"Updated {len(examples)} example(s) to {default_url}")
     return 0
+
+
+def cmd_package_examples(args: argparse.Namespace) -> int:
+    default_url = resolve_default_bundle_url(
+        args.bundle_url, args.release_version, args.release_bundles, args.repo
+    )
+
+    tag = args.tag or args.release_version or os.environ.get("RELEASE_VERSION", "")
+    if not tag:
+        raise RuntimeError("release tag is required")
+    if "/" in tag or "\\" in tag or not tag.strip():
+        raise RuntimeError(f"invalid release tag: {tag!r}")
+
+    root = repo_root()
+    examples_dir = Path(args.examples_dir)
+    if len(examples_dir.parts) != 1:
+        raise RuntimeError(f"examples dir must be a single top-level directory: {examples_dir}")
+    entries = tracked_files(root, examples_dir)
+    if not entries:
+        raise RuntimeError(f"no tracked files found under {examples_dir}")
+
+    output = Path(args.output) if args.output else Path(args.output_dir) / f"examples-{tag}.zip"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    replacement = f'"{default_url}"'
+    rewritten_headers = 0
+    example_dirs: set[str] = set()
+    packaged_apps: set[str] = set()
+
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for entry in entries:
+            source = root / entry
+            if not source.is_file():
+                raise RuntimeError(f"tracked example file is missing from the tree: {entry}")
+
+            parts = entry.split("/")
+            if len(parts) >= 3:
+                example_dirs.add(parts[1])
+
+            if parts[-1] == "main.roc" and len(parts) == 3:
+                original = source.read_text(encoding="utf-8")
+                rewritten, count = PLATFORM_REF_RE.subn(replacement, original)
+                if count != 1:
+                    raise RuntimeError(
+                        f"expected one recognized platform reference in {entry}, found {count}"
+                    )
+                data = rewritten.encode("utf-8")
+                rewritten_headers += 1
+                packaged_apps.add(parts[1])
+            else:
+                data = source.read_bytes()
+
+            write_zip_entry(archive, entry, data)
+
+    missing = sorted(example_dirs - packaged_apps)
+    if missing:
+        output.unlink(missing_ok=True)
+        raise RuntimeError(
+            "example directories without a rewritten main.roc header: " + ", ".join(missing)
+        )
+    if not rewritten_headers:
+        output.unlink(missing_ok=True)
+        raise RuntimeError("no example headers were rewritten")
+
+    if args.github_output:
+        append_github_output(args.github_output, "examples_zip", output.as_posix())
+
+    print(f"Wrote {output} with {len(entries)} file(s), {rewritten_headers} header(s) -> {default_url}")
+    return 0
+
+
+def repo_root() -> Path:
+    """The working tree the examples are read from, so `git ls-files` agrees with it."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stdout + result.stderr).strip() or "not inside a git work tree")
+    return Path(result.stdout.strip())
+
+
+def tracked_files(root: Path, examples_dir: Path) -> list[str]:
+    """Tracked paths under `examples_dir`, so build outputs and captures stay out."""
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", examples_dir.as_posix()],
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stdout + result.stderr).strip() or "git ls-files failed")
+    return sorted(entry for entry in result.stdout.split("\0") if entry)
+
+
+def write_zip_entry(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
+    """Add one file with a fixed timestamp so the archive is reproducible."""
+    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.external_attr = 0o644 << 16
+    archive.writestr(info, data)
 
 
 def require_bundle(path_text: str, description: str) -> Path:

@@ -198,13 +198,13 @@ jobs:
       - name: Install Mesa OpenGL for Windows
         if: runner.os == 'Windows'
         env:
-          MESA_VERSION: 26.2.0
+          MESA_VERSION: 24.3.4
         run: |
           set -euo pipefail
           mkdir -p ci-gl
           curl -fsSL -o mesa.7z \
             "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_VERSION}/mesa3d-${MESA_VERSION}-release-msvc.7z"
-          7z e mesa.7z -oci-gl x64/opengl32.dll
+          7z e -y mesa.7z -oci-gl x64/opengl32.dll x64/libgallium_wgl.dll x64/libglapi.dll
           rm mesa.7z
           ls -l ci-gl
 
@@ -212,6 +212,7 @@ jobs:
         timeout-minutes: 25
         env:
           ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}
+          GALLIUM_DRIVER: llvmpipe
         run: |
           set -euo pipefail
           SWEEP=(scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test

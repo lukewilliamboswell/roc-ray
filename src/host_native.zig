@@ -7252,6 +7252,19 @@ comptime {
 const RuntimeOptions = struct {
     headless: bool = false,
     headless_frames: u64 = DEFAULT_HEADLESS_FRAMES,
+    /// Cycles a windowed run is allowed before it exits by itself, or null for
+    /// an ordinary run that ends when the window or the app says so. Test
+    /// harness only: it bounds an unattended run, it is not an app-facing
+    /// lifecycle.
+    frames: ?u64 = null,
+    /// Force the window hidden regardless of what `App.Config` asked for. The
+    /// window, GL context, audio device and capture paths are all still real.
+    hidden: bool = false,
+    /// Scripted keyboard, in the `--host-keys` syntax below, or null to leave
+    /// the keyboard to hardware (and to the app's own `Keys.set_source!`).
+    key_script: ?[]const u8 = null,
+    /// Scripted typed text, in the `--host-text` syntax below.
+    text_script: ?[]const u8 = null,
     debug_allocator: bool = false,
     help: bool = false,
     app_args: []const [*:0]u8 = &.{},
@@ -7496,7 +7509,143 @@ fn windowState() WindowSnapshot {
 }
 
 fn printUsage() void {
-    std.debug.print("usage: app [--host-headless] [--host-headless-frames=N] [--host-debug-allocator] [app arguments...]\n", .{});
+    std.debug.print(
+        \\usage: app [--host-headless] [--host-headless-frames=N] [--host-frames=N]
+        \\           [--host-hidden] [--host-keys=SCRIPT] [--host-text=SCRIPT]
+        \\           [--host-debug-allocator] [app arguments...]
+        \\
+        \\  --host-frames=N   exit after N cycles of a real windowed run
+        \\  --host-hidden     open the real window hidden (needs a display server)
+        \\  --host-keys=SCRIPT  hold keys on given cycles, e.g. "3:S,4:LEFT+X,10:32"
+        \\  --host-text=SCRIPT  deliver typed text on given cycles, e.g. "2:ab,3:c"
+        \\
+    , .{});
+}
+
+/// The most keys one scripted cycle may hold down at once.
+const KEY_SCRIPT_CAPACITY = 8;
+
+const ScriptError = error{InvalidScript};
+
+/// Decode one `--host-keys` token into a raylib key code.
+///
+/// A single printable character stands for the key that types it in the
+/// ASCII-aligned part of raylib's keymap (`S`, `7`, ` `), a decimal number is a
+/// raw key code, and a bare name covers the few keys with no character
+/// (`LEFT`, `RIGHT`, `UP`, `DOWN`, `SPACE`, `ENTER`, `ESCAPE`, `TAB`).
+fn parseScriptedKey(token: []const u8) ScriptError!u64 {
+    if (token.len == 0) return error.InvalidScript;
+    if (token.len == 1) {
+        const c = std.ascii.toUpper(token[0]);
+        if (c < 32 or c > 126) return error.InvalidScript;
+        return c;
+    }
+    const named = .{
+        .{ "SPACE", 32 },
+        .{ "ENTER", 257 },
+        .{ "TAB", 258 },
+        .{ "ESCAPE", 256 },
+        .{ "BACKSPACE", 259 },
+        .{ "RIGHT", 262 },
+        .{ "LEFT", 263 },
+        .{ "DOWN", 264 },
+        .{ "UP", 265 },
+    };
+    inline for (named) |entry| {
+        if (std.ascii.eqlIgnoreCase(token, entry[0])) return entry[1];
+    }
+    return std.fmt.parseUnsigned(u64, token, 10) catch error.InvalidScript;
+}
+
+/// The segment of a script that applies to `cycle`, or null when none does.
+///
+/// A script is `cycle:payload` segments separated by commas. Only the cycles a
+/// script names are scripted; every other cycle is handed back to hardware, so
+/// a held-then-released key is expressible.
+fn scriptSegment(spec: []const u8, cycle: u64) ScriptError!?[]const u8 {
+    var segments = std.mem.splitScalar(u8, spec, ',');
+    var found: ?[]const u8 = null;
+    while (segments.next()) |segment| {
+        if (segment.len == 0) return error.InvalidScript;
+        const colon = std.mem.indexOfScalar(u8, segment, ':') orelse return error.InvalidScript;
+        const at = std.fmt.parseUnsigned(u64, segment[0..colon], 10) catch return error.InvalidScript;
+        const payload = segment[colon + 1 ..];
+        if (payload.len == 0) return error.InvalidScript;
+        if (at == cycle) found = payload;
+    }
+    return found;
+}
+
+/// The key codes a `--host-keys` script holds on `cycle`, or null when it
+/// scripts nothing there.
+fn scriptedKeysAtCycle(spec: []const u8, cycle: u64, out: *[KEY_SCRIPT_CAPACITY]u64) ScriptError!?[]const u64 {
+    const payload = (try scriptSegment(spec, cycle)) orelse return null;
+    var tokens = std.mem.splitScalar(u8, payload, '+');
+    var count: usize = 0;
+    while (tokens.next()) |token| {
+        if (count == out.len) return error.InvalidScript;
+        out[count] = try parseScriptedKey(token);
+        count += 1;
+    }
+    return out[0..count];
+}
+
+/// Validate a whole script without running it, so a typo fails at startup
+/// rather than silently scripting nothing.
+fn validateScript(spec: []const u8, keys: bool) ScriptError!void {
+    var segments = std.mem.splitScalar(u8, spec, ',');
+    while (segments.next()) |segment| {
+        if (segment.len == 0) return error.InvalidScript;
+        const colon = std.mem.indexOfScalar(u8, segment, ':') orelse return error.InvalidScript;
+        const at = std.fmt.parseUnsigned(u64, segment[0..colon], 10) catch return error.InvalidScript;
+        if (segment[colon + 1 ..].len == 0) return error.InvalidScript;
+        if (keys) {
+            var scratch: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+            _ = try scriptedKeysAtCycle(spec, at, &scratch);
+        }
+    }
+}
+
+/// Apply this cycle's scripted keyboard and typed text, if any are scripted.
+///
+/// Called immediately before the cycle samples input, so a scripted key goes
+/// through exactly the same edge detection as a hardware one.
+fn applyInputScripts(options: RuntimeOptions, cycle: u64) void {
+    if (options.key_script) |spec| {
+        var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+        const held = scriptedKeysAtCycle(spec, cycle, &codes) catch null;
+        if (held) |keys| applyVirtualKeys(true, keys) else applyVirtualKeys(false, &.{});
+    }
+    if (options.text_script) |spec| {
+        const typed = scriptSegment(spec, cycle) catch null;
+        if (typed) |text| {
+            var codepoints: [raylib.TEXT_INPUT_CAPACITY]u32 = undefined;
+            const kept = @min(text.len, codepoints.len);
+            for (text[0..kept], 0..) |byte, i| codepoints[i] = byte;
+            applyVirtualText(codepoints[0..kept]);
+        }
+    }
+}
+
+test "a key script holds only the cycles it names" {
+    var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+    const spec = "3:S,4:LEFT+x,10:32";
+
+    try std.testing.expectEqual(@as(?[]const u64, null), try scriptedKeysAtCycle(spec, 0, &codes));
+    try std.testing.expectEqualSlices(u64, &.{'S'}, (try scriptedKeysAtCycle(spec, 3, &codes)).?);
+    try std.testing.expectEqualSlices(u64, &.{ 263, 'X' }, (try scriptedKeysAtCycle(spec, 4, &codes)).?);
+    try std.testing.expectEqualSlices(u64, &.{32}, (try scriptedKeysAtCycle(spec, 10, &codes)).?);
+    try std.testing.expectEqual(@as(?[]const u64, null), try scriptedKeysAtCycle(spec, 5, &codes));
+}
+
+test "a malformed script is rejected rather than scripting nothing" {
+    var codes: [KEY_SCRIPT_CAPACITY]u64 = undefined;
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3", 3, &codes));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:", 3, &codes));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("x:S", 3, &codes));
+    try std.testing.expectError(error.InvalidScript, scriptedKeysAtCycle("3:NOPE", 3, &codes));
+    try std.testing.expectError(error.InvalidScript, validateScript("3:S,", true));
+    try validateScript("1:ab,2:c", false);
 }
 
 fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]u8) !RuntimeOptions {
@@ -7527,6 +7676,33 @@ fn parseRuntimeOptions(allocator: std.mem.Allocator, argc: usize, argv: [*][*:0]
                 return error.InvalidArgument;
             }
             options.headless_frames = frames;
+        } else if (std.mem.startsWith(u8, arg, "--host-frames=")) {
+            const value = arg["--host-frames=".len..];
+            const frames = std.fmt.parseUnsigned(u64, value, 10) catch {
+                std.debug.print("invalid --host-frames value: {s}\n", .{value});
+                return error.InvalidArgument;
+            };
+            if (frames == 0) {
+                std.debug.print("--host-frames must be greater than zero\n", .{});
+                return error.InvalidArgument;
+            }
+            options.frames = frames;
+        } else if (std.mem.eql(u8, arg, "--host-hidden")) {
+            options.hidden = true;
+        } else if (std.mem.startsWith(u8, arg, "--host-keys=")) {
+            const value = arg["--host-keys=".len..];
+            validateScript(value, true) catch {
+                std.debug.print("invalid --host-keys script: {s}\n", .{value});
+                return error.InvalidArgument;
+            };
+            options.key_script = value;
+        } else if (std.mem.startsWith(u8, arg, "--host-text=")) {
+            const value = arg["--host-text=".len..];
+            validateScript(value, false) catch {
+                std.debug.print("invalid --host-text script: {s}\n", .{value});
+                return error.InvalidArgument;
+            };
+            options.text_script = value;
         } else if (std.mem.eql(u8, arg, "--host-debug-allocator")) {
             options.debug_allocator = true;
         } else if (std.mem.eql(u8, arg, "--host-help")) {
@@ -7563,9 +7739,34 @@ test "runtime options reserve host switches and preserve complete app argv" {
     try std.testing.expectEqualStrings("--headless", std.mem.span(options.app_args[2]));
 }
 
+test "runtime options carry the windowed sweep switches" {
+    var argv = [_][*:0]u8{
+        @constCast("pong"),
+        @constCast("--host-frames=30"),
+        @constCast("--host-hidden"),
+        @constCast("--host-keys=3:S"),
+        @constCast("--host-text=4:ab"),
+    };
+    const options = try parseRuntimeOptions(std.testing.allocator, argv.len, &argv);
+    defer options.deinit(std.testing.allocator);
+
+    try std.testing.expect(!options.headless);
+    try std.testing.expectEqual(@as(?u64, 30), options.frames);
+    try std.testing.expect(options.hidden);
+    try std.testing.expectEqualStrings("3:S", options.key_script.?);
+    try std.testing.expectEqualStrings("4:ab", options.text_script.?);
+    try std.testing.expectEqual(@as(usize, 1), options.app_args.len);
+}
+
 test "runtime options reject malformed reserved host switches" {
     var argv = [_][*:0]u8{ @constCast("app"), @constCast("--host-unknown") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, argv.len, &argv));
+
+    var zero_windowed = [_][*:0]u8{ @constCast("app"), @constCast("--host-frames=0") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, zero_windowed.len, &zero_windowed));
+
+    var bad_keys = [_][*:0]u8{ @constCast("app"), @constCast("--host-keys=3") };
+    try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, bad_keys.len, &bad_keys));
 
     var zero_frames = [_][*:0]u8{ @constCast("app"), @constCast("--host-headless-frames=0") };
     try std.testing.expectError(error.InvalidArgument, parseRuntimeOptions(std.testing.allocator, zero_frames.len, &zero_frames));
@@ -9655,7 +9856,7 @@ fn reportCycleAllocStats(cycle_index: u64) void {
     alloc_meter.clearFrame();
 }
 
-fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: AppConfig) c_int {
+fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: AppConfig, options: RuntimeOptions) c_int {
     beginAppLifetime();
     var title_stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
     var window_title = makeTempCString(allocator, &title_stack, app_config.title.asSlice()) catch {
@@ -9671,7 +9872,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         app_config.resizable,
         app_config.fullscreen,
         app_config.vsync,
-        app_config.visible,
+        app_config.visible and !options.hidden,
     ));
     raylib.initWindow(
         positiveCInt(app_config.width, 800),
@@ -9765,6 +9966,7 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         const now_ns: u64 = captureAdjustedClock(real_ns, fixed_step);
         updateMusicStreams();
 
+        applyInputScripts(options, cycle_count);
         input.updateFromRaylib();
         const mouse_pos = if (virtual_mouse_active)
             raylib.Vec2{ .x = virtual_mouse_x, .y = virtual_mouse_y }
@@ -9848,6 +10050,12 @@ fn runNormalApp(roc_host: *RocHost, allocator: std.mem.Allocator, app_config: Ap
         if (exit_requested) |code| {
             exit_code = @intCast(code);
             break;
+        }
+
+        // A bounded unattended run ends itself once it has presented the
+        // frames it was asked for, exactly as if the window had been closed.
+        if (options.frames) |limit| {
+            if (cycle_count >= limit) break;
         }
     }
 
@@ -10090,7 +10298,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         return runHeadlessApp(&roc_host, app_config, options.headless_frames);
     }
 
-    return runNormalApp(&roc_host, allocator, app_config);
+    return runNormalApp(&roc_host, allocator, app_config, options);
 }
 
 /// Decode one entry of an encoded listing, returning its kind, its name, and

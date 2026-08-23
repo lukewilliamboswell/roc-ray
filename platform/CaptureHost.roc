@@ -3,7 +3,14 @@
 ## This module is intentionally not exposed by the platform package. Public
 ## applications use `Capture`, which maps these flat primitive codes onto tag
 ## unions and hides the numbering.
+##
+## The flattening functions live here rather than beside the tag unions in the
+## `roc-ray-types` package. The numbers are this host's wire format, not shared
+## vocabulary, and a pure package that named them would freeze them at its own
+## release cadence. `Capture.start!` and the startup config both flatten
+## through here, so the two cannot drift.
 import Draw
+import rrt.Capture as RrtCapture
 
 CaptureHost := [].{
 
@@ -147,4 +154,78 @@ CaptureHost := [].{
 
 	## Read a rectangle of a source as row-major, top-down RGBA8 bytes.
 	read_region! : RegionProbe => RegionResult
+
+	## Flatten a format to the code the host reads. Shared by the startup config
+	## and the runtime effects so the two cannot drift.
+	format_code : RrtCapture.Format -> U8
+	format_code = |value|
+		match value {
+			Png => 0
+			Gif => 1
+			WebM => 2
+		}
+
+	## Flatten a timing strategy to the code the host reads.
+	timing_code : RrtCapture.Timing -> U8
+	timing_code = |value|
+		match value {
+			RealTime => 0
+			FixedStep => 1
+		}
+
+	## Flatten a cursor mode to the code the host reads.
+	cursor_code : RrtCapture.Cursor -> U8
+	cursor_code = |value|
+		match value {
+			NoCursor => 0
+			DrawCursor => 1
+		}
+
+	## Flatten an encoder quality to the code the host reads.
+	##
+	## The host maps these onto whatever knob the chosen encoder actually has --
+	## for GIF, msf_gif's palette search depth -- so the numbering here is the
+	## only thing the two sides have to agree on.
+	quality_code : RrtCapture.Quality -> U8
+	quality_code = |value|
+		match value {
+			Fast => 0
+			Balanced => 1
+			Best => 2
+		}
+
+	## Flatten a scale to the numerator and denominator the host applies.
+	##
+	## A zero in either position would make the host fall back to the source
+	## size, so normalize it here where the intent is still visible.
+	scale_ratio : RrtCapture.Scale -> { numerator : U32, denominator : U32 }
+	scale_ratio = |value|
+		match value {
+			Full => { numerator: 1, denominator: 1 }
+			Half => { numerator: 1, denominator: 2 }
+			Quarter => { numerator: 1, denominator: 4 }
+			Ratio(r) =>
+				if r.numerator == 0 or r.denominator == 0 {
+					{ numerator: 1, denominator: 1 }
+				} else {
+					{ numerator: r.numerator, denominator: r.denominator }
+				}
+			}
 }
+
+expect CaptureHost.format_code(Png) == 0
+expect CaptureHost.format_code(Gif) == 1
+expect CaptureHost.format_code(WebM) == 2
+expect CaptureHost.timing_code(RealTime) == 0
+expect CaptureHost.timing_code(FixedStep) == 1
+expect CaptureHost.cursor_code(NoCursor) == 0
+expect CaptureHost.cursor_code(DrawCursor) == 1
+expect CaptureHost.quality_code(Fast) == 0
+expect CaptureHost.quality_code(Balanced) == 1
+expect CaptureHost.quality_code(Best) == 2
+expect CaptureHost.scale_ratio(Full) == { numerator: 1, denominator: 1 }
+expect CaptureHost.scale_ratio(Half) == { numerator: 1, denominator: 2 }
+expect CaptureHost.scale_ratio(Quarter) == { numerator: 1, denominator: 4 }
+expect CaptureHost.scale_ratio(Ratio({ numerator: 2, denominator: 3 })) == { numerator: 2, denominator: 3 }
+expect CaptureHost.scale_ratio(Ratio({ numerator: 1, denominator: 0 })) == { numerator: 1, denominator: 1 }
+expect CaptureHost.scale_ratio(Ratio({ numerator: 0, denominator: 4 })) == { numerator: 1, denominator: 1 }

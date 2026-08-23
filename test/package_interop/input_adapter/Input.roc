@@ -5,6 +5,7 @@
 ## The point of this module is what it does NOT import. It depends only on the
 ## `roc-ray-types` package, never on the RocRay platform, yet it accepts values
 ## produced by an app running on that platform.
+import rrt.App
 import rrt.Keys
 import rrt.Mouse
 import rrt.Gamepad
@@ -16,6 +17,23 @@ Input := [].{
 
 	## A framework-side event, carrying the platform's own key type.
 	Event : [KeyDown(Keys.Key), Click({ x : F32, y : F32 }), Pad(Gamepad.Id), Nothing]
+
+	## What the package reads off a whole cycle at once.
+	Pulse : { cycle : U64, messages : U64, clicked : Bool }
+
+	## Takes the entire `App.Input(msg)` the platform hands `update!`, rather
+	## than an open record of the fields it happens to read. `App.Input` here is
+	## this package's `rrt.App.Input`; the app names the same value
+	## `App.Input(Msg)`, which is the platform's re-export. This signature
+	## accepts it only if those are one parameterized nominal rather than two
+	## look-alikes -- and `msg` stays the app's own message type through it, so
+	## the value is still the witness `rr.Task.spawn!` demands.
+	pulse : App.Input(msg) -> Pulse
+	pulse = |input| {
+		cycle: input.time.cycle_count,
+		messages: List.len(input.messages),
+		clicked: Mouse.button_pressed(input.devices.mouse, Left),
+	}
 
 	## Takes the platform's `Devices.Snapshot` directly. The open record is what
 	## makes this work: `Snapshot` is a nominal record the package cannot name,

@@ -223,6 +223,22 @@ Create long-lived resources during initialization and retain them in the app
 model. Do not introduce per-frame loading, preparing, name lookup, or allocation
 when the work can be paid once.
 
+**The package describes, the app performs.** A package that needs fonts,
+textures, a window size, or work that waits does not get startup authority to
+go and take them: `App.Startup` is a capability token the platform adapter
+mints, and a type nobody outside the platform can construct would be a type
+nobody outside the platform can use. Instead the package exposes a plan and a
+pure constructor -- `Toolkit.required_assets : Theme -> List(AssetRequest)` and
+`Toolkit.init : List(Draw.Texture), Draw.Font -> Toolkit.State` -- and the
+app's `init!` walks the plan, calls `Assets.load_texture!` and
+`Draw.load_store_font!`, and hands the results back. For work that waits the
+package exposes a closure rather than spawning: `Toolkit.fetch_theme! : () =>
+Toolkit.Msg`, which the app starts with `Task.spawn_with!(input,
+Toolkit.fetch_theme!, |m| ToolkitMsg(m))`. A package wanting to configure the
+window answers the same way, with a suggestion the app applies. This is why
+`Task.spawn_with!` exists, and it is the answer whenever a package author asks
+for `App.Init` or `App.Config` in `roc-ray-types`.
+
 ### Validate before the hot path
 
 Opaque values such as cameras, projective quads, and `App.Config` prevent
@@ -385,7 +401,7 @@ an input it never reads:
 
 ```roc
 spawn! : App.Input(msg), (() => msg) => {}
-spawn! = |input, task!| App.Input.spawn!(input, task!)
+spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 ```
 
 Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else

@@ -379,84 +379,15 @@ Draw := [].{
 	TextSize : RrtFont.Size
 
 	## A native font handle paired with an immutable scalar metric snapshot.
-	## Loading constructs the snapshot once; every receiver below is pure.
-	Font :: {
-		raw : DrawHost.Font,
-		base_size_value : F32,
-		line_spacing_value : F32,
-		fallback_index : U64,
-		glyph_values : List(RrtFont.GlyphMetrics),
-	}.{
-		from_host! : DrawHost.Font => Font
-		from_host! = |raw| {
-			metrics = DrawHost.font_metrics!(raw)
-			Font.(
-				{
-					raw,
-					base_size_value: metrics.base_size,
-					line_spacing_value: metrics.line_spacing,
-					fallback_index: metrics.fallback_index,
-					glyph_values: metrics.glyphs,
-				},
-			)
-		}
-
-		for_host : Font -> DrawHost.Font
-		for_host = |Font.(font)| font.raw
-
-		## The pixel size this font's glyph atlas was rasterized at.
-		##
-		## Drawing at this size is one atlas texel per screen pixel. Drawing much
-		## larger scales the atlas up rather than re-rasterizing, so load the
-		## font again at the size wanted instead.
-		base_size : Font -> F32
-		base_size = |Font.(font)| font.base_size_value
-
-		## Extra vertical space between lines, on top of the drawn size. Adding
-		## it to the text size is the distance from one baseline to the next.
-		line_spacing : Font -> F32
-		line_spacing = |Font.(font)| font.line_spacing_value
-
-		## Every glyph the font rasterized, with its advance and its box. This is
-		## the table `measure` walks; an app rarely needs it directly.
-		glyphs : Font -> List(RrtFont.GlyphMetrics)
-		glyphs = |Font.(font)| font.glyph_values
-
-		## Where a codepoint sits in `glyphs`, or the fallback glyph's index when
-		## the font has no glyph for it. Answers an index rather than a `Try`, so
-		## measurement stays total.
-		get_glyph_index : Font, U32 -> U64
-		get_glyph_index = |Font.(font), codepoint| glyph_index(font.glyph_values, codepoint, 0, List.len(font.glyph_values), font.fallback_index)
-
-		## The size a string will occupy at a given size and letter spacing,
-		## following raylib's own measurement rules.
-		##
-		## Pure: it reads the metric snapshot taken when the font loaded and
-		## never calls the host, so a layout pass can run in `update!`, in a
-		## helper, or in an `expect`. `Text` is the fuller interface built on it.
-		measure : Font, RrtFont.Measure -> RrtFont.Size
-		measure = |font, cfg| RrtFont.measure(font, cfg)
-
-		## Resource-free font value for pure tests.
-		##
-		## The handle never resolves to a host resource, so every host path it
-		## reaches treats it as an invalid one: drawing falls back to raylib's
-		## built-in font, and `Text.prepare!` refuses it. Its metric snapshot is a
-		## fiction rather than a measurement -- no glyphs, no line spacing, and a
-		## `base_size` of 1 so that `measure` stays finite instead of dividing by
-		## zero. Put it in a model to reach the app's real `update!` from an
-		## `expect`. Do not use it to test drawing, layout, or resource lifetime.
-		stub : Font
-		stub = Font.(
-			{
-				raw: LoadedFont(DrawHost.FontResource.stub),
-				base_size_value: 1,
-				line_spacing_value: 0,
-				fallback_index: 0,
-				glyph_values: [],
-			},
-		)
-	}
+	## Loading constructs the snapshot once; every receiver on it is pure.
+	##
+	## Declared in the `roc-ray-types` package's `Font` and re-exported here,
+	## which is also where `base_size`, `line_spacing`, `glyphs`,
+	## `get_glyph_index`, `measure` and `stub` are documented. A layout package
+	## can therefore measure text against a real font without depending on this
+	## platform. Loading one is an effect and stays here: `Draw.default_font!`,
+	## `Draw.load_store_font!`, and `Draw.font_from_bytes!`.
+	Font : RrtFont.Font
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -967,7 +898,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || Font.from_host!(DefaultFont)
+	default_font! = || font_from_host!(DefaultFont)
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -1214,7 +1145,7 @@ Draw := [].{
 		} else if result.err != 0 {
 			Err(ResourceLimit)
 		} else {
-			Ok(Font.from_host!(LoadedFont(result.font)))
+			Ok(font_from_host!(LoadedFont(result.font)))
 		}
 	}
 
@@ -1226,7 +1157,7 @@ Draw := [].{
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
 		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(Font.from_host!(LoadedFont(result.font)))
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(LoadedFont(result.font)))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
@@ -1467,7 +1398,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: cfg.spacing,
 			color: cfg.color,
-			font: cfg.font.for_host(),
+			font: cfg.font.handle,
 			align_x: align.x,
 			align_y: align.y,
 		})
@@ -1523,22 +1454,21 @@ Draw := [].{
 
 }
 
-glyph_index : List(Draw.GlyphMetrics), U32, U64, U64, U64 -> U64
-glyph_index = |glyphs, codepoint, start, end, fallback| {
-	if start >= end {
-		fallback
-	} else {
-		middle = start + (end - start) / 2
-		match List.get(glyphs, middle) {
-			Err(_) => fallback
-			Ok(glyph) => if glyph.codepoint == codepoint {
-				middle
-			} else if codepoint < glyph.codepoint {
-				glyph_index(glyphs, codepoint, start, middle, fallback)
-			} else {
-				glyph_index(glyphs, codepoint, middle + 1, end, fallback)
-			}
-		}
+## Take the metric snapshot a font value carries.
+##
+## This is the one impure step in a font's life: it asks the host for the atlas
+## metrics once, when the font loads, so that every reader afterwards -- here,
+## in an app, or in a package that never heard of this platform -- is pure.
+## Private, because minting a `Draw.Font` is the host's business.
+font_from_host! : DrawHost.Font => Draw.Font
+font_from_host! = |handle| {
+	metrics = DrawHost.font_metrics!(handle)
+	{
+		handle: handle,
+		base_size_value: metrics.base_size,
+		line_spacing_value: metrics.line_spacing,
+		fallback_index: metrics.fallback_index,
+		glyph_values: metrics.glyphs,
 	}
 }
 

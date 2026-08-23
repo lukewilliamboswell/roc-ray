@@ -186,7 +186,7 @@ Text := [].{
 			text: builder.content,
 			size: builder.size,
 			spacing: builder.spacing,
-			font: builder.font.for_host(),
+			font: builder.font.handle,
 		})
 		if result.err == 2 {
 			Err(ResourceLimit)

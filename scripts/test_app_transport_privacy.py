@@ -123,6 +123,14 @@ CASES = (
         ROOT / "test" / "compile_fail" / "transition_removed.roc",
         ("does not exist", "rr.App.next does not exist"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "input_spawn_receiver.roc",
+        ("missing method", "does not have a method named spawn!"),
+    ),
+    (
+        ROOT / "test" / "compile_fail" / "font_handle_manufacture.roc",
+        ("cannot use opaque nominal type", "instance of Font.Resource"),
+    ),
 )
 
 ONE_ERROR = re.compile(r"\b1 error and \d+ warnings?\b")

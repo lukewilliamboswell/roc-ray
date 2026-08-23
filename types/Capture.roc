@@ -174,6 +174,33 @@ Capture := [].{
 		quality = |rec| rec.quality
 	}
 
+	## Live recording state, sampled onto every `App.Input` as `input.capture`.
+	##
+	## `Finished` remains observable after automatic finalization at the frame cap.
+	Status : [
+		Idle,
+		Active({ frames : U64, dropped : U64 }),
+		Finished({ frames : U64, bytes : U64 }),
+		Failed({ frames : U64, reason : FailureReason }),
+	]
+
+	## Why a recording is not running.
+	##
+	## `PathInvalid`, `PathEscapesOutputDir`, `AlreadyRecording`, and
+	## `BudgetExceeded` reject a start request before anything is written. The
+	## remaining reasons may stop an active recording.
+	FailureReason : [
+		PathInvalid,
+		PathEscapesOutputDir,
+		AlreadyRecording,
+		BudgetExceeded,
+		UnsupportedFormat,
+		OutOfMemory,
+		WriteFailed,
+		EncodeFailed,
+		Unknown,
+	]
+
 	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
 	## and balanced encoder quality.
 	##
@@ -191,63 +218,6 @@ Capture := [].{
 		cursor: NoCursor,
 		quality: Balanced,
 	}
-
-	## Flatten a format to the code the host reads. Shared by the startup config
-	## and the runtime effects so the two cannot drift.
-	format_code : Format -> U8
-	format_code = |value|
-		match value {
-			Png => 0
-			Gif => 1
-			WebM => 2
-		}
-
-	## Flatten a timing strategy to the code the host reads.
-	timing_code : Timing -> U8
-	timing_code = |value|
-		match value {
-			RealTime => 0
-			FixedStep => 1
-		}
-
-	## Flatten a cursor mode to the code the host reads.
-	cursor_code : Cursor -> U8
-	cursor_code = |value|
-		match value {
-			NoCursor => 0
-			DrawCursor => 1
-		}
-
-	## Flatten an encoder quality to the code the host reads.
-	##
-	## The host maps these onto whatever knob the chosen encoder actually has --
-	## for GIF, msf_gif's palette search depth -- so the numbering here is the
-	## only thing the two sides have to agree on.
-	quality_code : Quality -> U8
-	quality_code = |value|
-		match value {
-			Fast => 0
-			Balanced => 1
-			Best => 2
-		}
-
-	## Flatten a scale to the numerator and denominator the host applies.
-	##
-	## A zero in either position would make the host fall back to the source
-	## size, so normalize it here where the intent is still visible.
-	scale_ratio : Scale -> { numerator : U32, denominator : U32 }
-	scale_ratio = |value|
-		match value {
-			Full => { numerator: 1, denominator: 1 }
-			Half => { numerator: 1, denominator: 2 }
-			Quarter => { numerator: 1, denominator: 4 }
-			Ratio(r) =>
-				if r.numerator == 0 or r.denominator == 0 {
-					{ numerator: 1, denominator: 1 }
-				} else {
-					{ numerator: r.numerator, denominator: r.denominator }
-				}
-			}
 }
 
 normalize_fps : I32 -> I32
@@ -279,19 +249,3 @@ expect Capture.default.with_timing(RealTime).timing() == RealTime
 expect Capture.default.with_cursor(DrawCursor).cursor() == DrawCursor
 expect Capture.default.with_quality(Fast).quality() == Fast
 expect Capture.default.with_quality(Best).quality() == Best
-expect Capture.format_code(Png) == 0
-expect Capture.format_code(Gif) == 1
-expect Capture.format_code(WebM) == 2
-expect Capture.timing_code(RealTime) == 0
-expect Capture.timing_code(FixedStep) == 1
-expect Capture.cursor_code(NoCursor) == 0
-expect Capture.cursor_code(DrawCursor) == 1
-expect Capture.quality_code(Fast) == 0
-expect Capture.quality_code(Balanced) == 1
-expect Capture.quality_code(Best) == 2
-expect Capture.scale_ratio(Full) == { numerator: 1, denominator: 1 }
-expect Capture.scale_ratio(Half) == { numerator: 1, denominator: 2 }
-expect Capture.scale_ratio(Quarter) == { numerator: 1, denominator: 4 }
-expect Capture.scale_ratio(Ratio({ numerator: 2, denominator: 3 })) == { numerator: 2, denominator: 3 }
-expect Capture.scale_ratio(Ratio({ numerator: 1, denominator: 0 })) == { numerator: 1, denominator: 1 }
-expect Capture.scale_ratio(Ratio({ numerator: 0, denominator: 4 })) == { numerator: 1, denominator: 1 }

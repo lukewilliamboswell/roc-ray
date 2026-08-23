@@ -9385,7 +9385,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
+/// Roc signature: [DefaultFont, LoadedFont(Font.Resource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostFont_metricsArgs = extern struct {
     arg0: DefaultFontOrLoadedFont,
@@ -9448,7 +9448,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.load_font_bytes!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : DrawHost.FontResource }
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Resource }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostLoad_font_bytesArgs = if (@sizeOf(usize) == 4) extern struct {
     bytes: RocListWith(u8, false),
@@ -9494,7 +9494,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : DrawHost.FontResource }
+/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Resource }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostLoad_store_fontArgs = if (@sizeOf(usize) == 4) extern struct {
     path: RocStr,
@@ -9544,7 +9544,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.prepare_text!
-/// Roc signature: { font : [DefaultFont, LoadedFont(DrawHost.FontResource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
+/// Roc signature: { font : [DefaultFont, LoadedFont(Font.Resource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostPrepare_textArgs = if (@sizeOf(usize) == 4) extern struct {
     font: DefaultFontOrLoadedFont,
@@ -10072,7 +10072,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.text_aligned!
-/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(DrawHost.FontResource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostText_alignedArgs = if (@sizeOf(usize) == 4) extern struct {
     font: DefaultFontOrLoadedFont,
@@ -10140,7 +10140,7 @@ comptime {
 }
 
 /// Arguments for DrawHost.text!
-/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(DrawHost.FontResource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Refcounted fields are owned by the hosted function.
 pub const DrawHostTextArgs = if (@sizeOf(usize) == 4) extern struct {
     font: DefaultFontOrLoadedFont,
@@ -13488,7 +13488,7 @@ pub extern fn roc_draw_end_scissor_raw() callconv(.c) void;
 pub extern fn roc_draw_fps(arg0: DrawHostFpsArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.font_metrics!
-/// Roc signature: [DefaultFont, LoadedFont(DrawHost.FontResource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
+/// Roc signature: [DefaultFont, LoadedFont(Font.Resource)] => { base_size : F32, fallback_index : U64, glyphs : List({ advance_x : F32, codepoint : U32, height : F32, offset_x : F32, offset_y : F32, width : F32 }), line_spacing : F32 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13504,7 +13504,7 @@ pub extern fn roc_draw_frame_size() callconv(.c) __AnonStruct_473ae8de77ee164b;
 pub extern fn roc_draw_line_raw(arg0: DrawHostLineArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.load_font_bytes!
-/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : DrawHost.FontResource }
+/// Roc signature: { bytes : List(U8), format : U8, size : I32 } => { err : U8, font : Font.Resource }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13512,7 +13512,7 @@ pub extern fn roc_draw_line_raw(arg0: DrawHostLineArgs) callconv(.c) void;
 pub extern fn roc_draw_load_font_bytes_raw(arg0: DrawHostLoad_font_bytesArgs) callconv(.c) __AnonStruct_83bbf23095f15134;
 
 /// Hosted symbol for DrawHost.load_store_font!
-/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : DrawHost.FontResource }
+/// Roc signature: { path : Str, size : I32, store : Assets.Store } => { err : U8, font : Font.Resource }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13520,7 +13520,7 @@ pub extern fn roc_draw_load_font_bytes_raw(arg0: DrawHostLoad_font_bytesArgs) ca
 pub extern fn roc_draw_load_store_font_raw(arg0: DrawHostLoad_store_fontArgs) callconv(.c) __AnonStruct_83bbf23095f15134;
 
 /// Hosted symbol for DrawHost.prepare_text!
-/// Roc signature: { font : [DefaultFont, LoadedFont(DrawHost.FontResource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
+/// Roc signature: { font : [DefaultFont, LoadedFont(Font.Resource)], size : F32, spacing : F32, text : Str } => { err : U8, height : F32, prepared : DrawHost.PreparedText, width : F32 }
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
@@ -13573,14 +13573,14 @@ pub extern fn roc_draw_rounded_rectangle_lines_raw(arg0: DrawHostRounded_rectang
 pub extern fn roc_draw_rounded_rectangle_raw(arg0: DrawHostRounded_rectangleArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.text_aligned!
-/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(DrawHost.FontResource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { align_x : F32, align_y : F32, color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);
 pub extern fn roc_draw_text_aligned_raw(arg0: DrawHostText_alignedArgs) callconv(.c) void;
 
 /// Hosted symbol for DrawHost.text!
-/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(DrawHost.FontResource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
+/// Roc signature: { color : Color.Rgba, font : [DefaultFont, LoadedFont(Font.Resource)], pos : Math.Vec2, size : F32, spacing : F32, text : Str } => {}
 /// Owned arguments. Release each exactly once before returning, unless it is
 /// moved into storage or into the result:
 ///     arg0.decref(roc_host);

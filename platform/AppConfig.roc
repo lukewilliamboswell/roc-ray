@@ -8,6 +8,7 @@
 ## a `::` nominal is opaque outside the module that declares it.
 import App
 import Capture
+import CaptureHost
 import Keys
 import Mouse
 import rrt.Capture as RrtCapture
@@ -110,22 +111,22 @@ host_recording = |value|
 			every_nth: 1,
 			timing: 0,
 			cursor: 0,
-			quality: RrtCapture.quality_code(Balanced),
+			quality: CaptureHost.quality_code(Balanced),
 		}
 		Record(recording) => {
-			ratio = RrtCapture.scale_ratio(recording.scale())
+			ratio = CaptureHost.scale_ratio(recording.scale())
 			{
 				enabled: Bool.True,
 				path: recording.path(),
-				format: RrtCapture.format_code(recording.format()),
+				format: CaptureHost.format_code(recording.format()),
 				fps: recording.fps(),
 				max_frames: recording.max_frames(),
 				scale_numerator: ratio.numerator,
 				scale_denominator: ratio.denominator,
 				every_nth: recording.every_nth(),
-				timing: RrtCapture.timing_code(recording.timing()),
-				cursor: RrtCapture.cursor_code(recording.cursor()),
-				quality: RrtCapture.quality_code(recording.quality()),
+				timing: CaptureHost.timing_code(recording.timing()),
+				cursor: CaptureHost.cursor_code(recording.cursor()),
+				quality: CaptureHost.quality_code(recording.quality()),
 			}
 		}
 	}

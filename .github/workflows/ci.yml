@@ -32,11 +32,10 @@ jobs:
       matrix:
         os:
           - ubuntu-24.04
-          # The hosted arm64 macOS runners have no GPU and NSOpenGL offers
-          # them no pixel format at all ("NSGL: Failed to find a suitable
-          # pixel format"), so nothing graphical can run on macos-15. The
-          # Intel runner still has Apple's software GL.
-          - macos-15-intel
+          # No macOS: the hosted runners, arm64 and Intel alike, have no GPU
+          # and NSOpenGL offers them no pixel format at all ("NSGL: Failed to
+          # find a suitable pixel format"), so InitWindow cannot succeed. macOS
+          # rendering is only testable on a real Mac.
           - windows-2022
     defaults:
       run:
@@ -191,8 +190,9 @@ jobs:
       # the graphical-smoke job is the pixel-level test.
       #
       # Where it cannot run, and why:
-      # - macos-15 (arm64): the hosted runners have no GPU and NSOpenGL offers
-      #   no pixel format, so InitWindow fails; macos-15-intel covers macOS.
+      # - macOS (arm64 and Intel): the hosted runners have no GPU and NSOpenGL
+      #   offers no pixel format, so InitWindow fails. Only a real Mac can run
+      #   this sweep; macos-15-intel still earns its place as x64mac coverage.
       # - ubuntu-22.04: the vendored Linux raylib was built against glibc 2.38
       #   and every example aborts at window init with "undefined symbol:
       #   __isoc23_strtoul". Headless runs never reach that symbol, which is
@@ -205,6 +205,33 @@ jobs:
           sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
             libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
             libgl1-mesa-dev libglx-mesa0 mesa-utils
+
+      # No runner has a sound device, and raylib's audio init failing is a
+      # raylib WARNING that the sweep rightly treats as a failure (and the
+      # examples that load sounds then exit with an error). Give each runner a
+      # virtual one: a PulseAudio null sink on Linux, the Scream virtual
+      # sound card on Windows.
+      - name: Start a virtual audio device (Linux)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get install -y pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=ci-null sink_properties=device.description=ci-null
+          pactl set-default-sink ci-null
+          pactl info | grep -i "default sink"
+
+      - name: Install a virtual audio device (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          SCREAM_VERSION: "3.8"
+        run: |
+          Invoke-WebRequest "https://github.com/duncanthrax/scream/releases/download/$env:SCREAM_VERSION/Scream$env:SCREAM_VERSION.zip" -OutFile Scream.zip
+          Expand-Archive -Path Scream.zip -DestinationPath Scream
+          Import-Certificate -FilePath Scream\Install\driver\x64\Scream.cat -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+          Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+          net start audiosrv
+          Get-CimInstance Win32_SoundDevice | Select-Object Name, Status
 
       # Windows runners expose only OpenGL 1.1, which raylib cannot use. Mesa's
       # llvmpipe drop-in provides a real GL 3.3 context in software; it is
@@ -224,7 +251,7 @@ jobs:
           ls -l ci-gl
 
       - name: Run examples in a real window
-        if: matrix.os != 'macos-15' && matrix.os != 'ubuntu-22.04'
+        if: runner.os != 'macOS' && matrix.os != 'ubuntu-22.04'
         timeout-minutes: 25
         env:
           ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}

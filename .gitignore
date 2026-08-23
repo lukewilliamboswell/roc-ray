@@ -133,6 +133,7 @@ __pycache__/
 # Output written by the capture examples
 captures/
 shots/
+postcards/
 
 # Databases written by the sqlite example and probe
 sqlite_scores_out/

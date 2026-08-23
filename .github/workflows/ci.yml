@@ -124,4 +124,49 @@ jobs:
       # six-hour job limit.
       - name: Build and run examples headlessly
         timeout-minutes: 20
-        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle
+        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
+
+      # The headless run above never calls raylib, so window, GL, texture,
+      # font, audio and capture code would otherwise never execute on any
+      # runner. The windowed sweep runs the same examples against the real
+      # backend, with a real hidden window, and scripts keys into the ones with
+      # key-driven features (scripts/test_spec.json). Pixels are not compared;
+      # the graphical-smoke job is the pixel-level test.
+      - name: Install X11 and GL dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
+            libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libgl1-mesa-dev libglx-mesa0 mesa-utils
+
+      # Windows runners expose only OpenGL 1.1, which raylib cannot use. Mesa's
+      # llvmpipe drop-in provides a real GL 3.3 context in software; it is
+      # copied beside each built example because Windows resolves a DLL from
+      # the executable's own directory before the system one.
+      - name: Install Mesa OpenGL for Windows
+        if: runner.os == 'Windows'
+        env:
+          MESA_VERSION: 26.2.0
+        run: |
+          set -euo pipefail
+          mkdir -p ci-gl
+          curl -fsSL -o mesa.7z \
+            "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_VERSION}/mesa3d-${MESA_VERSION}-release-msvc.7z"
+          7z e mesa.7z -oci-gl x64/opengl32.dll
+          rm mesa.7z
+          ls -l ci-gl
+
+      - name: Run examples in a real window
+        timeout-minutes: 25
+        env:
+          ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}
+        run: |
+          set -euo pipefail
+          SWEEP=(scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test
+                 --platform-mode=bundle --skip-runtime --windowed)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a "${SWEEP[@]}"
+          else
+            "${SWEEP[@]}"
+          fi

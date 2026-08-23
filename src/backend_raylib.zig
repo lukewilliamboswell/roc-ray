@@ -1061,8 +1061,43 @@ pub fn endScissor() void {
 }
 
 /// Begin drawing in 2D camera mode.
+///
+/// raylib 6.0 carries the HiDPI content scale (render size / screen size) in
+/// the modelview matrix: `BeginDrawing` and `EndMode2D` multiply it in, but
+/// `BeginMode2D` resets the modelview to the camera alone (upstream #3746
+/// dropped it when macOS still scaled through the viewport). On a Retina Mac
+/// the camera section of a frame therefore lands at half size in the top-left
+/// quarter of the window while everything outside the camera is correct. Apply
+/// the same scale raylib applies elsewhere; it is the identity on ordinary
+/// displays, and is skipped inside a render texture like raylib does.
 pub fn beginMode2D(camera: anytype) void {
-    rl.BeginMode2D(cameraFromArgs(camera));
+    const cam = cameraFromArgs(camera);
+    rl.BeginMode2D(cam);
+    if (rl.rlGetActiveFramebuffer() != 0) return;
+    const screen_w: f32 = @floatFromInt(rl.GetScreenWidth());
+    const screen_h: f32 = @floatFromInt(rl.GetScreenHeight());
+    if (screen_w <= 0 or screen_h <= 0) return;
+    const sx = @as(f32, @floatFromInt(rl.GetRenderWidth())) / screen_w;
+    const sy = @as(f32, @floatFromInt(rl.GetRenderHeight())) / screen_h;
+    if (sx == 1 and sy == 1) return;
+    const scale = [16]f32{
+        sx, 0,  0, 0,
+        0,  sy, 0, 0,
+        0,  0,  1, 0,
+        0,  0,  0, 1,
+    };
+    // `rlMultMatrixf` pre-multiplies, so load the scale first and the camera
+    // on top of it: points go through the camera, then the content scale.
+    rl.rlLoadIdentity();
+    rl.rlMultMatrixf(&scale);
+    const m = rl.GetCameraMatrix2D(cam);
+    const cam_mat = [16]f32{
+        m.m0,  m.m1,  m.m2,  m.m3,
+        m.m4,  m.m5,  m.m6,  m.m7,
+        m.m8,  m.m9,  m.m10, m.m11,
+        m.m12, m.m13, m.m14, m.m15,
+    };
+    rl.rlMultMatrixf(&cam_mat);
 }
 
 /// End drawing in 2D camera mode.

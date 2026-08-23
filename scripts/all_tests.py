@@ -21,6 +21,13 @@ This script runs:
 - roc test        - Run inline tests
 - roc build       - Build executables against the served platform bundle
 - headless runs   - Run each built example for a few frames
+- windowed sweep  - Run the cases in `scripts/test_spec.json` against the real
+                    raylib backend, with a real (hidden) window, so the window,
+                    GL, texture, font, audio and capture paths `--host-headless`
+                    stubs out actually execute on every OS. Cases can script
+                    keys and typed text, and assert output, exit code and files
+                    written. Pixels are not compared; `zig build
+                    graphical-smoke` is the pixel-level test.
 - cli args        - Build and run the argv bridge probe
 - model alloc     - Measure what a frame costs a large collection in the model
 - task delivery   - Spawn one task per Msg variant and assert every message
@@ -51,7 +58,9 @@ Usage:
     ./scripts/all_tests.py --skip-roc-build      # Skip roc build
     ./scripts/all_tests.py --skip-runtime        # Skip running built examples
     ./scripts/all_tests.py --skip-roc-test       # Skip roc test
-    ./scripts/all_tests.py --runtime-only        # Only build and run examples headlessly
+    ./scripts/all_tests.py --runtime-only        # Only build and run examples
+    ./scripts/all_tests.py --skip-windowed       # Skip the windowed sweep (needs a display)
+    ./scripts/all_tests.py --windowed-dll-dir=DIR # Copy DIR/*.dll beside each binary first
     ./scripts/all_tests.py --skip-bundle-test    # Skip the Wayland bundle package test
     ./scripts/all_tests.py --platform-mode=source # Serve types only; use platform sources
     ./scripts/all_tests.py --copy-executables    # Also leave binaries beside each main.roc
@@ -66,8 +75,10 @@ TODO replace me with a Roc script when basic-cli is implemented
 
 import argparse
 import io
+import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -215,6 +226,203 @@ def run_headless_examples(
         else:
             print("FAILED")
             failed.append(f"headless run {name}")
+
+    return failed
+
+
+TEST_SPEC_PATH = Path(__file__).resolve().parent / "test_spec.json"
+
+# Lines that mean a windowed run went wrong even though the process exited 0.
+# raylib logs its own failures at ERROR/WARNING level rather than failing the
+# process, so a missing texture or a dead GL context is only visible here.
+_CRASH_MARKER = "[ROC CRASHED]"
+_RAYLIB_ERROR_RE = re.compile(r"^\s*ERROR:", re.MULTILINE)
+_RAYLIB_WARNING_FAILED_RE = re.compile(r"^\s*WARNING:.*failed", re.MULTILINE | re.IGNORECASE)
+
+_PLATFORM_KEY = "windows" if IS_WINDOWS else ("linux" if IS_LINUX else "darwin")
+
+
+def load_test_spec(root: Path) -> dict:
+    """Load scripts/test_spec.json and check it names every example exactly once.
+
+    The spec is validated against the whole `examples/` directory even when
+    `--only` narrowed this run, so a new example cannot be added without a case.
+    """
+    spec = json.loads(TEST_SPEC_PATH.read_text())
+    listed: list[str] = []
+    for app in spec["apps"]:
+        listed.append(Path(app["path"]).name)
+    duplicates = sorted({name for name in listed if listed.count(name) > 1})
+    if duplicates:
+        raise SystemExit(f"error: {TEST_SPEC_PATH.name} lists {', '.join(duplicates)} more than once")
+
+    on_disk = {example_name(example) for example in find_examples(root / "examples")}
+    missing = sorted(on_disk - set(listed))
+    extra = sorted(set(listed) - on_disk)
+    if missing or extra:
+        problems = []
+        if missing:
+            problems.append(f"missing: {', '.join(missing)}")
+        if extra:
+            problems.append(f"not an example: {', '.join(extra)}")
+        raise SystemExit(f"error: {TEST_SPEC_PATH.name} does not match examples/ ({'; '.join(problems)})")
+    return spec
+
+
+def has_display() -> bool:
+    """Can a real window be opened here?
+
+    macOS and Windows always have a window server; X11/Wayland is the case that
+    can genuinely be absent, and a run without one has to say so rather than
+    fail with a raylib GLFW error.
+    """
+    if not IS_LINUX:
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _png_dimensions(path: Path) -> tuple[int, int] | None:
+    """Width and height from a PNG's IHDR, or None if it is not a PNG."""
+    header = path.read_bytes()[:24]
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
+def _check_windowed_case(
+    root: Path, executable: Path, case: dict, defaults: dict, verbose: bool
+) -> list[str]:
+    """Run one spec case against the real backend and check what it produced."""
+    frames = case.get("frames", defaults["frames"])
+    expected_exit = case.get("exit_code", defaults["exit_code"])
+    timeout = case.get("timeout_seconds", defaults["timeout_seconds"])
+
+    expect_png = case.get("expect_png")
+    if expect_png:
+        # A stale picture from an earlier run must not pass for this one's.
+        for stale in root.glob(expect_png["glob"]):
+            stale.unlink()
+
+    cmd = [str(executable), "--host-hidden", f"--host-frames={frames}"]
+    if "keys" in case:
+        cmd.append(f"--host-keys={case['keys']}")
+    if "text" in case:
+        cmd.append(f"--host-text={case['text']}")
+    cmd.extend(case.get("args", []))
+
+    if verbose:
+        print(f"    Running: {' '.join(cmd)}")
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=root,
+            timeout=timeout,
+            shell=IS_WINDOWS,
+        )
+    except subprocess.TimeoutExpired:
+        return [f"timed out after {timeout}s"]
+
+    output = (result.stdout or "") + (result.stderr or "")
+    problems: list[str] = []
+    if result.returncode != expected_exit:
+        problems.append(f"exit code {result.returncode}, expected {expected_exit}")
+    if _CRASH_MARKER in output:
+        problems.append("output contains [ROC CRASHED]")
+    if _RAYLIB_ERROR_RE.search(output):
+        problems.append("output contains a raylib ERROR line")
+    if _RAYLIB_WARNING_FAILED_RE.search(output):
+        problems.append("output contains a raylib WARNING ... failed line")
+    for needle in case.get("contains", []):
+        if needle not in output:
+            problems.append(f"output does not contain {needle!r}")
+
+    if expect_png:
+        written = sorted(root.glob(expect_png["glob"]))
+        if not written:
+            problems.append(f"no file matched {expect_png['glob']}")
+        else:
+            size = _png_dimensions(written[-1])
+            wanted = (expect_png["width"], expect_png["height"])
+            # A screenshot is framebuffer pixels, and a HighDPI window's
+            # framebuffer is an integer multiple of the logical window size --
+            # 2x on this Mac's Retina display. The property worth asserting is
+            # the shape of the window, not the density of the monitor CI drew on.
+            if size is None or size[0] % wanted[0] or size[1] % wanted[1] or (
+                size[0] // wanted[0] != size[1] // wanted[1]
+            ):
+                problems.append(f"{written[-1].name} is {size}, expected {wanted} at some integer scale")
+            for picture in written:
+                picture.unlink()
+
+    if problems and not verbose and output:
+        print(output)
+    return problems
+
+
+def _install_runtime_dlls(dll_dir: Path, staged_dirs: set[Path]) -> None:
+    """Copy loader-visible DLLs beside each built executable.
+
+    Windows resolves a DLL from the executable's own directory first, and CI
+    runners ship an `opengl32.dll` that only offers GL 1.1, so a Mesa drop-in
+    has to sit beside the binary rather than anywhere on the path.
+    """
+    for library in sorted(dll_dir.glob("*.dll")):
+        for directory in staged_dirs:
+            shutil.copyfile(library, directory / library.name)
+
+
+def run_windowed_examples(
+    root: Path,
+    built: list[tuple[Path, Path]],
+    spec: dict,
+    verbose: bool,
+    dll_dir: Path | None = None,
+) -> list[str]:
+    """Run the spec's cases against the real backend, with a real hidden window.
+
+    This is the stage that executes the raylib window, GL, texture, font, audio
+    and capture paths that `--host-headless` stubs out entirely. Pixels are
+    deliberately not compared -- `zig build graphical-smoke` is the pixel test;
+    this one asserts that every example survives real frames on every OS.
+    """
+    failed: list[str] = []
+    if not has_display():
+        print("\nSkipping windowed runtime (no DISPLAY or WAYLAND_DISPLAY; use xvfb-run)")
+        return failed
+
+    cases_by_example = {Path(app["path"]).name: app for app in spec["apps"]}
+    defaults = spec["defaults"]
+
+    if dll_dir is not None:
+        _install_runtime_dlls(dll_dir, {executable_for(staged).parent for _, staged in built})
+
+    print("\nRunning built examples in a real hidden window...")
+    for example, staged in built:
+        name = example_name(example)
+        app = cases_by_example[name]
+        for case in app["cases"]:
+            label = f"{name}/{case['name']}"
+            excluded = {**app.get("platforms", {}), **case.get("platforms", {})}.get(_PLATFORM_KEY)
+            if excluded is not None and not excluded.get("run", True):
+                reason = case.get("reason") or app.get("reason") or "excluded by spec"
+                print(f"  {label}... SKIPPED ({reason})")
+                continue
+
+            print(f"  {label}...", end=" ", flush=True)
+            executable = executable_for(staged)
+            if not executable.is_file():
+                print("FAILED (missing executable)")
+                failed.append(f"windowed run {label} (missing executable)")
+                continue
+
+            problems = _check_windowed_case(root, executable, case, defaults, verbose)
+            if problems:
+                print(f"FAILED ({'; '.join(problems)})")
+                failed.append(f"windowed run {label}")
+            else:
+                print("ok")
 
     return failed
 
@@ -833,6 +1041,32 @@ def main() -> int:
         help="Number of frames to run each example in headless mode",
     )
     parser.add_argument(
+        "--windowed",
+        dest="windowed",
+        action="store_true",
+        default=True,
+        help="Run the windowed sweep from scripts/test_spec.json (the default)",
+    )
+    parser.add_argument(
+        "--skip-windowed",
+        dest="windowed",
+        action="store_false",
+        help=(
+            "Skip the windowed sweep. It opens a real (hidden) window per case, "
+            "so it needs a display server; on Linux use xvfb-run"
+        ),
+    )
+    parser.add_argument(
+        "--windowed-dll-dir",
+        metavar="DIR",
+        default=os.environ.get("ROC_RAY_WINDOWED_DLL_DIR"),
+        help=(
+            "Copy every *.dll in DIR beside each built example before the "
+            "windowed sweep (also settable with ROC_RAY_WINDOWED_DLL_DIR). CI "
+            "uses it for the Mesa opengl32.dll a Windows runner needs"
+        ),
+    )
+    parser.add_argument(
         "--skip-bundle-test",
         "--skip-wayland-bundle-test",
         dest="skip_bundle_test",
@@ -1105,6 +1339,26 @@ def _run_example_stages(
         print("\nSkipping headless runtime (--skip-roc-build)")
     else:
         failed.extend(run_headless_examples(root, built, args.headless_frames, args.verbose))
+
+    # The windowed sweep is its own stage rather than part of the headless
+    # block: CI runs the headless stage on every runner and then the windowed
+    # one under a virtual display, and each has to be selectable alone.
+    if not args.windowed:
+        print("\nSkipping windowed runtime (--skip-windowed)")
+    elif args.skip_roc_build:
+        print("\nSkipping windowed runtime (--skip-roc-build)")
+    else:
+        failed.extend(
+            run_windowed_examples(
+                root,
+                built,
+                load_test_spec(root),
+                args.verbose,
+                Path(args.windowed_dll_dir).resolve() if args.windowed_dll_dir else None,
+            )
+        )
+
+    if not (args.skip_runtime or args.skip_roc_build):
         failed.extend(run_cli_args_integration(root, packages, args.verbose))
         failed.extend(run_task_delivery_probe(root, packages, args.verbose))
         failed.extend(run_task_cap_probe(root, packages, args.verbose))

@@ -43,6 +43,14 @@ platform sources, so the checked-in files are never rewritten. Pass
 earlier `zig build`, and `--platform-mode=bundle` to run against a bundled
 platform instead of its sources.
 
+The host reserves a few `--host-` switches for unattended runs. `--host-frames=N`
+ends a real windowed run after N cycles, `--host-hidden` opens that window
+hidden, and `--host-keys=3:S,4:LEFT+X` / `--host-text=5:hi` script the keyboard
+and typed text on the cycles they name (a key is a character, one of a few names
+such as `LEFT` or `SPACE`, or a raw key code). They are what the windowed sweep
+below drives the examples with; `--host-headless` and `--host-headless-frames=N`
+select the stub backend instead, which draws nothing.
+
 Debug hosts use a fast thread-safe allocator by default. To diagnose Roc-side
 leaks with Zig's stack-tracing allocator, pass this flag to a Debug-built app:
 
@@ -87,7 +95,13 @@ scripts/all_tests.py --only pong,snake
 ```
 
 It checks formatting and types, runs Roc tests, builds the apps and exercises
-their headless paths. `--only` takes example names (repeatable, or comma
+both their headless paths and, in the windowed sweep, the real raylib backend:
+every example is run against a real (hidden) window for a bounded number of
+frames, with the cases in `scripts/test_spec.json` scripting keys and typed text
+into the examples with key-driven features and asserting the output, the exit
+code and the files they write. Add a case there when you add an example -- the
+spec is validated against `examples/`, so a missing one fails the run. Pass
+`--skip-windowed` when there is no display; on Linux use `xvfb-run -a`. `--only` takes example names (repeatable, or comma
 separated) and is the way to iterate on one example without waiting for the
 rest.
 

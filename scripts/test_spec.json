@@ -1,0 +1,284 @@
+{
+  "_readme": [
+    "Cases for the windowed sweep in scripts/all_tests.py: every example run",
+    "against the real raylib backend, with a real (hidden) window, for a bounded",
+    "number of frames.",
+    "",
+    "Every examples/<name> directory must appear exactly once, and each app has",
+    "one or more named cases. Case fields, all optional except name:",
+    "  frames           cycles to run before the host exits by itself",
+    "  keys             --host-keys script, e.g. \"3:S,4:LEFT+X\" (cycle:keys)",
+    "  text             --host-text script, e.g. \"5:hi\" (cycle:typed text)",
+    "  args             extra application arguments",
+    "  contains         substrings the combined output must contain",
+    "  exit_code        expected exit status (default 0)",
+    "  expect_png       {glob, width, height}: a PNG the run must have written",
+    "  timeout_seconds  wall-clock bound for this case",
+    "  platforms        {\"linux\"|\"darwin\"|\"windows\": {\"run\": false}} plus reason",
+    "",
+    "A case that scripts a quit key sets a very large `frames` and a small `timeout_seconds` on purpose: the key is what ends the run, so a key that never arrived is a timeout rather than a pass.",
+    "Every run also asserts there is no [ROC CRASHED] and no raylib ERROR: or",
+    "WARNING: ... failed line in the output. Pixels are deliberately not compared;",
+    "`zig build graphical-smoke` is the pixel-level test."
+  ],
+  "defaults": {
+    "frames": 20,
+    "exit_code": 0,
+    "timeout_seconds": 60
+  },
+  "apps": [
+    {
+      "path": "examples/async_read",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/breakout",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/camera",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_plot",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20,
+          "platforms": {
+            "windows": {
+              "run": false
+            }
+          },
+          "reason": "Crashes with 0xC0000005 at startup on Windows; see issue #172"
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_screenshot",
+      "cases": [
+        {
+          "name": "saves-a-shot",
+          "frames": 90,
+          "keys": "3:S",
+          "expect_png": {
+            "glob": "shots/*.png",
+            "width": 720,
+            "height": 420
+          }
+        }
+      ]
+    },
+    {
+      "path": "examples/capture_ui_demo",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/cave_climb",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/drop_viewer",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/generated_assets",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/hello_world",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/http_fetch",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/input_inspector",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "types-and-quits",
+          "frames": 1000000,
+          "keys": "3:A,4:A,8:Q",
+          "text": "5:hi",
+          "timeout_seconds": 30
+        }
+      ]
+    },
+    {
+      "path": "examples/live_plot",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/particles",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/pong",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "serves-and-quits",
+          "frames": 1000000,
+          "keys": "3:W,4:W,5:S,8:SPACE,12:ESCAPE",
+          "timeout_seconds": 30
+        }
+      ]
+    },
+    {
+      "path": "examples/post_process",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/postcard_studio",
+      "cases": [
+        {
+          "name": "exports-a-poster",
+          "frames": 90,
+          "keys": "3:S",
+          "expect_png": {
+            "glob": "postcards/sunrise.png",
+            "width": 1440,
+            "height": 960
+          }
+        }
+      ]
+    },
+    {
+      "path": "examples/projective_texture",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/responsive_ui",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/snake",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        },
+        {
+          "name": "turns-and-quits",
+          "frames": 1000000,
+          "keys": "3:RIGHT,6:DOWN,9:LEFT,14:ESCAPE",
+          "timeout_seconds": 30
+        }
+      ]
+    },
+    {
+      "path": "examples/sqlite_scores",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/task_sleep",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/top_down",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    },
+    {
+      "path": "examples/udp_cursor",
+      "cases": [
+        {
+          "name": "sweep",
+          "frames": 20
+        }
+      ]
+    }
+  ]
+}

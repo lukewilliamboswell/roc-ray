@@ -5,8 +5,18 @@ on:
 
 jobs:
   # Pixel-level rendering and capture checks. They need a real GL context, so
-  # they run under a virtual display -- without this the target never runs
-  # anywhere, which is how it sat unrun for so long.
+  # each runner has to be given one -- without this the target never runs
+  # anywhere, which is how it sat unrun for so long. It runs on all three
+  # targets because the backends differ: GLX/Mesa, CGL on macOS, WGL on Windows.
+  #
+  # Linux: Xvfb provides the display and mesa's software rasteriser provides the
+  # GL context, since the runners have no GPU.
+  # macOS: the runner already has a window session and a real GL driver, so the
+  # build runs directly.
+  # Windows: the runners only expose Microsoft's OpenGL 1.1, which cannot give
+  # raylib the GL 3.3 context it asks for, so Mesa's llvmpipe `opengl32.dll` is
+  # dropped next to the installed executable and picked up ahead of the system
+  # one.
   #
   # Deliberately outside the build matrix. This is the only thing here that
   # links the system libc directly (`-lc`), and the vendored raylib references
@@ -14,8 +24,23 @@ jobs:
   # platform and the examples are unaffected: they link through the generated
   # libc stub instead.
   graphical-smoke:
-    name: Graphical smoke tests
-    runs-on: ubuntu-24.04
+    name: Graphical smoke tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          # No macOS: the hosted runners, arm64 and Intel alike, have no GPU
+          # and NSOpenGL offers them no pixel format at all ("NSGL: Failed to
+          # find a suitable pixel format"), so InitWindow cannot succeed. macOS
+          # rendering is only testable on a real Mac.
+          - windows-2022
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,14 +53,43 @@ jobs:
       # Xvfb provides the display; the X11 dev packages are what raylib links
       # against, and mesa's software rasteriser is what gives xvfb a GL context.
       - name: Install X11 and GL dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
             libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
             libgl1-mesa-dev libglx-mesa0 mesa-utils
 
-      - name: Run graphical smoke tests
+      - name: Run graphical smoke tests (Xvfb)
+        if: runner.os == 'Linux'
         run: xvfb-run -a zig build graphical-smoke
+
+      - name: Run graphical smoke tests
+        if: runner.os == 'macOS'
+        run: zig build graphical-smoke
+
+      # Pinned so a new mesa-dist-win release cannot change what CI renders.
+      # Windows resolves a DLL from the executable's own directory before the
+      # system one, so the three x64 DLLs that make up the WGL front end are
+      # enough to shadow Microsoft's `opengl32.dll`.
+      - name: Install Mesa software OpenGL
+        if: runner.os == 'Windows'
+        env:
+          MESA_VERSION: 24.3.4
+        run: |
+          zig build graphical-smoke-exe
+          curl -fsSL -o mesa.7z \
+            "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_VERSION}/mesa3d-${MESA_VERSION}-release-msvc.7z"
+          7z e -y mesa.7z -o"zig-out/bin" x64/opengl32.dll x64/libgallium_wgl.dll x64/libglapi.dll
+          test -f zig-out/bin/opengl32.dll
+
+      - name: Run graphical smoke tests
+        if: runner.os == 'Windows'
+        # llvmpipe is the CPU rasteriser; the default would try the d3d12
+        # driver, which the runner's virtual GPU cannot service.
+        env:
+          GALLIUM_DRIVER: llvmpipe
+        run: ./zig-out/bin/graphical-smoke.exe
 
   build-and-test:
     name: Build and Test (${{ matrix.os }})
@@ -45,7 +99,9 @@ jobs:
       matrix:
         os:
           - macos-15         # arm64mac
-          - ubuntu-22.04     # x64glibc
+          - macos-15-intel   # x64mac
+          - ubuntu-22.04     # x64glibc, oldest supported glibc
+          - ubuntu-24.04     # x64glibc, the only Linux that can open a window (see below)
           - windows-2022     # x64win
     defaults:
       run:
@@ -124,4 +180,94 @@ jobs:
       # six-hour job limit.
       - name: Build and run examples headlessly
         timeout-minutes: 20
-        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle
+        run: scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test --platform-mode=bundle --skip-windowed
+
+      # The headless run above never calls raylib, so window, GL, texture,
+      # font, audio and capture code would otherwise never execute on any
+      # runner. The windowed sweep runs the same examples against the real
+      # backend, with a real hidden window, and scripts keys into the ones with
+      # key-driven features (scripts/test_spec.json). Pixels are not compared;
+      # the graphical-smoke job is the pixel-level test.
+      #
+      # Where it cannot run, and why:
+      # - macOS (arm64 and Intel): the hosted runners have no GPU and NSOpenGL
+      #   offers no pixel format, so InitWindow fails. Only a real Mac can run
+      #   this sweep; macos-15-intel still earns its place as x64mac coverage.
+      # - ubuntu-22.04: the vendored Linux raylib was built against glibc 2.38
+      #   and every example aborts at window init with "undefined symbol:
+      #   __isoc23_strtoul". Headless runs never reach that symbol, which is
+      #   how it went unnoticed. Tracked separately; ubuntu-24.04 covers Linux
+      #   until the archive is rebuilt against an older glibc baseline.
+      - name: Install X11 and GL dependencies
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
+            libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
+            libgl1-mesa-dev libglx-mesa0 mesa-utils
+
+      # No runner has a sound device, and raylib's audio init failing is a
+      # raylib WARNING that the sweep rightly treats as a failure (and the
+      # examples that load sounds then exit with an error). Give each runner a
+      # virtual one: a PulseAudio null sink on Linux, the Scream virtual
+      # sound card on Windows.
+      - name: Start a virtual audio device (Linux)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get install -y pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=ci-null sink_properties=device.description=ci-null
+          pactl set-default-sink ci-null
+          pactl info | grep -i "default sink"
+
+      - name: Install a virtual audio device (Windows)
+        if: runner.os == 'Windows'
+        # Bounded: a driver-trust prompt would otherwise hang the job. Scream
+        # 3.6 is the release whose driver Windows Server accepts without one
+        # once the signer is trusted; 3.8's newer signature still prompts.
+        timeout-minutes: 5
+        shell: powershell
+        env:
+          SCREAM_VERSION: "3.6"
+        run: |
+          Invoke-WebRequest "https://github.com/duncanthrax/scream/releases/download/$env:SCREAM_VERSION/Scream$env:SCREAM_VERSION.zip" -OutFile Scream.zip
+          Expand-Archive -Path Scream.zip -DestinationPath Scream
+          $cert = (Get-AuthenticodeSignature "Scream\Install\driver\Scream.sys").SignerCertificate
+          $store = [System.Security.Cryptography.X509Certificates.X509Store]::new("TrustedPublisher", "LocalMachine")
+          $store.Open("ReadWrite"); $store.Add($cert); $store.Close()
+          & "Scream\Install\helpers\devcon" install "Scream\Install\driver\Scream.inf" *Scream
+          net start audiosrv
+          Get-CimInstance Win32_SoundDevice | Select-Object Name, Status
+
+      # Windows runners expose only OpenGL 1.1, which raylib cannot use. Mesa's
+      # llvmpipe drop-in provides a real GL 3.3 context in software; it is
+      # copied beside each built example because Windows resolves a DLL from
+      # the executable's own directory before the system one.
+      - name: Install Mesa OpenGL for Windows
+        if: runner.os == 'Windows'
+        env:
+          MESA_VERSION: 24.3.4
+        run: |
+          set -euo pipefail
+          mkdir -p ci-gl
+          curl -fsSL -o mesa.7z \
+            "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_VERSION}/mesa3d-${MESA_VERSION}-release-msvc.7z"
+          7z e -y mesa.7z -oci-gl x64/opengl32.dll x64/libgallium_wgl.dll x64/libglapi.dll
+          rm mesa.7z
+          ls -l ci-gl
+
+      - name: Run examples in a real window
+        if: runner.os != 'macOS' && matrix.os != 'ubuntu-22.04'
+        timeout-minutes: 25
+        env:
+          ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          set -euo pipefail
+          SWEEP=(scripts/all_tests.py --skip-platform-build --runtime-only --skip-bundle-test
+                 --platform-mode=bundle --skip-runtime --windowed)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a "${SWEEP[@]}"
+          else
+            "${SWEEP[@]}"
+          fi

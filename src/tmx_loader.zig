@@ -122,7 +122,42 @@ pub const LoadError = error{
     OutOfMemory,
 };
 
-const max_file_bytes: usize = 16 * 1024 * 1024;
+/// The largest TMX or TSX file this loader will accept from a reader.
+pub const max_file_bytes: usize = 16 * 1024 * 1024;
+
+/// How the loader gets the bytes of a file it needs.
+///
+/// A map is not one file: an external `<tileset source="...">` sends the
+/// parser back for a `.tsx` beside it. Reading is a callback rather than an
+/// `std.Io` the loader drives itself so that the caller decides how each of
+/// those reads happens -- the host performs every one of them on its waiting
+/// path, parking the task per file, and parses between them on the frame
+/// thread.
+pub const FileReader = struct {
+    context: ?*anyopaque = null,
+    read: *const fn (context: ?*anyopaque, allocator: Allocator, path: []const u8) LoadError![]u8,
+
+    /// A reader with nothing behind it, for callers that already have the text
+    /// and must not reach the filesystem for anything it references.
+    pub const unavailable: FileReader = .{ .read = readUnavailable };
+
+    fn readUnavailable(_: ?*anyopaque, _: Allocator, _: []const u8) LoadError![]u8 {
+        return error.NotFound;
+    }
+
+    /// Read through an `std.Io`, for tests and tools with one in hand.
+    pub fn fromIo(io: *const std.Io) FileReader {
+        return .{ .context = @constCast(io), .read = readThroughIo };
+    }
+
+    fn readThroughIo(context: ?*anyopaque, allocator: Allocator, path: []const u8) LoadError![]u8 {
+        const io: *const std.Io = @ptrCast(@alignCast(context.?));
+        return std.Io.Dir.cwd().readFileAlloc(io.*, path, allocator, .limited(max_file_bytes)) catch |err| switch (err) {
+            error.FileNotFound => error.NotFound,
+            else => error.ReadFailed,
+        };
+    }
+};
 const property_string: u8 = 0;
 const property_int: u8 = 1;
 const property_float: u8 = 2;
@@ -131,7 +166,7 @@ const property_bool: u8 = 3;
 const Builder = struct {
     allocator: Allocator,
     scratch: Allocator,
-    io: std.Io,
+    reader: FileReader,
     tilesets: std.ArrayList(Tileset) = .empty,
     tile_properties: std.ArrayList(TileProperties) = .empty,
     layers: std.ArrayList(Layer) = .empty,
@@ -169,18 +204,19 @@ const Range = struct {
     count: u64,
 };
 
-/// Load and parse a TMX file from disk.
-pub fn load(allocator: Allocator, io_handle: std.Io, path: []const u8) LoadError!Map {
+/// Load and parse a TMX file, reading it and anything it references through
+/// `reader`.
+pub fn load(allocator: Allocator, reader: FileReader, path: []const u8) LoadError!Map {
     var arena = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
 
     var builder = Builder{
         .allocator = arena.allocator(),
         .scratch = allocator,
-        .io = io_handle,
+        .reader = reader,
     };
 
-    const source = try readFile(allocator, io_handle, path);
+    const source = try reader.read(reader.context, allocator, path);
     defer allocator.free(source);
 
     var doc = xml.parse(allocator, source) catch return error.ParseFailed;
@@ -198,7 +234,7 @@ pub fn parseString(allocator: Allocator, text: []const u8) LoadError!Map {
     var builder = Builder{
         .allocator = arena.allocator(),
         .scratch = allocator,
-        .io = std.Io.failing,
+        .reader = FileReader.unavailable,
     };
 
     var doc = xml.parse(allocator, text) catch return error.ParseFailed;
@@ -250,7 +286,7 @@ fn parseTileset(builder: *Builder, map_path: []const u8, element: *xml.Element) 
 
     if (element.getAttribute("source")) |source| {
         const tileset_path = try resolveRelative(builder.allocator, map_path, source);
-        const file_text = try readFile(builder.scratch, builder.io, tileset_path);
+        const file_text = try builder.reader.read(builder.reader.context, builder.scratch, tileset_path);
         defer builder.scratch.free(file_text);
 
         var doc = xml.parse(builder.scratch, file_text) catch return error.ParseFailed;
@@ -405,13 +441,6 @@ fn parseProperty(allocator: Allocator, element: *xml.Element) LoadError!Property
     return .{ .name = name, .kind = property_string, .text = text, .number = 0, .integer = 0, .bool_value = false };
 }
 
-fn readFile(allocator: Allocator, io_handle: std.Io, path: []const u8) LoadError![]u8 {
-    return std.Io.Dir.cwd().readFileAlloc(io_handle, path, allocator, .limited(max_file_bytes)) catch |err| switch (err) {
-        error.FileNotFound => error.NotFound,
-        else => error.ReadFailed,
-    };
-}
-
 fn resolveRelative(allocator: Allocator, base_path: []const u8, source: []const u8) LoadError![]const u8 {
     if (std.fs.path.isAbsolute(source)) return allocator.dupe(u8, source) catch return error.OutOfMemory;
     const dirname = std.fs.path.dirname(base_path) orelse ".";
@@ -541,7 +570,7 @@ test "tmx resolves external TSX paths relative to TMX" {
     const path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/map.tmx", .{tmp.sub_path});
     defer std.testing.allocator.free(path);
 
-    var map = try load(std.testing.allocator, std.testing.io, path);
+    var map = try load(std.testing.allocator, FileReader.fromIo(&std.testing.io), path);
     defer map.deinit();
 
     const expected_image_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/images/tiles.png", .{tmp.sub_path});

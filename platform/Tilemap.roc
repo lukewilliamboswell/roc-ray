@@ -1,10 +1,12 @@
 ## Tiled TMX data, tileset drawing, and grid queries.
 ##
 ## Parse a map with `load_tmx!` in `init!`, bind its tilesets to loaded
-## textures, and keep the built `Tilemap` in the model. Parsing reads a file
-## and allocates, so it is legal in `init!`, `update!`, and tasks, and refused
-## in `render!`; every `draw_*!` here takes a `Draw.Frame` and is legal in
-## `render!` only.
+## textures, and keep the built `Tilemap` in the model. Parsing reads files, so
+## `load_tmx!` waits: it is legal in `init!`, where it blocks startup, and in
+## tasks, where it parks the task, and refused in `update!` and `render!`. To
+## swap levels while the app is running, call it inside `Task.spawn!` and build
+## the `Tilemap` from the map its message carries. Every `draw_*!` here takes a
+## `Draw.Frame` and is legal in `render!` only.
 ##
 ## ```roc
 ## raw = Tilemap.load_tmx!("assets/level.tmx")?
@@ -277,8 +279,12 @@ Tilemap :: {
 	## Parse a Tiled TMX map.
 	##
 	## The returned data is an allocation-efficient set of flat lists with index
-	## ranges for nested properties, objects, and tile data. Legal in `init!`,
-	## `update!`, and tasks; refused in `render!`.
+	## ranges for nested properties, objects, and tile data.
+	##
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. A map is more than one
+	## file: an external tileset is read the same way, so a map spread across
+	## several files parks once per file and parses in between.
 	load_tmx! : Str => Try(TilemapRawMap, [NotFound, ReadFailed, ParseFailed, Unsupported, ..])
 	load_tmx! = |path| {
 		result = TilemapHost.load_tmx!(path)

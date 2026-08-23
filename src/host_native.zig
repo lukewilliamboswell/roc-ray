@@ -5732,12 +5732,29 @@ fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult 
     return hostedReadFileRaw(activeHost(), path_arg);
 }
 
+/// Read one TMX or TSX file on the waiting path.
+///
+/// The loader calls this once for the map and once more for every external
+/// tileset the map references, so a map spread across several files parks the
+/// task once per file and parses in between, on the frame thread, with each
+/// file's bytes in hand.
+fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []const u8) tmx_loader.LoadError![]u8 {
+    var err: u8 = READ_ERR_FAILED;
+    return readFileWaiting(allocator, path, tmx_loader.max_file_bytes, &err) orelse
+        return if (err == READ_ERR_NOT_FOUND) error.NotFound else error.ReadFailed;
+}
+
+/// `Tilemap.load_tmx!`: read a Tiled map and parse it into flat records.
+///
+/// Every read waits -- parking a task, blocking `init!` -- and the XML parse
+/// and the conversion into Roc values run on the frame thread between them.
 fn hostedTilemapLoadTmxRaw(roc_host: *RocHost, path_arg: abi.RocStr) callconv(.c) TilemapLoadTmxRawResult {
-    enforcePhase("Tilemap.load_tmx!", during_load);
+    enforcePhase("Tilemap.load_tmx!", during_wait);
     defer path_arg.decref(roc_host);
 
     const path = path_arg.asSlice();
-    var map = tmx_loader.load(allocatorFromHost(roc_host), mainThreadIo(), path) catch |err| {
+    const reader = tmx_loader.FileReader{ .read = readTilemapFileWaiting };
+    var map = tmx_loader.load(allocatorFromHost(roc_host), reader, path) catch |err| {
         return emptyTilemapLoadResult(tilemapLoadErrorCode(err));
     };
     defer map.deinit();
@@ -9110,26 +9127,88 @@ test "each fresh input schedules one update and optional presentation" {
     try std.testing.expectEqual(@as(u8, 1), presented.presentations);
 }
 
-test "a loader called from render! is rejected" {
+/// Release everything `convertTilemapRawMap` allocated.
+///
+/// Only a test needs this: in a real build the record is returned into Roc,
+/// which owns every list and string in it from then on.
+fn releaseTilemapRawMap(host: *RocHost, map: TilemapRawMap) void {
+    for (map.layers.allocationItems()) |layer| layer.name.decref(host);
+    for (map.objects.allocationItems()) |object| {
+        object.name.decref(host);
+        object.type_name.decref(host);
+    }
+    for (map.properties.allocationItems()) |property| {
+        property.name.decref(host);
+        property.text.decref(host);
+    }
+    for (map.tilesets.allocationItems()) |tileset| {
+        tileset.image_source.decref(host);
+        tileset.name.decref(host);
+    }
+    map.layers.decref(host);
+    map.objects.decref(host);
+    map.properties.decref(host);
+    map.tilesets.decref(host);
+    map.gids.decref(host);
+    map.points.decref(host);
+    map.tile_properties.decref(host);
+}
+
+test "loading a map from a frame or an update is rejected, and from a task is not" {
+    // A map is one file read plus one more per external tileset, so it belongs
+    // where waiting is defined. In a real build a refusal aborts and never
+    // returns; under `zig test` the guard records instead, so what the test can
+    // check is that it fired and named the right things.
     var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
     var roc_host = abi.makeRocHost(&roc_env);
-
-    const phase = PhaseScope.enter(.render);
-    defer phase.leave();
-    last_phase_violation = null;
     defer last_phase_violation = null;
 
-    // Reachable from an app today: the loader is an ordinary effect and nothing
-    // but the phase says it may not run mid-frame. In a real build this call
-    // aborts and never returns; under `zig test` the guard records instead, so
-    // what the test can check is that it fired and named the right things.
-    const result = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice("examples/assets/nothing.tmx", &roc_host));
-    try std.testing.expect(!result.ok);
+    for ([_]Phase{ .render, .update }) |phase| {
+        const scope = PhaseScope.enter(phase);
+        defer scope.leave();
+        last_phase_violation = null;
 
-    const violation = last_phase_violation orelse return error.OperationWasNotRejected;
-    try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
-    try std.testing.expect(violation.allowed.eql(during_load));
-    try std.testing.expectEqual(Phase.render, violation.actual);
+        const result = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice("examples/assets/nothing.tmx", &roc_host));
+        try std.testing.expect(!result.ok);
+
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Tilemap.load_tmx!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(phase, violation.actual);
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{
+        .sub_path = "tiles.tsx",
+        .data =
+        \\<tileset version="1.10" name="demo" tilewidth="16" tileheight="16" tilecount="4" columns="2">
+        \\ <image source="images/tiles.png" width="32" height="32"/>
+        \\</tileset>
+        ,
+    });
+    try tmp.dir.writeFile(std.testing.io, .{
+        .sub_path = "map.tmx",
+        .data =
+        \\<map orientation="orthogonal" width="1" height="1" tilewidth="16" tileheight="16">
+        \\ <tileset firstgid="5" source="tiles.tsx"/>
+        \\ <layer name="Ground" width="1" height="1"><data encoding="csv">5</data></layer>
+        \\</map>
+        ,
+    });
+    var path_buffer: [256]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/map.tmx", .{tmp.sub_path});
+
+    // On a task both reads park, and the parse in between still answers. Two
+    // files, so this also covers the referenced tileset going through the same
+    // waiting path rather than a blocking one.
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    last_phase_violation = null;
+    const loaded = hostedTilemapLoadTmxRaw(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    try std.testing.expect(loaded.ok);
+    try std.testing.expect(last_phase_violation == null);
+    releaseTilemapRawMap(&roc_host, loaded.map);
 }
 
 test "a drawing primitive called from update is rejected" {

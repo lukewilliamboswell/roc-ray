@@ -24,15 +24,24 @@
 ## controls rather than from the directory it happened to be launched in.
 ##
 ## A `Sound` is decoded into memory and played from there, so it suits short
-## effects. A `Music` is streamed from the file, so it suits a long track; the
-## platform advances every active stream once per frame, with nothing for the
-## app to pump.
+## effects. A `Music` is streamed, so it suits a long track; the platform reads
+## the file once, keeps the encoded bytes for the stream's lifetime, and
+## advances every active stream once per frame, with nothing for the app to
+## pump.
 ##
-## Every effect here that loads a resource or changes what the mixer is doing
-## is legal in `init!`, `update!`, and tasks, and refused in `render!`. The
-## four queries that only read a scalar the device already has --
-## `Sound.is_playing!`, `Music.is_playing!`, `Music.length!`, and
-## `Music.time_played!` -- are legal in any callback, `render!` included.
+## The two loaders read the disk, so they wait: `load_sound!` and `load_music!`
+## are legal in `init!`, where they block startup, and in tasks, where they
+## park the task, and are refused in `update!` and `render!`. To start a track
+## or a new effect after startup, call the loader inside `Task.spawn!` and keep
+## the resource the task's message carries. `gen_sound!` and `gen_tone!` build
+## a `Sound` with no file behind it, so they stay legal in `init!`, `update!`,
+## and tasks.
+##
+## Every other effect here changes what the mixer is doing and is legal in
+## `init!`, `update!`, and tasks, and refused in `render!`. The four queries
+## that only read a scalar the device already has -- `Sound.is_playing!`,
+## `Music.is_playing!`, `Music.length!`, and `Music.time_played!` -- are legal
+## in any callback, `render!` included.
 import AudioHost
 
 Audio := [].{
@@ -235,13 +244,25 @@ Audio := [].{
 
 	## Load a short sound effect from disk.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread and decoded onto the audio device when the bytes are back.
+	## `SoundLoadFailed` covers both a path with nothing behind it and bytes
+	## raylib would not decode; the format is taken from the extension, and
+	## `.wav`, `.ogg`, `.mp3`, `.qoa` and `.flac` are the ones it reads.
 	load_sound! : Str => Try(Sound, [SoundLoadFailed, ResourceLimit, ..])
 	load_sound! = |path| loaded_sound_from_resource(AudioHost.load_sound!(path))
 
 	## Load a streamed music file. Keep the returned value in the app model.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread and the host keeps those bytes for as long as the stream
+	## exists, releasing them with the final reference to the `Music`.
+	## `MusicLoadFailed` covers both a path with nothing behind it and bytes
+	## raylib would not decode; the format is taken from the extension, and
+	## `.wav`, `.ogg`, `.mp3`, `.qoa`, `.flac`, `.xm` and `.mod` are the ones it
+	## reads.
 	load_music! : Str => Try(Music, [MusicLoadFailed, ResourceLimit, ..])
 	load_music! = |path| music_from_resource(AudioHost.load_music!(path))
 

@@ -112,6 +112,11 @@ const STORE_LOAD_ERR_DECODE: u8 = 4;
 const STORE_LOAD_ERR_LIMIT: u8 = 5;
 const MAX_ASSET_FILE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_ASSET_MANIFEST_BYTES: usize = 1024 * 1024;
+/// The largest file `Audio.load_sound!` and `Audio.load_music!` will read. It
+/// bounds host memory per resource, not per frame: a sound is decoded whole
+/// onto the device, and a music stream holds its encoded bytes for as long as
+/// it exists. A larger file fails to load rather than being read.
+const MAX_AUDIO_FILE_BYTES: usize = 64 * 1024 * 1024;
 /// raylib 6's initial textLineSpacing. roc-ray exposes no setter, so a metric
 /// snapshot can retain this scalar instead of a host/global dependency.
 const RAYLIB_DEFAULT_TEXT_LINE_SPACING: f32 = 2;
@@ -1985,9 +1990,21 @@ const SoundResource = union(enum) {
     native: raylib.Sound,
 };
 
+/// A native music stream and the encoded file it plays out of.
+///
+/// `LoadMusicStreamFromMemory` decodes lazily from the buffer it is handed
+/// rather than copying it, so those bytes have to stay alive for as long as
+/// the stream does. The slot owns them: the stream is unloaded first, then the
+/// bytes are freed, and nothing outside the slot can reach either.
+const NativeMusic = struct {
+    stream: raylib.Music,
+    encoded: []u8,
+    allocator: std.mem.Allocator,
+};
+
 const MusicResource = union(enum) {
     headless,
-    native: raylib.Music,
+    native: NativeMusic,
 };
 
 const FontResource = union(enum) {
@@ -2040,7 +2057,10 @@ fn destroySound(resource: *SoundResource) void {
 fn destroyMusic(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.unloadMusic(music),
+        .native => |music| {
+            if (!builtin.is_test) raylib.unloadMusic(music.stream);
+            music.allocator.free(music.encoded);
+        },
     }
 }
 
@@ -2605,11 +2625,6 @@ fn targetFpsCInt(value: i32) c_int {
 
 fn nonNegativeCInt(value: i32) c_int {
     return if (value > 0) @as(c_int, @intCast(value)) else 0;
-}
-
-fn pathExists(path: []const u8) bool {
-    std.Io.Dir.cwd().access(mainThreadIo(), path, .{}) catch return false;
-    return true;
 }
 
 fn resetHeadlessRuntime(app_config: AppConfig) void {
@@ -6628,22 +6643,51 @@ fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioH
     return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
 }
 
+/// The extension raylib's in-memory audio decoders dispatch on.
+///
+/// The format is taken from the path rather than sniffed, which is how every
+/// other loader in this host decides, and an extension raylib was not built
+/// with fails here rather than inside a decoder that would not recognise the
+/// bytes. Module music -- `.xm` and `.mod` -- streams but does not decode into
+/// a `Sound`, so it is a music-only spelling.
+fn audioFileTypeFromPath(path: []const u8, comptime module_music: bool) ?[*:0]const u8 {
+    const extension = std.fs.path.extension(path);
+    if (std.ascii.eqlIgnoreCase(extension, ".wav")) return ".wav";
+    if (std.ascii.eqlIgnoreCase(extension, ".ogg")) return ".ogg";
+    if (std.ascii.eqlIgnoreCase(extension, ".mp3")) return ".mp3";
+    if (std.ascii.eqlIgnoreCase(extension, ".qoa")) return ".qoa";
+    if (std.ascii.eqlIgnoreCase(extension, ".flac")) return ".flac";
+    if (module_music) {
+        if (std.ascii.eqlIgnoreCase(extension, ".xm")) return ".xm";
+        if (std.ascii.eqlIgnoreCase(extension, ".mod")) return ".mod";
+    }
+    return null;
+}
+
+/// `Audio.load_sound!`: read an audio file and decode it onto the device.
+///
+/// The read waits -- it parks a task and blocks `init!` -- and the decode and
+/// the upload run on the frame thread once the bytes are back. Nothing of the
+/// file survives the call: `LoadSoundFromWave` copies the samples it needs.
 fn hostedAudioLoadSound(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_soundRetRecord {
-    enforcePhase("Audio.load_sound!", during_load);
+    enforcePhase("Audio.load_sound!", during_wait);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
-    if (active_headless) {
-        if (!pathExists(path_slice)) return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    defer allocator.free(bytes);
+
+    if (headlessMode()) {
         const sound = storeSound(.headless) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .sound = sound, .err = RESOURCE_ERR_NONE };
     }
 
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer path.deinit();
-
-    const sound = raylib.loadSound(path.ptr) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const file_type = audioFileTypeFromPath(path_slice, false) orelse
+        return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const sound = raylib.loadSoundFromMemory(file_type, bytes) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
     const stored = storeSound(.{ .native = sound }) orelse return .{ .sound = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
     return .{ .sound = stored, .err = RESOURCE_ERR_NONE };
 }
@@ -6652,28 +6696,110 @@ fn exportedAudioLoadSound(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_s
     return hostedAudioLoadSound(activeHost(), path_arg);
 }
 
+/// `Audio.load_music!`: read an audio file and open a stream over it.
+///
+/// The read waits the same way `load_sound!` does, but the bytes are not
+/// released afterwards: raylib's memory decoders read out of that buffer for
+/// as long as the stream plays, so the slot takes ownership of it and frees it
+/// only once the stream has been unloaded.
 fn hostedAudioLoadMusic(host: *RocHost, path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
-    enforcePhase("Audio.load_music!", during_load);
+    enforcePhase("Audio.load_music!", during_wait);
     defer path_arg.decref(host);
 
     const path_slice = path_arg.asSlice();
+    const allocator = allocatorFromHost(host);
+    var read_err: u8 = READ_ERR_FAILED;
+    const bytes = readFileWaiting(allocator, path_slice, MAX_AUDIO_FILE_BYTES + 1, &read_err) orelse
+        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    var bytes_transferred = false;
+    defer if (!bytes_transferred) allocator.free(bytes);
+
     if (headlessMode()) {
-        if (!pathExists(path_slice)) return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
         const music = storeMusic(.headless) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
         return .{ .music = music, .err = RESOURCE_ERR_NONE };
     }
 
-    var stack: [CSTRING_STACK_CAPACITY:0]u8 = undefined;
-    var path = makeTempCString(allocatorFromHost(host), &stack, path_slice) catch return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    defer path.deinit();
-
-    const music = raylib.loadMusic(path.ptr) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
-    const stored = storeMusic(.{ .native = music }) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
+    const file_type = audioFileTypeFromPath(path_slice, true) orelse
+        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const music = raylib.loadMusicFromMemory(file_type, bytes) orelse return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_FAILED };
+    const stored = storeMusic(.{ .native = .{ .stream = music, .encoded = bytes, .allocator = allocator } }) orelse {
+        raylib.unloadMusic(music);
+        return .{ .music = invalidResourceHandle(), .err = RESOURCE_ERR_LIMIT };
+    };
+    bytes_transferred = true;
     return .{ .music = stored, .err = RESOURCE_ERR_NONE };
 }
 
 fn exportedAudioLoadMusic(path_arg: abi.RocStr) callconv(.c) abi.AudioHostLoad_musicRetRecord {
     return hostedAudioLoadMusic(activeHost(), path_arg);
+}
+
+test "the audio file loaders wait rather than load" {
+    // A sound and a music stream both start with a file read, which is what
+    // moved: `update!` can no longer reach one, and the decode that follows is
+    // still frame-thread work on bytes already in hand.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        last_phase_violation = null;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        sound_heap.deinitAll();
+        music_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blip.wav", .data = "not decoded in headless tests" });
+    var path_buffer: [256]u8 = undefined;
+    const path = try std.fmt.bufPrint(&path_buffer, testing_tmp_prefix ++ "{s}/blip.wav", .{tmp.sub_path});
+
+    {
+        const update = PhaseScope.enter(.update);
+        defer update.leave();
+        last_phase_violation = null;
+        _ = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Audio.load_sound!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, violation.actual);
+
+        last_phase_violation = null;
+        _ = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+        const music_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Audio.load_music!", music_violation.operation);
+        try std.testing.expect(music_violation.allowed.eql(during_wait));
+    }
+
+    // `init!` blocks for the read and a task parks for it; both answer.
+    const startup = PhaseScope.enter(.startup);
+    last_phase_violation = null;
+    const sound = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, sound.err);
+    startup.leave();
+
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    const music = hostedAudioLoadMusic(&roc_host, abi.RocStr.fromSlice(path, &roc_host));
+    try std.testing.expectEqual(RESOURCE_ERR_NONE, music.err);
+    try std.testing.expect(last_phase_violation == null);
+
+    // A path with nothing behind it is a load failure rather than a resource.
+    const missing = hostedAudioLoadSound(&roc_host, abi.RocStr.fromSlice(testing_tmp_prefix ++ "no-such-sound.wav", &roc_host));
+    try std.testing.expectEqual(RESOURCE_ERR_FAILED, missing.err);
+
+    releaseResourceBox(&roc_host, sound.sound);
+    releaseResourceBox(&roc_host, music.music);
+}
+
+test "an extension raylib cannot decode is refused, and module music is music only" {
+    try std.testing.expect(audioFileTypeFromPath("track.ogg", false) != null);
+    try std.testing.expect(audioFileTypeFromPath("track.OGG", false) != null);
+    try std.testing.expect(audioFileTypeFromPath("track.aiff", true) == null);
+    try std.testing.expect(audioFileTypeFromPath("track", true) == null);
+    // `.xm` and `.mod` stream but never decode into a `Sound`.
+    try std.testing.expect(audioFileTypeFromPath("theme.xm", true) != null);
+    try std.testing.expect(audioFileTypeFromPath("theme.xm", false) == null);
 }
 
 // The audio entry points below guard their `.native` arm with `builtin.is_test`
@@ -6769,7 +6895,7 @@ fn hostedAudioPlayMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.playMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.playMusic(music.stream),
     }
 }
 
@@ -6779,7 +6905,7 @@ fn hostedAudioStopMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.stopMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.stopMusic(music.stream),
     }
 }
 
@@ -6789,7 +6915,7 @@ fn hostedAudioPauseMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.pauseMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.pauseMusic(music.stream),
     }
 }
 
@@ -6799,7 +6925,7 @@ fn hostedAudioResumeMusic(handle: *u64) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.resumeMusic(music),
+        .native => |music| if (!builtin.is_test) raylib.resumeMusic(music.stream),
     }
 }
 
@@ -6809,7 +6935,7 @@ fn hostedAudioSetMusicVolume(handle: *u64, volume: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.setMusicVolume(music, volume),
+        .native => |music| if (!builtin.is_test) raylib.setMusicVolume(music.stream, volume),
     }
 }
 
@@ -6819,7 +6945,7 @@ fn hostedAudioSetMusicPitch(handle: *u64, pitch: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.setMusicPitch(music, pitch),
+        .native => |music| if (!builtin.is_test) raylib.setMusicPitch(music.stream, pitch),
     }
 }
 
@@ -6829,7 +6955,7 @@ fn hostedAudioSetMusicPan(handle: *u64, pan: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.setMusicPan(music, pan),
+        .native => |music| if (!builtin.is_test) raylib.setMusicPan(music.stream, pan),
     }
 }
 
@@ -6839,7 +6965,7 @@ fn hostedAudioSetMusicLooping(handle: *u64, looping: bool) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |*music| raylib.setMusicLooping(music, looping),
+        .native => |*music| raylib.setMusicLooping(&music.stream, looping),
     }
 }
 
@@ -6849,7 +6975,7 @@ fn hostedAudioIsMusicPlaying(handle: *u64) callconv(.c) bool {
     const resource = music_heap.get(handle.*) orelse return false;
     return switch (resource.*) {
         .headless => false,
-        .native => |music| if (builtin.is_test) false else raylib.isMusicPlaying(music),
+        .native => |music| if (builtin.is_test) false else raylib.isMusicPlaying(music.stream),
     };
 }
 
@@ -6859,7 +6985,7 @@ fn hostedAudioSeekMusic(handle: *u64, seconds: f32) callconv(.c) void {
     const resource = music_heap.get(handle.*) orelse return;
     switch (resource.*) {
         .headless => {},
-        .native => |music| if (!builtin.is_test) raylib.seekMusic(music, seconds),
+        .native => |music| if (!builtin.is_test) raylib.seekMusic(music.stream, seconds),
     }
 }
 
@@ -6869,7 +6995,7 @@ fn hostedAudioMusicLength(handle: *u64) callconv(.c) f32 {
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
         .headless => 0,
-        .native => |music| if (builtin.is_test) 0 else raylib.musicLength(music),
+        .native => |music| if (builtin.is_test) 0 else raylib.musicLength(music.stream),
     };
 }
 
@@ -6879,7 +7005,7 @@ fn hostedAudioMusicTimePlayed(handle: *u64) callconv(.c) f32 {
     const resource = music_heap.get(handle.*) orelse return 0;
     return switch (resource.*) {
         .headless => 0,
-        .native => |music| if (builtin.is_test) 0 else raylib.musicTimePlayed(music),
+        .native => |music| if (builtin.is_test) 0 else raylib.musicTimePlayed(music.stream),
     };
 }
 
@@ -6892,7 +7018,7 @@ fn hostedAudioSetMasterVolume(volume: f32) callconv(.c) void {
 fn updateMusicResource(resource: *MusicResource) void {
     switch (resource.*) {
         .headless => {},
-        .native => |*music| raylib.updateMusicStream(music),
+        .native => |*music| raylib.updateMusicStream(&music.stream),
     }
 }
 

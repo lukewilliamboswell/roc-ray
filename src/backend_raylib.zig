@@ -1388,9 +1388,16 @@ fn waveformSample(waveform: u8, phase: f32, random_state: *u32) f32 {
     };
 }
 
-/// Load a sound effect from disk.
-pub fn loadSound(path: [*:0]const u8) ?Sound {
-    const sound = rl.LoadSound(path);
+/// Load a sound effect from encoded file bytes the host already read.
+///
+/// The wave is decoded, uploaded to the audio device, and released again:
+/// `LoadSoundFromWave` copies the samples into its own buffer, so neither the
+/// wave nor the encoded bytes have to outlive this call.
+pub fn loadSoundFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Sound {
+    const wave = rl.LoadWaveFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
+    if (!rl.IsWaveValid(wave)) return null;
+    defer rl.UnloadWave(wave);
+    const sound = rl.LoadSoundFromWave(wave);
     if (!rl.IsSoundValid(sound)) return null;
     return sound;
 }
@@ -1491,9 +1498,13 @@ pub fn setSoundPan(sound: Sound, pan: f32) void {
     rl.SetSoundPan(sound, clampF32(pan, -1.0, 1.0));
 }
 
-/// Load a music stream from disk.
-pub fn loadMusic(path: [*:0]const u8) ?Music {
-    var stream = rl.LoadMusicStream(path);
+/// Load a music stream from encoded file bytes the host already read.
+///
+/// raylib's memory decoders keep a pointer into `bytes` and read from it as
+/// the stream plays, so the caller owns those bytes for the stream's whole
+/// life and must not free them until after `unloadMusic`.
+pub fn loadMusicFromMemory(file_type: [*:0]const u8, bytes: []const u8) ?Music {
+    var stream = rl.LoadMusicStreamFromMemory(file_type, bytes.ptr, @intCast(bytes.len));
     if (!rl.IsMusicValid(stream)) return null;
     stream.looping = true;
     return stream;

@@ -314,18 +314,18 @@ Capture := [].{
 	## the same way whichever phase started it.
 	start! : Recording => {}
 	start! = |recording| {
-		ratio = RrtCapture.scale_ratio(recording.scale())
+		ratio = CaptureHost.scale_ratio(recording.scale())
 		_refusal = CaptureHost.start_recording!({
 			path: recording.path(),
-			format: RrtCapture.format_code(recording.format()),
+			format: CaptureHost.format_code(recording.format()),
 			fps: recording.fps(),
 			max_frames: recording.max_frames(),
 			scale_numerator: ratio.numerator,
 			scale_denominator: ratio.denominator,
 			every_nth: recording.every_nth(),
-			timing: RrtCapture.timing_code(recording.timing()),
-			cursor: RrtCapture.cursor_code(recording.cursor()),
-			quality: RrtCapture.quality_code(recording.quality()),
+			timing: CaptureHost.timing_code(recording.timing()),
+			cursor: CaptureHost.cursor_code(recording.cursor()),
+			quality: CaptureHost.quality_code(recording.quality()),
 		})
 		{}
 	}

@@ -8,7 +8,9 @@ import json
 import subprocess
 import sys
 import tempfile
+import os
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -219,8 +221,11 @@ class ResolveDefaultBundleUrlTests(unittest.TestCase):
         )
 
     def test_missing_version_is_reported(self) -> None:
-        with self.assertRaises(RuntimeError):
-            helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
+        # CI exports RELEASE_VERSION, which the helper falls back to; clear it
+        # so the test sees the same environment everywhere.
+        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(RuntimeError):
+                helpers.resolve_default_bundle_url("", "", "bundles.json", "owner/repo")
 
 
 if __name__ == "__main__":

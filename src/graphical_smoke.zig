@@ -770,10 +770,15 @@ pub fn main() !void {
         .tint = white,
     });
     backend.endShaderMode();
+
+    // Read the frame back before `EndDrawing` swaps it away, for the reason
+    // `captureRoundTrip` documents: after the swap the back buffer's contents
+    // are undefined, which on macOS reads back as an empty buffer.
+    var shot = backend.captureFramebuffer() orelse return error.CaptureUnavailable;
+    defer shot.deinit();
     rl.EndDrawing();
 
-    const screen = rl.LoadImageFromScreen();
-    defer rl.UnloadImage(screen);
+    const screen = shot.image;
     try expectPixel(screen, 8, 8, red);
     try expectPixel(screen, 2, 2, black);
     try expectPixel(screen, 30, 10, green);

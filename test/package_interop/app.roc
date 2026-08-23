@@ -72,9 +72,11 @@ init! = App.init(
 	},
 )
 
-## This is the UI package boundary: it needs only the pure measurable-font
-## contract, so layout can run during update without host authority.
-solve_layout : font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } } where [font.base_size : font -> F32, font.line_spacing : font -> F32, font.glyphs : font -> List(Draw.GlyphMetrics), font.get_glyph_index : font, U32 -> U64]
+## This is the UI package boundary: it names the types package's `Font`
+## directly, so layout can run during update without host authority. The value
+## it is handed is a `Draw.Font` loaded through the platform, which compiles
+## only because the two are one nominal.
+solve_layout : Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
 solve_layout = |font, label| {
 	label_size = Font.measure(font, { text: label, size: 20, spacing: Draw.default_spacing })
 	{ label: label_size, label_pos: { x: 10, y: 10 } }

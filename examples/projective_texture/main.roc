@@ -27,6 +27,9 @@ Model : {
 	corners : Corners,
 	guide : Text.Prepared,
 	dragging : Bool,
+
+	## Seconds since launch, so the handle can pulse and invite the drag.
+	elapsed : F32,
 }
 
 program = { init!, update!, render! }
@@ -54,8 +57,8 @@ init! = App.init(
 		Assets.set_texture_filter!(texture, Bilinear)
 		quad = Draw.ProjectiveQuad.from_corners(initial_corners)?
 		font = Draw.default_font!()
-		guide = Text.from("Drag the top-right handle | R resets", font).size(18).prepare!()?
-		Ok({ texture, quad, corners: initial_corners, guide, dragging: Bool.False })
+		guide = Text.from("Drag the blue handle to reshape the perspective  -  R resets", font).size(18).prepare!()?
+		Ok({ texture, quad, corners: initial_corners, guide, dragging: Bool.False, elapsed: 0 })
 	},
 )
 
@@ -65,7 +68,7 @@ update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	dragged = drag_corner(model, program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
-	Ok(dragged.model)
+	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
 }
 
 ## Fold one frame of pointer input into the quad.
@@ -102,7 +105,11 @@ drag_corner = |model, input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x101827))
+	pulse = 0.5 + 0.5 * F32.sin(model.elapsed * 3)
+	edge = Color.with_alpha(Color.white, 170)
+
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x16223a), color_bottom: Color.from_hex_rgb(0x080c16) })
+	frame.circle_gradient!({ center: { x: 400, y: 300 }, radius: 420, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2f80ed), 55), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2f80ed), 0) })
 	frame.projective_texture!({
 		texture: model.texture,
 		source: { x: 0, y: 0, width: model.texture.width, height: model.texture.height },
@@ -113,12 +120,23 @@ render! = |model, frame| {
 	# Overlay points go through the same homography as the texture.
 	center = model.quad.project({ x: 0.5, y: 0.5 })
 	frame.circle!({ center, radius: 7, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xffd166), Color.black, 2) })
-	frame.line!({ start: model.corners.top_left, end: model.corners.top_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: model.corners.top_right, end: model.corners.bottom_right, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: model.corners.bottom_right, end: model.corners.bottom_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
-	frame.line!({ start: model.corners.bottom_left, end: model.corners.top_left, stroke: Draw.stroke(Color.with_alpha(Color.white, 170), 2) })
+	# The other diagonal through the projected centre: a straight line in
+	# texture space stays straight through a homography, which is what makes
+	# this quad perspective-correct rather than two stretched triangles.
+	frame.line!({ start: model.quad.project({ x: 0, y: 0.5 }), end: model.quad.project({ x: 1, y: 0.5 }), stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 110), 1) })
+	frame.line!({ start: model.corners.top_left, end: model.corners.top_right, stroke: Draw.stroke(edge, 2) })
+	frame.line!({ start: model.corners.top_right, end: model.corners.bottom_right, stroke: Draw.stroke(edge, 2) })
+	frame.line!({ start: model.corners.bottom_right, end: model.corners.bottom_left, stroke: Draw.stroke(edge, 2) })
+	frame.line!({ start: model.corners.bottom_left, end: model.corners.top_left, stroke: Draw.stroke(edge, 2) })
+
+	# The handle pulses until it is grabbed, which is the only hint the scene
+	# needs about where to put the pointer.
+	halo = if model.dragging 0 else 10 * pulse
+	frame.circle!({ center: model.corners.top_right, radius: 15 + halo, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x2f80ed), 70)) })
 	frame.circle!({ center: model.corners.top_right, radius: 13, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2f80ed), Color.white, 3) })
-	model.guide.draw!(frame, { pos: { x: 400, y: 565 }, color: Color.ray_white, align: Text.align_top_center })
+
+	frame.rounded_rectangle!({ x: 150, y: 552, width: 500, height: 34, radius: 10, segments: 8, style: Draw.filled(Color.with_alpha(Color.black, 130)) })
+	model.guide.draw!(frame, { pos: { x: 400, y: 559 }, color: Color.ray_white, align: Text.align_top_center })
 
 	Ok({})
 }
@@ -133,6 +151,7 @@ test_model = |quad| {
 	corners: initial_corners,
 	guide: Text.Prepared.stub,
 	dragging: Bool.False,
+	elapsed: 0,
 }
 
 expect

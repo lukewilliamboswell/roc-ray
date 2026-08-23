@@ -7,6 +7,7 @@ import rr.Files
 import rr.Random
 import rr.Sqlite
 import rr.Task
+import rr.Text
 import rr.Time
 
 ## A high-score board that outlives the process.
@@ -39,6 +40,12 @@ Model : {
 	pending : Bool,
 	rng : Random.State,
 	font : Draw.Font,
+
+	## Wall-clock seconds since startup, so the in-flight indicator turns.
+	elapsed : F32,
+	title : Text.Prepared,
+	subtitle : Text.Prepared,
+	hint : Text.Prepared,
 }
 
 ## One row of the board, in the app's own vocabulary rather than the database's.
@@ -84,7 +91,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, ..])
 init! = App.init(
-	App.default.with_title("RocRay SQLite Scores").with_frame_pacing(Capped(60)),
+	App.default.with_title("RocRay SQLite Scores").with_size({ width: 880, height: 560 }).with_frame_pacing(Capped(60)),
 	|startup| {
 		# A write builds the tree on its way, which is how the directory the
 		# database lives in comes to exist.
@@ -92,6 +99,9 @@ init! = App.init(
 
 		rng = Random.seed(U64.to_u32_wrap(App.entropy!(startup)))
 		font = Draw.default_font!()
+		title = Text.from("High scores that outlive the process", font).size(26).prepare!()?
+		subtitle = Text.from("the write and the re-read share one task, so the board is told what the database holds", font).size(15).prepare!()?
+		hint = Text.from("SPACE  record a run        R  reset the board        ESC  quit", font).size(14).spacing(2.0).prepare!()?
 
 		# A store that will not open is shown rather than fatal: the stub
 		# handles keep the model well-formed, every later call through them
@@ -106,6 +116,10 @@ init! = App.init(
 					pending: Bool.False,
 					rng,
 					font,
+					elapsed: 0,
+					title,
+					subtitle,
+					hint,
 				})
 			Ok(opened) =>
 				Ok({
@@ -116,6 +130,10 @@ init! = App.init(
 					pending: Bool.False,
 					rng,
 					font,
+					elapsed: 0,
+					title,
+					subtitle,
+					hint,
 				})
 			}
 	},
@@ -279,7 +297,7 @@ next_run = |state| {
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
-	folded = List.fold(input.messages, model, apply_message)
+	folded = List.fold(input.messages, { ..model, elapsed: model.elapsed + input.time.elapsed_seconds }, apply_message)
 
 	if input.devices.key_pressed(KeyEscape) {
 		return Err(Exit(0))
@@ -308,68 +326,115 @@ update! = |model, input| {
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x141820))
-	frame.text_at!({ pos: { x: 40, y: 32 }, text: "High scores", size: 30, color: Color.white })
-	frame.text_at!({
-		pos: { x: 40, y: 74 },
-		text: "SPACE records a run   R resets the board   ESC quits",
-		size: 18,
-		color: Color.from_hex_rgb(0x8a93a5),
-	})
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
+
+	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink, align: Text.align_top_left })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted, align: Text.align_top_left })
+
+	width = size.width - 88
+	frame.rounded_rectangle!({ x: 44, y: 112, width: width, height: 388, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
+	frame.text_at!({ pos: { x: 68, y: 126 }, text: "#", size: 13, color: faint })
+	frame.text_at!({ pos: { x: 104, y: 126 }, text: "RUNNER", size: 13, color: faint })
+	frame.text_at!({ pos: { x: 268, y: 126 }, text: "SCORE", size: 13, color: faint })
+	frame.text_at!({ pos: { x: 596, y: 126 }, text: "RECORDED", size: 13, color: faint })
+	frame.line!({ start: { x: 44, y: 152 }, end: { x: 44 + width, y: 152 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
 
 	if List.is_empty(model.rows) {
-		frame.text_at!({
-			pos: { x: 40, y: 130 },
-			text: "No runs yet -- press SPACE",
-			size: 22,
-			color: Color.from_hex_rgb(0x8a93a5),
-		})
+		frame.text_at!({ pos: { x: 68, y: 190 }, text: "No runs yet -- press SPACE to record one", size: 18, color: muted })
 	} else {
+		best = List.fold(model.rows, 1, |top, entry| I64.max(top, entry.score))
 		List.for_each!(
 			List.map_with_index(model.rows, |entry, index| { entry, index }),
-			|row| draw_entry!(frame, row.index, row.entry),
+			|row| draw_entry!(frame, row.index, row.entry, best, width),
 		)
 	}
 
-	frame.text_at!({
-		pos: { x: 40, y: 470 },
-		text: status_line(model.status),
-		size: 18,
-		color: status_color(model.status),
-	})
+	draw_status!(frame, model.status, model.elapsed, size.height - 46)
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
 	Ok({})
 }
 
-draw_entry! : Draw.Frame, U64, Entry => {}
-draw_entry! = |frame, index, entry| {
-	y = 130 + U64.to_f32(index) * 32
-	frame.rectangle!({
-		x: 36,
-		y: y - 6,
-		width: 600,
-		height: 28,
-		style: Draw.filled(if index % 2 == 0 Color.from_hex_rgb(0x1c212b) else Color.from_hex_rgb(0x181d26)),
-	})
-	frame.text_at!({
-		pos: { x: 44, y },
-		text: "${U64.to_str(index + 1)}.",
-		size: 20,
-		color: Color.from_hex_rgb(0x6d778a),
-	})
-	frame.text_at!({ pos: { x: 84, y }, text: entry.name, size: 20, color: Color.white })
-	frame.text_at!({
-		pos: { x: 300, y },
-		text: I64.to_str(entry.score),
-		size: 20,
-		color: Color.from_hex_rgb(0x7fd188),
-	})
-	frame.text_at!({
-		pos: { x: 430, y },
-		text: Time.Timestamp.to_iso_8601(entry.played_at),
-		size: 18,
-		color: Color.from_hex_rgb(0x6d778a),
-	})
+## One row: rank badge, name, score with a bar for its share of the best score,
+## and the wall-clock instant the run was written.
+draw_entry! : Draw.Frame, U64, Entry, I64, F32 => {}
+draw_entry! = |frame, index, entry, best, width| {
+	y = 168 + U64.to_f32(index) * 32
+	if index % 2 == 1 {
+		frame.rectangle!({ x: 45, y: y - 6, width: width - 2, height: 30, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
+	}
+	medal = if index == 0 gold else if index < 3 silver else faint
+	frame.circle!({ center: { x: 74, y: y + 9 }, radius: 11, style: Draw.filled(Color.with_alpha(medal, 40)) })
+	frame.text_at!({ pos: { x: if index < 9 70 else 66, y: y }, text: U64.to_str(index + 1), size: 16, color: medal })
+	frame.text_at!({ pos: { x: 104, y: y }, text: entry.name, size: 19, color: ink })
+
+	# The bar is the row's score against the board's best, so the shape of the
+	# board is readable before any of the numbers are.
+	share = I64.to_f32(entry.score) / I64.to_f32(I64.max(best, 1))
+	frame.rectangle!({ x: 348, y: y + 6, width: 220, height: 6, style: Draw.filled(Color.from_hex_rgba(0xffffff0c)) })
+	frame.rectangle!({ x: 348, y: y + 6, width: 220 * share, height: 6, style: Draw.filled(Color.with_alpha(accent_ok, 190)) })
+	frame.text_at!({ pos: { x: 268, y: y }, text: I64.to_str(entry.score), size: 19, color: accent_ok })
+	frame.text_at!({ pos: { x: 596, y: y + 1 }, text: Time.Timestamp.to_iso_8601(entry.played_at), size: 15, color: faint })
 }
+
+## The status line, with a comet while a task is in flight and a resting dot
+## once it has answered.
+draw_status! : Draw.Frame, Status, F32, F32 => {}
+draw_status! = |frame, status, elapsed, y| {
+	color = status_color(status)
+	center = { x: 44 + width_of_indicator, y: y - 46 }
+	match status {
+		Working =>
+			List.for_each!(
+				spinner_dots,
+				|dot| {
+					angle = elapsed * 3.6 - dot.lag
+					frame.circle!({
+						center: { x: center.x + 8 * F32.cos(angle), y: center.y + 8 * F32.sin(angle) },
+						radius: dot.radius,
+						style: Draw.filled(Color.with_alpha(color, dot.alpha)),
+					})
+				},
+			)
+
+		_ => frame.circle!({ center: center, radius: 5, style: Draw.filled(color) })
+	}
+	frame.text_at!({ pos: { x: center.x + 20, y: center.y - 9 }, text: status_line(status), size: 16, color: color })
+}
+
+## Half the indicator's width, so the status line has the same left margin as
+## everything else on the screen.
+width_of_indicator : F32
+width_of_indicator = 12
+
+spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })
+spinner_dots = [
+	{ lag: 0, radius: 3.2, alpha: 255 },
+	{ lag: 0.32, radius: 2.7, alpha: 190 },
+	{ lag: 0.64, radius: 2.2, alpha: 135 },
+	{ lag: 0.96, radius: 1.8, alpha: 85 },
+]
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x151b2a)
+
+panel = Color.from_hex_rgb(0x141a28)
+
+card_edge = Color.from_hex_rgb(0x2a3348)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+faint = Color.from_hex_rgb(0x5c6880)
+
+gold = Color.from_hex_rgb(0xf2c777)
+
+silver = Color.from_hex_rgb(0xb9c4d8)
+
+accent_ok = Color.from_hex_rgb(0x7fd6a2)
 
 status_line : Status -> Str
 status_line = |status|
@@ -382,9 +447,9 @@ status_line = |status|
 status_color : Status -> Color.Rgba
 status_color = |status|
 	match status {
-		Ready => Color.from_hex_rgb(0x7fd188)
-		Working => Color.from_hex_rgb(0xe0c16a)
-		Failed(_) => Color.from_hex_rgb(0xe07a7a)
+		Ready => accent_ok
+		Working => gold
+		Failed(_) => Color.from_hex_rgb(0xef7d7d)
 	}
 
 expect status_line(Ready) == "Ready"
@@ -434,4 +499,8 @@ test_model = {
 	pending: Bool.False,
 	rng: Random.seed(1),
 	font: Draw.Font.stub,
+	elapsed: 0,
+	title: Text.Prepared.stub,
+	subtitle: Text.Prepared.stub,
+	hint: Text.Prepared.stub,
 }

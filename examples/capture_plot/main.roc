@@ -20,11 +20,18 @@ import rr.Text
 ## without one. That is not the same as the host's `--host-headless` flag, which
 ## swaps in a stub backend that draws nothing and therefore captures nothing.
 ##
+## The progress bar is drawn from `input.capture`'s `Active({ frames, .. })`,
+## so the recording reports its own state rather than the app counting frames.
+##
 ## Run it, then open `captures/plot.webm`. Swap `.with_format(Gif)` and a
 ## `.gif` path if you want something to drop straight into a README --
 ## GIF is more portable, WebM is far smaller and keeps full colour.
 Model : {
 	elapsed : F32,
+
+	## Frames the host says it has written, straight from `input.capture`. The
+	## progress bar is drawn from it, so the recording reports on itself.
+	frames : U64,
 	title : Text.Prepared,
 	status : Text.Prepared,
 }
@@ -59,8 +66,9 @@ init! = App.init(
 		font = Draw.default_font!()
 		Ok({
 			elapsed: 0,
-			title: Text.from("Recording a plot", font).size(28).prepare!()?,
-			status: Text.from("captures/plot.webm", font).size(16).prepare!()?,
+			frames: 0,
+			title: Text.from("Recording a plot", font).size(24).prepare!()?,
+			status: Text.from("captures/plot.webm", font).size(14).prepare!()?,
 		})
 	},
 )
@@ -84,23 +92,52 @@ update! = |model, program_input| {
 		Finished(_) => Err(Exit(0))
 		Failed(_) => Err(Exit(1))
 		Idle => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-		Active(_) => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
+		Active(progress) => Ok({ ..model, elapsed: model.elapsed + program_input.time.elapsed_seconds, frames: progress.frames })
 	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x121420))
-	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
-	model.status.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
 
-	draw_bars!(frame, model.elapsed)
+	model.title.draw!(frame, { pos: { x: 32, y: 26 }, color: ink, align: Text.align_top_left })
 
+	# A recording indicator that reads at a glance in the finished file: the
+	# dot pulses on the same fixed step the frames are captured on.
+	pulse = 4 + 2 * F32.sin(model.elapsed * 6)
+	frame.circle!({ center: { x: 38, y: 66 }, radius: pulse, style: Draw.filled(rec) })
+	model.status.draw!(frame, { pos: { x: 52, y: 58 }, color: muted, align: Text.align_top_left })
+
+	draw_progress!(frame, { x: size.width - 232, y: 34, width: 200 }, model.frames)
+	draw_bars!(frame, model.elapsed, size)
 	Ok({})
 }
 
-draw_bars! : Draw.Frame, F32 => {}
-draw_bars! = |frame, elapsed|
+## How much of the recording is written, as a bar and a count. `frames` comes
+## from `input.capture`, so this is the host's number rather than a guess.
+draw_progress! : Draw.Frame, { x : F32, y : F32, width : F32 }, U64 => {}
+draw_progress! = |frame, at, frames| {
+	share = F32.min(U64.to_f32(frames) / U64.to_f32(recorded_frames), 1)
+	frame.text_at!({ pos: { x: at.x, y: at.y }, text: "${U64.to_str(frames)} / ${U64.to_str(recorded_frames)} frames", size: 13, color: muted })
+	frame.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width, height: 6, radius: 0.5, segments: 6, style: Draw.filled(track) })
+	if share > 0 {
+		frame.rounded_rectangle!({ x: at.x, y: at.y + 22, width: at.width * share, height: 6, radius: 0.5, segments: 6, style: Draw.filled(rec) })
+	}
+}
+
+draw_bars! : Draw.Frame, F32, Draw.FrameSize => {}
+draw_bars! = |frame, elapsed, size| {
+	baseline = size.height - 44
+
+	# Four gridlines behind the bars, so the wave has something to be measured
+	# against and a duplicated frame is easier to spot.
+	List.for_each!(
+		List.map_with_index(List.repeat({}, 4), |_unit, index| U64.to_f32(index + 1) * 42),
+		|step| frame.line!({ start: { x: 32, y: baseline - step }, end: { x: size.width - 32, y: baseline - step }, stroke: Stroke({ color: grid, thickness: 1 }) }),
+	)
+	frame.line!({ start: { x: 32, y: baseline }, end: { x: size.width - 32, y: baseline }, stroke: Stroke({ color: axis, thickness: 1.5 }) })
+
 	List.repeat({}, bar_count)
 		|> List.map_with_index(|_, index| U64.to_f32(index))
 		|> List.for_each!(
@@ -109,12 +146,35 @@ draw_bars! = |frame, elapsed|
 				# duplicated frame is visible in the finished sequence.
 				phase = elapsed * 2.2 + offset * 0.5
 				height = 40 + 90 * (1 + F32.sin(phase)) / 2
-				frame.rectangle!({
-					x: 40 + offset * 46,
-					y: 320 - height,
-					width: 34,
-					height: height,
-					style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
-				})
+				x = 40 + offset * 46
+				top = baseline - height
+				# The gradient runs the bar's own length rather than the
+				# window's, so a tall bar is brighter than a short one.
+				frame.rectangle_gradient_v!({ x: x, y: top, width: 34, height: height, color_top: bar_top, color_bottom: bar_bottom })
+				frame.rectangle!({ x: x, y: top, width: 34, height: 3, style: Draw.filled(bar_cap) })
+				frame.circle!({ center: { x: x + 17, y: top - 10 }, radius: 2.5, style: Draw.filled(Color.with_alpha(bar_cap, 150)) })
 			},
 		)
+}
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x171f31)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+grid = Color.from_hex_rgba(0xffffff1a)
+
+axis = Color.from_hex_rgb(0x39445c)
+
+track = Color.from_hex_rgb(0x232c3f)
+
+rec = Color.from_hex_rgb(0xef7d7d)
+
+bar_top = Color.from_hex_rgb(0x7fd6d0)
+
+bar_bottom = Color.from_hex_rgb(0x4667b4)
+
+bar_cap = Color.from_hex_rgb(0xbdf0ea)

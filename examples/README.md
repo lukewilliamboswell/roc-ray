@@ -1,5 +1,8 @@
 # Example gallery
 
+A zip of the examples pinned to this release is attached to every release;
+unzip and `roc examples/<name>/main.roc`.
+
 These examples are small applications first and API demonstrations second.
 Choose one that resembles what you want to build, copy its directory, and keep
 the model/update/render shape as the project grows.

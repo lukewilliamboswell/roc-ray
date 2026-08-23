@@ -177,58 +177,81 @@ framebuffer_line = |screen, scale|
 		" framebuffer pixels",
 	)
 
+## The shared surface palette for this screen: one dark ground, one panel
+## fill, one edge, and two accents.
+theme : { bg : Color.Rgba, panel : Color.Rgba, panel_high : Color.Rgba, edge : Color.Rgba, ink : Color.Rgba, muted : Color.Rgba, faint : Color.Rgba, accent : Color.Rgba, accent_soft : Color.Rgba }
+theme = {
+	bg: Color.from_hex_rgb(0x0e1420),
+	panel: Color.from_hex_rgb(0x161f31),
+	panel_high: Color.from_hex_rgb(0x1e2942),
+	edge: Color.from_hex_rgb(0x25314b),
+	ink: Color.from_hex_rgb(0xe6ecf5),
+	muted: Color.from_hex_rgb(0x8fa0bd),
+	faint: Color.from_hex_rgb(0x5c6b87),
+	accent: Color.from_hex_rgb(0x4c8dff),
+	accent_soft: Color.from_hex_rgb(0x21386a),
+}
+
+## A nav row in one of three states: selected, hovered, or resting. The lit
+## bar down the left edge is what makes the selected row readable at a glance
+## without shouting over the panel it sits in.
 draw_menu_item! : Draw.Frame, Math.Rect, Text.Prepared, Bool, Bool => {}
 draw_menu_item! = |frame, bounds, label, selected, hovered| {
-	fill = if selected Color.from_hex_rgb(0x2f6fed) else if hovered Color.from_hex_rgb(0x25314a) else Color.from_hex_rgb(0x192238)
-	outline = if selected Color.from_hex_rgb(0x8fb4ff) else Color.with_alpha(Color.white, 24)
-	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, 2) })
-	label.draw!(frame, { pos: { x: bounds.x + 18, y: bounds.y + bounds.height * 0.5 }, color: Color.white, align: Text.align_middle_left })
+	fill = if selected theme.accent_soft else if hovered theme.panel_high else Color.from_hex_rgb(0x141d2f)
+	outline = if selected theme.accent else if hovered theme.edge else Color.with_alpha(theme.edge, 140)
+	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 10, segments: 8, style: Draw.filled_and_outlined(fill, outline, if selected 2 else 1) })
+	if selected {
+		frame.rounded_rectangle!({ x: bounds.x + 8, y: bounds.y + 10, width: 4, height: bounds.height - 20, radius: 2, segments: 4, style: Draw.filled(theme.accent) })
+	}
+	label.draw!(frame, { pos: { x: bounds.x + 22, y: bounds.y + bounds.height * 0.5 }, color: if selected theme.ink else theme.muted, align: Text.align_middle_left })
 }
 
 draw_key! : Draw.Frame, F32, F32, Str => {}
 draw_key! = |frame, x, y, label| {
-	frame.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x202b43), Color.from_hex_rgb(0x7083a8), 2) })
-	frame.text_centered!({ pos: { x: x + 34, y: y + 22 }, text: label, size: 18, color: Color.white })
+	frame.rounded_rectangle!({ x, y, width: 68, height: 44, radius: 8, segments: 8, style: Draw.filled_and_outlined(theme.panel_high, theme.edge, 2) })
+	frame.text_centered!({ pos: { x: x + 34, y: y + 22 }, text: label, size: 18, color: theme.ink })
 }
 
 draw_preview! : Draw.Frame, Math.Rect, Selection, UiCopy, Draw.FrameSize, Model => {}
 draw_preview! = |frame, bounds, selection, ui, screen, model| {
 	simulation_nanos = model.simulation_nanos
-	frame.rectangle_gradient_v!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, color_top: Color.from_hex_rgb(0x15213a), color_bottom: Color.from_hex_rgb(0x0d1425) })
+	frame.rectangle_gradient_v!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, color_top: Color.from_hex_rgb(0x182540), color_bottom: Color.from_hex_rgb(0x0f1728) })
 
 	body = match selection {
 		Display => ui.display_body
 		AudioSettings => ui.audio_body
 		Controls => ui.controls_body
 	}
-	body.draw!(frame, { pos: { x: bounds.x + 28, y: bounds.y + 28 }, color: Color.white, align: Text.align_top_left })
+	# The preview reads as a card of its own, not as a hole in the background.
+	frame.rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, style: Draw.outlined(theme.edge, 2) })
+	body.draw!(frame, { pos: { x: bounds.x + 28, y: bounds.y + 28 }, color: theme.ink, align: Text.align_top_left })
 
 	match selection {
 		Display => {
 			size_text = Str.concat(I32.to_str(F32.to_i32_wrap(screen.width)), Str.concat(" x ", I32.to_str(F32.to_i32_wrap(screen.height))))
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 72 }, text: size_text, size: 20, color: Color.from_hex_rgb(0x8fb4ff) })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 72 }, text: size_text, size: 20, color: theme.accent })
 			# Asked for here rather than remembered: the scale belongs to the
 			# surface being drawn to, and reading it mid-frame is free.
 			scale = Window.scale!()
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 98 }, text: framebuffer_line(screen, scale), size: 16, color: Color.from_hex_rgb(0x91a0bd) })
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 122 }, text: monitor_line(model.monitors, model.monitor_choice), size: 16, color: Color.from_hex_rgb(0x91a0bd) })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 98 }, text: framebuffer_line(screen, scale), size: 16, color: theme.muted })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 122 }, text: monitor_line(model.monitors, model.monitor_choice), size: 16, color: theme.muted })
 			phase = U64.to_f32(simulation_nanos % 3_000_000_000) / 3_000_000_000
 			preview_x = bounds.x + bounds.width * phase
-			frame.circle_gradient!({ center: { x: preview_x, y: bounds.y + bounds.height * 0.62 }, radius: 105, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2f6fed), 150), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2f6fed), 0) })
-			frame.rounded_rectangle!({ x: bounds.x + 28, y: bounds.y + 152, width: bounds.width - 56, height: 78, radius: 12, segments: 8, style: Draw.outlined(Color.with_alpha(Color.white, 70), 2) })
+			frame.circle_gradient!({ center: { x: preview_x, y: bounds.y + bounds.height * 0.62 }, radius: 105, color_inner: Color.with_alpha(theme.accent, 110), color_outer: Color.with_alpha(theme.accent, 0) })
+			frame.rounded_rectangle!({ x: bounds.x + 28, y: bounds.y + 152, width: bounds.width - 56, height: 78, radius: 12, segments: 8, style: Draw.outlined(Color.with_alpha(theme.muted, 90), 2) })
 		}
 		AudioSettings => {
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 74 }, text: "Music", size: 18, color: Color.light_gray })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: bounds.width - 90, height: 14, style: Draw.filled(Color.from_hex_rgb(0x27334c)) })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 74 }, text: "Music", size: 18, color: theme.muted })
+			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
 			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 106, width: (bounds.width - 90) * 0.72, height: 14, style: Draw.filled(Color.from_hex_rgb(0x43aa8b)) })
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 154 }, text: "Effects", size: 18, color: Color.light_gray })
-			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: bounds.width - 90, height: 14, style: Draw.filled(Color.from_hex_rgb(0x27334c)) })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 154 }, text: "Effects", size: 18, color: theme.muted })
+			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: bounds.width - 90, height: 14, style: Draw.filled(theme.panel_high) })
 			frame.rectangle!({ x: bounds.x + 28, y: bounds.y + 186, width: (bounds.width - 90) * 0.9, height: 14, style: Draw.filled(Color.from_hex_rgb(0xf9c74f)) })
 		}
 		Controls => {
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 76 }, text: "Move", size: 18, color: Color.light_gray })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 76 }, text: "Move", size: 18, color: theme.muted })
 			draw_key!(frame, bounds.x + 28, bounds.y + 112, "WASD")
-			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 182 }, text: "Command", size: 18, color: Color.light_gray })
+			frame.text_at!({ pos: { x: bounds.x + 28, y: bounds.y + 182 }, text: "Command", size: 18, color: theme.muted })
 			draw_key!(frame, bounds.x + 28, bounds.y + 218, "SPACE")
 		}
 	}
@@ -327,10 +350,12 @@ render! = |model, frame| {
 	hover_audio = view.audio_bounds.contains(model.mouse)
 	hover_controls = view.controls_bounds.contains(model.mouse)
 
-	frame.clear!(Color.from_hex_rgb(0x090f1c))
-	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: Color.white, align: Text.align_top_left })
-	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
-	frame.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled(Color.from_hex_rgb(0x111a2b)) })
+	frame.clear!(theme.bg)
+	ui.title.draw!(frame, { pos: { x: view.margin, y: 24 }, color: theme.ink, align: Text.align_top_left })
+	ui.subtitle.draw!(frame, { pos: { x: view.margin, y: 70 }, color: theme.muted, align: Text.align_top_left })
+	# A hairline under the header, drawn to the live width so it follows a resize.
+	frame.rectangle!({ x: view.margin, y: 96, width: screen.width - view.margin * 2, height: 1, style: Draw.filled(theme.edge) })
+	frame.rounded_rectangle!({ x: view.nav.x, y: view.nav.y, width: view.nav.width, height: view.nav.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	draw_menu_item!(frame, view.display_bounds, ui.display, model.selection == Display, hover_display)
 	draw_menu_item!(frame, view.audio_bounds, ui.audio, model.selection == AudioSettings, hover_audio)
 	draw_menu_item!(frame, view.controls_bounds, ui.controls, model.selection == Controls, hover_controls)
@@ -341,7 +366,7 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_bottom_left })
+	ui.help.draw!(frame, { pos: { x: view.margin, y: view.screen_h - 24 }, color: theme.faint, align: Text.align_bottom_left })
 
 	Ok({})
 }

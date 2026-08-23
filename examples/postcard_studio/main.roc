@@ -62,18 +62,18 @@ init! = App.init(
 		.with_frame_pacing(Capped(120)),
 	|_startup| {
 		font = Draw.default_font!()
-		idle = Text.from("Ready to export", font).size(16).prepare!()?
+		idle = Text.from("Ready to export 1440x960", font).size(14).prepare!()?
 		Ok({
 			card: Box.box({
 				title: Text.from("POSTCARD STUDIO", font).size(68).prepare!()?,
 				subtitle: Text.from("Wish you were here", font).size(40).prepare!()?,
 			}),
 			chrome: Box.box({
-				help: Text.from("Move the mouse | 1-3 change colour | S exports a 1440x960 PNG | ESC quits", font).size(15).prepare!()?,
+				help: Text.from("Mouse moves the sun  |  1-3 colourway  |  S exports  |  ESC quits", font).size(13).prepare!()?,
 				idle,
-				saving: Text.from("Exporting postcards/sunrise.png at 1440x960 ...", font).size(16).prepare!()?,
-				saved: Text.from("Saved postcards/sunrise.png at 1440x960", font).size(16).prepare!()?,
-				failed: Text.from("Could not export the postcard", font).size(16).prepare!()?,
+				saving: Text.from("Exporting sunrise.png ...", font).size(14).prepare!()?,
+				saved: Text.from("Saved postcards/sunrise.png", font).size(14).prepare!()?,
+				failed: Text.from("Export failed", font).size(14).prepare!()?,
 			}),
 			poster: Draw.RenderTexture.load!({ width: 1440, height: 960 })?,
 			theme: 0,
@@ -177,9 +177,14 @@ render! = |model, frame| {
 		tint: Color.white,
 	})
 
+	# A scrim under the chrome, so the controls stay legible over any colourway
+	# without a border cutting into the postcard itself.
+	frame.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 46, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x0b1120), 205)) })
+	frame.rectangle!({ x: 0, y: window_height - 46, width: window_width, height: 1, style: Draw.filled(Color.with_alpha(colors.ink, 60)) })
+
 	chrome = Box.unbox(model.chrome)
-	chrome.help.draw!(frame, { pos: { x: 24, y: 446 }, color: colors.ink, align: Text.align_top_left })
-	model.status.draw!(frame, { pos: { x: 696, y: 446 }, color: colors.ink, align: Text.align_top_right })
+	chrome.help.draw!(frame, { pos: { x: 24, y: window_height - 23 }, color: Color.with_alpha(colors.ink, 170), align: Text.align_middle_left })
+	model.status.draw!(frame, { pos: { x: 696, y: window_height - 23 }, color: colors.ink, align: Text.align_middle_right })
 
 	Ok({})
 }

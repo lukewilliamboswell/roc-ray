@@ -103,7 +103,7 @@ render! = |model, frame| {
 	mouse_world = camera.screen_to_world(model.mouse)
 	mouse_screen = camera.world_to_screen(mouse_world)
 
-	frame.clear!(Color.ray_white)
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: Color.from_hex_rgb(0x101a24), color_bottom: Color.from_hex_rgb(0x060a0f) })
 	frame.with_camera!(
 		camera,
 		|world_frame| {
@@ -111,29 +111,44 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	frame.circle!({ center: mouse_screen, radius: 5, style: Draw.outlined(Color.yellow, 2) })
-	draw_hud!(frame, model)
+	# Drawn outside the camera scope: `world_to_screen` is what puts a
+	# screen-space mark back on top of a world-space point.
+	frame.circle!({ center: mouse_screen, radius: 7, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
+	frame.line!({ start: { x: mouse_screen.x - 14, y: mouse_screen.y }, end: { x: mouse_screen.x + 14, y: mouse_screen.y }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
+	frame.line!({ start: { x: mouse_screen.x, y: mouse_screen.y - 14 }, end: { x: mouse_screen.x, y: mouse_screen.y + 14 }, stroke: Draw.stroke(Color.with_alpha(Color.from_hex_rgb(0xffd166), 140), 1) })
+	draw_hud!(frame, model, mouse_world)
 
 	Ok({})
 }
 
 draw_world! : Draw.Frame, Math.Vec2, Math.Vec2 => {}
 draw_world! = |frame, player, mouse_world| {
-	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled(Color.from_hex_rgb(0x23323a)) })
+	frame.rectangle!({ x: world_left, y: world_top, width: world_right - world_left, height: world_bottom - world_top, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x16222b), Color.with_alpha(Color.from_hex_rgb(0x5fa8d3), 90), 3) })
 	draw_grid_x!(frame, world_left)
 	draw_grid_y!(frame, world_top)
 
-	frame.rectangle!({ x: -320, y: -160, width: 360, height: 260, style: Draw.filled(Color.from_hex_rgb(0x3b5f6f)) })
-	frame.rectangle!({ x: 280, y: 120, width: 520, height: 340, style: Draw.filled(Color.from_hex_rgb(0x4c6f4f)) })
-	frame.rectangle!({ x: 860, y: -280, width: 420, height: 460, style: Draw.filled(Color.from_hex_rgb(0x6f5540)) })
+	landmark!(frame, { x: -320, y: -160, width: 360, height: 260 }, Color.from_hex_rgb(0x3b6f8f))
+	landmark!(frame, { x: 280, y: 120, width: 520, height: 340 }, Color.from_hex_rgb(0x4c8f5f))
+	landmark!(frame, { x: 860, y: -280, width: 420, height: 460 }, Color.from_hex_rgb(0x8f6540))
 
-	frame.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(Color.yellow, 3) })
-	frame.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(Color.yellow, 3) })
+	axis_color = Color.with_alpha(Color.from_hex_rgb(0xffd166), 200)
+	frame.line!({ start: { x: world_left, y: 0 }, end: { x: world_right, y: 0 }, stroke: Draw.stroke(axis_color, 3) })
+	frame.line!({ start: { x: 0, y: world_top }, end: { x: 0, y: world_bottom }, stroke: Draw.stroke(axis_color, 3) })
 
-	frame.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.red, Color.white, 4) })
+	frame.circle!({ center: { x: player.x, y: player.y + 6 }, radius: 26, style: Draw.filled(Color.with_alpha(Color.black, 110)) })
+	frame.circle!({ center: player, radius: 26, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xef476f), Color.white, 4) })
 	frame.line!({ start: { x: player.x - 42, y: player.y }, end: { x: player.x + 42, y: player.y }, stroke: Draw.stroke(Color.white, 3) })
 	frame.line!({ start: { x: player.x, y: player.y - 42 }, end: { x: player.x, y: player.y + 42 }, stroke: Draw.stroke(Color.white, 3) })
-	frame.circle!({ center: mouse_world, radius: 8, style: Draw.outlined(Color.yellow, 2) })
+	frame.circle!({ center: mouse_world, radius: 10, style: Draw.outlined(Color.from_hex_rgb(0xffd166), 2) })
+}
+
+## A world landmark: a soft shadow, the slab, and a lighter cap so the world
+## reads as depth rather than as three flat swatches.
+landmark! : Draw.Frame, { x : F32, y : F32, width : F32, height : F32 }, Color.Rgba => {}
+landmark! = |frame, rect, color| {
+	frame.rectangle!({ x: rect.x + 10, y: rect.y + 14, width: rect.width, height: rect.height, style: Draw.filled(Color.with_alpha(Color.black, 90)) })
+	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: rect.height, style: Draw.filled(color) })
+	frame.rectangle!({ x: rect.x, y: rect.y, width: rect.width, height: 10, style: Draw.filled(Color.with_alpha(Color.white, 45)) })
 }
 
 draw_grid_x! : Draw.Frame, F32 => {}
@@ -156,14 +171,22 @@ draw_grid_y! = |frame, y| {
 	}
 }
 
-draw_hud! : Draw.Frame, Model => {}
-draw_hud! = |frame, model| {
+draw_hud! : Draw.Frame, Model, Math.Vec2 => {}
+draw_hud! = |frame, model, mouse_world| {
 	hud = Box.unbox(model.hud)
-	frame.rectangle!({ x: 16, y: 16, width: 320, height: 92, style: Draw.filled(Color.with_alpha(Color.black, 180)) })
-	hud.title.draw!(frame, { pos: { x: 30, y: 28 }, color: Color.white, align: Text.align_top_left })
-	hud.subtitle.draw!(frame, { pos: { x: 30, y: 62 }, color: Color.light_gray, align: Text.align_top_left })
-	hud.help.draw!(frame, { pos: { x: 30, y: 84 }, color: Color.light_gray, align: Text.align_top_left })
+	frame.rounded_rectangle!({ x: 16, y: 16, width: 340, height: 122, radius: 12, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(Color.from_hex_rgb(0x0b1219), 215), Color.with_alpha(Color.white, 40), 1) })
+	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
+	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
+	frame.line!({ start: { x: 32, y: 84 }, end: { x: 340, y: 84 }, stroke: Draw.stroke(Color.with_alpha(Color.white, 30), 1) })
+	# The readout is the point of the example, so it is on screen rather than
+	# left for the reader to imagine: the pointer in both spaces at once.
+	frame.text_at!({ pos: { x: 32, y: 92 }, text: "world ${coord(mouse_world.x)}, ${coord(mouse_world.y)}   zoom ${coord(model.zoom * 100)}%", size: 14, color: Color.from_hex_rgb(0xffd166) })
+	hud.help.draw!(frame, { pos: { x: 32, y: 114 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
 }
+
+## Whole units, so the readout does not jitter its own width every frame.
+coord : F32 -> Str
+coord = |value| I32.to_str(F32.to_i32_wrap(value))
 
 expect axis(Bool.True, Bool.False) == -1
 expect axis(Bool.False, Bool.False) == 0

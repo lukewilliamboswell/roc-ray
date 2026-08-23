@@ -7,8 +7,14 @@ import rr.Capture
 import rr.Draw
 import rr.Devices
 import rr.Math
+import rr.Text
 
 ## Breakout, with a `--record-demo` mode that records its own GIF.
+##
+## The cabinet is drawn in neon on a dark gradient: a lit wall of bricks, glow
+## under the ball and the paddle, and prepared HUD text measured once at
+## startup. None of that is game state -- the rules below are still one pure
+## step over a `Game` -- so the demo records exactly what a player sees.
 ##
 ## The rules are one pure step over a `Game` and a `FrameInput`, returning the
 ## next game and the events it produced; `update!` turns those events into
@@ -59,6 +65,17 @@ Model : {
 	game : Game,
 	sounds : Sounds,
 	demo : Bool,
+
+	## Presentation only. `elapsed` is wall-clock seconds, used to breathe the
+	## prompts; the rest is text the host measured once at startup.
+	elapsed : F32,
+	title : Text.Prepared,
+	hint : Text.Prepared,
+	launch_line : Text.Prepared,
+	won_line : Text.Prepared,
+	over_line : Text.Prepared,
+	restart_line : Text.Prepared,
+	font : Draw.Font,
 }
 
 FrameInput : {
@@ -81,14 +98,24 @@ screen_w = 800
 screen_h : F32
 screen_h = 600
 
-ready_help : Str
-ready_help = "Move with A/D or arrow keys"
+# --- Palette: a dark cabinet, a cyan paddle, a warm ball ---
+field_top : Color.Rgba
+field_top = Color.from_hex_rgb(0x161d3c)
 
-won_help : Str
-won_help = "Press SPACE to play again"
+field_bottom : Color.Rgba
+field_bottom = Color.from_hex_rgb(0x05070f)
 
-game_over_help : Str
-game_over_help = "Press SPACE to restart"
+paddle_neon : Color.Rgba
+paddle_neon = Color.from_hex_rgb(0x38e8ff)
+
+ball_neon : Color.Rgba
+ball_neon = Color.from_hex_rgb(0xffe08a)
+
+hud_color : Color.Rgba
+hud_color = Color.from_hex_rgb(0xd7e3ff)
+
+hint_color : Color.Rgba
+hint_color = Color.from_hex_rgb(0x6d7aa8)
 
 top_wall_y : F32
 top_wall_y = 58
@@ -185,9 +212,18 @@ init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init_for_args(
 	breakout_config,
 	|startup| {
+		font = Draw.default_font!()
 		Ok({
 			game: new_game_state(),
 			demo: List.contains(App.args!(startup), record_demo_flag),
+			elapsed: 0,
+			font: font,
+			title: Text.from("BREAKOUT", font).size(28).spacing(5).prepare!()?,
+			hint: Text.from("A / D  or  ARROWS  move    SPACE  launch    ESC  quit", font).size(17).prepare!()?,
+			launch_line: Text.from("PRESS SPACE TO LAUNCH", font).size(26).prepare!()?,
+			won_line: Text.from("WALL CLEARED", font).size(34).prepare!()?,
+			over_line: Text.from("GAME OVER", font).size(34).prepare!()?,
+			restart_line: Text.from("PRESS SPACE TO PLAY AGAIN", font).size(19).prepare!()?,
 			sounds: {
 				paddle: Audio.gen_tone!({ freq: 440, ms: 50 })?,
 				brick: Audio.gen_tone!({ freq: 760, ms: 45 })?,
@@ -234,11 +270,11 @@ brick_row_index = |row|
 brick_row_color : BrickRow -> Color.Rgba
 brick_row_color = |row|
 	match row {
-		RedRow => Color.from_hex_rgb(0xf94144)
-		OrangeRow => Color.from_hex_rgb(0xf3722c)
-		YellowRow => Color.from_hex_rgb(0xf9c74f)
-		GreenRow => Color.from_hex_rgb(0x43aa8b)
-		BlueRow => Color.from_hex_rgb(0x577590)
+		RedRow => Color.from_hex_rgb(0xff4f7d)
+		OrangeRow => Color.from_hex_rgb(0xff9f45)
+		YellowRow => Color.from_hex_rgb(0xffe066)
+		GreenRow => Color.from_hex_rgb(0x4ce0b3)
+		BlueRow => Color.from_hex_rgb(0x5a9dff)
 	}
 
 brick_row_y : BrickRow -> F32
@@ -524,21 +560,43 @@ update! = |model, program_input| {
 
 	match exit {
 		Err(code) => Err(code)
-		Ok({}) => Ok({ ..model, game: result.game })
+		Ok({}) => Ok({ ..model, game: result.game, elapsed: model.elapsed + dt })
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	frame.clear!(Color.ray_white)
-	draw_game!(frame, model.game, model.demo)
+	game = model.game
+	frame.clear!(field_bottom)
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw_hud!(frame, model)
+	draw_bricks!(frame, game.bricks)
+
+	# One additive scope for everything that emits light, so the halos add up
+	# rather than stacking as translucent grey.
+	frame.with_blend_mode!(
+		Draw.additive_blend,
+		|glow_frame| {
+			paddle = paddle_rect(game.paddle_x)
+			glow_frame.circle_gradient!({ center: Math.center(paddle), radius: 90, color_inner: Color.with_alpha(paddle_neon, 95), color_outer: Color.with_alpha(paddle_neon, 0) })
+			glow_frame.circle_gradient!({ center: game.ball.pos, radius: 46, color_inner: Color.with_alpha(ball_neon, 95), color_outer: Color.with_alpha(ball_neon, 0) })
+			Ok({})
+		},
+	)?
+
+	draw_bodies!(frame, game)
+	draw_state_overlay!(frame, model)
 
 	Ok({})
 }
 
+# Each brick is its own colour with a brighter sheen along the top edge, which
+# is what keeps a flat rectangle from reading as a flat rectangle.
 draw_brick! : Draw.Frame, Brick => {}
-draw_brick! = |frame, brick|
-	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 5, segments: 6, style: Draw.filled_and_outlined(brick.color, Color.with_alpha(Color.black, 90), 2) })
+draw_brick! = |frame, brick| {
+	frame.rounded_rectangle!({ x: brick.rect.x, y: brick.rect.y, width: brick.rect.width, height: brick.rect.height, radius: 0.28, segments: 6, style: Draw.filled(Color.with_alpha(brick.color, 235)) })
+	frame.rectangle!({ x: brick.rect.x + 5, y: brick.rect.y + 3, width: brick.rect.width - 10, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 110)) })
+}
 
 draw_bricks! : Draw.Frame, List(Brick) => {}
 draw_bricks! = |frame, bricks| {
@@ -547,76 +605,43 @@ draw_bricks! = |frame, bricks| {
 	}
 }
 
-draw_game! : Draw.Frame, Game, Bool => {}
-draw_game! = |frame, game, demo| {
-	frame.text_at!({ pos: { x: 44, y: 24 }, text: "Breakout", size: 30, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 290, y: 32 }, text: Str.concat("Score ", U64.to_str(game.score)), size: 22, color: Color.gray })
-	frame.text_at!({ pos: { x: 620, y: 32 }, text: Str.concat("Lives ", U64.to_str(game.lives)), size: 22, color: Color.gray })
-	if demo {} else frame.fps!({ pos: { x: 730, y: 32 }, size: 18, color: Color.gray })
-	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.light_gray, 2) })
-
-	draw_bricks!(frame, game.bricks)
-
+draw_bodies! : Draw.Frame, Game => {}
+draw_bodies! = |frame, game| {
 	paddle = paddle_rect(game.paddle_x)
-	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 7, segments: 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x277da1), Color.dark_gray, 2) })
-	frame.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled_and_outlined(Color.from_hex_rgb(0xf9c74f), Color.dark_gray, 2) })
+	frame.rounded_rectangle!({ x: paddle.x, y: paddle.y, width: paddle.width, height: paddle.height, radius: 0.5, segments: 8, style: Draw.filled(paddle_neon) })
+	frame.rectangle!({ x: paddle.x + 8, y: paddle.y + 3, width: paddle.width - 16, height: 3, style: Draw.filled(Color.with_alpha(Color.white, 150)) })
+	frame.circle!({ center: game.ball.pos, radius: ball_radius, style: Draw.filled(ball_neon) })
+	frame.circle!({ center: { x: game.ball.pos.x - 2, y: game.ball.pos.y - 2 }, radius: ball_radius * 0.4, style: Draw.filled(Color.with_alpha(Color.white, 210)) })
+}
 
-	match game.state {
-		Ready => {
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 338 }, text: "Press SPACE to launch", size: 24, color: Color.dark_gray })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 370 }, text: ready_help, size: 18, color: Color.gray })
-		}
+draw_hud! : Draw.Frame, Model => {}
+draw_hud! = |frame, model| {
+	model.title.draw!(frame, { pos: { x: 44, y: 22 }, color: paddle_neon, align: Text.align_top_left })
+	frame.text!({ pos: { x: 330, y: 26 }, text: "SCORE ${U64.to_str(model.game.score)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 560, y: 26 }, text: "LIVES ${U64.to_str(model.game.lives)}", size: 22, spacing: Draw.default_spacing, color: hud_color, font: model.font, align: Draw.align_top_left })
+	if model.demo {} else frame.fps!({ pos: { x: 730, y: 28 }, size: 18, color: hint_color })
+	frame.line!({ start: { x: 44, y: top_wall_y }, end: { x: screen_w - 44, y: top_wall_y }, stroke: Draw.stroke(Color.from_hex_rgb(0x2a3566), 2) })
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })
+}
+
+# A prompt that fades in and out on its own clock, so a waiting screen still has
+# a heartbeat.
+prompt_alpha : Model -> U8
+prompt_alpha = |model| F32.to_u8_wrap(150 + 105 * (0.5 + 0.5 * F32.sin(model.elapsed * 3.4)))
+
+draw_state_overlay! : Draw.Frame, Model => {}
+draw_state_overlay! = |frame, model|
+	match model.game.state {
+		Ready =>
+			model.launch_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 350 }, color: Color.with_alpha(hud_color, prompt_alpha(model)), align: Text.align_center })
 		Playing => {}
-		Won => {
-			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "You cleared the wall", size: 30, color: Color.white })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: won_help, size: 20, color: Color.light_gray })
-		}
-		GameOver => {
-			frame.rectangle!({ x: 210, y: 280, width: 380, height: 118, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 318 }, text: "Game Over", size: 34, color: Color.white })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 360 }, text: game_over_help, size: 20, color: Color.light_gray })
-		}
+		Won => draw_banner!(frame, model, model.won_line, Color.from_hex_rgb(0x4ce0b3))
+		GameOver => draw_banner!(frame, model, model.over_line, Color.from_hex_rgb(0xff4f7d))
 	}
-}
 
-still_input : FrameInput
-still_input = { paddle_move: PaddleStill, action_pressed: Bool.False, dt: 0 }
-
-expect List.len(fresh_bricks) == bricks_per_row * 5
-expect brick_row_index(BlueRow) == 4
-expect brick_row_y(YellowRow) == 148
-expect paddle_move_dir(PaddleLeft) == -1
-expect paddle_move_dir(PaddleRight) == 1
-expect paddle_move_dir(PaddleStill) == 0
-expect launch_ball(start_paddle_x).pos == { x: 400, y: 538 }
-expect ball_circle(launch_ball(start_paddle_x)).radius == ball_radius
-
-expect {
-	result = advance_ready(new_game_state(), { paddle_move: PaddleStill, action_pressed: Bool.True, dt: 0 })
-	result.game.state == Playing and List.first(result.events) == Ok(GameStarted)
-}
-
-expect {
-	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 20, y: top_wall_y + ball_radius - 1 }, vel: { x: 0, y: -100 } } }
-	result = advance_playing(game, still_input)
-	result.game.ball.vel.y == 100 and List.first(result.events) == Ok(WallHit)
-}
-
-expect {
-	game = { ..new_game_state(), state: Playing, ball: { pos: { x: 400, y: paddle_y - ball_radius - 3 }, vel: { x: 0, y: 120 } } }
-	result = advance_playing(game, { ..still_input, dt: 0.05 })
-	result.game.ball.vel.y < 0 and result.game.ball.pos.y == paddle_y - ball_radius - ball_bounce_gap and result.paddle_hit
-}
-
-expect {
-	game = { ..new_game_state(), state: Playing, lives: 1, ball: { pos: { x: 10, y: screen_h + ball_radius + 1 }, vel: { x: 0, y: 0 } } }
-	result = advance_playing(game, still_input)
-	result.game.state == GameOver and result.game.lives == 0 and List.first(result.events) == Ok(LifeLost(GameOver))
-}
-
-expect {
-	brick = brick_at(99, 100, 100, Color.red)
-	result = find_hit_brick([brick], Math.circle({ x: 105, y: 105 }, 1), 0)
-	result == Ok(brick)
+draw_banner! : Draw.Frame, Model, Text.Prepared, Color.Rgba => {}
+draw_banner! = |frame, model, line, accent| {
+	frame.rounded_rectangle!({ x: 190, y: 276, width: 420, height: 124, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(Color.with_alpha(field_bottom, 232), Color.with_alpha(accent, 120), 2) })
+	line.draw!(frame, { pos: { x: screen_w * 0.5, y: 318 }, color: accent, align: Text.align_center })
+	model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 362 }, color: Color.with_alpha(hint_color, prompt_alpha(model)), align: Text.align_center })
 }

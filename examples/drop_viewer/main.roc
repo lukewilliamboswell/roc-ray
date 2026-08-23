@@ -62,7 +62,7 @@ init! = App.init(
 	|_startup| {
 		font = Draw.default_font!()
 		Ok({
-			title: Text.from("Drop an image onto this window", font).size(26).prepare!()?,
+			title: Text.from("Drop Viewer", font).size(28).prepare!()?,
 			status: WaitingForDrop,
 			image: NoImage,
 			partial_drop: Bool.False,
@@ -212,14 +212,48 @@ expect
 		.status
 		== Refused("/home/example/notes.txt: not an image this viewer knows")
 
+## The shared surface palette, so the frame, the status line and the hint all
+## belong to one dark theme.
+theme : { bg : Color.Rgba, panel : Color.Rgba, edge : Color.Rgba, ink : Color.Rgba, muted : Color.Rgba, faint : Color.Rgba, accent : Color.Rgba, ok : Color.Rgba, warn : Color.Rgba }
+theme = {
+	bg: Color.from_hex_rgb(0x0e1420),
+	panel: Color.from_hex_rgb(0x141d2f),
+	edge: Color.from_hex_rgb(0x25314b),
+	ink: Color.from_hex_rgb(0xe6ecf5),
+	muted: Color.from_hex_rgb(0x8fa0bd),
+	faint: Color.from_hex_rgb(0x5c6b87),
+	accent: Color.from_hex_rgb(0x4c8dff),
+	ok: Color.from_hex_rgb(0x3ddc97),
+	warn: Color.from_hex_rgb(0xf2a65a),
+}
+
+## The colour that says what the viewer is doing, without reading the words.
+status_color : Status -> Color.Rgba
+status_color = |status|
+	match status {
+		WaitingForDrop => theme.faint
+		Reading(_) => theme.accent
+		Showing(_, _) => theme.ok
+		Refused(_) => theme.warn
+	}
+
+expect status_color(WaitingForDrop) == theme.faint
+expect status_color(Refused("x")) == theme.warn
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x11161f))
-	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
-	frame.rectangle!({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height, style: Draw.outlined(Color.from_hex_rgb(0x35415a), 2) })
+	frame.clear!(theme.bg)
+	model.title.draw!(frame, { pos: { x: 40, y: 34 }, color: theme.ink, align: Text.align_top_left })
+	frame.text_at!({ pos: { x: 40, y: 70 }, text: "A dropped path, read off the frame thread and decoded into a texture", size: 15, color: theme.muted })
+
+	# The drop target: a card first, an outline second, so an empty viewer still
+	# looks like a place a file is meant to go.
+	frame.rounded_rectangle!({ x: canvas.x, y: canvas.y, width: canvas.width, height: canvas.height, radius: 14, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 2) })
 
 	match model.image {
-		NoImage => {}
+		NoImage =>
+			frame.text_centered!({ pos: { x: canvas.x + canvas.width / 2, y: canvas.y + canvas.height / 2 }, text: "Drop a PNG, JPEG, GIF, QOI or BMP file here", size: 18, color: theme.faint })
+
 		Shown(texture) =>
 			frame.texture!({
 				texture,
@@ -231,11 +265,13 @@ render! = |model, frame| {
 			})
 		}
 
-	frame.text_at!({ pos: { x: 40, y: 84 }, text: describe(model.status), size: 18, color: Color.from_hex_rgb(0x88c0d0) })
+	# A lit dot carries the state; the words carry the detail.
+	frame.circle!({ center: { x: 47, y: 105 }, radius: 5, style: Draw.filled(status_color(model.status)) })
+	frame.text_at!({ pos: { x: 62, y: 96 }, text: describe(model.status), size: 17, color: theme.ink })
 	if model.partial_drop {
-		frame.text_at!({ pos: { x: 40, y: window_height - 74 }, text: "That drop carried more than 64 files; only the first 64 were delivered", size: 16, color: Color.from_hex_rgb(0xd08770) })
+		frame.text_at!({ pos: { x: 40, y: window_height - 74 }, text: "That drop carried more than 64 files; only the first 64 were delivered", size: 16, color: theme.warn })
 	} else {}
-	frame.text_at!({ pos: { x: 40, y: window_height - 48 }, text: "PNG, JPEG, GIF, QOI and BMP | ESC quits", size: 16, color: Color.from_hex_rgb(0x6f7a90) })
+	frame.text_at!({ pos: { x: 40, y: window_height - 44 }, text: "Drag a file onto the window  |  ESC quits", size: 14, color: theme.faint })
 	Ok({})
 }
 

@@ -158,6 +158,7 @@ pub const FileReader = struct {
         };
     }
 };
+
 const property_string: u8 = 0;
 const property_int: u8 = 1;
 const property_float: u8 = 2;

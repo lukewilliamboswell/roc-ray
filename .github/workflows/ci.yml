@@ -222,14 +222,20 @@ jobs:
 
       - name: Install a virtual audio device (Windows)
         if: runner.os == 'Windows'
+        # Bounded: a driver-trust prompt would otherwise hang the job.
+        timeout-minutes: 5
         shell: powershell
         env:
           SCREAM_VERSION: "3.8"
         run: |
           Invoke-WebRequest "https://github.com/duncanthrax/scream/releases/download/$env:SCREAM_VERSION/Scream$env:SCREAM_VERSION.zip" -OutFile Scream.zip
           Expand-Archive -Path Scream.zip -DestinationPath Scream
-          Import-Certificate -FilePath Scream\Install\driver\x64\Scream.cat -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
-          Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+          $driver = "Scream\Install\driver\x64"
+          # Trust the driver's signer so the install needs no prompt.
+          $cert = (Get-AuthenticodeSignature "$driver\Scream.sys").SignerCertificate
+          $store = [System.Security.Cryptography.X509Certificates.X509Store]::new("TrustedPublisher", "LocalMachine")
+          $store.Open("ReadWrite"); $store.Add($cert); $store.Close()
+          & "Scream\Install\helpers\devcon-x64.exe" install "$driver\Scream.inf" *Scream
           net start audiosrv
           Get-CimInstance Win32_SoundDevice | Select-Object Name, Status
 

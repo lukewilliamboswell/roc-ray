@@ -20,13 +20,19 @@
 ##
 ## Every effect that takes a `Frame` -- every shape, every texture, every
 ## scope, and every uniform `set!` -- is legal in `render!` only. The loaders
-## in this module are the other half: `default_font!`, `load_store_font!`,
-## `font_from_bytes!`, `load_render_texture!`, `Shader.from_source!`,
-## `Shader.from_store!`, and the `Shader.uniform_*!` resolvers allocate host
-## resources, so they are legal in `init!`, `update!`, and tasks, and refused
-## in `render!`. Create them in `init!`, keep them in the model, and hand the
-## values to `render!`; per-frame drawing and uniform updates then allocate
-## nothing.
+## in this module are the other half. `default_font!`, `font_from_bytes!`,
+## `load_render_texture!`, `Shader.from_source!` and the `Shader.uniform_*!`
+## resolvers allocate host resources from what the app already has, so they are
+## legal in `init!`, `update!`, and tasks, and refused in `render!`. The two
+## that read files out of an asset store, `load_store_font!` and
+## `Shader.from_store!`, wait instead: each is legal in `init!`, where it
+## blocks startup, and in tasks, where it parks the task, and refused in
+## `update!` and `render!`. Create them in `init!`, keep them in the model, and
+## hand the values to `render!`; per-frame drawing and uniform updates then
+## allocate nothing. To load a font or a shader after startup, read the file on
+## a task -- with `Files.read_bytes!`, then `font_from_bytes!` or
+## `Shader.from_source!` from `update!` when the message arrives, or by calling
+## the store loader inside the task itself.
 ##
 ## Most shapes come in two spellings: `frame.circle!(cfg)` and
 ## `Draw.circle!(frame, cfg)` are the same call. Prefer the receiver; the free
@@ -695,7 +701,11 @@ Draw := [].{
 
 		## Compile shader stage files resolved through an explicit asset store.
 		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`. The sources are
+		## read off the frame thread and compiled when the bytes are back. To
+		## compile from `update!`, use `from_source!` with strings the app
+		## already holds.
 		from_store! : Assets.Store, LoadShader => Try(Shader, [PathInvalid, NotFound, ReadFailed, ShaderLoadFailed, ResourceLimit, ..])
 		from_store! = |store, cfg| {
 			result = DrawHost.load_store_shader!({ store, vertex_path: cfg.vertex_path, fragment_path: cfg.fragment_path })
@@ -1186,7 +1196,10 @@ Draw := [].{
 
 	## Load a font relative to an explicit asset store.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread and rasterized when the bytes are back. To load a font from
+	## `update!`, use `font_from_bytes!` with bytes the app already holds.
 	load_store_font! : Assets.Store, LoadFont => Try(Font, [PathInvalid, NotFound, ReadFailed, FontLoadFailed, ResourceLimit, ..])
 	load_store_font! = |store, cfg| {
 		result = DrawHost.load_store_font!({ store, path: cfg.path, size: cfg.size })

@@ -3285,6 +3285,16 @@ fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture 
     return .{ .handle = allocateTestResourceStub(host), .width = width, .height = height };
 }
 
+/// Take a second reference to a live host resource handle, the way a Roc value
+/// copied into two effect calls would. Each hosted effect releases the handle
+/// it was passed, so a test that calls two of them against one resource has to
+/// hand each its own reference.
+fn retainTestResourceBox(handle: *u64) *u64 {
+    const refcount: *isize = @ptrFromInt(@intFromPtr(handle) - @sizeOf(isize));
+    refcount.* += 1;
+    return handle;
+}
+
 test "resource-free texture is safe across hosted operations and ordinary deallocation" {
     drainRetiredResourcesUpTo(std.math.maxInt(usize));
     try std.testing.expectEqual(@as(usize, 0), texture_heap.active());
@@ -4800,8 +4810,12 @@ fn exportedDrawLoadShaderSourceRaw(args: abi.DrawHostLoad_shader_sourceArgs) cal
     return hostedDrawLoadShaderSourceRaw(activeHost(), args);
 }
 
+/// `Draw.Shader.from_store!`: read one or two shader sources and compile them.
+///
+/// Reading the sources waits -- it parks a task and blocks `init!` -- and the
+/// compile runs on the frame thread once both reads have answered.
 fn hostedDrawLoadStoreShaderRaw(host: *RocHost, args: abi.DrawHostLoad_store_shaderArgs) callconv(.c) abi.DrawHostLoad_store_shaderRetRecord {
-    enforcePhase("Draw.Shader.from_store!", during_load);
+    enforcePhase("Draw.Shader.from_store!", during_wait);
     defer args.vertex_path.decref(host);
     defer args.fragment_path.decref(host);
     defer releaseResourceBox(host, args.store);
@@ -5213,8 +5227,12 @@ fn exportedDrawLoadFontBytesRaw(args: abi.DrawHostLoad_font_bytesArgs) callconv(
     return hostedDrawLoadFontBytesRaw(activeHost(), args);
 }
 
+/// `Draw.load_store_font!`: read a font file out of a store and rasterize it.
+///
+/// The read waits -- it parks a task and blocks `init!` -- and the rasterizing
+/// happens on the frame thread with the bytes back in hand.
 fn hostedDrawLoadStoreFontRaw(host: *RocHost, args: abi.DrawHostLoad_store_fontArgs) callconv(.c) abi.DrawHostLoad_store_fontRetRecord {
-    enforcePhase("Draw.load_store_font!", during_load);
+    enforcePhase("Draw.load_store_font!", during_wait);
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     if (args.size <= 0) return .{ .font = invalidResourceHandle(), .err = STORE_LOAD_ERR_DECODE };
@@ -5247,6 +5265,83 @@ fn fontFileTypeFromPath(path: []const u8) ?[*:0]const u8 {
 
 fn exportedDrawLoadStoreFontRaw(args: abi.DrawHostLoad_store_fontArgs) callconv(.c) abi.DrawHostLoad_store_fontRetRecord {
     return hostedDrawLoadStoreFontRaw(activeHost(), args);
+}
+
+test "the store-backed font and shader loaders wait rather than load" {
+    // Both read files out of a store, so both belong where waiting is defined.
+    // The rasterizing and the shader compile that follow are frame-thread work
+    // on bytes already in hand, which is why only the read moved.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        last_phase_violation = null;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        store_heap.deinitAll();
+        font_heap.deinitAll();
+        shader_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "body.ttf", .data = "not rasterized in headless tests" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "blur.fs", .data = "not compiled in headless tests" });
+    var root_path: [256]u8 = undefined;
+    const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
+
+    const startup = PhaseScope.enter(.startup);
+    last_phase_violation = null;
+    const opened = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
+    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    startup.leave();
+
+    {
+        const update = PhaseScope.enter(.update);
+        defer update.leave();
+        last_phase_violation = null;
+        _ = hostedDrawLoadStoreFontRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
+            .size = 16,
+        });
+        const font_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Draw.load_store_font!", font_violation.operation);
+        try std.testing.expect(font_violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, font_violation.actual);
+
+        last_phase_violation = null;
+        _ = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .vertex_path = abi.RocStr.empty(),
+            .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
+        });
+        const shader_violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Draw.Shader.from_store!", shader_violation.operation);
+        try std.testing.expect(shader_violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, shader_violation.actual);
+    }
+
+    // On a task, where the read parks rather than holding the frame, the same
+    // two calls answer with resources.
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    last_phase_violation = null;
+    const font = hostedDrawLoadStoreFontRaw(&roc_host, .{
+        .store = retainTestResourceBox(opened.store),
+        .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
+        .size = 16,
+    });
+    try std.testing.expectEqual(STORE_ERR_NONE, font.err);
+    releaseResourceBox(&roc_host, font.font);
+
+    const shader = hostedDrawLoadStoreShaderRaw(&roc_host, .{
+        .store = opened.store,
+        .vertex_path = abi.RocStr.empty(),
+        .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
+    });
+    try std.testing.expectEqual(STORE_ERR_NONE, shader.err);
+    releaseResourceBox(&roc_host, shader.shader);
+    try std.testing.expect(last_phase_violation == null);
 }
 
 fn fontForValue(font_value: *const abi.DefaultFontOrLoadedFont) raylib.Font {

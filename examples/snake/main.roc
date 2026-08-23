@@ -8,8 +8,14 @@ import rr.Draw
 import rr.Devices
 import rr.Random
 import rr.Math
+import rr.Text
 
 ## Snake on a fixed timestep, with a replayable simulation.
+##
+## The board is drawn as a neon arcade cabinet: a gridded panel, a snake that
+## fades from a bright head to a deep tail, and additive glow under the head and
+## the pulsing food. The pulse is the only presentation state, one seconds
+## counter the frame loop advances, so the rules below are still the whole game.
 ##
 ## `update!` folds each cycle's elapsed seconds into an accumulator and runs as
 ## many discrete steps as the frame paid for, so the snake moves at the same
@@ -39,6 +45,18 @@ Model : {
 	eat_sound : Audio.Sound,
 	crash_sound : Audio.Sound,
 	start_sound : Audio.Sound,
+	font : Draw.Font,
+
+	## Wall-clock seconds since launch, advanced by `update!` and used only by
+	## the renderer, to pulse the food and breathe the restart prompt.
+	elapsed : F32,
+
+	## Text measured once in `init!`. Only the score changes per frame, and it
+	## is short enough to lay out inline.
+	title : Text.Prepared,
+	hint : Text.Prepared,
+	over_title : Text.Prepared,
+	over_hint : Text.Prepared,
 
 	## Simulation randomness lives in the model, so food appears on the frame it
 	## was eaten and a run replays exactly from its seed.
@@ -65,13 +83,13 @@ screen_h : F32
 screen_h = 600
 
 board_x : F32
-board_x = 50
+board_x = 75
 
 board_y : F32
-board_y = 72
+board_y = 80
 
 cell_size : F32
-cell_size = 28
+cell_size = 26
 
 grid_cols : I32
 grid_cols = 25
@@ -79,16 +97,49 @@ grid_cols = 25
 grid_rows : I32
 grid_rows = 18
 
+# The same two counts as `U64`, for the list-shaped loops the renderer uses.
+grid_cols_count : U64
+grid_cols_count = 25
+
+grid_rows_count : U64
+grid_rows_count = 18
+
 step_time : F32
 step_time = 0.115
+
+# --- Palette: one dark cabinet, a cyan snake, a warm apple ---
+field_top : Color.Rgba
+field_top = Color.from_hex_rgb(0x151d3a)
+
+field_bottom : Color.Rgba
+field_bottom = Color.from_hex_rgb(0x060810)
+
+board_fill : Color.Rgba
+board_fill = Color.from_hex_rgb(0x0b1226)
+
+grid_line : Color.Rgba
+grid_line = Color.from_hex_rgb(0x16203f)
+
+snake_head : Color.Rgba
+snake_head = Color.from_hex_rgb(0x7ef7d1)
+
+snake_tail : Color.Rgba
+snake_tail = Color.from_hex_rgb(0x1d7fb8)
+
+food_neon : Color.Rgba
+food_neon = Color.from_hex_rgb(0xff6b8b)
+
+hint_color : Color.Rgba
+hint_color = Color.from_hex_rgb(0x6d7aa8)
 
 start_snake : List(Cell)
 start_snake = [{ x: 12, y: 9 }, { x: 11, y: 9 }, { x: 10, y: 9 }]
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.default.with_title("RocRay Snake").with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Snake").with_size({ width: 800, height: 600 }).with_frame_pacing(Capped(120)),
 	|startup| {
+		font = Draw.default_font!()
 		seed = {
 			snake: start_snake,
 			direction: DirRight,
@@ -100,6 +151,12 @@ init! = App.init(
 			eat_sound: Audio.gen_tone!({ freq: 620, ms: 70 })?,
 			crash_sound: Audio.gen_tone!({ freq: 120, ms: 180 })?,
 			start_sound: Audio.gen_tone!({ freq: 360, ms: 80 })?,
+			font: font,
+			elapsed: 0,
+			title: Text.from("SNAKE", font).size(30).spacing(6).prepare!()?,
+			hint: Text.from("ARROWS / WASD  turn    SPACE  restart    ESC  quit", font).size(17).prepare!()?,
+			over_title: Text.from("GAME OVER", font).size(40).prepare!()?,
+			over_hint: Text.from("PRESS SPACE TO PLAY AGAIN", font).size(19).prepare!()?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update!` advances without an effect, so this
 			# whole run reproduces from the one number below. Replace it with
@@ -305,6 +362,12 @@ test_model = {
 	eat_sound: Audio.Sound.stub,
 	crash_sound: Audio.Sound.stub,
 	start_sound: Audio.Sound.stub,
+	font: Draw.Font.stub,
+	elapsed: 0,
+	title: Text.Prepared.stub,
+	hint: Text.Prepared.stub,
+	over_title: Text.Prepared.stub,
+	over_hint: Text.Prepared.stub,
 	rng: Random.seed(1),
 }
 
@@ -375,14 +438,38 @@ update! = |model, program_input| {
 	if input.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {
-		Ok(stepped.model)
+		Ok({ ..stepped.model, elapsed: stepped.model.elapsed + dt })
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	frame.clear!(Color.ray_white)
-	draw_game!(frame, model)
+	frame.clear!(field_bottom)
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw_hud!(frame, model)
+	draw_board!(frame)
+	draw_snake_cells!(frame, model.snake)
+
+	# Everything that glows shares one additive scope, so overlapping light adds
+	# up instead of stacking as translucent grey.
+	frame.with_blend_mode!(
+		Draw.additive_blend,
+		|glow_frame| {
+			draw_food!(glow_frame, model)
+			head_rect = cell_rect(head_of(model.snake))
+			glow_frame.circle_gradient!({
+				center: Math.center(head_rect),
+				radius: cell_size * 1.5,
+				color_inner: Color.with_alpha(snake_head, 90),
+				color_outer: Color.with_alpha(snake_head, 0),
+			})
+			Ok({})
+		},
+	)?
+
+	draw_food_body!(frame, model)
+	draw_cell!(frame, head_of(model.snake), snake_head, Color.with_alpha(Color.white, 200))
+	draw_game_over!(frame, model)
 
 	Ok({})
 }
@@ -398,19 +485,48 @@ cell_rect = |cell| {
 draw_cell! : Draw.Frame, Cell, Color.Rgba, Color.Rgba => {}
 draw_cell! = |frame, cell, fill, outline| {
 	rect = cell_rect(cell)
-	frame.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, outline, 2) })
+	frame.rounded_rectangle!({ x: rect.x + 2, y: rect.y + 2, width: rect.width - 4, height: rect.height - 4, radius: 0.35, segments: 6, style: Draw.filled_and_outlined(fill, outline, 1) })
 }
 
-draw_food! : Draw.Frame, Cell => {}
-draw_food! = |frame, food| {
-	rect = cell_rect(food)
-	frame.circle!({ center: { x: rect.x + rect.width * 0.5, y: rect.y + rect.height * 0.5 }, radius: cell_size * 0.36, style: Draw.filled_and_outlined(Color.red, Color.dark_gray, 2) })
+# The apple breathes: one sine of the model's own clock drives both the halo
+# radius and its brightness, so the board never sits completely still.
+food_pulse : Model -> F32
+food_pulse = |model| 0.5 + 0.5 * F32.sin(model.elapsed * 3.4)
+
+draw_food! : Draw.Frame, Model => {}
+draw_food! = |frame, model| {
+	pulse = food_pulse(model)
+	frame.circle_gradient!({
+		center: Math.center(cell_rect(model.food)),
+		radius: cell_size * (1.0 + 0.5 * pulse),
+		color_inner: Color.with_alpha(food_neon, F32.to_u8_wrap(70 + 60 * pulse)),
+		color_outer: Color.with_alpha(food_neon, 0),
+	})
+}
+
+draw_food_body! : Draw.Frame, Model => {}
+draw_food_body! = |frame, model| {
+	center = Math.center(cell_rect(model.food))
+	radius = cell_size * (0.3 + 0.04 * food_pulse(model))
+	frame.circle!({ center: center, radius: radius, style: Draw.filled(food_neon) })
+	frame.circle!({ center: { x: center.x - radius * 0.3, y: center.y - radius * 0.35 }, radius: radius * 0.32, style: Draw.filled(Color.with_alpha(Color.white, 190)) })
+}
+
+# The body fades from head to tail. Mixing the two palette colors by position
+# rather than giving every segment one color is what reads as a direction of
+# travel when the snake is long.
+segment_color : U64, U64 -> Color.Rgba
+segment_color = |index, length| {
+	t = if length <= 1 0 else U64.to_f32(index) / U64.to_f32(length - 1)
+	mix = |from, to| F32.to_u8_wrap(U8.to_f32(from) + (U8.to_f32(to) - U8.to_f32(from)) * t)
+	Color.rgba(mix(snake_head.r, snake_tail.r), mix(snake_head.g, snake_tail.g), mix(snake_head.b, snake_tail.b), 255)
 }
 
 draw_snake_cells! : Draw.Frame, List(Cell) => {}
 draw_snake_cells! = |frame, snake| {
-	for cell in snake {
-		draw_cell!(frame, cell, Color.from_hex_rgb(0x23c552), Color.from_hex_rgb(0x0d5f2a))
+	length = List.len(snake)
+	for segment in List.map_with_index(snake, |cell, index| { cell, color: segment_color(index, length) }) {
+		draw_cell!(frame, segment.cell, segment.color, Color.with_alpha(segment.color, 90))
 	}
 }
 
@@ -418,24 +534,35 @@ draw_board! : Draw.Frame => {}
 draw_board! = |frame| {
 	board_w = I32.to_f32(grid_cols) * cell_size
 	board_h = I32.to_f32(grid_rows) * cell_size
-	frame.rectangle!({ x: board_x - 4, y: board_y - 4, width: board_w + 8, height: board_h + 8, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x17202a), Color.dark_gray, 2) })
+	frame.rounded_rectangle!({ x: board_x - 8, y: board_y - 8, width: board_w + 16, height: board_h + 16, radius: 0.06, segments: 8, style: Draw.filled_and_outlined(board_fill, Color.from_hex_rgb(0x2a3566), 2) })
+
+	# A faint lattice, so a cell is a place rather than an empty field.
+	for column in List.map_with_index(List.repeat({}, grid_cols_count + 1), |_unit, index| board_x + U64.to_f32(index) * cell_size) {
+		frame.line!({ start: { x: column, y: board_y }, end: { x: column, y: board_y + board_h }, stroke: Draw.stroke(grid_line, 1) })
+	}
+	for row in List.map_with_index(List.repeat({}, grid_rows_count + 1), |_unit, index| board_y + U64.to_f32(index) * cell_size) {
+		frame.line!({ start: { x: board_x, y: row }, end: { x: board_x + board_w, y: row }, stroke: Draw.stroke(grid_line, 1) })
+	}
 }
 
-draw_game! : Draw.Frame, Model => {}
-draw_game! = |frame, model| {
-	frame.text_at!({ pos: { x: board_x, y: 24 }, text: "Snake", size: 32, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: screen_w - 190, y: 32 }, text: Str.concat("Score ", U64.to_str(model.score)), size: 22, color: Color.gray })
-	draw_board!(frame)
-	draw_food!(frame, model.food)
-	draw_snake_cells!(frame, model.snake)
-	draw_cell!(frame, head_of(model.snake), Color.yellow, Color.from_hex_rgb(0x0d5f2a))
+draw_hud! : Draw.Frame, Model => {}
+draw_hud! = |frame, model| {
+	model.title.draw!(frame, { pos: { x: board_x, y: 26 }, color: snake_head, align: Text.align_top_left })
+	frame.text!({ pos: { x: screen_w - board_x, y: 30 }, text: "SCORE ${U64.to_str(model.score)}", size: 24, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0xd7e3ff), font: model.font, align: Draw.align_top_right })
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 20 }, color: hint_color, align: Text.align_center })
+}
 
+draw_game_over! : Draw.Frame, Model => {}
+draw_game_over! = |frame, model|
 	match model.state {
 		Playing => {}
 		GameOver => {
-			frame.rectangle!({ x: board_x, y: 250, width: I32.to_f32(grid_cols) * cell_size, height: 120, style: Draw.filled(Color.with_alpha(Color.black, 210)) })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 286 }, text: "Game Over", size: 36, color: Color.white })
-			frame.text_centered!({ pos: { x: screen_w * 0.5, y: 330 }, text: "Press SPACE to restart", size: 22, color: Color.light_gray })
+			board_w = I32.to_f32(grid_cols) * cell_size
+			frame.rectangle!({ x: board_x - 8, y: 236, width: board_w + 16, height: 140, style: Draw.filled(Color.with_alpha(field_bottom, 225)) })
+			model.over_title.draw!(frame, { pos: { x: screen_w * 0.5, y: 282 }, color: food_neon, align: Text.align_center })
+			# The prompt breathes on the same clock as the food, so a waiting
+			# screen still has a heartbeat.
+			prompt_alpha = F32.to_u8_wrap(150 + 105 * food_pulse(model))
+			model.over_hint.draw!(frame, { pos: { x: screen_w * 0.5, y: 336 }, color: Color.with_alpha(hint_color, prompt_alpha), align: Text.align_center })
 		}
 	}
-}

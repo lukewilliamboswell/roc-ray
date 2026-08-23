@@ -7,9 +7,16 @@ import rr.Random
 import rr.Audio
 import rr.App
 import rr.Math
+import rr.Text
 
 ## Two-paddle Pong: W and S drive the left paddle, an AI tracks the ball on the
 ## right, first to five wins and SPACE serves a new match.
+##
+## The presentation is a neon arcade cabinet: a gradient field with a dashed
+## centre line, paddles and ball lit by additive glow, a fading ball trail, and
+## a screen flash that pulses on every hit and every point. All of it is derived
+## from the model -- the trail is a short list of past ball positions and the
+## flash is one decaying number -- so the rules below stay the whole game.
 ##
 ## Everything moves in pixels per second scaled by the cycle's elapsed seconds,
 ## so the game plays the same at any frame rate. The step is pure and returns
@@ -30,6 +37,22 @@ Model : {
 	wall_sound : Audio.Sound,
 	score_sound : Audio.Sound,
 	font : Draw.Font,
+
+	## Presentation state, advanced by the same pure step as the rules.
+	## `trail` is the ball's recent positions, newest first; `flash` decays from
+	## 1 to 0 after a hit or a point and tints a full-screen additive wash.
+	trail : List(Math.Vec2),
+	flash : F32,
+	flash_color : Color.Rgba,
+
+	## Text measured once in `init!`: the HUD hint and one glyph per reachable
+	## score, so no frame pays to lay out a digit that never changes.
+	hint : Text.Prepared,
+	digits : List(Text.Prepared),
+
+	## Index 0 is the left player's banner, index 1 the right player's.
+	win_lines : List(Text.Prepared),
+	restart_line : Text.Prepared,
 
 	## Simulation randomness lives in the model, so a serve is drawn on the
 	## frame that needs it and a run replays exactly from its seed.
@@ -72,6 +95,33 @@ bounce_factor = 6
 win_score : U64
 win_score = 5
 
+# The ball's comet: how many past positions to keep, and how far apart to
+# sample them.
+trail_length : U64
+trail_length = 14
+
+trail_spacing : F32
+trail_spacing = 11
+
+# --- Palette: one dark field, two rival neons, one warm ball ---
+field_top : Color.Rgba
+field_top = Color.from_hex_rgb(0x141a35)
+
+field_bottom : Color.Rgba
+field_bottom = Color.from_hex_rgb(0x05060f)
+
+left_neon : Color.Rgba
+left_neon = Color.from_hex_rgb(0x38e8ff)
+
+right_neon : Color.Rgba
+right_neon = Color.from_hex_rgb(0xff4fa3)
+
+ball_neon : Color.Rgba
+ball_neon = Color.from_hex_rgb(0xffe7a3)
+
+hint_color : Color.Rgba
+hint_color = Color.from_hex_rgb(0x6d7aa8)
+
 # A random vertical serve speed in px/second, so each serve leaves at a
 # different angle instead of the same predictable line.
 # Drawing from the model's own generator rather than an effect keeps the serve
@@ -110,8 +160,22 @@ new_round = |model| {
 		right_y: 250,
 		left_score: 0,
 		right_score: 0,
+		trail: [],
+		flash: 0,
+		flash_color: ball_neon,
 	}
 }
+
+# The trail is sampled by distance, not by frame: at 240 frames a second a
+# per-frame trail would sit entirely inside the ball, and at 30 it would be a
+# dashed line. Recording only once the ball has moved `trail_spacing` pixels
+# gives the same comet at any frame rate.
+push_trail : List(Math.Vec2), Math.Vec2 -> List(Math.Vec2)
+push_trail = |trail, pos|
+	match List.first(trail) {
+		Ok(head) if Math.distance_squared(head, pos) < trail_spacing * trail_spacing => trail
+		_ => List.take_first(List.prepend(trail, pos), trail_length)
+	}
 
 # The playback for a sound that should only be heard when `cond` is true.
 #
@@ -124,9 +188,16 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit, SoundGenerationFailed])
 init! = App.init(
-	App.default.with_title("RocRay Pong"),
+	App.default.with_title("RocRay Pong").with_size({ width: 800, height: 600 }),
 	|startup| {
 		# Generate the sound effects once; new_round carries the handles forward.
+		font = Draw.default_font!()
+		# Only scores 0..win_score can ever be shown, so the whole scoreboard is
+		# prepared here and a frame just picks the glyph it needs.
+		digits = List.map_try(
+			List.map_with_index(List.repeat({}, win_score + 1), |_unit, index| U64.to_str(index)),
+			|glyph| Text.from(glyph, font).size(64).prepare!(),
+		)?
 		seed = {
 			ball_x: 0,
 			ball_y: 0,
@@ -139,7 +210,17 @@ init! = App.init(
 			hit_sound: Audio.gen_tone!({ freq: 440, ms: 60 })?,
 			wall_sound: Audio.gen_tone!({ freq: 220, ms: 50 })?,
 			score_sound: Audio.gen_tone!({ freq: 160, ms: 200 })?,
-			font: Draw.default_font!(),
+			font: font,
+			trail: [],
+			flash: 0,
+			flash_color: ball_neon,
+			hint: Text.from("W / S  move    SPACE  serve    ESC  quit", font).size(18).prepare!()?,
+			digits: digits,
+			win_lines: [
+				Text.from("LEFT PLAYER WINS", font).size(44).prepare!()?,
+				Text.from("RIGHT PLAYER WINS", font).size(44).prepare!()?,
+			],
+			restart_line: Text.from("PRESS SPACE FOR A NEW MATCH", font).size(20).prepare!()?,
 			# Entropy is asked for once, here. From this point randomness is
 			# model state that `update!` advances without an effect, so this
 			# whole run reproduces from the one number below. Replace it with
@@ -189,24 +270,116 @@ update! = |model, program_input| {
 	}
 }
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	frame.clear!(Color.black)
-	draw_field!(frame, model)
+	frame.clear!(field_bottom)
+	# The field is a vertical gradient rather than flat black, so the paddles
+	# and the glow below have something to sit on.
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: screen_h, color_top: field_top, color_bottom: field_bottom })
+	draw_center_line!(frame)
+	draw_scores!(frame, model)
+
+	# One additive scope covers everything that glows, so overlapping light
+	# reads as brighter rather than as stacked grey.
+	frame.with_blend_mode!(
+		Draw.additive_blend,
+		|glow_frame| {
+			draw_trail!(glow_frame, model)
+			draw_glow!(glow_frame, model)
+			# Alpha zero when the flash has decayed, so no branch is needed here.
+			wash = Color.with_alpha(model.flash_color, F32.to_u8_wrap(model.flash * 70))
+			glow_frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(wash) })
+			Ok({})
+		},
+	)?
+
+	draw_bodies!(frame, model)
 
 	if game_over(model) {
-		winner = if model.left_score >= win_score "LEFT PLAYER WINS" else "RIGHT PLAYER WINS"
-		frame.text!({ pos: { x: screen_w * 0.5, y: 260 }, text: winner, size: 40, spacing: Draw.default_spacing, color: Color.yellow, font: model.font, align: Draw.align_center })
-		frame.text!({ pos: { x: screen_w * 0.5, y: 315 }, text: "Press SPACE to restart", size: 24, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_center })
-	}
+		# Dim the frozen field so the banner reads, then name the winner.
+		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(field_bottom, 190)) })
+		winner_index = if model.left_score >= win_score 0 else 1
+		winner_color = if winner_index == 0 left_neon else right_neon
+		match List.get(model.win_lines, winner_index) {
+			Ok(line) => line.draw!(frame, { pos: { x: screen_w * 0.5, y: 268 }, color: winner_color, align: Text.align_center })
+			Err(_) => {}
+		}
+		model.restart_line.draw!(frame, { pos: { x: screen_w * 0.5, y: 326 }, color: hint_color, align: Text.align_center })
+	} else {}
+
+	model.hint.draw!(frame, { pos: { x: screen_w * 0.5, y: screen_h - 26 }, color: hint_color, align: Text.align_center })
 
 	Ok({})
+}
+
+# Soft dashes rather than one hard rule: the halfway point is marked without
+# competing with the paddles for attention.
+draw_center_line! : Draw.Frame => {}
+draw_center_line! = |frame| {
+	for dash in List.map_with_index(List.repeat({}, 15), |_unit, index| 12 + U64.to_f32(index) * 40) {
+		y = dash
+		frame.rounded_rectangle!({ x: screen_w * 0.5 - 2, y: y, width: 4, height: 22, radius: 1, segments: 4, style: Draw.filled(Color.from_hex_rgb(0x2a3566)) })
+	}
+}
+
+# Newest position first, so the index is the age of the sample: alpha and radius
+# both fall off with it and the ball drags a short comet tail.
+draw_trail! : Draw.Frame, Model => {}
+draw_trail! = |frame, model| {
+	for sample in List.map_with_index(model.trail, |pos, index| { pos, fade: 1 - U64.to_f32(index) / U64.to_f32(trail_length) }) {
+		frame.circle!({
+			center: sample.pos,
+			radius: ball_r * (0.35 + 0.55 * sample.fade),
+			style: Draw.filled(Color.with_alpha(ball_neon, F32.to_u8_wrap(sample.fade * sample.fade * 130))),
+		})
+	}
+}
+
+# Radial gradients fading to fully transparent, drawn additively, are the
+# cheapest convincing bloom available without a shader.
+draw_glow! : Draw.Frame, Model => {}
+draw_glow! = |frame, model| {
+	halo! = |center, color, radius| frame.circle_gradient!({
+		center: center,
+		radius: radius,
+		color_inner: Color.with_alpha(color, 100),
+		color_outer: Color.with_alpha(color, 0),
+	})
+
+	halo!(Math.center(left_paddle(model.left_y)), left_neon, 68)
+	halo!(Math.center(right_paddle(model.right_y)), right_neon, 68)
+	halo!({ x: model.ball_x, y: model.ball_y }, ball_neon, 46)
+}
+
+# The solid bodies, drawn over their own glow so the edges stay crisp.
+draw_bodies! : Draw.Frame, Model => {}
+draw_bodies! = |frame, model| {
+	left_rect = left_paddle(model.left_y)
+	right_rect = right_paddle(model.right_y)
+
+	frame.rounded_rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, radius: 0.5, segments: 8, style: Draw.filled(left_neon) })
+	frame.rounded_rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, radius: 0.5, segments: 8, style: Draw.filled(right_neon) })
+	frame.circle!({ center: { x: model.ball_x, y: model.ball_y }, radius: ball_r, style: Draw.filled(ball_neon) })
+	frame.circle!({ center: { x: model.ball_x - 2, y: model.ball_y - 3 }, radius: ball_r * 0.42, style: Draw.filled(Color.white) })
+}
+
+# Scores are prepared glyphs picked by value, so a frame lays out no text.
+draw_scores! : Draw.Frame, Model => {}
+draw_scores! = |frame, model| {
+	draw_score! = |score, x, color|
+		match List.get(model.digits, score) {
+			Ok(glyph) => glyph.draw!(frame, { pos: { x: x, y: 30 }, color: color, align: Text.align_top_center })
+			Err(_) => {}
+		}
+
+	draw_score!(model.left_score, screen_w * 0.32, Color.with_alpha(left_neon, 220))
+	draw_score!(model.right_score, screen_w * 0.68, Color.with_alpha(right_neon, 220))
 }
 
 # --- Win screen: freeze the field and wait for SPACE to start a new game ---
 step_game_over : Model, Devices.Snapshot -> Stepped
 step_game_over = |model, input| {
-	model: if input.key_pressed(KeySpace) new_round(model) else model,
+	model: if input.key_pressed(KeySpace) new_round(model) else { ..model, flash: F32.max(model.flash - 0.02, 0) },
 	sounds: [],
 }
 
@@ -270,6 +443,28 @@ step_playing = |model, input, dt| {
 	left_score = if out_right model.left_score + 1 else model.left_score
 	right_score = if out_left model.right_score + 1 else model.right_score
 
+	scored = out_left or out_right
+	paddled = hit_left or hit_right
+
+	# Presentation, derived from the events this frame already computed: a point
+	# flashes hard in the scorer's colour, a hit gently, and otherwise the
+	# previous flash decays.
+	flash =
+		if scored 1.0
+		else if paddled 0.45
+		else if hit_top or hit_bottom 0.22
+		else F32.max(model.flash - dt * 2.4, 0)
+	flash_color =
+		if out_right left_neon
+		else if out_left right_neon
+		else if hit_left left_neon
+		else if hit_right right_neon
+		else model.flash_color
+
+	# A serve teleports the ball, so the trail is cleared rather than stretched
+	# across the field as one long streak.
+	trail = if scored [] else push_trail(model.trail, { x: final_ball_x, y: final_ball_y })
+
 	next = {
 		..model,
 		ball_x: final_ball_x,
@@ -281,6 +476,9 @@ step_playing = |model, input, dt| {
 		left_score: left_score,
 		right_score: right_score,
 		rng: serve.state,
+		trail: trail,
+		flash: flash,
+		flash_color: flash_color,
 	}
 
 	# Sound effects for this frame's events, in the order they are played.
@@ -294,21 +492,6 @@ step_playing = |model, input, dt| {
 			),
 		),
 	}
-}
-
-# Draw the static scene (center line, paddles, ball, scores) for a model.
-draw_field! : Draw.Frame, Model => {}
-draw_field! = |frame, model| {
-	left_rect = left_paddle(model.left_y)
-	right_rect = right_paddle(model.right_y)
-	ball_shape = ball_circle(model.ball_x, model.ball_y)
-
-	frame.line!({ start: { x: screen_w * 0.5, y: 0 }, end: { x: screen_w * 0.5, y: screen_h }, stroke: Draw.stroke(Color.dark_gray, 2) })
-	frame.rectangle!({ x: left_rect.x, y: left_rect.y, width: left_rect.width, height: left_rect.height, style: Draw.filled(Color.white) })
-	frame.rectangle!({ x: right_rect.x, y: right_rect.y, width: right_rect.width, height: right_rect.height, style: Draw.filled(Color.white) })
-	frame.circle!({ center: ball_shape.center, radius: ball_shape.radius, style: Draw.filled(Color.ray_white) })
-	frame.text!({ pos: { x: screen_w * 0.25, y: 20 }, text: U64.to_str(model.left_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
-	frame.text!({ pos: { x: screen_w * 0.75, y: 20 }, text: U64.to_str(model.right_score), size: 40, spacing: Draw.default_spacing, color: Color.white, font: model.font, align: Draw.align_top_center })
 }
 
 ## A model with no host resources behind it, so the steppers above can be
@@ -328,6 +511,13 @@ test_model = {
 	wall_sound: Audio.Sound.stub,
 	score_sound: Audio.Sound.stub,
 	font: Draw.Font.stub,
+	trail: [],
+	flash: 0,
+	flash_color: ball_neon,
+	hint: Text.Prepared.stub,
+	digits: [],
+	win_lines: [],
+	restart_line: Text.Prepared.stub,
 	rng: Random.seed(1),
 }
 

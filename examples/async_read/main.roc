@@ -25,6 +25,9 @@ import rr.Text
 ## wall-clock time, comparable with `Time.now!` and with a `modified` the app
 ## saved earlier, which is what makes polling it a hot reload.
 ##
+## Each card's indicator turns while its task is in flight and settles into a
+## dot when its answer lands. ESC quits.
+##
 ## `Files.read_text!` copies valid UTF-8 into a `Str`, so it has a small
 ## inline limit. `Files.read_bytes!` instead returns an ordinary `List(U8)`:
 ## the host moves the worker allocation into List ARC without copying file
@@ -39,6 +42,8 @@ Model : {
 	meta : MetaState,
 	elapsed : F32,
 	title : Text.Prepared,
+	subtitle : Text.Prepared,
+	hint : Text.Prepared,
 }
 
 ReadState : [Waiting, Loaded(U64), Failed(Str)]
@@ -67,7 +72,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
-	App.default.with_title("RocRay Async Read").with_frame_pacing(Capped(120)),
+	App.default.with_title("RocRay Async Read").with_size({ width: 880, height: 480 }).with_frame_pacing(Capped(120)),
 	|_host| {
 		font = Draw.default_font!()
 		Ok({
@@ -75,7 +80,9 @@ init! = App.init(
 			large: Waiting,
 			meta: Waiting,
 			elapsed: 0,
-			title: Text.from("Reading while the frame keeps moving", font).size(22).prepare!()?,
+			title: Text.from("Reading while the frame keeps moving", font).size(26).prepare!()?,
+			subtitle: Text.from("three tasks in flight, three Msg variants, one frame loop that never stalls", font).size(15).prepare!()?,
+			hint: Text.from("ESC  quit", font).size(14).spacing(2.0).prepare!()?,
 		})
 	},
 )
@@ -178,14 +185,134 @@ expect
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x121420))
-	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
-	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("read_text README.md: ", describe_string(model.small)), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
-	frame.text_at!({ pos: { x: 40, y: 120 }, text: Str.concat("read_bytes generated ABI: ", describe_bytes(model.large)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
-	frame.text_at!({ pos: { x: 40, y: 148 }, text: Str.concat("metadata README.md: ", describe_meta(model.meta)), size: 20, color: Color.from_hex_rgb(0xd08770) })
-	frame.circle!({ center: { x: 400 + 220 * F32.cos(model.elapsed * 2), y: 300 + 120 * F32.sin(model.elapsed * 2) }, radius: 26, style: Draw.filled(Color.from_hex_rgb(0x5e81ac)) })
+	size = draw_backdrop!(frame)
+	model.title.draw!(frame, { pos: { x: 44, y: 40 }, color: ink, align: Text.align_top_left })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 76 }, color: muted, align: Text.align_top_left })
+
+	card_width = size.width - 88
+	draw_row!(frame, { y: 128, width: card_width, accent: accent_read, label: "Files.read_text!", path: small_path, phase: string_phase(model.small), value: describe_string(model.small), elapsed: model.elapsed })
+	draw_row!(frame, { y: 216, width: card_width, accent: accent_bytes, label: "Files.read_bytes!", path: large_path, phase: bytes_phase(model.large), value: describe_bytes(model.large), elapsed: model.elapsed })
+	draw_row!(frame, { y: 304, width: card_width, accent: accent_meta, label: "Files.metadata!", path: small_path, phase: meta_phase(model.meta), value: describe_meta(model.meta), elapsed: model.elapsed })
+
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
 	Ok({})
 }
+
+## Background: one vertical gradient and one soft glow, so the cards sit on
+## something with depth rather than on flat grey.
+draw_backdrop! : Draw.Frame => Draw.FrameSize
+draw_backdrop! = |frame| {
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
+	size
+}
+
+## One status card: accent bar, indicator, effect name, path, and answer.
+draw_row! : Draw.Frame, { y : F32, width : F32, accent : Color.Rgba, label : Str, path : Str, phase : Phase, value : Str, elapsed : F32 } => {}
+draw_row! = |frame, row| {
+	frame.rounded_rectangle!({ x: 44, y: row.y, width: row.width, height: 72, radius: 0.18, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	frame.rounded_rectangle!({ x: 44, y: row.y + 12, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(row.accent) })
+	draw_indicator!(frame, { x: 86, y: row.y + 36 }, row.phase, row.accent, row.elapsed)
+	frame.text_at!({ pos: { x: 116, y: row.y + 14 }, text: row.label, size: 17, color: ink })
+	frame.text_at!({ pos: { x: 116 + 172, y: row.y + 16 }, text: row.path, size: 14, color: faint })
+	frame.text_at!({ pos: { x: 116, y: row.y + 42 }, text: row.value, size: 15, color: phase_color(row.phase) })
+}
+
+## In flight: a comet of fading dots, driven by wall-clock elapsed time so a
+## stalled frame loop would be obvious. Settled: a solid dot in a quiet ring.
+draw_indicator! : Draw.Frame, { x : F32, y : F32 }, Phase, Color.Rgba, F32 => {}
+draw_indicator! = |frame, center, phase, accent, elapsed|
+	match phase {
+		Pending =>
+			List.for_each!(
+				spinner_dots,
+				|dot| {
+					angle = elapsed * 3.6 - dot.lag
+					frame.circle!({
+						center: { x: center.x + 10 * F32.cos(angle), y: center.y + 10 * F32.sin(angle) },
+						radius: dot.radius,
+						style: Draw.filled(Color.with_alpha(accent, dot.alpha)),
+					})
+				},
+			)
+
+		Settled(color) => {
+			frame.circle!({ center: center, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
+			frame.circle!({ center: center, radius: 5, style: Draw.filled(color) })
+		}
+	}
+
+## Where a card has got to, as the renderer needs it: waiting, or finished
+## well or badly. Derived from the state rather than stored beside it.
+Phase : [Pending, Settled(Color.Rgba)]
+
+string_phase : ReadState -> Phase
+string_phase = |state|
+	match state {
+		Waiting => Pending
+		Loaded(_) => Settled(accent_read)
+		Failed(_) => Settled(accent_bad)
+	}
+
+bytes_phase : BytesState -> Phase
+bytes_phase = |state|
+	match state {
+		Waiting => Pending
+		Held(_) => Settled(accent_bytes)
+		Failed(_) => Settled(accent_bad)
+	}
+
+meta_phase : MetaState -> Phase
+meta_phase = |state|
+	match state {
+		Waiting => Pending
+		Described(_) => Settled(accent_meta)
+		Failed(_) => Settled(accent_bad)
+	}
+
+expect string_phase(Waiting) == Pending
+expect string_phase(Failed("nope")) == Settled(accent_bad)
+expect bytes_phase(Held([1])) == Settled(accent_bytes)
+
+## Grey while the task is in flight, then the colour the phase settled on.
+phase_color : Phase -> Color.Rgba
+phase_color = |phase|
+	match phase {
+		Pending => muted
+		Settled(color) => color
+	}
+
+spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })
+spinner_dots = [
+	{ lag: 0, radius: 3.4, alpha: 255 },
+	{ lag: 0.34, radius: 2.9, alpha: 190 },
+	{ lag: 0.68, radius: 2.4, alpha: 135 },
+	{ lag: 1.02, radius: 1.9, alpha: 85 },
+	{ lag: 1.36, radius: 1.5, alpha: 45 },
+]
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x151b2a)
+
+card = Color.from_hex_rgb(0x171d2b)
+
+card_edge = Color.from_hex_rgb(0x2a3348)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+faint = Color.from_hex_rgb(0x5c6880)
+
+accent_read = Color.from_hex_rgb(0x7fd6a2)
+
+accent_bytes = Color.from_hex_rgb(0x6fb3e0)
+
+accent_meta = Color.from_hex_rgb(0xf2a97c)
+
+accent_bad = Color.from_hex_rgb(0xef7d7d)
 
 describe_string : ReadState -> Str
 describe_string = |state|

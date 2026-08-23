@@ -132,7 +132,7 @@ init! = App.init(
 			slider: 0,
 			focused: Bool.False,
 			typed: 0,
-			title: Text.from("Scripted input", font).size(24).prepare!()?,
+			title: Text.from("Scripted Input", font).size(24).prepare!()?,
 			increment_label: Text.from("Increment", font).size(18).prepare!()?,
 			toggle_label: Text.from("Toggle", font).size(18).prepare!()?,
 			counter_labels: prepare_counter_labels!(font, 0, [])?,
@@ -299,8 +299,10 @@ render! = |model, frame| {
 	over_increment = inside(model.mouse, increment_button)
 	over_toggle = inside(model.mouse, toggle_button)
 
-	frame.clear!(Color.from_hex_rgb(0x121420))
-	model.title.draw!(frame, { pos: { x: 60, y: 60 }, color: Color.white, align: Text.align_top_left })
+	frame.clear!(theme.bg)
+	model.title.draw!(frame, { pos: { x: 40, y: 22 }, color: theme.ink, align: Text.align_top_left })
+	frame.text_at!({ pos: { x: 40, y: 54 }, text: "A scripted pointer and keyboard on the real input path", size: 13, color: theme.muted })
+	frame.rounded_rectangle!({ x: widget_panel.x, y: widget_panel.y, width: widget_panel.width, height: widget_panel.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 
 	draw_button!(frame, increment_button, over_increment, model.held and over_increment, model.increment_label)
 	draw_button!(frame, toggle_button, over_toggle, model.toggled, model.toggle_label)
@@ -309,7 +311,7 @@ render! = |model, frame| {
 
 	match List.get(model.field_labels, model.typed) {
 		Ok(label) => {
-			label.draw!(frame, { pos: field_text_origin, color: Color.white, align: Text.align_top_left })
+			label.draw!(frame, { pos: field_text_origin, color: theme.ink, align: Text.align_top_left })
 			if model.focused and caret_visible(model.frame) {
 				draw_caret!(frame, field_text_origin.x + label.bounds().width + 3)
 			}
@@ -319,9 +321,11 @@ render! = |model, frame| {
 	}
 
 	match List.get(model.counter_labels, U64.to_u64(model.clicks)) {
-		Ok(label) => label.draw!(frame, { pos: { x: 60, y: 100 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
+		Ok(label) => label.draw!(frame, { pos: { x: 40, y: 92 }, color: Color.from_hex_rgb(0x3ddc97), align: Text.align_top_left })
 		Err(_) => {}
 	}
+
+	frame.text_at!({ pos: { x: 40, y: 364 }, text: "Recording captures/ui_demo.gif", size: 11, color: theme.faint })
 
 	Ok({})
 }
@@ -400,15 +404,34 @@ inside_slider : { x : F32, y : F32 } -> Bool
 inside_slider = |point|
 	inside(point, { x: slider_track.x, y: slider_track.y - 14, width: slider_track.width, height: slider_track.height + 28 })
 
+## The shared surface palette for the demo's chrome. The accent is what the
+## recording is meant to show moving: hover, press, focus and fill all use it.
+theme : { bg : Color.Rgba, panel : Color.Rgba, control : Color.Rgba, hover : Color.Rgba, edge : Color.Rgba, ink : Color.Rgba, muted : Color.Rgba, faint : Color.Rgba, accent : Color.Rgba }
+theme = {
+	bg: Color.from_hex_rgb(0x0e1420),
+	panel: Color.from_hex_rgb(0x161f31),
+	control: Color.from_hex_rgb(0x223052),
+	hover: Color.from_hex_rgb(0x33507f),
+	edge: Color.from_hex_rgb(0x2b3856),
+	ink: Color.from_hex_rgb(0xe6ecf5),
+	muted: Color.from_hex_rgb(0x8fa0bd),
+	faint: Color.from_hex_rgb(0x5c6b87),
+	accent: Color.from_hex_rgb(0x88c0d0),
+}
+
+## The card every widget sits on, so the recording reads as one surface.
+widget_panel : { x : F32, y : F32, width : F32, height : F32 }
+widget_panel = { x: 40, y: 126, width: 410, height: 232 }
+
 draw_button! : Draw.Frame, { x : F32, y : F32, width : F32, height : F32 }, Bool, Bool, Text.Prepared => {}
 draw_button! = |frame, box, hovered, active, label| {
 	fill =
 		if active {
-			Color.from_hex_rgb(0x88c0d0)
+			theme.accent
 		} else if hovered {
-			Color.from_hex_rgb(0x4c6a92)
+			theme.hover
 		} else {
-			Color.from_hex_rgb(0x2b3550)
+			theme.control
 		}
 
 	frame.rounded_rectangle!({
@@ -418,13 +441,13 @@ draw_button! = |frame, box, hovered, active, label| {
 		height: box.height,
 		radius: 10,
 		segments: 8,
-		style: Draw.filled_and_outlined(fill, Color.with_alpha(Color.white, 60), 2),
+		style: Draw.filled_and_outlined(fill, if active or hovered theme.accent else theme.edge, 2),
 	})
 	label.draw!(
 		frame,
 		{
 			pos: { x: box.x + box.width / 2, y: box.y + box.height / 2 - 10 },
-			color: Color.white,
+			color: if active Color.from_hex_rgb(0x08131f) else theme.ink,
 			align: Text.align_top_center,
 		},
 	)
@@ -438,7 +461,7 @@ field_text_origin = { x: text_field.x + 14, y: text_field.y + 12 }
 ## one is anywhere else, so the recording shows the keyboard's whereabouts.
 draw_field_box! : Draw.Frame, Bool => {}
 draw_field_box! = |frame, focused| {
-	outline = if focused Color.from_hex_rgb(0x88c0d0) else Color.with_alpha(Color.white, 60)
+	outline = if focused theme.accent else theme.edge
 	frame.rounded_rectangle!({
 		x: text_field.x,
 		y: text_field.y,
@@ -446,7 +469,7 @@ draw_field_box! = |frame, focused| {
 		height: text_field.height,
 		radius: 8,
 		segments: 8,
-		style: Draw.filled_and_outlined(Color.from_hex_rgb(0x1b2136), outline, 2),
+		style: Draw.filled_and_outlined(Color.from_hex_rgb(0x111a2b), outline, 2),
 	})
 }
 
@@ -458,7 +481,7 @@ draw_caret! = |frame, x|
 		y: field_text_origin.y,
 		width: 2,
 		height: 22,
-		style: Draw.filled(Color.white),
+		style: Draw.filled(theme.accent),
 	})
 
 draw_slider! : Draw.Frame, F32 => {}
@@ -470,7 +493,7 @@ draw_slider! = |frame, value| {
 		height: slider_track.height,
 		radius: 6,
 		segments: 6,
-		style: Draw.filled(Color.from_hex_rgb(0x2b3550)),
+		style: Draw.filled(theme.control),
 	})
 	frame.rounded_rectangle!({
 		x: slider_track.x,
@@ -479,12 +502,12 @@ draw_slider! = |frame, value| {
 		height: slider_track.height,
 		radius: 6,
 		segments: 6,
-		style: Draw.filled(Color.from_hex_rgb(0x88c0d0)),
+		style: Draw.filled(theme.accent),
 	})
 	frame.circle!({
 		center: { x: slider_track.x + slider_track.width * value, y: slider_track.y + slider_track.height / 2 },
 		radius: 11,
-		style: Draw.filled_and_outlined(Color.white, Color.from_hex_rgb(0x2b3550), 2),
+		style: Draw.filled_and_outlined(Color.white, theme.edge, 2),
 	})
 }
 

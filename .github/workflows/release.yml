@@ -55,7 +55,7 @@ jobs:
 
       - name: Validate release request
         id: validate
-        uses: roc-lang/release-package/actions/validate-release@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/validate-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
@@ -99,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Check version bump
-        uses: roc-lang/release-package/actions/run-bump-check@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/run-bump-check@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ steps.validate.outputs.release_version }}
           dry_run: ${{ github.event_name != 'workflow_dispatch' }}
@@ -149,10 +149,22 @@ jobs:
 
       - name: Prepare release bundle metadata
         id: bundles
-        uses: roc-lang/release-package/actions/prepare-bundles@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/prepare-bundles@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           bundle_glob: dist/*.tar.zst
           bundle_manifest_path: .release/bundle-manifest.json
+
+      # Dry-run cover for the asset the publish job attaches. A pull request
+      # never reaches `publish-release`, so without this a broken example
+      # header or a new example directory would only be found mid-release.
+      # The URL is a placeholder and the archive is thrown away.
+      - name: Check the examples archive can be built
+        run: |
+          python3 scripts/release_helpers.py package-examples \
+            --bundle-url "https://github.com/${{ github.repository }}/releases/download/0.0.0/dry-run.tar.zst" \
+            --tag dry-run \
+            --output .release/examples-dry-run.zip
+          rm -f .release/examples-dry-run.zip
 
       - name: Upload release bundles
         uses: actions/upload-artifact@v4
@@ -206,7 +218,7 @@ jobs:
           path: .release/test-bundles
 
       - name: Test release bundle
-        uses: roc-lang/release-package/actions/test-bundle@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/test-bundle@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           test_bundle_command: scripts/test_bundle_artifact.py
           bundle_path: .release/test-bundles/${{ matrix.artifact_file }}
@@ -242,17 +254,29 @@ jobs:
           path: .release
 
       - name: Make release notes
-        uses: roc-lang/release-package/actions/make-release-notes@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/make-release-notes@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           docs_url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ needs.build.outputs.docs_version }}/
           release_notes_command: python3 scripts/release_helpers.py make-release-notes --release-version "$RELEASE_VERSION" --release-bundles "$RELEASE_BUNDLES_PATH" --output-file "$RELEASE_NOTES_PATH" --docs-url "$DOCS_URL"
           github_token: ${{ github.token }}
 
+      # The examples are packaged with their headers pointing at the default
+      # bundle URL this release is about to publish, so an unzipped copy builds
+      # without any local platform checkout.
+      - name: Package examples archive
+        run: |
+          python3 scripts/release_helpers.py package-examples \
+            --release-version "${{ needs.build.outputs.release_version }}" \
+            --release-bundles .release/release-bundles.json \
+            --repo "${{ github.repository }}" \
+            --output ".release/examples-${{ needs.build.outputs.release_version }}.zip"
+
       - name: Publish release
-        uses: roc-lang/release-package/actions/publish-release@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/publish-release@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
+          additional_assets: .release/examples-${{ needs.build.outputs.release_version }}.zip
           github_token: ${{ github.token }}
 
   publish-docs:
@@ -298,7 +322,7 @@ jobs:
             --examples-dir examples
 
       - name: Snapshot existing docs
-        uses: roc-lang/release-package/actions/docs-snapshot@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/docs-snapshot@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           docs_root: www
 
@@ -310,19 +334,19 @@ jobs:
         run: python3 scripts/build_docs.py --version "${{ needs.build.outputs.docs_version }}"
 
       - name: Update docs index
-        uses: roc-lang/release-package/actions/docs-index@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/docs-index@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
 
       - name: Validate docs
-        uses: roc-lang/release-package/actions/docs-validate@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/docs-validate@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           docs_root: www
           docs_version: ${{ needs.build.outputs.docs_version }}
 
       - name: Open release follow-up PR
-        uses: roc-lang/release-package/actions/create-followup-pr@d2560ead9f724bfaabfbc8134b8895e120171064
+        uses: roc-lang/release-package/actions/create-followup-pr@af2f0cd8662874b825ff3917f4286e793ba18c55
         with:
           release_version: ${{ needs.build.outputs.release_version }}
           paths: www examples

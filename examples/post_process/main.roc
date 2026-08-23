@@ -15,6 +15,10 @@ import rr.Math
 ## inside and the window's size outside. The shader's uniform location is
 ## resolved once in `init!` and written in `render!`, immediately before the
 ## draw it applies to.
+##
+## The offscreen scene is three additively blended lobes orbiting a common
+## centre; the shader then warps and tints the whole thing as one image. ESC
+## quits.
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,
@@ -31,7 +35,7 @@ program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
 init! = App.init(
-	App.default.with_title("RocRay Offscreen Post-processing"),
+	App.default.with_title("RocRay Offscreen Post-processing").with_size({ width: 800, height: 600 }),
 	|_host| {
 
 		## This source tree example deliberately opts into CWD-relative assets.
@@ -53,7 +57,11 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input|
-	Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
+	if program_input.devices.key_pressed(KeyEscape) {
+		Err(Exit(0))
+	} else {
+		Ok({ ..model, seconds: U64.to_f32(program_input.time.simulation_nanos) / 1_000_000_000 })
+	}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
@@ -63,13 +71,18 @@ render! = |model, frame| {
 			# `size!` follows the target, not the window: inside this scope it
 			# is the 800x600 framebuffer these coordinates are relative to.
 			offscreen = target_frame.size!()
-			target_frame.clear!(Color.from_hex_rgb(0x10162f))
-			target_frame.text_centered!({ pos: { x: offscreen.width * 0.5, y: 120 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
+			center = { x: offscreen.width * 0.5, y: offscreen.height * 0.62 }
+			target_frame.rectangle_gradient_v!({ x: 0, y: 0, width: offscreen.width, height: offscreen.height, color_top: Color.from_hex_rgb(0x1a1140), color_bottom: Color.from_hex_rgb(0x060716) })
+			target_frame.text_centered!({ pos: { x: center.x, y: 96 }, text: "offscreen + shader", size: 48, color: Color.ray_white })
+			target_frame.text_centered!({ pos: { x: center.x, y: 152 }, text: "render texture -> additive blend -> fragment shader   (ESC quits)", size: 18, color: Color.from_hex_rgb(0x9d8fd0) })
 			target_frame.with_blend_mode!(
 				Draw.additive_blend,
 				|blend_frame| {
-					blend_frame.circle!({ center: { x: 330, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.blue, 180)) })
-					blend_frame.circle!({ center: { x: 470, y: 330 }, radius: 120, style: Draw.filled(Color.with_alpha(Color.red, 180)) })
+					# Three lobes on a shared orbit. Additive blending is what
+					# turns their overlaps into the bright core in the middle.
+					lobe!(blend_frame, center, model.seconds, 0, Color.from_hex_rgb(0x2f6bff))
+					lobe!(blend_frame, center, model.seconds, 2.0943952, Color.from_hex_rgb(0xff3366))
+					lobe!(blend_frame, center, model.seconds, 4.1887903, Color.from_hex_rgb(0x18d69b))
 					Ok({})
 				},
 			)?
@@ -90,6 +103,7 @@ render! = |model, frame| {
 	}
 
 	frame.clear!(Color.black)
+
 	frame.with_shader!(
 		model.shader,
 		|shader_frame| {
@@ -102,4 +116,13 @@ render! = |model, frame| {
 	)?
 
 	Ok({})
+}
+
+## One orbiting lobe, drawn as a soft radial gradient so the additive overlaps
+## fall off smoothly instead of banding at a hard circle edge.
+lobe! : Draw.Frame, Math.Vec2, F32, F32, Color.Rgba => {}
+lobe! = |frame, center, seconds, phase, color| {
+	angle = seconds * 0.7 + phase
+	pos = { x: center.x + 110 * F32.cos(angle), y: center.y + 70 * F32.sin(angle * 1.3) }
+	frame.circle_gradient!({ center: pos, radius: 150, color_inner: Color.with_alpha(color, 170), color_outer: Color.with_alpha(color, 0) })
 }

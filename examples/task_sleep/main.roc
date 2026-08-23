@@ -10,10 +10,11 @@ import rr.Text
 ## A task that waits without stalling the frame, and printing that does not.
 ##
 ## On the first cycle `update!` spawns one task: an effectful closure that calls
-## `Task.sleep!(300)` and then answers `Woke`. The host runs it on its own
+## `Task.sleep!(1200)` and then answers `Woke`. The host runs it on its own
 ## coroutine stack; the sleep parks that stack, the frame loop keeps going, and
-## the closure's return value arrives on `Input.messages` ~18 cycles later at
-## 60 Hz. Meanwhile the circle keeps orbiting.
+## the closure's return value arrives on `Input.messages` ~72 cycles later at
+## 60 Hz. Meanwhile the comet keeps orbiting and the progress ring keeps
+## filling, which is the whole point: nothing in the frame loop is blocked.
 ##
 ## The printing is the contrast. `Stdout.line!` is a queued effect: it copies
 ## into a host-owned queue and returns, so it belongs in `update!` alongside the
@@ -25,6 +26,8 @@ Model : {
 	cycle : U64,
 	elapsed : F32,
 	title : Text.Prepared,
+	hint : Text.Prepared,
+	font : Draw.Font,
 }
 
 ## How far the app has got: waiting on the sleeper, or holding the cycle its
@@ -34,7 +37,7 @@ State : [Waiting, Woke({ arrived_on : U64 })]
 Msg : [Woke]
 
 sleep_millis : U64
-sleep_millis = 300
+sleep_millis = 1200
 
 program = { init!, update!, render! }
 
@@ -48,6 +51,8 @@ init! = App.init(
 			cycle: 0,
 			elapsed: 0,
 			title: Text.from("Sleeping on a task while the frame keeps moving", font).size(22).prepare!()?,
+			hint: Text.from("ESC quits - the app closes itself once the task answers", font).size(14).prepare!()?,
+			font,
 		})
 	},
 )
@@ -96,7 +101,7 @@ report_line : U64 -> Str
 report_line = |arrived_on|
 	"task_sleep: slept ${U64.to_str(sleep_millis)} ms, message arrived on cycle ${U64.to_str(arrived_on)}"
 
-expect report_line(18) == "task_sleep: slept 300 ms, message arrived on cycle 18"
+expect report_line(18) == "task_sleep: slept 1200 ms, message arrived on cycle 18"
 
 apply_message : State, Msg, U64 -> State
 apply_message = |state, message, cycle|
@@ -119,13 +124,62 @@ expect apply_message(Woke({ arrived_on: 18 }), Woke, 25) == Woke({ arrived_on: 1
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x121420))
+	# How much of the sleep has gone by, clamped so a slow frame cannot
+	# overshoot the ring. Purely a view value, so it is derived here.
+	progress = F32.min(model.elapsed * 1000 / U64.to_f32(sleep_millis), 1)
+	center = { x: 400.F32, y: 340.F32 }
+
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: 800, height: 600, color_top: Color.from_hex_rgb(0x1b2136), color_bottom: Color.from_hex_rgb(0x0a0c15) })
+	frame.circle_gradient!({ center, radius: 260, color_inner: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 40), color_outer: Color.with_alpha(Color.from_hex_rgb(0x5e81ac), 0) })
+
 	model.title.draw!(frame, { pos: { x: 40, y: 40 }, color: Color.white, align: Text.align_top_left })
-	frame.text_at!({ pos: { x: 40, y: 92 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
-	frame.text_at!({ pos: { x: 40, y: 120 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
-	frame.circle!({ center: { x: 400 + 220 * F32.cos(model.elapsed * 2), y: 300 + 120 * F32.sin(model.elapsed * 2) }, radius: 26, style: Draw.filled(Color.from_hex_rgb(0x5e81ac)) })
+	frame.text_at!({ pos: { x: 40, y: 78 }, text: Str.concat("cycle ", U64.to_str(model.cycle)), size: 20, color: Color.from_hex_rgb(0x88c0d0) })
+	frame.text_at!({ pos: { x: 40, y: 106 }, text: describe(model.state), size: 20, color: Color.from_hex_rgb(0xa3be8c) })
+	model.hint.draw!(frame, { pos: { x: 40, y: 552 }, color: Color.from_hex_rgb(0x6b7590), align: Text.align_top_left })
+
+	# The track, then the arc the sleeper has used up so far.
+	frame.circle!({ center, radius: 150, style: Draw.outlined(Color.with_alpha(Color.white, 35), 3) })
+	draw_arc!(frame, center, progress, 0)
+
+	# A short trail of the orbiting comet: the same orbit sampled a few
+	# frames back, fading out behind the head.
+	draw_trail!(frame, center, model.elapsed, 8)
+	frame.circle!({ center: orbit(center, model.elapsed), radius: 14, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x88c0d0), Color.white, 3) })
+
 	Ok({})
 }
+
+## Where the comet is at a given moment. One function so the head and every
+## trail sample are guaranteed to sit on the same orbit.
+orbit : { x : F32, y : F32 }, F32 -> { x : F32, y : F32 }
+orbit = |center, seconds| { x: center.x + 150 * F32.cos(seconds * 2), y: center.y + 150 * F32.sin(seconds * 2) }
+
+draw_trail! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
+draw_trail! = |frame, center, seconds, remaining|
+	if remaining == 0 {
+		{}
+	} else {
+		fade = U64.to_f32(remaining) / 8
+		frame.circle!({ center: orbit(center, seconds - U64.to_f32(remaining) * 0.03), radius: 12 * fade, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0x88c0d0), F32.to_u8_wrap(90 * fade))) })
+		draw_trail!(frame, center, seconds, remaining - 1)
+	}
+
+## The progress arc, stepped by hand out of short segments so it needs nothing
+## more than `frame.line!`.
+draw_arc! : Draw.Frame, { x : F32, y : F32 }, F32, U64 => {}
+draw_arc! = |frame, center, progress, step|
+	if U64.to_f32(step) / 90 >= progress {
+		{}
+	} else {
+		a = -1.5707964 + 6.2831855 * U64.to_f32(step) / 90
+		b = -1.5707964 + 6.2831855 * U64.to_f32(step + 1) / 90
+		frame.line!({
+			start: { x: center.x + 150 * F32.cos(a), y: center.y + 150 * F32.sin(a) },
+			end: { x: center.x + 150 * F32.cos(b), y: center.y + 150 * F32.sin(b) },
+			stroke: Draw.stroke(Color.from_hex_rgb(0xa3be8c), 5),
+		})
+		draw_arc!(frame, center, progress, step + 1)
+	}
 
 describe : State -> Str
 describe = |state|

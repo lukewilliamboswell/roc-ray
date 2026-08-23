@@ -104,8 +104,8 @@ init! = App.init(
 			last_cell: Idle,
 			mouse: { x: 0, y: 0 },
 			ui: Box.box({
-				title: Text.from("Pixel Workshop", font).size(34).prepare!()?,
-				help: Text.from("Paint with the mouse | 1-4 palette | C restores the design", font).size(17).prepare!()?,
+				title: Text.from("Pixel Workshop", font).size(26).prepare!()?,
+				help: Text.from("Drag to paint  |  1-4 pick a colour  |  C restores the design  |  ESC quits", font).size(14).prepare!()?,
 				palette: Text.from("Palette", font).size(22).prepare!()?,
 			}),
 		})
@@ -205,11 +205,36 @@ paint : Audio.Sound, F32 -> Edit
 paint = |sound, pitch|
 	Play(sound.playback().with_volume(paint_volume).with_pitch(pitch))
 
-draw_swatch! : Draw.Frame, U64, U64 => {}
-draw_swatch! = |frame, index, selected| {
-	y = 180 + U64.to_f32(index) * 70
-	frame.rounded_rectangle!({ x: 610, y, width: 118, height: 50, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), if index == selected Color.white else Color.with_alpha(Color.white, 45), if index == selected 4 else 2) })
-	frame.text_centered!({ pos: { x: 752, y: y + 25 }, text: U64.to_str(index + 1), size: 20, color: Color.light_gray })
+## The shared surface palette for the workshop's chrome. The four paint
+## colours are the artwork; everything around them stays quiet.
+theme : { bg : Color.Rgba, panel : Color.Rgba, edge : Color.Rgba, ink : Color.Rgba, muted : Color.Rgba, faint : Color.Rgba, accent : Color.Rgba }
+theme = {
+	bg: Color.from_hex_rgb(0x0e1420),
+	panel: Color.from_hex_rgb(0x161f31),
+	edge: Color.from_hex_rgb(0x25314b),
+	ink: Color.from_hex_rgb(0xe6ecf5),
+	muted: Color.from_hex_rgb(0x8fa0bd),
+	faint: Color.from_hex_rgb(0x5c6b87),
+	accent: Color.from_hex_rgb(0x4c8dff),
+}
+
+## Where one palette swatch sits, so the drawing and the hover test agree.
+swatch_bounds : U64 -> Math.Rect
+swatch_bounds = |index| Math.rect(610, 180 + U64.to_f32(index) * 70, 118, 50)
+
+draw_swatch! : Draw.Frame, U64, U64, Math.Vec2 => {}
+draw_swatch! = |frame, index, selected, mouse| {
+	bounds = swatch_bounds(index)
+	chosen = index == selected
+	hovered = bounds.contains(mouse)
+	edge = if chosen Color.white else if hovered Color.with_alpha(Color.white, 150) else theme.edge
+	# The selected swatch gets a lit ring outside it as well as a bright edge,
+	# so which colour the brush carries survives a glance.
+	if chosen {
+		frame.rounded_rectangle!({ x: bounds.x - 5, y: bounds.y - 5, width: bounds.width + 10, height: bounds.height + 10, radius: 11, segments: 8, style: Draw.outlined(theme.accent, 2) })
+	}
+	frame.rounded_rectangle!({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, radius: 8, segments: 8, style: Draw.filled_and_outlined(palette_color(index), edge, if chosen 3 else 2) })
+	frame.text_centered!({ pos: { x: 752, y: bounds.y + 25 }, text: U64.to_str(index + 1), size: 20, color: if chosen theme.ink else theme.faint })
 }
 
 ## Perform one edit. A mismatched upload is a programmer error -- the editor
@@ -262,8 +287,13 @@ render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	ui = Box.unbox(model.ui)
 
-	frame.clear!(Color.from_hex_rgb(0x0e1625))
-	ui.title.draw!(frame, { pos: { x: canvas_x, y: 24 }, color: Color.white, align: Text.align_top_left })
+	frame.clear!(theme.bg)
+	ui.title.draw!(frame, { pos: { x: canvas_x, y: 12 }, color: theme.ink, align: Text.align_top_left })
+	frame.text_at!({ pos: { x: canvas_x, y: 42 }, text: "Canvas, palette and brush sound all generated at startup", size: 13, color: theme.muted })
+
+	# A card under the canvas, so the pixel art sits on a surface instead of
+	# floating on the background.
+	frame.rounded_rectangle!({ x: canvas_bounds.x - 14, y: canvas_bounds.y - 14, width: canvas_bounds.width + 28, height: canvas_bounds.height + 28, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	frame.texture!({
 		texture: model.texture,
 		source: { x: 0, y: 0, width: model.texture.width, height: model.texture.height },
@@ -272,7 +302,7 @@ render! = |model, frame| {
 		rotation: 0,
 		tint: Color.white,
 	})
-	frame.rectangle!({ x: canvas_bounds.x - 4, y: canvas_bounds.y - 4, width: canvas_bounds.width + 8, height: canvas_bounds.height + 8, style: Draw.outlined(Color.from_hex_rgb(0x7083a8), 4) })
+	frame.rectangle!({ x: canvas_bounds.x - 2, y: canvas_bounds.y - 2, width: canvas_bounds.width + 4, height: canvas_bounds.height + 4, style: Draw.outlined(theme.edge, 2) })
 
 	match cell_at(model.mouse) {
 		Err(_) => {}
@@ -283,15 +313,20 @@ render! = |model, frame| {
 		}
 	}
 
-	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: Color.white, align: Text.align_top_left })
-	draw_swatch!(frame, 0, model.palette)
-	draw_swatch!(frame, 1, model.palette)
-	draw_swatch!(frame, 2, model.palette)
-	draw_swatch!(frame, 3, model.palette)
-	ui.help.draw!(frame, { pos: { x: canvas_x, y: 558 }, color: Color.from_hex_rgb(0x91a0bd), align: Text.align_top_left })
+	frame.rounded_rectangle!({ x: 594, y: 108, width: 150, height: 348, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	ui.palette.draw!(frame, { pos: { x: 610, y: 126 }, color: theme.ink, align: Text.align_top_left })
+	draw_swatch!(frame, 0, model.palette, model.mouse)
+	draw_swatch!(frame, 1, model.palette, model.mouse)
+	draw_swatch!(frame, 2, model.palette, model.mouse)
+	draw_swatch!(frame, 3, model.palette, model.mouse)
+	ui.help.draw!(frame, { pos: { x: canvas_x, y: 562 }, color: theme.faint, align: Text.align_top_left })
 
 	Ok({})
 }
+
+## Every swatch stays inside the palette panel, which is what makes the hover
+## test against the same rectangle honest.
+expect swatch_bounds(0).x >= 594 and swatch_bounds(3).y + swatch_bounds(3).height <= 456
 
 expect palette_from_input(0, Devices.none.with_key_pressed(Key3)) == 2
 expect palette_from_input(2, Devices.none) == 2

@@ -7,6 +7,7 @@ app [Model, program] {
 import rr.App
 import rr.Task
 import rr.Http
+import rr.Math
 import rr.Color
 import rr.Draw
 import rr.Text
@@ -46,6 +47,7 @@ Model : {
 	elapsed : F32,
 	started_waiting : F32,
 	title : Text.Prepared,
+	subtitle : Text.Prepared,
 	hint : Text.Prepared,
 }
 
@@ -85,8 +87,9 @@ init! = App.init_for_args(
 			fetch: 0,
 			elapsed: 0,
 			started_waiting: 0,
-			title: Text.from("Fetching while the frame keeps moving", font).size(24).prepare!()?,
-			hint: Text.from("R fetch again      ESC quit", font).size(15).spacing(2.0).prepare!()?,
+			title: Text.from("Fetching while the frame keeps moving", font).size(26).prepare!()?,
+			subtitle: Text.from("Http.send! parks a coroutine on the socket; the frame loop never waits for it", font).size(15).prepare!()?,
+			hint: Text.from("R  fetch again        ESC  quit", font).size(14).spacing(2.0).prepare!()?,
 		})
 	},
 )
@@ -182,46 +185,122 @@ apply = |state, message, current, waited|
 		_ => state
 	}
 
-render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
+render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x121420))
-	model.title.draw!(frame, { pos: { x: 40, y: 36 }, color: Color.white, align: Text.align_top_left })
-	model.hint.draw!(frame, { pos: { x: 40, y: 74 }, color: Color.from_hex_rgb(0x616e88), align: Text.align_top_left })
-	frame.text_at!({ pos: { x: 40, y: 108 }, text: model.url, size: 16, color: Color.from_hex_rgb(0x88c0d0) })
-	frame.text_at!({ pos: { x: 40, y: 134 }, text: headline(model.state), size: 18, color: headline_color(model.state) })
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	frame.circle_gradient!({ center: { x: size.width * 0.5, y: -40 }, radius: size.height, color_inner: Color.from_hex_rgba(0x3a5f9c33), color_outer: Color.from_hex_rgba(0x00000000) })
 
-	# The ring keeps turning for as long as the request is in flight. It is
-	# driven by wall-clock elapsed time, so a stalled frame would be obvious.
-	angle = model.elapsed * 2.4
-	frame.circle!({
-		center: { x: 800 + 44 * F32.cos(angle), y: 96 + 44 * F32.sin(angle) },
-		radius: 11,
-		style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
-	})
-	frame.circle!({ center: { x: 800, y: 96 }, radius: 44, style: Draw.outlined(Color.from_hex_rgb(0x2e3440), 1) })
+	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink, align: Text.align_top_left })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted, align: Text.align_top_left })
 
-	match model.state {
-		Loaded({ lines, status: _, bytes: _, waited_ms: _ }) => draw_lines!(frame, lines)
-		Waiting => {}
-		Failed(_) => {}
-	}
+	width = size.width - 88
+	accent = state_color(model.state)
+
+	# The request card: what was asked for, and where the answer has got to.
+	frame.rounded_rectangle!({ x: 44, y: 112, width: width, height: 88, radius: 0.14, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	frame.rounded_rectangle!({ x: 44, y: 124, width: 4, height: 64, radius: 1, segments: 4, style: Draw.filled(accent) })
+	frame.rounded_rectangle!({ x: 68, y: 130, width: 46, height: 22, radius: 0.5, segments: 8, style: Draw.filled(Color.with_alpha(accent_url, 45)) })
+	frame.text_at!({ pos: { x: 80, y: 133 }, text: "GET", size: 14, color: accent_url })
+	frame.text_at!({ pos: { x: 128, y: 132 }, text: model.url, size: 16, color: ink })
+	frame.text_at!({ pos: { x: 68, y: 164 }, text: headline(model.state), size: 15, color: accent })
+	draw_indicator!(frame, { x: 44 + width - 44, y: 156 }, model.state, model.elapsed)
+
+	# The body preview, in a panel of its own so a long line is clipped by the
+	# panel rather than running off the window.
+	panel_top = 224
+	panel_height = size.height - panel_top - 64
+	frame.rounded_rectangle!({ x: 44, y: panel_top, width: width, height: panel_height, radius: 0.05, segments: 8, style: Draw.filled_and_outlined(panel, card_edge, 1) })
+	frame.text_at!({ pos: { x: 68, y: panel_top + 14 }, text: "first ${U64.to_str(preview_lines)} lines of the body", size: 13, color: faint })
+	frame.line!({ start: { x: 44, y: panel_top + 40 }, end: { x: 44 + width, y: panel_top + 40 }, stroke: Stroke({ color: card_edge, thickness: 1 }) })
+
+	frame.with_scissor!(
+		Math.rect(44, panel_top + 40, width, panel_height - 40),
+		|clipped| {
+			draw_body!(clipped, model.state, panel_top + 54)
+			Ok({})
+		},
+	)?
+
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
 	Ok({})
 }
 
-## Draw the body preview, one line per row.
-draw_lines! : Draw.Frame, List(Str) => {}
-draw_lines! = |frame, lines| {
+## In flight: a comet of fading dots turning on wall-clock elapsed time, so a
+## stalled frame loop would show. Settled: a dot resting in a quiet ring.
+draw_indicator! : Draw.Frame, { x : F32, y : F32 }, State, F32 => {}
+draw_indicator! = |frame, center, state, elapsed| {
+	color = state_color(state)
+	frame.circle!({ center: center, radius: 20, style: Draw.outlined(Color.with_alpha(color, 55), 1.5) })
+	match state {
+		Waiting =>
+			List.for_each!(
+				spinner_dots,
+				|dot| {
+					angle = elapsed * 3.6 - dot.lag
+					frame.circle!({
+						center: { x: center.x + 20 * F32.cos(angle), y: center.y + 20 * F32.sin(angle) },
+						radius: dot.radius,
+						style: Draw.filled(Color.with_alpha(color, dot.alpha)),
+					})
+				},
+			)
+
+		_ => frame.circle!({ center: center, radius: 6, style: Draw.filled(color) })
+	}
+}
+
+## What the panel holds, clipped to it: the preview, or why there is none.
+draw_body! : Draw.Frame, State, F32 => {}
+draw_body! = |frame, state, top|
+	match state {
+		Loaded({ lines, status: _, bytes: _, waited_ms: _ }) => draw_lines!(frame, lines, top)
+		Waiting => frame.text_at!({ pos: { x: 68, y: top + 6 }, text: "waiting for the server...", size: 15, color: muted })
+		Failed(_) => frame.text_at!({ pos: { x: 68, y: top + 6 }, text: "nothing to show", size: 15, color: faint })
+	}
+
+## Draw the body preview, one line per row, banded so long rows stay readable.
+draw_lines! : Draw.Frame, List(Str), F32 => {}
+draw_lines! = |frame, lines, top| {
 	var $row = 0
 	for line in lines {
-		frame.text_at!({
-			pos: { x: 40, y: 184 + 22 * U64.to_f32($row) },
-			text: line,
-			size: 15,
-			color: Color.from_hex_rgb(0xd8dee9),
-		})
+		y = top + 22 * U64.to_f32($row)
+		if $row % 2 == 1 {
+			frame.rectangle!({ x: 44, y: y - 3, width: 4000, height: 22, style: Draw.filled(Color.from_hex_rgba(0xffffff06)) })
+		}
+		frame.text_at!({ pos: { x: 68, y: y }, text: line, size: 15, color: body_ink })
 		$row = $row + 1
 	}
 }
+
+spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })
+spinner_dots = [
+	{ lag: 0, radius: 4.0, alpha: 255 },
+	{ lag: 0.3, radius: 3.4, alpha: 190 },
+	{ lag: 0.6, radius: 2.8, alpha: 135 },
+	{ lag: 0.9, radius: 2.2, alpha: 85 },
+	{ lag: 1.2, radius: 1.7, alpha: 45 },
+]
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x151b2a)
+
+card = Color.from_hex_rgb(0x171d2b)
+
+panel = Color.from_hex_rgb(0x131926)
+
+card_edge = Color.from_hex_rgb(0x2a3348)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+body_ink = Color.from_hex_rgb(0xb9c4d8)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+faint = Color.from_hex_rgb(0x5c6880)
+
+accent_url = Color.from_hex_rgb(0x6fb3e0)
 
 ## One line describing where the request has got to.
 headline : State -> Str
@@ -231,18 +310,20 @@ headline = |state|
 		Failed(reason) => Str.concat("failed: ", reason)
 		Loaded({ status, bytes, waited_ms, lines: _ }) =>
 			Str.join_with(
-				[U16.to_str(status), U64.to_str(bytes), "bytes in", U64.to_str(waited_ms), "ms"],
-				" ",
+				["HTTP ${U16.to_str(status)}", "${U64.to_str(bytes)} bytes", "${U64.to_str(waited_ms)} ms"],
+				"    ",
 			)
 		}
 
 ## Green when a response arrived, red when it did not, amber while waiting.
-headline_color : State -> Color.Rgba
-headline_color = |state|
+## One colour drives the card's accent bar, its status line and its indicator,
+## so the whole card reads as one state.
+state_color : State -> Color.Rgba
+state_color = |state|
 	match state {
-		Waiting => Color.from_hex_rgb(0xebcb8b)
-		Loaded(_) => Color.from_hex_rgb(0xa3be8c)
-		Failed(_) => Color.from_hex_rgb(0xbf616a)
+		Waiting => Color.from_hex_rgb(0xf2c777)
+		Loaded(_) => Color.from_hex_rgb(0x7fd6a2)
+		Failed(_) => Color.from_hex_rgb(0xef7d7d)
 	}
 
 expect chosen_url(["--url", "http://example.test/"], Err(NotFound)) == "http://example.test/"

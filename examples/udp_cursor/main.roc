@@ -15,6 +15,9 @@ import rr.Udp
 ## frame does. Receiving waits, so it lives in a task, and `update!` starts the
 ## next one each time the previous answers.
 ##
+## The pointer labelled `you` is the one being sent; `peer` is the one that
+## arrived. With one instance they sit on top of each other.
+##
 ## Run two of them:
 ##
 ##     ./main --udp-port 7001 --udp-peer 7002
@@ -39,7 +42,13 @@ Model : {
 	peer_pointer : Try({ x : F32, y : F32 }, [NothingYet]),
 	received : U64,
 	dropped : U64,
+
+	## This instance's own pointer, kept so `render!` can draw the position
+	## that was sent beside the one that arrived.
+	pointer : { x : F32, y : F32 },
 	title : Text.Prepared,
+	subtitle : Text.Prepared,
+	hint : Text.Prepared,
 }
 
 Msg : [Arrived(List(Udp.Datagram)), ReceiveFailed(Udp.ReceiveError)]
@@ -67,7 +76,10 @@ init! = App.init_for_args(
 			peer_pointer: Err(NothingYet),
 			received: 0,
 			dropped: 0,
-			title: Text.from("UDP cursor: this pointer is sent, the other is received", font).size(20).prepare!()?,
+			pointer: { x: 0, y: 0 },
+			title: Text.from("Two pointers, one socket", font).size(26).prepare!()?,
+			subtitle: Text.from("sending is an ordinary line of update!; receiving waits, so it lives in a task", font).size(15).prepare!()?,
+			hint: Text.from("--udp-port / --udp-peer  pair two instances        ESC  quit", font).size(14).spacing(2.0).prepare!()?,
 		})
 	},
 )
@@ -103,7 +115,7 @@ update! = |model, input| {
 	if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {
-		Ok({ ..next, listening: !answered })
+		Ok({ ..next, listening: !answered, pointer })
 	}
 }
 
@@ -199,36 +211,104 @@ expect flag_port([], "--udp-port", 5) == 5
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x14161f))
-	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
-	local = Udp.Socket.local_address(model.socket)
-	frame.text_at!({
-		pos: { x: 32, y: 64 },
-		text: "bound 127.0.0.1:${U16.to_str(local.port)}  peer 127.0.0.1:${U16.to_str(model.peer.port)}",
-		size: 18,
-		color: Color.from_hex_rgb(0x88c0d0),
-	})
-	frame.text_at!({
-		pos: { x: 32, y: 90 },
-		text: "${U64.to_str(model.received)} received, ${U64.to_str(model.dropped)} not sent",
-		size: 18,
-		color: Color.from_hex_rgb(0xa3be8c),
-	})
-	match model.peer_pointer {
-		Err(NothingYet) =>
-			frame.text_at!({
-				pos: { x: 32, y: 116 },
-				text: "waiting for the peer...",
-				size: 18,
-				color: Color.from_hex_rgb(0x6c7086),
-			})
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+	draw_grid!(frame, size)
 
-		Ok(pointer) =>
-			frame.circle!({
-				center: pointer,
-				radius: 18,
-				style: Draw.filled(Color.from_hex_rgba(0xebcb8b80)),
-			})
-		}
+	# The peer's pointer first, so this instance's own crosshair stays on top
+	# of it when the two overlap -- which is exactly what a lone run looks like.
+	match model.peer_pointer {
+		Err(NothingYet) => draw_searching!(frame, size, model.received)
+		Ok(pointer) => draw_pointer!(frame, pointer, accent_peer, "peer", 22)
+	}
+	draw_pointer!(frame, model.pointer, accent_local, "you", 13)
+
+	model.title.draw!(frame, { pos: { x: 44, y: 36 }, color: ink, align: Text.align_top_left })
+	model.subtitle.draw!(frame, { pos: { x: 44, y: 72 }, color: muted, align: Text.align_top_left })
+
+	local = Udp.Socket.local_address(model.socket)
+	frame.rounded_rectangle!({ x: 44, y: 112, width: 384, height: 96, radius: 0.12, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	frame.text_at!({ pos: { x: 64, y: 126 }, text: "bound", size: 13, color: faint })
+	frame.text_at!({ pos: { x: 64, y: 144 }, text: "127.0.0.1:${U16.to_str(local.port)}", size: 17, color: accent_local })
+	frame.text_at!({ pos: { x: 232, y: 126 }, text: "peer", size: 13, color: faint })
+	frame.text_at!({ pos: { x: 232, y: 144 }, text: "127.0.0.1:${U16.to_str(model.peer.port)}", size: 17, color: accent_peer })
+	frame.text_at!({ pos: { x: 64, y: 178 }, text: "${U64.to_str(model.received)} received", size: 14, color: muted })
+	frame.text_at!({ pos: { x: 232, y: 178 }, text: "${U64.to_str(model.dropped)} not sent", size: 14, color: if model.dropped == 0 muted else accent_bad })
+
+	model.hint.draw!(frame, { pos: { x: 44, y: size.height - 40 }, color: faint, align: Text.align_top_left })
 	Ok({})
 }
+
+## A faint square grid, so a pointer moving over it reads as motion rather than
+## as a circle floating in the dark.
+draw_grid! : Draw.Frame, Draw.FrameSize => {}
+draw_grid! = |frame, size|
+	List.for_each!(
+		List.map_with_index(List.repeat({}, 32), |_unit, index| U64.to_f32(index) * 40),
+		|offset| {
+			frame.line!({ start: { x: offset, y: 0 }, end: { x: offset, y: size.height }, stroke: Stroke({ color: grid, thickness: 1 }) })
+			frame.line!({ start: { x: 0, y: offset }, end: { x: size.width, y: offset }, stroke: Stroke({ color: grid, thickness: 1 }) })
+		},
+	)
+
+## One pointer: a soft glow, a ring, and a crosshair with its name.
+draw_pointer! : Draw.Frame, { x : F32, y : F32 }, Color.Rgba, Str, F32 => {}
+draw_pointer! = |frame, at, color, label, radius| {
+	frame.circle_gradient!({ center: at, radius: radius * 2.6, color_inner: Color.with_alpha(color, 40), color_outer: Color.with_alpha(color, 0) })
+	frame.circle!({ center: at, radius: radius, style: Draw.outlined(color, 2) })
+	frame.line!({ start: { x: at.x - radius - 8, y: at.y }, end: { x: at.x - radius + 2, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
+	frame.line!({ start: { x: at.x + radius - 2, y: at.y }, end: { x: at.x + radius + 8, y: at.y }, stroke: Stroke({ color: color, thickness: 1.5 }) })
+	frame.text_at!({ pos: { x: at.x + radius + 12, y: at.y - 8 }, text: label, size: 14, color: color })
+}
+
+## Nothing has arrived yet: a comet turning on the received count, so the
+## waiting state is visibly alive rather than a line of grey text.
+draw_searching! : Draw.Frame, Draw.FrameSize, U64 => {}
+draw_searching! = |frame, size, received| {
+	center = { x: size.width * 0.5, y: size.height * 0.55 }
+	turn = U64.to_f32(received % 360) * 0.12
+	frame.circle!({ center: center, radius: 26, style: Draw.outlined(Color.with_alpha(accent_peer, 50), 1.5) })
+	List.for_each!(
+		spinner_dots,
+		|dot| {
+			angle = turn - dot.lag
+			frame.circle!({
+				center: { x: center.x + 26 * F32.cos(angle), y: center.y + 26 * F32.sin(angle) },
+				radius: dot.radius,
+				style: Draw.filled(Color.with_alpha(accent_peer, dot.alpha)),
+			})
+		},
+	)
+	frame.text_at!({ pos: { x: center.x - 78, y: center.y + 44 }, text: "waiting for the peer...", size: 15, color: muted })
+}
+
+spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })
+spinner_dots = [
+	{ lag: 0, radius: 4.0, alpha: 255 },
+	{ lag: 0.3, radius: 3.4, alpha: 190 },
+	{ lag: 0.6, radius: 2.8, alpha: 135 },
+	{ lag: 0.9, radius: 2.2, alpha: 85 },
+	{ lag: 1.2, radius: 1.7, alpha: 45 },
+]
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x151b2a)
+
+grid = Color.from_hex_rgba(0xffffff14)
+
+card = Color.from_hex_rgb(0x171d2b)
+
+card_edge = Color.from_hex_rgb(0x2a3348)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+faint = Color.from_hex_rgb(0x5c6880)
+
+accent_local = Color.from_hex_rgb(0x6fb3e0)
+
+accent_peer = Color.from_hex_rgb(0xf2c777)
+
+accent_bad = Color.from_hex_rgb(0xef7d7d)

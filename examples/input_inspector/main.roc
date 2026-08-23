@@ -176,17 +176,17 @@ expect eyedropper_label(Ok(Color.rgba(1, 2, 3, 255))) == "Under the pointer: rgb
 expect eyedropper_label(Err(RegionOutOfBounds)) == "Under the pointer: off screen"
 expect eyedropper_label(Err(Unavailable)) == "Under the pointer: no frame to read yet"
 
-## The swatch colour to draw for one reading. A failed read shows the neutral
-## grey every other inactive indicator here uses.
+## The swatch colour to draw for one reading. A failed read shows the same
+## unlit fill every other inactive indicator here uses.
 eyedropper_swatch : Picked -> Color.Rgba
 eyedropper_swatch = |picked|
 	match picked {
 		Ok(color) => color
-		Err(_) => Color.light_gray
+		Err(_) => theme.idle
 	}
 
 expect eyedropper_swatch(Ok(Color.rgba(9, 9, 9, 255))) == Color.rgba(9, 9, 9, 255)
-expect eyedropper_swatch(Err(Busy)) == Color.light_gray
+expect eyedropper_swatch(Err(Busy)) == theme.idle
 
 ## Fold one clipboard read's outcome into the text field.
 ##
@@ -216,9 +216,56 @@ expect apply_paste(apply_paste({ typed: "", clipboard_status: "idle" }, Ok("firs
 expect apply_paste({ typed: "kept", clipboard_status: "idle" }, Err(Unavailable))
 	== { typed: "kept", clipboard_status: "clipboard has no text" }
 
+## The shared surface palette. Every panel, label and indicator in the
+## inspector reads from this one record, so the whole window keeps one theme.
+theme : { bg : Color.Rgba, panel : Color.Rgba, edge : Color.Rgba, ink : Color.Rgba, muted : Color.Rgba, idle : Color.Rgba, idle_ink : Color.Rgba, active : Color.Rgba, active_ink : Color.Rgba }
+theme = {
+	bg: Color.from_hex_rgb(0x0e1420),
+	panel: Color.from_hex_rgb(0x161f31),
+	edge: Color.from_hex_rgb(0x25314b),
+	ink: Color.from_hex_rgb(0xe6ecf5),
+	muted: Color.from_hex_rgb(0x8fa0bd),
+	idle: Color.from_hex_rgb(0x1e2942),
+	idle_ink: Color.from_hex_rgb(0x7183a3),
+	active: Color.from_hex_rgb(0x3ddc97),
+	active_ink: Color.from_hex_rgb(0x08131f),
+}
+
+## A titled surface for one group of indicators.
+panel! : Draw.Frame, Draw.Font, { x : F32, y : F32, width : F32, height : F32, label : Str } => {}
+panel! = |frame, font, cfg| {
+	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
+	frame.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
+}
+
+## One indicator chip, lit while the snapshot says its input is active.
+chip! : Draw.Frame, Draw.Font, { x : F32, y : F32, width : F32, label : Str, on : Bool } => {}
+chip! = |frame, font, cfg| {
+	fill = if cfg.on theme.active else theme.idle
+	edge = if cfg.on theme.active else theme.edge
+	ink = if cfg.on theme.active_ink else theme.idle_ink
+	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: 30, radius: 8, segments: 6, style: Draw.filled_and_outlined(fill, edge, 1) })
+	frame.text!({ pos: { x: cfg.x + cfg.width / 2, y: cfg.y + 15 }, text: cfg.label, size: 17, spacing: Draw.default_spacing, color: ink, font: font, align: Draw.align_center })
+}
+
+## A small square light next to a label, for the signals that are on or off
+## rather than named keys.
+light! : Draw.Frame, Draw.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
+light! = |frame, font, cfg| {
+	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
+	fill = if cfg.on theme.active else theme.idle
+	frame.rounded_rectangle!({ x: cfg.x + 130, y: cfg.y, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(fill, if cfg.on theme.active else theme.edge, 1) })
+}
+
+## A line of body text inside a panel.
+line! : Draw.Frame, Draw.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
+line! = |frame, font, cfg|
+	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font, align: Draw.align_top_left })
+
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
 	input = model.input
+	font = model.font
 
 	w_down = input.key_down(KeyW)
 	a_down = input.key_down(KeyA)
@@ -250,82 +297,46 @@ render! = |model, frame| {
 	wheel_moved = wheel_delta.x != 0 or wheel_delta.y != 0
 	stick_moved = F32.abs(left_stick.x) > 0.1 or F32.abs(left_stick.y) > 0.1
 
-	frame.clear!(Color.ray_white)
-	frame.text!({ pos: { x: 10, y: 50 }, text: title, size: 20, spacing: Draw.default_spacing, color: Color.dark_gray, font: model.font, align: Draw.align_top_left })
+	frame.clear!(theme.bg)
+	frame.text!({ pos: { x: 30, y: 26 }, text: title, size: 26, spacing: Draw.default_spacing, color: theme.ink, font: font, align: Draw.align_top_left })
+	frame.text!({ pos: { x: 30, y: 58 }, text: "Every field of one Devices.Snapshot, live", size: 15, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
 
-	w_color = if w_down Color.green else Color.light_gray
-	a_color = if a_down Color.green else Color.light_gray
-	s_color = if s_down Color.green else Color.light_gray
-	d_color = if d_down Color.green else Color.light_gray
+	panel!(frame, font, { x: 20, y: 84, width: 780, height: 258, label: "KEYS AND BUTTONS" })
+	chip!(frame, font, { x: 70, y: 126, width: 30, label: "W", on: w_down })
+	chip!(frame, font, { x: 30, y: 161, width: 30, label: "A", on: a_down })
+	chip!(frame, font, { x: 70, y: 161, width: 30, label: "S", on: s_down })
+	chip!(frame, font, { x: 110, y: 161, width: 30, label: "D", on: d_down })
+	chip!(frame, font, { x: 250, y: 126, width: 30, label: "^", on: up_down })
+	chip!(frame, font, { x: 210, y: 161, width: 30, label: "<", on: left_down })
+	chip!(frame, font, { x: 250, y: 161, width: 30, label: "v", on: down_down })
+	chip!(frame, font, { x: 290, y: 161, width: 30, label: ">", on: right_down })
+	chip!(frame, font, { x: 30, y: 246, width: 50, label: "1", on: one_down })
+	chip!(frame, font, { x: 90, y: 246, width: 80, label: "Shift", on: shift_down })
+	chip!(frame, font, { x: 180, y: 246, width: 70, label: "Ctrl", on: ctrl_down })
+	chip!(frame, font, { x: 260, y: 246, width: 80, label: "Esc", on: escape_pressed })
+	chip!(frame, font, { x: 350, y: 246, width: 90, label: "Space", on: space_released })
+	chip!(frame, font, { x: 30, y: 296, width: 130, label: "Mouse down", on: mouse_left_pressed })
+	chip!(frame, font, { x: 170, y: 296, width: 110, label: "Mouse up", on: mouse_left_released })
 
-	frame.rectangle!({ x: 70, y: 100, width: 30, height: 30, style: Draw.filled(w_color) })
-	frame.text!({ pos: { x: 85, y: 115 }, text: "W", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 30, y: 135, width: 30, height: 30, style: Draw.filled(a_color) })
-	frame.text!({ pos: { x: 45, y: 150 }, text: "A", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 70, y: 135, width: 30, height: 30, style: Draw.filled(s_color) })
-	frame.text!({ pos: { x: 85, y: 150 }, text: "S", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 110, y: 135, width: 30, height: 30, style: Draw.filled(d_color) })
-	frame.text!({ pos: { x: 125, y: 150 }, text: "D", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
+	panel!(frame, font, { x: 20, y: 356, width: 780, height: 108, label: "SIGNALS" })
+	light!(frame, font, { x: 30, y: 388, label: "Typed Unicode", on: text_entered })
+	light!(frame, font, { x: 220, y: 388, label: "Mouse delta", on: mouse_moved })
+	light!(frame, font, { x: 410, y: 388, label: "Wheel x/y", on: wheel_moved })
+	light!(frame, font, { x: 30, y: 424, label: "Gamepad 1", on: gamepad_connected })
+	light!(frame, font, { x: 220, y: 424, label: "Left stick", on: stick_moved })
+	light!(frame, font, { x: 410, y: 424, label: "Face down", on: gamepad_action_pressed })
+	line!(frame, font, { x: 600, y: 391, text: "Mouse ${F32.to_str(mouse_position.x)}, ${F32.to_str(mouse_position.y)}", color: theme.muted })
 
-	up_color = if up_down Color.green else Color.light_gray
-	left_color = if left_down Color.green else Color.light_gray
-	down_color = if down_down Color.green else Color.light_gray
-	right_color = if right_down Color.green else Color.light_gray
+	panel!(frame, font, { x: 20, y: 478, width: 780, height: 184, label: "HOST EFFECTS" })
+	line!(frame, font, { x: 30, y: 510, text: cursor_help_visibility, color: theme.muted })
+	line!(frame, font, { x: 250, y: 510, text: cursor_help_locking, color: theme.muted })
+	line!(frame, font, { x: 30, y: 536, text: clipboard_help, color: theme.muted })
+	line!(frame, font, { x: 30, y: 560, text: window_help, color: theme.muted })
+	line!(frame, font, { x: 30, y: 586, text: Str.concat("Buffer: ", model.typed), color: theme.ink })
+	line!(frame, font, { x: 30, y: 610, text: model.clipboard_status, color: theme.muted })
+	frame.rounded_rectangle!({ x: 30, y: 632, width: 22, height: 22, radius: 6, segments: 6, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), theme.edge, 1) })
+	line!(frame, font, { x: 62, y: 634, text: eyedropper_label(model.picked), color: theme.muted })
 
-	frame.rectangle!({ x: 250, y: 100, width: 30, height: 30, style: Draw.filled(up_color) })
-	frame.text!({ pos: { x: 265, y: 115 }, text: "^", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 210, y: 135, width: 30, height: 30, style: Draw.filled(left_color) })
-	frame.text!({ pos: { x: 225, y: 150 }, text: "<", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 250, y: 135, width: 30, height: 30, style: Draw.filled(down_color) })
-	frame.text!({ pos: { x: 265, y: 150 }, text: "v", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 290, y: 135, width: 30, height: 30, style: Draw.filled(right_color) })
-	frame.text!({ pos: { x: 305, y: 150 }, text: ">", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-
-	one_color = if one_down Color.green else Color.light_gray
-	shift_color = if shift_down Color.green else Color.light_gray
-	ctrl_color = if ctrl_down Color.green else Color.light_gray
-	escape_color = if escape_pressed Color.green else Color.light_gray
-	space_color = if space_released Color.green else Color.light_gray
-	mouse_press_color = if mouse_left_pressed Color.green else Color.light_gray
-	mouse_release_color = if mouse_left_released Color.green else Color.light_gray
-
-	frame.rectangle!({ x: 30, y: 220, width: 50, height: 30, style: Draw.filled(one_color) })
-	frame.text!({ pos: { x: 55, y: 235 }, text: "1", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 90, y: 220, width: 80, height: 30, style: Draw.filled(shift_color) })
-	frame.text!({ pos: { x: 130, y: 235 }, text: "Shift", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 180, y: 220, width: 70, height: 30, style: Draw.filled(ctrl_color) })
-	frame.text!({ pos: { x: 215, y: 235 }, text: "Ctrl", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 260, y: 220, width: 80, height: 30, style: Draw.filled(escape_color) })
-	frame.text!({ pos: { x: 300, y: 235 }, text: "Esc", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 350, y: 220, width: 90, height: 30, style: Draw.filled(space_color) })
-	frame.text!({ pos: { x: 395, y: 235 }, text: "Space", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 30, y: 270, width: 130, height: 30, style: Draw.filled(mouse_press_color) })
-	frame.text!({ pos: { x: 95, y: 285 }, text: "Mouse down", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-	frame.rectangle!({ x: 170, y: 270, width: 110, height: 30, style: Draw.filled(mouse_release_color) })
-	frame.text!({ pos: { x: 225, y: 285 }, text: "Mouse up", size: 20, spacing: Draw.default_spacing, color: Color.black, font: model.font, align: Draw.align_center })
-
-	frame.text_at!({ pos: { x: 30, y: 330 }, text: "Typed Unicode", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 175, y: 328, width: 24, height: 24, style: Draw.filled(if text_entered Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 220, y: 330 }, text: "Mouse delta", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 345, y: 328, width: 24, height: 24, style: Draw.filled(if mouse_moved Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 390, y: 330 }, text: "Wheel x/y", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 505, y: 328, width: 24, height: 24, style: Draw.filled(if wheel_moved Color.green else Color.light_gray) })
-
-	frame.text_at!({ pos: { x: 30, y: 370 }, text: "Gamepad 1", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 135, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_connected Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 180, y: 370 }, text: "Left stick", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 285, y: 368, width: 24, height: 24, style: Draw.filled(if stick_moved Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 330, y: 370 }, text: "Face down", size: 18, color: Color.dark_gray })
-	frame.rectangle!({ x: 440, y: 368, width: 24, height: 24, style: Draw.filled(if gamepad_action_pressed Color.green else Color.light_gray) })
-	frame.text_at!({ pos: { x: 30, y: 410 }, text: cursor_help_visibility, size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 238, y: 410 }, text: cursor_help_locking, size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 450 }, text: Str.concat("Mouse ", Str.concat(F32.to_str(mouse_position.x), Str.concat(", ", F32.to_str(mouse_position.y)))), size: 18, color: Color.gray })
-	frame.text_at!({ pos: { x: 30, y: 486 }, text: clipboard_help, size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 512 }, text: window_help, size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 542 }, text: Str.concat("Buffer: ", model.typed), size: 18, color: Color.dark_gray })
-	frame.text_at!({ pos: { x: 30, y: 568 }, text: model.clipboard_status, size: 18, color: Color.gray })
-	frame.text_at!({ pos: { x: 30, y: 594 }, text: "Hold left mouse for crosshair | Q exits | Esc is a normal key", size: 18, color: Color.gray })
-	frame.rectangle!({ x: 30, y: 620, width: 24, height: 24, style: Draw.filled_and_outlined(eyedropper_swatch(model.picked), Color.dark_gray, 1) })
-	frame.text_at!({ pos: { x: 66, y: 622 }, text: eyedropper_label(model.picked), size: 18, color: Color.gray })
+	frame.text!({ pos: { x: 30, y: 676 }, text: "Q exits  |  Esc is a normal key  |  hold left mouse for a crosshair", size: 14, spacing: Draw.default_spacing, color: Color.from_hex_rgb(0x5c6b87), font: font, align: Draw.align_top_left })
 	Ok({})
 }

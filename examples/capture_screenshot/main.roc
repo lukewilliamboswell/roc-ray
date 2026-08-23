@@ -30,6 +30,7 @@ import rr.Text
 ## headless CI sweep still runs it.
 Model : {
 	title : Text.Prepared,
+	subtitle : Text.Prepared,
 	help : Text.Prepared,
 
 	## Every outcome is prepared once at startup rather than re-laid-out each
@@ -64,19 +65,20 @@ init! : App.Init(Model, [ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("RocRay Capture: Screenshot")
-		.with_size({ width: 640, height: 360 })
+		.with_size({ width: 720, height: 420 })
 		.with_output_dir("shots"),
 	|_startup|
 		{
 			font = Draw.default_font!()
 			shot_path = "scene-${Time.now!().to_file_stamp()}.png"
 			Ok({
-				title: Text.from("Screenshot demo", font).size(28).prepare!()?,
-				help: Text.from("S = save, E = try to escape the sandbox, ESC = quit", font).size(16).prepare!()?,
+				title: Text.from("A picture of this frame", font).size(26).prepare!()?,
+				subtitle: Text.from("encoded and written off the frame thread, reported back as a message", font).size(14).prepare!()?,
+				help: Text.from("S  save        E  try to escape the sandbox        ESC  quit", font).size(13).spacing(2.0).prepare!()?,
 				idle: Text.from("no capture yet", font).size(16).prepare!()?,
 				saved: Text.from("saved shots/${shot_path}", font).size(16).prepare!()?,
 				save_failed: Text.from("could not write shots/${shot_path}", font).size(16).prepare!()?,
-				refused: Text.from("refused ../escaped.png (PathEscapesOutputDir)", font).size(16).prepare!()?,
+				refused: Text.from("refused ../escaped.png -- PathEscapesOutputDir", font).size(16).prepare!()?,
 				outcome: NoCapture,
 				shot_path: shot_path,
 			})
@@ -154,22 +156,77 @@ expect apply_messages(NoCapture, [SavedScreenshotFinished(Ok({})), EscapingScree
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
 render! = |model, frame| {
-	frame.clear!(Color.from_hex_rgb(0x121420))
-	model.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
-	model.help.draw!(frame, { pos: { x: 32, y: 64 }, color: Color.from_hex_rgb(0x81a1c1), align: Text.align_top_left })
-	result = match model.outcome {
+	size = frame.size!()
+	frame.rectangle_gradient_v!({ x: 0, y: 0, width: size.width, height: size.height, color_top: bg_top, color_bottom: bg_bottom })
+
+	# Something worth photographing: a still motif, so two runs of the example
+	# differ only in the filename rather than in the picture.
+	center = { x: size.width - 140, y: 190 }
+	frame.circle_gradient!({ center: center, radius: 120, color_inner: Color.from_hex_rgba(0x5e81ac55), color_outer: Color.from_hex_rgba(0x5e81ac00) })
+	frame.circle!({ center: center, radius: 62, style: Draw.filled(Color.from_hex_rgb(0x4f7cc0)) })
+	frame.circle!({ center: center, radius: 79, style: Draw.outlined(Color.with_alpha(accent, 110), 2) })
+	frame.circle!({ center: center, radius: 94, style: Draw.outlined(Color.with_alpha(accent, 45), 1) })
+	frame.circle!({ center: { x: center.x + 56, y: center.y - 56 }, radius: 7, style: Draw.filled(accent) })
+
+	model.title.draw!(frame, { pos: { x: 36, y: 34 }, color: ink, align: Text.align_top_left })
+	model.subtitle.draw!(frame, { pos: { x: 36, y: 68 }, color: muted, align: Text.align_top_left })
+
+	# The outcome card. Its accent is the whole report: green for a file on
+	# disk, amber for the sandbox refusing a path, red for a write that failed.
+	color = outcome_color(model.outcome)
+	frame.rounded_rectangle!({ x: 36, y: 236, width: 404, height: 72, radius: 0.16, segments: 8, style: Draw.filled_and_outlined(card, card_edge, 1) })
+	frame.rounded_rectangle!({ x: 36, y: 248, width: 4, height: 48, radius: 1, segments: 4, style: Draw.filled(color) })
+	frame.circle!({ center: { x: 78, y: 272 }, radius: 11, style: Draw.outlined(Color.with_alpha(color, 70), 1.5) })
+	frame.circle!({ center: { x: 78, y: 272 }, radius: 5, style: Draw.filled(color) })
+	frame.text_at!({ pos: { x: 108, y: 250 }, text: outcome_label(model.outcome), size: 13, color: faint })
+	outcome_text(model).draw!(frame, { pos: { x: 108, y: 270 }, color: color, align: Text.align_top_left })
+
+	model.help.draw!(frame, { pos: { x: 36, y: size.height - 38 }, color: faint, align: Text.align_top_left })
+	Ok({})
+}
+
+## The prepared line for the outcome, all four laid out once at startup.
+outcome_text : Model -> Text.Prepared
+outcome_text = |model|
+	match model.outcome {
 		NoCapture => model.idle
 		Saved => model.saved
 		SaveFailed => model.save_failed
 		Refused => model.refused
 	}
-	result.draw!(frame, { pos: { x: 32, y: 300 }, color: Color.from_hex_rgb(0xa3be8c), align: Text.align_top_left })
 
-	frame.circle!({
-		center: { x: 320, y: 190 },
-		radius: 70,
-		style: Draw.filled(Color.from_hex_rgb(0x5e81ac)),
-	})
+outcome_label : Outcome -> Str
+outcome_label = |outcome|
+	match outcome {
+		NoCapture => "WAITING FOR A TASK"
+		Saved => "Capture.screenshot!"
+		SaveFailed => "Capture.screenshot!"
+		Refused => "OUTPUT SANDBOX"
+	}
 
-	Ok({})
-}
+outcome_color : Outcome -> Color.Rgba
+outcome_color = |outcome|
+	match outcome {
+		NoCapture => muted
+		Saved => Color.from_hex_rgb(0x7fd6a2)
+		SaveFailed => Color.from_hex_rgb(0xef7d7d)
+		Refused => Color.from_hex_rgb(0xf2c777)
+	}
+
+expect outcome_color(Saved) != outcome_color(Refused)
+
+bg_top = Color.from_hex_rgb(0x0b0e17)
+
+bg_bottom = Color.from_hex_rgb(0x151b2a)
+
+card = Color.from_hex_rgb(0x171d2b)
+
+card_edge = Color.from_hex_rgb(0x2a3348)
+
+ink = Color.from_hex_rgb(0xe8ecf5)
+
+muted = Color.from_hex_rgb(0x8a97b0)
+
+faint = Color.from_hex_rgb(0x5c6880)
+
+accent = Color.from_hex_rgb(0x9ec7f5)

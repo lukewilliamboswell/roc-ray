@@ -442,8 +442,9 @@ const during_update = PhaseSet.initMany(&.{ .startup, .update, .task });
 ///
 /// A loader that opens a directory or reads a file is `during_wait` instead,
 /// however small the file: reaching the filesystem from `update!` is what
-/// invariant 4 forbids. Every such loader has a `*_from_bytes!` sibling in
-/// this set, so a load a task started can still be finished in `update!`.
+/// invariant 4 forbids. Where a resource can be built without one, the
+/// `*_from_bytes!` spelling stays in this set, so a load a task started can
+/// still be finished in `update!`.
 const during_load = during_update;
 
 /// Handing the host deferred work: `Task.spawn!`, and `Task.spawn_with!`
@@ -5746,8 +5747,9 @@ fn exportedReadFileRaw(path_arg: abi.RocStr) callconv(.c) HostReadFileRawResult 
 /// file's bytes in hand.
 fn readTilemapFileWaiting(_: ?*anyopaque, allocator: std.mem.Allocator, path: []const u8) tmx_loader.LoadError![]u8 {
     var err: u8 = READ_ERR_FAILED;
-    return readFileWaiting(allocator, path, tmx_loader.max_file_bytes, &err) orelse
+    const bytes = readFileWaiting(allocator, path, tmx_loader.max_file_bytes, &err) orelse
         return if (err == READ_ERR_NOT_FOUND) error.NotFound else error.ReadFailed;
+    return bytes;
 }
 
 /// `Tilemap.load_tmx!`: read a Tiled map and parse it into flat records.
@@ -6673,7 +6675,7 @@ fn hostedAudioGenSound(args: abi.AudioHostGen_soundArgs) callconv(.c) abi.AudioH
 /// with fails here rather than inside a decoder that would not recognise the
 /// bytes. Module music -- `.xm` and `.mod` -- streams but does not decode into
 /// a `Sound`, so it is a music-only spelling.
-fn audioFileTypeFromPath(path: []const u8, comptime module_music: bool) ?[*:0]const u8 {
+fn audioFileTypeFromPath(path: []const u8, module_music: bool) ?[*:0]const u8 {
     const extension = std.fs.path.extension(path);
     if (std.ascii.eqlIgnoreCase(extension, ".wav")) return ".wav";
     if (std.ascii.eqlIgnoreCase(extension, ".ogg")) return ".ogg";

@@ -322,8 +322,9 @@ doc comment in step with it.
 already holds -- `Assets.texture_from_bytes!`, `Draw.Shader.from_source!`,
 `Audio.gen_sound!`. A loader that opens a directory or reads a file is
 `during_wait`, however small the file: reaching the filesystem from `update!`
-is exactly what invariant 4 forbids. Give such an effect a `*_from_bytes!`
-sibling so an app can still finish a load in `update!` from what a task read.
+is exactly what invariant 4 forbids. Where the resource can be built without
+touching the filesystem, give the effect a `*_from_bytes!` sibling in
+`during_load` so an app can still finish in `update!` a load a task started.
 
 An effect in `during_wait` does its I/O through `waitingIo()` rather than
 `mainThreadIo()`, and wraps the call in a `WaitScope` so the phase is restored

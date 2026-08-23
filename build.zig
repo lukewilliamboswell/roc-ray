@@ -389,6 +389,18 @@ pub fn build(b: *std.Build) void {
         const run_graphical_smoke = b.addRunArtifact(graphical_smoke);
         const graphical_smoke_step = b.step("graphical-smoke", "Run pixel-level rendering smoke tests (requires a display)");
         graphical_smoke_step.dependOn(&run_graphical_smoke.step);
+
+        // Windows CI has no GL 3.3 driver, so it substitutes Mesa's llvmpipe
+        // `opengl32.dll`. Windows only picks a DLL up from the executable's own
+        // directory, and the run step above runs straight out of the build
+        // cache, so installing the executable gives CI a stable directory to
+        // drop the replacement next to.
+        const install_graphical_smoke = b.addInstallArtifact(graphical_smoke, .{});
+        const install_graphical_smoke_step = b.step(
+            "graphical-smoke-exe",
+            "Build the graphical smoke test into zig-out/bin without running it",
+        );
+        install_graphical_smoke_step.dependOn(&install_graphical_smoke.step);
     }
 
     if (run_roc_tests) {

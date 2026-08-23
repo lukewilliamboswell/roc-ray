@@ -5,8 +5,18 @@ on:
 
 jobs:
   # Pixel-level rendering and capture checks. They need a real GL context, so
-  # they run under a virtual display -- without this the target never runs
-  # anywhere, which is how it sat unrun for so long.
+  # each runner has to be given one -- without this the target never runs
+  # anywhere, which is how it sat unrun for so long. It runs on all three
+  # targets because the backends differ: GLX/Mesa, CGL on macOS, WGL on Windows.
+  #
+  # Linux: Xvfb provides the display and mesa's software rasteriser provides the
+  # GL context, since the runners have no GPU.
+  # macOS: the runner already has a window session and a real GL driver, so the
+  # build runs directly.
+  # Windows: the runners only expose Microsoft's OpenGL 1.1, which cannot give
+  # raylib the GL 3.3 context it asks for, so Mesa's llvmpipe `opengl32.dll` is
+  # dropped next to the installed executable and picked up ahead of the system
+  # one.
   #
   # Deliberately outside the build matrix. This is the only thing here that
   # links the system libc directly (`-lc`), and the vendored raylib references
@@ -14,8 +24,20 @@ jobs:
   # platform and the examples are unaffected: they link through the generated
   # libc stub instead.
   graphical-smoke:
-    name: Graphical smoke tests
-    runs-on: ubuntu-24.04
+    name: Graphical smoke tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2022
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,14 +50,43 @@ jobs:
       # Xvfb provides the display; the X11 dev packages are what raylib links
       # against, and mesa's software rasteriser is what gives xvfb a GL context.
       - name: Install X11 and GL dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
             libxfixes-dev libxi-dev libxinerama-dev libxrandr-dev \
             libgl1-mesa-dev libglx-mesa0 mesa-utils
 
-      - name: Run graphical smoke tests
+      - name: Run graphical smoke tests (Xvfb)
+        if: runner.os == 'Linux'
         run: xvfb-run -a zig build graphical-smoke
+
+      - name: Run graphical smoke tests
+        if: runner.os == 'macOS'
+        run: zig build graphical-smoke
+
+      # Pinned so a new mesa-dist-win release cannot change what CI renders.
+      # Windows resolves a DLL from the executable's own directory before the
+      # system one, so the three x64 DLLs that make up the WGL front end are
+      # enough to shadow Microsoft's `opengl32.dll`.
+      - name: Install Mesa software OpenGL
+        if: runner.os == 'Windows'
+        env:
+          MESA_VERSION: 24.3.4
+        run: |
+          zig build graphical-smoke-exe
+          curl -fsSL -o mesa.7z \
+            "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_VERSION}/mesa3d-${MESA_VERSION}-release-msvc.7z"
+          7z e -y mesa.7z -o"zig-out/bin" x64/opengl32.dll x64/libgallium_wgl.dll x64/libglapi.dll
+          test -f zig-out/bin/opengl32.dll
+
+      - name: Run graphical smoke tests
+        if: runner.os == 'Windows'
+        # llvmpipe is the CPU rasteriser; the default would try the d3d12
+        # driver, which the runner's virtual GPU cannot service.
+        env:
+          GALLIUM_DRIVER: llvmpipe
+        run: ./zig-out/bin/graphical-smoke.exe
 
   build-and-test:
     name: Build and Test (${{ matrix.os }})

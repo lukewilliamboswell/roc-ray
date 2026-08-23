@@ -28,10 +28,21 @@
 ## to one unloads the native texture automatically, so there is no `unload` to
 ## remember.
 ##
-## Every effect in this module changes host state: each is legal in `init!`,
+## The two effects that read the disk -- `Store.open!` and `load_texture!` --
+## wait: each is legal in `init!`, where it blocks startup, and in tasks, where
+## it parks the task; both are refused in `update!` and `render!`. Everything
+## else here builds a texture from bytes the app already holds --
+## `texture_from_bytes!`, `generate_color_texture!`,
+## `generate_checked_texture!`, `update_texture!` -- and is legal in `init!`,
 ## `update!`, and tasks, and refused in `render!`, where a decode or an upload
-## would land in the middle of drawing a frame. Loading per frame is a cost
-## rather than an error -- pay it once at startup.
+## would land in the middle of drawing a frame.
+##
+## That split is what a texture loaded after startup goes through: read the
+## file on a task with `Files.read_bytes!`, return the bytes as the task's
+## message, and call `texture_from_bytes!` from `update!` when the message
+## arrives. Calling `load_texture!` inside the task itself does the same in one
+## step, which is what a hot reload wants -- poll `Files.metadata!` on a task,
+## and load again when the modification time moves.
 ##
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
 ## It is a bound on how many textures exist at once, not on how fast they are
@@ -61,7 +72,10 @@ Assets := [].{
 		## Open the store described by a `StoreConfig`, checking its manifest if
 		## one was required.
 		##
-		## Legal in `init!`, `update!`, and tasks; refused in `render!`.
+		## Legal in `init!`, where it blocks startup, and in tasks, where it
+		## parks the task; refused in `update!` and `render!`. Opening the
+		## directory and reading the manifest are filesystem work, so the host
+		## does both off the frame thread and answers when they are done.
 		##
 		## The first four failures are about the root directory: `RootNotFound`
 		## is nothing at that path, `RootNotDirectory` is something there that
@@ -227,11 +241,11 @@ Assets := [].{
 
 	## Load an image relative to an explicit store.
 	##
-	## Legal in `init!`, `update!`, and tasks; refused in `render!`. This is one
-	## of the two effects that sit outside the platform's three phase rules: it
-	## loads rather than waits, reading the file on the calling thread instead
-	## of parking a task, so a large load during `update!` costs that frame.
-	## Prefer `init!`.
+	## Legal in `init!`, where it blocks startup, and in tasks, where it parks
+	## the task; refused in `update!` and `render!`. The file is read off the
+	## frame thread; the decode and the GPU upload happen when the bytes are
+	## back. To load after startup, call this inside `Task.spawn!`, or read the
+	## bytes on a task and call `texture_from_bytes!` from `update!`.
 	##
 	## `path` must be relative; `PathInvalid` is an absolute path, one holding a
 	## NUL, or a lexical `..` escape, and is answered before any file I/O.

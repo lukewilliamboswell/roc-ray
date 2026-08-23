@@ -4050,9 +4050,9 @@ fn isSafeRootRelativePath(path: []const u8) bool {
     return isSafeStoreRelativePath(path);
 }
 
-fn openStoreRootRelative(base: std.Io.Dir, root: []const u8) !std.Io.Dir {
+fn openStoreRootRelative(io: std.Io, base: std.Io.Dir, root: []const u8) !std.Io.Dir {
     if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
-    return base.openDir(mainThreadIo(), root, .{});
+    return base.openDir(io, root, .{});
 }
 
 fn storeErrorDescription(err: u8) []const u8 {
@@ -4083,8 +4083,7 @@ fn storeOpenError(error_value: anyerror) u8 {
     };
 }
 
-fn openStoreDirectory(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) !std.Io.Dir {
-    const io = mainThreadIo();
+fn openStoreDirectoryIn(io: std.Io, allocator: std.mem.Allocator, location_kind: u8, root: []const u8) !std.Io.Dir {
     switch (location_kind) {
         // The executable directory is opened first, then the configured root
         // is opened through that handle. This remains CWD-independent even if
@@ -4094,7 +4093,7 @@ fn openStoreDirectory(allocator: std.mem.Allocator, location_kind: u8, root: []c
             defer allocator.free(executable_dir_path);
             const executable_dir = try std.Io.Dir.openDirAbsolute(io, executable_dir_path, .{});
             defer executable_dir.close(io);
-            return openStoreRootRelative(executable_dir, root);
+            return openStoreRootRelative(io, executable_dir, root);
         },
         1 => {
             if (!isSafeRootRelativePath(root)) return error.InvalidRootPath;
@@ -4106,6 +4105,56 @@ fn openStoreDirectory(allocator: std.mem.Allocator, location_kind: u8, root: []c
         },
         else => return error.InvalidRootPath,
     }
+}
+
+/// The outcome of one directory open or one store-relative read, carried back
+/// from a blocking worker as plain host data.
+const StoreDirOpen = union(enum) { dir: std.Io.Dir, failed: anyerror };
+const StoreDirRead = union(enum) { bytes: []u8, failed: anyerror };
+
+/// Open a store root, and read a file beneath one, on zio's blocking pool.
+///
+/// These take the same path `writeFileWaiting` does rather than the runtime's
+/// own file backend, for a reason of its own: a store keeps its directory
+/// handle for the life of the store and closes it on the frame thread, so
+/// handing that descriptor to the event loop for one read and to the blocking
+/// implementation later would mix two ownership models over one fd. The pool
+/// parks the calling task exactly as the event loop would, and the worker sees
+/// only the host-owned directory, path and bytes -- never a Roc value.
+fn openStoreDirectoryBlocking(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) StoreDirOpen {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const dir = openStoreDirectoryIn(threaded.io(), allocator, location_kind, root) catch |err| return .{ .failed = err };
+    return .{ .dir = dir };
+}
+
+fn openStoreDirectoryWaiting(allocator: std.mem.Allocator, location_kind: u8, root: []const u8) StoreDirOpen {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("store open", 0);
+    defer AppTasks.traceResume("store open");
+    const rt = AppTasks.currentRuntime() orelse return openStoreDirectoryBlocking(allocator, location_kind, root);
+    var blocking = rt.spawnBlocking(openStoreDirectoryBlocking, .{ allocator, location_kind, root }) catch
+        return openStoreDirectoryBlocking(allocator, location_kind, root);
+    return blocking.join();
+}
+
+fn readDirFileBlocking(allocator: std.mem.Allocator, dir: std.Io.Dir, path: []const u8, limit: usize) StoreDirRead {
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const bytes = dir.readFileAlloc(threaded.io(), path, allocator, .limited(limit)) catch |err| return .{ .failed = err };
+    return .{ .bytes = bytes };
+}
+
+fn readDirFileWaiting(allocator: std.mem.Allocator, dir: std.Io.Dir, path: []const u8, limit: usize) StoreDirRead {
+    const scope = WaitScope.enter();
+    defer scope.leave();
+    AppTasks.tracePark("store read", 0);
+    defer AppTasks.traceResume("store read");
+    const rt = AppTasks.currentRuntime() orelse return readDirFileBlocking(allocator, dir, path, limit);
+    var blocking = rt.spawnBlocking(readDirFileBlocking, .{ allocator, dir, path, limit }) catch
+        return readDirFileBlocking(allocator, dir, path, limit);
+    return blocking.join();
 }
 
 const ParsedAssetManifest = struct {
@@ -4177,11 +4226,12 @@ fn expectedManifestHash(args: abi.AssetsHostOpen_storeArgs) union(enum) { any, h
 
 fn validateStoreManifest(allocator: std.mem.Allocator, root: *std.Io.Dir, args: abi.AssetsHostOpen_storeArgs) u8 {
     if (!args.manifest_required) return STORE_ERR_NONE;
-    const bytes = root.readFileAlloc(mainThreadIo(), "roc-assets.manifest", allocator, .limited(MAX_ASSET_MANIFEST_BYTES)) catch |err| {
-        return switch (err) {
+    const bytes = switch (readDirFileWaiting(allocator, root.*, "roc-assets.manifest", MAX_ASSET_MANIFEST_BYTES)) {
+        .failed => |err| return switch (err) {
             error.FileNotFound => STORE_ERR_MANIFEST_MISSING,
             else => STORE_ERR_MANIFEST_UNREADABLE,
-        };
+        },
+        .bytes => |value| value,
     };
     defer allocator.free(bytes);
     const manifest = parseAssetManifest(bytes) orelse return STORE_ERR_MANIFEST_MALFORMED;
@@ -4224,7 +4274,7 @@ test "executable-relative asset roots resolve from the opened executable directo
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "installed/assets/sentinel", .data = "not from CWD" });
     const executable_dir = try tmp.dir.openDir(std.testing.io, "installed", .{});
     defer executable_dir.close(std.testing.io);
-    var root = try openStoreRootRelative(executable_dir, "assets");
+    var root = try openStoreRootRelative(std.testing.io, executable_dir, "assets");
     defer root.close(std.testing.io);
     const bytes = try root.readFileAlloc(std.testing.io, "sentinel", std.testing.allocator, .limited(64));
     defer std.testing.allocator.free(bytes);
@@ -4337,6 +4387,71 @@ test "store startup failures close an untransferred root and successful insertio
     try std.testing.expectEqual(@as(usize, 0), store_heap.active());
 }
 
+test "opening a store and loading a texture from it wait rather than load" {
+    // Both reach the filesystem, so both belong where waiting is defined: a
+    // task, where they park it, or `init!`, where they block startup. Called
+    // from `update!` they would put a disk read inside the frame, which is the
+    // hole this guard closes.
+    drainRetiredResourcesUpTo(std.math.maxInt(usize));
+    var roc_env = abi.RocEnv{ .allocator = std.testing.allocator, .roc_io = abi.RocIo.freestanding() };
+    var roc_host = routingTestHost(&roc_env);
+    defer {
+        last_phase_violation = null;
+        drainRetiredResourcesUpTo(std.math.maxInt(usize));
+        store_heap.deinitAll();
+        texture_heap.deinitAll();
+    }
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "logo.png", .data = "not decoded in headless tests" });
+    var root_path: [256]u8 = undefined;
+    const relative_root = try std.fmt.bufPrint(&root_path, testing_tmp_prefix ++ "{s}", .{tmp.sub_path});
+
+    {
+        const update = PhaseScope.enter(.update);
+        defer update.leave();
+        last_phase_violation = null;
+        _ = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Assets.Store.open!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, violation.actual);
+    }
+
+    // A task is the other half of the waiting set, and the one an app reaches
+    // for once startup is over: the same call there succeeds.
+    const task = PhaseScope.enter(.task);
+    defer task.leave();
+    last_phase_violation = null;
+    const opened = hostedAssetsOpenStoreRaw(&roc_host, testStoreOpenArgs(&roc_host, relative_root, false, 0, ""));
+    try std.testing.expectEqual(STORE_ERR_NONE, opened.err);
+    try std.testing.expect(last_phase_violation == null);
+
+    {
+        const update = PhaseScope.enter(.update);
+        defer update.leave();
+        last_phase_violation = null;
+        _ = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+            .store = allocateTestResourceStub(&roc_host),
+            .path = abi.RocStr.fromSlice("logo.png", &roc_host),
+        });
+        const violation = last_phase_violation orelse return error.OperationWasNotRejected;
+        try std.testing.expectEqualStrings("Assets.load_texture!", violation.operation);
+        try std.testing.expect(violation.allowed.eql(during_wait));
+        try std.testing.expectEqual(Phase.update, violation.actual);
+    }
+
+    last_phase_violation = null;
+    const loaded = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
+        .store = opened.store,
+        .path = abi.RocStr.fromSlice("logo.png", &roc_host),
+    });
+    try std.testing.expectEqual(STORE_ERR_NONE, loaded.err);
+    try std.testing.expect(last_phase_violation == null);
+    loaded.texture.decref(&roc_host);
+}
+
 fn byteListRefcount(list: abi.RocListWith(u8, false)) *isize {
     return @ptrFromInt(@intFromPtr(list.elements_ptr.?) - @sizeOf(isize));
 }
@@ -4387,8 +4502,13 @@ test "embedded texture and font bytes are consumed exactly once" {
     bad_font_bytes.decref(&roc_host);
 }
 
+/// `Assets.Store.open!`: open a store root and check its manifest.
+///
+/// Opening a directory and reading a manifest are both filesystem work, so
+/// this waits: it parks a task and blocks `init!`. The validation that follows
+/// is pure and runs on the frame thread once the read has come back.
 fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) callconv(.c) abi.AssetsHostOpen_storeRetRecord {
-    enforcePhase("Assets.Store.open!", during_load);
+    enforcePhase("Assets.Store.open!", during_wait);
     defer args.root.decref(host);
     defer args.asset_set.decref(host);
     defer args.content_hash.decref(host);
@@ -4401,13 +4521,16 @@ fn hostedAssetsOpenStoreRaw(host: *RocHost, args: abi.AssetsHostOpen_storeArgs) 
         },
         else => {},
     }
-    var root = openStoreDirectory(allocator, args.location_kind, root_path) catch |err| {
-        const code: u8 = switch (err) {
-            error.InvalidRootPath => STORE_ERR_INVALID_ROOT_PATH,
-            else => storeOpenError(err),
-        };
-        reportStoreOpenFailure(code, root_path, null);
-        return .{ .store = invalidResourceHandle(), .err = code };
+    var root = switch (openStoreDirectoryWaiting(allocator, args.location_kind, root_path)) {
+        .failed => |err| {
+            const code: u8 = switch (err) {
+                error.InvalidRootPath => STORE_ERR_INVALID_ROOT_PATH,
+                else => storeOpenError(err),
+            };
+            reportStoreOpenFailure(code, root_path, null);
+            return .{ .store = invalidResourceHandle(), .err = code };
+        },
+        .dir => |dir| dir,
     };
     var root_transferred = false;
     defer if (!root_transferred) root.close(mainThreadIo());
@@ -4432,17 +4555,22 @@ const StoreRead = union(enum) { bytes: []u8, path_invalid, not_found, failed };
 
 fn readStoreAsset(allocator: std.mem.Allocator, store: *StoreResource, path: []const u8) StoreRead {
     if (!isSafeStoreRelativePath(path)) return .path_invalid;
-    const bytes = store.root.readFileAlloc(mainThreadIo(), path, allocator, .limited(MAX_ASSET_FILE_BYTES)) catch |err| {
-        return switch (err) {
+    return switch (readDirFileWaiting(allocator, store.root, path, MAX_ASSET_FILE_BYTES)) {
+        .failed => |err| switch (err) {
             error.FileNotFound => .not_found,
             else => .failed,
-        };
+        },
+        .bytes => |bytes| .{ .bytes = bytes },
     };
-    return .{ .bytes = bytes };
 }
 
+/// `Assets.load_texture!`: read an image out of a store and upload it.
+///
+/// The read waits -- it parks a task and blocks `init!` -- and the decode and
+/// the GPU upload happen on the frame thread afterwards, with the bytes back
+/// in hand.
 fn hostedAssetsLoadStoreTextureRaw(host: *RocHost, args: abi.AssetsHostLoad_store_textureArgs) callconv(.c) abi.AssetsHostLoad_store_textureRetRecord {
-    enforcePhase("Assets.load_texture!", during_load);
+    enforcePhase("Assets.load_texture!", during_wait);
     defer args.path.decref(host);
     defer releaseResourceBox(host, args.store);
     const store = store_heap.get(args.store.*) orelse return .{ .texture = invalidTexture(), .err = STORE_LOAD_ERR_READ };

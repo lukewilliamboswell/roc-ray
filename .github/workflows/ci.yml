@@ -32,7 +32,11 @@ jobs:
       matrix:
         os:
           - ubuntu-24.04
-          - macos-15
+          # The hosted arm64 macOS runners have no GPU and NSOpenGL offers
+          # them no pixel format at all ("NSGL: Failed to find a suitable
+          # pixel format"), so nothing graphical can run on macos-15. The
+          # Intel runner still has Apple's software GL.
+          - macos-15-intel
           - windows-2022
     defaults:
       run:
@@ -96,7 +100,9 @@ jobs:
       matrix:
         os:
           - macos-15         # arm64mac
-          - ubuntu-22.04     # x64glibc
+          - macos-15-intel   # x64mac
+          - ubuntu-22.04     # x64glibc, oldest supported glibc
+          - ubuntu-24.04     # x64glibc, the only Linux that can open a window (see below)
           - windows-2022     # x64win
     defaults:
       run:
@@ -183,8 +189,17 @@ jobs:
       # backend, with a real hidden window, and scripts keys into the ones with
       # key-driven features (scripts/test_spec.json). Pixels are not compared;
       # the graphical-smoke job is the pixel-level test.
+      #
+      # Where it cannot run, and why:
+      # - macos-15 (arm64): the hosted runners have no GPU and NSOpenGL offers
+      #   no pixel format, so InitWindow fails; macos-15-intel covers macOS.
+      # - ubuntu-22.04: the vendored Linux raylib was built against glibc 2.38
+      #   and every example aborts at window init with "undefined symbol:
+      #   __isoc23_strtoul". Headless runs never reach that symbol, which is
+      #   how it went unnoticed. Tracked separately; ubuntu-24.04 covers Linux
+      #   until the archive is rebuilt against an older glibc baseline.
       - name: Install X11 and GL dependencies
-        if: runner.os == 'Linux'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb libx11-dev libxcursor-dev libxext-dev \
@@ -209,6 +224,7 @@ jobs:
           ls -l ci-gl
 
       - name: Run examples in a real window
+        if: matrix.os != 'macos-15' && matrix.os != 'ubuntu-22.04'
         timeout-minutes: 25
         env:
           ROC_RAY_WINDOWED_DLL_DIR: ${{ runner.os == 'Windows' && 'ci-gl' || '' }}

@@ -5,6 +5,9 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+comptime {
+    _ = @import("msvc_runtime_stubs.zig");
+}
 const backend = @import("backend_raylib.zig");
 const abi = @import("roc_platform_abi.zig");
 const tilemap_batch = @import("tilemap_batch.zig");

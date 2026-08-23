@@ -359,11 +359,19 @@ pub fn build(b: *std.Build) void {
         // Pixel-level rendering checks need a real graphics context, so keep
         // them opt-in for local/CI runs with a display (for example xvfb-run).
         const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
+        // As with libvpx and sqlite: a native Windows build links `-lc`, and
+        // the MSVC ABI has no CRT for Zig to supply (CI has no MSVC libraries
+        // either). Build against mingw's CRT instead; the vendored raylib.lib
+        // is plain C with the same COFF ABI, so it links either way.
+        const graphical_smoke_target = if (native_target.result.os.tag == .windows)
+            b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu })
+        else
+            native_target;
         const graphical_smoke = b.addExecutable(.{
             .name = "graphical-smoke",
             .root_module = b.createModule(.{
                 .root_source_file = b.path("src/graphical_smoke.zig"),
-                .target = native_target,
+                .target = graphical_smoke_target,
                 .optimize = optimize,
             }),
         });
@@ -382,6 +390,26 @@ pub fn build(b: *std.Build) void {
                 inline for (windows_import_libs) |lib_name| {
                     graphical_smoke.root_module.linkSystemLibrary(lib_name, .{});
                 }
+                // The MSVC-built raylib.lib carries `/DEFAULTLIB` directives
+                // for the MSVC CRT, which lld honours even on the gnu target.
+                // mingw's CRT already provides everything they would, so
+                // satisfy the names with empty archives. The runtime symbols
+                // MSVC's `/GS` codegen needs come from src/msvc_runtime_stubs.zig.
+                const empty_source = b.addWriteFiles().add("empty.c", "\n");
+                const placeholders = b.addWriteFiles();
+                inline for (.{ "MSVCRT", "OLDNAMES", "uuid" }) |lib_name| {
+                    const empty = b.addLibrary(.{
+                        .name = lib_name,
+                        .linkage = .static,
+                        .root_module = b.createModule(.{
+                            .target = graphical_smoke_target,
+                            .optimize = optimize,
+                        }),
+                    });
+                    empty.root_module.addCSourceFile(.{ .file = empty_source, .flags = &.{} });
+                    _ = placeholders.addCopyFile(empty.getEmittedBin(), "lib" ++ lib_name ++ ".a");
+                }
+                graphical_smoke.root_module.addLibraryPath(placeholders.getDirectory());
             },
             else => {},
         }

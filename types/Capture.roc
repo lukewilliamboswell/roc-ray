@@ -174,6 +174,33 @@ Capture := [].{
 		quality = |rec| rec.quality
 	}
 
+	## Live recording state, sampled onto every `App.Input` as `input.capture`.
+	##
+	## `Finished` remains observable after automatic finalization at the frame cap.
+	Status : [
+		Idle,
+		Active({ frames : U64, dropped : U64 }),
+		Finished({ frames : U64, bytes : U64 }),
+		Failed({ frames : U64, reason : FailureReason }),
+	]
+
+	## Why a recording is not running.
+	##
+	## `PathInvalid`, `PathEscapesOutputDir`, `AlreadyRecording`, and
+	## `BudgetExceeded` reject a start request before anything is written. The
+	## remaining reasons may stop an active recording.
+	FailureReason : [
+		PathInvalid,
+		PathEscapesOutputDir,
+		AlreadyRecording,
+		BudgetExceeded,
+		UnsupportedFormat,
+		OutOfMemory,
+		WriteFailed,
+		EncodeFailed,
+		Unknown,
+	]
+
 	## A 25 FPS half-scale GIF of at most 300 frames, using fixed-step timing
 	## and balanced encoder quality.
 	##

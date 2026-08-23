@@ -123,6 +123,10 @@ CASES = (
         ROOT / "test" / "compile_fail" / "transition_removed.roc",
         ("does not exist", "rr.App.next does not exist"),
     ),
+    (
+        ROOT / "test" / "compile_fail" / "input_spawn_receiver.roc",
+        ("missing method", "does not have a method named spawn!"),
+    ),
 )
 
 ONE_ERROR = re.compile(r"\b1 error and \d+ warnings?\b")

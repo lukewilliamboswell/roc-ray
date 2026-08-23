@@ -68,12 +68,14 @@ Task := [].{
 	## and drop replies that do not match the latest; `examples/http_fetch`
 	## shows the shape.
 	##
-	## `input.spawn!(|| ...)` is the same effect written as a receiver.
+	## This is the only way to start a task. `Input` is a pure value declared in
+	## the `roc-ray-types` package and has no effectful receivers, so there is no
+	## `input.spawn!` form.
 	##
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`. `init!`
 	## never sees the answering input, and `render!` does not change the world.
 	spawn! : App.Input(msg), (() => msg) => {}
-	spawn! = |input, task!| App.Input.spawn!(input, task!)
+	spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 
 	## Start a task whose message belongs to a component, wrapped into the app's
 	## own `Msg` on the way back.
@@ -99,14 +101,13 @@ Task := [].{
 	## and before the message is handed back, so it is ordinary pure code and not
 	## a second scheduled step.
 	##
-	## `input.spawn_with!(task!, wrap)` is the same effect written as a receiver.
 	## Everything `spawn!` says about the `App.Input` witness, about when a task's
 	## message arrives, and about which callbacks may spawn applies here
 	## unchanged.
 	##
 	## Legal in `update!` and in tasks; refused in `init!` and `render!`.
 	spawn_with! : App.Input(msg), (() => a), (a -> msg) => {}
-	spawn_with! = |input, task!, wrap| App.Input.spawn_with!(input, task!, wrap)
+	spawn_with! = |input, task!, wrap| Task.spawn!(input, || wrap(task!()))
 
 	## Wait at least `millis` without stalling the frame.
 	##

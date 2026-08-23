@@ -369,7 +369,7 @@ an input it never reads:
 
 ```roc
 spawn! : App.Input(msg), (() => msg) => {}
-spawn! = |input, task!| App.Input.spawn!(input, task!)
+spawn! = |_input, task!| TaskHost.spawn!(Box.box(task!))
 ```
 
 Only `platform/main.roc` can name the `requires` bound `Msg`. Everywhere else

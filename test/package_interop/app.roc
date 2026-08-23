@@ -35,6 +35,10 @@ Model : {
 
 	## What the package measured on the way through.
 	swatch_aspect : F32,
+
+	## What the package read off the whole `App.Input(Msg)`, which it accepted
+	## as one parameterized nominal rather than as an open record.
+	pulse : Events.Pulse,
 }
 
 program = { init!, update!, render! }
@@ -63,6 +67,7 @@ init! = App.init(
 			layout_passes: 1,
 			swatch: Events.retained(sized),
 			swatch_aspect: sized.aspect,
+			pulse: { cycle: 0, messages: 0, clicked: Bool.False },
 		})
 	},
 )
@@ -140,6 +145,7 @@ update! = |model, program_input| {
 			layout_passes: model.layout_passes + 1,
 			swatch: Events.retained(sized),
 			swatch_aspect: sized.aspect,
+			pulse: Events.pulse(program_input),
 		})
 	}
 }
@@ -156,5 +162,6 @@ render! = |model, frame| {
 	# through a platform call that accepts nothing but the platform's own type.
 	frame.texture!(Draw.texture_at(model.swatch, { x: 10, y: 100 }))
 	frame.text_at!({ pos: { x: 10, y: 130 }, text: F32.to_str(model.swatch_aspect), size: 20, color: Color.black })
+	frame.text_at!({ pos: { x: 10, y: 160 }, text: U64.to_str(model.pulse.cycle), size: 20, color: Color.black })
 	Ok({})
 }

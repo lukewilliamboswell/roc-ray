@@ -59,29 +59,14 @@ Capture := [].{
 	## Live recording state, sampled onto every `App.Input` as `input.capture`.
 	##
 	## `Finished` remains observable after automatic finalization at the frame cap.
-	Status : [
-		Idle,
-		Active({ frames : U64, dropped : U64 }),
-		Finished({ frames : U64, bytes : U64 }),
-		Failed({ frames : U64, reason : FailureReason }),
-	]
+	Status : RrtCapture.Status
 
 	## Why a recording is not running.
 	##
 	## `PathInvalid`, `PathEscapesOutputDir`, `AlreadyRecording`, and
 	## `BudgetExceeded` reject a start request before anything is written. The
 	## remaining reasons may stop an active recording.
-	FailureReason : [
-		PathInvalid,
-		PathEscapesOutputDir,
-		AlreadyRecording,
-		BudgetExceeded,
-		UnsupportedFormat,
-		OutOfMemory,
-		WriteFailed,
-		EncodeFailed,
-		Unknown,
-	]
+	FailureReason : RrtCapture.FailureReason
 
 	## Why a screenshot did not become a file.
 	##

@@ -434,10 +434,16 @@ const during_render = PhaseSet.initOne(.render);
 /// `init!`, `update!`, and tasks, and not from `render!`, which only draws.
 const during_update = PhaseSet.initMany(&.{ .startup, .update, .task });
 
-/// Loading, allocating or generating a resource. Allowed wherever the app
-/// changes host state -- `init!`, `update!`, and tasks -- but not during
-/// `render!`, where an upload or a decode lands in the middle of a frame.
-/// The same set as `during_update`; the separate name records intent.
+/// Allocating or generating a resource from bytes the app already holds.
+/// Allowed wherever the app changes host state -- `init!`, `update!`, and
+/// tasks -- but not during `render!`, where an upload or a decode lands in the
+/// middle of a frame. The same set as `during_update`; the separate name
+/// records intent.
+///
+/// A loader that opens a directory or reads a file is `during_wait` instead,
+/// however small the file: reaching the filesystem from `update!` is what
+/// invariant 4 forbids. Every such loader has a `*_from_bytes!` sibling in
+/// this set, so a load a task started can still be finished in `update!`.
 const during_load = during_update;
 
 /// Handing the host deferred work: `Task.spawn!`, and `Task.spawn_with!`

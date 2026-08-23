@@ -21,12 +21,18 @@
 ## where it parks the task while the frame loop keeps drawing; it is refused in
 ## `update!` and `render!`.
 ##
-## Two effects sit outside those rules, and each says so on its own page.
+## One effect sits outside those rules, and says so on its own page.
 ## `Capture.screenshot!` is legal only in a task: it waits for a frame that has
 ## to be drawn first, and `init!` runs before the frame loop has gone around
-## once. `Assets.load_texture!` loads rather than waits -- it reads the file on
-## the calling thread instead of parking -- so it is legal in `update!`, where a
-## large load costs that frame rather than parking a task. Load in `init!`.
+## once.
+##
+## Every loader that reads a file waits, so it belongs in `init!` or in a task:
+## `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
+## `Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!` and
+## `Tilemap.load_tmx!`. The constructors that take bytes the app already holds
+## -- `Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
+## `Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait, and are how a
+## load started on a task finishes in `update!`.
 ##
 ## Calling an effect from a callback that does not permit it is a programmer
 ## error rather than a runtime outcome: the app stops at once with a message

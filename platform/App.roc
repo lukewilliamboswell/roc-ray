@@ -28,12 +28,19 @@
 ## is legal in `init!`, where it blocks startup, and in tasks, where it parks
 ## the task; it is refused in `update!` and `render!`.
 ##
-## Two effects sit outside those three rules. `Capture.screenshot!` is legal
+## One effect sits outside those three rules. `Capture.screenshot!` is legal
 ## only in a task: it waits for a frame that has to be drawn first, and `init!`
-## runs before the frame loop has gone around once. `Assets.load_texture!`
-## loads rather than waits -- it reads the file on the calling thread instead
-## of parking -- so it is legal in `update!`, where a large load costs that
-## frame. Load textures in `init!`.
+## runs before the frame loop has gone around once.
+##
+## Every loader that reads a file waits, so it belongs in `init!` or in a task:
+## `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
+## `Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!` and
+## `Tilemap.load_tmx!`. The constructors that take bytes the app already holds
+## -- `Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
+## `Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait and are legal
+## in `update!`. To load after startup, read the file on a task and build the
+## resource in `update!` when the message arrives, or call the loader inside
+## the task.
 ##
 ## Calling an effect from a phase it does not permit is a programmer error, not
 ## a runtime outcome: it stops the app at once with a message naming the

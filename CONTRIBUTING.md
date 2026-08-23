@@ -318,11 +318,26 @@ A call from the wrong phase stops the app with a message naming the effect, the
 phase, and the fix, so choose the set deliberately and keep the public wrapper's
 doc comment in step with it.
 
+`during_load` is for allocating or generating a resource from bytes the app
+already holds -- `Assets.texture_from_bytes!`, `Draw.Shader.from_source!`,
+`Audio.gen_sound!`. A loader that opens a directory or reads a file is
+`during_wait`, however small the file: reaching the filesystem from `update!`
+is exactly what invariant 4 forbids. Give such an effect a `*_from_bytes!`
+sibling so an app can still finish a load in `update!` from what a task read.
+
 An effect in `during_wait` does its I/O through `waitingIo()` rather than
 `mainThreadIo()`, and wraps the call in a `WaitScope` so the phase is restored
 when it resumes. On a task that parks the coroutine and the frame loop keeps
 running; in `init!` it parks the frame loop's own task and pumps the event loop
 until the answer is in, which is the blocking behaviour startup wants.
+
+Work the event loop cannot take runs on zio's blocking pool instead, through
+`rt.spawnBlocking` with a `std.Io.Threaded` inside the worker: a file write,
+because creating directories through the runtime's file backend fails on
+Windows, and anything reached through a descriptor the frame thread opened and
+closes, such as an asset store's directory handle. The pool parks the caller
+the same way the event loop would, and the worker must see host-owned bytes
+only -- never a Roc value.
 
 `during_frame_wait` is `during_wait` without `init!`, for a waiting effect
 whose answer is a frame that has to be drawn first. `Capture.screenshot!` is

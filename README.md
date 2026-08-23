@@ -68,12 +68,19 @@ purpose, or from a task, where it parks that task and the frame keeps going.
 Break one and the app stops immediately with a message naming the effect, the
 phase it was called from, and where it belongs.
 
-Two effects sit outside those rules, and each says so on its own docs page.
+One effect sits outside those rules, and says so on its own docs page.
 `Capture.screenshot!` runs only from a task: it waits for a frame that has to
 be drawn first, and `init!` runs before the frame loop has gone around once.
-`Assets.load_texture!` loads rather than waits -- it reads the file on the
-calling thread instead of parking -- so it is legal in `update!`, where a large
-load costs that frame. Load textures in `init!`.
+
+Every loader that reads a file is a waiting effect, so it belongs in `init!` or
+in a task -- `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
+`Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!`, and
+`Tilemap.load_tmx!`. The constructors that take bytes the app already holds --
+`Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
+`Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait and stay legal in
+`update!`. That pair is the idiom for loading after startup: read the file on a
+task, and build the resource in `update!` when the message arrives, or just
+call the loader inside the task.
 
 Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
 to bottom to see this loop in the smallest complete app. Load long-lived

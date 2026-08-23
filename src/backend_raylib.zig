@@ -454,22 +454,37 @@ pub fn generateCheckedTexture(args: anytype) ?Texture {
     return texture;
 }
 
+/// Roc lays `Color.Rgba` out with its fields sorted, so the bytes arrive as
+/// `{a, b, g, r}` while raylib reads `{r, g, b, a}`; uploading the Roc bytes
+/// directly paints every pixel with its channels reversed. The pixels are
+/// converted into a scratch buffer with `colorToRl` like every other color
+/// that crosses into raylib. The scratch buffer failing to allocate is a host
+/// failure, not an application outcome, so it stops the program by name.
+fn convertPixels(pixels: []const Color) []rl.Color {
+    const converted = std.heap.page_allocator.alloc(rl.Color, pixels.len) catch
+        @panic("roc-ray: out of memory converting pixels for a texture upload");
+    for (pixels, converted) |pixel, *out| out.* = colorToRl(pixel);
+    return converted;
+}
+
 /// Replace all pixels in a texture from tightly packed RGBA colors.
 pub fn updateTexture(texture: Texture, pixels: []const Color) void {
-    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
-    rl.UpdateTexture(texture, pixels.ptr);
+    const converted = convertPixels(pixels);
+    defer std.heap.page_allocator.free(converted);
+    rl.UpdateTexture(texture, converted.ptr);
 }
 
 /// One rectangle of a texture. `area` is in pixels and must lie inside it;
 /// raylib does no bounds checking of its own, so the caller does.
 pub fn updateTextureRegion(texture: Texture, area: struct { x: i32, y: i32, width: i32, height: i32 }, pixels: []const Color) void {
-    comptime std.debug.assert(@sizeOf(Color) == @sizeOf(rl.Color));
+    const converted = convertPixels(pixels);
+    defer std.heap.page_allocator.free(converted);
     rl.UpdateTextureRec(texture, .{
         .x = @floatFromInt(area.x),
         .y = @floatFromInt(area.y),
         .width = @floatFromInt(area.width),
         .height = @floatFromInt(area.height),
-    }, pixels.ptr);
+    }, converted.ptr);
 }
 
 /// Set a texture's scaling filter from the Roc enum code.

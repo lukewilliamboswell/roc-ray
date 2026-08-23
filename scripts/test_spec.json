@@ -59,7 +59,13 @@
       "cases": [
         {
           "name": "sweep",
-          "frames": 20
+          "frames": 20,
+          "platforms": {
+            "windows": {
+              "run": false
+            }
+          },
+          "reason": "Crashes with 0xC0000005 at startup on Windows; see issue #172"
         }
       ]
     },

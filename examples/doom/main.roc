@@ -122,7 +122,7 @@ update! = |model, input| {
 		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
 		previous_pos = model.world.doom.player.sim.state.pos
 		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos), decoration_segments(model.decorations))
-		advanced = DoomRuntime.advance(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers)
+		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers, DoomMap.e1m1)
 		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
 			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)

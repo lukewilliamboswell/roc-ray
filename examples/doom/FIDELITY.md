@@ -18,7 +18,7 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover weapon ownership, typed selection, dry-ammo fallback, cadence, ammunition, hitscan spread, damage, pain and death states; several exact weapon state chains remain incomplete |
 | Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
 | Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
-| Audio | Freedoom sounds and music | Positional effects and a reproducibly rendered or natively synthesized Freedoom track accompany a complete run |
+| Audio | Freedoom sounds and music | Actor alert/attack/pain/death and projectile/explosion effects use listener-relative pan and distance attenuation; activated doors, switches, and platforms use the interaction position, while player/weapon/pickup feedback stays centered. Playback is capped at 16 semantic cues per host cycle, and the reproducibly rendered Freedoom track accompanies a complete run |
 | Whole level | Chocolate Doom running the same pinned WAD | The frozen `DoomReplay` ordinary-command fixture completes E1M1 and asserts route/state checkpoints; representative native frames are structurally validated, not compared with Chocolate Doom |
 
 ## Reference map

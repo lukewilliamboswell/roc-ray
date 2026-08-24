@@ -48,7 +48,11 @@ Model : {
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
-Cue : [FireCue, PickupCue, PainCue, DeathCue, AlertCue, DoorCue, SwitchOnCue, SwitchOffCue, MonsterAttackCue, ProjectileCue, ExplosionCue, OofCue, NoWayCue, PlatformCue]
+LocalCueKind : [FireSound, PickupSound, OofSound, NoWaySound]
+
+SpatialCueKind : [PainSound, DeathSound, AlertSound, DoorSound, SwitchOnSound, SwitchOffSound, MonsterAttackSound, ProjectileSound, ExplosionSound, PlatformSound]
+
+Cue : [LocalCue(LocalCueKind), SpatialCue(SpatialCueKind, DoomSim.Vec2)]
 
 Msg : []
 
@@ -153,8 +157,9 @@ update! = |model, input| {
 		sprites = if advanced.tics > 0 sprite_geometry(world, model.decorations, level, world.doom.player.sim.state.pos) else model.sprites
 		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
 		flashes = DoomView.advance(model.flashes, advanced.tics, { damaged: world.doom.player.health < model.world.doom.player.health, picked_up: taken_count(world.doom.pickups) > taken_count(model.world.doom.pickups) })
-		for cue in transition_cues(model.world, world, use_result, advanced.fired, input.devices.key_pressed(KeyE)) {
-			play_cue!(model.sounds, cue)
+		listener = { pos: world.doom.player.sim.state.pos, angle: world.doom.player.sim.state.angle }
+		for cue in List.take_first(transition_cues(model.world, world, use_result, advanced.fired, input.devices.key_pressed(KeyE)), max_cues_per_cycle) {
+			play_cue!(model.sounds, cue, listener)
 		}
 		Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, flashes })
 	}
@@ -458,38 +463,59 @@ draw_flashes! = |frame, flashes| {
 }
 
 transition_cues = |before, after, use_result, fired, used| {
-	var $cues = if fired [FireCue] else []
+	var $cues = if fired [LocalCue(FireSound)] else []
 	if taken_count(after.doom.pickups) > taken_count(before.doom.pickups) {
-		$cues = List.append($cues, PickupCue)
+		$cues = List.append($cues, LocalCue(PickupSound))
 	}
-	if dead_count(after.doom.actors) > dead_count(before.doom.actors) {
-		$cues = List.append($cues, DeathCue)
-	} else if actor_health(after.doom.actors) < actor_health(before.doom.actors) {
-		$cues = List.append($cues, PainCue)
+	match changed_actor(before.doom.actors, after.doom.actors, |old, new| old.state.mode != Dead and new.state.mode == Dead) {
+		Ok(actor) => {
+			$cues = List.append($cues, SpatialCue(DeathSound, actor.pos))
+		}
+		Err(_) => match changed_actor(before.doom.actors, after.doom.actors, |old, new| new.health < old.health) {
+			Ok(actor) => {
+				$cues = List.append($cues, SpatialCue(PainSound, actor.pos))
+			}
+			Err(_) => {}
+		}
 	}
-	if awake_count(after.doom.actors) > awake_count(before.doom.actors) {
-		$cues = List.append($cues, AlertCue)
+	match changed_actor(before.doom.actors, after.doom.actors, |old, new| old.state.mode == Look and new.state.mode != Look and new.state.mode != Dead) {
+		Ok(actor) => {
+			$cues = List.append($cues, SpatialCue(AlertSound, actor.pos))
+		}
+		Err(_) => {}
 	}
-	if attack_count(after.doom.actors) > attack_count(before.doom.actors) {
-		$cues = List.append($cues, MonsterAttackCue)
+	match changed_actor(before.doom.actors, after.doom.actors, |old, new| old.state.mode != Attack and new.state.mode == Attack) {
+		Ok(actor) => {
+			$cues = List.append($cues, SpatialCue(MonsterAttackSound, actor.pos))
+		}
+		Err(_) => {}
 	}
-	if List.len(after.projectiles) > List.len(before.projectiles) {
-		$cues = List.append($cues, ProjectileCue)
+	match newest_projectile(before.projectiles, after.projectiles) {
+		Ok(projectile) => {
+			$cues = List.append($cues, SpatialCue(ProjectileSound, projectile.pos))
+		}
+		Err(_) => {}
 	}
 	if List.len(after.explosions) > List.len(before.explosions) {
-		$cues = List.append($cues, ExplosionCue)
+		match List.get(after.explosions, List.len(after.explosions) - 1) {
+			Ok(explosion) => {
+				$cues = List.append($cues, SpatialCue(ExplosionSound, explosion.pos))
+			}
+			Err(_) => {}
+		}
 	}
 	if after.doom.player.health < before.doom.player.health {
-		$cues = List.append($cues, OofCue)
+		$cues = List.append($cues, LocalCue(OofSound))
 	}
 	match use_result {
 		Activated(_) => {
-			$cues = List.append($cues, DoorCue)
-			$cues = List.append($cues, SwitchOnCue)
-			$cues = List.append($cues, PlatformCue)
+			source = after.doom.player.sim.state.pos
+			$cues = List.append($cues, SpatialCue(DoorSound, source))
+			$cues = List.append($cues, SpatialCue(SwitchOnSound, source))
+			$cues = List.append($cues, SpatialCue(PlatformSound, source))
 		}
 		_ => if used {
-			$cues = List.append($cues, NoWayCue)
+			$cues = List.append($cues, LocalCue(NoWaySound))
 		}
 	}
 	$cues
@@ -523,23 +549,59 @@ attack_count = |actors|
 
 actor_health = |actors| List.fold(actors, 0.I64, |total, actor| total + actor.health)
 
-play_cue! = |sounds, cue|
-	match cue {
-		FireCue => sounds.fire.play!()
-		PickupCue => sounds.pickup.play!()
-		PainCue => sounds.pain.play!()
-		DeathCue => sounds.death.play!()
-		AlertCue => sounds.alert.play!()
-		DoorCue => sounds.door.play!()
-		SwitchOnCue => sounds.switch_on.play!()
-		SwitchOffCue => sounds.switch_off.play!()
-		MonsterAttackCue => sounds.monster_attack.play!()
-		ProjectileCue => sounds.projectile.play!()
-		ExplosionCue => sounds.explosion.play!()
-		OofCue => sounds.oof.play!()
-		NoWayCue => sounds.no_way.play!()
-		PlatformCue => sounds.platform_move.play!()
+changed_actor = |before, after, changed| {
+	for actor in after {
+		match List.find_first(before, |old| old.id == actor.id) {
+			Ok(old) => if changed(old, actor) return Ok(actor)
+			Err(_) => {}
+		}
 	}
+	Err(NoChangedActor)
+}
+
+newest_projectile = |before, after|
+	List.find_first(after, |projectile| !(List.any(before, |old| old.id == projectile.id)))
+
+spatialize = |listener, source| {
+	offset = DoomSim.sub(source, listener.pos)
+	distance = DoomSim.length(offset)
+	direction = if distance <= 0 DoomSim.zero else DoomSim.scale(offset, 1 / distance)
+	facing = listener.angle.forward()
+	right = { x: facing.y, y: 0 - facing.x }
+	pan = F32.max(-1, F32.min(1, DoomSim.dot(direction, right)))
+	volume = F32.max(0, F32.min(1, 1 - distance / spatial_max_distance))
+	{ pan, volume }
+}
+
+play_cue! = |sounds, cue, listener|
+	match cue {
+		LocalCue(kind) => match kind {
+			FireSound => sounds.fire.play!()
+			PickupSound => sounds.pickup.play!()
+			OofSound => sounds.oof.play!()
+			NoWaySound => sounds.no_way.play!()
+		}
+		SpatialCue(kind, source) => {
+			settings = spatialize(listener, source)
+			sound = match kind {
+				PainSound => sounds.pain
+				DeathSound => sounds.death
+				AlertSound => sounds.alert
+				DoorSound => sounds.door
+				SwitchOnSound => sounds.switch_on
+				SwitchOffSound => sounds.switch_off
+				MonsterAttackSound => sounds.monster_attack
+				ProjectileSound => sounds.projectile
+				ExplosionSound => sounds.explosion
+				PlatformSound => sounds.platform_move
+			}
+			sound.playback().with_pan(settings.pan).with_volume(settings.volume).play!()
+		}
+	}
+
+max_cues_per_cycle = 16.U64
+
+spatial_max_distance = 1200
 
 load_sounds! = || {
 	base = "examples/doom/assets/freedoom/generated/e1m1/sounds"
@@ -575,7 +637,22 @@ expect {
 	world = DoomRuntime.initial(doom)
 	cues = transition_cues(world, world, NotUsable, Bool.True, Bool.False)
 	List.len(cues) == 1 and match List.get(cues, 0) {
-		Ok(FireCue) => Bool.True
+		Ok(LocalCue(FireSound)) => Bool.True
 		_ => Bool.False
 	}
+}
+
+expect {
+	listener = { pos: { x: 0, y: 0 }, angle: DoomSim.Angle.from_turns(0) }
+	right = spatialize(listener, { x: 0, y: -64 })
+	left = spatialize(listener, { x: 0, y: 64 })
+	near = spatialize(listener, { x: 32, y: 0 })
+	far = spatialize(listener, { x: spatial_max_distance, y: 0 })
+	right.pan > 0.99 and left.pan < -0.99 and near.volume > 0.9 and far.volume == 0
+}
+
+expect {
+	listener = { pos: { x: 10, y: 20 }, angle: DoomSim.Angle.from_turns(0.25) }
+	centered = spatialize(listener, listener.pos)
+	centered.pan == 0 and centered.volume == 1 and max_cues_per_cycle == 16
 }

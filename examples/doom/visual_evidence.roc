@@ -1,4 +1,4 @@
-## Navigable Freedoom E1M1 rendered from its real Doom map lumps. The app owns
+## Native visual-evidence harness for the navigable Freedoom E1M1.\n## Renders from its real Doom map lumps. The app owns
 ## player simulation and map policy in Roc; the host retains textures and draws
 ## bounded borrowed triangle batches derived by E1M1Renderer.
 app [Model, program] {
@@ -10,11 +10,15 @@ import rr.App
 import rr.Assets
 import rr.Audio
 import rr.Camera
+import rr.Capture
 import rr.Color
 import rr.Draw
+import rr.Mouse
+import rr.Task
 import DoomLevel
 import DoomMap
 import DoomPresentation
+import DoomReplay
 import DoomRuntime
 import DoomSim
 import DoomSprites
@@ -44,24 +48,35 @@ Model : {
 	logical_target : Draw.RenderTexture,
 	flashes : DoomView.Flashes,
 	sounds : Sounds,
+	evidence : Evidence,
 }
+
+Evidence : { active : Bool, tic : U64, start_requested : Bool, combat_requested : Bool, door_requested : Bool, saved : U64 }
 
 Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
 Cue : [FireCue, PickupCue, PainCue, DeathCue, AlertCue, DoorCue, SwitchOnCue, SwitchOffCue, MonsterAttackCue, ProjectileCue, ExplosionCue, OofCue, NoWayCue, PlatformCue]
 
-Msg : []
+Msg : [EvidenceSaved]
 
 program = { init!, update!, render! }
 
 init! : App.Init(Model, _)
-init! = App.init(
-	App.default
-		.with_title("RocRay: Freedoom E1M1")
-		.with_size({ width: 1280, height: 720 })
-		.with_frame_pacing(VSync)
-		.with_cursor_mode(Locked),
+init! = App.init_for_args(
+	|args| {
+		evidence = List.contains(args, "--capture-evidence")
+		cursor_mode : Mouse.CursorMode
+		cursor_mode = if evidence Visible else Locked
+		App.default
+			.with_title("RocRay: Freedoom E1M1")
+			.with_size(if evidence { width: 320, height: 200 } else { width: 1280, height: 720 })
+			.with_frame_pacing(if evidence Uncapped else VSync)
+			.with_visible(!(evidence))
+			.with_output_dir("examples/doom/evidence")
+			.with_cursor_mode(cursor_mode)
+	},
 	|startup| {
+		evidence_active = List.contains(App.args!(startup), "--capture-evidence")
 		# Reapply capture after native-window creation; see App.Config cursor-mode
 		# transport notes in the original vertical-slice example.
 		App.set_cursor_mode!(startup, Locked)
@@ -95,13 +110,17 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
+		Ok({ world, decorations, level, blockers, batches, masked_batches, dynamic_batches, masked_dynamic_batches, sprites, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds, evidence: { active: evidence_active, tic: 0, start_requested: Bool.False, combat_requested: Bool.False, door_requested: Bool.False, saved: 0 } })
 	},
 )
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
-	if input.devices.key_pressed(KeyEscape) {
+	saved = model.evidence.saved + List.len(input.messages)
+	model0 = { ..model, evidence: { ..model.evidence, saved } }
+	if model0.evidence.active {
+		update_evidence!(model0, input)
+	} else if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else if input.devices.key_pressed(KeyR) {
 		start = DoomMap.e1m1.player_start() ?? crash "validated E1M1 player start missing"
@@ -157,6 +176,68 @@ update! = |model, input| {
 			play_cue!(model.sounds, cue)
 		}
 		Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, flashes })
+	}
+}
+
+update_evidence! = |model, input| {
+	if model.evidence.saved >= 3 {
+		Err(Exit(0))
+	} else if !(model.evidence.start_requested) {
+		Task.spawn!(
+			input,
+			|| {
+				_ = Capture.screenshot!("start.png")
+				EvidenceSaved
+			},
+		)
+		Ok({ ..model, evidence: { ..model.evidence, start_requested: Bool.True } })
+	} else {
+		match DoomReplay.command_at(model.evidence.tic) {
+			Err(ReplayFinished) => if input.time.cycle_count > 1000 Err(Exit(2)) else Ok(model)
+			Ok(command) => {
+				previous_pos = model.world.doom.player.sim.state.pos
+				extra_blockers = decoration_segments(model.decorations)
+				advanced = DoomRuntime.advance_in_map(model.world, DoomSim.tic_seconds * 1.0001, command, extra_blockers, DoomMap.e1m1, model.level)
+				crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+				use_result = DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
+				level0 = match use_result {
+					Activated(next) => next
+					_ => crossed.level
+				}
+				exited = crossed.exited or match use_result {
+					Exit => Bool.True
+					_ => Bool.False
+				}
+				world = if exited { ..advanced.world, phase: Exited } else advanced.world
+				level = advance_level(level0, advanced.tics)
+				dynamic_changed = DoomLevel.render_changed(DoomMap.e1m1, model.level, level)
+				dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic E1M1 atlas is incomplete", render_geometry) else model.dynamic_batches
+				masked_dynamic_batches = if dynamic_changed List.map(E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, level) ?? crash "generated dynamic masked E1M1 atlas is incomplete", render_geometry) else model.masked_dynamic_batches
+				sprites = if advanced.tics > 0 sprite_geometry(world, model.decorations, level, world.doom.player.sim.state.pos) else model.sprites
+				blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
+				combat = !(model.evidence.combat_requested) and advanced.fired
+				door = !(model.evidence.door_requested) and !(List.is_empty(level.doors))
+				if combat {
+					Task.spawn!(
+						input,
+						|| {
+							_ = Capture.screenshot!("combat.png")
+							EvidenceSaved
+						},
+					)
+				}
+				if door {
+					Task.spawn!(
+						input,
+						|| {
+							_ = Capture.screenshot!("moving-door.png")
+							EvidenceSaved
+						},
+					)
+				}
+				Ok({ ..model, world, level, blockers, dynamic_batches, masked_dynamic_batches, sprites, evidence: { ..model.evidence, tic: model.evidence.tic + advanced.tics, combat_requested: model.evidence.combat_requested or combat, door_requested: model.evidence.door_requested or door } })
+			}
+		}
 	}
 }
 

@@ -12,14 +12,14 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Map data | Freedoom Phase 1 E1M1 WAD lumps | Checked-in deterministic extraction with source checksum; counts and cross-references validated |
 | Timing | Doom 35 Hz game tic | Tests show the same command stream produces the same tic trace across different host-cycle deltas, with bounded catch-up |
 | Player movement | Chocolate Doom `p_user.c`, `p_map.c`, `p_mobj.c` | Deterministic regression traces cover thrust, turning, friction, stopping, collision radius, wall sliding, and narrow-portal recovery; these are not yet cross-engine golden traces |
-| Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, upper/lower/middle textures, offsets, light levels, sky, and moving sectors; special-7 damaging floors apply five damage on the 32-tic cadence |
+| Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, textures, offsets, sky and moving sectors; special-1 random flashes and synchronized special-12 strobes use explicit tic/RNG state, special-7 floors damage on the 32-tic cadence, and special-9 discoveries count once |
 | Interaction | Chocolate Doom `p_map.c`, `p_doors.c`, `p_spec.c` | Use and crossing specials operate the corresponding E1M1 doors, switches and exit |
 | Things | Doom thing types and difficulty flags | Player start, enemies, weapons, ammo, health, keys and decorations come from E1M1 data |
 | Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover weapon ownership, typed selection, dry-ammo fallback, cadence, ammunition, hitscan spread, damage, pain and death states; several exact weapon state chains remain incomplete |
 | Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
-| Presentation | Chocolate Doom screenshots and state | A 320x200-style viewport, weapon bob, palette-like flashes, status bar, directional sprites and base sector lighting are present; screenshot parity, animated light specials, and full status-face priority are not yet evidenced |
+| Presentation | Chocolate Doom screenshots and state | Native captures validate distinct, nonblank 320x200 start, combat and moving-door frames; animated lights are deterministic, while cross-engine screenshot parity and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Positional effects and a reproducibly rendered or natively synthesized Freedoom track accompany a complete run |
-| Whole level | Chocolate Doom running the same pinned WAD | A recorded start-to-exit input trace completes E1M1; state checkpoints and representative frames are compared |
+| Whole level | Chocolate Doom running the same pinned WAD | A recorded start-to-exit input trace completes E1M1; state checkpoints are asserted and representative native frames are structurally validated, not compared with Chocolate Doom |
 
 ## Reference map
 
@@ -102,6 +102,27 @@ The initial target is gameplay-compatible E1M1, not demo-byte compatibility.
 Any intentional departure is recorded here with an observable reason rather
 than silently becoming the new definition of Doom behaviour.
 
+## Native visual and performance evidence
+
+Run `python3 scripts/test_doom_visual.py --build` in a graphical session (or
+under Xvfb). The dedicated evidence app advances the ordinary deterministic
+replay through the real runtime and captures start, first combat and first
+moving-door frames through the public screenshot effect. The validator decodes
+the PNGs, requires exact 320x200 RGBA dimensions, at least 128 colours, and
+distinct content, then removes them. SHA-256 values are reported for diagnosis
+but are not portable golden values across GPU drivers. This proves the native
+render path is live at representative states; it is not cross-engine parity.
+
+`python3 scripts/test_doom_performance.py` builds and runs 120 hidden headless
+cycles with host allocation metering. It enforces 28 MiB worst-cycle, 16 MiB
+average-cycle and 1 MiB idle-update bounds, plus a conservative 30 cycles/second
+floor on the executing machine. Retained static and dynamic batches prevent map
+topology from being rebuilt by presentation frames; moving-sector batches are
+rebuilt only when a rendered height or light changes. Renderer tests separately
+bound an E1M1 batch to 60,000 vertices, dynamic sectors to 32, and worst-case
+geometry to 180,000 vertices / 270,000 indices. These are allocation/resource
+bounds, not a universal frame-time guarantee across machines or backends.
+
 ## Current verified gaps
 
 - E1M1 weapon pickups populate explicit ownership, newly acquired weapons
@@ -109,11 +130,10 @@ than silently becoming the new definition of Doom behaviour.
   deterministic Doom-style fallback priority. Weapon raising/lowering remains
   instantaneous rather than using the complete psprite transition chain.
 - Skill is retained in deterministic runtime state. Baby halves incoming
-  damage with integer truncation; Nightmare's faster actor cadence/respawning and the
-  Baby/Nightmare doubled-ammunition pickup rule are not implemented yet.
-- E1M1 sector specials 1 and 12 still use their base light level rather than
-  deterministic random/fast blinking. Secret special 9 is present in map data,
-  but the runtime does not count secret discovery.
+  damage with integer truncation, and Baby/Nightmare ammunition grants are
+  doubled. Nightmare's faster actor cadence and monster respawning remain an
+  intentional E1M1 vertical-slice departure: respawn bookkeeping and spawn
+  occupancy policy are outside the currently modeled bounded actor lifecycle.
 - Actor modes have deterministic tic durations, but they are coarser than the
   complete Doom sprite-state chains. The status face similarly provides useful
   health feedback without implementing the full original priority machine.

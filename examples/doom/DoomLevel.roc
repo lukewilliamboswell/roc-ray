@@ -130,6 +130,12 @@ DoomLevel := [].{
 		$result
 	}
 
+	## Whether retained dynamic geometry needs rebuilding. Simulation tics that
+	## leave every moving height and animated sector light unchanged reuse the
+	## previous batches.
+	render_changed : DoomMap.Map, State, State -> Bool
+	render_changed = |map, before, after| render_changed_in(map, before, after, dynamic_sectors(map), 0)
+
 	## Activate the E1M1 use-line door vocabulary. Specials 1 and 117 are
 	## ordinary/blazing local doors; 26 is the blue-key variant; 62 opens all
 	## tagged doors permanently. Special 11 requests level exit.
@@ -171,6 +177,18 @@ DoomLevel := [].{
 		{ ..lifts_advanced, tic: lifts_advanced.tic + 1, light_rng: light.rng, light_flashes: light.flashes }
 	}
 }
+
+render_changed_in = |map, before, after, sectors, index|
+	match List.get(sectors, index) {
+		Err(_) => Bool.False
+		Ok(sector) => {
+			before_heights = DoomLevel.heights_for(before, sector) ?? crash "dynamic sector missing"
+			after_heights = DoomLevel.heights_for(after, sector) ?? crash "dynamic sector missing"
+			before_light = DoomLevel.light_for(map, before, sector) ?? crash "dynamic light missing"
+			after_light = DoomLevel.light_for(map, after, sector) ?? crash "dynamic light missing"
+			before_heights != after_heights or before_light != after_light or render_changed_in(map, before, after, sectors, index + 1)
+		}
+	}
 
 descend = |nodes, index, point| {
 	node = List.get(nodes, index) ?? crash "validated BSP child missing"

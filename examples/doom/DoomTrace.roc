@@ -56,7 +56,7 @@ DoomTrace := [].{
 	checksum : List(Snapshot) -> U64
 	checksum = |trace| checksum_from(trace, 0, 2166136261)
 
-	golden_checksum = 326144865.U64
+	golden_checksum = 2176744692.U64
 }
 
 run_commands = |run, commands, partitions, index|
@@ -130,7 +130,11 @@ snapshot_value = |value| {
 	y = I64.to_u64_wrap(F32.to_i64_wrap(value.pos.y * 1000)) % modulus
 	angle = I64.to_u64_wrap(F32.to_i64_wrap(value.angle_turns * 1000000)) % modulus
 	heights = I64.to_u64_wrap(value.moving_height_sum) % modulus
-	phase = match value.phase { Playing => 1, Dead => 2, Exited => 3 }
+	phase = match value.phase {
+		Playing => 1
+		Dead => 2
+		Exited => 3
+	}
 	(value.tic * 31 + x * 37 + y * 41 + angle * 43 + value.sector * 47 + heights * 53 + value.actors * 59 + value.projectiles * 61 + value.explosions * 67 + I64.to_u64_wrap(value.health) * 71 + I64.to_u64_wrap(value.bullets) * 73 + U8.to_u64(value.rng) * 79 + value.weapon_cooldown * 83 + value.weapon_phase * 89 + phase * 97) % modulus
 }
 
@@ -152,10 +156,10 @@ expect {
 	initial = DoomTrace.initial({})
 	first.trace == restarted.trace
 		and initial.world.doom.player.sim.state.tic == 0
-		and initial.world.doom.rng.index() == 0
-		and List.is_empty(initial.level.doors)
-		and List.is_empty(initial.level.floors)
-		and List.is_empty(initial.level.lifts)
+			and initial.world.doom.rng.index() == 0
+				and List.is_empty(initial.level.doors)
+					and List.is_empty(initial.level.floors)
+						and List.is_empty(initial.level.lifts)
 }
 
 expect {

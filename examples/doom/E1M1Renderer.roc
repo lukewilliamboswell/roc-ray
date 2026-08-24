@@ -239,16 +239,31 @@ pack = |packed, primitive| {
 			Ok({ finished: List.append(packed.finished, packed.current), current: primitive })
 		} else {
 			offset = U64.to_u32_wrap(current_count)
-			shifted = List.map(primitive.indices, |index| index + offset)
 			Ok({
 				..packed,
 				current: {
-					vertices: List.concat(packed.current.vertices, primitive.vertices),
-					indices: List.concat(packed.current.indices, shifted),
+					vertices: append_all(packed.current.vertices, primitive.vertices),
+					indices: append_shifted(packed.current.indices, primitive.indices, offset),
 				},
 			})
 		}
 	}
+}
+
+append_all = |destination, source| {
+	var $result = destination
+	for item in source {
+		$result = List.append($result, item)
+	}
+	$result
+}
+
+append_shifted = |destination, source, offset| {
+	var $result = destination
+	for index in source {
+		$result = List.append($result, index + offset)
+	}
+	$result
 }
 
 finish = |packed| if List.len(packed.current.vertices) == 0 packed.finished else List.append(packed.finished, packed.current)

@@ -85,7 +85,7 @@ DoomMap := [].{
 		wall_spans_at = |Map.(value), heights| if List.len(heights) != List.len(value.sectors) crash "sector height count mismatch" else derive_all_spans({ ..value, sectors: resolve_sector_heights(value.sectors, heights, 0, []) })
 
 		surface_polygons : Map -> List(SurfacePolygon)
-		surface_polygons = |Map.(value)| derive_surfaces(value, 0)
+		surface_polygons = |Map.(value)| derive_surfaces(value, 0, [])
 
 		blocking_segments : Map -> List(BlockingSegment)
 		blocking_segments = |Map.(value)| derive_blocking_segments(value, 0)
@@ -222,9 +222,9 @@ validate_child = |raw, node_index, child|
 		if child.index >= List.len(raw.subsectors) Err(NodeChildOutOfRange({ node: node_index, kind: child.kind, index: child.index })) else Ok({})
 	} else Err(InvalidNodeChildKind({ node: node_index, kind: child.kind }))
 
-derive_surfaces = |raw, index|
+derive_surfaces = |raw, index, surfaces|
 	match List.get(raw.subsector_polygons, index) {
-		Err(_) => []
+		Err(_) => surfaces
 		Ok(polygon) => {
 			sector = List.get(raw.sectors, polygon.sector) ?? crash "validated polygon sector missing"
 			ceiling_points = reverse_list(polygon.points, [])
@@ -232,9 +232,17 @@ derive_surfaces = |raw, index|
 				{ subsector: polygon.subsector, sector: polygon.sector, orientation: Floor, vertices: polygon.points, height: sector.floor_height, flat: sector.floor_flat, light_level: sector.light_level },
 				{ subsector: polygon.subsector, sector: polygon.sector, orientation: Ceiling, vertices: ceiling_points, height: sector.ceiling_height, flat: sector.ceiling_flat, light_level: sector.light_level },
 			]
-			List.concat(polygons, derive_surfaces(raw, index + 1))
+			derive_surfaces(raw, index + 1, append_all(surfaces, polygons))
 		}
 	}
+
+append_all = |destination, source| {
+	var $result = destination
+	for item in source {
+		$result = List.append($result, item)
+	}
+	$result
+}
 
 signed_area = |points| signed_area_from(points, 0)
 
@@ -289,7 +297,7 @@ find_player_start = |things, index, found|
 		}
 	}
 
-derive_all_spans = |raw| derive_spans_from(raw, 0)
+derive_all_spans = |raw| derive_spans_from(raw, 0, [])
 
 resolve_sector_heights = |sectors, heights, index, resolved|
 	match List.get(sectors, index) {
@@ -300,10 +308,10 @@ resolve_sector_heights = |sectors, heights, index, resolved|
 		}
 	}
 
-derive_spans_from = |raw, index|
+derive_spans_from = |raw, index, spans|
 	match List.get(raw.linedefs, index) {
-		Err(_) => []
-		Ok(line) => List.concat(derive_line_spans(raw, line, index), derive_spans_from(raw, index + 1))
+		Err(_) => spans
+		Ok(line) => derive_spans_from(raw, index + 1, append_all(spans, derive_line_spans(raw, line, index)))
 	}
 
 derive_line_spans = |raw, line, index| {

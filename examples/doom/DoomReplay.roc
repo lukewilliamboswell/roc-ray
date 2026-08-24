@@ -17,6 +17,9 @@ DoomReplay := [].{
 	runs : List(CommandRun)
 	runs = parse_fixture(fixture)
 
+	command_at : U64 -> Try(DoomSim.Command, [ReplayFinished])
+	command_at = |tic| command_in_runs(runs, tic, 0)
+
 	initial : {} -> Result
 	initial = |_unit| {
 		map = DoomMap.e1m1
@@ -37,6 +40,12 @@ DoomReplay := [].{
 
 	golden_checksum = 2481569275.U64
 }
+
+command_in_runs = |runs, tic, index|
+	match List.get(runs, index) {
+		Err(_) => Err(ReplayFinished)
+		Ok(run) => if tic < run.count Ok(run.command) else command_in_runs(runs, tic - run.count, index + 1)
+	}
 
 replay_runs = |run, runs, partitions, decorations, index|
 	match List.get(runs, index) {

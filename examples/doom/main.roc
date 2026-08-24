@@ -8,11 +8,13 @@ app [Model, program] {
 
 import rr.App
 import rr.Assets
+import rr.Audio
 import rr.Camera
 import rr.Color
 import rr.Draw
 import DoomLevel
 import DoomMap
+import DoomPresentation
 import DoomRuntime
 import DoomSim
 import DoomSprites
@@ -33,7 +35,12 @@ Model : {
 	world_atlas : Draw.Texture,
 	sprite_atlas : Draw.Texture,
 	sprite_shader : Draw.Shader,
+	sounds : Sounds,
 }
+
+Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound }
+
+Cue : [FireCue, PickupCue, PainCue, DeathCue, AlertCue, DoorCue, SwitchOnCue, SwitchOffCue]
 
 Msg : []
 
@@ -56,6 +63,7 @@ init! = App.init(
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
+		sounds = load_sounds!()?
 
 		map = DoomMap.e1m1
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
@@ -72,7 +80,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader })
+		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader, sounds })
 	},
 )
 
@@ -100,7 +108,7 @@ update! = |model, input| {
 			40,
 		)
 		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
-		fire = input.devices.mouse.button_pressed(Left) or input.devices.key_pressed(KeySpace)
+		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
 		previous_pos = model.world.doom.player.sim.state.pos
 		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos)
 		advanced = DoomRuntime.advance(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers)
@@ -118,6 +126,9 @@ update! = |model, input| {
 		}
 		world = if exited { ..advanced.world, phase: Exited } else advanced.world
 		level = advance_level(level0, advanced.tics)
+		for cue in transition_cues(model.world, world, use_result, advanced.fired) {
+			play_cue!(model.sounds, cue)
+		}
 		Ok({ ..model, world, level, blockers })
 	}
 }
@@ -149,7 +160,7 @@ render! = |model, frame| {
 				dynamic = render_geometry(batch)
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: dynamic.vertices, indices: dynamic.indices })
 			}
-			sprites = sprite_geometry(model.world.doom, model.level, state.pos)
+			sprites = sprite_geometry(model.world, model.level, state.pos)
 			scene.with_shader!(
 				model.sprite_shader,
 				|cutout| {
@@ -160,33 +171,49 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, model.world)
+	draw_weapon!(frame, model.sprite_atlas, model.world)
+	draw_hud!(frame, model.sprite_atlas, model.world)
 	Ok({})
 }
 
-sprite_geometry : DoomWorld.World, DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
+sprite_geometry : DoomRuntime.World, DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
 sprite_geometry = |world, level, viewer| {
 	var $geometry = { vertices: [], indices: [] }
-	for actor in world.actors {
+	for actor in world.doom.actors {
 		primitive = DoomSprites.actor_geometry(actor, viewer) ?? crash "generated E1M1 actor has no sprite mapping"
 		$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, actor.pos))
 	}
-	for pickup in world.pickups {
-		if !(pickup.taken) {
-			primitive = DoomSprites.pickup_geometry(pickup, viewer) ?? crash "generated E1M1 pickup has no sprite mapping"
-			$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, pickup.pos))
+	for pickup in world.doom.pickups {
+		match DoomSprites.pickup_geometry(pickup, viewer, world.doom.player.sim.state.tic) ?? crash "generated E1M1 pickup has no sprite mapping" {
+			Visible(primitive) => {
+				$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, pickup.pos))
+			}
+			Hidden => {}
 		}
+	}
+	for projectile in world.projectiles {
+		primitive = DoomSprites.effect_geometry(ImpProjectile, projectile.pos, viewer, world.doom.player.sim.state.tic) ?? crash "Imp projectile sprite missing"
+		$geometry = append_sprite($geometry, place_above_floor(render_sprite_geometry(primitive), level, projectile.pos, 24))
+	}
+	for explosion in world.explosions {
+		phase = (DoomRuntime.explosion_lifetime - explosion.remaining) / 3
+		primitive = DoomSprites.effect_geometry(ImpExplosion, explosion.pos, viewer, phase) ?? crash "Imp explosion sprite missing"
+		$geometry = append_sprite($geometry, place_above_floor(render_sprite_geometry(primitive), level, explosion.pos, 20))
 	}
 	$geometry
 }
 
 place_on_floor = |geometry, level, pos| {
+	place_above_floor(geometry, level, pos, 0)
+}
+
+place_above_floor = |geometry, level, pos, above| {
 	sector = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(pos.x), y: F32.to_f64(pos.y) })
 	floor = match sector {
 		Ok(index) => (DoomLevel.heights_for(level, index) ?? crash "sprite sector state missing").floor
 		Err(OutsideMap) => 0
 	}
-	offset = I64.to_f32(floor) * E1M1Renderer.doom_scale
+	offset = I64.to_f32(floor + above) * E1M1Renderer.doom_scale
 	{ ..geometry, vertices: List.map(geometry.vertices, |vertex| { ..vertex, position: { ..vertex.position, y: vertex.position.y + offset } }) }
 }
 
@@ -207,12 +234,31 @@ append_sprite = |geometry, primitive| {
 	{ vertices: List.concat(geometry.vertices, primitive.vertices), indices: List.concat(geometry.indices, indices) }
 }
 
-draw_hud! = |frame, world| {
+draw_weapon! = |frame, atlas, world| {
+	if world.phase == Playing {
+		match DoomPresentation.weapon(world.doom.player.weapon, world.weapon.phase) {
+			Ok(view) => {
+				size = frame.size!()
+				width = U64.to_f32(view.rect.width) * 3
+				height = U64.to_f32(view.rect.height) * 3
+				frame.texture!({ texture: atlas, source: atlas_rect(view.rect), dest: { x: size.width * 0.5 - width * 0.5, y: size.height - height - hud_height, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			}
+			Err(_) => {}
+		}
+	}
+}
+
+draw_hud! = |frame, atlas, world| {
 	player = world.doom.player
 	size = frame.size!()
-	frame.text_at!({ pos: { x: 24, y: size.height - 42 }, text: "HEALTH ${I64.to_str(player.health)}", size: 24, color: if player.health <= 25 Color.red else Color.ray_white })
 	ammo = if player.weapon == Pistol player.ammo.bullets else player.ammo.shells
-	frame.text_at!({ pos: { x: size.width - 160, y: size.height - 42 }, text: "AMMO ${I64.to_str(ammo)}", size: 24, color: Color.from_hex_rgb(0xe8c56a) })
+	bar = DoomPresentation.hud(StatusBar) ?? crash "generated status bar sprite missing"
+	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: size.width * 0.5 - 480, y: size.height - hud_height, width: 960, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	draw_number!(frame, atlas, I64.max(0, ammo), size.width * 0.5 - 430, size.height - 82)
+	draw_number!(frame, atlas, I64.max(0, player.health), size.width * 0.5 - 270, size.height - 82)
+	face = DoomPresentation.hud(Face("ST00")) ?? crash "generated status face sprite missing"
+	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: size.width * 0.5 - 54, y: size.height - 96, width: 108, height: 90 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	draw_keys!(frame, atlas, player.keys, size)
 	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
 	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
 	match world.phase {
@@ -221,6 +267,31 @@ draw_hud! = |frame, world| {
 		Exited => overlay!(frame, size, "LEVEL COMPLETE", "Press R to restart")
 	}
 }
+
+draw_number! = |frame, atlas, value, x, y| {
+	n = I64.min(999, value)
+	digits = [I64.to_u8_wrap(n / 100), I64.to_u8_wrap((n / 10) % 10), I64.to_u8_wrap(n % 10)]
+	for entry in List.map_with_index(digits, |digit, index| { digit, index }) {
+		match DoomPresentation.hud(LargeDigit(entry.digit)) {
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: x + U64.to_f32(entry.index) * 42, y, width: 42, height: 54 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Err(_) => {}
+		}
+	}
+}
+
+draw_keys! = |frame, atlas, keys, size| {
+	flags = [{ present: keys.blue, index: 0.U8 }, { present: keys.yellow, index: 1.U8 }, { present: keys.red, index: 2.U8 }]
+	for item in List.map_with_index(flags, |entry, slot| { entry, slot }) {
+		if item.entry.present {
+			match DoomPresentation.hud(Key(item.entry.index)) {
+				Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: size.width * 0.5 + 300 + U64.to_f32(item.slot) * 42, y: size.height - 70, width: 36, height: 30 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+				Err(_) => {}
+			}
+		}
+	}
+}
+
+atlas_rect = |rect| { x: U64.to_f32(rect.x), y: U64.to_f32(rect.y), width: U64.to_f32(rect.width), height: U64.to_f32(rect.height) }
 
 overlay! = |frame, size, title, subtitle| {
 	frame.rectangle!({ x: 0, y: 0, width: size.width, height: size.height, style: Draw.filled(Color.with_alpha(Color.black, 165)) })
@@ -257,6 +328,72 @@ advance_level = |level, tics| if tics == 0 level else advance_level(DoomLevel.ti
 
 mouse_turns_per_pixel = 0.0004
 
+hud_height = 96
+
+transition_cues = |before, after, use_result, fired| {
+	var $cues = if fired [FireCue] else []
+	if taken_count(after.doom.pickups) > taken_count(before.doom.pickups) {
+		$cues = List.append($cues, PickupCue)
+	}
+	if dead_count(after.doom.actors) > dead_count(before.doom.actors) {
+		$cues = List.append($cues, DeathCue)
+	} else if actor_health(after.doom.actors) < actor_health(before.doom.actors) {
+		$cues = List.append($cues, PainCue)
+	}
+	if awake_count(after.doom.actors) > awake_count(before.doom.actors) {
+		$cues = List.append($cues, AlertCue)
+	}
+	match use_result {
+		Activated(_) => {
+			$cues = List.append($cues, DoorCue)
+			$cues = List.append($cues, SwitchOnCue)
+		}
+		_ => {}
+	}
+	$cues
+}
+
+taken_count = |pickups| List.len(List.keep_if(pickups, |pickup| pickup.taken))
+
+dead_count = |actors| List.len(List.keep_if(actors, |actor| actor.state.mode == Dead))
+
+awake_count = |actors| List.len(List.keep_if(actors, |actor| actor.state.mode != Look and actor.state.mode != Dead))
+
+actor_health = |actors| List.fold(actors, 0.I64, |total, actor| total + actor.health)
+
+play_cue! = |sounds, cue|
+	match cue {
+		FireCue => sounds.fire.play!()
+		PickupCue => sounds.pickup.play!()
+		PainCue => sounds.pain.play!()
+		DeathCue => sounds.death.play!()
+		AlertCue => sounds.alert.play!()
+		DoorCue => sounds.door.play!()
+		SwitchOnCue => sounds.switch_on.play!()
+		SwitchOffCue => sounds.switch_off.play!()
+	}
+
+load_sounds! = || {
+	base = "examples/doom/assets/freedoom/generated/audio"
+	fire = Audio.load_sound!("${base}/pistol.wav")?
+	pickup = Audio.load_sound!("${base}/pickup.wav")?
+	pain = Audio.load_sound!("${base}/enemy_pain.wav")?
+	death = Audio.load_sound!("${base}/enemy_die.wav")?
+	alert = Audio.load_sound!("${base}/enemy_alert.wav")?
+	door = Audio.load_sound!("${base}/door_move.wav")?
+	switch_on = Audio.load_sound!("${base}/switch_on.wav")?
+	switch_off = Audio.load_sound!("${base}/switch_off.wav")?
+	Ok({ fire, pickup, pain, death, alert, door, switch_on, switch_off })
+}
+
 expect signed_command(Bool.True, Bool.False, 50) == 50
 	and signed_command(Bool.False, Bool.True, 50) == -50
 		and signed_command(Bool.True, Bool.True, 50) == 0
+
+expect {
+	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	doom : DoomWorld.World
+	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	world = DoomRuntime.initial(doom)
+	transition_cues(world, world, NotUsable, Bool.True) == [FireCue]
+}

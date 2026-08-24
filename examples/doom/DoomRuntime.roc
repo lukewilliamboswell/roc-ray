@@ -11,11 +11,13 @@ DoomRuntime := [].{
 		is_eq : _
 	}
 	Projectile : { id : U64, pos : DoomSim.Vec2, momentum : DoomSim.Vec2, damage : I64, remaining : U64 }
-	World : { doom : DoomWorld.World, projectiles : List(Projectile), next_projectile_id : U64, phase : Phase }
+	Explosion : { pos : DoomSim.Vec2, remaining : U64 }
+	WeaponState : { cooldown : U64, phase : U64 }
+	World : { doom : DoomWorld.World, projectiles : List(Projectile), explosions : List(Explosion), next_projectile_id : U64, weapon : WeaponState, phase : Phase }
 	Advance : { world : World, tics : U64, dropped : Bool, fired : Bool, projectile_saturated : Bool }
 
 	initial : DoomWorld.World -> World
-	initial = |doom| { doom, projectiles: [], next_projectile_id: 0, phase: if doom.player.health <= 0 Dead else Playing }
+	initial = |doom| { doom, projectiles: [], explosions: [], next_projectile_id: 0, weapon: { cooldown: 0, phase: 0 }, phase: if doom.player.health <= 0 Dead else Playing }
 
 	advance : World, F32, DoomSim.Command, List(DoomSim.Segment) -> Advance
 	advance = |world, elapsed, command, blockers| {
@@ -27,18 +29,19 @@ DoomRuntime := [].{
 			sim = DoomSim.advance(world.doom.player.sim, elapsed, command, all_blockers)
 			var $next = { ..world, doom: { ..world.doom, player: { ..world.doom.player, sim: sim.clock } } }
 			var $saturated = Bool.False
+			var $fired = Bool.False
 			for _ in List.repeat({}, sim.tics) {
 				result = tic($next, command.fire, blockers)
 				$next = result.world
 				$saturated = $saturated or result.projectile_saturated
+				$fired = $fired or result.fired
 			}
-			fired_world = if command.fire and sim.tics > 0 fire($next, blockers) else { world: $next, fired: Bool.False }
-			phase = if fired_world.world.doom.player.health <= 0 Dead else fired_world.world.phase
-			{ world: { ..fired_world.world, phase }, tics: sim.tics, dropped: sim.dropped, fired: fired_world.fired, projectile_saturated: $saturated }
+			phase = if $next.doom.player.health <= 0 Dead else $next.phase
+			{ world: { ..$next, phase }, tics: sim.tics, dropped: sim.dropped, fired: $fired, projectile_saturated: $saturated }
 		}
 	}
 
-	tic : World, Bool, List(DoomSim.Segment) -> { world : World, projectile_saturated : Bool }
+	tic : World, Bool, List(DoomSim.Segment) -> { world : World, projectile_saturated : Bool, fired : Bool }
 	tic = |world, heard_shot, blockers| {
 		player_pos = world.doom.player.sim.state.pos
 		var $rng = world.doom.rng
@@ -67,10 +70,22 @@ DoomRuntime := [].{
 			$actors = List.append($actors, actor1)
 		}
 		projectile_step = advance_projectiles($projectiles, player_pos, blockers)
+		var $explosions = advance_explosions(world.explosions)
+		for impact in projectile_step.impacts {
+			if List.len($explosions) < max_explosions {
+				$explosions = List.append($explosions, { pos: impact, remaining: explosion_lifetime })
+			} else {
+				$saturated = Bool.True
+			}
+		}
 		player0 = DoomWorld.damage_player(world.doom.player, $damage + projectile_step.damage)
 		collected = collect_nearby(player0, world.doom.pickups)
 		doom = { ..world.doom, player: collected.player, actors: $actors, pickups: collected.pickups, rng: $rng }
-		{ world: { ..world, doom, projectiles: projectile_step.projectiles, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }, projectile_saturated: $saturated }
+		world0 = { ..world, doom, projectiles: projectile_step.projectiles, explosions: $explosions, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }
+		fired_result = if heard_shot and world.weapon.cooldown == 0 and doom.player.health > 0 fire(world0, blockers) else { world: world0, fired: Bool.False }
+		cooldown = if fired_result.fired weapon_cadence(doom.player.weapon) - 1 else if world.weapon.cooldown > 0 world.weapon.cooldown - 1 else 0
+		phase = if fired_result.fired 1 else if cooldown > 0 world.weapon.phase + 1 else 0
+		{ world: { ..fired_result.world, weapon: { cooldown, phase } }, projectile_saturated: $saturated, fired: fired_result.fired }
 	}
 
 	line_of_sight : DoomSim.Vec2, DoomSim.Vec2, List(DoomSim.Segment) -> Bool
@@ -136,6 +151,8 @@ DoomRuntime := [].{
 
 	player_pickup_radius = 20
 	max_projectiles = 64.U64
+	max_explosions = 64.U64
+	explosion_lifetime = 15.U64
 	use_distance = 64
 }
 
@@ -184,6 +201,7 @@ actor_overlaps = |actor, actors|
 advance_projectiles = |projectiles, player_pos, blockers| {
 	var $next = []
 	var $damage = 0.I64
+	var $impacts = []
 	for projectile in projectiles {
 		candidate = DoomSim.add(projectile.pos, projectile.momentum)
 		path : DoomSim.Segment
@@ -192,12 +210,18 @@ advance_projectiles = |projectiles, player_pos, blockers| {
 		hits_player = DoomSim.distance_to_segment_squared(player_pos, path) <= (DoomSim.player_radius + projectile_radius) * (DoomSim.player_radius + projectile_radius)
 		if hits_player {
 			$damage = $damage + projectile.damage
+			$impacts = List.append($impacts, candidate)
+		} else if hits_wall {
+			$impacts = List.append($impacts, candidate)
 		} else if !(hits_wall) and projectile.remaining > 1 {
 			$next = List.append($next, { ..projectile, pos: candidate, remaining: projectile.remaining - 1 })
 		}
 	}
-	{ projectiles: $next, damage: $damage }
+	{ projectiles: $next, damage: $damage, impacts: $impacts }
 }
+
+advance_explosions = |explosions|
+	List.keep_oks(explosions, |explosion| if explosion.remaining > 1 Ok({ ..explosion, remaining: explosion.remaining - 1 }) else Err(Expired))
 
 projectile_speed = 10
 
@@ -241,6 +265,8 @@ spend_ammo = |player|
 		Pistol => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
 		Shotgun => { ..player, ammo: { ..player.ammo, shells: I64.max(0, player.ammo.shells - 1) } }
 	}
+
+weapon_cadence = |weapon| if weapon == Pistol 7 else 35
 
 target_actor = |actors, origin, angle, spread_turns, blockers| {
 	facing0 = angle.forward()
@@ -374,4 +400,18 @@ expect {
 	doom = { player, actors: [zombie], pickups: [], rng: DoomWorld.Rng.seed(0) }
 	next = DoomRuntime.tic(DoomRuntime.initial(doom), Bool.False, []).world
 	next.phase == Dead and next.doom.player.health == 0
+}
+
+expect {
+	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	doom : DoomWorld.World
+	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(7) }
+	command = { ..DoomSim.neutral, fire: Bool.True }
+	whole = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds * 8, command, []).world
+	first = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds * 3, command, []).world
+	partitioned = DoomRuntime.advance(first, DoomSim.tic_seconds * 5, command, []).world
+	whole.doom.player.ammo == partitioned.doom.player.ammo
+		and whole.doom.rng.index() == partitioned.doom.rng.index()
+			and whole.weapon == partitioned.weapon
+				and whole.doom.player.sim.state.tic == partitioned.doom.player.sim.state.tic
 }

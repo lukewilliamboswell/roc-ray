@@ -54,6 +54,8 @@ SpatialCueKind : [PainSound, DeathSound, AlertSound, DoorSound, SwitchOnSound, S
 
 Cue : [LocalCue(LocalCueKind), SpatialCue(SpatialCueKind, DoomSim.Vec2)]
 
+Listener : { pos : DoomSim.Vec2, angle : DoomSim.Angle }
+
 Msg : []
 
 program = { init!, update!, render! }
@@ -462,6 +464,7 @@ draw_flashes! = |frame, flashes| {
 	}
 }
 
+transition_cues : DoomRuntime.World, DoomRuntime.World, DoomLevel.UseResult, Bool, Bool -> List(Cue)
 transition_cues = |before, after, use_result, fired, used| {
 	var $cues = if fired [LocalCue(FireSound)] else []
 	if taken_count(after.doom.pickups) > taken_count(before.doom.pickups) {
@@ -549,6 +552,7 @@ attack_count = |actors|
 
 actor_health = |actors| List.fold(actors, 0.I64, |total, actor| total + actor.health)
 
+changed_actor : List(DoomWorld.Actor), List(DoomWorld.Actor), (DoomWorld.Actor, DoomWorld.Actor -> Bool) -> Try(DoomWorld.Actor, [NoChangedActor])
 changed_actor = |before, after, changed| {
 	for actor in after {
 		match List.find_first(before, |old| old.id == actor.id) {
@@ -559,9 +563,11 @@ changed_actor = |before, after, changed| {
 	Err(NoChangedActor)
 }
 
+newest_projectile : List(DoomRuntime.Projectile), List(DoomRuntime.Projectile) -> Try(DoomRuntime.Projectile, [NotFound])
 newest_projectile = |before, after|
 	List.find_first(after, |projectile| !(List.any(before, |old| old.id == projectile.id)))
 
+spatialize : Listener, DoomSim.Vec2 -> { pan : F32, volume : F32 }
 spatialize = |listener, source| {
 	offset = DoomSim.sub(source, listener.pos)
 	distance = DoomSim.length(offset)
@@ -573,6 +579,7 @@ spatialize = |listener, source| {
 	{ pan, volume }
 }
 
+play_cue! : Sounds, Cue, Listener => {}
 play_cue! = |sounds, cue, listener|
 	match cue {
 		LocalCue(kind) => match kind {

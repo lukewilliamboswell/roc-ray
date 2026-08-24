@@ -26,9 +26,6 @@ Text := [].{
 	## from `roc-ray-types`, re-exported for applications that depend only on the
 	## platform.
 	Font : RrtFont.Font
-	FontMetrics : RrtFont.FontMetrics
-	GlyphMetrics : RrtFont.GlyphMetrics
-	Measure : RrtFont.Measure
 
 	## Which horizontal edge or centre of the text `pos` names.
 	HAlign : [Left, Center, Right]

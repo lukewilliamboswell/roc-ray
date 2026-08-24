@@ -52,10 +52,6 @@ Text := [].{
 	font_stub : Font
 	font_stub = RrtFont.stub
 
-	## Measure text from the immutable metric snapshot carried by a font.
-	measure : Font, Measure -> Size
-	measure = |font, cfg| RrtFont.measure(font, cfg)
-
 	## Everything a draw needs beyond the text itself: where to put it, what
 	## colour to paint it, and which point of it `pos` names.
 	Placement : {

@@ -82,7 +82,7 @@ update! = |model, program_input| {
 solve_layout : Text.Font -> Layout
 solve_layout = |font| {
 	panel: { x: 120, y: 150, width: 560, height: 300 },
-	title_size: Text.measure(font, { text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
+	title_size: font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

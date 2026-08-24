@@ -86,7 +86,7 @@ font = startup.default_font!()?
 ```
 
 `Text.Font` carries both its opaque host handle and an immutable metric
-snapshot, so `Text.measure` is pure.
+snapshot, so `font.measure(...)` is pure.
 
 ## Project links
 

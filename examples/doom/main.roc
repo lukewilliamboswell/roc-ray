@@ -84,12 +84,13 @@ render! = |model, frame| {
 draw_hud! : Draw.Frame, Draw.Texture, Game.World => {}
 draw_hud! = |frame, atlas, world| {
 	size = frame.size!()
-	frame.texture!({ texture: atlas, source: { x: 582, y: 132, width: 320, height: 32 }, dest: { x: size.width * 0.5 - 320, y: size.height - 64, width: 640, height: 64 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	hud_source = Renderer.hud_bar_source
+	frame.texture!({ texture: atlas, source: hud_source, dest: { x: size.width * 0.5 - hud_source.width, y: size.height - hud_source.height * 2, width: hud_source.width * 2, height: hud_source.height * 2 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	frame.text_at!({ pos: { x: 28, y: size.height - 54 }, text: "HEALTH ${I64.to_str(world.player.health)}", size: 25, color: if world.player.hurt_flash > 0 Color.red else Color.ray_white })
 	frame.text_at!({ pos: { x: size.width - 180, y: size.height - 54 }, text: "AMMO ${I64.to_str(world.player.ammo)}", size: 25, color: Color.from_hex_rgb(0xf1cc62) })
 
 	# The weapon overlay remains screen-space while the room uses perspective.
-	weapon_source = if world.player.shot_flash > 0 { x: 272, y: 132, width: 84, height: 100 } else { x: 104, y: 132, width: 82, height: 92 }
+	weapon_source = Renderer.pistol_source(world.player.shot_flash > 0)
 	weapon_width = weapon_source.width * 2.7
 	weapon_height = weapon_source.height * 2.7
 	frame.texture!({ texture: atlas, source: weapon_source, dest: { x: size.width * 0.5 - weapon_width * 0.5, y: size.height - weapon_height, width: weapon_width, height: weapon_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })

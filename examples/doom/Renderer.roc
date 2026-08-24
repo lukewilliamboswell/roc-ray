@@ -5,9 +5,54 @@ import rr.Color
 import rr.Draw
 import rr.Math
 import Game
+import "assets/freedoom/generated/atlas.json" as atlas_json : Str
+
+AtlasSprite : {
+	x : U64,
+	y : U64,
+	width : U64,
+	height : U64,
+	source : Str,
+	source_sha256 : Str,
+}
+
+AtlasMetadata : {
+	width : U64,
+	height : U64,
+	sprites : {
+		wall_concrete : AtlasSprite,
+		floor : AtlasSprite,
+		ceiling : AtlasSprite,
+		enemy_walk_0 : AtlasSprite,
+		ammo : AtlasSprite,
+		pistol_0 : AtlasSprite,
+		pistol_2 : AtlasSprite,
+		hud_bar : AtlasSprite,
+	},
+}
+
+## Importing and decoding at the top level makes the generated manifest part of
+## the program. Its JSON and the fields this renderer depends on are validated
+## while the app is built, with no runtime filesystem lookup or parser state.
+atlas_metadata : AtlasMetadata
+atlas_metadata = decode_atlas(atlas_json)
+
+decode_atlas : Str -> AtlasMetadata
+decode_atlas = |json|
+	match Json.parse(json) {
+		Ok(metadata) => metadata
+		Err(_) => crash "Freedoom generated/atlas.json is malformed or its schema changed"
+	}
 
 Renderer := [].{
 	Geometry : { vertices : List(Draw.TexturedVertex3D), indices : List(U32) }
+
+	hud_bar_source : Math.Rect
+	hud_bar_source = source_rect(atlas_metadata.sprites.hud_bar)
+
+	pistol_source : Bool -> Math.Rect
+	pistol_source = |firing|
+		if firing source_rect(atlas_metadata.sprites.pistol_2) else source_rect(atlas_metadata.sprites.pistol_0)
 
 	build_room : Geometry
 	build_room = {
@@ -121,21 +166,33 @@ Renderer := [].{
 	# Stable names in generated/atlas.json are deliberately mapped here rather
 	# than leaking asset-pipeline coordinates through gameplay or drawing code.
 	wall_uv : Uv
-	wall_uv = atlas_uv(2, 2, 128, 128)
+	wall_uv = atlas_uv(atlas_metadata.sprites.wall_concrete)
 	floor_uv : Uv
-	floor_uv = atlas_uv(524, 2, 64, 64)
+	floor_uv = atlas_uv(atlas_metadata.sprites.floor)
 	ceiling_uv : Uv
-	ceiling_uv = atlas_uv(590, 2, 64, 64)
+	ceiling_uv = atlas_uv(atlas_metadata.sprites.ceiling)
 	enemy_uv : Uv
-	enemy_uv = atlas_uv(656, 2, 41, 57)
+	enemy_uv = atlas_uv(atlas_metadata.sprites.enemy_walk_0)
 	ammo_uv : Uv
-	ammo_uv = atlas_uv(532, 132, 17, 16)
+	ammo_uv = atlas_uv(atlas_metadata.sprites.ammo)
 
-	atlas_uv : F32, F32, F32, F32 -> Uv
-	atlas_uv = |x, y, width, height| {
-		left: x / 1024,
-		top: y / 512,
-		right: (x + width) / 1024,
-		bottom: (y + height) / 512,
+	atlas_uv : AtlasSprite -> Uv
+	atlas_uv = |sprite| {
+		x = U64.to_f32(sprite.x)
+		y = U64.to_f32(sprite.y)
+		width = U64.to_f32(sprite.width)
+		height = U64.to_f32(sprite.height)
+		atlas_width = U64.to_f32(atlas_metadata.width)
+		atlas_height = U64.to_f32(atlas_metadata.height)
+		{
+			left: x / atlas_width,
+			top: y / atlas_height,
+			right: (x + width) / atlas_width,
+			bottom: (y + height) / atlas_height,
+		}
 	}
+
+	source_rect : AtlasSprite -> Math.Rect
+	source_rect = |sprite|
+		Math.rect(U64.to_f32(sprite.x), U64.to_f32(sprite.y), U64.to_f32(sprite.width), U64.to_f32(sprite.height))
 }

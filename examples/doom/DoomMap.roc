@@ -1,0 +1,313 @@
+## Pure decoding and wall derivation for a deterministic Doom map-lump export.
+##
+## This module deliberately does not triangulate floors or ceilings. A sector's
+## linedefs do not by themselves describe ordered loops, concavity, holes, or
+## the subsector partition. Sound flat geometry needs the exported seg,
+## subsector, and node data (or an equivalently validated polygonization).
+
+DoomMap := [].{
+	Vertex : { x : I64, y : I64 }
+	Linedef : { start_vertex : U64, end_vertex : U64, flags : U64, special : U64, tag : U64, right_sidedef : Try(U64, [Null]), left_sidedef : Try(U64, [Null]) }
+	Sidedef : { x_offset : I64, y_offset : I64, upper_texture : Try(Str, [Null]), lower_texture : Try(Str, [Null]), middle_texture : Try(Str, [Null]), sector : U64 }
+	Sector : { floor_height : I64, ceiling_height : I64, floor_flat : Str, ceiling_flat : Str, light_level : I64, special : U64, tag : U64 }
+	Thing : { x : I64, y : I64, angle : I64, type : U64, flags : U64 }
+
+	Raw : { format : Str, map : Str, vertices : List(Vertex), linedefs : List(Linedef), sidedefs : List(Sidedef), sectors : List(Sector), things : List(Thing) }
+
+	Side := [Right, Left].{
+		is_eq : _
+	}
+	WallKind := [Middle, Upper, Lower].{
+		is_eq : _
+	}
+	LineFlags : {
+		blocks_players : Bool,
+		blocks_monsters : Bool,
+		two_sided : Bool,
+		upper_unpegged : Bool,
+		lower_unpegged : Bool,
+		secret : Bool,
+		blocks_sound : Bool,
+		hidden_on_map : Bool,
+		shown_on_map : Bool,
+	}
+	Special : [NoSpecial, Special({ number : U64, tag : U64 })]
+	WallSpan : {
+		linedef : U64,
+		side : Side,
+		kind : WallKind,
+		start : Vertex,
+		end : Vertex,
+		bottom : I64,
+		top : I64,
+		texture : Str,
+		x_offset : I64,
+		y_offset : I64,
+		sector : U64,
+		light_level : I64,
+		flags : LineFlags,
+		special : Special,
+	}
+
+	Map :: Raw.{
+		raw : Map -> Raw
+		raw = |Map.(value)| value
+
+		wall_spans : Map -> List(WallSpan)
+		wall_spans = |Map.(value)| derive_all_spans(value)
+	}
+
+	## Decode the asset pipeline's deterministic `map.json`, then validate every
+	## cross-lump index and structural invariant used by wall derivation. Extra
+	## exported BSP fields are intentionally ignored until flat triangulation is
+	## implemented.
+	decode : Str -> Try(Map, [InvalidJson, InvalidFormat(Str), EmptyMapName, DegenerateLinedef(U64), VertexOutOfRange({ linedef : U64, vertex : U64 }), MissingRightSidedef(U64), SidedefOutOfRange({ linedef : U64, sidedef : U64 }), TwoSidedMismatch(U64), SectorOutOfRange({ sidedef : U64, sector : U64 }), InvalidLight({ sector : U64, light : I64 }), InvalidThingAngle({ thing : U64, angle : I64 }), ..])
+	decode = |text|
+		match Json.parse(text) {
+			Ok(raw) => validate(raw)
+			Err(_) => Err(InvalidJson)
+		}
+
+	## Validate an already-decoded fixture or generated value.
+	validate : Raw -> Try(Map, [InvalidFormat(Str), EmptyMapName, DegenerateLinedef(U64), VertexOutOfRange({ linedef : U64, vertex : U64 }), MissingRightSidedef(U64), SidedefOutOfRange({ linedef : U64, sidedef : U64 }), TwoSidedMismatch(U64), SectorOutOfRange({ sidedef : U64, sector : U64 }), InvalidLight({ sector : U64, light : I64 }), InvalidThingAngle({ thing : U64, angle : I64 }), ..])
+	validate = |raw| {
+		if raw.format != "doom" {
+			Err(InvalidFormat(raw.format))
+		} else if Str.is_empty(raw.map) {
+			Err(EmptyMapName)
+		} else {
+			validate_linedefs(raw, 0)?
+			validate_sidedefs(raw, 0)?
+			validate_sectors(raw.sectors, 0)?
+			validate_things(raw.things, 0)?
+			Ok(Map.(raw))
+		}
+	}
+
+	## Decode the stable meanings of the original Doom linedef flag bits.
+	line_flags : U64 -> LineFlags
+	line_flags = |flags| {
+		blocks_players: bit_set(flags, 0x0001),
+		blocks_monsters: bit_set(flags, 0x0002),
+		two_sided: bit_set(flags, 0x0004),
+		upper_unpegged: bit_set(flags, 0x0008),
+		lower_unpegged: bit_set(flags, 0x0010),
+		secret: bit_set(flags, 0x0020),
+		blocks_sound: bit_set(flags, 0x0040),
+		hidden_on_map: bit_set(flags, 0x0080),
+		shown_on_map: bit_set(flags, 0x0100),
+	}
+}
+
+bit_set : U64, U64 -> Bool
+bit_set = |value, mask| U64.bitwise_and(value, mask) != 0
+
+validate_linedefs = |raw, index|
+	match List.get(raw.linedefs, index) {
+		Err(_) => Ok({})
+		Ok(line) => {
+			if line.start_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.start_vertex })) else if line.end_vertex >= List.len(raw.vertices) Err(VertexOutOfRange({ linedef: index, vertex: line.end_vertex })) else if line.start_vertex == line.end_vertex Err(DegenerateLinedef(index)) else {
+				validate_side_ref(line.right_sidedef, raw.sidedefs, index, Bool.True)?
+				validate_side_ref(line.left_sidedef, raw.sidedefs, index, Bool.False)?
+				has_left = match line.left_sidedef {
+					Ok(_) => Bool.True
+					Err(Null) => Bool.False
+				}
+				if bit_set(line.flags, 0x0004) != has_left Err(TwoSidedMismatch(index)) else validate_linedefs(raw, index + 1)
+			}
+		}
+	}
+
+validate_side_ref = |side, sidedefs, linedef, required|
+	match side {
+		Err(Null) => if required Err(MissingRightSidedef(linedef)) else Ok({})
+		Ok(index) => if index >= List.len(sidedefs) Err(SidedefOutOfRange({ linedef, sidedef: index })) else Ok({})
+	}
+
+validate_sidedefs = |raw, index|
+	match List.get(raw.sidedefs, index) {
+		Err(_) => Ok({})
+		Ok(side) => if side.sector >= List.len(raw.sectors) Err(SectorOutOfRange({ sidedef: index, sector: side.sector })) else validate_sidedefs(raw, index + 1)
+	}
+
+validate_sectors = |sectors, index|
+	match List.get(sectors, index) {
+		Err(_) => Ok({})
+		Ok(sector) => if sector.light_level < 0 or sector.light_level > 255 Err(InvalidLight({ sector: index, light: sector.light_level })) else validate_sectors(sectors, index + 1)
+	}
+
+validate_things = |things, index|
+	match List.get(things, index) {
+		Err(_) => Ok({})
+		Ok(thing) => if thing.angle < 0 or thing.angle >= 360 Err(InvalidThingAngle({ thing: index, angle: thing.angle })) else validate_things(things, index + 1)
+	}
+
+derive_all_spans = |raw| derive_spans_from(raw, 0)
+
+derive_spans_from = |raw, index|
+	match List.get(raw.linedefs, index) {
+		Err(_) => []
+		Ok(line) => List.concat(derive_line_spans(raw, line, index), derive_spans_from(raw, index + 1))
+	}
+
+derive_line_spans = |raw, line, index| {
+	right = side_spans(raw, line, index, Right, line.right_sidedef, line.left_sidedef)
+	left = side_spans(raw, line, index, Left, line.left_sidedef, line.right_sidedef)
+	List.concat(right, left)
+}
+
+# A two-sided middle texture occupies the portal opening geometrically. Exact
+# Doom pegging/cropping additionally depends on decoded texture dimensions;
+# this span deliberately preserves offsets and heights rather than guessing it.
+side_spans = |raw, line, line_index, side_name, own_ref, other_ref|
+	match own_ref {
+		Err(Null) => []
+		Ok(own_index) => {
+			own = List.get(raw.sidedefs, own_index) ?? crash "validated sidedef missing"
+			sector = List.get(raw.sectors, own.sector) ?? crash "validated sector missing"
+			raw_start = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
+			raw_end = List.get(raw.vertices, line.end_vertex) ?? crash "validated vertex missing"
+			start = if side_name == Right raw_start else raw_end
+			end = if side_name == Right raw_end else raw_start
+			common : SpanCommon
+			common = { linedef: line_index, side: side_name, start, end, x_offset: own.x_offset, y_offset: own.y_offset, sector: own.sector, light_level: sector.light_level, flags: DoomMap.line_flags(line.flags), special: if line.special == 0 NoSpecial else Special({ number: line.special, tag: line.tag }) }
+			match other_ref {
+				Err(Null) => texture_span(own.middle_texture, common, Middle, sector.floor_height, sector.ceiling_height)
+				Ok(other_index) => {
+					other = List.get(raw.sidedefs, other_index) ?? crash "validated sidedef missing"
+					other_sector = List.get(raw.sectors, other.sector) ?? crash "validated sector missing"
+					upper = if sector.ceiling_height > other_sector.ceiling_height texture_span(own.upper_texture, common, Upper, other_sector.ceiling_height, sector.ceiling_height) else []
+					lower = if sector.floor_height < other_sector.floor_height texture_span(own.lower_texture, common, Lower, sector.floor_height, other_sector.floor_height) else []
+					opening_bottom = I64.max(sector.floor_height, other_sector.floor_height)
+					opening_top = I64.min(sector.ceiling_height, other_sector.ceiling_height)
+					middle = if opening_top > opening_bottom texture_span(own.middle_texture, common, Middle, opening_bottom, opening_top) else []
+					List.concat(List.concat(lower, middle), upper)
+				}
+			}
+		}
+	}
+
+SpanCommon : { linedef : U64, side : DoomMap.Side, start : DoomMap.Vertex, end : DoomMap.Vertex, x_offset : I64, y_offset : I64, sector : U64, light_level : I64, flags : DoomMap.LineFlags, special : DoomMap.Special }
+
+texture_span : Try(Str, [Null]), SpanCommon, DoomMap.WallKind, I64, I64 -> List(DoomMap.WallSpan)
+texture_span = |texture, common, kind, bottom, top|
+	match texture {
+		Err(Null) => []
+		Ok(name) => if top <= bottom [] else [{ linedef: common.linedef, side: common.side, kind, start: common.start, end: common.end, bottom, top, texture: name, x_offset: common.x_offset, y_offset: common.y_offset, sector: common.sector, light_level: common.light_level, flags: common.flags, special: common.special }]
+	}
+
+fixture_sector = |floor_height, ceiling_height, light_level| { floor_height, ceiling_height, floor_flat: "FLOOR", ceiling_flat: "CEIL", light_level, special: 0, tag: 0 }
+
+fixture_side = |sector, upper_texture, lower_texture, middle_texture| { x_offset: 8, y_offset: -4, upper_texture, lower_texture, middle_texture, sector }
+
+fixture_line = |flags, left_sidedef| { start_vertex: 0, end_vertex: 1, flags, special: 1, tag: 7, right_sidedef: Ok(0), left_sidedef }
+
+fixture = |line, sides, sectors| { format: "doom", map: "E1M1", vertices: [{ x: 0, y: 0 }, { x: 128, y: 0 }], linedefs: [line], sidedefs: sides, sectors, things: [{ x: 32, y: 16, angle: 90, type: 1, flags: 7 }] }
+
+expect {
+	raw = fixture(fixture_line(0, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 160)])
+	map = DoomMap.validate(raw) ?? crash "fixture should validate"
+	spans = map.wall_spans()
+	span = List.get(spans, 0) ?? crash "one-sided wall missing"
+	List.len(spans) == 1 and span.kind == Middle and span.bottom == 0 and span.top == 128 and span.texture == "STONE" and span.special == Special({ number: 1, tag: 7 })
+}
+
+expect {
+	raw = fixture(
+		fixture_line(0x0004, Ok(1)),
+		[fixture_side(0, Ok("UPPER_A"), Ok("LOWER_A"), Ok("MASK_A")), fixture_side(1, Ok("UPPER_B"), Ok("LOWER_B"), Err(Null))],
+		[fixture_sector(0, 192, 192), fixture_sector(32, 128, 96)],
+	)
+	map = DoomMap.validate(raw) ?? crash "fixture should validate"
+	spans = map.wall_spans()
+	List.len(spans) == 3
+		and List.any(spans, |span| span.side == Right and span.kind == Lower and span.bottom == 0 and span.top == 32 and span.texture == "LOWER_A")
+			and List.any(spans, |span| span.side == Right and span.kind == Middle and span.bottom == 32 and span.top == 128 and span.texture == "MASK_A")
+				and List.any(spans, |span| span.side == Right and span.kind == Upper and span.bottom == 128 and span.top == 192 and span.texture == "UPPER_A")
+					and !(List.any(spans, |span| span.side == Left))
+}
+
+expect {
+	bad_vertex = fixture({ ..fixture_line(0, Err(Null)), end_vertex: 9 }, [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 160)])
+	bad_sector = fixture(fixture_line(0, Err(Null)), [fixture_side(4, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 160)])
+	bad_light = fixture(fixture_line(0, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 300)])
+	match DoomMap.validate(bad_vertex) {
+		Err(VertexOutOfRange(_)) => Bool.True
+		_ => Bool.False
+	}
+		and match DoomMap.validate(bad_sector) {
+			Err(SectorOutOfRange(_)) => Bool.True
+			_ => Bool.False
+		}
+			and match DoomMap.validate(bad_light) {
+				Err(InvalidLight(_)) => Bool.True
+				_ => Bool.False
+			}
+}
+
+expect {
+	flags = DoomMap.line_flags(0x01ff)
+	flags.blocks_players and flags.blocks_monsters and flags.two_sided and flags.upper_unpegged and flags.lower_unpegged and flags.secret and flags.blocks_sound and flags.hidden_on_map and flags.shown_on_map
+}
+
+expect {
+	json = "{\"format\":\"doom\",\"map\":\"E1M1\",\"vertices\":[{\"x\":0,\"y\":0},{\"x\":64,\"y\":0}],\"linedefs\":[{\"start_vertex\":0,\"end_vertex\":1,\"flags\":0,\"special\":0,\"tag\":0,\"right_sidedef\":0,\"left_sidedef\":null}],\"sidedefs\":[{\"x_offset\":0,\"y_offset\":0,\"upper_texture\":null,\"lower_texture\":null,\"middle_texture\":\"STONE\",\"sector\":0}],\"sectors\":[{\"floor_height\":0,\"ceiling_height\":128,\"floor_flat\":\"FLOOR\",\"ceiling_flat\":\"CEIL\",\"light_level\":160,\"special\":0,\"tag\":0}],\"things\":[],\"segs\":[],\"subsectors\":[],\"nodes\":[] }"
+	match DoomMap.decode(json) {
+		Ok(map) => List.len(map.wall_spans()) == 1
+		Err(_) => Bool.False
+	}
+}
+
+expect {
+	base = fixture(fixture_line(0, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 160)])
+	missing_right = { ..base, linedefs: [{ ..fixture_line(0, Err(Null)), right_sidedef: Err(Null) }] }
+	bad_side = { ..base, linedefs: [{ ..fixture_line(0, Err(Null)), right_sidedef: Ok(9) }] }
+	bad_two_sided = { ..base, linedefs: [fixture_line(0x0004, Err(Null))] }
+	match DoomMap.validate(missing_right) {
+		Err(MissingRightSidedef(_)) => Bool.True
+		_ => Bool.False
+	}
+		and match DoomMap.validate(bad_side) {
+			Err(SidedefOutOfRange(_)) => Bool.True
+			_ => Bool.False
+		}
+			and match DoomMap.validate(bad_two_sided) {
+				Err(TwoSidedMismatch(_)) => Bool.True
+				_ => Bool.False
+			}
+}
+
+expect {
+	raw = fixture(
+		fixture_line(0x0004, Ok(1)),
+		[fixture_side(0, Err(Null), Err(Null), Ok("MASK_A")), fixture_side(1, Err(Null), Err(Null), Ok("MASK_B"))],
+		[fixture_sector(0, 128, 160), fixture_sector(0, 128, 128)],
+	)
+	map = DoomMap.validate(raw) ?? crash "fixture should validate"
+	left = List.find_first(map.wall_spans(), |span| span.side == Left) ?? crash "left span missing"
+	left.start == { x: 128, y: 0 } and left.end == { x: 0, y: 0 } and left.light_level == 128
+}
+
+expect {
+	base = fixture(fixture_line(0, Err(Null)), [fixture_side(0, Err(Null), Err(Null), Ok("STONE"))], [fixture_sector(0, 128, 160)])
+	bad_format = { ..base, format: "hexen" }
+	empty_name = { ..base, map: "" }
+	degenerate = { ..base, linedefs: [{ ..fixture_line(0, Err(Null)), end_vertex: 0 }] }
+	bad_angle = { ..base, things: [{ x: 0, y: 0, angle: 360, type: 1, flags: 0 }] }
+	match DoomMap.validate(bad_format) {
+		Err(InvalidFormat(_)) => Bool.True
+		_ => Bool.False
+	}
+		and match DoomMap.validate(empty_name) {
+			Err(EmptyMapName) => Bool.True
+			_ => Bool.False
+		}
+			and match DoomMap.validate(degenerate) {
+				Err(DegenerateLinedef(_)) => Bool.True
+				_ => Bool.False
+			}
+				and match DoomMap.validate(bad_angle) {
+					Err(InvalidThingAngle(_)) => Bool.True
+					_ => Bool.False
+				}
+}

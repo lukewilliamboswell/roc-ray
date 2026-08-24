@@ -59,7 +59,7 @@ init! = App.init(
 
 		map = DoomMap.e1m1
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
-		mesh_batches = E1M1Renderer.build(map.surface_polygons(), map.wall_spans()) ?? crash "generated E1M1 atlas is incomplete"
+		mesh_batches = E1M1Renderer.build_static(map) ?? crash "generated E1M1 atlas is incomplete"
 		batches = List.map(mesh_batches, render_geometry)
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
@@ -143,6 +143,11 @@ render! = |model, frame| {
 		|scene| {
 			for batch in model.batches {
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: batch.vertices, indices: batch.indices })
+			}
+			dynamic_batches = E1M1Renderer.build_dynamic(DoomMap.e1m1, model.level) ?? crash "generated dynamic E1M1 atlas is incomplete"
+			for batch in dynamic_batches {
+				dynamic = render_geometry(batch)
+				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: dynamic.vertices, indices: dynamic.indices })
 			}
 			sprites = sprite_geometry(model.world.doom, model.level, state.pos)
 			scene.with_shader!(

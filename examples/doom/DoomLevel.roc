@@ -67,6 +67,11 @@ DoomLevel := [].{
 	crossed_lines : DoomMap.Map, Point, Point -> List(U64)
 	crossed_lines = |map, start, end| crossed_lines_from(map.raw(), start, end, 0)
 
+	## Sectors whose planes can move under the supported E1M1 specials. Render
+	## adapters use this stable set to keep them out of retained static geometry.
+	dynamic_sectors : DoomMap.Map -> List(U64)
+	dynamic_sectors = |map| dynamic_sectors_from(map.raw(), initial(map), 0, [])
+
 	## Activate the E1M1 use-line door vocabulary. Specials 1 and 117 are
 	## ordinary/blazing local doors; 26 is the blue-key variant; 62 opens all
 	## tagged doors permanently. Special 11 requests level exit.
@@ -181,6 +186,43 @@ side_sector = |raw, side_ref|
 	match side_ref {
 		Err(Null) => Err(NoSector)
 		Ok(index) => Ok((List.get(raw.sidedefs, index) ?? crash "validated sidedef missing").sector)
+	}
+
+dynamic_sectors_from = |raw, state, index, result|
+	match List.get(raw.linedefs, index) {
+		Err(_) => result
+		Ok(line) => {
+			sectors = match line.special {
+				1 => local_door_sectors(raw, state, line)
+				26 => local_door_sectors(raw, state, line)
+				117 => local_door_sectors(raw, state, line)
+				2 => tagged_sectors(raw.sectors, line.tag, 0)
+				23 => tagged_sectors(raw.sectors, line.tag, 0)
+				62 => tagged_sectors(raw.sectors, line.tag, 0)
+				88 => tagged_sectors(raw.sectors, line.tag, 0)
+				_ => []
+			}
+			dynamic_sectors_from(raw, state, index + 1, append_unique(result, sectors, 0))
+		}
+	}
+
+local_door_sectors = |raw, state, line|
+	match line.left_sidedef {
+		Err(Null) => []
+		Ok(left_index) => {
+			right_index = line.right_sidedef ?? crash "validated right sidedef missing"
+			right_sector = (List.get(raw.sidedefs, right_index) ?? crash "validated sidedef missing").sector
+			left_sector = (List.get(raw.sidedefs, left_index) ?? crash "validated sidedef missing").sector
+			right = List.get(state.heights, right_sector) ?? crash "sector state missing"
+			left = List.get(state.heights, left_sector) ?? crash "sector state missing"
+			[if right.ceiling - right.floor <= left.ceiling - left.floor right_sector else left_sector]
+		}
+	}
+
+append_unique = |result, values, index|
+	match List.get(values, index) {
+		Err(_) => result
+		Ok(value) => append_unique(if List.contains(result, value) result else List.append(result, value), values, index + 1)
 	}
 
 activate_local_door = |raw, state, line, stays_open, speed|

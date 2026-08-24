@@ -3,6 +3,7 @@
 ## two into structural records accepted by `Draw.textured_triangles_3d!`.
 ## Geometry is split below the U32 index ceiling so host work stays explicit.
 import DoomAssets
+import DoomLevel
 import DoomMap
 
 E1M1Renderer := [].{
@@ -39,6 +40,44 @@ E1M1Renderer := [].{
 			}
 		}
 		Ok(finish($packed))
+	}
+
+	## Build once at startup. Every potentially moving sector plane and every
+	## wall touching one is excluded so a later overlay cannot z-fight stale
+	## retained geometry.
+	build_static : DoomMap.Map -> Try(List(Geometry), [MissingFlat(Str), MissingTexture(Str), GeometryPrimitiveTooLarge(U64)])
+	build_static = |map| {
+		dynamic = DoomLevel.dynamic_sectors(map)
+		raw = map.raw()
+		surfaces = List.keep_if(map.surface_polygons(), |surface| !(List.contains(dynamic, surface.sector)))
+		walls = List.keep_if(map.wall_spans(), |wall| !(line_touches_any(raw, wall.linedef, dynamic)))
+		build(surfaces, walls)
+	}
+
+	## Build the bounded moving-sector overlay from the current pure level state.
+	## E1M1 has a stable small dynamic-sector set; no geometry is retained here.
+	build_dynamic = |map, state| {
+		dynamic = DoomLevel.dynamic_sectors(map)
+		raw = map.raw()
+		surfaces = List.map(
+			List.keep_if(map.surface_polygons(), |surface| List.contains(dynamic, surface.sector)),
+			|surface| {
+				heights = DoomLevel.heights_for(state, surface.sector) ?? crash "level state sector mismatch"
+				{ ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling }
+			},
+		)
+		all_walls = map.wall_spans_at(state.heights)
+		walls = List.keep_if(all_walls, |wall| line_touches_any(raw, wall.linedef, dynamic))
+		build(surfaces, walls)
+	}
+
+	sector_surfaces = |map, state, sector| {
+		heights = DoomLevel.heights_for(state, sector) ?? crash "level state sector mismatch"
+		surfaces = List.map(
+			List.keep_if(map.surface_polygons(), |surface| surface.sector == sector),
+			|surface| { ..surface, height: if surface.orientation == Floor heights.floor else heights.ceiling },
+		)
+		build(surfaces, [])
 	}
 
 	surface_geometry : DoomMap.SurfacePolygon -> Try(Geometry, [MissingFlat(Str)])
@@ -114,6 +153,17 @@ TileRun : { from : F64, to : F64, uv_from : F64, uv_to : F64 }
 
 empty : E1M1Renderer.Geometry
 empty = { vertices: [], indices: [] }
+
+line_touches_any = |raw, linedef, sectors| {
+	line = List.get(raw.linedefs, linedef) ?? crash "validated linedef missing"
+	right = line.right_sidedef ?? crash "validated right sidedef missing"
+	right_sector = (List.get(raw.sidedefs, right) ?? crash "validated sidedef missing").sector
+	left_touches = match line.left_sidedef {
+		Err(Null) => Bool.False
+		Ok(left) => List.contains(sectors, (List.get(raw.sidedefs, left) ?? crash "validated sidedef missing").sector)
+	}
+	List.contains(sectors, right_sector) or left_touches
+}
 
 pack : Packed, E1M1Renderer.Geometry -> Try(Packed, [GeometryPrimitiveTooLarge(U64)])
 pack = |packed, primitive| {
@@ -193,6 +243,38 @@ geometry_counts = |batches| {
 	}
 	{ vertices: $vertices, indices: $indices }
 }
+
+max_geometry_y = |batches| {
+	var $maximum = -1000000.F32
+	for batch in batches {
+		for vertex in batch.vertices {
+			$maximum = F32.max($maximum, vertex.position.y)
+		}
+	}
+	$maximum
+}
+
+min_geometry_y = |batches| {
+	var $minimum = 1000000.F32
+	for batch in batches {
+		for vertex in batch.vertices {
+			$minimum = F32.min($minimum, vertex.position.y)
+		}
+	}
+	$minimum
+}
+
+line_wall_extent = |walls, linedef| {
+	var $extent = 0.I64
+	for wall in walls {
+		if wall.linedef == linedef {
+			$extent = $extent + wall.top - wall.bottom
+		}
+	}
+	$extent
+}
+
+advance_level = |state, count| if count == 0 state else advance_level(DoomLevel.tick(state), count - 1)
 
 ## Half-texel inset keeps filtered samples inside the atlas padding. Coordinate
 ## wrapping is computed in Doom texels before normalization into atlas space.
@@ -286,4 +368,48 @@ expect {
 		and List.all(batches, |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
 			and counts.vertices > List.len(derived_surfaces) * 3
 				and counts.indices > counts.vertices
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	activated = DoomLevel.use_line(map, initial, 55, { blue: Bool.False, yellow: Bool.False, red: Bool.False })
+	match activated {
+		Activated(opening) => {
+			door = List.get(opening.doors, 0) ?? crash "E1M1 door missing"
+			closed_geometry = E1M1Renderer.sector_surfaces(map, initial, door.sector) ?? crash "door flat missing"
+			mid_geometry = E1M1Renderer.sector_surfaces(map, DoomLevel.tick(opening), door.sector) ?? crash "door flat missing"
+			open_geometry = E1M1Renderer.sector_surfaces(map, advance_level(opening, 80), door.sector) ?? crash "door flat missing"
+			initial_extent = line_wall_extent(map.wall_spans_at(initial.heights), 55)
+			mid_extent = line_wall_extent(map.wall_spans_at(DoomLevel.tick(opening).heights), 55)
+			max_geometry_y(mid_geometry) == max_geometry_y(closed_geometry) + 2 * E1M1Renderer.doom_scale
+				and max_geometry_y(open_geometry) == I64.to_f32(door.open) * E1M1Renderer.doom_scale
+				and mid_extent != initial_extent
+		}
+		_ => Bool.False
+	}
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	match DoomLevel.cross_line(map, initial, 593) {
+		Activated(moving) => {
+			lift = List.get(moving.lifts, 0) ?? crash "E1M1 lift missing"
+			initial_geometry = E1M1Renderer.sector_surfaces(map, initial, lift.sector) ?? crash "lift flat missing"
+			mid_geometry = E1M1Renderer.sector_surfaces(map, DoomLevel.tick(moving), lift.sector) ?? crash "lift flat missing"
+			low_geometry = E1M1Renderer.sector_surfaces(map, advance_level(moving, 140), lift.sector) ?? crash "lift flat missing"
+			min_geometry_y(mid_geometry) == min_geometry_y(initial_geometry) - E1M1Renderer.doom_scale
+				and min_geometry_y(low_geometry) == I64.to_f32(lift.low) * E1M1Renderer.doom_scale
+		}
+		_ => Bool.False
+	}
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	static = E1M1Renderer.build_static(map) ?? crash "static E1M1 atlas entry missing"
+	dynamic = E1M1Renderer.build_dynamic(map, initial) ?? crash "dynamic E1M1 atlas entry missing"
+	List.len(DoomLevel.dynamic_sectors(map)) > 0 and List.len(static) > 0 and List.len(dynamic) > 0
 }

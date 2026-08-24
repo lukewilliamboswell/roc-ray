@@ -42,6 +42,7 @@ DoomMap := [].{
 	Special : [NoSpecial, Special({ number : U64, tag : U64 })]
 	SurfaceOrientation := [Floor, Ceiling].{ is_eq : _ }
 	SurfacePolygon : { subsector : U64, sector : U64, orientation : SurfaceOrientation, vertices : List(SurfacePoint), height : I64, flat : Str, light_level : I64 }
+	SectorHeights : { floor : I64, ceiling : I64 }
 	BlockingSegment : { linedef : U64, start : Vertex, end : Vertex, flags : LineFlags, special : Special }
 	PlayerStart : { position : Vertex, angle : I64, flags : U64 }
 	WallSpan : {
@@ -67,6 +68,11 @@ DoomMap := [].{
 
 		wall_spans : Map -> List(WallSpan)
 		wall_spans = |Map.(value)| derive_all_spans(value)
+
+		## Re-derive spans from application-owned moving sector heights. The list
+		## must preserve the validated map's sector order and cardinality.
+		wall_spans_at : Map, List(SectorHeights) -> List(WallSpan)
+		wall_spans_at = |Map.(value), heights| if List.len(heights) != List.len(value.sectors) crash "sector height count mismatch" else derive_all_spans({ ..value, sectors: resolve_sector_heights(value.sectors, heights, 0, []) })
 
 		surface_polygons : Map -> List(SurfacePolygon)
 		surface_polygons = |Map.(value)| derive_surfaces(value, 0)
@@ -274,6 +280,15 @@ find_player_start = |things, index, found|
 	}
 
 derive_all_spans = |raw| derive_spans_from(raw, 0)
+
+resolve_sector_heights = |sectors, heights, index, resolved|
+	match List.get(sectors, index) {
+		Err(_) => resolved
+		Ok(sector) => {
+			height = List.get(heights, index) ?? crash "sector height cardinality checked"
+			resolve_sector_heights(sectors, heights, index + 1, List.append(resolved, { ..sector, floor_height: height.floor, ceiling_height: height.ceiling }))
+		}
+	}
 
 derive_spans_from = |raw, index|
 	match List.get(raw.linedefs, index) {

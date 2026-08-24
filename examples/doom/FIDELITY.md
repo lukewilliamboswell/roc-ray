@@ -15,7 +15,7 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, upper/lower/middle textures, offsets, light levels, sky, and moving sectors; special-7 damaging floors apply five damage on the 32-tic cadence |
 | Interaction | Chocolate Doom `p_map.c`, `p_doors.c`, `p_spec.c` | Use and crossing specials operate the corresponding E1M1 doors, switches and exit |
 | Things | Doom thing types and difficulty flags | Player start, enemies, weapons, ammo, health, keys and decorations come from E1M1 data |
-| Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover the implemented weapon cadence, ammunition, hitscan spread, damage, pain and death states; weapon ownership/selection and several exact weapon state chains remain incomplete |
+| Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover weapon ownership, typed selection, dry-ammo fallback, cadence, ammunition, hitscan spread, damage, pain and death states; several exact weapon state chains remain incomplete |
 | Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
 | Presentation | Chocolate Doom screenshots and state | A 320x200-style viewport, weapon bob, palette-like flashes, status bar, directional sprites and base sector lighting are present; screenshot parity, animated light specials, and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Positional effects and a reproducibly rendered or natively synthesized Freedoom track accompany a complete run |
@@ -107,9 +107,10 @@ than silently becoming the new definition of Doom behaviour.
 
 ## Current verified gaps
 
-- Weapon pickups select the collected weapon, but owned-weapon inventory,
-  number-key selection, and automatic fallback when ammunition is exhausted
-  are not modeled yet.
+- E1M1 weapon pickups populate explicit ownership, newly acquired weapons
+  auto-equip, number-key intents select only owned weapons, and dry-fire uses a
+  deterministic Doom-style fallback priority. Weapon raising/lowering remains
+  instantaneous rather than using the complete psprite transition chain.
 - Skill is retained in deterministic runtime state. Baby halves incoming
   damage with integer truncation; Nightmare's faster actor cadence/respawning and the
   Baby/Nightmare doubled-ammunition pickup rule are not implemented yet.

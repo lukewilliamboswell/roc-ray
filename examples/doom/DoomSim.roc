@@ -35,6 +35,7 @@ DoomSim := [].{
 		## Fraction of one complete turn applied this tic.
 		turn : F32,
 		fire : Bool,
+		weapon_slot : [KeepWeapon, SelectSlot(U8)],
 	}
 
 	Segment : { start : Vec2, end : Vec2 }
@@ -72,7 +73,7 @@ DoomSim := [].{
 	clock = |state| { state, remainder: 0 }
 
 	neutral : Command
-	neutral = { forward: 0, side: 0, turn: 0, fire: Bool.False }
+	neutral = { forward: 0, side: 0, turn: 0, fire: Bool.False, weapon_slot: KeepWeapon }
 
 	## Fold elapsed host-cycle time into at most `max_catch_up_tics` simulation
 	## tics. A remainder smaller than one tic is retained. If the cap saturates,

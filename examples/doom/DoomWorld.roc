@@ -93,6 +93,7 @@ DoomWorld := [].{
 	Thing : { x : I64, y : I64, angle : I64, type : U64, flags : U64 }
 
 	Ammo : { bullets : I64, shells : I64, rockets : I64, cells : I64 }
+	Weapons : { pistol : Bool, shotgun : Bool, chaingun : Bool, rocket_launcher : Bool, plasma_rifle : Bool, chainsaw : Bool }
 	Keys : { blue : Bool, yellow : Bool, red : Bool }
 	Player : {
 		sim : DoomSim.Clock,
@@ -102,6 +103,7 @@ DoomWorld := [].{
 		ammo : Ammo,
 		keys : Keys,
 		weapon : Weapon,
+		weapons : Weapons,
 		backpack : Bool,
 		berserk : Bool,
 		computer_map : Bool,
@@ -131,11 +133,15 @@ DoomWorld := [].{
 		ammo: { bullets: 50, shells: 0, rockets: 0, cells: 0 },
 		keys: { blue: Bool.False, yellow: Bool.False, red: Bool.False },
 		weapon: Pistol,
+		weapons: { pistol: Bool.True, shotgun: Bool.False, chaingun: Bool.False, rocket_launcher: Bool.False, plasma_rifle: Bool.False, chainsaw: Bool.False },
 		backpack: Bool.False,
 		berserk: Bool.False,
 		computer_map: Bool.False,
 		light_amp_tics: 0,
 	}
+
+	owns : Player, Weapon -> Bool
+	owns = |value, weapon| owns_weapon(value, weapon)
 
 	## Classify the editor numbers used by E1M1 and its normal Doom pickups.
 	thing_kind : U64 -> Try(ThingKind, [UnsupportedThing(U64)])
@@ -507,7 +513,7 @@ apply_pickup = |player, kind|
 		BlueKeyPickup => { player: { ..player, keys: { ..player.keys, blue: Bool.True } }, collected: !(player.keys.blue) }
 		YellowKeyPickup => { player: { ..player, keys: { ..player.keys, yellow: Bool.True } }, collected: !(player.keys.yellow) }
 		RedKeyPickup => { player: { ..player, keys: { ..player.keys, red: Bool.True } }, collected: !(player.keys.red) }
-		ShotgunPickup => { player: { ..give_shells(player, 8).player, weapon: Shotgun }, collected: Bool.True }
+		ShotgunPickup => acquire_weapon(give_shells(player, 8).player, Shotgun)
 		BackpackPickup => {
 			ammo = {
 				bullets: I64.min(DoomWorld.max_bullets * 2, player.ammo.bullets + 10),
@@ -517,19 +523,42 @@ apply_pickup = |player, kind|
 			}
 			{ player: { ..player, backpack: Bool.True, ammo }, collected: Bool.True }
 		}
-		ChaingunPickup => { player: { ..give_bullets(player, 20).player, weapon: Chaingun }, collected: Bool.True }
-		RocketLauncherPickup => { player: { ..give_rockets(player, 2).player, weapon: RocketLauncher }, collected: Bool.True }
-		PlasmaRiflePickup => { player: { ..give_cells(player, 40).player, weapon: PlasmaRifle }, collected: Bool.True }
-		ChainsawPickup => { player: { ..player, weapon: Chainsaw }, collected: Bool.True }
+		ChaingunPickup => acquire_weapon(give_bullets(player, 20).player, Chaingun)
+		RocketLauncherPickup => acquire_weapon(give_rockets(player, 2).player, RocketLauncher)
+		PlasmaRiflePickup => acquire_weapon(give_cells(player, 40).player, PlasmaRifle)
+		ChainsawPickup => acquire_weapon(player, Chainsaw)
 		RocketPickup => give_rockets(player, 1)
 		SoulSpherePickup => give_health(player, 100, 200)
-		BerserkPickup => { player: { ..give_health(player, 100, DoomWorld.max_health).player, berserk: Bool.True, weapon: Chainsaw }, collected: Bool.True }
+		BerserkPickup => { player: { ..give_health(player, 100, DoomWorld.max_health).player, berserk: Bool.True }, collected: Bool.True }
 		ComputerMapPickup => { player: { ..player, computer_map: Bool.True }, collected: !(player.computer_map) }
 		LightAmpPickup => { player: { ..player, light_amp_tics: 4200 }, collected: Bool.True }
 		BulletBoxPickup => give_bullets(player, 50)
 		ShellBoxPickup => give_shells(player, 20)
 		CellPackPickup => give_cells(player, 100)
 		_ => { player, collected: Bool.False }
+	}
+
+acquire_weapon = |player, weapon| {
+	already_owned = owns_weapon(player, weapon)
+	weapons = match weapon {
+		Pistol => { ..player.weapons, pistol: Bool.True }
+		Shotgun => { ..player.weapons, shotgun: Bool.True }
+		Chaingun => { ..player.weapons, chaingun: Bool.True }
+		RocketLauncher => { ..player.weapons, rocket_launcher: Bool.True }
+		PlasmaRifle => { ..player.weapons, plasma_rifle: Bool.True }
+		Chainsaw => { ..player.weapons, chainsaw: Bool.True }
+	}
+	{ player: { ..player, weapons, weapon: if already_owned player.weapon else weapon }, collected: Bool.True }
+}
+
+owns_weapon = |player, weapon|
+	match weapon {
+		Pistol => player.weapons.pistol
+		Shotgun => player.weapons.shotgun
+		Chaingun => player.weapons.chaingun
+		RocketLauncher => player.weapons.rocket_launcher
+		PlasmaRifle => player.weapons.plasma_rifle
+		Chainsaw => player.weapons.chainsaw
 	}
 
 give_bullets = |player, amount| {
@@ -724,6 +753,14 @@ expect {
 	first = DoomWorld.hitscan(DoomWorld.Rng.seed(0), Pistol)
 	second = DoomWorld.hitscan(first.rng, Pistol)
 	first.damage == 15 and second.damage == 15 and F32.abs(first.spread_turns - (90 / 65536)) < 0.000001
+}
+
+expect {
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	pickup : DoomWorld.Pickup
+	pickup = { id: 0, kind: ShotgunPickup, pos: base.sim.state.pos, taken: Bool.False }
+	result = DoomWorld.collect(base, pickup)
+	result.collected and result.player.weapon == Shotgun and DoomWorld.owns(result.player, Shotgun) and !(DoomWorld.owns(base, Shotgun))
 }
 
 expect {

@@ -36,6 +36,7 @@ DoomRuntime := [].{
 			var $saturated = Bool.False
 			var $fired = Bool.False
 			for _ in List.repeat({}, sim.tics) {
+				$next = prepare_weapon($next, command.weapon_slot, command.fire)
 				result = tic($next, command.fire, blockers)
 				$next = result.world
 				$saturated = $saturated or result.projectile_saturated
@@ -58,6 +59,7 @@ DoomRuntime := [].{
 			var $fired = Bool.False
 			var $tic = sim.clock.state.tic - sim.tics + 1
 			for _ in List.repeat({}, sim.tics) {
+				$next = prepare_weapon($next, command.weapon_slot, command.fire)
 				will_fire = command.fire and $next.weapon.cooldown == 0 and player_can_fire($next.doom.player)
 				sources = if will_fire List.append($next.sound_origins, $next.doom.player.sim.state.pos) else $next.sound_origins
 				heard0 = heard_actor_ids(map, sources, $next.doom.actors)
@@ -399,6 +401,52 @@ player_can_fire = |player|
 		Chainsaw => Bool.True
 	}
 
+prepare_weapon = |world, intent, firing| {
+	requested = match intent {
+		KeepWeapon => Err(NoWeaponRequest)
+		SelectSlot(slot) => weapon_for_slot(slot)
+	}
+	selected = match requested {
+		Ok(weapon) => if DoomWorld.owns(world.doom.player, weapon) Ok(weapon) else Err(NotOwned)
+		Err(_) => if firing and !(player_can_fire(world.doom.player)) fallback_weapon(world.doom.player) else Err(KeepCurrent)
+	}
+	match selected {
+		Err(_) => world
+		Ok(weapon) => if weapon == world.doom.player.weapon {
+			world
+		} else {
+			player = { ..world.doom.player, weapon }
+			{ ..world, doom: { ..world.doom, player }, weapon: { ..world.weapon, phase: 0 } }
+		}
+	}
+}
+
+weapon_for_slot = |slot|
+	match slot {
+		2 => Ok(Pistol)
+		3 => Ok(Shotgun)
+		4 => Ok(Chaingun)
+		5 => Ok(RocketLauncher)
+		6 => Ok(PlasmaRifle)
+		8 => Ok(Chainsaw)
+		_ => Err(UnsupportedSlot)
+	}
+
+fallback_weapon = |player| {
+	candidates = [PlasmaRifle, Chaingun, Shotgun, Pistol, Chainsaw, RocketLauncher]
+	List.first(List.keep_if(candidates, |weapon| DoomWorld.owns(player, weapon) and weapon_has_ammo(player, weapon)))
+}
+
+weapon_has_ammo = |player, weapon|
+	match weapon {
+		Pistol => player.ammo.bullets > 0
+		Shotgun => player.ammo.shells > 0
+		Chaingun => player.ammo.bullets > 0
+		RocketLauncher => player.ammo.rockets > 0
+		PlasmaRifle => player.ammo.cells > 0
+		Chainsaw => Bool.True
+	}
+
 apply_sector_hazard = |world, map, tic| {
 	sector = DoomLevel.sector_at(map, { x: F32.to_f64(world.doom.player.sim.state.pos.x), y: F32.to_f64(world.doom.player.sim.state.pos.y) }) ?? return world
 	raw_sector = List.get(map.raw().sectors, sector) ?? return world
@@ -655,6 +703,25 @@ expect {
 	medium = damage_player_for_skill(player, 15, Medium)
 	baby = damage_player_for_skill(player, 15, Baby)
 	medium.health == 85 and baby.health == 93
+}
+
+expect {
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	player = { ..base, weapon: Shotgun, weapons: { ..base.weapons, shotgun: Bool.True }, ammo: { ..base.ammo, bullets: 2, shells: 0 } }
+	doom : DoomWorld.World
+	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	advanced = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds, { ..DoomSim.neutral, fire: Bool.True }, [])
+	advanced.fired and advanced.world.doom.player.weapon == Pistol and advanced.world.doom.player.ammo.bullets == 1
+}
+
+expect {
+	base = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	owned = { ..base, weapons: { ..base.weapons, chaingun: Bool.True } }
+	doom : DoomWorld.World
+	doom = { player: owned, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	selected = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds, { ..DoomSim.neutral, weapon_slot: SelectSlot(4) }, []).world
+	ignored = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds, { ..DoomSim.neutral, weapon_slot: SelectSlot(6) }, []).world
+	selected.doom.player.weapon == Chaingun and ignored.doom.player.weapon == Pistol
 }
 
 expect {

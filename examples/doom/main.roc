@@ -120,9 +120,10 @@ update! = |model, input| {
 		)
 		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
 		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
+		weapon_slot = if input.devices.key_pressed(Key2) SelectSlot(2) else if input.devices.key_pressed(Key3) SelectSlot(3) else if input.devices.key_pressed(Key4) SelectSlot(4) else if input.devices.key_pressed(Key5) SelectSlot(5) else if input.devices.key_pressed(Key6) SelectSlot(6) else if input.devices.key_pressed(Key8) SelectSlot(8) else KeepWeapon
 		previous_pos = model.world.doom.player.sim.state.pos
 		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos), decoration_segments(model.decorations))
-		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers, DoomMap.e1m1)
+		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire, weapon_slot }, blockers, DoomMap.e1m1)
 		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
 			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
@@ -306,6 +307,7 @@ draw_hud! = |frame, atlas, world, flashes| {
 	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: 0, y: size.height - hud_height, width: 320, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	draw_number!(frame, atlas, I64.max(0, ammo), 43, size.height - 29)
 	draw_number!(frame, atlas, I64.max(0, player.health), 90, size.height - 29)
+	draw_weapons!(frame, atlas, player, size)
 	dead = match world.phase {
 		Dead => Bool.True
 		_ => Bool.False
@@ -333,6 +335,19 @@ draw_hud! = |frame, atlas, world, flashes| {
 		Playing => {}
 		Dead => overlay!(frame, size, "YOU DIED", "Press R to restart")
 		Exited => overlay!(frame, size, "LEVEL COMPLETE", "Press R to restart")
+	}
+}
+
+draw_weapons! = |frame, atlas, player, size| {
+	arms = DoomPresentation.hud(Arms) ?? crash "status arms sprite missing"
+	frame.texture!({ texture: atlas, source: atlas_rect(arms), dest: { x: 104, y: size.height - 32, width: 32, height: 10 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	slots = [{ slot: 2.U8, owned: player.weapons.pistol }, { slot: 3.U8, owned: player.weapons.shotgun }, { slot: 4.U8, owned: player.weapons.chaingun }, { slot: 5.U8, owned: player.weapons.rocket_launcher }, { slot: 6.U8, owned: player.weapons.plasma_rifle }, { slot: 8.U8, owned: player.weapons.chainsaw }]
+	for item in List.map_with_index(slots, |value, index| { value, index }) {
+		element = if item.value.owned SmallDigit(item.value.slot) else GrayDigit(item.value.slot)
+		match DoomPresentation.hud(element) {
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: 106 + U64.to_f32(item.index % 3) * 10, y: size.height - 20 + U64.to_f32(item.index / 3) * 9, width: 8, height: 7 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Err(_) => {}
+		}
 	}
 }
 

@@ -9,7 +9,8 @@ import DoomWorld
 
 DoomPresentation := [].{
 	PickupView : [Hidden, Visible(DoomAssets.SpriteView)]
-	HudElement : [StatusBar, LargeDigit(U8)]
+	HudElement : [StatusBar, LargeDigit(U8), SmallDigit(U8), GrayDigit(U8), Key(U8), Face(Str), Arms, Percent]
+	Effect : [ImpProjectile, ImpExplosion, BulletPuff, Blood, BarrelExplosion]
 
 	actor : DoomWorld.Actor, DoomSim.Vec2 -> Try(DoomAssets.SpriteView, [MissingActorSpriteMapping(DoomWorld.ThingKind), MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
 	actor = |actor_value, viewer| {
@@ -37,9 +38,8 @@ DoomPresentation := [].{
 		}
 	}
 
-	## Resolve a first-person weapon frame when that family is present in the
-	## complete sprite atlas. E1M1 currently has no PISG/SHTG entries, so callers
-	## receive MissingSprite until extraction deliberately admits those lumps.
+	## Resolve a first-person weapon frame from the presentation sprite families
+	## deliberately admitted by the E1M1 extraction.
 	weapon : DoomWorld.Weapon, U64 -> Try(DoomAssets.SpriteView, [MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
 	weapon = |weapon_kind, phase| {
 		mapping = match weapon_kind {
@@ -49,14 +49,30 @@ DoomPresentation := [].{
 		DoomAssets.sprite(mapping.sprite, mapping.frame, 1)
 	}
 
-	## HUD graphics are ordinary WAD graphics rather than rotating sprites. This
-	## lookup succeeds only if the generated sprite atlas explicitly contains the
-	## requested lump; the current E1M1 atlas does not silently substitute one.
+	effect : Effect, U64 -> Try(DoomAssets.SpriteView, [MissingSprite({ sprite : Str, frame : Str, angle : U64 })])
+	effect = |effect_kind, phase| {
+		mapping = match effect_kind {
+			ImpProjectile => { sprite: "BAL1", frames: ["A", "B"] }
+			ImpExplosion => { sprite: "BAL1", frames: ["C", "D", "E"] }
+			BulletPuff => { sprite: "PUFF", frames: ["A", "B", "C", "D"] }
+			Blood => { sprite: "BLUD", frames: ["A", "B", "C"] }
+			BarrelExplosion => { sprite: "BEXP", frames: ["A", "B", "C", "D", "E"] }
+		}
+		DoomAssets.sprite(mapping.sprite, frame_at(mapping.frames, phase), 1)
+	}
+
+	## HUD graphics are ordinary WAD graphics rather than rotating sprites.
 	hud : HudElement -> Try(DoomAssets.Rect, [InvalidHudDigit(U8), MissingHudAsset(Str)])
 	hud = |element| {
 		name = match element {
 			StatusBar => "STBAR"
 			LargeDigit(digit) => if digit <= 9 "STTNUM${U8.to_str(digit)}" else return Err(InvalidHudDigit(digit))
+			SmallDigit(digit) => if digit <= 9 "STYSNUM${U8.to_str(digit)}" else return Err(InvalidHudDigit(digit))
+			GrayDigit(digit) => if digit <= 9 "STGNUM${U8.to_str(digit)}" else return Err(InvalidHudDigit(digit))
+			Key(index) => if index <= 8 "STKEYS${U8.to_str(index)}" else return Err(InvalidHudDigit(index))
+			Face(suffix) => "STF${suffix}"
+			Arms => "STARMS"
+			Percent => "STTPRCNT"
 		}
 		match List.find_first(DoomAssets.sprites.entries, |entry| entry.doom_name == name) {
 			Ok(entry) => Ok(entry.rect)
@@ -95,18 +111,39 @@ DoomPresentation := [].{
 	}
 }
 
+expect {
+	weapons = [DoomPresentation.weapon(Pistol, 0), DoomPresentation.weapon(Shotgun, 0)]
+	effects = List.map([ImpProjectile, ImpExplosion, BulletPuff, Blood, BarrelExplosion], |kind| DoomPresentation.effect(kind, 0))
+	hud = List.map([StatusBar, LargeDigit(9), SmallDigit(8), GrayDigit(7), Key(8), Face("ST00"), Arms, Percent], DoomPresentation.hud)
+	List.all(weapons, |result|
+		match result {
+			Ok(_) => Bool.True
+			Err(_) => Bool.False
+		})
+		and List.all(effects, |result|
+			match result {
+				Ok(_) => Bool.True
+				Err(_) => Bool.False
+			})
+		and List.all(hud, |result|
+			match result {
+				Ok(_) => Bool.True
+				Err(_) => Bool.False
+			})
+}
+
 actor_mapping : DoomWorld.Actor -> Try({ sprite : Str, frame : Str }, [MissingActorSpriteMapping(DoomWorld.ThingKind)])
 actor_mapping = |actor_value| {
 	sprite = match actor_value.kind {
 		ZombieMan => Ok("POSS")
 		ShotgunGuy => Ok("SPOS")
 		Imp => Ok("TROO")
-		Barrel => Ok("BAR1")
+		Barrel => Ok(if actor_value.state.mode == Dead "BEXP" else "BAR1")
 		_ => Err(MissingActorSpriteMapping(actor_value.kind))
 	}?
 	frame = match actor_value.kind {
 		Barrel => match actor_value.state.mode {
-			Dead => "C" # absent BEXP art is reported, never replaced with idle BAR1B
+			Dead => "E"
 			_ => if actor_value.state.remaining % 2 == 0 "B" else "A"
 		}
 		Imp => match actor_value.state.mode {
@@ -190,25 +227,30 @@ expect {
 	pickup = { id: 0, kind: BlueKeyPickup, pos: { x: 0, y: 0 }, taken: Bool.False }
 	missing_key = DoomPresentation.pickup({ ..pickup, kind: YellowKeyPickup }, 0)
 	hidden = DoomPresentation.pickup({ ..pickup, taken: Bool.True }, 0)
-	missing_weapon = DoomPresentation.weapon(Pistol, 0)
-	missing_hud = DoomPresentation.hud(StatusBar)
+	weapon = DoomPresentation.weapon(Pistol, 0)
+	hud = DoomPresentation.hud(StatusBar)
 	barrel = DoomWorld.actor(1, Barrel, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
-	missing_explosion = DoomPresentation.actor({ ..barrel, state: DoomWorld.state(Dead) }, { x: 64, y: 0 })
+	explosion = DoomPresentation.actor({ ..barrel, state: DoomWorld.state(Dead) }, { x: 64, y: 0 })
+	projectile = DoomPresentation.effect(ImpProjectile, 0)
 	match missing_key {
 		Err(MissingSprite(_)) => Bool.True
 		_ => Bool.False
 	}
 		and hidden == Ok(Hidden)
-		and match missing_weapon {
-			Err(MissingSprite(_)) => Bool.True
-			_ => Bool.False
+		and match weapon {
+			Ok(view) => view.doom_name == "PISGA0"
+			Err(_) => Bool.False
 		}
-		and match missing_hud {
-			Err(MissingHudAsset("STBAR")) => Bool.True
-			_ => Bool.False
+		and match hud {
+			Ok(rect) => rect.width == 320 and rect.height == 32
+			Err(_) => Bool.False
 		}
-		and match missing_explosion {
-			Err(MissingSprite({ sprite: "BAR1", frame: "C", angle: _ })) => Bool.True
-			_ => Bool.False
+		and match explosion {
+			Ok(view) => view.doom_name == "BEXPE0"
+			Err(_) => Bool.False
+		}
+		and match projectile {
+			Ok(view) => view.doom_name == "BAL1A0"
+			Err(_) => Bool.False
 		}
 }

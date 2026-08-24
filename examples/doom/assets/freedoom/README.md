@@ -34,7 +34,9 @@ python3 scripts/doom_wad.py --check
 
 It downloads the official binary release, verifies both the ZIP and embedded
 `freedoom1.wad`, parses the classic Doom map lumps, and composes every wall
-texture plus every flat and thing sprite referenced by E1M1. See
+texture plus every flat and thing sprite referenced by E1M1. It also extracts
+the first-person weapon, combat-effect, explosion, and status-bar graphics the
+level can produce during play. See
 `docs/E1M1.md` for the generated schema and known scope limits. The 61 MB ZIP
 and 28 MB WAD are not committed; `--archive` permits an offline rebuild.
 

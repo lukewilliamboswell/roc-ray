@@ -27,6 +27,8 @@ WAD_MEMBER = f"freedoom-{VERSION}/freedoom1.wad"
 WAD_SHA256 = "7323bcc168c5a45ff10749b339960e98314740a734c30d4b9f3337001f9e703d"
 PILLOW_VERSION = "10.2.0"
 MAP_NAME = "E1M1"
+PRESENTATION_SPRITES = {"PISG", "PISF", "SHTG", "SHTF", "BAL1", "BEXP", "PUFF", "BLUD"}
+HUD_GRAPHIC_PREFIXES = ("STBAR", "STTNUM", "STYSNUM", "STGNUM", "STKEYS", "STF", "STARMS", "STTPRCNT")
 
 # Standard Doom editor-number to sprite-prefix mapping for every thing type used
 # by Freedoom 0.13.0 E1M1. Starts and invisible-only things deliberately map to
@@ -399,6 +401,14 @@ def sprite_images(wad: Wad, prefixes: set[str]) -> dict[str, tuple[Image.Image, 
     missing = sorted(prefix for prefix in prefixes if not any(name.startswith(prefix) for name in output))
     if missing:
         raise ValueError(f"no sprite lumps found for prefixes: {missing}")
+    for name, offset, size in wad.lumps:
+        if name not in output and any(name.startswith(prefix) for prefix in HUD_GRAPHIC_PREFIXES):
+            image = doom_picture(wad.data[offset : offset + size], colors)
+            output[name] = (image, {"kind": "graphic", "doom_name": name,
+                                   "sprite": "", "aliases": []})
+    missing_graphics = sorted(prefix for prefix in HUD_GRAPHIC_PREFIXES if not any(name.startswith(prefix) for name in output))
+    if missing_graphics:
+        raise ValueError(f"no HUD graphic lumps found for prefixes: {missing_graphics}")
     return output
 
 
@@ -447,6 +457,7 @@ def build(output: Path, supplied_zip: Path | None) -> None:
         raise ValueError("Freedoom Phase 1 WAD checksum mismatch")
     wad = Wad(wad_bytes)
     map_data, textures, flats, prefixes = parse_map(wad)
+    prefixes.update(PRESENTATION_SPRITES)
     output.mkdir(parents=True, exist_ok=True)
     (output / "map.json").write_text(json.dumps(map_data, indent=2) + "\n")
     world = write_atlas(output / "world_atlas.png", world_images(wad, textures, flats))
@@ -469,7 +480,11 @@ def build(output: Path, supplied_zip: Path | None) -> None:
                 "subsector_polygon_min_points": min(polygon_sizes),
                 "subsector_polygon_max_points": max(polygon_sizes),
                 "texture_count": len(textures), "flat_count": len(flats), "sprite_prefixes": sorted(prefixes),
-                "sprite_lump_count": len(sprites["entries"]), "music_lump": "D_E1M1",
+                "sprite_lump_count": len(sprites["entries"]),
+                "presentation_sprite_prefixes": sorted(PRESENTATION_SPRITES),
+                "hud_graphic_prefixes": list(HUD_GRAPHIC_PREFIXES),
+                "hud_graphic_lump_count": sum(1 for entry in sprites["entries"] if entry["kind"] == "graphic"),
+                "music_lump": "D_E1M1",
                 "music_path": "music/e1m1.mid", "music_sha256": digest(midi)}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 

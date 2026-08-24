@@ -17,7 +17,7 @@ Texture := {
 	## sampling configuration, or resource lifetime.
 	stub : Texture
 	stub = {
-		handle: Handle.(Box.box(0)),
+		handle: Handle.(Box.box(U64.highest)),
 		width: 0,
 		height: 0,
 	}

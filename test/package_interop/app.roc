@@ -24,7 +24,7 @@ Model : {
 	clicked : Bool,
 	padded : Bool,
 	age : F32,
-	font : Draw.Font,
+	font : Font,
 	layout : { label : Draw.TextSize, label_pos : { x : F32, y : F32 } },
 	layout_passes : U64,
 
@@ -74,7 +74,7 @@ init! = App.init(
 
 ## This is the UI package boundary: it names the types package's `Font`
 ## directly, so layout can run during update without host authority. The value
-## it is handed is a `Draw.Font` loaded through the platform, which compiles
+## it is handed is a `Font` loaded through the platform, which compiles
 ## only because the two are one nominal.
 solve_layout : Font, Str -> { label : Draw.TextSize, label_pos : { x : F32, y : F32 } }
 solve_layout = |font, label| {

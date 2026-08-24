@@ -58,7 +58,7 @@ Model : {
 	eat_sound : Audio.Sound,
 	crash_sound : Audio.Sound,
 	start_sound : Audio.Sound,
-	font : Draw.Font,
+	font : Text.Font,
 
 	## Wall-clock seconds since launch, advanced by `update!` and used only by
 	## the renderer, to pulse the food and breathe the restart prompt.
@@ -347,7 +347,7 @@ test_model = {
 	eat_sound: Audio.Sound.stub,
 	crash_sound: Audio.Sound.stub,
 	start_sound: Audio.Sound.stub,
-	font: Draw.Font.stub,
+	font: Text.font_stub,
 	elapsed: 0,
 	title: Text.Prepared.stub,
 	hint: Text.Prepared.stub,

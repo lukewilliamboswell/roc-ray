@@ -117,6 +117,8 @@ platform ""
 		"roc_draw_draw_texture_quad_raw": DrawHost.draw_texture_quad!,
 		"roc_draw_end_scissor_raw": DrawHost.end_scissor!,
 		"roc_draw_fps": DrawHost.fps!,
+		"roc_draw_default_font_raw": DrawHost.default_font!,
+		"roc_draw_startup_default_font_raw": DrawHost.startup_default_font!,
 		"roc_draw_font_metrics_raw": DrawHost.font_metrics!,
 		"roc_draw_frame_size": DrawHost.frame_size!,
 		"roc_draw_line_raw": DrawHost.line!,
@@ -349,7 +351,7 @@ app_input_from_raw = |devices, window, time, capture, messages, dropped, dropped
 ## No input, window, or timing observations have been sampled at this point.
 init_for_host! : () => Try(Box(Model), I64)
 init_for_host! = ||
-	match (program.init!.run!)(HostHost.Startup.for_host) {
+	match (program.init!.run!)(App.Startup.for_host(HostHost.Startup.for_host)) {
 		Ok(model) => Ok(Box.box(model))
 		Err(Exit(code)) => Err(code)
 		Err(_) => Err(-1)

@@ -7,6 +7,7 @@
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
+import rr.Text
 import rr.Color
 import rr.Devices
 import rr.Window
@@ -20,7 +21,7 @@ import rr.Capture
 ## latest device snapshot, and the last colour read beneath the pointer. The
 ## font is retained for drawing each new snapshot.
 Model : {
-	font : Draw.Font,
+	font : Text.Font,
 
 	## Text typed since the last clear, and what the clipboard last did with it.
 	typed : Str,
@@ -233,14 +234,14 @@ theme = {
 }
 
 ## A titled surface for one group of indicators.
-panel! : Draw.Frame, Draw.Font, { x : F32, y : F32, width : F32, height : F32, label : Str } => {}
+panel! : Draw.Frame, Text.Font, { x : F32, y : F32, width : F32, height : F32, label : Str } => {}
 panel! = |frame, font, cfg| {
 	frame.rounded_rectangle!({ x: cfg.x, y: cfg.y, width: cfg.width, height: cfg.height, radius: 12, segments: 8, style: Draw.filled_and_outlined(theme.panel, theme.edge, 1) })
 	frame.text!({ pos: { x: cfg.x + 18, y: cfg.y + 12 }, text: cfg.label, size: 14, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
 }
 
 ## One indicator chip, lit while the snapshot says its input is active.
-chip! : Draw.Frame, Draw.Font, { x : F32, y : F32, width : F32, label : Str, on : Bool } => {}
+chip! : Draw.Frame, Text.Font, { x : F32, y : F32, width : F32, label : Str, on : Bool } => {}
 chip! = |frame, font, cfg| {
 	fill = if cfg.on theme.active else theme.idle
 	edge = if cfg.on theme.active else theme.edge
@@ -251,7 +252,7 @@ chip! = |frame, font, cfg| {
 
 ## A small square light next to a label, for the signals that are on or off
 ## rather than named keys.
-light! : Draw.Frame, Draw.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
+light! : Draw.Frame, Text.Font, { x : F32, y : F32, label : Str, on : Bool } => {}
 light! = |frame, font, cfg| {
 	frame.text!({ pos: { x: cfg.x, y: cfg.y + 3 }, text: cfg.label, size: 16, spacing: Draw.default_spacing, color: theme.muted, font: font, align: Draw.align_top_left })
 	fill = if cfg.on theme.active else theme.idle
@@ -259,7 +260,7 @@ light! = |frame, font, cfg| {
 }
 
 ## A line of body text inside a panel.
-line! : Draw.Frame, Draw.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
+line! : Draw.Frame, Text.Font, { x : F32, y : F32, text : Str, color : Color.Rgba } => {}
 line! = |frame, font, cfg|
 	frame.text!({ pos: { x: cfg.x, y: cfg.y }, text: cfg.text, size: 16, spacing: Draw.default_spacing, color: cfg.color, font: font, align: Draw.align_top_left })
 

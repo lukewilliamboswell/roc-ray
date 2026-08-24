@@ -103,7 +103,7 @@ App := [].{
 		##
 		## Building the model this is called with is the other half: every host
 		## resource an app can hold has a resource-free `stub`
-		## (`Draw.Font.stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
+		## (`Text.font_stub`, `Audio.Sound.stub`, `Text.Prepared.stub`,
 		## `Assets.Texture.stub`, ...), so a `Model` full of assets can be written
 		## down in a pure test.
 		##

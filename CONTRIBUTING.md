@@ -161,7 +161,7 @@ xvfb-run -a zig build graphical-smoke
 
 Run it when changing primitives, texture coordinates, shaders, blending,
 scissoring, render textures, paired drawing modes, or native font metrics. It
-also compares the scalar snapshot inside `Draw.Font` with raylib's
+also compares the scalar snapshot inside `Text.Font` with raylib's
 `MeasureTextEx` for the default font and, when the system provides one, a
 loaded proportional font. The ordinary headless app runs verify composition
 and lifecycle behavior, not framebuffer pixels.
@@ -243,7 +243,7 @@ go and take them: `App.Startup` is a capability token the platform adapter
 mints, and a type nobody outside the platform can construct would be a type
 nobody outside the platform can use. Instead the package exposes a plan and a
 pure constructor -- `Toolkit.required_assets : Theme -> List(AssetRequest)` and
-`Toolkit.init : List(Draw.Texture), Draw.Font -> Toolkit.State` -- and the
+`Toolkit.init : List(Draw.Texture), Text.Font -> Toolkit.State` -- and the
 app's `init!` walks the plan, calls `Assets.load_texture!` and
 `Draw.load_store_font!`, and hands the results back. For work that waits the
 package exposes a closure rather than spawning: `Toolkit.fetch_theme! : () =>

@@ -13,6 +13,7 @@ import rr.Assets
 import rr.Camera
 import rr.Color
 import rr.Draw
+import rr.Text
 import rr.Devices
 import rr.Keys
 import rr.Math
@@ -1045,7 +1046,7 @@ draw_player! = |frame, characters, player| {
 	frame.rectangle!({ x: pos.x - half_player_w, y: pos.y - half_player_h, width: player_width, height: player_height, style: Draw.outlined(Color.with_alpha(Color.white, 90), 2) })
 }
 
-draw_hud! : Draw.Frame, Level, World, Draw.Font => {}
+draw_hud! : Draw.Frame, Level, World, Text.Font => {}
 draw_hud! = |frame, level, world, font| {
 	frame.rectangle_gradient_v!({ x: 0, y: 0, width: screen_w, height: 76, color_top: Color.with_alpha(Color.black, 220), color_bottom: Color.with_alpha(Color.black, 110) })
 	frame.text!({ pos: { x: 22, y: 16 }, text: "Cave Climb", size: 27, spacing: Draw.default_spacing, color: Color.white, font: font, align: Draw.align_top_left })

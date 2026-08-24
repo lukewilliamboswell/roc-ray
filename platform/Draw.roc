@@ -36,8 +36,8 @@ import Assets
 import Camera
 import Color
 import DrawHost
+import rrt.Font
 import Math
-import rrt.Font as RrtFont
 
 TextureDrawConfig : {
 	texture : Assets.Texture,
@@ -362,21 +362,10 @@ Draw := [].{
 	}
 
 	## Scalar metrics for one glyph, shared with platform-independent packages.
-	GlyphMetrics : RrtFont.GlyphMetrics
+	GlyphMetrics : Font.GlyphMetrics
 
 	## Text measurement result.
-	TextSize : RrtFont.Size
-
-	## A native font handle paired with an immutable scalar metric snapshot.
-	## Loading constructs the snapshot once; every receiver on it is pure.
-	##
-	## Declared in the `roc-ray-types` package's `Font` and re-exported here,
-	## which is also where `base_size`, `line_spacing`, `glyphs`,
-	## `get_glyph_index`, `measure` and `stub` are documented. A layout package
-	## can therefore measure text against a real font without depending on this
-	## platform. Loading one is an effect and stays here: `Draw.default_font!`,
-	## `Draw.load_store_font!`, and `Draw.font_from_bytes!`.
-	Font : RrtFont.Font
+	TextSize : Font.Size
 
 	## Horizontal text anchor.
 	HAlign : [Left, Center, Right]
@@ -887,7 +876,7 @@ Draw := [].{
 	##
 	## Legal in `init!`, `update!`, and tasks; refused in `render!`.
 	default_font! : () => Font
-	default_font! = || font_from_host!(DefaultFont)
+	default_font! = || font_from_host!(DrawHost.default_font!())
 
 	## Default text glyph spacing in logical pixels.
 	default_spacing : F32
@@ -1134,7 +1123,7 @@ Draw := [].{
 		} else if result.err != 0 {
 			Err(ResourceLimit)
 		} else {
-			Ok(font_from_host!(LoadedFont(result.font)))
+			Ok(font_from_host!(result.font))
 		}
 	}
 
@@ -1146,7 +1135,7 @@ Draw := [].{
 	font_from_bytes! : FontBytes => Try(Font, [FontLoadFailed, ResourceLimit, ..])
 	font_from_bytes! = |cfg| {
 		result = DrawHost.load_font_bytes!({ format: font_format_code(cfg.format), bytes: cfg.bytes, size: cfg.size })
-		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(LoadedFont(result.font)))
+		if result.err == 2 Err(ResourceLimit) else if result.err != 0 Err(FontLoadFailed) else Ok(font_from_host!(result.font))
 	}
 
 	## Create a draw configuration covering the whole texture at the origin.
@@ -1404,7 +1393,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: DefaultFont,
+			font: Font.stub.handle,
 			align_x: 0,
 			align_y: 0,
 		})
@@ -1420,7 +1409,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: DefaultFont,
+			font: Font.stub.handle,
 			align_x: 0,
 			align_y: 0,
 		})
@@ -1436,7 +1425,7 @@ Draw := [].{
 			size: cfg.size,
 			spacing: Draw.default_spacing,
 			color: cfg.color,
-			font: DefaultFont,
+			font: Font.stub.handle,
 			align_x: 0.5,
 			align_y: 0.5,
 		})
@@ -1448,17 +1437,11 @@ Draw := [].{
 ## This is the one impure step in a font's life: it asks the host for the atlas
 ## metrics once, when the font loads, so that every reader afterwards -- here,
 ## in an app, or in a package that never heard of this platform -- is pure.
-## Private, because minting a `Draw.Font` is the host's business.
-font_from_host! : DrawHost.Font => Draw.Font
+## Private, because minting a live `Font` is the host's business.
+font_from_host! : Font.Handle => Font
 font_from_host! = |handle| {
 	metrics = DrawHost.font_metrics!(handle)
-	{
-		handle: handle,
-		base_size_value: metrics.base_size,
-		line_spacing_value: metrics.line_spacing,
-		fallback_index: metrics.fallback_index,
-		glyph_values: metrics.glyphs,
-	}
+	{ handle, metrics }
 }
 
 blend_mode_code : Draw.BlendMode -> U8
@@ -1573,15 +1556,13 @@ expect match Draw.ProjectiveQuad.from_corners({
 ## A `Texture`, a `Shader`, and a `RenderTexture` each hold a `Box` and cannot be
 ## compared -- a type reaching a host-resource box does not support equality --
 ## so these read the ordinary data beside the handle instead.
-expect Draw.Font.stub.base_size() == 1
-expect Draw.Font.stub.line_spacing() == 0
-expect List.is_empty(Draw.Font.stub.glyphs())
+expect Font.stub.metrics.base_size == 1
+expect Font.stub.metrics.line_spacing == 0
+expect List.len(Font.stub.metrics.glyphs) == 1
 
-## A font with no glyphs measures every string as zero-wide. The height is the
-## requested size because that is one line of it, and the `base_size` of 1 is
-## what keeps the scale factor finite rather than dividing by zero.
-expect Draw.Font.stub.measure({ text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
-expect Draw.Font.stub.measure({ text: "inert", size: 20, spacing: 0 }) == { width: 0, height: 20 }
+## The synthetic stub measures one advance per Unicode scalar.
+expect Font.measure(Font.stub, { text: "", size: 20, spacing: 1 }) == { width: 0, height: 0 }
+expect Font.measure(Font.stub, { text: "inert", size: 20, spacing: 0 }) == { width: 100, height: 20 }
 
 ## A stub render target's colour attachment is the `roc-ray-types` package's
 ## `Texture.stub`, so it has no area and its vertically flipped source

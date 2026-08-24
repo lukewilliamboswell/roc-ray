@@ -17,7 +17,7 @@ import rr.Text
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,
-	font : Draw.Font,
+	font : Text.Font,
 	layout : Layout,
 	pointer : { x : F32, y : F32 },
 	accent_on : Bool,
@@ -34,14 +34,15 @@ Layout : {
 
 program = { init!, update!, render! }
 
-init! : App.Init(Model, [ResourceLimit])
+init! : App.Init(Model, [AssetPathInvalid, AssetNotFound, AssetReadFailed, FontLoadFailed, ResourceLimit])
 init! = App.init(
 	App.default
 		.with_title("Hello RocRay")
 		.with_size({ width: 800, height: 600 })
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
-		font = Draw.default_font!()
+		.with_frame_pacing(Capped(120))
+		.with_default_font({ path: "examples/live_plot/assets/fonts/LiberationSans-Regular.ttf", size: 38 }),
+	|startup| {
+		font = startup.default_font!()?
 		Ok({
 			title: Text.from("Roc :heart: Raylib", font).size(38).prepare!()?,
 			help: Text.from("Move the pointer  -  click for an accent  -  ESC exits", font).size(18).prepare!()?,
@@ -78,10 +79,10 @@ update! = |model, program_input| {
 	}
 }
 
-solve_layout : Draw.Font -> Layout
+solve_layout : Text.Font -> Layout
 solve_layout = |font| {
 	panel: { x: 120, y: 150, width: 560, height: 300 },
-	title_size: font.measure({ text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
+	title_size: Text.measure(font, { text: "Roc :heart: Raylib", size: 38, spacing: Text.default_spacing }),
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])

@@ -124,7 +124,7 @@ init! = App.init(
 )
 
 ## Prepare one label per reachable click count, so `render!` never lays out text.
-prepare_counter_labels! : Draw.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_counter_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
 prepare_counter_labels! = |font, index, acc|
 	if index > max_clicks {
 		Ok(acc)
@@ -137,7 +137,7 @@ prepare_counter_labels! = |font, index, acc|
 ##
 ## The script types that string in order and backspace only ever removes from
 ## its end, so every state the field can reach is one of these prefixes.
-prepare_field_labels! : Draw.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
+prepare_field_labels! : Text.Font, U64, List(Text.Prepared) => Try(List(Text.Prepared), [ResourceLimit, ..])
 prepare_field_labels! = |font, index, acc|
 	if index > List.len(field_text) {
 		Ok(acc)

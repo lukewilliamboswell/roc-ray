@@ -21,15 +21,9 @@ init! : App.Init(Model, [])
 init! = App.init(
 	App.default,
 	|_startup| {
-		resource = Font.Resource.(Box.box(0))
+		handle = Font.Handle.(Box.box(0))
 		Ok({
-			font: {
-				handle: LoadedFont(resource),
-				base_size_value: 1,
-				line_spacing_value: 0,
-				fallback_index: 0,
-				glyph_values: [],
-			},
+			font: { ..Font.stub, handle },
 		})
 	},
 )

@@ -18,6 +18,7 @@ import rr.Camera
 import rr.Color
 import rr.Capture
 import rr.Draw
+import rr.Text
 import rr.Devices
 import rr.Keys
 import rr.Math
@@ -296,7 +297,7 @@ Sounds : {
 ## Keeping resources beside the world lets `update!` advance the game and
 ## `render!` draw the result without loading anything again.
 Model : {
-	font : Draw.Font,
+	font : Text.Font,
 	characters : Draw.Texture,
 	tiles : Draw.Texture,
 	level : Level,
@@ -522,7 +523,7 @@ make_sounds! = || {
 	Ok({ collect, hurt, win, lose, gate, dash, sparkle, music })
 }
 
-new_game : Draw.Font, Draw.Texture, Draw.Texture, Level, Sounds -> Model
+new_game : Text.Font, Draw.Texture, Draw.Texture, Level, Sounds -> Model
 new_game = |font, characters, tiles, level, sounds| {
 	font,
 	characters,
@@ -1204,7 +1205,7 @@ shaken_target = |world| {
 	}
 }
 
-draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, World, Math.Rect, Draw.Font => {}
+draw_world! : Draw.Frame, Level, Draw.Texture, Draw.Texture, World, Math.Rect, Text.Font => {}
 draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	frame.rectangle_gradient_v!({ x: level.bounds.x, y: level.bounds.y, width: level.bounds.width, height: level.bounds.height, color_top: Color.from_hex_rgb(0x173833), color_bottom: Color.from_hex_rgb(0x132821) })
 	level.tilemap.draw_all_in!(frame, viewport)
@@ -1266,14 +1267,14 @@ draw_tile! = |frame, tiles, tile, pos, scale| tile_sprite(tiles, tile, pos, scal
 draw_tile_centered! : Draw.Frame, Draw.Texture, Tile, Math.Vec2, F32, F32 => {}
 draw_tile_centered! = |frame, tiles, tile, pos, scale, rotation| tile_sprite(tiles, tile, pos, scale).centered().rotation(rotation).draw!(frame)
 
-draw_spawn! : Draw.Frame, Level, Draw.Font => {}
+draw_spawn! : Draw.Frame, Level, Text.Font => {}
 draw_spawn! = |frame, level, font| {
 	frame.circle_gradient!({ center: level.spawn, radius: 72, color_inner: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 120), color_outer: Color.with_alpha(Color.from_hex_rgb(0x2a9d8f), 0) })
 	frame.circle!({ center: level.spawn, radius: 42, style: Draw.filled_and_outlined(Color.from_hex_rgb(0x2a9d8f), Color.white, 4) })
 	frame.text!({ pos: { x: level.spawn.x, y: level.spawn.y + 63 }, text: "START", size: 18, spacing: Draw.default_spacing, color: Color.with_alpha(Color.white, 190), font, align: Draw.align_top_center })
 }
 
-draw_exit! : Draw.Frame, Level, World, Draw.Font => {}
+draw_exit! : Draw.Frame, Level, World, Text.Font => {}
 draw_exit! = |frame, level, world, font| {
 	is_open = gate_is_open(world.gate)
 	color = if is_open Color.from_hex_rgb(0xf9c74f) else Color.from_hex_rgb(0x576066)
@@ -1432,7 +1433,7 @@ draw_bar! = |frame, x, y, width, height, amount, color| {
 	frame.rounded_rectangle!({ x, y, width: width * Math.clamp(amount, 0, 1), height, radius: 5, segments: 6, style: Draw.filled(color) })
 }
 
-draw_hud! : Draw.Frame, Level, World, Draw.Font => {}
+draw_hud! : Draw.Frame, Level, World, Text.Font => {}
 draw_hud! = |frame, level, world, font| {
 	is_open = gate_is_open(world.gate)
 

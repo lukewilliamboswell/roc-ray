@@ -78,6 +78,16 @@ complete app, then choose a project from the
 [API reference](https://lukewilliamboswell.github.io/roc-ray/) documents the
 available features and functions.
 
+Configure a shared startup font when one font serves most of the app:
+
+```roc
+config = App.default.with_default_font({ path: "assets/body.ttf", size: 32 })
+font = startup.default_font!()?
+```
+
+`Text.Font` carries both its opaque host handle and an immutable metric
+snapshot, so `Text.measure` is pure.
+
 ## Project links
 
 - [Examples and learning path](examples/README.md)

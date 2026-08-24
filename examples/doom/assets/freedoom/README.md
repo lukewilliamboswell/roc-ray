@@ -43,11 +43,13 @@ sample metadata, and source/output checksums. See
 `docs/E1M1.md` for the generated schema and known scope limits. The 61 MB ZIP
 and 28 MB WAD are not committed; `--archive` permits an offline rebuild.
 
-For an offline rebuild, download the archive named in `source/manifest.json`
-and pass `--archive /path/to/freedoom-v0.13.0.tar.gz`. The script verifies its
-SHA-256 before reading it. It selects only the listed upstream files, performs
-no lossy conversion, and writes PNG output deterministically with a fixed atlas
-layout.
+For an offline source-atlas rebuild, download the archive named in
+`source/manifest.json` and pass it to `doom_assets.py --archive`. For an offline
+E1M1 WAD rebuild, use the release ZIP named in `source/e1m1_release.json` with
+`doom_wad.py --archive`. Each script verifies its archive SHA-256 before
+reading it. The source-atlas stage selects only its listed upstream files and
+the WAD stage extracts only its declared map/gameplay set; both write their
+outputs deterministically.
 
 ## Licence and attribution
 

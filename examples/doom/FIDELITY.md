@@ -78,17 +78,14 @@ and independently observed outputs rather than importing GPL implementation.
 - **Audio and MIDI.** Freedoom 0.13.0 and its [modified-BSD content
   licence](https://github.com/freedoom/freedoom/blob/v0.13.0/COPYING.adoc) own
   the sounds, MIDI and attribution; the checked-in WAD checksum fixes the exact
-  input. A legally clean synthesis route is a pinned
-  [TinySoundFont](https://github.com/schellingb/TinySoundFont) renderer (MIT)
-  plus its [TinyMidiLoader](https://github.com/schellingb/TinySoundFont/blob/main/tml.h)
-  (zlib), using either a project-authored freely licensed SF2 or an audited,
-  pinned subset of the [FreePats General MIDI
-  set](https://freepats.zenvoid.org/SoundSets/general-midi.html), which is
-  GPL-3.0-or-later with its stated sound-bank exception. Do not use an
-  unrecorded system soundfont: instrument samples determine the output. Before
-  adopting FreePats, verify that E1M1's required programs exist, retain every
-  sample's attribution/licence, and record synth, SF2, sample-rate and output
-  checksums.
+  input. `scripts/doom_midi.py` is the completed, project-authored synthesis
+  path: it validates the exact programs, percussion and supported controller
+  events used by E1M1, renders a deterministic procedural instrument bank, and
+  writes mono 16-bit PCM WAV. It incorporates no soundfont or third-party
+  samples. The generated manifest records the renderer description, bank
+  requirements, sample rate, and MIDI/WAV checksums. An unrecorded system
+  soundfont is intentionally not used because instrument samples would change
+  both redistribution obligations and output bytes.
 - **Validation.** Compare the same pinned WAD and command stream in Chocolate
   Doom, using its [`g_game.c`](https://github.com/chocolate-doom/chocolate-doom/blob/master/src/doom/g_game.c)
   demo/tic path as the definition of command ordering. Keep deterministic

@@ -11,9 +11,14 @@ import rr.Assets
 import rr.Camera
 import rr.Color
 import rr.Draw
+import DoomLevel
 import DoomMap
+import DoomRuntime
 import DoomSim
+import DoomSprites
+import DoomWorld
 import E1M1Renderer
+import "sprite_cutout.fs" as sprite_fragment_shader : Str
 
 RenderGeometry : {
 	vertices : List({ position : { x : F32, y : F32, z : F32 }, uv : { x : F32, y : F32 }, tint : Color.Rgba }),
@@ -21,11 +26,13 @@ RenderGeometry : {
 }
 
 Model : {
-	player : DoomSim.Clock,
+	world : DoomWorld.World,
+	level : DoomLevel.State,
 	blockers : List(DoomSim.Segment),
 	batches : List(RenderGeometry),
 	world_atlas : Draw.Texture,
 	sprite_atlas : Draw.Texture,
+	sprite_shader : Draw.Shader,
 }
 
 Msg : []
@@ -48,6 +55,7 @@ init! = App.init(
 		sprite_atlas = Assets.load_texture!(store, "freedoom/generated/e1m1/sprite_atlas.png")?
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
+		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
 
 		map = DoomMap.e1m1
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
@@ -55,6 +63,10 @@ init! = App.init(
 		batches = List.map(mesh_batches, render_geometry)
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
+		spawned = DoomWorld.spawn(map.raw().things, Medium)
+		world : DoomWorld.World
+		world = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+		level = DoomLevel.initial(map)
 		blockers = List.map(
 			map.blocking_segments(),
 			|segment| {
@@ -62,7 +74,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ player: DoomSim.clock(DoomSim.initial(position, angle)), blockers, batches, world_atlas, sprite_atlas })
+		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader })
 	},
 )
 
@@ -82,21 +94,35 @@ update! = |model, input| {
 			40,
 		)
 		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
-		advanced = DoomSim.advance(model.player, input.time.elapsed_seconds, { forward, side, turn, fire: Bool.False }, model.blockers)
-		Ok({ ..model, player: advanced.clock })
+		fire = input.devices.mouse.button_pressed(Left) or input.devices.key_pressed(KeySpace)
+		previous_pos = model.world.player.sim.state.pos
+		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos)
+		advanced = DoomRuntime.advance(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers)
+		crossed_level = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.player.sim.state.pos)
+		level0 = if input.devices.key_pressed(KeyE) {
+			match DoomRuntime.use_nearest(DoomMap.e1m1, crossed_level, advanced.world.player.sim.state.pos, advanced.world.player.keys) {
+				Activated(next) => next
+				_ => crossed_level
+			}
+		} else crossed_level
+		level = advance_level(level0, advanced.tics)
+		Ok({ ..model, world: advanced.world, level, blockers })
 	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101010))
-	state = model.player.state
+	state = model.world.player.sim.state
 	world_x = state.pos.x * E1M1Renderer.doom_scale
 	world_z = state.pos.y * E1M1Renderer.doom_scale
 	facing = state.angle.forward()
+	sector = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(state.pos.x), y: F32.to_f64(state.pos.y) }) ?? crash "player left validated E1M1 geometry"
+	heights = DoomLevel.heights_for(model.level, sector) ?? crash "player sector state missing"
+	eye_y = I64.to_f32(heights.floor + 41) * E1M1Renderer.doom_scale
 	camera = Camera.perspective({
-		position: { x: world_x, y: eye_height, z: world_z },
-		target: { x: world_x + facing.x, y: eye_height, z: world_z + facing.y },
+		position: { x: world_x, y: eye_y, z: world_z },
+		target: { x: world_x + facing.x, y: eye_y, z: world_z + facing.y },
 		up: { x: 0, y: 1, z: 0 },
 		fovy: 74,
 	})
@@ -106,10 +132,71 @@ render! = |model, frame| {
 			for batch in model.batches {
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: batch.vertices, indices: batch.indices })
 			}
+			sprites = sprite_geometry(model.world, model.level, state.pos)
+			scene.with_shader!(
+				model.sprite_shader,
+				|cutout| {
+					cutout.textured_triangles_3d!({ texture: model.sprite_atlas, vertices: sprites.vertices, indices: sprites.indices })
+					Ok({})
+				},
+			)?
 			Ok({})
 		},
 	)?
+	draw_hud!(frame, model.world.player)
 	Ok({})
+}
+
+sprite_geometry : DoomWorld.World, DoomLevel.State, DoomSim.Vec2 -> RenderGeometry
+sprite_geometry = |world, level, viewer| {
+	var $geometry = { vertices: [], indices: [] }
+	for actor in world.actors {
+		primitive = DoomSprites.actor_geometry(actor, viewer) ?? crash "generated E1M1 actor has no sprite mapping"
+		$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, actor.pos))
+	}
+	for pickup in world.pickups {
+		if !(pickup.taken) {
+			primitive = DoomSprites.pickup_geometry(pickup, viewer) ?? crash "generated E1M1 pickup has no sprite mapping"
+			$geometry = append_sprite($geometry, place_on_floor(render_sprite_geometry(primitive), level, pickup.pos))
+		}
+	}
+	$geometry
+}
+
+place_on_floor = |geometry, level, pos| {
+	sector = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(pos.x), y: F32.to_f64(pos.y) })
+	floor = match sector {
+		Ok(index) => (DoomLevel.heights_for(level, index) ?? crash "sprite sector state missing").floor
+		Err(OutsideMap) => 0
+	}
+	offset = I64.to_f32(floor) * E1M1Renderer.doom_scale
+	{ ..geometry, vertices: List.map(geometry.vertices, |vertex| { ..vertex, position: { ..vertex.position, y: vertex.position.y + offset } }) }
+}
+
+render_sprite_geometry = |batch| {
+	vertices = List.map(
+		batch.vertices,
+		|vertex| {
+			..vertex,
+			tint: Color.rgba(vertex.tint.r, vertex.tint.g, vertex.tint.b, vertex.tint.a),
+		},
+	)
+	{ vertices, indices: batch.indices }
+}
+
+append_sprite = |geometry, primitive| {
+	offset = U64.to_u32_wrap(List.len(geometry.vertices))
+	indices = List.map(primitive.indices, |index| index + offset)
+	{ vertices: List.concat(geometry.vertices, primitive.vertices), indices: List.concat(geometry.indices, indices) }
+}
+
+draw_hud! = |frame, player| {
+	size = frame.size!()
+	frame.text_at!({ pos: { x: 24, y: size.height - 42 }, text: "HEALTH ${I64.to_str(player.health)}", size: 24, color: if player.health <= 25 Color.red else Color.ray_white })
+	ammo = if player.weapon == Pistol player.ammo.bullets else player.ammo.shells
+	frame.text_at!({ pos: { x: size.width - 160, y: size.height - 42 }, text: "AMMO ${I64.to_str(ammo)}", size: 24, color: Color.from_hex_rgb(0xe8c56a) })
+	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
+	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
 }
 
 ## Resolve the independently testable mesh module's structural tint into the
@@ -130,7 +217,7 @@ signed_command : Bool, Bool, I16 -> I16
 signed_command = |positive, negative, magnitude|
 	if positive and !(negative) magnitude else if negative and !(positive) 0 - magnitude else 0
 
-eye_height = 41 / 64
+advance_level = |level, tics| if tics == 0 level else advance_level(DoomLevel.tick(level), tics - 1)
 
 mouse_turns_per_pixel = 0.0004
 

@@ -26,7 +26,7 @@ RenderGeometry : {
 }
 
 Model : {
-	world : DoomWorld.World,
+	world : DoomRuntime.World,
 	level : DoomLevel.State,
 	blockers : List(DoomSim.Segment),
 	batches : List(RenderGeometry),
@@ -63,9 +63,7 @@ init! = App.init(
 		batches = List.map(mesh_batches, render_geometry)
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
-		spawned = DoomWorld.spawn(map.raw().things, Medium)
-		world : DoomWorld.World
-		world = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+		world = initial_runtime(map, position, angle)
 		level = DoomLevel.initial(map)
 		blockers = List.map(
 			map.blocking_segments(),
@@ -82,6 +80,14 @@ update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
 	if input.devices.key_pressed(KeyEscape) {
 		Err(Exit(0))
+	} else if input.devices.key_pressed(KeyR) {
+		start = DoomMap.e1m1.player_start() ?? crash "validated E1M1 player start missing"
+		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
+		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
+		world = initial_runtime(DoomMap.e1m1, position, angle)
+		level = DoomLevel.initial(DoomMap.e1m1)
+		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, level, position)
+		Ok({ ..model, world, level, blockers })
 	} else {
 		forward = signed_command(
 			input.devices.key_down(KeyW) or input.devices.key_down(KeyUp),
@@ -95,25 +101,31 @@ update! = |model, input| {
 		)
 		turn = input.devices.mouse.delta().x * mouse_turns_per_pixel
 		fire = input.devices.mouse.button_pressed(Left) or input.devices.key_pressed(KeySpace)
-		previous_pos = model.world.player.sim.state.pos
+		previous_pos = model.world.doom.player.sim.state.pos
 		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos)
 		advanced = DoomRuntime.advance(model.world, input.time.elapsed_seconds, { forward, side, turn, fire }, blockers)
-		crossed_level = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.player.sim.state.pos)
-		level0 = if input.devices.key_pressed(KeyE) {
-			match DoomRuntime.use_nearest(DoomMap.e1m1, crossed_level, advanced.world.player.sim.state.pos, advanced.world.player.keys) {
-				Activated(next) => next
-				_ => crossed_level
-			}
-		} else crossed_level
+		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
+		use_result = if input.devices.key_pressed(KeyE) {
+			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
+		} else NotUsable
+		level0 = match use_result {
+			Activated(next) => next
+			_ => crossed.level
+		}
+		exited = crossed.exited or match use_result {
+			Exit => Bool.True
+			_ => Bool.False
+		}
+		world = if exited { ..advanced.world, phase: Exited } else advanced.world
 		level = advance_level(level0, advanced.tics)
-		Ok({ ..model, world: advanced.world, level, blockers })
+		Ok({ ..model, world, level, blockers })
 	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101010))
-	state = model.world.player.sim.state
+	state = model.world.doom.player.sim.state
 	world_x = state.pos.x * E1M1Renderer.doom_scale
 	world_z = state.pos.y * E1M1Renderer.doom_scale
 	facing = state.angle.forward()
@@ -132,7 +144,7 @@ render! = |model, frame| {
 			for batch in model.batches {
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: batch.vertices, indices: batch.indices })
 			}
-			sprites = sprite_geometry(model.world, model.level, state.pos)
+			sprites = sprite_geometry(model.world.doom, model.level, state.pos)
 			scene.with_shader!(
 				model.sprite_shader,
 				|cutout| {
@@ -143,7 +155,7 @@ render! = |model, frame| {
 			Ok({})
 		},
 	)?
-	draw_hud!(frame, model.world.player)
+	draw_hud!(frame, model.world)
 	Ok({})
 }
 
@@ -190,13 +202,32 @@ append_sprite = |geometry, primitive| {
 	{ vertices: List.concat(geometry.vertices, primitive.vertices), indices: List.concat(geometry.indices, indices) }
 }
 
-draw_hud! = |frame, player| {
+draw_hud! = |frame, world| {
+	player = world.doom.player
 	size = frame.size!()
 	frame.text_at!({ pos: { x: 24, y: size.height - 42 }, text: "HEALTH ${I64.to_str(player.health)}", size: 24, color: if player.health <= 25 Color.red else Color.ray_white })
 	ammo = if player.weapon == Pistol player.ammo.bullets else player.ammo.shells
 	frame.text_at!({ pos: { x: size.width - 160, y: size.height - 42 }, text: "AMMO ${I64.to_str(ammo)}", size: 24, color: Color.from_hex_rgb(0xe8c56a) })
 	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
 	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
+	match world.phase {
+		Playing => {}
+		Dead => overlay!(frame, size, "YOU DIED", "Press R to restart")
+		Exited => overlay!(frame, size, "LEVEL COMPLETE", "Press R to restart")
+	}
+}
+
+overlay! = |frame, size, title, subtitle| {
+	frame.rectangle!({ x: 0, y: 0, width: size.width, height: size.height, style: Draw.filled(Color.with_alpha(Color.black, 165)) })
+	frame.text_at!({ pos: { x: size.width * 0.5 - 150, y: size.height * 0.42 }, text: title, size: 36, color: Color.from_hex_rgb(0xd7433f) })
+	frame.text_at!({ pos: { x: size.width * 0.5 - 100, y: size.height * 0.42 + 48 }, text: subtitle, size: 18, color: Color.ray_white })
+}
+
+initial_runtime = |map, position, angle| {
+	spawned = DoomWorld.spawn(map.raw().things, Medium)
+	doom : DoomWorld.World
+	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
+	DoomRuntime.initial(doom)
 }
 
 ## Resolve the independently testable mesh module's structural tint into the

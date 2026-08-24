@@ -75,10 +75,15 @@ author_tic = |run| {
 		Ok(actor) => combat_move(run.world.doom.player.sim.state, actor.pos, match supply { Ok(pickup) => pickup.pos, Err(_) => target })
 		Err(_) => steer(run.world.doom.player.sim.state, match supply { Ok(pickup) => pickup.pos, Err(_) => target }, Bool.False)
 	}
-	command = match closest_projectile(run.world.projectiles, pos) {
+	movement = match closest_projectile(run.world.projectiles, pos) {
 		Ok(projectile) => evade_projectile(run.world.doom.player.sim.state, projectile.momentum, target)
 		Err(_) => planned
 	}
+	weapon_slot = match combat_target {
+		Ok(actor) => if DoomWorld.owns(run.world.doom.player, Shotgun) and run.world.doom.player.ammo.shells > 0 and DoomSim.distance_squared(pos, actor.pos) < 192 * 192 { SelectSlot(3) } else if run.world.doom.player.ammo.bullets > 0 { SelectSlot(2) } else KeepWeapon
+		Err(_) => KeepWeapon
+	}
+	command = { ..movement, weapon_slot }
 	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, blockers, map)
 	new_pos = advanced.world.doom.player.sim.state.pos
 	crossed = DoomRuntime.cross_specials(map, run.level, pos, new_pos)
@@ -115,7 +120,7 @@ evade_projectile = |state, momentum, target| {
 	right = { x: facing.y, y: 0 - facing.x }
 	forward = DoomSim.dot(facing, move)
 	side = DoomSim.dot(right, move)
-	{ forward: if forward > 0.2 50 else if forward < -0.2 -50 else 0, side: if side > 0.2 40 else if side < -0.2 -40 else 0, turn: 0, fire: Bool.False }
+	{ ..DoomSim.neutral, forward: if forward > 0.2 50 else if forward < -0.2 -50 else 0, side: if side > 0.2 40 else if side < -0.2 -40 else 0 }
 }
 
 recover_route_index = |sector, current| {
@@ -154,7 +159,7 @@ steer = |state, target, combat| {
 	dot = DoomSim.dot(facing, direction)
 	cross = facing.x * direction.y - facing.y * direction.x
 	turn = if cross > 0.08 0.015625 else if cross < -0.08 -0.015625 else 0
-	{ forward: if dot > 0.35 50 else 0, side: if combat 40 else if (state.tic / 16) % 2 == 0 20 else -20, turn, fire: combat and dot > 0.92 }
+	{ ..DoomSim.neutral, forward: if dot > 0.35 50 else 0, side: if combat 40 else if (state.tic / 16) % 2 == 0 20 else -20, turn, fire: combat and dot > 0.92 }
 }
 
 combat_steer = |state, aim, _movement| {
@@ -163,6 +168,7 @@ combat_steer = |state, aim, _movement| {
 	aim_dot = DoomSim.dot(facing, aim_direction)
 	cross = facing.x * aim_direction.y - facing.y * aim_direction.x
 	{
+		..DoomSim.neutral,
 		forward: 0,
 		side: if (state.tic / 16) % 2 == 0 40 else -40,
 		turn: if cross > 0.08 0.015625 else if cross < -0.08 -0.015625 else 0,
@@ -178,7 +184,7 @@ combat_move = |state, aim, movement| {
 	forward_dot = DoomSim.dot(facing, move_direction)
 	side_dot = DoomSim.dot(right, move_direction)
 	cross = facing.x * aim_direction.y - facing.y * aim_direction.x
-	{ forward: if forward_dot > 0.2 50 else if forward_dot < -0.2 -50 else 0, side: if side_dot > 0.2 40 else if side_dot < -0.2 -40 else 0, turn: if cross > 0.08 0.015625 else if cross < -0.08 -0.015625 else 0, fire: DoomSim.dot(facing, aim_direction) > 0.92 }
+	{ ..DoomSim.neutral, forward: if forward_dot > 0.2 50 else if forward_dot < -0.2 -50 else 0, side: if side_dot > 0.2 40 else if side_dot < -0.2 -40 else 0, turn: if cross > 0.08 0.015625 else if cross < -0.08 -0.015625 else 0, fire: DoomSim.dot(facing, aim_direction) > 0.92 }
 }
 
 closest_visible_actor = |actors, pos, blockers| {
@@ -261,7 +267,7 @@ join_u64 = |values, index, text|
 encode_runs = |runs, index, text|
 	match List.get(runs,index) {
 		Err(_) => text
-		Ok(r) => encode_runs(runs,index+1,"${text}${U64.to_str(r.count)}:${I16.to_str(r.command.forward)},${I16.to_str(r.command.side)},${F32.to_str(r.command.turn)},${if r.command.fire "1" else "0"};")
+		Ok(r) => encode_runs(runs,index+1,"${text}${U64.to_str(r.count)}:${I16.to_str(r.command.forward)},${I16.to_str(r.command.side)},${F32.to_str(r.command.turn)},${if r.command.fire "1" else "0"},${match r.command.weapon_slot { KeepWeapon => "-", SelectSlot(slot) => U8.to_str(slot) }};")
 	}
 
 route_sectors = [140,141,91,150,98,142,17,93,10,9,13,12,37,34,8,135,63,64,68,66,67]

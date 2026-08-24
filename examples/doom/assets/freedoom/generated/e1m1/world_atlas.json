@@ -1,0 +1,1270 @@
+{
+  "width": 2048,
+  "height": 1024,
+  "entries": {
+    "flat/AQF001": {
+      "x": 1900,
+      "y": 522,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF001"
+    },
+    "flat/AQF003": {
+      "x": 1966,
+      "y": 522,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF003"
+    },
+    "flat/AQF007": {
+      "x": 2,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF007"
+    },
+    "flat/AQF009": {
+      "x": 68,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF009"
+    },
+    "flat/AQF010": {
+      "x": 134,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF010"
+    },
+    "flat/AQF012": {
+      "x": 200,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF012"
+    },
+    "flat/AQF018": {
+      "x": 266,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF018"
+    },
+    "flat/AQF024": {
+      "x": 332,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF024"
+    },
+    "flat/AQF028": {
+      "x": 398,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF028"
+    },
+    "flat/AQF030": {
+      "x": 464,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF030"
+    },
+    "flat/AQF031": {
+      "x": 530,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF031"
+    },
+    "flat/AQF032": {
+      "x": 596,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF032"
+    },
+    "flat/AQF050": {
+      "x": 662,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF050"
+    },
+    "flat/AQF054": {
+      "x": 728,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF054"
+    },
+    "flat/AQF055": {
+      "x": 794,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF055"
+    },
+    "flat/AQF057": {
+      "x": 860,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF057"
+    },
+    "flat/AQF067": {
+      "x": 926,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF067"
+    },
+    "flat/AQF068": {
+      "x": 992,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF068"
+    },
+    "flat/AQF069": {
+      "x": 1058,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF069"
+    },
+    "flat/AQF070": {
+      "x": 1124,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF070"
+    },
+    "flat/AQF072": {
+      "x": 1190,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF072"
+    },
+    "flat/AQF073": {
+      "x": 1256,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "AQF073"
+    },
+    "flat/CEIL4_1": {
+      "x": 1322,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "CEIL4_1"
+    },
+    "flat/CEIL5_1": {
+      "x": 1388,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "CEIL5_1"
+    },
+    "flat/CEIL5_2": {
+      "x": 1454,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "CEIL5_2"
+    },
+    "flat/CRATOP1": {
+      "x": 1520,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "CRATOP1"
+    },
+    "flat/CRATOP2": {
+      "x": 1586,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "CRATOP2"
+    },
+    "flat/FLAT1": {
+      "x": 1652,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLAT1"
+    },
+    "flat/FLAT20": {
+      "x": 1718,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLAT20"
+    },
+    "flat/FLAT4": {
+      "x": 1784,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLAT4"
+    },
+    "flat/FLAT5_4": {
+      "x": 1850,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLAT5_4"
+    },
+    "flat/FLOOR0_3": {
+      "x": 1916,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLOOR0_3"
+    },
+    "flat/FLOOR0_5": {
+      "x": 1982,
+      "y": 652,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLOOR0_5"
+    },
+    "flat/FLOOR5_2": {
+      "x": 2,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FLOOR5_2"
+    },
+    "flat/FWATER1": {
+      "x": 68,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "FWATER1"
+    },
+    "flat/F_SKY1": {
+      "x": 134,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "F_SKY1"
+    },
+    "flat/GRASS1": {
+      "x": 200,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "GRASS1"
+    },
+    "flat/MFLR8_3": {
+      "x": 266,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "MFLR8_3"
+    },
+    "flat/MFLR8_4": {
+      "x": 332,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "MFLR8_4"
+    },
+    "flat/NUKAGE1": {
+      "x": 398,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "NUKAGE1"
+    },
+    "flat/RROCK17": {
+      "x": 464,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "RROCK17"
+    },
+    "flat/RROCK18": {
+      "x": 530,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "RROCK18"
+    },
+    "flat/SLIME14": {
+      "x": 596,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "SLIME14"
+    },
+    "flat/TLITE6_1": {
+      "x": 662,
+      "y": 718,
+      "width": 64,
+      "height": 64,
+      "kind": "flat",
+      "doom_name": "TLITE6_1"
+    },
+    "texture/A-CONCTE": {
+      "x": 1292,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "A-CONCTE"
+    },
+    "texture/A-MUD": {
+      "x": 1422,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "A-MUD"
+    },
+    "texture/AQCOMP01": {
+      "x": 2,
+      "y": 2,
+      "width": 256,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCOMP01"
+    },
+    "texture/AQCONC05": {
+      "x": 262,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCONC05"
+    },
+    "texture/AQCONC11": {
+      "x": 328,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCONC11"
+    },
+    "texture/AQCONC14": {
+      "x": 1552,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCONC14"
+    },
+    "texture/AQCONC16": {
+      "x": 1682,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCONC16"
+    },
+    "texture/AQCONC18": {
+      "x": 394,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQCONC18"
+    },
+    "texture/AQDOOR01": {
+      "x": 1812,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQDOOR01"
+    },
+    "texture/AQDOOR02": {
+      "x": 2,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQDOOR02"
+    },
+    "texture/AQLITE01": {
+      "x": 460,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQLITE01"
+    },
+    "texture/AQLITE07": {
+      "x": 526,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQLITE07"
+    },
+    "texture/AQLITE08": {
+      "x": 592,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQLITE08"
+    },
+    "texture/AQLITE18": {
+      "x": 658,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQLITE18"
+    },
+    "texture/AQMETL01": {
+      "x": 724,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL01"
+    },
+    "texture/AQMETL03": {
+      "x": 132,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL03"
+    },
+    "texture/AQMETL06": {
+      "x": 262,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL06"
+    },
+    "texture/AQMETL07": {
+      "x": 790,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL07"
+    },
+    "texture/AQMETL09": {
+      "x": 856,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL09"
+    },
+    "texture/AQMETL10": {
+      "x": 922,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL10"
+    },
+    "texture/AQMETL11": {
+      "x": 988,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL11"
+    },
+    "texture/AQMETL12": {
+      "x": 1054,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL12"
+    },
+    "texture/AQMETL13": {
+      "x": 392,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL13"
+    },
+    "texture/AQMETL14": {
+      "x": 522,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL14"
+    },
+    "texture/AQMETL15": {
+      "x": 1120,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL15"
+    },
+    "texture/AQMETL17": {
+      "x": 1186,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL17"
+    },
+    "texture/AQMETL21": {
+      "x": 1252,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL21"
+    },
+    "texture/AQMETL24": {
+      "x": 1318,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL24"
+    },
+    "texture/AQMETL25": {
+      "x": 1384,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL25"
+    },
+    "texture/AQMETL26": {
+      "x": 1450,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL26"
+    },
+    "texture/AQMETL27": {
+      "x": 1516,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL27"
+    },
+    "texture/AQMETL32": {
+      "x": 1582,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQMETL32"
+    },
+    "texture/AQPANL01": {
+      "x": 652,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPANL01"
+    },
+    "texture/AQPANL02": {
+      "x": 782,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPANL02"
+    },
+    "texture/AQPANL05": {
+      "x": 912,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPANL05"
+    },
+    "texture/AQPANL08": {
+      "x": 1648,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPANL08"
+    },
+    "texture/AQPIPE01": {
+      "x": 1714,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPIPE01"
+    },
+    "texture/AQPIPE08": {
+      "x": 1780,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPIPE08"
+    },
+    "texture/AQPIPE14": {
+      "x": 1042,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQPIPE14"
+    },
+    "texture/AQRUST02": {
+      "x": 1846,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQRUST02"
+    },
+    "texture/AQRUST10": {
+      "x": 1912,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQRUST10"
+    },
+    "texture/AQSECT11": {
+      "x": 1172,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSECT11"
+    },
+    "texture/AQSUPP01": {
+      "x": 1322,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP01"
+    },
+    "texture/AQSUPP04": {
+      "x": 1526,
+      "y": 522,
+      "width": 16,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP04"
+    },
+    "texture/AQSUPP08": {
+      "x": 1356,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP08"
+    },
+    "texture/AQSUPP10": {
+      "x": 1544,
+      "y": 522,
+      "width": 16,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP10"
+    },
+    "texture/AQSUPP11": {
+      "x": 1562,
+      "y": 522,
+      "width": 16,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP11"
+    },
+    "texture/AQSUPP13": {
+      "x": 1598,
+      "y": 522,
+      "width": 8,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQSUPP13"
+    },
+    "texture/AQTILE01": {
+      "x": 1978,
+      "y": 392,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQTILE01"
+    },
+    "texture/AQTILE02": {
+      "x": 2,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQTILE02"
+    },
+    "texture/AQTRIM05": {
+      "x": 1302,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "AQTRIM05"
+    },
+    "texture/ASHWALL": {
+      "x": 68,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "ASHWALL"
+    },
+    "texture/ASHWALL2": {
+      "x": 134,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "ASHWALL2"
+    },
+    "texture/BASE": {
+      "x": 1432,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BASE"
+    },
+    "texture/BASE2": {
+      "x": 1562,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BASE2"
+    },
+    "texture/BIGDOOR2": {
+      "x": 1692,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BIGDOOR2"
+    },
+    "texture/BIGDOOR3": {
+      "x": 1822,
+      "y": 132,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BIGDOOR3"
+    },
+    "texture/BROWN1": {
+      "x": 2,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BROWN1"
+    },
+    "texture/BROWN96": {
+      "x": 132,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BROWN96"
+    },
+    "texture/BROWNHUG": {
+      "x": 200,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "BROWNHUG"
+    },
+    "texture/CEILVINE": {
+      "x": 262,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CEILVINE"
+    },
+    "texture/COMP2": {
+      "x": 260,
+      "y": 2,
+      "width": 256,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMP2"
+    },
+    "texture/COMPLIT3": {
+      "x": 1390,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPLIT3"
+    },
+    "texture/COMPSPAN": {
+      "x": 1424,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPSPAN"
+    },
+    "texture/COMPTALL": {
+      "x": 518,
+      "y": 2,
+      "width": 256,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPTALL"
+    },
+    "texture/COMPUTE1": {
+      "x": 392,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPUTE1"
+    },
+    "texture/COMPUTE2": {
+      "x": 728,
+      "y": 718,
+      "width": 256,
+      "height": 56,
+      "kind": "texture",
+      "doom_name": "COMPUTE2"
+    },
+    "texture/COMPUTE4": {
+      "x": 776,
+      "y": 2,
+      "width": 256,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPUTE4"
+    },
+    "texture/COMPVENT": {
+      "x": 1458,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPVENT"
+    },
+    "texture/COMPWERF": {
+      "x": 266,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "COMPWERF"
+    },
+    "texture/CRATE1": {
+      "x": 332,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRATE1"
+    },
+    "texture/CRATE2": {
+      "x": 398,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRATE2"
+    },
+    "texture/CRATE3": {
+      "x": 464,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRATE3"
+    },
+    "texture/CRATELIT": {
+      "x": 530,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRATELIT"
+    },
+    "texture/CRATINY": {
+      "x": 1182,
+      "y": 718,
+      "width": 64,
+      "height": 16,
+      "kind": "texture",
+      "doom_name": "CRATINY"
+    },
+    "texture/CRATWIDE": {
+      "x": 522,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRATWIDE"
+    },
+    "texture/CRAWHBP": {
+      "x": 652,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "CRAWHBP"
+    },
+    "texture/DOOR1": {
+      "x": 1768,
+      "y": 522,
+      "width": 64,
+      "height": 72,
+      "kind": "texture",
+      "doom_name": "DOOR1"
+    },
+    "texture/DOOR3": {
+      "x": 1834,
+      "y": 522,
+      "width": 64,
+      "height": 72,
+      "kind": "texture",
+      "doom_name": "DOOR3"
+    },
+    "texture/DOORBLU": {
+      "x": 1608,
+      "y": 522,
+      "width": 8,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "DOORBLU"
+    },
+    "texture/DOORSTOP": {
+      "x": 1618,
+      "y": 522,
+      "width": 8,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "DOORSTOP"
+    },
+    "texture/DOORTRAK": {
+      "x": 1628,
+      "y": 522,
+      "width": 8,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "DOORTRAK"
+    },
+    "texture/EXITDOOR": {
+      "x": 1638,
+      "y": 522,
+      "width": 128,
+      "height": 72,
+      "kind": "texture",
+      "doom_name": "EXITDOOR"
+    },
+    "texture/EXITSIGN": {
+      "x": 1248,
+      "y": 718,
+      "width": 64,
+      "height": 16,
+      "kind": "texture",
+      "doom_name": "EXITSIGN"
+    },
+    "texture/LITE3": {
+      "x": 1492,
+      "y": 522,
+      "width": 32,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "LITE3"
+    },
+    "texture/LITE5": {
+      "x": 1580,
+      "y": 522,
+      "width": 16,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "LITE5"
+    },
+    "texture/MC17": {
+      "x": 782,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC17"
+    },
+    "texture/MC18": {
+      "x": 912,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC18"
+    },
+    "texture/MC19": {
+      "x": 1042,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC19"
+    },
+    "texture/MC2": {
+      "x": 1172,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC2"
+    },
+    "texture/MC3": {
+      "x": 1302,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC3"
+    },
+    "texture/MC5": {
+      "x": 1432,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "MC5"
+    },
+    "texture/METAL": {
+      "x": 596,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "METAL"
+    },
+    "texture/METAL2": {
+      "x": 662,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "METAL2"
+    },
+    "texture/METAL5": {
+      "x": 728,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "METAL5"
+    },
+    "texture/NUKE24": {
+      "x": 986,
+      "y": 718,
+      "width": 64,
+      "height": 24,
+      "kind": "texture",
+      "doom_name": "NUKE24"
+    },
+    "texture/PLAT1": {
+      "x": 1562,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "PLAT1"
+    },
+    "texture/SFALL1": {
+      "x": 794,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SFALL1"
+    },
+    "texture/SHAWN02": {
+      "x": 1692,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SHAWN02"
+    },
+    "texture/SHAWN1": {
+      "x": 1822,
+      "y": 262,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SHAWN1"
+    },
+    "texture/SHAWN2": {
+      "x": 860,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SHAWN2"
+    },
+    "texture/SKY1": {
+      "x": 1034,
+      "y": 2,
+      "width": 256,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SKY1"
+    },
+    "texture/SP_ROCK1": {
+      "x": 2,
+      "y": 392,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SP_ROCK1"
+    },
+    "texture/STARGR1": {
+      "x": 926,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "STARGR1"
+    },
+    "texture/STARGR2": {
+      "x": 132,
+      "y": 392,
+      "width": 128,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "STARGR2"
+    },
+    "texture/STEP3": {
+      "x": 1382,
+      "y": 718,
+      "width": 32,
+      "height": 8,
+      "kind": "texture",
+      "doom_name": "STEP3"
+    },
+    "texture/STEP4": {
+      "x": 1314,
+      "y": 718,
+      "width": 32,
+      "height": 16,
+      "kind": "texture",
+      "doom_name": "STEP4"
+    },
+    "texture/STEP6": {
+      "x": 1348,
+      "y": 718,
+      "width": 32,
+      "height": 16,
+      "kind": "texture",
+      "doom_name": "STEP6"
+    },
+    "texture/STEPTOP": {
+      "x": 1052,
+      "y": 718,
+      "width": 128,
+      "height": 16,
+      "kind": "texture",
+      "doom_name": "STEPTOP"
+    },
+    "texture/STONE4": {
+      "x": 992,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "STONE4"
+    },
+    "texture/SW1BRN1": {
+      "x": 1058,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SW1BRN1"
+    },
+    "texture/SW1GRAY": {
+      "x": 1124,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "SW1GRAY"
+    },
+    "texture/WFALL1": {
+      "x": 1190,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "WFALL1"
+    },
+    "texture/ZIMMER3": {
+      "x": 1256,
+      "y": 522,
+      "width": 64,
+      "height": 128,
+      "kind": "texture",
+      "doom_name": "ZIMMER3"
+    }
+  }
+}

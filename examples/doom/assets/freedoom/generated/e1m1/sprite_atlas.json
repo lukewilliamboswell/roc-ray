@@ -1,0 +1,3110 @@
+{
+  "width": 2048,
+  "height": 1024,
+  "entries": {
+    "AMMOA0": {
+      "x": 719,
+      "y": 530,
+      "width": 17,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "AMMOA0"
+    },
+    "ARM1A0": {
+      "x": 1028,
+      "y": 492,
+      "width": 37,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "ARM1A0"
+    },
+    "ARM1B0": {
+      "x": 1067,
+      "y": 492,
+      "width": 37,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "ARM1B0"
+    },
+    "ARM2A0": {
+      "x": 1458,
+      "y": 492,
+      "width": 37,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "ARM2A0"
+    },
+    "ARM2B0": {
+      "x": 1497,
+      "y": 492,
+      "width": 37,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "ARM2B0"
+    },
+    "BAR1A0": {
+      "x": 492,
+      "y": 492,
+      "width": 23,
+      "height": 32,
+      "kind": "sprite",
+      "doom_name": "BAR1A0"
+    },
+    "BAR1B0": {
+      "x": 517,
+      "y": 492,
+      "width": 23,
+      "height": 32,
+      "kind": "sprite",
+      "doom_name": "BAR1B0"
+    },
+    "BKEYA0": {
+      "x": 1855,
+      "y": 492,
+      "width": 14,
+      "height": 21,
+      "kind": "sprite",
+      "doom_name": "BKEYA0"
+    },
+    "BKEYB0": {
+      "x": 1871,
+      "y": 492,
+      "width": 14,
+      "height": 21,
+      "kind": "sprite",
+      "doom_name": "BKEYB0"
+    },
+    "BON1A0": {
+      "x": 738,
+      "y": 530,
+      "width": 11,
+      "height": 15,
+      "kind": "sprite",
+      "doom_name": "BON1A0"
+    },
+    "BON1B0": {
+      "x": 751,
+      "y": 530,
+      "width": 11,
+      "height": 15,
+      "kind": "sprite",
+      "doom_name": "BON1B0"
+    },
+    "BON1C0": {
+      "x": 764,
+      "y": 530,
+      "width": 11,
+      "height": 15,
+      "kind": "sprite",
+      "doom_name": "BON1C0"
+    },
+    "BON1D0": {
+      "x": 777,
+      "y": 530,
+      "width": 11,
+      "height": 15,
+      "kind": "sprite",
+      "doom_name": "BON1D0"
+    },
+    "BON2A0": {
+      "x": 224,
+      "y": 530,
+      "width": 13,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "BON2A0"
+    },
+    "BON2B0": {
+      "x": 239,
+      "y": 530,
+      "width": 13,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "BON2B0"
+    },
+    "BON2C0": {
+      "x": 254,
+      "y": 530,
+      "width": 13,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "BON2C0"
+    },
+    "BON2D0": {
+      "x": 269,
+      "y": 530,
+      "width": 13,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "BON2D0"
+    },
+    "BPAKA0": {
+      "x": 729,
+      "y": 492,
+      "width": 26,
+      "height": 30,
+      "kind": "sprite",
+      "doom_name": "BPAKA0"
+    },
+    "CANDA0": {
+      "x": 206,
+      "y": 530,
+      "width": 16,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "CANDA0"
+    },
+    "CLIPA0": {
+      "x": 926,
+      "y": 530,
+      "width": 7,
+      "height": 12,
+      "kind": "sprite",
+      "doom_name": "CLIPA0"
+    },
+    "COLUA0": {
+      "x": 647,
+      "y": 438,
+      "width": 18,
+      "height": 48,
+      "kind": "sprite",
+      "doom_name": "COLUA0"
+    },
+    "CSAWA0": {
+      "x": 123,
+      "y": 530,
+      "width": 47,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "CSAWA0"
+    },
+    "ELECA0": {
+      "x": 2,
+      "y": 2,
+      "width": 26,
+      "height": 128,
+      "kind": "sprite",
+      "doom_name": "ELECA0"
+    },
+    "GOR2A0": {
+      "x": 624,
+      "y": 381,
+      "width": 31,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "GOR2A0"
+    },
+    "HEADA1": {
+      "x": 1821,
+      "y": 2,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADA1"
+    },
+    "HEADA2A8": {
+      "x": 1623,
+      "y": 2,
+      "width": 64,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADA2A8"
+    },
+    "HEADA3A7": {
+      "x": 1418,
+      "y": 2,
+      "width": 67,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADA3A7"
+    },
+    "HEADA4A6": {
+      "x": 262,
+      "y": 132,
+      "width": 62,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADA4A6"
+    },
+    "HEADA5": {
+      "x": 1886,
+      "y": 2,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADA5"
+    },
+    "HEADB1": {
+      "x": 390,
+      "y": 132,
+      "width": 61,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADB1"
+    },
+    "HEADB2B8": {
+      "x": 1951,
+      "y": 2,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADB2B8"
+    },
+    "HEADB3B7": {
+      "x": 1348,
+      "y": 2,
+      "width": 68,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADB3B7"
+    },
+    "HEADB4B6": {
+      "x": 453,
+      "y": 132,
+      "width": 61,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADB4B6"
+    },
+    "HEADB5": {
+      "x": 2,
+      "y": 132,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADB5"
+    },
+    "HEADC1": {
+      "x": 874,
+      "y": 2,
+      "width": 64,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADC1"
+    },
+    "HEADC2C8": {
+      "x": 67,
+      "y": 132,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADC2C8"
+    },
+    "HEADC3C7": {
+      "x": 1487,
+      "y": 2,
+      "width": 66,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADC3C7"
+    },
+    "HEADC4C6": {
+      "x": 579,
+      "y": 132,
+      "width": 63,
+      "height": 65,
+      "kind": "sprite",
+      "doom_name": "HEADC4C6"
+    },
+    "HEADC5": {
+      "x": 132,
+      "y": 132,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADC5"
+    },
+    "HEADD1": {
+      "x": 940,
+      "y": 2,
+      "width": 64,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADD1"
+    },
+    "HEADD2D8": {
+      "x": 326,
+      "y": 132,
+      "width": 62,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADD2D8"
+    },
+    "HEADD3D7": {
+      "x": 1555,
+      "y": 2,
+      "width": 66,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADD3D7"
+    },
+    "HEADD4D6": {
+      "x": 1689,
+      "y": 2,
+      "width": 64,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADD4D6"
+    },
+    "HEADD5": {
+      "x": 1755,
+      "y": 2,
+      "width": 64,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADD5"
+    },
+    "HEADE1": {
+      "x": 1072,
+      "y": 2,
+      "width": 63,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADE1"
+    },
+    "HEADE2E8": {
+      "x": 1006,
+      "y": 2,
+      "width": 64,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADE2E8"
+    },
+    "HEADE3E7": {
+      "x": 611,
+      "y": 2,
+      "width": 69,
+      "height": 68,
+      "kind": "sprite",
+      "doom_name": "HEADE3E7"
+    },
+    "HEADE4E6": {
+      "x": 682,
+      "y": 2,
+      "width": 63,
+      "height": 68,
+      "kind": "sprite",
+      "doom_name": "HEADE4E6"
+    },
+    "HEADE5": {
+      "x": 1137,
+      "y": 2,
+      "width": 63,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADE5"
+    },
+    "HEADF1": {
+      "x": 811,
+      "y": 2,
+      "width": 61,
+      "height": 68,
+      "kind": "sprite",
+      "doom_name": "HEADF1"
+    },
+    "HEADF2F8": {
+      "x": 747,
+      "y": 2,
+      "width": 62,
+      "height": 68,
+      "kind": "sprite",
+      "doom_name": "HEADF2F8"
+    },
+    "HEADF3F7": {
+      "x": 477,
+      "y": 2,
+      "width": 68,
+      "height": 69,
+      "kind": "sprite",
+      "doom_name": "HEADF3F7"
+    },
+    "HEADF4F6": {
+      "x": 1202,
+      "y": 2,
+      "width": 63,
+      "height": 67,
+      "kind": "sprite",
+      "doom_name": "HEADF4F6"
+    },
+    "HEADF5": {
+      "x": 197,
+      "y": 132,
+      "width": 63,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADF5"
+    },
+    "HEADG0": {
+      "x": 516,
+      "y": 132,
+      "width": 61,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADG0"
+    },
+    "HEADH0": {
+      "x": 1267,
+      "y": 2,
+      "width": 79,
+      "height": 66,
+      "kind": "sprite",
+      "doom_name": "HEADH0"
+    },
+    "HEADI0": {
+      "x": 235,
+      "y": 2,
+      "width": 83,
+      "height": 73,
+      "kind": "sprite",
+      "doom_name": "HEADI0"
+    },
+    "HEADJ0": {
+      "x": 156,
+      "y": 2,
+      "width": 77,
+      "height": 76,
+      "kind": "sprite",
+      "doom_name": "HEADJ0"
+    },
+    "HEADK0": {
+      "x": 1867,
+      "y": 381,
+      "width": 83,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "HEADK0"
+    },
+    "HEADL0": {
+      "x": 757,
+      "y": 492,
+      "width": 82,
+      "height": 29,
+      "kind": "sprite",
+      "doom_name": "HEADL0"
+    },
+    "LAUNA0": {
+      "x": 1887,
+      "y": 492,
+      "width": 59,
+      "height": 20,
+      "kind": "sprite",
+      "doom_name": "LAUNA0"
+    },
+    "MEDIA0": {
+      "x": 40,
+      "y": 530,
+      "width": 29,
+      "height": 20,
+      "kind": "sprite",
+      "doom_name": "MEDIA0"
+    },
+    "MGUNA0": {
+      "x": 1406,
+      "y": 492,
+      "width": 50,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "MGUNA0"
+    },
+    "PLASA0": {
+      "x": 666,
+      "y": 530,
+      "width": 51,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "PLASA0"
+    },
+    "PLAYA1": {
+      "x": 824,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYA1"
+    },
+    "PLAYA2A8": {
+      "x": 1882,
+      "y": 323,
+      "width": 26,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYA2A8"
+    },
+    "PLAYA3A7": {
+      "x": 1607,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYA3A7"
+    },
+    "PLAYA4A6": {
+      "x": 690,
+      "y": 381,
+      "width": 29,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "PLAYA4A6"
+    },
+    "PLAYA5": {
+      "x": 546,
+      "y": 323,
+      "width": 38,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYA5"
+    },
+    "PLAYB1": {
+      "x": 862,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYB1"
+    },
+    "PLAYB2B8": {
+      "x": 1271,
+      "y": 323,
+      "width": 33,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYB2B8"
+    },
+    "PLAYB3B7": {
+      "x": 419,
+      "y": 323,
+      "width": 41,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYB3B7"
+    },
+    "PLAYB4B6": {
+      "x": 746,
+      "y": 323,
+      "width": 37,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYB4B6"
+    },
+    "PLAYB5": {
+      "x": 1127,
+      "y": 323,
+      "width": 34,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYB5"
+    },
+    "PLAYC1": {
+      "x": 900,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYC1"
+    },
+    "PLAYC2C8": {
+      "x": 1910,
+      "y": 323,
+      "width": 26,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYC2C8"
+    },
+    "PLAYC3C7": {
+      "x": 1638,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYC3C7"
+    },
+    "PLAYC4C6": {
+      "x": 1669,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYC4C6"
+    },
+    "PLAYC5": {
+      "x": 938,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYC5"
+    },
+    "PLAYD1": {
+      "x": 1090,
+      "y": 323,
+      "width": 35,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYD1"
+    },
+    "PLAYD2D8": {
+      "x": 1478,
+      "y": 323,
+      "width": 31,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYD2D8"
+    },
+    "PLAYD3D7": {
+      "x": 321,
+      "y": 381,
+      "width": 39,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "PLAYD3D7"
+    },
+    "PLAYD4D6": {
+      "x": 785,
+      "y": 323,
+      "width": 37,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYD4D6"
+    },
+    "PLAYD5": {
+      "x": 1306,
+      "y": 323,
+      "width": 33,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYD5"
+    },
+    "PLAYE1": {
+      "x": 1700,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYE1"
+    },
+    "PLAYE2E8": {
+      "x": 976,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYE2E8"
+    },
+    "PLAYE3E7": {
+      "x": 1700,
+      "y": 264,
+      "width": 47,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYE3E7"
+    },
+    "PLAYE4E6": {
+      "x": 462,
+      "y": 323,
+      "width": 41,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYE4E6"
+    },
+    "PLAYE5": {
+      "x": 1511,
+      "y": 323,
+      "width": 30,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYE5"
+    },
+    "PLAYF1": {
+      "x": 1731,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYF1"
+    },
+    "PLAYF2F8": {
+      "x": 331,
+      "y": 323,
+      "width": 42,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYF2F8"
+    },
+    "PLAYF3F7": {
+      "x": 1586,
+      "y": 264,
+      "width": 55,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYF3F7"
+    },
+    "PLAYF4F6": {
+      "x": 1749,
+      "y": 264,
+      "width": 47,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYF4F6"
+    },
+    "PLAYF5": {
+      "x": 1543,
+      "y": 323,
+      "width": 30,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYF5"
+    },
+    "PLAYG1": {
+      "x": 1762,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYG1"
+    },
+    "PLAYG2G8": {
+      "x": 1341,
+      "y": 323,
+      "width": 33,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYG2G8"
+    },
+    "PLAYG3G7": {
+      "x": 375,
+      "y": 323,
+      "width": 42,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYG3G7"
+    },
+    "PLAYG4G6": {
+      "x": 1163,
+      "y": 323,
+      "width": 34,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYG4G6"
+    },
+    "PLAYG5": {
+      "x": 1793,
+      "y": 323,
+      "width": 29,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYG5"
+    },
+    "PLAYH0": {
+      "x": 1376,
+      "y": 323,
+      "width": 32,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYH0"
+    },
+    "PLAYI0": {
+      "x": 489,
+      "y": 438,
+      "width": 28,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "PLAYI0"
+    },
+    "PLAYJ0": {
+      "x": 1306,
+      "y": 438,
+      "width": 27,
+      "height": 40,
+      "kind": "sprite",
+      "doom_name": "PLAYJ0"
+    },
+    "PLAYK0": {
+      "x": 1536,
+      "y": 492,
+      "width": 28,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "PLAYK0"
+    },
+    "PLAYL0": {
+      "x": 1818,
+      "y": 492,
+      "width": 35,
+      "height": 21,
+      "kind": "sprite",
+      "doom_name": "PLAYL0"
+    },
+    "PLAYM0": {
+      "x": 2,
+      "y": 530,
+      "width": 36,
+      "height": 20,
+      "kind": "sprite",
+      "doom_name": "PLAYM0"
+    },
+    "PLAYN0": {
+      "x": 2002,
+      "y": 492,
+      "width": 37,
+      "height": 20,
+      "kind": "sprite",
+      "doom_name": "PLAYN0"
+    },
+    "PLAYO0": {
+      "x": 586,
+      "y": 323,
+      "width": 38,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "PLAYO0"
+    },
+    "PLAYP0": {
+      "x": 1575,
+      "y": 381,
+      "width": 41,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "PLAYP0"
+    },
+    "PLAYQ0": {
+      "x": 601,
+      "y": 438,
+      "width": 44,
+      "height": 49,
+      "kind": "sprite",
+      "doom_name": "PLAYQ0"
+    },
+    "PLAYR0": {
+      "x": 925,
+      "y": 438,
+      "width": 46,
+      "height": 45,
+      "kind": "sprite",
+      "doom_name": "PLAYR0"
+    },
+    "PLAYS0": {
+      "x": 1335,
+      "y": 438,
+      "width": 49,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "PLAYS0"
+    },
+    "PLAYT0": {
+      "x": 281,
+      "y": 492,
+      "width": 49,
+      "height": 35,
+      "kind": "sprite",
+      "doom_name": "PLAYT0"
+    },
+    "PLAYU0": {
+      "x": 1242,
+      "y": 492,
+      "width": 53,
+      "height": 27,
+      "kind": "sprite",
+      "doom_name": "PLAYU0"
+    },
+    "PLAYV0": {
+      "x": 556,
+      "y": 530,
+      "width": 53,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "PLAYV0"
+    },
+    "PLAYW0": {
+      "x": 611,
+      "y": 530,
+      "width": 53,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "PLAYW0"
+    },
+    "PMAPA0": {
+      "x": 1106,
+      "y": 492,
+      "width": 32,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "PMAPA0"
+    },
+    "PMAPB0": {
+      "x": 1140,
+      "y": 492,
+      "width": 32,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "PMAPB0"
+    },
+    "PMAPC0": {
+      "x": 1174,
+      "y": 492,
+      "width": 32,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "PMAPC0"
+    },
+    "PMAPD0": {
+      "x": 1208,
+      "y": 492,
+      "width": 32,
+      "height": 28,
+      "kind": "sprite",
+      "doom_name": "PMAPD0"
+    },
+    "POL5A0": {
+      "x": 935,
+      "y": 530,
+      "width": 55,
+      "height": 10,
+      "kind": "sprite",
+      "doom_name": "POL5A0"
+    },
+    "POSSA1": {
+      "x": 1183,
+      "y": 264,
+      "width": 41,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSA1"
+    },
+    "POSSA2": {
+      "x": 567,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSA2"
+    },
+    "POSSA3": {
+      "x": 611,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSA3"
+    },
+    "POSSA4": {
+      "x": 655,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSA4"
+    },
+    "POSSA5": {
+      "x": 626,
+      "y": 323,
+      "width": 38,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSA5"
+    },
+    "POSSA6": {
+      "x": 194,
+      "y": 323,
+      "width": 45,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSA6"
+    },
+    "POSSA7": {
+      "x": 1798,
+      "y": 264,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSA7"
+    },
+    "POSSA8": {
+      "x": 1014,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSA8"
+    },
+    "POSSB1": {
+      "x": 1226,
+      "y": 264,
+      "width": 41,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSB1"
+    },
+    "POSSB2": {
+      "x": 699,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSB2"
+    },
+    "POSSB3": {
+      "x": 743,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSB3"
+    },
+    "POSSB4": {
+      "x": 787,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSB4"
+    },
+    "POSSB5": {
+      "x": 666,
+      "y": 323,
+      "width": 38,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSB5"
+    },
+    "POSSB6": {
+      "x": 1846,
+      "y": 264,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSB6"
+    },
+    "POSSB7": {
+      "x": 1894,
+      "y": 264,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSB7"
+    },
+    "POSSB8": {
+      "x": 1052,
+      "y": 323,
+      "width": 36,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSB8"
+    },
+    "POSSC1": {
+      "x": 831,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSC1"
+    },
+    "POSSC2": {
+      "x": 875,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSC2"
+    },
+    "POSSC3": {
+      "x": 919,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSC3"
+    },
+    "POSSC4": {
+      "x": 963,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSC4"
+    },
+    "POSSC5": {
+      "x": 505,
+      "y": 323,
+      "width": 39,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSC5"
+    },
+    "POSSC6": {
+      "x": 1942,
+      "y": 264,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSC6"
+    },
+    "POSSC7": {
+      "x": 1990,
+      "y": 264,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSC7"
+    },
+    "POSSC8": {
+      "x": 1310,
+      "y": 264,
+      "width": 36,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSC8"
+    },
+    "POSSD1": {
+      "x": 1007,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSD1"
+    },
+    "POSSD2": {
+      "x": 1051,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSD2"
+    },
+    "POSSD3": {
+      "x": 1095,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSD3"
+    },
+    "POSSD4": {
+      "x": 1139,
+      "y": 264,
+      "width": 42,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSD4"
+    },
+    "POSSD5": {
+      "x": 376,
+      "y": 438,
+      "width": 39,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "POSSD5"
+    },
+    "POSSD6": {
+      "x": 2,
+      "y": 323,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSD6"
+    },
+    "POSSD7": {
+      "x": 50,
+      "y": 323,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSD7"
+    },
+    "POSSD8": {
+      "x": 1348,
+      "y": 264,
+      "width": 36,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSD8"
+    },
+    "POSSE1": {
+      "x": 1938,
+      "y": 323,
+      "width": 26,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSE1"
+    },
+    "POSSE2": {
+      "x": 274,
+      "y": 381,
+      "width": 45,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSE2"
+    },
+    "POSSE3": {
+      "x": 839,
+      "y": 381,
+      "width": 50,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSE3"
+    },
+    "POSSE4": {
+      "x": 1618,
+      "y": 381,
+      "width": 37,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "POSSE4"
+    },
+    "POSSE5": {
+      "x": 214,
+      "y": 438,
+      "width": 24,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "POSSE5"
+    },
+    "POSSE6": {
+      "x": 1805,
+      "y": 381,
+      "width": 32,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "POSSE6"
+    },
+    "POSSE7": {
+      "x": 891,
+      "y": 381,
+      "width": 50,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSE7"
+    },
+    "POSSE8": {
+      "x": 325,
+      "y": 264,
+      "width": 48,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSE8"
+    },
+    "POSSF1": {
+      "x": 1824,
+      "y": 323,
+      "width": 27,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSF1"
+    },
+    "POSSF2": {
+      "x": 98,
+      "y": 323,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSF2"
+    },
+    "POSSF3": {
+      "x": 60,
+      "y": 381,
+      "width": 53,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSF3"
+    },
+    "POSSF4": {
+      "x": 943,
+      "y": 381,
+      "width": 46,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSF4"
+    },
+    "POSSF5": {
+      "x": 1839,
+      "y": 381,
+      "width": 26,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "POSSF5"
+    },
+    "POSSF6": {
+      "x": 1657,
+      "y": 381,
+      "width": 37,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "POSSF6"
+    },
+    "POSSF7": {
+      "x": 781,
+      "y": 381,
+      "width": 56,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSF7"
+    },
+    "POSSF8": {
+      "x": 1528,
+      "y": 264,
+      "width": 56,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSF8"
+    },
+    "POSSG1": {
+      "x": 362,
+      "y": 381,
+      "width": 39,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSG1"
+    },
+    "POSSG2": {
+      "x": 442,
+      "y": 381,
+      "width": 36,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSG2"
+    },
+    "POSSG3": {
+      "x": 1038,
+      "y": 381,
+      "width": 40,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSG3"
+    },
+    "POSSG4": {
+      "x": 1997,
+      "y": 381,
+      "width": 41,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "POSSG4"
+    },
+    "POSSG5": {
+      "x": 1733,
+      "y": 381,
+      "width": 34,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "POSSG5"
+    },
+    "POSSG6": {
+      "x": 2,
+      "y": 438,
+      "width": 41,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "POSSG6"
+    },
+    "POSSG7": {
+      "x": 1122,
+      "y": 381,
+      "width": 39,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "POSSG7"
+    },
+    "POSSG8": {
+      "x": 1269,
+      "y": 264,
+      "width": 39,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "POSSG8"
+    },
+    "POSSH0": {
+      "x": 225,
+      "y": 381,
+      "width": 47,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSH0"
+    },
+    "POSSI0": {
+      "x": 1017,
+      "y": 438,
+      "width": 38,
+      "height": 42,
+      "kind": "sprite",
+      "doom_name": "POSSI0"
+    },
+    "POSSJ0": {
+      "x": 379,
+      "y": 492,
+      "width": 44,
+      "height": 34,
+      "kind": "sprite",
+      "doom_name": "POSSJ0"
+    },
+    "POSSK0": {
+      "x": 1297,
+      "y": 492,
+      "width": 48,
+      "height": 27,
+      "kind": "sprite",
+      "doom_name": "POSSK0"
+    },
+    "POSSL0": {
+      "x": 71,
+      "y": 530,
+      "width": 50,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "POSSL0"
+    },
+    "POSSM0": {
+      "x": 348,
+      "y": 200,
+      "width": 44,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "POSSM0"
+    },
+    "POSSN0": {
+      "x": 146,
+      "y": 323,
+      "width": 46,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "POSSN0"
+    },
+    "POSSO0": {
+      "x": 115,
+      "y": 381,
+      "width": 53,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "POSSO0"
+    },
+    "POSSP0": {
+      "x": 667,
+      "y": 438,
+      "width": 57,
+      "height": 47,
+      "kind": "sprite",
+      "doom_name": "POSSP0"
+    },
+    "POSSQ0": {
+      "x": 1091,
+      "y": 438,
+      "width": 65,
+      "height": 40,
+      "kind": "sprite",
+      "doom_name": "POSSQ0"
+    },
+    "POSSR0": {
+      "x": 841,
+      "y": 492,
+      "width": 67,
+      "height": 29,
+      "kind": "sprite",
+      "doom_name": "POSSR0"
+    },
+    "POSSS0": {
+      "x": 1686,
+      "y": 492,
+      "width": 64,
+      "height": 23,
+      "kind": "sprite",
+      "doom_name": "POSSS0"
+    },
+    "POSST0": {
+      "x": 284,
+      "y": 530,
+      "width": 65,
+      "height": 17,
+      "kind": "sprite",
+      "doom_name": "POSST0"
+    },
+    "POSSU0": {
+      "x": 418,
+      "y": 530,
+      "width": 67,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "POSSU0"
+    },
+    "PSTRA0": {
+      "x": 172,
+      "y": 530,
+      "width": 32,
+      "height": 19,
+      "kind": "sprite",
+      "doom_name": "PSTRA0"
+    },
+    "PVISA0": {
+      "x": 866,
+      "y": 530,
+      "width": 28,
+      "height": 13,
+      "kind": "sprite",
+      "doom_name": "PVISA0"
+    },
+    "PVISB0": {
+      "x": 896,
+      "y": 530,
+      "width": 28,
+      "height": 13,
+      "kind": "sprite",
+      "doom_name": "PVISB0"
+    },
+    "ROCKA0": {
+      "x": 1674,
+      "y": 492,
+      "width": 10,
+      "height": 24,
+      "kind": "sprite",
+      "doom_name": "ROCKA0"
+    },
+    "SARGA1": {
+      "x": 1231,
+      "y": 200,
+      "width": 38,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "SARGA1"
+    },
+    "SARGA2A8": {
+      "x": 1964,
+      "y": 200,
+      "width": 54,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGA2A8"
+    },
+    "SARGA3A7": {
+      "x": 1491,
+      "y": 200,
+      "width": 58,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGA3A7"
+    },
+    "SARGA4A6": {
+      "x": 425,
+      "y": 264,
+      "width": 47,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGA4A6"
+    },
+    "SARGA5": {
+      "x": 953,
+      "y": 200,
+      "width": 38,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGA5"
+    },
+    "SARGB1": {
+      "x": 1391,
+      "y": 200,
+      "width": 34,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "SARGB1"
+    },
+    "SARGB2B8": {
+      "x": 1720,
+      "y": 200,
+      "width": 49,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGB2B8"
+    },
+    "SARGB3B7": {
+      "x": 1609,
+      "y": 200,
+      "width": 54,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGB3B7"
+    },
+    "SARGB4B6": {
+      "x": 474,
+      "y": 264,
+      "width": 46,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGB4B6"
+    },
+    "SARGB5": {
+      "x": 1386,
+      "y": 264,
+      "width": 34,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGB5"
+    },
+    "SARGC1": {
+      "x": 1271,
+      "y": 200,
+      "width": 38,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "SARGC1"
+    },
+    "SARGC2C8": {
+      "x": 1919,
+      "y": 200,
+      "width": 43,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGC2C8"
+    },
+    "SARGC3C7": {
+      "x": 2,
+      "y": 264,
+      "width": 54,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGC3C7"
+    },
+    "SARGC4C6": {
+      "x": 375,
+      "y": 264,
+      "width": 48,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGC4C6"
+    },
+    "SARGC5": {
+      "x": 993,
+      "y": 200,
+      "width": 38,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGC5"
+    },
+    "SARGD1": {
+      "x": 1311,
+      "y": 200,
+      "width": 38,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "SARGD1"
+    },
+    "SARGD2D8": {
+      "x": 1822,
+      "y": 200,
+      "width": 47,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGD2D8"
+    },
+    "SARGD3D7": {
+      "x": 58,
+      "y": 264,
+      "width": 54,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGD3D7"
+    },
+    "SARGD4D6": {
+      "x": 168,
+      "y": 264,
+      "width": 51,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGD4D6"
+    },
+    "SARGD5": {
+      "x": 1422,
+      "y": 264,
+      "width": 34,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGD5"
+    },
+    "SARGE1": {
+      "x": 1033,
+      "y": 200,
+      "width": 38,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGE1"
+    },
+    "SARGE2E8": {
+      "x": 1665,
+      "y": 200,
+      "width": 53,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGE2E8"
+    },
+    "SARGE3E7": {
+      "x": 1551,
+      "y": 200,
+      "width": 56,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGE3E7"
+    },
+    "SARGE4E6": {
+      "x": 274,
+      "y": 264,
+      "width": 49,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGE4E6"
+    },
+    "SARGE5": {
+      "x": 1458,
+      "y": 264,
+      "width": 34,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGE5"
+    },
+    "SARGF1": {
+      "x": 1073,
+      "y": 200,
+      "width": 38,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGF1"
+    },
+    "SARGF2F8": {
+      "x": 114,
+      "y": 264,
+      "width": 52,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGF2F8"
+    },
+    "SARGF3F7": {
+      "x": 1427,
+      "y": 200,
+      "width": 62,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGF3F7"
+    },
+    "SARGF4F6": {
+      "x": 221,
+      "y": 264,
+      "width": 51,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGF4F6"
+    },
+    "SARGF5": {
+      "x": 1199,
+      "y": 323,
+      "width": 34,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SARGF5"
+    },
+    "SARGG1": {
+      "x": 1113,
+      "y": 200,
+      "width": 34,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGG1"
+    },
+    "SARGG2G8": {
+      "x": 1871,
+      "y": 200,
+      "width": 46,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGG2G8"
+    },
+    "SARGG3G7": {
+      "x": 1771,
+      "y": 200,
+      "width": 49,
+      "height": 58,
+      "kind": "sprite",
+      "doom_name": "SARGG3G7"
+    },
+    "SARGG4G6": {
+      "x": 522,
+      "y": 264,
+      "width": 43,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SARGG4G6"
+    },
+    "SARGG5": {
+      "x": 1410,
+      "y": 323,
+      "width": 32,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SARGG5"
+    },
+    "SARGH1": {
+      "x": 566,
+      "y": 438,
+      "width": 33,
+      "height": 50,
+      "kind": "sprite",
+      "doom_name": "SARGH1"
+    },
+    "SARGH2H8": {
+      "x": 334,
+      "y": 438,
+      "width": 40,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "SARGH2H8"
+    },
+    "SARGH3H7": {
+      "x": 1952,
+      "y": 381,
+      "width": 43,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SARGH3H7"
+    },
+    "SARGH4H6": {
+      "x": 289,
+      "y": 438,
+      "width": 43,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "SARGH4H6"
+    },
+    "SARGH5": {
+      "x": 454,
+      "y": 438,
+      "width": 33,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "SARGH5"
+    },
+    "SARGI0": {
+      "x": 1351,
+      "y": 200,
+      "width": 38,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "SARGI0"
+    },
+    "SARGJ0": {
+      "x": 911,
+      "y": 200,
+      "width": 40,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SARGJ0"
+    },
+    "SARGK0": {
+      "x": 1485,
+      "y": 381,
+      "width": 43,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SARGK0"
+    },
+    "SARGL0": {
+      "x": 1225,
+      "y": 438,
+      "width": 43,
+      "height": 40,
+      "kind": "sprite",
+      "doom_name": "SARGL0"
+    },
+    "SARGM0": {
+      "x": 679,
+      "y": 492,
+      "width": 48,
+      "height": 30,
+      "kind": "sprite",
+      "doom_name": "SARGM0"
+    },
+    "SARGN0": {
+      "x": 977,
+      "y": 492,
+      "width": 49,
+      "height": 29,
+      "kind": "sprite",
+      "doom_name": "SARGN0"
+    },
+    "SBOXA0": {
+      "x": 830,
+      "y": 530,
+      "width": 34,
+      "height": 13,
+      "kind": "sprite",
+      "doom_name": "SBOXA0"
+    },
+    "SHELA0": {
+      "x": 1013,
+      "y": 530,
+      "width": 14,
+      "height": 10,
+      "kind": "sprite",
+      "doom_name": "SHELA0"
+    },
+    "SHOTA0": {
+      "x": 790,
+      "y": 530,
+      "width": 38,
+      "height": 13,
+      "kind": "sprite",
+      "doom_name": "SHOTA0"
+    },
+    "SKULA1": {
+      "x": 1498,
+      "y": 438,
+      "width": 30,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "SKULA1"
+    },
+    "SKULA5": {
+      "x": 1530,
+      "y": 438,
+      "width": 30,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "SKULA5"
+    },
+    "SKULA6A4": {
+      "x": 1621,
+      "y": 438,
+      "width": 31,
+      "height": 38,
+      "kind": "sprite",
+      "doom_name": "SKULA6A4"
+    },
+    "SKULA7A3": {
+      "x": 1654,
+      "y": 438,
+      "width": 31,
+      "height": 38,
+      "kind": "sprite",
+      "doom_name": "SKULA7A3"
+    },
+    "SKULA8A2": {
+      "x": 1687,
+      "y": 438,
+      "width": 30,
+      "height": 38,
+      "kind": "sprite",
+      "doom_name": "SKULA8A2"
+    },
+    "SKULB1": {
+      "x": 1862,
+      "y": 438,
+      "width": 30,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULB1"
+    },
+    "SKULB5": {
+      "x": 1894,
+      "y": 438,
+      "width": 30,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULB5"
+    },
+    "SKULB6B4": {
+      "x": 183,
+      "y": 492,
+      "width": 31,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULB6B4"
+    },
+    "SKULB7B3": {
+      "x": 216,
+      "y": 492,
+      "width": 31,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULB7B3"
+    },
+    "SKULB8B2": {
+      "x": 249,
+      "y": 492,
+      "width": 30,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULB8B2"
+    },
+    "SKULC1": {
+      "x": 1719,
+      "y": 438,
+      "width": 34,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULC1"
+    },
+    "SKULC5": {
+      "x": 39,
+      "y": 492,
+      "width": 34,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULC5"
+    },
+    "SKULC6C4": {
+      "x": 1926,
+      "y": 438,
+      "width": 38,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULC6C4"
+    },
+    "SKULC7C3": {
+      "x": 1430,
+      "y": 438,
+      "width": 32,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "SKULC7C3"
+    },
+    "SKULC8C2": {
+      "x": 1755,
+      "y": 438,
+      "width": 34,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULC8C2"
+    },
+    "SKULD1": {
+      "x": 75,
+      "y": 492,
+      "width": 34,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULD1"
+    },
+    "SKULD5": {
+      "x": 111,
+      "y": 492,
+      "width": 34,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULD5"
+    },
+    "SKULD6D4": {
+      "x": 2005,
+      "y": 438,
+      "width": 35,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULD6D4"
+    },
+    "SKULD7D3": {
+      "x": 1270,
+      "y": 438,
+      "width": 34,
+      "height": 40,
+      "kind": "sprite",
+      "doom_name": "SKULD7D3"
+    },
+    "SKULD8D2": {
+      "x": 2,
+      "y": 492,
+      "width": 35,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULD8D2"
+    },
+    "SKULE1": {
+      "x": 1791,
+      "y": 438,
+      "width": 34,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULE1"
+    },
+    "SKULE5": {
+      "x": 147,
+      "y": 492,
+      "width": 34,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULE5"
+    },
+    "SKULE6E4": {
+      "x": 1966,
+      "y": 438,
+      "width": 37,
+      "height": 36,
+      "kind": "sprite",
+      "doom_name": "SKULE6E4"
+    },
+    "SKULE7E3": {
+      "x": 1464,
+      "y": 438,
+      "width": 32,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "SKULE7E3"
+    },
+    "SKULE8E2": {
+      "x": 1827,
+      "y": 438,
+      "width": 33,
+      "height": 37,
+      "kind": "sprite",
+      "doom_name": "SKULE8E2"
+    },
+    "SKULF0": {
+      "x": 828,
+      "y": 438,
+      "width": 38,
+      "height": 46,
+      "kind": "sprite",
+      "doom_name": "SKULF0"
+    },
+    "SKULG0": {
+      "x": 1057,
+      "y": 438,
+      "width": 32,
+      "height": 42,
+      "kind": "sprite",
+      "doom_name": "SKULG0"
+    },
+    "SKULH0": {
+      "x": 785,
+      "y": 438,
+      "width": 41,
+      "height": 46,
+      "kind": "sprite",
+      "doom_name": "SKULH0"
+    },
+    "SKULI0": {
+      "x": 240,
+      "y": 438,
+      "width": 47,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "SKULI0"
+    },
+    "SKULJ0": {
+      "x": 1643,
+      "y": 264,
+      "width": 55,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SKULJ0"
+    },
+    "SKULK0": {
+      "x": 783,
+      "y": 132,
+      "width": 60,
+      "height": 64,
+      "kind": "sprite",
+      "doom_name": "SKULK0"
+    },
+    "SMBTA0": {
+      "x": 373,
+      "y": 2,
+      "width": 24,
+      "height": 70,
+      "kind": "sprite",
+      "doom_name": "SMBTA0"
+    },
+    "SMBTB0": {
+      "x": 399,
+      "y": 2,
+      "width": 24,
+      "height": 70,
+      "kind": "sprite",
+      "doom_name": "SMBTB0"
+    },
+    "SMBTC0": {
+      "x": 425,
+      "y": 2,
+      "width": 24,
+      "height": 70,
+      "kind": "sprite",
+      "doom_name": "SMBTC0"
+    },
+    "SMBTD0": {
+      "x": 451,
+      "y": 2,
+      "width": 24,
+      "height": 70,
+      "kind": "sprite",
+      "doom_name": "SMBTD0"
+    },
+    "SMITA0": {
+      "x": 547,
+      "y": 2,
+      "width": 62,
+      "height": 69,
+      "kind": "sprite",
+      "doom_name": "SMITA0"
+    },
+    "SOULA0": {
+      "x": 1566,
+      "y": 492,
+      "width": 25,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "SOULA0"
+    },
+    "SOULB0": {
+      "x": 1593,
+      "y": 492,
+      "width": 25,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "SOULB0"
+    },
+    "SOULC0": {
+      "x": 1620,
+      "y": 492,
+      "width": 25,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "SOULC0"
+    },
+    "SOULD0": {
+      "x": 1647,
+      "y": 492,
+      "width": 25,
+      "height": 25,
+      "kind": "sprite",
+      "doom_name": "SOULD0"
+    },
+    "SPOSA1": {
+      "x": 480,
+      "y": 381,
+      "width": 35,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSA1"
+    },
+    "SPOSA2A8": {
+      "x": 657,
+      "y": 381,
+      "width": 31,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSA2A8"
+    },
+    "SPOSA3A7": {
+      "x": 1769,
+      "y": 381,
+      "width": 34,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SPOSA3A7"
+    },
+    "SPOSA4A6": {
+      "x": 519,
+      "y": 438,
+      "width": 45,
+      "height": 50,
+      "kind": "sprite",
+      "doom_name": "SPOSA4A6"
+    },
+    "SPOSA5": {
+      "x": 417,
+      "y": 438,
+      "width": 35,
+      "height": 51,
+      "kind": "sprite",
+      "doom_name": "SPOSA5"
+    },
+    "SPOSB1": {
+      "x": 517,
+      "y": 381,
+      "width": 35,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSB1"
+    },
+    "SPOSB2B8": {
+      "x": 752,
+      "y": 381,
+      "width": 27,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSB2B8"
+    },
+    "SPOSB3B7": {
+      "x": 1494,
+      "y": 264,
+      "width": 32,
+      "height": 57,
+      "kind": "sprite",
+      "doom_name": "SPOSB3B7"
+    },
+    "SPOSB4B6": {
+      "x": 1080,
+      "y": 381,
+      "width": 40,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSB4B6"
+    },
+    "SPOSB5": {
+      "x": 1279,
+      "y": 381,
+      "width": 34,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSB5"
+    },
+    "SPOSC1": {
+      "x": 1444,
+      "y": 323,
+      "width": 32,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSC1"
+    },
+    "SPOSC2C8": {
+      "x": 721,
+      "y": 381,
+      "width": 29,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSC2C8"
+    },
+    "SPOSC3C7": {
+      "x": 706,
+      "y": 323,
+      "width": 38,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSC3C7"
+    },
+    "SPOSC4C6": {
+      "x": 1163,
+      "y": 381,
+      "width": 38,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSC4C6"
+    },
+    "SPOSC5": {
+      "x": 554,
+      "y": 381,
+      "width": 34,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSC5"
+    },
+    "SPOSD1": {
+      "x": 1235,
+      "y": 323,
+      "width": 34,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSD1"
+    },
+    "SPOSD2D8": {
+      "x": 1853,
+      "y": 323,
+      "width": 27,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSD2D8"
+    },
+    "SPOSD3D7": {
+      "x": 1575,
+      "y": 323,
+      "width": 30,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSD3D7"
+    },
+    "SPOSD4D6": {
+      "x": 403,
+      "y": 381,
+      "width": 37,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSD4D6"
+    },
+    "SPOSD5": {
+      "x": 1242,
+      "y": 381,
+      "width": 35,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSD5"
+    },
+    "SPOSE1": {
+      "x": 1994,
+      "y": 323,
+      "width": 24,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSE1"
+    },
+    "SPOSE2E8": {
+      "x": 1203,
+      "y": 381,
+      "width": 37,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSE2E8"
+    },
+    "SPOSE3E7": {
+      "x": 1439,
+      "y": 381,
+      "width": 44,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SPOSE3E7"
+    },
+    "SPOSE4E6": {
+      "x": 88,
+      "y": 438,
+      "width": 34,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SPOSE4E6"
+    },
+    "SPOSE5": {
+      "x": 160,
+      "y": 438,
+      "width": 25,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SPOSE5"
+    },
+    "SPOSF1": {
+      "x": 1966,
+      "y": 323,
+      "width": 26,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSF1"
+    },
+    "SPOSF2F8": {
+      "x": 241,
+      "y": 323,
+      "width": 43,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSF2F8"
+    },
+    "SPOSF3F7": {
+      "x": 1386,
+      "y": 381,
+      "width": 51,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SPOSF3F7"
+    },
+    "SPOSF4F6": {
+      "x": 45,
+      "y": 438,
+      "width": 41,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SPOSF4F6"
+    },
+    "SPOSF5": {
+      "x": 187,
+      "y": 438,
+      "width": 25,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SPOSF5"
+    },
+    "SPOSG1": {
+      "x": 590,
+      "y": 381,
+      "width": 32,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSG1"
+    },
+    "SPOSG2G8": {
+      "x": 1351,
+      "y": 381,
+      "width": 33,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSG2G8"
+    },
+    "SPOSG3G7": {
+      "x": 1530,
+      "y": 381,
+      "width": 43,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SPOSG3G7"
+    },
+    "SPOSG4G6": {
+      "x": 124,
+      "y": 438,
+      "width": 34,
+      "height": 52,
+      "kind": "sprite",
+      "doom_name": "SPOSG4G6"
+    },
+    "SPOSG5": {
+      "x": 1315,
+      "y": 381,
+      "width": 34,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "SPOSG5"
+    },
+    "SPOSH0": {
+      "x": 1149,
+      "y": 200,
+      "width": 33,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "SPOSH0"
+    },
+    "SPOSI0": {
+      "x": 1696,
+      "y": 381,
+      "width": 35,
+      "height": 53,
+      "kind": "sprite",
+      "doom_name": "SPOSI0"
+    },
+    "SPOSJ0": {
+      "x": 1386,
+      "y": 438,
+      "width": 42,
+      "height": 39,
+      "kind": "sprite",
+      "doom_name": "SPOSJ0"
+    },
+    "SPOSK0": {
+      "x": 332,
+      "y": 492,
+      "width": 45,
+      "height": 34,
+      "kind": "sprite",
+      "doom_name": "SPOSK0"
+    },
+    "SPOSL0": {
+      "x": 1948,
+      "y": 492,
+      "width": 52,
+      "height": 20,
+      "kind": "sprite",
+      "doom_name": "SPOSL0"
+    },
+    "SPOSM0": {
+      "x": 532,
+      "y": 200,
+      "width": 41,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "SPOSM0"
+    },
+    "SPOSN0": {
+      "x": 286,
+      "y": 323,
+      "width": 43,
+      "height": 56,
+      "kind": "sprite",
+      "doom_name": "SPOSN0"
+    },
+    "SPOSO0": {
+      "x": 170,
+      "y": 381,
+      "width": 53,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "SPOSO0"
+    },
+    "SPOSP0": {
+      "x": 726,
+      "y": 438,
+      "width": 57,
+      "height": 47,
+      "kind": "sprite",
+      "doom_name": "SPOSP0"
+    },
+    "SPOSQ0": {
+      "x": 1158,
+      "y": 438,
+      "width": 65,
+      "height": 40,
+      "kind": "sprite",
+      "doom_name": "SPOSQ0"
+    },
+    "SPOSR0": {
+      "x": 542,
+      "y": 492,
+      "width": 67,
+      "height": 30,
+      "kind": "sprite",
+      "doom_name": "SPOSR0"
+    },
+    "SPOSS0": {
+      "x": 1752,
+      "y": 492,
+      "width": 64,
+      "height": 23,
+      "kind": "sprite",
+      "doom_name": "SPOSS0"
+    },
+    "SPOST0": {
+      "x": 351,
+      "y": 530,
+      "width": 65,
+      "height": 17,
+      "kind": "sprite",
+      "doom_name": "SPOST0"
+    },
+    "SPOSU0": {
+      "x": 487,
+      "y": 530,
+      "width": 67,
+      "height": 16,
+      "kind": "sprite",
+      "doom_name": "SPOSU0"
+    },
+    "STIMA0": {
+      "x": 992,
+      "y": 530,
+      "width": 19,
+      "height": 10,
+      "kind": "sprite",
+      "doom_name": "STIMA0"
+    },
+    "TRE1A0": {
+      "x": 320,
+      "y": 2,
+      "width": 51,
+      "height": 70,
+      "kind": "sprite",
+      "doom_name": "TRE1A0"
+    },
+    "TRE2A0": {
+      "x": 30,
+      "y": 2,
+      "width": 124,
+      "height": 124,
+      "kind": "sprite",
+      "doom_name": "TRE2A0"
+    },
+    "TROOA1": {
+      "x": 673,
+      "y": 200,
+      "width": 48,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOA1"
+    },
+    "TROOA2A8": {
+      "x": 394,
+      "y": 200,
+      "width": 44,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOA2A8"
+    },
+    "TROOA3A7": {
+      "x": 773,
+      "y": 200,
+      "width": 46,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOA3A7"
+    },
+    "TROOA4A6": {
+      "x": 1959,
+      "y": 132,
+      "width": 46,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOA4A6"
+    },
+    "TROOA5": {
+      "x": 1184,
+      "y": 200,
+      "width": 45,
+      "height": 59,
+      "kind": "sprite",
+      "doom_name": "TROOA5"
+    },
+    "TROOB1": {
+      "x": 1647,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOB1"
+    },
+    "TROOB2B8": {
+      "x": 440,
+      "y": 200,
+      "width": 44,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOB2B8"
+    },
+    "TROOB3B7": {
+      "x": 1251,
+      "y": 132,
+      "width": 42,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOB3B7"
+    },
+    "TROOB4B6": {
+      "x": 888,
+      "y": 132,
+      "width": 40,
+      "height": 64,
+      "kind": "sprite",
+      "doom_name": "TROOB4B6"
+    },
+    "TROOB5": {
+      "x": 1699,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOB5"
+    },
+    "TROOC1": {
+      "x": 723,
+      "y": 200,
+      "width": 48,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOC1"
+    },
+    "TROOC2C8": {
+      "x": 575,
+      "y": 200,
+      "width": 39,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOC2C8"
+    },
+    "TROOC3C7": {
+      "x": 486,
+      "y": 200,
+      "width": 44,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOC3C7"
+    },
+    "TROOC4C6": {
+      "x": 130,
+      "y": 200,
+      "width": 39,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOC4C6"
+    },
+    "TROOC5": {
+      "x": 821,
+      "y": 200,
+      "width": 45,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOC5"
+    },
+    "TROOD1": {
+      "x": 1751,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOD1"
+    },
+    "TROOD2D8": {
+      "x": 88,
+      "y": 200,
+      "width": 40,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOD2D8"
+    },
+    "TROOD3D7": {
+      "x": 1339,
+      "y": 132,
+      "width": 39,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOD3D7"
+    },
+    "TROOD4D6": {
+      "x": 845,
+      "y": 132,
+      "width": 41,
+      "height": 64,
+      "kind": "sprite",
+      "doom_name": "TROOD4D6"
+    },
+    "TROOD5": {
+      "x": 1803,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOD5"
+    },
+    "TROOE1": {
+      "x": 209,
+      "y": 200,
+      "width": 29,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOE1"
+    },
+    "TROOE2E8": {
+      "x": 1295,
+      "y": 132,
+      "width": 42,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOE2E8"
+    },
+    "TROOE3E7": {
+      "x": 1380,
+      "y": 132,
+      "width": 39,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOE3E7"
+    },
+    "TROOE4E6": {
+      "x": 2,
+      "y": 200,
+      "width": 41,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOE4E6"
+    },
+    "TROOE5": {
+      "x": 171,
+      "y": 200,
+      "width": 36,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOE5"
+    },
+    "TROOF1": {
+      "x": 240,
+      "y": 200,
+      "width": 54,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOF1"
+    },
+    "TROOF2F8": {
+      "x": 1044,
+      "y": 132,
+      "width": 52,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOF2F8"
+    },
+    "TROOF3F7": {
+      "x": 1421,
+      "y": 132,
+      "width": 60,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOF3F7"
+    },
+    "TROOF4F6": {
+      "x": 1594,
+      "y": 132,
+      "width": 51,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOF4F6"
+    },
+    "TROOF5": {
+      "x": 45,
+      "y": 200,
+      "width": 41,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOF5"
+    },
+    "TROOG1": {
+      "x": 644,
+      "y": 132,
+      "width": 71,
+      "height": 64,
+      "kind": "sprite",
+      "doom_name": "TROOG1"
+    },
+    "TROOG2G8": {
+      "x": 930,
+      "y": 132,
+      "width": 55,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOG2G8"
+    },
+    "TROOG3G7": {
+      "x": 987,
+      "y": 132,
+      "width": 55,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOG3G7"
+    },
+    "TROOG4G6": {
+      "x": 1855,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOG4G6"
+    },
+    "TROOG5": {
+      "x": 717,
+      "y": 132,
+      "width": 64,
+      "height": 64,
+      "kind": "sprite",
+      "doom_name": "TROOG5"
+    },
+    "TROOH1": {
+      "x": 1098,
+      "y": 132,
+      "width": 49,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOH1"
+    },
+    "TROOH2H8": {
+      "x": 296,
+      "y": 200,
+      "width": 50,
+      "height": 61,
+      "kind": "sprite",
+      "doom_name": "TROOH2H8"
+    },
+    "TROOH3H7": {
+      "x": 616,
+      "y": 200,
+      "width": 55,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOH3H7"
+    },
+    "TROOH4H6": {
+      "x": 1539,
+      "y": 132,
+      "width": 53,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOH4H6"
+    },
+    "TROOH5": {
+      "x": 868,
+      "y": 200,
+      "width": 41,
+      "height": 60,
+      "kind": "sprite",
+      "doom_name": "TROOH5"
+    },
+    "TROOI0": {
+      "x": 1149,
+      "y": 132,
+      "width": 49,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROOI0"
+    },
+    "TROOJ0": {
+      "x": 1483,
+      "y": 132,
+      "width": 54,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOJ0"
+    },
+    "TROOK0": {
+      "x": 991,
+      "y": 381,
+      "width": 45,
+      "height": 54,
+      "kind": "sprite",
+      "doom_name": "TROOK0"
+    },
+    "TROOL0": {
+      "x": 973,
+      "y": 438,
+      "width": 42,
+      "height": 43,
+      "kind": "sprite",
+      "doom_name": "TROOL0"
+    },
+    "TROOM0": {
+      "x": 1347,
+      "y": 492,
+      "width": 57,
+      "height": 26,
+      "kind": "sprite",
+      "doom_name": "TROOM0"
+    },
+    "TROON0": {
+      "x": 1200,
+      "y": 132,
+      "width": 49,
+      "height": 63,
+      "kind": "sprite",
+      "doom_name": "TROON0"
+    },
+    "TROOO0": {
+      "x": 1907,
+      "y": 132,
+      "width": 50,
+      "height": 62,
+      "kind": "sprite",
+      "doom_name": "TROOO0"
+    },
+    "TROOP0": {
+      "x": 2,
+      "y": 381,
+      "width": 56,
+      "height": 55,
+      "kind": "sprite",
+      "doom_name": "TROOP0"
+    },
+    "TROOQ0": {
+      "x": 868,
+      "y": 438,
+      "width": 55,
+      "height": 45,
+      "kind": "sprite",
+      "doom_name": "TROOQ0"
+    },
+    "TROOR0": {
+      "x": 1562,
+      "y": 438,
+      "width": 57,
+      "height": 38,
+      "kind": "sprite",
+      "doom_name": "TROOR0"
+    },
+    "TROOS0": {
+      "x": 425,
+      "y": 492,
+      "width": 65,
+      "height": 32,
+      "kind": "sprite",
+      "doom_name": "TROOS0"
+    },
+    "TROOT0": {
+      "x": 910,
+      "y": 492,
+      "width": 65,
+      "height": 29,
+      "kind": "sprite",
+      "doom_name": "TROOT0"
+    },
+    "TROOU0": {
+      "x": 611,
+      "y": 492,
+      "width": 66,
+      "height": 30,
+      "kind": "sprite",
+      "doom_name": "TROOU0"
+    }
+  }
+}

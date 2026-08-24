@@ -283,3 +283,34 @@ expect {
 	restarted = Game.step({ ..Game.initial, phase: Won }, { ..neutral_input, restart: Bool.True })
 	refused.phase == Playing and restarted.phase == Playing and restarted.player.pos == Game.initial.player.pos and List.len(restarted.enemies) == 4
 }
+
+walk_to : Game.World, Math.Vec2 -> Game.World
+walk_to = |world, target| {
+	var $walking = world
+	for _ in List.repeat({}, 240) if Math.distance($walking.player.pos, target) > 0.12 {
+		delta = Math.scale(Math.normalize(Math.sub(target, $walking.player.pos)), 0.08)
+		moved = Game.move_player($walking, $walking.player.pos, delta)
+		$walking = { ..$walking, player: { ..$walking.player, pos: moved } }
+	}
+	$walking
+}
+
+expect {
+	# Exercise an actual collision-respecting route through all three spaces.
+	# This proves the authored walls leave a navigable path rather than merely
+	# proving that progression succeeds when tests teleport between milestones.
+	at_key = walk_to(Game.initial, { x: 5, y: 12 })
+	keyed = Game.step(at_key, neutral_input)
+	at_door = walk_to(keyed, { x: 7.2, y: 6.5 })
+	opened = Game.step(at_door, { ..neutral_input, use: Bool.True })
+	through_door = walk_to(opened, { x: 10, y: 6.5 })
+	below_divider = walk_to(through_door, { x: 15, y: 11 })
+	in_final_room = walk_to(below_divider, { x: 18, y: 11 })
+	at_exit = walk_to(in_final_room, Math.center(Game.exit))
+	finished = Game.step({ ..at_exit, enemies: List.map(at_exit.enemies, |enemy| { ..enemy, health: 0 }) }, neutral_input)
+	Math.distance(at_key.player.pos, { x: 5, y: 12 }) < 0.2
+		and opened.door.open
+			and through_door.player.pos.x > 9
+				and in_final_room.player.pos.x > 17
+					and finished.phase == Won
+}

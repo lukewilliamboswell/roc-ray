@@ -42,7 +42,9 @@ render! = |_model, frame| {
 initial = |_unit| {
 	map = DoomMap.e1m1
 	start = map.player_start() ?? crash "player start missing"
-	spawned = DoomWorld.spawn(map.raw().things, Medium)
+	# The first complete proof intentionally authors against the genuine Baby
+	# thing population. Inventory, health and runtime rules remain untouched.
+	spawned = DoomWorld.spawn(map.raw().things, Baby)
 	player = DoomWorld.player({ x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }, DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360))
 	doom : DoomWorld.World
 	doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
@@ -62,15 +64,14 @@ author_tic = |run| {
 	pos = run.world.doom.player.sim.state.pos
 	sector = DoomLevel.sector_at(map, { x: F32.to_f64(pos.x), y: F32.to_f64(pos.y) }) ?? crash "author left map"
 	route_index = recover_route_index(sector, run.route_index)
-	line_index = if sector == 142 566 else List.get(portal_lines, route_index) ?? exit_line
+	line_index = List.get(portal_lines, route_index) ?? exit_line
 	target = author_target(route_index, pos, line_midpoint(line_index))
 	blockers = List.concat(DoomRuntime.blockers_for_player(map, run.level, pos), decoration_segments(run.decorations))
-	combat_target = closest_visible_actor(run.world.doom.actors, pos, blockers)
-	command = if sector == 150 and pos.x < 70 and run.world.doom.player.sim.state.momentum.x > 1 {
-		world_move(run.world.doom.player.sim.state, { x: -1, y: 0 })
-	} else match combat_target {
-		Ok(actor) => combat_steer(run.world.doom.player.sim.state, actor.pos, target)
-		Err(_) => steer(run.world.doom.player.sim.state, target, Bool.False)
+	supply = closest_supply(run.world.doom.pickups, run.world.doom.player, pos, sector)
+	combat_target = if can_fire(run.world.doom.player) closest_visible_actor(run.world.doom.actors, pos, blockers) else Err(NoActor)
+	command = match combat_target {
+		Ok(actor) => match supply { Ok(pickup) => combat_move(run.world.doom.player.sim.state, actor.pos, pickup.pos), Err(_) => combat_steer(run.world.doom.player.sim.state, actor.pos, target) }
+		Err(_) => steer(run.world.doom.player.sim.state, match supply { Ok(pickup) => pickup.pos, Err(_) => target }, Bool.False)
 	}
 	advanced = DoomRuntime.advance(run.world, DoomSim.tic_seconds * 1.0001, command, blockers)
 	new_pos = advanced.world.doom.player.sim.state.pos
@@ -102,12 +103,9 @@ line_midpoint = |index| {
 }
 
 author_target = |route_index, pos, portal| {
-	if route_index == 3 and pos.x < 70 and pos.y < 325 { x: 48, y: 328 }
-	else if route_index == 3 and pos.x < 380 { x: 400, y: 328 }
-	else if route_index == 4 and pos.x < 620 { x: 630, y: 328 }
-	else if route_index == 4 and pos.y < 420 { x: 730, y: 430 }
-	else if route_index == 5 and pos.x < 700 { x: 700, y: 380 }
-	else if route_index == 5 and pos.y < 410 { x: 800, y: 420 }
+	if route_index == 6 and pos.x < 660 { x: 670, y: 303 }
+	else if route_index == 6 and pos.y < 350 { x: 700, y: 370 }
+	else if route_index == 6 and pos.y < 420 { x: 800, y: 430 }
 	else portal
 }
 
@@ -133,12 +131,15 @@ combat_steer = |state, aim, _movement| {
 	}
 }
 
-world_move = |state, direction| {
+combat_move = |state, aim, movement| {
+	aim_direction = DoomSim.normalize(DoomSim.sub(aim, state.pos))
+	move_direction = DoomSim.normalize(DoomSim.sub(movement, state.pos))
 	facing = state.angle.forward()
 	right = { x: facing.y, y: 0 - facing.x }
-	forward = DoomSim.dot(facing, direction)
-	side = DoomSim.dot(right, direction)
-	{ forward: if forward > 0 50 else -50, side: if side > 0 40 else -40, turn: 0, fire: Bool.False }
+	forward_dot = DoomSim.dot(facing, move_direction)
+	side_dot = DoomSim.dot(right, move_direction)
+	cross = facing.x * aim_direction.y - facing.y * aim_direction.x
+	{ forward: if forward_dot > 0.2 50 else if forward_dot < -0.2 -50 else 0, side: if side_dot > 0.2 40 else if side_dot < -0.2 -40 else 0, turn: if cross > 0.08 0.015625 else if cross < -0.08 -0.015625 else 0, fire: DoomSim.dot(facing, aim_direction) > 0.92 }
 }
 
 closest_visible_actor = |actors, pos, blockers| {
@@ -149,6 +150,36 @@ closest_visible_actor = |actors, pos, blockers| {
 		if actor.state.mode != Dead and d < $distance and DoomRuntime.line_of_sight(pos, actor.pos, blockers) {
 			$best = Ok(actor)
 			$distance = d
+		}
+	}
+	$best
+}
+
+can_fire = |player|
+	match player.weapon {
+		Pistol | Chaingun => player.ammo.bullets > 0
+		Shotgun => player.ammo.shells > 0
+		RocketLauncher => player.ammo.rockets > 0
+		PlasmaRifle => player.ammo.cells > 0
+		Chainsaw => Bool.True
+	}
+
+closest_supply = |pickups, player, pos, sector| {
+	var $best = Err(NoPickup)
+	var $distance = 700 * 700
+	for pickup in pickups {
+		useful = match pickup.kind {
+			StimpackPickup | MedikitPickup | HealthBonusPickup | SoulSpherePickup | BerserkPickup => !(can_fire(player)) and player.health < 75
+			ClipPickup | BulletBoxPickup | ChaingunPickup | BackpackPickup => !(can_fire(player))
+			ShellPickup | ShellBoxPickup | ShotgunPickup => !(can_fire(player))
+			ChainsawPickup => !(can_fire(player))
+			_ => Bool.False
+		}
+		pickup_sector = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(pickup.pos.x), y: F32.to_f64(pickup.pos.y) })
+		distance = DoomSim.distance_squared(pos, pickup.pos)
+		if useful and !(pickup.taken) and pickup_sector == Ok(sector) and distance < $distance {
+			$best = Ok(pickup)
+			$distance = distance
 		}
 	}
 	$best
@@ -181,7 +212,7 @@ summary = |run| {
 	p = run.world.doom.player.sim.state.pos
 	s = DoomLevel.sector_at(DoomMap.e1m1, { x:F32.to_f64(p.x), y:F32.to_f64(p.y) }) ?? 9999
 	phase = match run.world.phase { Playing => "Playing", Dead => "Dead", Exited => "Exited" }
-	"phase=${phase} tics=${U64.to_str(run.tics)} sector=${U64.to_str(s)} route=${U64.to_str(run.route_index)} pos=${F32.to_str(p.x)},${F32.to_str(p.y)} health=${I64.to_str(run.world.doom.player.health)} runs=${U64.to_str(List.len(run.runs))} visited=${join_u64(run.visited, 0, "")}"
+	"phase=${phase} tics=${U64.to_str(run.tics)} sector=${U64.to_str(s)} route=${U64.to_str(run.route_index)} pos=${F32.to_str(p.x)},${F32.to_str(p.y)} health=${I64.to_str(run.world.doom.player.health)} bullets=${I64.to_str(run.world.doom.player.ammo.bullets)} shells=${I64.to_str(run.world.doom.player.ammo.shells)} runs=${U64.to_str(List.len(run.runs))} visited=${join_u64(run.visited, 0, "")}"
 }
 
 join_u64 = |values, index, text|
@@ -193,7 +224,7 @@ encode_runs = |runs, index, text|
 		Ok(r) => encode_runs(runs,index+1,"${text}${U64.to_str(r.count)}:${I16.to_str(r.command.forward)},${I16.to_str(r.command.side)},${F32.to_str(r.command.turn)},${if r.command.fire "1" else "0"};")
 	}
 
-route_sectors = [140,141,91,150,151,17,93,10,9,13,12,37,34,8,135,63,64,68,66,67]
-portal_lines = [834,837,564,873,1166,573,577,55,62,76,248,203,201,1006,386,391,389,396,405]
+route_sectors = [140,141,91,150,98,142,17,93,10,9,13,12,37,34,8,135,63,64,68,66,67]
+portal_lines = [834,837,564,593,594,1084,573,577,55,62,76,248,203,201,1006,386,391,389,396,405]
 exit_line = 407
-max_tics = 1000.U64
+max_tics = 3000.U64

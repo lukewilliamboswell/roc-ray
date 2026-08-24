@@ -261,7 +261,13 @@ def cmd_package_examples(args: argparse.Namespace) -> int:
     examples_dir = Path(args.examples_dir)
     if len(examples_dir.parts) != 1:
         raise RuntimeError(f"examples dir must be a single top-level directory: {examples_dir}")
-    entries = tracked_files(root, examples_dir)
+    # README recordings live under examples/gallery but are documentation
+    # media, not a runnable app or part of the downloadable examples archive.
+    entries = [
+        entry
+        for entry in tracked_files(root, examples_dir)
+        if not entry.startswith(f"{examples_dir.as_posix()}/gallery/")
+    ]
     if not entries:
         raise RuntimeError(f"no tracked files found under {examples_dir}")
 

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import PIL
 from PIL import Image
+from doom_midi import render as render_midi
 
 
 VERSION = "0.13.0"
@@ -509,6 +510,8 @@ def build(output: Path, supplied_zip: Path | None) -> None:
     if not midi.startswith(b"MThd"):
         raise ValueError("D_E1M1 is not a standard MIDI file")
     (music_dir / "e1m1.mid").write_bytes(midi)
+    music_wav, music_requirements = render_midi(midi)
+    (music_dir / "e1m1.wav").write_bytes(music_wav)
     sound_dir = output / "sounds"
     sound_dir.mkdir(exist_ok=True)
     for stale_sound in sound_dir.glob("*.wav"):
@@ -542,7 +545,9 @@ def build(output: Path, supplied_zip: Path | None) -> None:
                 "gameplay_sounds": sounds,
                 "gameplay_sound_count": len(sounds),
                 "music_lump": "D_E1M1",
-                "music_path": "music/e1m1.mid", "music_sha256": digest(midi)}
+                "music_path": "music/e1m1.mid", "music_sha256": digest(midi),
+                "music_render_path": "music/e1m1.wav", "music_render_sha256": digest(music_wav),
+                "music_requirements": music_requirements}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 

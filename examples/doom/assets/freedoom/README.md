@@ -62,12 +62,13 @@ The source manifest records the pinned release, archive checksum, exact selected
 upstream paths, and each selected file's checksum. Keep the licence, credits,
 manifest, and this notice with redistributed generated assets.
 
-Freedoom 0.13.0 supplies its music as MIDI files. The WAD stage extracts E1M1's
-exact standard MIDI to `generated/e1m1/music/e1m1.mid`, but RocRay's music
-loader does not load MIDI. TinySoundFont and TinyMidiLoader are permissively
-licensed and small enough to vendor; they do not include the instrument samples
-that determine rendered output. A reproducible renderer must also pin and ship
-an SF2 soundfont. No suitably small soundfont with clear source, redistribution,
-modification, and generated-audio terms has yet been selected and audited.
-Until that licensing and size decision is sound, the pipeline retains and
-checksums the MIDI rather than committing environment-dependent synthesis.
+Freedoom 0.13.0 supplies E1M1 as standard MIDI. The WAD stage retains the exact
+MIDI and renders `generated/e1m1/music/e1m1.wav` with the project-authored,
+dependency-free procedural bank in `scripts/doom_midi.py`. No soundfont or
+third-party instrument samples are incorporated. The renderer validates every
+used program and percussion note, supports the file's tempo, volume, pitch-bend
+and pitch-sensitivity events, and writes deterministic mono 16-bit PCM suitable
+for RocRay's streaming music loader. The manifest records the complete bank
+requirements and both MIDI/WAV checksums. The renderer source is original
+RocRay project code covered by this repository's licence; the musical
+composition remains Freedoom content covered and credited above.

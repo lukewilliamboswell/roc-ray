@@ -21,7 +21,7 @@ VERSION = "0.13.0"
 ARCHIVE_URL = f"https://github.com/freedoom/freedoom/archive/refs/tags/v{VERSION}.tar.gz"
 ARCHIVE_SHA256 = "860edb005bcf0b2acf29d10fd9130c91025301764a4d0d6dcffc503fdf8d2c77"
 ARCHIVE_ROOT = f"freedoom-{VERSION}"
-ATLAS_SIZE = (1024, 512)
+ATLAS_SIZE = (1024, 576)
 PADDING = 2
 PILLOW_VERSION = "10.2.0"
 
@@ -33,6 +33,12 @@ IMAGES = (
     ("wall_metal", "patches/aqmetl29.png"),
     ("wall_light", "patches/aqlite12.png"),
     ("door", "patches/aqdoor01.png"),
+    ("wall_computer", "patches/aqcomp01.png"),
+    ("wall_warning", "patches/graywarn.png"),
+    ("door_locked", "patches/aqdoor02.png"),
+    ("switch_off", "patches/sw1s0.png"),
+    ("switch_on", "patches/sw1s1.png"),
+    ("exit_sign", "patches/exit_grn.png"),
     ("floor", "flats/floor4_8.png"),
     ("ceiling", "flats/ceil3_5.png"),
     ("enemy_walk_0", "sprites/possa1.png"),
@@ -52,8 +58,25 @@ IMAGES = (
     ("pistol_4", "sprites/pisge0.png"),
     ("ammo", "sprites/ammoa0.png"),
     ("health", "sprites/media0.png"),
+    ("health_small", "sprites/stima0.png"),
+    *((f"health_bonus_{frame}", f"sprites/bon1{frame}0.png") for frame in "abcd"),
+    *((f"soul_{frame}", f"sprites/soul{frame}0.png") for frame in "abcd"),
+    *((f"key_blue_{frame}", f"sprites/bkey{frame}0.png") for frame in "ab"),
+    *((f"key_red_{frame}", f"sprites/rkey{frame}0.png") for frame in "ab"),
+    *((f"key_yellow_{frame}", f"sprites/ykey{frame}0.png") for frame in "ab"),
     ("hud_bar", "graphics/stbar.png"),
     *((f"hud_digit_{n}", f"graphics/sttnum{n}.png") for n in range(10)),
+    *(
+        (f"enemy_walk_{frame}_{angle}", f"sprites/poss{frame}{angle}.png")
+        for frame in "abcd"
+        for angle in range(1, 9)
+    ),
+    *(
+        (f"enemy_attack_{frame}_{angle}", f"sprites/poss{frame}{angle}.png")
+        for frame in "ef"
+        for angle in range(1, 9)
+    ),
+    *((f"enemy_pain_{angle}", f"sprites/possg{angle}.png") for angle in range(1, 9)),
 )
 
 AUDIO = (

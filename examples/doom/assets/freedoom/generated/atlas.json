@@ -1,6 +1,6 @@
 {
   "width": 1024,
-  "height": 512,
+  "height": 576,
   "sprites": {
     "wall_concrete": {
       "x": 2,
@@ -42,88 +42,136 @@
       "source": "patches/aqdoor01.png",
       "source_sha256": "ca8608ddef23b9abc6b17187a7bc920d34c304a2c65920fa8bf1a386ab8fdb8d"
     },
-    "floor": {
+    "wall_computer": {
       "x": 524,
       "y": 2,
+      "width": 256,
+      "height": 128,
+      "source": "patches/aqcomp01.png",
+      "source_sha256": "cd3b06cce6b5ef6fcba36d72027620e0dfc9d3992f524fa08bb7df9627525d46"
+    },
+    "wall_warning": {
+      "x": 782,
+      "y": 2,
+      "width": 64,
+      "height": 128,
+      "source": "patches/graywarn.png",
+      "source_sha256": "0dc9cc4a7853eb4854edd55434f41919c878d619635c98a8fd0192eed60f3d97"
+    },
+    "door_locked": {
+      "x": 848,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "source": "patches/aqdoor02.png",
+      "source_sha256": "6a3bf4549aedfc21c353309c670c83ecbfff5dbf96706d854ec94225808e416f"
+    },
+    "switch_off": {
+      "x": 978,
+      "y": 2,
+      "width": 32,
+      "height": 32,
+      "source": "patches/sw1s0.png",
+      "source_sha256": "8c382b0a2aa118fa86e89bfd0b0543487ed8685b289e663b0f5991bdefc16f0c"
+    },
+    "switch_on": {
+      "x": 2,
+      "y": 132,
+      "width": 32,
+      "height": 32,
+      "source": "patches/sw1s1.png",
+      "source_sha256": "a925c6a9e08bdd8c0e42481847e88072eeaf4f38b64987a663375c4e8222c217"
+    },
+    "exit_sign": {
+      "x": 36,
+      "y": 132,
+      "width": 32,
+      "height": 16,
+      "source": "patches/exit_grn.png",
+      "source_sha256": "85f44f77935f33d65917a24d54a7310aa605acbf8db25e2047c9ed7a99469bbe"
+    },
+    "floor": {
+      "x": 70,
+      "y": 132,
       "width": 64,
       "height": 64,
       "source": "flats/floor4_8.png",
       "source_sha256": "b6962de1ead5b9e1dc0b881dfc69ec68c8d63eed4a9824576f150d470f4f016a"
     },
     "ceiling": {
-      "x": 590,
-      "y": 2,
+      "x": 136,
+      "y": 132,
       "width": 64,
       "height": 64,
       "source": "flats/ceil3_5.png",
       "source_sha256": "7ba51d113324cb2a67506a93a6c9f8784d03890088aff7a8662e78b926653e3d"
     },
     "enemy_walk_0": {
-      "x": 656,
-      "y": 2,
+      "x": 202,
+      "y": 132,
       "width": 41,
       "height": 57,
       "source": "sprites/possa1.png",
       "source_sha256": "e62029733a0e5382eaae7c39fdc9d1f39f6e6868d378843705882f664ad47863"
     },
     "enemy_walk_1": {
-      "x": 699,
-      "y": 2,
+      "x": 245,
+      "y": 132,
       "width": 41,
       "height": 57,
       "source": "sprites/possb1.png",
       "source_sha256": "47dc7ff3eecf9f88917ce6b4fcb09128b83f445f902688dfc252defaafdb5fc2"
     },
     "enemy_attack_0": {
-      "x": 742,
-      "y": 2,
+      "x": 288,
+      "y": 132,
       "width": 26,
       "height": 56,
       "source": "sprites/posse1.png",
       "source_sha256": "4df5c71405ea368df5c809bb545ea52b5dd10e4dcdcedb9c460cbe4af54da4a3"
     },
     "enemy_attack_1": {
-      "x": 770,
-      "y": 2,
+      "x": 316,
+      "y": 132,
       "width": 27,
       "height": 56,
       "source": "sprites/possf1.png",
       "source_sha256": "ac8be884afb0668a36ad1c7f3c7b6051825643bf34f2185bfe3a0fffb817b47a"
     },
     "enemy_pain": {
-      "x": 799,
-      "y": 2,
+      "x": 345,
+      "y": 132,
       "width": 39,
       "height": 55,
       "source": "sprites/possg1.png",
       "source_sha256": "1545da7ed444ccbf5e74b60832aa7520e9806e8b43ae01e693b0c14e8ca47890"
     },
     "enemy_die_0": {
-      "x": 840,
-      "y": 2,
+      "x": 386,
+      "y": 132,
       "width": 47,
       "height": 55,
       "source": "sprites/possh0.png",
       "source_sha256": "0abb189c6f31e14fc76c3cc67d11615a2131304ae2cb0db25b65f510aa0d8892"
     },
     "enemy_die_1": {
-      "x": 889,
-      "y": 2,
+      "x": 435,
+      "y": 132,
       "width": 38,
       "height": 42,
       "source": "sprites/possi0.png",
       "source_sha256": "ebefb77e2880cc96e584a2d4470a5bb4476c730452c14f1524f7be780edfecc0"
     },
     "enemy_die_2": {
-      "x": 929,
-      "y": 2,
+      "x": 475,
+      "y": 132,
       "width": 44,
       "height": 34,
       "source": "sprites/possj0.png",
       "source_sha256": "b218e545eb6baef89ab1339440da05774e55f674405ed3d443393a5e60ea04b9"
     },
     "enemy_die_3": {
-      "x": 2,
+      "x": 521,
       "y": 132,
       "width": 48,
       "height": 27,
@@ -131,7 +179,7 @@
       "source_sha256": "a2af003fb6020a6968062e1c555715897acaf053dcca2938ea1300b613fa66fe"
     },
     "enemy_die_4": {
-      "x": 52,
+      "x": 571,
       "y": 132,
       "width": 50,
       "height": 19,
@@ -139,7 +187,7 @@
       "source_sha256": "fa2adfd3a8d760769e3d2a1e3962f24b2d8fc405b7ee9623c7e34bf5c8aa7686"
     },
     "pistol_0": {
-      "x": 104,
+      "x": 623,
       "y": 132,
       "width": 82,
       "height": 92,
@@ -147,7 +195,7 @@
       "source_sha256": "c54deb188194714b5e75d4a7a125c8ab4214415db93df83c76188b6c1bd3f523"
     },
     "pistol_1": {
-      "x": 188,
+      "x": 707,
       "y": 132,
       "width": 82,
       "height": 96,
@@ -155,7 +203,7 @@
       "source_sha256": "d41d5db3ce330ae28fd41486691a042fe18de49cb01b1cc88383479c60407b80"
     },
     "pistol_2": {
-      "x": 272,
+      "x": 791,
       "y": 132,
       "width": 84,
       "height": 100,
@@ -163,7 +211,7 @@
       "source_sha256": "f7d15a6ccc8fb0f3121121b5e72a8296d63a6e1badc7b82269bc579663f56bdd"
     },
     "pistol_3": {
-      "x": 358,
+      "x": 877,
       "y": 132,
       "width": 84,
       "height": 106,
@@ -171,116 +219,684 @@
       "source_sha256": "d7efa151a14a8e2c8ff2cd551b91c5b72a13648337d5230568eb4885b6fb8ce2"
     },
     "pistol_4": {
-      "x": 444,
-      "y": 132,
+      "x": 2,
+      "y": 240,
       "width": 86,
       "height": 120,
       "source": "sprites/pisge0.png",
       "source_sha256": "2757ba6dd27b83b3ba73805f16e2b3cdb3fc9cb66d96390e93440ef864d7e014"
     },
     "ammo": {
-      "x": 532,
-      "y": 132,
+      "x": 90,
+      "y": 240,
       "width": 17,
       "height": 16,
       "source": "sprites/ammoa0.png",
       "source_sha256": "5efe6f2f123814373ebf5aa3ab165b65aa89ce83680b0a2f5d544a5efd7c4fb0"
     },
     "health": {
-      "x": 551,
-      "y": 132,
+      "x": 109,
+      "y": 240,
       "width": 29,
       "height": 20,
       "source": "sprites/media0.png",
       "source_sha256": "151affd4a4a729ae6388785a20b8dae01080c2e26efa61d10d67ef255dde34a1"
     },
+    "health_small": {
+      "x": 140,
+      "y": 240,
+      "width": 19,
+      "height": 10,
+      "source": "sprites/stima0.png",
+      "source_sha256": "287281a4302616bbeee1d99b87b746478dfbbfee9c5f8cdaec9250c80227ec48"
+    },
+    "health_bonus_a": {
+      "x": 161,
+      "y": 240,
+      "width": 11,
+      "height": 15,
+      "source": "sprites/bon1a0.png",
+      "source_sha256": "463e34360416d655e5f0403cb5df38422eb052ebfa9900151eba665fb918ba59"
+    },
+    "health_bonus_b": {
+      "x": 174,
+      "y": 240,
+      "width": 11,
+      "height": 15,
+      "source": "sprites/bon1b0.png",
+      "source_sha256": "681f6036ef155b0ac446334c3cc43beb393a8833c567278f8e22706d2b8323ee"
+    },
+    "health_bonus_c": {
+      "x": 187,
+      "y": 240,
+      "width": 11,
+      "height": 15,
+      "source": "sprites/bon1c0.png",
+      "source_sha256": "4c3b19d7e9c6788aa53b904d366c3e2d2c429ea55e10ebdf8c17e72c5f7b87b5"
+    },
+    "health_bonus_d": {
+      "x": 200,
+      "y": 240,
+      "width": 11,
+      "height": 15,
+      "source": "sprites/bon1d0.png",
+      "source_sha256": "e1e9d066cf4e008d58118b82d66a69e1b85a65473ec81860502146d7868d86fa"
+    },
+    "soul_a": {
+      "x": 213,
+      "y": 240,
+      "width": 25,
+      "height": 25,
+      "source": "sprites/soula0.png",
+      "source_sha256": "e21d312bfa879c734aedacd252dd772ff59df2c4388e92cc8d17677c569da3f0"
+    },
+    "soul_b": {
+      "x": 240,
+      "y": 240,
+      "width": 25,
+      "height": 25,
+      "source": "sprites/soulb0.png",
+      "source_sha256": "ec57291bbeb07f4d8505f40ecba032b41fb3ff6f50f09513c41432269bde4aa7"
+    },
+    "soul_c": {
+      "x": 267,
+      "y": 240,
+      "width": 25,
+      "height": 25,
+      "source": "sprites/soulc0.png",
+      "source_sha256": "482abe6ad15ec189cb8f5241a8fc970e6316ccab8a2642995731bb624c795a85"
+    },
+    "soul_d": {
+      "x": 294,
+      "y": 240,
+      "width": 25,
+      "height": 25,
+      "source": "sprites/sould0.png",
+      "source_sha256": "bb7b0cd8398ec98262611fcf3dd3b1822af012093d47962bcc039daafb499c8b"
+    },
+    "key_blue_a": {
+      "x": 321,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/bkeya0.png",
+      "source_sha256": "780f331d1da65193a4e060fab39b17341aab7efada249aee5d1e51dee1ce799e"
+    },
+    "key_blue_b": {
+      "x": 337,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/bkeyb0.png",
+      "source_sha256": "e99c41122efd0aa4a8653b6c08220ac44adfd92b3205856f978f80403ae9cc3c"
+    },
+    "key_red_a": {
+      "x": 353,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/rkeya0.png",
+      "source_sha256": "f2e63acab0ef1ce4caa16f5385d0020ddfabfce852238bc9dfaa4f1ec66c3eec"
+    },
+    "key_red_b": {
+      "x": 369,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/rkeyb0.png",
+      "source_sha256": "69873f7348803011b3dac6283f5695ad6e296c2cd06eddbe114882ce47ff0a52"
+    },
+    "key_yellow_a": {
+      "x": 385,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/ykeya0.png",
+      "source_sha256": "91f79c43c463eaffef3354f6863cd7f7a1ea1c973e80b60229b644626ed44c5a"
+    },
+    "key_yellow_b": {
+      "x": 401,
+      "y": 240,
+      "width": 14,
+      "height": 21,
+      "source": "sprites/ykeyb0.png",
+      "source_sha256": "8e571c1242890626e47f88d15781d75a6f5031a6a87a8615a704d4f241c6bdc3"
+    },
     "hud_bar": {
-      "x": 582,
-      "y": 132,
+      "x": 417,
+      "y": 240,
       "width": 320,
       "height": 32,
       "source": "graphics/stbar.png",
       "source_sha256": "4c551b443341876876f1302c8f97415447183658045852381d0e84e0d51aefc8"
     },
     "hud_digit_0": {
-      "x": 904,
-      "y": 132,
+      "x": 739,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum0.png",
       "source_sha256": "587eb5ce1d72d028116733895abc848c8188c0de5768958ca95c14fb507d9e54"
     },
     "hud_digit_1": {
-      "x": 919,
-      "y": 132,
+      "x": 754,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum1.png",
       "source_sha256": "c46887a76b8ef925c1f9aa180190ec6cb8e580ffb958741b8dc6c69b76f83461"
     },
     "hud_digit_2": {
-      "x": 934,
-      "y": 132,
+      "x": 769,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum2.png",
       "source_sha256": "3afd05f038c6247200d663623bb1ad07ea3a963ece1d2a754f17d979a3e23eb6"
     },
     "hud_digit_3": {
-      "x": 949,
-      "y": 132,
+      "x": 784,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum3.png",
       "source_sha256": "a20caf7e8955fe3b25c0a562b81d2f1dca236dccec275dd906dfcf497646b60b"
     },
     "hud_digit_4": {
-      "x": 964,
-      "y": 132,
+      "x": 799,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum4.png",
       "source_sha256": "0dcb637bbe66938dae089e8adf3560ce8a4f718fe0cd2191d7984ad0db08fe08"
     },
     "hud_digit_5": {
-      "x": 979,
-      "y": 132,
+      "x": 814,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum5.png",
       "source_sha256": "49a6338cde35d81a978b365f2780f3a76dbafb9a490811b7eeaaa6c06bd9964d"
     },
     "hud_digit_6": {
-      "x": 994,
-      "y": 132,
+      "x": 829,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum6.png",
       "source_sha256": "ddb0b02adeca4af57029b046f02bf51ebad00addeca49dbcb0323a0d0ccb626e"
     },
     "hud_digit_7": {
-      "x": 1009,
-      "y": 132,
+      "x": 844,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum7.png",
       "source_sha256": "7e2cb178047b8abbde46745910e40ec23a18eecdd2829bb558cc379cd54cfdf7"
     },
     "hud_digit_8": {
-      "x": 2,
-      "y": 254,
+      "x": 859,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum8.png",
       "source_sha256": "5822edbd64d21a6190a87bb9283c40e70937dbdb6b71bd6a7c0bee92e1545c95"
     },
     "hud_digit_9": {
-      "x": 17,
-      "y": 254,
+      "x": 874,
+      "y": 240,
       "width": 13,
       "height": 16,
       "source": "graphics/sttnum9.png",
       "source_sha256": "bf2912cbda684c615200ca9f7a952b0efb1ed358a7d3229e380f35958a295d5b"
+    },
+    "enemy_walk_a_1": {
+      "x": 889,
+      "y": 240,
+      "width": 41,
+      "height": 57,
+      "source": "sprites/possa1.png",
+      "source_sha256": "e62029733a0e5382eaae7c39fdc9d1f39f6e6868d378843705882f664ad47863"
+    },
+    "enemy_walk_a_2": {
+      "x": 932,
+      "y": 240,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possa2.png",
+      "source_sha256": "5a705bfd39c20f2ebc9d297a6c09782da16915745d0d2b816309340bc15923e2"
+    },
+    "enemy_walk_a_3": {
+      "x": 976,
+      "y": 240,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possa3.png",
+      "source_sha256": "c9b3517041a5e95ba0c8f5f520a2a1357bc11a9dd069aab7d6add0bde77deff9"
+    },
+    "enemy_walk_a_4": {
+      "x": 2,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possa4.png",
+      "source_sha256": "6a8827cf5e0ae7a51040fc9f4ddc97d051bcf372821bd60c1ac80ddcbfa043cb"
+    },
+    "enemy_walk_a_5": {
+      "x": 46,
+      "y": 362,
+      "width": 38,
+      "height": 56,
+      "source": "sprites/possa5.png",
+      "source_sha256": "9b31ad496f731fe7cada614ae3108fdee2b7ca82a4dad4a511105e13626f0fc1"
+    },
+    "enemy_walk_a_6": {
+      "x": 86,
+      "y": 362,
+      "width": 45,
+      "height": 56,
+      "source": "sprites/possa6.png",
+      "source_sha256": "27bdabff77a47c77feac22538043cf19f04976584927f8758134d5ffd396d4b2"
+    },
+    "enemy_walk_a_7": {
+      "x": 133,
+      "y": 362,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possa7.png",
+      "source_sha256": "d047d35e51c585df856154b4d436dc44ed3ce33a4f4e5fce1200ba8e79b56085"
+    },
+    "enemy_walk_a_8": {
+      "x": 181,
+      "y": 362,
+      "width": 36,
+      "height": 56,
+      "source": "sprites/possa8.png",
+      "source_sha256": "46740b42108c4f4e2890c902f224f6c88b78f070f4500718767a3dd26d9b9699"
+    },
+    "enemy_walk_b_1": {
+      "x": 219,
+      "y": 362,
+      "width": 41,
+      "height": 57,
+      "source": "sprites/possb1.png",
+      "source_sha256": "47dc7ff3eecf9f88917ce6b4fcb09128b83f445f902688dfc252defaafdb5fc2"
+    },
+    "enemy_walk_b_2": {
+      "x": 262,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possb2.png",
+      "source_sha256": "1f9ff32fb30e5dfe562e37226f491a0318b9025ef4e36ea5f8d2a5e062ab127e"
+    },
+    "enemy_walk_b_3": {
+      "x": 306,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possb3.png",
+      "source_sha256": "32187ec0d09ac0c5c8b8443c081df3e3c2f062a925e2fbabe87db55d6c2c0694"
+    },
+    "enemy_walk_b_4": {
+      "x": 350,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possb4.png",
+      "source_sha256": "9e23aaf91da2f5c4b15cb24165db01e7756b14be333b8a0d726121ef5c69ae10"
+    },
+    "enemy_walk_b_5": {
+      "x": 394,
+      "y": 362,
+      "width": 38,
+      "height": 56,
+      "source": "sprites/possb5.png",
+      "source_sha256": "899c89a4635943eeffd475eb87db3305d8f2ceea46df021566c8abf1a6c6b74f"
+    },
+    "enemy_walk_b_6": {
+      "x": 434,
+      "y": 362,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possb6.png",
+      "source_sha256": "dfcff66beb70aa6b0ef3babf1f040ec0b4e700996925dfe4e4a0a5c222e91637"
+    },
+    "enemy_walk_b_7": {
+      "x": 482,
+      "y": 362,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possb7.png",
+      "source_sha256": "f2a63d70afc04a40c1704e96ce7c1a7bce0a9c315292700886770c93350182ef"
+    },
+    "enemy_walk_b_8": {
+      "x": 530,
+      "y": 362,
+      "width": 36,
+      "height": 56,
+      "source": "sprites/possb8.png",
+      "source_sha256": "705c535da94525a63bb422255947dc1953e4e4f88c52c389f0d4dc44e8355255"
+    },
+    "enemy_walk_c_1": {
+      "x": 568,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possc1.png",
+      "source_sha256": "7745d9f6898b59d3f13d0585a1ba61d97dec0e4b7a1078130aaabdc7cf198ed6"
+    },
+    "enemy_walk_c_2": {
+      "x": 612,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possc2.png",
+      "source_sha256": "49f7d5b5dd612ffb69d2ed3b3127f426b1912e970e35f1d68b91222e754f5797"
+    },
+    "enemy_walk_c_3": {
+      "x": 656,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possc3.png",
+      "source_sha256": "11278e44cd8acfab1d3c4e32cf454d09c9db7eb51059688d2c973f4a79aae9fc"
+    },
+    "enemy_walk_c_4": {
+      "x": 700,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possc4.png",
+      "source_sha256": "5b36e2f907d1475bafdaca8aa1e8423ef900b740c77e41be07240139b8a92edb"
+    },
+    "enemy_walk_c_5": {
+      "x": 744,
+      "y": 362,
+      "width": 39,
+      "height": 56,
+      "source": "sprites/possc5.png",
+      "source_sha256": "eb4adf39c04f544c38b6e70852cbf4d4f130d4e2fbc265387796d360577b6048"
+    },
+    "enemy_walk_c_6": {
+      "x": 785,
+      "y": 362,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possc6.png",
+      "source_sha256": "fb4f4a9361fcf97aa19340b1d42b277a3d80c3881e4ac05e5e008a6eb599411d"
+    },
+    "enemy_walk_c_7": {
+      "x": 833,
+      "y": 362,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possc7.png",
+      "source_sha256": "37d2fbf592cbe22bb160475e5b34f879126f4445110eb2a532df2ca33b382d53"
+    },
+    "enemy_walk_c_8": {
+      "x": 881,
+      "y": 362,
+      "width": 36,
+      "height": 57,
+      "source": "sprites/possc8.png",
+      "source_sha256": "3d058893faa2284b453ba572908d36c45da64c499899136524286f77947f7aab"
+    },
+    "enemy_walk_d_1": {
+      "x": 919,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possd1.png",
+      "source_sha256": "6c43a07321feb0de22ad14d4d0651c78468d94d4d9e868a206725d02a0a11fd2"
+    },
+    "enemy_walk_d_2": {
+      "x": 963,
+      "y": 362,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possd2.png",
+      "source_sha256": "bfc411d00ba0edd845fe7b594187a2bc6da6cf556f565e8190b457c51cb009f2"
+    },
+    "enemy_walk_d_3": {
+      "x": 2,
+      "y": 421,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possd3.png",
+      "source_sha256": "abde05472284e6e111f261000708c984397cc18c13cb5ffad4634a923682237b"
+    },
+    "enemy_walk_d_4": {
+      "x": 46,
+      "y": 421,
+      "width": 42,
+      "height": 57,
+      "source": "sprites/possd4.png",
+      "source_sha256": "f05cee7e9cf3e73b83e7ce13148784fd2b6ca13ed8a1e63a51af616d8e8cf4df"
+    },
+    "enemy_walk_d_5": {
+      "x": 90,
+      "y": 421,
+      "width": 39,
+      "height": 51,
+      "source": "sprites/possd5.png",
+      "source_sha256": "4121fdd320d2150901694f3a0bd0bfb14676ddb35593a24f8177308c8ee777c8"
+    },
+    "enemy_walk_d_6": {
+      "x": 131,
+      "y": 421,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possd6.png",
+      "source_sha256": "6a268d310bf8010f3a52fbd2414f0a944044bf7b939ae29a546fe8f42570ca71"
+    },
+    "enemy_walk_d_7": {
+      "x": 179,
+      "y": 421,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possd7.png",
+      "source_sha256": "eda740910d89473d855f1952f96873ffc79050e0f06c778ba9ac63f6f876ebb2"
+    },
+    "enemy_walk_d_8": {
+      "x": 227,
+      "y": 421,
+      "width": 36,
+      "height": 57,
+      "source": "sprites/possd8.png",
+      "source_sha256": "2977465d8d1418e1cfc02f7585430cf55014a036f14e2d97486493e3d4ad2e35"
+    },
+    "enemy_attack_e_1": {
+      "x": 265,
+      "y": 421,
+      "width": 26,
+      "height": 56,
+      "source": "sprites/posse1.png",
+      "source_sha256": "4df5c71405ea368df5c809bb545ea52b5dd10e4dcdcedb9c460cbe4af54da4a3"
+    },
+    "enemy_attack_e_2": {
+      "x": 293,
+      "y": 421,
+      "width": 45,
+      "height": 55,
+      "source": "sprites/posse2.png",
+      "source_sha256": "4af2c830f3967c855204b96c8f8b92a9b31de26f977997cd24f31fe23ba75e7d"
+    },
+    "enemy_attack_e_3": {
+      "x": 340,
+      "y": 421,
+      "width": 50,
+      "height": 54,
+      "source": "sprites/posse3.png",
+      "source_sha256": "cf9d5f7c70acb09c0b617cfc009d20543a1b07d0293b600312068d08eb24febf"
+    },
+    "enemy_attack_e_4": {
+      "x": 392,
+      "y": 421,
+      "width": 37,
+      "height": 53,
+      "source": "sprites/posse4.png",
+      "source_sha256": "f20d9fb441a2034e6dc6ce4dbed2f415a6107887fa7acc8f16bb8b977b5ced42"
+    },
+    "enemy_attack_e_5": {
+      "x": 431,
+      "y": 421,
+      "width": 24,
+      "height": 52,
+      "source": "sprites/posse5.png",
+      "source_sha256": "fabdb9e503bffd36df784e2a68599b178c6cb6408fa6a339f0ae3fd35bd8b334"
+    },
+    "enemy_attack_e_6": {
+      "x": 457,
+      "y": 421,
+      "width": 32,
+      "height": 53,
+      "source": "sprites/posse6.png",
+      "source_sha256": "c1fb606d6920d025a2ee3f79309f7f6fc82af18ab17b4da8761beea973b9da00"
+    },
+    "enemy_attack_e_7": {
+      "x": 491,
+      "y": 421,
+      "width": 50,
+      "height": 54,
+      "source": "sprites/posse7.png",
+      "source_sha256": "91254babdc777f8dd22ffc3242b81fb44316303a928f2ff2ea3ff60dfb08c419"
+    },
+    "enemy_attack_e_8": {
+      "x": 543,
+      "y": 421,
+      "width": 48,
+      "height": 57,
+      "source": "sprites/posse8.png",
+      "source_sha256": "f8541c0abae2a829d4eede542c3b9774bf930d0daa43c0e70b4192a5fe2e7fc5"
+    },
+    "enemy_attack_f_1": {
+      "x": 593,
+      "y": 421,
+      "width": 27,
+      "height": 56,
+      "source": "sprites/possf1.png",
+      "source_sha256": "ac8be884afb0668a36ad1c7f3c7b6051825643bf34f2185bfe3a0fffb817b47a"
+    },
+    "enemy_attack_f_2": {
+      "x": 622,
+      "y": 421,
+      "width": 46,
+      "height": 56,
+      "source": "sprites/possf2.png",
+      "source_sha256": "ae30af81201db62ab964f2fbb0cc86bb23a0324ae1ee86848ad5c2c223a28388"
+    },
+    "enemy_attack_f_3": {
+      "x": 670,
+      "y": 421,
+      "width": 53,
+      "height": 55,
+      "source": "sprites/possf3.png",
+      "source_sha256": "c331a218ec364da57d17a14510cb322cdc3647bf4b4089c129988cbce88d0ba9"
+    },
+    "enemy_attack_f_4": {
+      "x": 725,
+      "y": 421,
+      "width": 46,
+      "height": 54,
+      "source": "sprites/possf4.png",
+      "source_sha256": "ecb247b8de04acf09b73e0c6916c50070c57f773cf5637f071217814cdad3cd6"
+    },
+    "enemy_attack_f_5": {
+      "x": 773,
+      "y": 421,
+      "width": 26,
+      "height": 53,
+      "source": "sprites/possf5.png",
+      "source_sha256": "4492c53bd21ee1cfc9addc6a59f7c409dea87e82b51f538ea44e52c9b9d1a7a2"
+    },
+    "enemy_attack_f_6": {
+      "x": 801,
+      "y": 421,
+      "width": 37,
+      "height": 53,
+      "source": "sprites/possf6.png",
+      "source_sha256": "c3cbac9d4a141cec6c2ecbd8b0dccc7b3c68872dc3785bdbea55d7cbaa4eb455"
+    },
+    "enemy_attack_f_7": {
+      "x": 840,
+      "y": 421,
+      "width": 56,
+      "height": 54,
+      "source": "sprites/possf7.png",
+      "source_sha256": "12a0b03701ece59faf0a2e1e8cdce0a0af7be836b6b5320374014133ede624eb"
+    },
+    "enemy_attack_f_8": {
+      "x": 898,
+      "y": 421,
+      "width": 56,
+      "height": 56,
+      "source": "sprites/possf8.png",
+      "source_sha256": "8ed1c53e8e1bbeb082fda72aa292ca106c7f3b3c33b1f096af0b981541271b75"
+    },
+    "enemy_pain_1": {
+      "x": 956,
+      "y": 421,
+      "width": 39,
+      "height": 55,
+      "source": "sprites/possg1.png",
+      "source_sha256": "1545da7ed444ccbf5e74b60832aa7520e9806e8b43ae01e693b0c14e8ca47890"
+    },
+    "enemy_pain_2": {
+      "x": 2,
+      "y": 480,
+      "width": 36,
+      "height": 55,
+      "source": "sprites/possg2.png",
+      "source_sha256": "7bcd8cff97c31ef2d8d4bfbcee89967b9aa0c02d0f78069b48dd96b71ddd82a7"
+    },
+    "enemy_pain_3": {
+      "x": 40,
+      "y": 480,
+      "width": 40,
+      "height": 54,
+      "source": "sprites/possg3.png",
+      "source_sha256": "07432dc982057c24bf21598baa8b63feaaf2423ab83752ae9f5b405dfa51d73d"
+    },
+    "enemy_pain_4": {
+      "x": 82,
+      "y": 480,
+      "width": 41,
+      "height": 52,
+      "source": "sprites/possg4.png",
+      "source_sha256": "580b22cc9f8e41b971c56e689c02db59b6b376e800d6791344ee0cf7eeaab0db"
+    },
+    "enemy_pain_5": {
+      "x": 125,
+      "y": 480,
+      "width": 34,
+      "height": 53,
+      "source": "sprites/possg5.png",
+      "source_sha256": "6e564b4bb3862fc675d2182021bcbfd0c4d5d347ce5d1e6aa6fe6b85200c6233"
+    },
+    "enemy_pain_6": {
+      "x": 161,
+      "y": 480,
+      "width": 41,
+      "height": 52,
+      "source": "sprites/possg6.png",
+      "source_sha256": "ad7f08adbe73f029d925e746b581e5eb609fc49ebadf54368ad0e5dadde54c68"
+    },
+    "enemy_pain_7": {
+      "x": 204,
+      "y": 480,
+      "width": 39,
+      "height": 54,
+      "source": "sprites/possg7.png",
+      "source_sha256": "dde71974563c53dca64d6e6eaa7856e5ab53d3160701adcad63fc59d35f9b443"
+    },
+    "enemy_pain_8": {
+      "x": 245,
+      "y": 480,
+      "width": 39,
+      "height": 57,
+      "source": "sprites/possg8.png",
+      "source_sha256": "c04464aa1eefcca0337560b67ac46f2e0270f65600ee3d2bd6f7563edaaabe8d"
     }
   }
 }

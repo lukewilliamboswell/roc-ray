@@ -10,6 +10,13 @@ Generated files are ready for RocRay: `generated/atlas.png` is one RGBA texture,
 directory rooted at `examples/doom/assets` and refer to these files relative to
 that root.
 
+The atlas includes walls, doors, switch and exit decorations, floor and ceiling
+flats, pickups and animated keycards, HUD elements, the pistol, and a complete
+eight-angle walk/attack/pain set plus death animation for one enemy. The older
+short names (`enemy_walk_0`, for example) remain aliases by content for the
+initial renderer; names ending in `_1` through `_8` follow Doom's viewing-angle
+convention.
+
 Regenerate from the repository root with Python 3 and the pinned Pillow version:
 
 ```sh
@@ -35,3 +42,8 @@ changes do not imply endorsement by Freedoom or its contributors.
 The source manifest records the pinned release, archive checksum, exact selected
 upstream paths, and each selected file's checksum. Keep the licence, credits,
 manifest, and this notice with redistributed generated assets.
+
+Freedoom 0.13.0 supplies its music as MIDI files. RocRay's music loader does not
+load MIDI, and reproducible rendering would require pinning a synthesizer and a
+separately licensed soundfont. This pipeline therefore deliberately includes no
+music rather than adding a heavyweight or legally ambiguous conversion step.

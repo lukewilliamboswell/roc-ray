@@ -112,6 +112,16 @@
       ]
     },
     {
+      "path": "examples/doom",
+      "cases": [
+        {
+          "name": "walks-and-fires",
+          "frames": 20,
+          "keys": "3:W,5:SPACE"
+        }
+      ]
+    },
+    {
       "path": "examples/generated_assets",
       "cases": [
         {

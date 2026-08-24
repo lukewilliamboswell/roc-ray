@@ -1,4 +1,4 @@
-app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-21-90da19f" }
+app [Model, program] { rr: platform "../../platform/main.roc", roc: "nightly-2026-08-23-fb208ba" }
 
 # `update!` is effectful: host state changes are direct calls and deferred
 # work goes through `Task.spawn!`. The pure-update `Transition` builder is

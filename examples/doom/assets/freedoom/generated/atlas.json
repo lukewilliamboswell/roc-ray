@@ -1,0 +1,286 @@
+{
+  "width": 1024,
+  "height": 512,
+  "sprites": {
+    "wall_concrete": {
+      "x": 2,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "source": "patches/aqconc02.png",
+      "source_sha256": "e0a9321048a13930baf1337c3f74de0c3e92e45f647c3155a3ac09309c7fd9f0"
+    },
+    "wall_brown": {
+      "x": 132,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "source": "patches/brown5.png",
+      "source_sha256": "71985d9fc35b2755c4a7e8ee81509f2cfa3638e694f40b269efaa17222b80088"
+    },
+    "wall_metal": {
+      "x": 262,
+      "y": 2,
+      "width": 64,
+      "height": 64,
+      "source": "patches/aqmetl29.png",
+      "source_sha256": "12bb6e19bf6d09c243042e0676ace2d253d11ae51db06cbe470a105de6ecbdb4"
+    },
+    "wall_light": {
+      "x": 328,
+      "y": 2,
+      "width": 64,
+      "height": 64,
+      "source": "patches/aqlite12.png",
+      "source_sha256": "af64eaf1e0037889935cdb54cefcdb52f33b0a07b40bd22ce724c4336bd93413"
+    },
+    "door": {
+      "x": 394,
+      "y": 2,
+      "width": 128,
+      "height": 128,
+      "source": "patches/aqdoor01.png",
+      "source_sha256": "ca8608ddef23b9abc6b17187a7bc920d34c304a2c65920fa8bf1a386ab8fdb8d"
+    },
+    "floor": {
+      "x": 524,
+      "y": 2,
+      "width": 64,
+      "height": 64,
+      "source": "flats/floor4_8.png",
+      "source_sha256": "b6962de1ead5b9e1dc0b881dfc69ec68c8d63eed4a9824576f150d470f4f016a"
+    },
+    "ceiling": {
+      "x": 590,
+      "y": 2,
+      "width": 64,
+      "height": 64,
+      "source": "flats/ceil3_5.png",
+      "source_sha256": "7ba51d113324cb2a67506a93a6c9f8784d03890088aff7a8662e78b926653e3d"
+    },
+    "enemy_walk_0": {
+      "x": 656,
+      "y": 2,
+      "width": 41,
+      "height": 57,
+      "source": "sprites/possa1.png",
+      "source_sha256": "e62029733a0e5382eaae7c39fdc9d1f39f6e6868d378843705882f664ad47863"
+    },
+    "enemy_walk_1": {
+      "x": 699,
+      "y": 2,
+      "width": 41,
+      "height": 57,
+      "source": "sprites/possb1.png",
+      "source_sha256": "47dc7ff3eecf9f88917ce6b4fcb09128b83f445f902688dfc252defaafdb5fc2"
+    },
+    "enemy_attack_0": {
+      "x": 742,
+      "y": 2,
+      "width": 26,
+      "height": 56,
+      "source": "sprites/posse1.png",
+      "source_sha256": "4df5c71405ea368df5c809bb545ea52b5dd10e4dcdcedb9c460cbe4af54da4a3"
+    },
+    "enemy_attack_1": {
+      "x": 770,
+      "y": 2,
+      "width": 27,
+      "height": 56,
+      "source": "sprites/possf1.png",
+      "source_sha256": "ac8be884afb0668a36ad1c7f3c7b6051825643bf34f2185bfe3a0fffb817b47a"
+    },
+    "enemy_pain": {
+      "x": 799,
+      "y": 2,
+      "width": 39,
+      "height": 55,
+      "source": "sprites/possg1.png",
+      "source_sha256": "1545da7ed444ccbf5e74b60832aa7520e9806e8b43ae01e693b0c14e8ca47890"
+    },
+    "enemy_die_0": {
+      "x": 840,
+      "y": 2,
+      "width": 47,
+      "height": 55,
+      "source": "sprites/possh0.png",
+      "source_sha256": "0abb189c6f31e14fc76c3cc67d11615a2131304ae2cb0db25b65f510aa0d8892"
+    },
+    "enemy_die_1": {
+      "x": 889,
+      "y": 2,
+      "width": 38,
+      "height": 42,
+      "source": "sprites/possi0.png",
+      "source_sha256": "ebefb77e2880cc96e584a2d4470a5bb4476c730452c14f1524f7be780edfecc0"
+    },
+    "enemy_die_2": {
+      "x": 929,
+      "y": 2,
+      "width": 44,
+      "height": 34,
+      "source": "sprites/possj0.png",
+      "source_sha256": "b218e545eb6baef89ab1339440da05774e55f674405ed3d443393a5e60ea04b9"
+    },
+    "enemy_die_3": {
+      "x": 2,
+      "y": 132,
+      "width": 48,
+      "height": 27,
+      "source": "sprites/possk0.png",
+      "source_sha256": "a2af003fb6020a6968062e1c555715897acaf053dcca2938ea1300b613fa66fe"
+    },
+    "enemy_die_4": {
+      "x": 52,
+      "y": 132,
+      "width": 50,
+      "height": 19,
+      "source": "sprites/possl0.png",
+      "source_sha256": "fa2adfd3a8d760769e3d2a1e3962f24b2d8fc405b7ee9623c7e34bf5c8aa7686"
+    },
+    "pistol_0": {
+      "x": 104,
+      "y": 132,
+      "width": 82,
+      "height": 92,
+      "source": "sprites/pisga0.png",
+      "source_sha256": "c54deb188194714b5e75d4a7a125c8ab4214415db93df83c76188b6c1bd3f523"
+    },
+    "pistol_1": {
+      "x": 188,
+      "y": 132,
+      "width": 82,
+      "height": 96,
+      "source": "sprites/pisgb0.png",
+      "source_sha256": "d41d5db3ce330ae28fd41486691a042fe18de49cb01b1cc88383479c60407b80"
+    },
+    "pistol_2": {
+      "x": 272,
+      "y": 132,
+      "width": 84,
+      "height": 100,
+      "source": "sprites/pisgc0.png",
+      "source_sha256": "f7d15a6ccc8fb0f3121121b5e72a8296d63a6e1badc7b82269bc579663f56bdd"
+    },
+    "pistol_3": {
+      "x": 358,
+      "y": 132,
+      "width": 84,
+      "height": 106,
+      "source": "sprites/pisgd0.png",
+      "source_sha256": "d7efa151a14a8e2c8ff2cd551b91c5b72a13648337d5230568eb4885b6fb8ce2"
+    },
+    "pistol_4": {
+      "x": 444,
+      "y": 132,
+      "width": 86,
+      "height": 120,
+      "source": "sprites/pisge0.png",
+      "source_sha256": "2757ba6dd27b83b3ba73805f16e2b3cdb3fc9cb66d96390e93440ef864d7e014"
+    },
+    "ammo": {
+      "x": 532,
+      "y": 132,
+      "width": 17,
+      "height": 16,
+      "source": "sprites/ammoa0.png",
+      "source_sha256": "5efe6f2f123814373ebf5aa3ab165b65aa89ce83680b0a2f5d544a5efd7c4fb0"
+    },
+    "health": {
+      "x": 551,
+      "y": 132,
+      "width": 29,
+      "height": 20,
+      "source": "sprites/media0.png",
+      "source_sha256": "151affd4a4a729ae6388785a20b8dae01080c2e26efa61d10d67ef255dde34a1"
+    },
+    "hud_bar": {
+      "x": 582,
+      "y": 132,
+      "width": 320,
+      "height": 32,
+      "source": "graphics/stbar.png",
+      "source_sha256": "4c551b443341876876f1302c8f97415447183658045852381d0e84e0d51aefc8"
+    },
+    "hud_digit_0": {
+      "x": 904,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum0.png",
+      "source_sha256": "587eb5ce1d72d028116733895abc848c8188c0de5768958ca95c14fb507d9e54"
+    },
+    "hud_digit_1": {
+      "x": 919,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum1.png",
+      "source_sha256": "c46887a76b8ef925c1f9aa180190ec6cb8e580ffb958741b8dc6c69b76f83461"
+    },
+    "hud_digit_2": {
+      "x": 934,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum2.png",
+      "source_sha256": "3afd05f038c6247200d663623bb1ad07ea3a963ece1d2a754f17d979a3e23eb6"
+    },
+    "hud_digit_3": {
+      "x": 949,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum3.png",
+      "source_sha256": "a20caf7e8955fe3b25c0a562b81d2f1dca236dccec275dd906dfcf497646b60b"
+    },
+    "hud_digit_4": {
+      "x": 964,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum4.png",
+      "source_sha256": "0dcb637bbe66938dae089e8adf3560ce8a4f718fe0cd2191d7984ad0db08fe08"
+    },
+    "hud_digit_5": {
+      "x": 979,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum5.png",
+      "source_sha256": "49a6338cde35d81a978b365f2780f3a76dbafb9a490811b7eeaaa6c06bd9964d"
+    },
+    "hud_digit_6": {
+      "x": 994,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum6.png",
+      "source_sha256": "ddb0b02adeca4af57029b046f02bf51ebad00addeca49dbcb0323a0d0ccb626e"
+    },
+    "hud_digit_7": {
+      "x": 1009,
+      "y": 132,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum7.png",
+      "source_sha256": "7e2cb178047b8abbde46745910e40ec23a18eecdd2829bb558cc379cd54cfdf7"
+    },
+    "hud_digit_8": {
+      "x": 2,
+      "y": 254,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum8.png",
+      "source_sha256": "5822edbd64d21a6190a87bb9283c40e70937dbdb6b71bd6a7c0bee92e1545c95"
+    },
+    "hud_digit_9": {
+      "x": 17,
+      "y": 254,
+      "width": 13,
+      "height": 16,
+      "source": "graphics/sttnum9.png",
+      "source_sha256": "bf2912cbda684c615200ca9f7a952b0efb1ed358a7d3229e380f35958a295d5b"
+    }
+  }
+}

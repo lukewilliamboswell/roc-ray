@@ -115,9 +115,9 @@
       "path": "examples/doom",
       "cases": [
         {
-          "name": "walks-and-fires",
+          "name": "walks-fires-and-uses",
           "frames": 20,
-          "keys": "3:W,5:SPACE"
+          "keys": "3:W,5:SPACE,7:E"
         }
       ]
     },

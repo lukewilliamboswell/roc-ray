@@ -1751,6 +1751,30 @@ fn cameraFromArgs(args: anytype) rl.Camera2D {
     };
 }
 
+fn toVector3(point: anytype) rl.Vector3 {
+    return .{ .x = point.x, .y = point.y, .z = point.z };
+}
+
+fn camera3DFromArgs(args: anytype) rl.Camera3D {
+    return .{
+        .position = toVector3(args.position),
+        .target = toVector3(args.target),
+        .up = toVector3(args.up),
+        .fovy = args.fovy,
+        .projection = rl.CAMERA_PERSPECTIVE,
+    };
+}
+
+/// Enter raylib's perspective mode with depth testing enabled.
+pub fn beginMode3D(args: anytype) void {
+    rl.BeginMode3D(camera3DFromArgs(args));
+}
+
+/// Leave perspective mode and restore the default orthographic projection.
+pub fn endMode3D() void {
+    rl.EndMode3D();
+}
+
 fn positiveThickness(thickness: f32) ?f32 {
     if (thickness <= 0) return null;
     return thickness;
@@ -1945,6 +1969,23 @@ pub fn drawTexture(texture: Texture, args: anytype) void {
 /// for its own, with no other structure to reproduce.
 pub fn drawTextureInstances(texture: Texture, instances: anytype) void {
     for (instances) |instance| drawTexture(texture, instance);
+}
+
+/// Submit one synchronously borrowed indexed textured triangle batch.
+/// UV coordinates are normalized and colors are supplied per vertex.
+pub fn drawTexturedTriangles3D(texture: Texture, vertices: anytype, indices: anytype) void {
+    if (texture.width <= 0 or texture.height <= 0 or indices.len == 0) return;
+    rl.rlSetTexture(texture.id);
+    rl.rlBegin(rl.RL_TRIANGLES);
+    for (indices) |raw_index| {
+        const vertex = vertices[@intCast(raw_index)];
+        const tint = colorToRl(vertex.tint);
+        rl.rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+        rl.rlTexCoord2f(vertex.uv.x, vertex.uv.y);
+        rl.rlVertex3f(vertex.position.x, vertex.position.y, vertex.position.z);
+    }
+    rl.rlEnd();
+    rl.rlSetTexture(0);
 }
 
 fn textureRegionUv(texture: Texture, x: f32, y: f32) rl.Vector2 {

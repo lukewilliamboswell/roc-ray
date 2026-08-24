@@ -3436,6 +3436,10 @@ var blend_scopes: [SCOPE_STACK_LIMIT]u8 = undefined;
 var blend_scope_count: usize = 0;
 var camera_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_cameraArgs = undefined;
 var camera_scope_count: usize = 0;
+var camera_3d_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_camera_3dArgs = undefined;
+var camera_3d_scope_count: usize = 0;
+var headless_textured_triangle_batches: usize = 0;
+var headless_textured_triangles: usize = 0;
 var scissor_scopes: [SCOPE_STACK_LIMIT]abi.DrawHostBegin_scissorArgs = undefined;
 var scissor_scope_count: usize = 0;
 
@@ -4155,6 +4159,9 @@ fn resetHeadlessRuntime(app_config: AppConfig) void {
     shader_lease_count = 0;
     blend_scope_count = 0;
     camera_scope_count = 0;
+    camera_3d_scope_count = 0;
+    headless_textured_triangle_batches = 0;
+    headless_textured_triangles = 0;
     scissor_scope_count = 0;
     prepared_text_prepare_calls = 0;
     prepared_text_draw_calls = 0;
@@ -6755,6 +6762,15 @@ fn hostedDrawBeginCamera(args: abi.DrawHostBegin_cameraArgs) callconv(.c) u8 {
     return SCOPE_OK;
 }
 
+fn hostedDrawBeginCamera3D(args: abi.DrawHostBegin_camera_3dArgs) callconv(.c) u8 {
+    enforcePhase("Draw.with_camera_3d!", during_render);
+    if (camera_3d_scope_count == SCOPE_STACK_LIMIT) return SCOPE_LIMIT;
+    if (!headlessMode()) raylib.beginMode3D(args);
+    camera_3d_scopes[camera_3d_scope_count] = args;
+    camera_3d_scope_count += 1;
+    return SCOPE_OK;
+}
+
 fn hostedDrawCircleRaw(args: abi.DrawHostCircleArgs) callconv(.c) void {
     enforcePhase("Draw.circle!", during_render);
     const effect = EffectScope.begin("Draw.circle!", 0);
@@ -6795,6 +6811,14 @@ fn hostedDrawEndCamera() callconv(.c) void {
     if (!headlessMode()) raylib.endMode2D();
     camera_scope_count -= 1;
     if (!headlessMode() and camera_scope_count > 0) raylib.beginMode2D(camera_scopes[camera_scope_count - 1]);
+}
+
+fn hostedDrawEndCamera3D() callconv(.c) void {
+    enforcePhase("Draw.with_camera_3d!", during_render);
+    if (camera_3d_scope_count == 0) return;
+    if (!headlessMode()) raylib.endMode3D();
+    camera_3d_scope_count -= 1;
+    if (!headlessMode() and camera_3d_scope_count > 0) raylib.beginMode3D(camera_3d_scopes[camera_3d_scope_count - 1]);
 }
 
 fn hostedDrawFps(args: abi.DrawHostFpsArgs) callconv(.c) void {
@@ -7302,6 +7326,41 @@ fn hostedDrawTextureInstancesRaw(host: *RocHost, args: abi.DrawHostDraw_texture_
 
 fn exportedDrawTextureInstancesRaw(args: abi.DrawHostDraw_texture_instancesArgs) callconv(.c) void {
     hostedDrawTextureInstancesRaw(activeHost(), args);
+}
+
+fn texturedTriangleIndicesValid(vertex_count: usize, indices: []const u32) bool {
+    if (indices.len % 3 != 0) return false;
+    for (indices) |index| if (index >= vertex_count) return false;
+    return true;
+}
+
+test "textured triangle indices require complete in-range triples" {
+    try std.testing.expect(texturedTriangleIndicesValid(4, &.{ 0, 1, 2, 0, 2, 3 }));
+    try std.testing.expect(!texturedTriangleIndicesValid(4, &.{ 0, 1 }));
+    try std.testing.expect(!texturedTriangleIndicesValid(4, &.{ 0, 1, 4 }));
+}
+
+fn hostedDrawTexturedTriangles3DRaw(host: *RocHost, args: abi.DrawHostDraw_textured_triangles_3dArgs) callconv(.c) void {
+    enforcePhase("Draw.textured_triangles_3d!", during_render);
+    defer args.decref(host);
+    const vertices = args.vertices.items();
+    const indices = args.indices.items();
+    if (!texturedTriangleIndicesValid(vertices.len, indices)) {
+        @panic("roc-ray: Draw.textured_triangles_3d! requires an index count divisible by three and every index in range");
+    }
+    if (headlessMode()) {
+        if (texture_heap.get(args.texture.handle.*) != null or render_texture_heap.get(args.texture.handle.*) != null) {
+            headless_textured_triangle_batches += 1;
+            headless_textured_triangles += indices.len / 3;
+        }
+        return;
+    }
+    const texture = nativeTextureForToken(args.texture.handle.*) orelse return;
+    raylib.drawTexturedTriangles3D(texture, vertices, indices);
+}
+
+fn exportedDrawTexturedTriangles3DRaw(args: abi.DrawHostDraw_textured_triangles_3dArgs) callconv(.c) void {
+    hostedDrawTexturedTriangles3DRaw(activeHost(), args);
 }
 
 fn hostedDrawTextureQuadRaw(args: abi.DrawHostDraw_texture_quadArgs) callconv(.c) void {
@@ -8861,6 +8920,7 @@ fn deinitResources() void {
     std.debug.assert(shader_lease_count == 0);
     std.debug.assert(blend_scope_count == 0);
     std.debug.assert(camera_scope_count == 0);
+    std.debug.assert(camera_3d_scope_count == 0);
     std.debug.assert(scissor_scope_count == 0);
     // App shutdown clears delivery promises, through `clearAfterWorkStops`,
     // before resource teardown. A non-zero value here would make the next app
@@ -8951,6 +9011,7 @@ comptime {
         @export(&hostedAudioStopMusic, .{ .name = "roc_audio_stop_music_raw" });
         @export(&hostedAudioStop, .{ .name = "roc_audio_stop_raw" });
         @export(&hostedDrawBeginCamera, .{ .name = "roc_draw_begin_camera" });
+        @export(&hostedDrawBeginCamera3D, .{ .name = "roc_draw_begin_camera_3d" });
         @export(&hostedDrawBeginBlendRaw, .{ .name = "roc_draw_begin_blend_raw" });
         @export(&hostedDrawBeginRenderTextureRaw, .{ .name = "roc_draw_begin_render_texture_raw" });
         @export(&hostedDrawBeginScissorRaw, .{ .name = "roc_draw_begin_scissor_raw" });
@@ -8962,8 +9023,10 @@ comptime {
         @export(&exportedDrawPreparedTextRaw, .{ .name = "roc_draw_draw_prepared_text_raw" });
         @export(&hostedDrawTextureRaw, .{ .name = "roc_draw_draw_texture_raw" });
         @export(&exportedDrawTextureInstancesRaw, .{ .name = "roc_draw_draw_texture_instances_raw" });
+        @export(&exportedDrawTexturedTriangles3DRaw, .{ .name = "roc_draw_draw_textured_triangles_3d_raw" });
         @export(&hostedDrawTextureQuadRaw, .{ .name = "roc_draw_draw_texture_quad_raw" });
         @export(&hostedDrawEndCamera, .{ .name = "roc_draw_end_camera" });
+        @export(&hostedDrawEndCamera3D, .{ .name = "roc_draw_end_camera_3d" });
         @export(&hostedDrawEndBlendRaw, .{ .name = "roc_draw_end_blend_raw" });
         @export(&hostedDrawEndRenderTextureRaw, .{ .name = "roc_draw_end_render_texture_raw" });
         @export(&hostedDrawEndScissorRaw, .{ .name = "roc_draw_end_scissor_raw" });

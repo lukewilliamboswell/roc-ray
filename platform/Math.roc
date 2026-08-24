@@ -20,6 +20,9 @@ Math := [].{
 	## the platform are this same type, re-exported.
 	Vec2 : RrtMath.Vec2
 
+	## Three-dimensional floating-point vector.
+	Vec3 : RrtMath.Vec3
+
 	## Axis-aligned rectangle represented by top-left position and size.
 	Rect : RrtMath.Rect
 
@@ -29,6 +32,10 @@ Math := [].{
 	## Construct a two-dimensional vector.
 	vec2 : F32, F32 -> Vec2
 	vec2 = |a0, a1| RrtMath.vec2(a0, a1)
+
+	## Construct a three-dimensional vector.
+	vec3 : F32, F32, F32 -> Vec3
+	vec3 = |a0, a1, a2| RrtMath.vec3(a0, a1, a2)
 
 	## The zero vector.
 	zero : Vec2

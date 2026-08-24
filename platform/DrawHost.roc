@@ -81,6 +81,8 @@ DrawHost := [].{
 	## Borrowed instance batch. One hosted call draws every instance with the same
 	## texture, so a per-sprite crossing becomes a single crossing per batch.
 	TextureInstances : { texture : Texture, instances : List(TextureInstance) }
+	TexturedVertex3D : { position : Math.Vec3, uv : Math.Vec2, tint : Color.Rgba }
+	TexturedTriangles3D : { texture : Texture, vertices : List(TexturedVertex3D), indices : List(U32) }
 	TextureQuad : { texture : Texture, source : Math.Rect, top_left : Math.Vec2, bottom_left : Math.Vec2, bottom_right : Math.Vec2, top_right : Math.Vec2, q_top_left : F32, q_bottom_left : F32, q_bottom_right : F32, q_top_right : F32, tint : Color.Rgba }
 	ShaderLocation : { shader : Shader, name : Str }
 	ShaderFloat : { uniform : Uniform, value : F32 }
@@ -94,7 +96,9 @@ DrawHost := [].{
 	ShaderResult : { shader : Shader, err : U8 }
 
 	begin_camera! : Camera.Camera2D => U8
+	begin_camera_3d! : Camera.Camera3D => U8
 	end_camera! : () => {}
+	end_camera_3d! : () => {}
 	begin_blend! : U8 => U8
 	end_blend! : () => {}
 	begin_render_texture! : RenderTexture => U8
@@ -131,6 +135,7 @@ DrawHost := [].{
 	text! : Text => {}
 	draw_texture! : TextureDraw => {}
 	draw_texture_instances! : TextureInstances => {}
+	draw_textured_triangles_3d! : TexturedTriangles3D => {}
 	draw_texture_quad! : TextureQuad => {}
 	triangle! : Triangle => {}
 	triangle_lines! : TriangleLines => {}

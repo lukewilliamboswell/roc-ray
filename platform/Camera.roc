@@ -24,6 +24,11 @@ import Math
 
 Camera := [].{
 
+	## Validated pure perspective camera accepted by `Draw.with_camera_3d!`.
+	## Non-finite vector components become zero. A field of view outside the open
+	## interval 0 to 180 degrees becomes 60 degrees.
+	Camera3D : RrtCamera.Camera3D
+
 	## Immutable camera value accepted by drawing and coordinate transforms.
 	## `Camera.Camera2D` and `Draw.CameraMode` on the platform are this same
 	## type, re-exported.
@@ -36,6 +41,13 @@ Camera := [].{
 
 	## Target, screen offset, clockwise rotation in degrees, and zoom factor.
 	Settings : RrtCamera.Settings
+
+	## Eye, focus, up direction, and vertical field of view for a perspective camera.
+	PerspectiveSettings : RrtCamera.PerspectiveSettings
+
+	## Construct a validated perspective camera.
+	perspective : RrtCamera.PerspectiveSettings -> Camera3D
+	perspective = |a0| RrtCamera.perspective(a0)
 
 	## The zoom substituted for a zoom that cannot be used, meaning zero (which
 	## has no inverse) or a non-finite one (which has no meaning).

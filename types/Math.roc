@@ -20,6 +20,17 @@ Math := [].{
 		is_eq : _
 	}
 
+	## Three-dimensional floating-point vector.
+	Vec3 := {
+		x : F32,
+		y : F32,
+		z : F32,
+	}.{
+
+		## Compare two of these values.
+		is_eq : _
+	}
+
 	## Axis-aligned rectangle represented by top-left position and size.
 	Rect := {
 		x : F32,
@@ -45,6 +56,10 @@ Math := [].{
 	## Construct a two-dimensional vector.
 	vec2 : F32, F32 -> Vec2
 	vec2 = |x, y| { x, y }
+
+	## Construct a three-dimensional vector.
+	vec3 : F32, F32, F32 -> Vec3
+	vec3 = |x, y, z| { x, y, z }
 
 	## The zero vector.
 	zero : Vec2

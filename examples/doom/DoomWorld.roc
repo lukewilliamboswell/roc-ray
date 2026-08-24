@@ -104,6 +104,8 @@ DoomWorld := [].{
 		weapon : Weapon,
 		backpack : Bool,
 		berserk : Bool,
+		computer_map : Bool,
+		light_amp_tics : U64,
 	}
 
 	Rng :: U8.{
@@ -131,6 +133,8 @@ DoomWorld := [].{
 		weapon: Pistol,
 		backpack: Bool.False,
 		berserk: Bool.False,
+		computer_map: Bool.False,
+		light_amp_tics: 0,
 	}
 
 	## Classify the editor numbers used by E1M1 and its normal Doom pickups.
@@ -406,14 +410,18 @@ DoomWorld := [].{
 	world_tic : World, DoomSim.Command -> World
 	world_tic = |world, command| {
 		actors0 = List.map(world.actors, tick_actor)
-		if command.fire and ammo_for(world.player) > 0 {
+		player0 = tick_player_powers(world.player)
+		if command.fire and ammo_for(player0) > 0 {
 			shot = hitscan(world.rng, world.player.weapon)
 			actors = damage_first_live(actors0, shot.damage)
-			{ ..world, player: spend_ammo(world.player), actors, rng: shot.rng }
+			{ ..world, player: spend_ammo(player0), actors, rng: shot.rng }
 		} else {
-			{ ..world, actors: actors0 }
+			{ ..world, player: player0, actors: actors0 }
 		}
 	}
+
+	tick_player_powers : Player -> Player
+	tick_player_powers = |value| { ..value, light_amp_tics: if value.light_amp_tics > 0 value.light_amp_tics - 1 else 0 }
 
 	state_duration : ActorMode -> I64
 	state_duration = |mode|
@@ -516,8 +524,8 @@ apply_pickup = |player, kind|
 		RocketPickup => give_rockets(player, 1)
 		SoulSpherePickup => give_health(player, 100, 200)
 		BerserkPickup => { player: { ..give_health(player, 100, DoomWorld.max_health).player, berserk: Bool.True, weapon: Chainsaw }, collected: Bool.True }
-		ComputerMapPickup => { player, collected: Bool.True }
-		LightAmpPickup => { player, collected: Bool.True }
+		ComputerMapPickup => { player: { ..player, computer_map: Bool.True }, collected: !(player.computer_map) }
+		LightAmpPickup => { player: { ..player, light_amp_tics: 4200 }, collected: Bool.True }
 		BulletBoxPickup => give_bullets(player, 50)
 		ShellBoxPickup => give_shells(player, 20)
 		CellPackPickup => give_cells(player, 100)
@@ -837,4 +845,16 @@ expect {
 	packed = DoomWorld.collect(player, backpack)
 	cells = DoomWorld.collect(packed.player, cell_pack)
 	packed.player.backpack and packed.player.ammo.bullets == 60 and cells.player.ammo.cells == 120
+}
+
+expect {
+	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	map_pickup : DoomWorld.Pickup
+	map_pickup = { id: 0, kind: ComputerMapPickup, pos: { x: 0, y: 0 }, taken: Bool.False }
+	lamp_pickup : DoomWorld.Pickup
+	lamp_pickup = { id: 1, kind: LightAmpPickup, pos: { x: 0, y: 0 }, taken: Bool.False }
+	mapped = DoomWorld.collect(player, map_pickup)
+	lit = DoomWorld.collect(mapped.player, lamp_pickup)
+	ticked = DoomWorld.tick_player_powers(lit.player)
+	mapped.player.computer_map and lit.player.light_amp_tics == 4200 and ticked.light_amp_tics == 4199
 }

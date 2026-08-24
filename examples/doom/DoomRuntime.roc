@@ -78,7 +78,7 @@ DoomRuntime := [].{
 				$saturated = Bool.True
 			}
 		}
-		player0 = DoomWorld.damage_player(world.doom.player, $damage + projectile_step.damage)
+		player0 = DoomWorld.damage_player(DoomWorld.tick_player_powers(world.doom.player), $damage + projectile_step.damage)
 		collected = collect_nearby(player0, world.doom.pickups)
 		doom = { ..world.doom, player: collected.player, actors: $actors, pickups: collected.pickups, rng: $rng }
 		world0 = { ..world, doom, projectiles: projectile_step.projectiles, explosions: $explosions, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }

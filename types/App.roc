@@ -1,12 +1,8 @@
-## The value a RocRay app folds in once per cycle, and the small records that
-## ride on it.
+## The complete input folded by one `update!` call.
 ##
-## `Input(msg)` is what the platform hands `update!`: the device snapshot, the
-## window geometry, the simulation clock, the task messages that arrived, the
-## recording status, and the files dropped onto the window. Everything here is
-## pure data with pure receivers, so a package can accept a whole input rather
-## than an open record of the fields it happens to read, and a test can build
-## one from `for_tests` without a host.
+## `Input(msg)` contains sampled devices, window state, simulation time, task
+## messages, capture status, and dropped-file events. It is pure data;
+## `for_tests` constructs a neutral input without a host.
 ##
 ## The platform's `App` re-exports these, so an app writes `App.Input(Msg)` and
 ## never depends on this package directly. `msg` is the app's own message type;

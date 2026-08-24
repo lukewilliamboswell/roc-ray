@@ -1,3 +1,11 @@
+## Plot the line lengths of files while a source tree is still being scanned.
+##
+## Run this app from the directory you want to inspect. Use the wheel to scroll,
+## Shift-wheel to zoom, drag to pan, R to return to new results, N to change the
+## horizontal scale, and Escape to quit. Run with `--record-demo` to create the
+## gallery GIF from built-in sample data. This larger example uses Tasks for
+## file work, limits how much work and data it keeps at once, and draws many
+## points efficiently.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -7,14 +15,14 @@ import rr.App
 import rr.Files
 import "assets/fonts/LiberationSans-Regular.ttf" as liberation_sans : List(U8)
 import rr.Camera
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Task
 import rr.Text
 
-## Walk a source tree from the working directory and plot every line of it,
-## while it is still being walked.
+## Walk a source tree and plot every line while it is still being discovered.
 ##
 ## Nothing about the dataset is known when this starts. There is no list of
 ## files: `Files.list!` reports one directory, the app decides which of its
@@ -87,9 +95,17 @@ import rr.Text
 ## Paths are resolved relative to the working directory, so run it from the
 ## root of the tree it should plot:
 ##
-##     roc build examples/live_plot/main.roc --output live_plot
-##     ./live_plot
+##     roc examples/live_plot/main.roc
+##
+## Run with `--record-demo` to plot a deterministic built-in source tree and
+## write `examples/gallery/live_plot.gif`.
+## State kept between updates: queued and active file work, partial parsing
+## results, bounded point data, permanent per-file summaries, camera position,
+## drawing resources, and prepared labels. These categories let scanning,
+## parsing, interaction, and drawing advance a little at a time without keeping
+## every line from every file in memory.
 Model : {
+	demo : Bool,
 
 	## The one sprite behind every point, and the offscreen buffer it is
 	## painted into. A batch draws a single texture, so hundreds of differently
@@ -106,10 +122,7 @@ Model : {
 
 	## The backlog of listings and reads. Only `max_in_flight` of these are
 	## running as tasks at once, however much the walk has discovered.
-	pending : List(Work),
-
-	## How many spawned tasks have not yet delivered their message.
-	in_flight : U64,
+	queue : WorkQueue,
 
 	## What the walk has found so far, and what it is still owed.
 	walk : Walk,
@@ -306,12 +319,83 @@ Peak : {
 ##
 ## The counters accumulate within the current sample and the list holds the
 ## finished ones, so a graph never shows a partial bucket as a dip.
-Rates : {
+Rates := {
 	samples : List(Sample),
 	clock : F32,
 	bytes : U64,
 	lines : U64,
+}.{
+	is_eq : _
+
+	new = || Rates.{ samples: [], clock: 0, bytes: 0, lines: 0 }
+
+	add_bytes = |rates, count| Rates.{ samples: rates.samples, clock: rates.clock, bytes: rates.bytes + count, lines: rates.lines }
+
+	add_lines = |rates, count| Rates.{ samples: rates.samples, clock: rates.clock, bytes: rates.bytes, lines: rates.lines + count }
+
+	sample = |rates, delta| {
+		ticked = rates.clock + delta
+		if ticked < sample_period {
+			Rates.{ samples: rates.samples, clock: ticked, bytes: rates.bytes, lines: rates.lines }
+		} else {
+			kept = if List.len(rates.samples) >= rate_window {
+				List.drop_first(rates.samples, 1)
+			} else {
+				rates.samples
+			}
+			Rates.{
+				samples: List.append(kept, { bytes: rates.bytes, lines: rates.lines }),
+				clock: ticked - sample_period,
+				bytes: 0,
+				lines: 0,
+			}
+		}
+	}
+
+	peak = |rates, measure| List.fold(rates.samples, 1, |most, item| U64.max(most, measure(item)))
+
+	latest = |rates, measure|
+		match List.last(rates.samples) {
+			Ok(item) => measure(item)
+			Err(_) => 0
+		}
+
+	recent_mean = |rates, measure| {
+		len = List.len(rates.samples)
+		span = U64.min(len, mean_window)
+		if span == 0 {
+			0
+		} else {
+			total = List.fold(List.sublist(rates.samples, { start: len - span, len: span }), 0, |sum, item| sum + measure(item))
+			U64.to_f32(total) / U64.to_f32(span)
+		}
+	}
 }
+
+## A sample stays open until its period has elapsed.
+expect {
+	part = Rates.{ samples: [], clock: 0, bytes: 900, lines: 4 }.sample(sample_period / 2)
+	List.is_empty(part.samples) and part.bytes == 900
+}
+
+expect {
+	closed = Rates.{ samples: [], clock: 0, bytes: 900, lines: 4 }.sample(sample_period)
+	closed.samples == [{ bytes: 900, lines: 4 }] and closed.bytes == 0 and closed.lines == 0
+}
+
+## Sampling keeps a fixed-size history.
+expect {
+	full = List.repeat({ bytes: 1, lines: 1 }, rate_window)
+	rolled = Rates.{ samples: full, clock: 0, bytes: 7, lines: 7 }.sample(sample_period)
+	List.len(rolled.samples) == rate_window and List.last(rolled.samples) == Ok({ bytes: 7, lines: 7 })
+}
+
+expect Rates.{ samples: [{ bytes: 3, lines: 1 }, { bytes: 9, lines: 2 }], clock: 0, bytes: 0, lines: 0 }.peak(|item| item.bytes) == 9
+
+## An empty history still has a peak because it is used as a divisor.
+expect Rates.new().peak(|item| item.bytes) == 1
+expect Rates.new().latest(|item| item.lines) == 0
+expect Rates.{ samples: [{ bytes: 1, lines: 5 }], clock: 0, bytes: 0, lines: 0 }.latest(|item| item.lines) == 5
 
 Sample : {
 	bytes : U64,
@@ -365,7 +449,124 @@ Msg : [
 ## window. `start_work!` is the only place it becomes an effect.
 Work : [ListDir(Str), ReadFile(Str, [New, Lane(U64)])]
 
+max_in_flight = 6.U64
+
+## The app-owned backlog and the number of tasks still expected to answer.
+## Keeping them in one type puts all changes to the work limit in one place.
+WorkQueue := { pending : List(Work), in_flight : U64 }.{
+	is_eq : _
+
+	new = || WorkQueue.{ pending: [], in_flight: 0 }
+
+	enqueue = |queue, work| WorkQueue.{ pending: List.append(queue.pending, work), in_flight: queue.in_flight }
+
+	completed = |queue| WorkQueue.{ pending: queue.pending, in_flight: if queue.in_flight == 0 0 else queue.in_flight - 1 }
+
+	take_ready = |queue| {
+		room = if queue.in_flight >= max_in_flight 0 else max_in_flight - queue.in_flight
+		split = List.split_at(queue.pending, U64.min(room, List.len(queue.pending)))
+		{
+			queue: WorkQueue.{ pending: split.others, in_flight: queue.in_flight + List.len(split.before) },
+			starting: split.before,
+		}
+	}
+}
+
+expect WorkQueue.{ pending: [ListDir("a"), ListDir("b"), ListDir("c")], in_flight: 4 }.take_ready()
+	== { queue: WorkQueue.{ pending: [ListDir("c")], in_flight: 6 }, starting: [ListDir("a"), ListDir("b")] }
+expect WorkQueue.new().take_ready() == { queue: WorkQueue.new(), starting: [] }
+expect WorkQueue.new().completed() == WorkQueue.new()
+
 program = { init!, update!, render! }
+
+demo_frames = 150.U64
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+live_plot_config : List(Str) -> App.Config
+live_plot_config = |args| {
+	base = App.default
+		.with_title("A tree, streamed - RocRay live plot")
+		.with_size({ width: 1240, height: 860 })
+		.with_min_size({ width: 980, height: 640 })
+		.with_resizable(Bool.True)
+		.with_frame_pacing(VSync)
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("live_plot.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
+## A small built-in tree for reproducible capture. Each file still enters as a
+## `FileRead` message and goes through the ordinary bounded parser.
+demo_paths : List(Str)
+demo_paths = [
+	"platform/App.roc",
+	"platform/Draw.roc",
+	"src/runtime.zig",
+	"src/capture.zig",
+	"examples/breakout.roc",
+	"examples/particles.roc",
+	"docs/guide.md",
+	"platform/Color.roc",
+	"src/render.zig",
+	"tests/host.c",
+	"examples/snake.roc",
+	"platform/Task.roc",
+	"scripts/gallery.py",
+	"docs/design.md",
+	"platform/Files.roc",
+	"src/input.zig",
+	"examples/plot.roc",
+	"README.md",
+]
+
+demo_bytes : U64 -> List(U8)
+demo_bytes = |file_index| {
+	lines = List.map_with_index(
+		List.repeat({}, 96),
+		|_unit, line_index| {
+			width = 12 + ((line_index * 29 + file_index * 17 + (line_index % 7) * 11) % 104)
+			Str.repeat(
+				if line_index % 5 == 0 {
+					"#"
+				} else {
+					"x"
+				},
+				width,
+			)
+		},
+	)
+	Str.to_utf8(Str.join_with(lines, "\n"))
+}
+
+demo_message : U64 -> Try(Msg, [None])
+demo_message = |cycle| {
+	interval = 6
+	if cycle % interval != 0 {
+		Err(None)
+	} else {
+		index = cycle / interval
+		match List.get(demo_paths, index) {
+			Ok(path) => Ok(FileRead(path, New, Ok(demo_bytes(index))))
+			Err(_) => Err(None)
+		}
+	}
+}
 
 # ---------------------------------------------------------------------------
 # The tree
@@ -502,13 +703,13 @@ enqueue_entries = |model, dir, entries|
 				Descend => {
 					..acc,
 					walk: { ..acc.walk, dirs_found: acc.walk.dirs_found + 1 },
-					pending: List.append(acc.pending, ListDir(path)),
+					queue: acc.queue.enqueue(ListDir(path)),
 				}
 
 				Read => {
 					..acc,
 					walk: { ..acc.walk, files_found: acc.walk.files_found + 1 },
-					pending: List.append(acc.pending, ReadFile(path, New)),
+					queue: acc.queue.enqueue(ReadFile(path, New)),
 				}
 
 				Ignore => { ..acc, walk: { ..acc.walk, files_skipped: acc.walk.files_skipped + 1 } }
@@ -565,44 +766,6 @@ describe_read_error = |reason|
 # Pacing
 # ---------------------------------------------------------------------------
 
-## How many listings and reads may be running as tasks at once.
-##
-## The host runs 32 tasks at once and queues anything past that, so this is the
-## app's own choice rather than a limit it has to respect. Six is chosen so the
-## pacing is real rather than theoretical: a walk of a few hundred files
-## genuinely backs up, and the backlog in the masthead genuinely rises and falls.
-max_in_flight : U64
-max_in_flight = 6
-
-## Take as much off the front of the backlog as the in-flight budget has room
-## for, oldest first.
-##
-## The whole of the pacing, and pure: `update!` starts a task for each item
-## `starting` names and stores `pending` back in the model.
-take_ready : List(Work), U64 -> { pending : List(Work), starting : List(Work) }
-take_ready = |pending, in_flight| {
-	room = if in_flight >= max_in_flight 0 else max_in_flight - in_flight
-	split = List.split_at(pending, U64.min(room, List.len(pending)))
-	{ pending: split.others, starting: split.before }
-}
-
-## Readiness is FIFO, capped by the budget, and it takes from the front.
-expect take_ready([ListDir("a"), ListDir("b"), ListDir("c")], 4)
-	== { pending: [ListDir("c")], starting: [ListDir("a"), ListDir("b")] }
-expect take_ready([ListDir("a")], max_in_flight) == { pending: [ListDir("a")], starting: [] }
-expect take_ready([], 0) == { pending: [], starting: [] }
-expect take_ready([ReadFile("x", New), ReadFile("y", Lane(3))], 0)
-	== { pending: [], starting: [ReadFile("x", New), ReadFile("y", Lane(3))] }
-
-## One completion frees exactly one slot, and the count floors at zero so an
-## extra completion cannot wrap it into a budget that never starts anything.
-completed : U64 -> U64
-completed = |in_flight| if in_flight == 0 0 else in_flight - 1
-
-expect completed(0) == 0
-expect completed(1) == 0
-expect completed(6) == 5
-
 ## How many delivered-but-unparsed files the app will hold before it stops
 ## asking for more.
 ##
@@ -611,8 +774,7 @@ expect completed(6) == 5
 ## arrived. The parser consumes one bounded window a frame whatever it is given,
 ## so without this the reads win the race and the model ends up holding the
 ## whole tree in memory to parse it a window at a time.
-arrival_limit : U64
-arrival_limit = 8
+arrival_limit = 8.U64
 
 # ---------------------------------------------------------------------------
 # What is kept
@@ -625,8 +787,7 @@ arrival_limit = 8
 ## every retained point is paid for on every frame whether or not it is on
 ## screen. Sixty thousand instances is about four megabytes, which is what this
 ## figure spends. Raising it costs frame time in exact proportion.
-point_budget : U64
-point_budget = 60_000
+point_budget = 60_000.U64
 
 ## Drop whole runs from the front until the budget is met.
 ##
@@ -684,8 +845,7 @@ grow_run = |runs, added|
 scan_budget : Budget
 scan_budget = { max_lines: 2_048, max_bytes: 65_536 }
 
-newline : U8
-newline = 10
+newline = 10.U8
 
 ## Scan the next bounded window of one file into plot points.
 ##
@@ -892,7 +1052,7 @@ scan_once = |model, scan| {
 		runs: grow_run(model.runs, List.len(dots)),
 		peak: retain_peak(model.peak, scan, result.best, lane_path(model, scan.lane)),
 		lanes: add_lines(add_columns(model.lanes, scan.lane, cols), scan.lane, List.len(dots)),
-		rates: { ..model.rates, lines: model.rates.lines + List.len(dots) },
+		rates: model.rates.add_lines(List.len(dots)),
 	}
 
 	if done {
@@ -911,8 +1071,7 @@ scan_once = |model, scan| {
 }
 
 ## How much of the longest line to keep for the HUD.
-peak_bytes : U64
-peak_bytes = 56
+peak_bytes = 56.U64
 
 ## Keep the longest line found so far, as bytes of its own.
 ##
@@ -974,8 +1133,7 @@ lane_path = |model, index|
 ## columns is one bucket per six columns: fine enough that the 60-to-90 column
 ## ridge most source files have is a ridge, coarse enough to stay smooth at
 ## forty pixels tall.
-hist_buckets : U64
-hist_buckets = 20
+hist_buckets = 20.U64
 
 bucket_of : U64 -> U64
 bucket_of = |columns| U64.min(columns * hist_buckets / 120, hist_buckets - 1)
@@ -1036,70 +1194,12 @@ total_lines = |lanes| List.fold(lanes, 0, |sum, lane| sum + lane.lines)
 
 ## How long one sample of the throughput graphs covers, and how many are kept.
 ## Eight seconds of history at ten samples a second.
-sample_period : F32
-sample_period = 0.1
+sample_period = 0.1.F32
 
-rate_window : U64
-rate_window = 80
-
-## Close the current sample if its period has elapsed.
-##
-## The counters accumulate into `bytes` and `lines` as work happens and are
-## flushed here, so a graph never shows a partial bucket as a dip and the
-## sampling costs one comparison a frame.
-sample_rates : Rates, F32 -> Rates
-sample_rates = |rates, delta| {
-	ticked = rates.clock + delta
-	if ticked < sample_period {
-		{ ..rates, clock: ticked }
-	} else {
-		kept =
-			if List.len(rates.samples) >= rate_window {
-				List.drop_first(rates.samples, 1)
-			} else {
-				rates.samples
-			}
-		{
-			samples: List.append(kept, { bytes: rates.bytes, lines: rates.lines }),
-			clock: ticked - sample_period,
-			bytes: 0,
-			lines: 0,
-		}
-	}
-}
-
-## The most any one sample reached, which is what both graphs are scaled to.
-peak_sample : List(Sample), (Sample -> U64) -> U64
-peak_sample = |samples, of| List.fold(samples, 1, |most, sample| U64.max(most, of(sample)))
-
-## The mean of the last second, which is what the headline figure shows.
-##
-## A single 100 ms bucket is the right resolution for the graph and the wrong
-## one for a number: reads arrive in bursts, so whichever bucket happens to be
-## last reads either far above the real rate or, more often, zero. The graph
-## keeps the spikes; the number beside it is what they average to.
-recent_mean : List(Sample), (Sample -> U64) -> F32
-recent_mean = |samples, of| {
-	len = List.len(samples)
-	span = U64.min(len, mean_window)
-	if span == 0 {
-		0
-	} else {
-		total = List.fold(List.sublist(samples, { start: len - span, len: span }), 0, |sum, sample| sum + of(sample))
-		U64.to_f32(total) / U64.to_f32(span)
-	}
-}
+rate_window = 80.U64
 
 ## How many samples the headline figure averages over: one second.
-mean_window : U64
-mean_window = 10
-
-latest_sample : List(Sample), (Sample -> U64) -> U64
-latest_sample = |samples, of|
-	match List.last(samples) {
-		Ok(sample) => of(sample)
-		Err(_) => 0
-	}
+mean_window = 10.U64
 
 ## A per-sample count as a per-second rate.
 per_second : F32 -> F32
@@ -1112,23 +1212,19 @@ per_second = |count| count / sample_period
 ## World units per line index on the shared scale, so a lane is as wide as its
 ## file is long. Twelve thousand lines is the full width of the plot; the
 ## longest file in this repository is about eleven thousand.
-line_scale : F32
-line_scale = 0.08
+line_scale = 0.08.F32
 
 ## Columns past this are clipped to the top of the lane rather than allowed to
 ## rescale it. A plot whose axes move every time a longer line arrives cannot
 ## be read while it is still filling in, which is the state this app is in for
 ## most of its interesting life.
-max_columns : F32
-max_columns = 120
+max_columns = 120.F32
 
 ## How much of a lane, in world units, the trace may use. The rest is the gap
 ## to the lane below.
-lane_span : F32
-lane_span = 32.4
+lane_span = 32.4.F32
 
-lane_height : F32
-lane_height = 40
+lane_height = 40.F32
 
 ## How far above its baseline a line of `columns` columns is drawn.
 ##
@@ -1167,16 +1263,14 @@ world_height = |lanes| F32.max(U64.to_f32(List.len(lanes)) * lane_height, lane_h
 ## sprite is radially symmetric, so its flip is its own reflection and the
 ## source rectangle can be the plain one -- which is what lets `plot_dot` stay a
 ## pure function that no test has to build a framebuffer to call.
-sprite_size : F32
-sprite_size = 64
+sprite_size = 64.F32
 
 dot_source : Math.Rect
 dot_source = Math.rect(0, 0, sprite_size, sprite_size)
 
 ## Size of one point at low zoom, in world units. The sprite is mostly halo, so
 ## the solid core of this is about a quarter of it.
-dot_size : F32
-dot_size = 5.6
+dot_size = 5.6.F32
 
 ## Points are sized in world units, so a magnified view magnifies them. The fix
 ## is to shrink them as the view grows, and the catch is that doing it from the
@@ -1184,17 +1278,14 @@ dot_size = 5.6
 ##
 ## So the zoom is quantised first. Each step is a factor of `step_ratio`, and
 ## only crossing a step boundary rewrites anything.
-step_ratio : F32
-step_ratio = 1.5
+step_ratio = 1.5.F32
 
-max_dot_step : I32
-max_dot_step = 9
+max_dot_step = 9.I32
 
 ## The zoom the first step is taken at. Below it a point is drawn at `dot_size`
 ## and simply gets smaller with the view, which is what should happen when the
 ## whole figure is being looked at from further away.
-step_base : F32
-step_base = 1.2
+step_base = 1.2.F32
 
 dot_step_of : F32 -> I32
 dot_step_of = |zoom| steps_above(zoom, step_base, 0)
@@ -1224,17 +1315,13 @@ current_dot_size = |model| dot_size_for(model.dot_step)
 ## How much of the window the figure's furniture keeps for itself: a masthead
 ## above, a key below, and a gutter on the left carrying one row per visible
 ## file.
-hud_top : F32
-hud_top = 200
+hud_top = 200.F32
 
-hud_bottom : F32
-hud_bottom = 84
+hud_bottom = 84.F32
 
-hud_left : F32
-hud_left = 360
+hud_left = 360.F32
 
-margin : F32
-margin = 30
+margin = 30.F32
 
 ## The part of the window the plot may draw in. `render!` scissors to this, so
 ## a dragged plot cannot scribble over the furniture.
@@ -1242,11 +1329,9 @@ plot_area : Math.Vec2 -> Math.Rect
 plot_area = |screen|
 	Math.rect(hud_left, hud_top, F32.max(screen.x - hud_left - margin, 1), F32.max(screen.y - hud_top - hud_bottom, 1))
 
-min_zoom : F32
-min_zoom = 0.04
+min_zoom = 0.04.F32
 
-max_zoom : F32
-max_zoom = 24
+max_zoom = 24.F32
 
 # ---------------------------------------------------------------------------
 # Layout of the batch
@@ -1301,8 +1386,7 @@ normalised_scale = |span|
 ## Source files average a little under forty bytes a line. Erring high keeps an
 ## in-progress trace inside its lane, so the correction when the true count
 ## arrives pulls the trace out rather than snapping it back.
-bytes_per_line : U64
-bytes_per_line = 42
+bytes_per_line = 42.U64
 
 estimated_lines : U64 -> U64
 estimated_lines = |bytes| U64.max(bytes / bytes_per_line, 1)
@@ -1377,8 +1461,7 @@ visible_height = |area, zoom| area.height / zoom
 ## edge would pin the lane being parsed to the very bottom pixel of the plot --
 ## which is the one place a reader cannot watch it, because the trace grows into
 ## an edge rather than into space.
-tail_room : F32
-tail_room = 0.15
+tail_room = 0.15.F32
 
 ## Keep a scroll position inside the strip, plus that room at the end.
 clamp_scroll : F32, List(Lane), Math.Rect, F32 -> F32
@@ -1429,8 +1512,7 @@ pan = |camera, delta| camera.with_target(camera.target().sub(delta.scale(1 / cam
 
 ## Scroll by a fixed number of screen pixels a notch, whatever the zoom, so the
 ## wheel moves the page rather than the world.
-scroll_pixels : F32
-scroll_pixels = 110
+scroll_pixels = 110.F32
 
 scroll_by : Camera.Camera2D, F32 -> Camera.Camera2D
 scroll_by = |camera, notches|
@@ -1480,12 +1562,10 @@ lane_index_at = |y|
 	}
 
 ## How long the sweep takes to cross the plot, in seconds.
-sweep_period : F32
-sweep_period = 7
+sweep_period = 7.F32
 
 ## How long the opening move takes, in seconds.
-entrance_seconds : F32
-entrance_seconds = 1.1
+entrance_seconds = 1.1.F32
 
 ## Cubic ease-out: fast at the start, settling rather than stopping.
 ease_out : F32 -> F32
@@ -1506,14 +1586,9 @@ other_mode = |mode|
 # ---------------------------------------------------------------------------
 
 init! : App.Init(Model, _)
-init! = App.init(
-	App.default
-		.with_title("A tree, streamed - RocRay live plot")
-		.with_size({ width: 1240, height: 860 })
-		.with_min_size({ width: 980, height: 640 })
-		.with_resizable(Bool.True)
-		.with_frame_pacing(VSync),
-	|_startup| {
+init! = App.init_for_args(
+	live_plot_config,
+	|startup| {
 		# Two sizes of the same face rather than one scaled about. A glyph atlas
 		# is rasterised at the size it is loaded at, so a masthead drawn from a
 		# 15-pixel atlas is soft and a table label drawn from a 34-pixel one is
@@ -1539,9 +1614,9 @@ init! = App.init(
 				.prepare!()?
 
 		Ok({
+			demo: List.contains(App.args!(startup), record_demo_flag),
 			glow: glow,
-			pending: [],
-			in_flight: 0,
+			queue: WorkQueue.new(),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
 			arrivals: [],
 			parsing: Idle,
@@ -1550,7 +1625,7 @@ init! = App.init(
 			runs: [],
 			refetching: Nothing,
 			peak: { path: "", columns: 0, text: "" },
-			rates: { samples: [], clock: 0, bytes: 0, lines: 0 },
+			rates: Rates.new(),
 			camera: Camera.default,
 			following: Bool.True,
 			# The configured size, replaced by the sampled one on the first
@@ -1581,15 +1656,27 @@ update! = |model, program_input| {
 	# 1. Fold this cycle's completions in. Each one ends a task this update
 	#    started, so each one frees a slot -- and a listing may enqueue a great
 	#    deal more work while it is at it.
-	settled_model = List.fold(program_input.messages, model, receive)
+	received = List.fold(program_input.messages, model, receive)
+	settled_model =
+		if model.demo {
+			match demo_message(program_input.time.cycle_count) {
+				Ok(message) => {
+					with_file = { ..received, walk: { ..received.walk, files_found: received.walk.files_found + 1 } }
+					receive(with_file, message)
+				}
+				Err(_) => received
+			}
+		} else {
+			received
+		}
 
 	# 2. Ask for the root. Everything else in the walk is discovered from it.
 	primed =
-		if program_input.time.cycle_count == 0 {
+		if !model.demo and program_input.time.cycle_count == 0 {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
-				pending: List.append(settled_model.pending, ListDir(walk_root)),
+				queue: settled_model.queue.enqueue(ListDir(walk_root)),
 			}
 		} else {
 			settled_model
@@ -1606,7 +1693,11 @@ update! = |model, program_input| {
 
 	# 5. Ask for a file back if the view has scrolled onto a lane whose points
 	#    were dropped. At most one of these is outstanding.
-	refetched = request_refetch(viewed)
+	refetched = if model.demo {
+		viewed
+	} else {
+		request_refetch(viewed)
+	}
 
 	# 6. Start whatever fits -- unless the parser is already behind. The
 	#    in-flight budget bounds how many reads are *running*; this bounds how
@@ -1615,20 +1706,32 @@ update! = |model, program_input| {
 	#    a whole tree of bytes while the parser works through it one window at
 	#    a time.
 	ready =
-		if List.len(refetched.arrivals) >= arrival_limit {
-			{ pending: refetched.pending, starting: [] }
+		if model.demo or List.len(refetched.arrivals) >= arrival_limit {
+			{ queue: refetched.queue, starting: [] }
 		} else {
-			take_ready(refetched.pending, refetched.in_flight)
+			refetched.queue.take_ready()
 		}
 
 	for work in ready.starting {
 		start_work!(program_input, work)
 	}
 
-	if program_input.devices.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..refetched, pending: ready.pending, in_flight: refetched.in_flight + List.len(ready.starting) })
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if program_input.devices.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..refetched, queue: ready.queue })
 	}
 }
 
@@ -1640,7 +1743,7 @@ receive = |model, message|
 			enqueue_entries(
 				{
 					..model,
-					in_flight: completed(model.in_flight),
+					queue: model.queue.completed(),
 					walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1 },
 				},
 				dir,
@@ -1653,35 +1756,33 @@ receive = |model, message|
 		# it is here because the error union says it can be.
 		Listed(dir, Err(Busy)) => {
 			..model,
-			in_flight: completed(model.in_flight),
-			pending: List.append(model.pending, ListDir(dir)),
+			queue: model.queue.completed().enqueue(ListDir(dir)),
 		}
 
 		Listed(_dir, Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1, dirs_failed: model.walk.dirs_failed + 1 },
 		}
 
 		FileRead(path, slot, Ok(bytes)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			# The bytes go straight into the model. There is no copy here and
 			# no host handle to hold: the list *is* the ownership.
 			arrivals: List.append(model.arrivals, { path: path, bytes: bytes, replaces: slot }),
 			walk: { ..model.walk, bytes_read: model.walk.bytes_read + List.len(bytes) },
-			rates: { ..model.rates, bytes: model.rates.bytes + List.len(bytes) },
+			rates: model.rates.add_bytes(List.len(bytes)),
 		}
 
 		FileRead(path, slot, Err(Busy)) => {
 			..model,
-			in_flight: completed(model.in_flight),
-			pending: List.append(model.pending, ReadFile(path, slot)),
+			queue: model.queue.completed().enqueue(ReadFile(path, slot)),
 		}
 
 		FileRead(_path, New, Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			walk: { ..model.walk, files_skipped: model.walk.files_skipped + 1 },
 		}
 
@@ -1689,7 +1790,7 @@ receive = |model, message|
 		# without points -- and clears the slot so another can be asked for.
 		FileRead(_path, Lane(_index), Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			refetching: Nothing,
 		}
 	}
@@ -1768,7 +1869,7 @@ look = |model, program_input| {
 			model.fps
 		},
 		x_mode: mode,
-		rates: sample_rates(model.rates, delta),
+		rates: model.rates.sample(delta),
 	}
 
 	# The two things that move points rather than the view. Both are rare, and
@@ -1802,7 +1903,7 @@ request_refetch = |model|
 					Ok(index) => {
 						..model,
 						refetching: Fetching(index),
-						pending: List.append(model.pending, ReadFile(lane_path(model, index), Lane(index))),
+						queue: model.queue.enqueue(ReadFile(lane_path(model, index), Lane(index))),
 					}
 				}
 			}
@@ -2131,8 +2232,7 @@ draw_points! = |frame, model|
 	)
 
 ## How many of the most recent points the trail covers.
-trail_length : U64
-trail_length = 900
+trail_length = 900.U64
 
 ## The scan frontier: where in its lane the parser has got to, this instant.
 draw_head! : Draw.Frame, Model => {}
@@ -2235,8 +2335,8 @@ draw_graphs! = |frame, model, fade| {
 	width = 208
 	gap = 18
 	right = model.screen.x - margin
-	reading = Str.concat(one_decimal(per_second(recent_mean(model.rates.samples, |sample| sample.bytes)) / 1_048_576), " MiB/s")
-	parsing = Str.concat(commas(rounded(per_second(recent_mean(model.rates.samples, |sample| sample.lines)))), " lines/s")
+	reading = Str.concat(one_decimal(per_second(model.rates.recent_mean(|sample| sample.bytes)) / 1_048_576), " MiB/s")
+	parsing = Str.concat(commas(rounded(per_second(model.rates.recent_mean(|sample| sample.lines)))), " lines/s")
 
 	draw_graph!(
 		frame,
@@ -2279,7 +2379,7 @@ draw_graph! = |frame, model, graph| {
 	plot_top = bounds.y + 30
 	plot_height = bounds.y + bounds.height - plot_top
 	measure = graph.of
-	peak = U64.to_f32(peak_sample(model.rates.samples, measure))
+	peak = U64.to_f32(model.rates.peak(measure))
 	step = bounds.width / U64.to_f32(rate_window)
 
 	text_left!(frame, model.small, { x: bounds.x, y: bounds.y }, graph.label, 9, 1.5, fade_to(ink_faint, graph.fade))
@@ -2340,8 +2440,8 @@ draw_figures! = |frame, model, fade| {
 		},
 		{
 			label: "QUEUED",
-			value: commas(List.len(model.pending)),
-			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.in_flight), Str.concat(" / ", U64.to_str(max_in_flight)))),
+			value: commas(List.len(model.queue.pending)),
+			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.queue.in_flight), Str.concat(" / ", U64.to_str(max_in_flight)))),
 		},
 		{
 			label: "FILE BYTES HELD",
@@ -2770,7 +2870,7 @@ rounded = |value|
 # `update!` cannot be called from an `expect`: a `Model` holds a render texture,
 # a font and prepared text, and those are host resources that only `init!` can
 # produce. So every decision `update!` makes lives in a function that does not
-# need one -- `classify`, `scan_chunk`, `trim`, `sample_rates`, `zoom_at` -- and
+# need one -- `classify`, `scan_chunk`, `trim`, `Rates.sample`, `zoom_at` -- and
 # those are what is tested here.
 
 # --- Walking ----------------------------------------------------------------
@@ -2862,35 +2962,6 @@ expect !(has_run([], 0))
 ## A cycle's points go on the end of the run being parsed, and nowhere else.
 expect grow_run(sample_runs, 5) == [{ lane: 0, count: 4 }, { lane: 1, count: 3 }, { lane: 2, count: 7 }]
 expect grow_run([], 5) == []
-
-# --- Throughput -------------------------------------------------------------
-
-## A sample is only closed once its period has elapsed, so a graph never shows a
-## partial bucket as a dip.
-expect {
-	part = sample_rates({ samples: [], clock: 0, bytes: 900, lines: 4 }, sample_period / 2)
-	List.is_empty(part.samples) and part.bytes == 900
-}
-
-expect {
-	closed = sample_rates({ samples: [], clock: 0, bytes: 900, lines: 4 }, sample_period)
-	closed.samples == [{ bytes: 900, lines: 4 }] and closed.bytes == 0 and closed.lines == 0
-}
-
-## The window is a window: it never grows past `rate_window`, so an app left
-## running overnight holds the same eighty samples it held after eight seconds.
-expect {
-	full = List.repeat({ bytes: 1, lines: 1 }, rate_window)
-	rolled = sample_rates({ samples: full, clock: 0, bytes: 7, lines: 7 }, sample_period)
-	List.len(rolled.samples) == rate_window and List.last(rolled.samples) == Ok({ bytes: 7, lines: 7 })
-}
-
-expect peak_sample([{ bytes: 3, lines: 1 }, { bytes: 9, lines: 2 }], |sample| sample.bytes) == 9
-
-## An empty history still has a peak, because it is a divisor.
-expect peak_sample([], |sample| sample.bytes) == 1
-expect latest_sample([], |sample| sample.lines) == 0
-expect latest_sample([{ bytes: 1, lines: 5 }], |sample| sample.lines) == 5
 
 ## Ten samples a second, so a sample is a tenth of the rate.
 expect per_second(120) == 1200

@@ -1,6 +1,13 @@
+## Resize the window and select the Display, Audio, or Controls panel. Press M
+## to suggest moving the window to another monitor and Escape to quit. Run with
+## `--record-demo` to save a repeatable gallery recording.
+##
+## This example shows one shared layout calculation for drawing and pointer hit
+## testing, resizable-window settings, and monitor information.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Devices
@@ -9,21 +16,40 @@ import rr.Mouse
 import rr.Text
 import rr.Window
 
-## A settings screen that rearranges itself as the window resizes.
-##
-## `layout_for` is a pure function of the surface size, and both callbacks call
-## it: `update!` to decide what the pointer is over, `render!` to draw. Nothing
-## about the geometry is stored, so the two can never disagree. The window is
-## resizable with a minimum size, and `with_exit_key(NoExitKey)` frees Escape
-## for the UI so the app owns shutdown itself.
-##
-## The Display panel is where the window looks at the display it is on. It
-## reads `Window.scale!` while drawing -- a factor the backend already holds,
-## so it costs nothing mid-frame -- to report the framebuffer resolution behind
-## the logical size, and `M` walks the window across the monitors
-## `Window.monitors!` found.
 Selection := [Display, AudioSettings, Controls].{
 	is_eq : _
+
+	previous : Selection -> Selection
+	previous = |selection|
+		match selection {
+			Display => Controls
+			AudioSettings => Display
+			Controls => AudioSettings
+		}
+
+	next : Selection -> Selection
+	next = |selection|
+		match selection {
+			Display => AudioSettings
+			AudioSettings => Controls
+			Controls => Display
+		}
+
+	from_keyboard : Selection, Devices.Snapshot -> Selection
+	from_keyboard = |selection, input|
+		if input.key_pressed(KeyUp) {
+			selection.previous()
+		} else if input.key_pressed(KeyDown) {
+			selection.next()
+		} else if input.key_pressed(Key1) {
+			Display
+		} else if input.key_pressed(Key2) {
+			AudioSettings
+		} else if input.key_pressed(Key3) {
+			Controls
+		} else {
+			selection
+		}
 }
 
 UiCopy : {
@@ -38,12 +64,10 @@ UiCopy : {
 	help : Text.Prepared,
 }
 
-## The window size is deliberately absent. `update!` needs it to decide what the
-## pointer is over, and reads it off the input; `render!` needs it to draw the
-## same layout, and asks the frame. Neither reason is a reason to remember it.
-## The monitor list is remembered because it is not free to ask for: it
-## allocates a name per display. It is re-read whenever the app acts on it, so
-## a display plugged in mid-run still shows up.
+## State retained between updates: prepared labels, the selected panel and
+## pointer position, animation time, monitor choices, and demo mode. Window
+## size is intentionally omitted because `update!` and `render!` each receive
+## the current size when they need it.
 Model : {
 	ui : Box(UiCopy),
 	selection : Selection,
@@ -51,24 +75,48 @@ Model : {
 	simulation_nanos : U64,
 	monitors : List(Window.Monitor),
 	monitor_choice : U64,
+	demo : Bool,
 }
 
 program = { init!, update!, render! }
 
+demo_frames = 150.U64
+
+record_demo_flag = "--record-demo"
+
+responsive_config : List(Str) -> App.Config
+responsive_config = |args| {
+	base =
+		App.default
+			.with_title("RocRay Responsive UI")
+			.with_size({ width: 960, height: 640 })
+			.with_resizable(Bool.True)
+			.with_min_size({ width: 480, height: 400 })
+			.with_exit_key(NoExitKey)
+			.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("responsive_ui.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
+
 init! : App.Init(Model, [ResourceLimit])
-init! = App.init(
-	App.default
-		.with_title("RocRay Responsive UI")
-		.with_size({ width: 960, height: 640 })
-		.with_resizable(Bool.True)
-	# The layout stops being usable below this, so keep the window manager
-	# out of that range. A minimum only binds on a resizable window.
-		.with_min_size({ width: 480, height: 400 })
-	# Escape is an ordinary key on a settings screen, so take it back from
-	# raylib and own shutdown ourselves.
-		.with_exit_key(NoExitKey)
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	responsive_config,
+	|startup| {
 		font = Draw.default_font!()
 		Ok({
 			ui: Box.box({
@@ -87,41 +135,10 @@ init! = App.init(
 			simulation_nanos: 0,
 			monitors: Window.monitors!(),
 			monitor_choice: 0,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
-
-previous_selection : Selection -> Selection
-previous_selection = |selection|
-	match selection {
-		Display => Controls
-		AudioSettings => Display
-		Controls => AudioSettings
-	}
-
-next_selection : Selection -> Selection
-next_selection = |selection|
-	match selection {
-		Display => AudioSettings
-		AudioSettings => Controls
-		Controls => Display
-	}
-
-keyboard_selection : Selection, Devices.Snapshot -> Selection
-keyboard_selection = |selection, input|
-	if input.key_pressed(KeyUp) {
-		previous_selection(selection)
-	} else if input.key_pressed(KeyDown) {
-		next_selection(selection)
-	} else if input.key_pressed(Key1) {
-		Display
-	} else if input.key_pressed(Key2) {
-		AudioSettings
-	} else if input.key_pressed(Key3) {
-		Controls
-	} else {
-		selection
-	}
 
 ## Walk the window on to the next display, re-reading the monitor list first so
 ## the move is decided from what is connected now rather than from what was
@@ -264,7 +281,7 @@ draw_preview! = |frame, bounds, selection, ui, screen, model| {
 ## `update!` gets the size from the input's window, because which arrangement to
 ## use is application logic. `render!` gets it from `frame.size!()`, because by
 ## then it is a property of what is being drawn to.
-Layout : {
+Layout := {
 	margin : F32,
 	screen_h : F32,
 	nav : Math.Rect,
@@ -272,30 +289,30 @@ Layout : {
 	display_bounds : Math.Rect,
 	audio_bounds : Math.Rect,
 	controls_bounds : Math.Rect,
-}
+}.{
+	from_size : { width : F32, height : F32 } -> Layout
+	from_size = |screen| {
+		screen_w = F32.max(screen.width, 360)
+		screen_h = F32.max(screen.height, 360)
+		compact = screen_w < 700
+		margin = if compact 16 else 30
+		content_top = 104
+		content_w = screen_w - margin * 2
+		content_h = F32.max(screen_h - content_top - 52, 220)
 
-layout_for : { width : F32, height : F32 } -> Layout
-layout_for = |screen| {
-	screen_w = F32.max(screen.width, 360)
-	screen_h = F32.max(screen.height, 360)
-	compact = screen_w < 700
-	margin = if compact 16 else 30
-	content_top = 104
-	content_w = screen_w - margin * 2
-	content_h = F32.max(screen_h - content_top - 52, 220)
+		nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
+		preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
+		item_w = nav.width - 24
 
-	nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
-	preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
-	item_w = nav.width - 24
-
-	{
-		margin,
-		screen_h,
-		nav,
-		preview,
-		display_bounds: Math.rect(nav.x + 12, nav.y + 14, item_w, 46),
-		audio_bounds: Math.rect(nav.x + 12, nav.y + 66, item_w, 46),
-		controls_bounds: Math.rect(nav.x + 12, nav.y + 118, item_w, 46),
+		{
+			margin,
+			screen_h,
+			nav,
+			preview,
+			display_bounds: Math.rect(nav.x + 12, nav.y + 14, item_w, 46),
+			audio_bounds: Math.rect(nav.x + 12, nav.y + 66, item_w, 46),
+			controls_bounds: Math.rect(nav.x + 12, nav.y + 118, item_w, 46),
+		}
 	}
 }
 
@@ -307,14 +324,20 @@ update! = |model, program_input| {
 
 	# Layout follows the window, pointing follows the mouse, and the preview
 	# animates on the clock -- three separate observations off one input.
-	view = layout_for({ width: I32.to_f32(program_input.window.size.width), height: I32.to_f32(program_input.window.size.height) })
+	view = Layout.from_size({ width: I32.to_f32(program_input.window.size.width), height: I32.to_f32(program_input.window.size.height) })
 	mouse = input.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
 	hover_controls = view.controls_bounds.contains(mouse)
 	Mouse.set_cursor!(if hover_display or hover_audio or hover_controls PointingHand else Arrow)
 
-	from_keyboard = keyboard_selection(model.selection, input)
+	cycle = program_input.time.cycle_count
+	selection_input =
+		if model.demo and cycle == 38 Devices.none.with_key_pressed(KeyDown)
+		else if model.demo and cycle == 78 Devices.none.with_key_pressed(KeyDown)
+		else if model.demo and cycle == 118 Devices.none.with_key_pressed(KeyUp)
+		else input
+	from_keyboard = model.selection.from_keyboard(selection_input)
 	selection = if input.mouse.button_pressed(Left) and hover_display {
 		Display
 	} else if input.mouse.button_pressed(Left) and hover_audio {
@@ -331,7 +354,13 @@ update! = |model, program_input| {
 
 	# With `with_exit_key(NoExitKey)` no key closes the window on its
 	# own, so the app decides. Escape is left free for the UI to use.
-	if input.key_pressed(KeyQ) {
+	if model.demo {
+		match program_input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(1))
+			_ => Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
+		}
+	} else if input.key_pressed(KeyQ) {
 		Err(Exit(0))
 	} else {
 		Ok({ ..model, selection, mouse, simulation_nanos: program_input.time.simulation_nanos, monitors: display.monitors, monitor_choice: display.choice })
@@ -345,7 +374,7 @@ render! = |model, frame| {
 	# visible here on the cycle it happens, without a copy in the model that
 	# could be a frame behind it.
 	screen = frame.size!()
-	view = layout_for(screen)
+	view = Layout.from_size(screen)
 	hover_display = view.display_bounds.contains(model.mouse)
 	hover_audio = view.audio_bounds.contains(model.mouse)
 	hover_controls = view.controls_bounds.contains(model.mouse)
@@ -372,20 +401,39 @@ render! = |model, frame| {
 }
 
 ## Selection wraps in both directions, so an arrow key never dead-ends.
-expect previous_selection(Display) == Controls
-expect next_selection(Controls) == Display
-expect keyboard_selection(Display, Devices.none.with_key_pressed(Key3)) == Controls
-expect keyboard_selection(Display, Devices.none) == Display
+expect {
+	selection : Selection
+	selection = Display
+	selection.previous() == Controls
+}
+
+expect {
+	selection : Selection
+	selection = Controls
+	selection.next() == Display
+}
+
+expect {
+	selection : Selection
+	selection = Display
+	selection.from_keyboard(Devices.none.with_key_pressed(Key3)) == Controls
+}
+
+expect {
+	selection : Selection
+	selection = Display
+	selection.from_keyboard(Devices.none) == Display
+}
 
 ## The wide layout puts the preview beside the nav; the narrow one stacks it
 ## below. This is the only thing the 700px breakpoint does.
 expect {
-	wide = layout_for({ width: 960, height: 640 })
+	wide = Layout.from_size({ width: 960, height: 640 })
 	wide.preview.x > wide.nav.x + wide.nav.width
 }
 
 expect {
-	narrow = layout_for({ width: 480, height: 640 })
+	narrow = Layout.from_size({ width: 480, height: 640 })
 	narrow.preview.y > narrow.nav.y + narrow.nav.height
 }
 
@@ -403,6 +451,6 @@ expect monitor_line([{ index: 0, name: "Headless", size: { width: 800, height: 6
 ## Every nav item stays inside the nav panel at either size, which is what
 ## makes hit-testing against the same layout `render!` draws safe.
 expect {
-	view = layout_for({ width: 360, height: 360 })
+	view = Layout.from_size({ width: 360, height: 360 })
 	view.display_bounds.x >= view.nav.x and view.controls_bounds.x + view.controls_bounds.width <= view.nav.x + view.nav.width
 }

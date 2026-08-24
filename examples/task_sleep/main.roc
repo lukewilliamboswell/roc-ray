@@ -1,3 +1,7 @@
+## Watch a comet keep moving while a 1.2-second Task waits; the app exits after
+## the task finishes, or press Escape to quit. This example introduces Tasks as
+## work that may wait without pausing drawing, and Messages as the values
+## completed tasks deliver to a later Input.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -7,20 +11,10 @@ import rr.Draw
 import rr.Stdout
 import rr.Text
 
-## A task that waits without stalling the frame, and printing that does not.
-##
-## On the first cycle `update!` spawns one task: an effectful closure that calls
-## `Task.sleep!(1200)` and then answers `Woke`. The host runs it on its own
-## coroutine stack; the sleep parks that stack, the frame loop keeps going, and
-## the closure's return value arrives on `Input.messages` ~72 cycles later at
-## 60 Hz. Meanwhile the comet keeps orbiting and the progress ring keeps
-## filling, which is the whole point: nothing in the frame loop is blocked.
-##
-## The printing is the contrast. `Stdout.line!` is a queued effect: it copies
-## into a host-owned queue and returns, so it belongs in `update!` alongside the
-## rest of the app's decisions rather than in a task of its own. Exiting in the
-## same `update!` that printed is safe, because the host drains what is queued
-## before the process ends. Waiting is what needs a task; writing does not.
+## State retained between updates: whether the Task is still waiting, the
+## current cycle and animation time, and prepared drawing resources. The Model
+## records the cycle reported by the Task's Message so the result can be shown
+## the next time `render!` draws.
 Model : {
 	state : State,
 	cycle : U64,
@@ -36,8 +30,7 @@ State : [Waiting, Woke({ arrived_on : U64 })]
 
 Msg : [Woke]
 
-sleep_millis : U64
-sleep_millis = 1200
+sleep_millis = 1200.U64
 
 program = { init!, update!, render! }
 

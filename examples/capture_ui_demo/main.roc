@@ -1,3 +1,7 @@
+## Records a scripted button, slider, and text-field demonstration to
+## `captures/ui_demo.gif`, then exits. This example shows how simulated mouse,
+## key, and text input can exercise normal UI code, and how to include a cursor
+## in a recording.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,27 +12,10 @@ import rr.Keys
 import rr.Mouse
 import rr.Text
 
-## Record a UI demo driven by a scripted pointer and keyboard.
-##
-## `Mouse.set_source!` and `Keys.set_source!` replace only what the host reports
-## on the input, so the widget code below is ordinary hover, hit-test and
-## text-entry logic reading `input.mouse`, `input.text_input` and
-## `input.key_pressed` -- it has no idea either device is scripted. That is the
-## point: the recording exercises the real input path instead of a parallel
-## fake one, so what you see in the GIF is what a real click or keystroke would
-## do.
-##
-## Keys and text are separate channels because they are separate things. A key
-## code says which key is held, and edges fall out of consecutive frames;
-## `Keys.set_text!` says what characters were entered, which on a real keyboard
-## depends on the layout and so cannot be derived from a key code. The field
-## below fills from the text channel and its backspace comes from the key
-## channel.
-##
-## The recording asks for `DrawCursor`, because the operating-system cursor is
-## not part of the framebuffer and would otherwise be missing from the file.
-##
-## Run it, then open `captures/ui_demo.gif`.
+## The Model is the UI state kept between updates: scripted and reported
+## pointer positions, widget values, typing progress, and prepared labels. The
+## app keeps these values so later input and drawing continue from the previous
+## frame.
 Model : {
 	frame : U64,
 	pointer : { x : F32, y : F32 },
@@ -61,12 +48,10 @@ Model : {
 program = { init!, update!, render! }
 
 ## Frames recorded before the host finalizes the file and the app exits.
-recorded_frames : U64
-recorded_frames = 240
+recorded_frames = 240.U64
 
 ## Highest click count the demo can reach, so its labels can be prepared once.
-max_clicks : U64
-max_clicks = 4
+max_clicks = 4.U64
 
 increment_button : { x : F32, y : F32, width : F32, height : F32 }
 increment_button = { x: 60, y: 150, width: 170, height: 56 }
@@ -85,18 +70,15 @@ field_text : List(Str)
 field_text = ["r", "o", "c", "-", "r", "a", "y", "!"]
 
 ## Frame the first character is entered on, and the gap between characters.
-first_type_frame : U64
-first_type_frame = 165
+first_type_frame = 165.U64
 
-type_every : U64
-type_every = 6
+type_every = 6.U64
 
 ## Frame the script holds backspace on, deleting the trailing `!`.
 ##
 ## One frame, so the field's `key_pressed` handling deletes exactly one
 ## character however long the recording runs at.
-backspace_frame : U64
-backspace_frame = 215
+backspace_frame = 215.U64
 
 ## Backspace lands after the last character and before the recording ends.
 expect backspace_frame > first_type_frame + (List.len(field_text) - 1) * type_every

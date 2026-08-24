@@ -1,9 +1,7 @@
-## Helpers for working with the monotonic clock.
+## Pure simulation and monotonic-time conversions.
 ##
-## These convert nanosecond durations and monotonic clock samples into seconds
-## (`F32`) for animation and simulation math. The platform samples a `Cycle`
-## once per host cycle and hands it over as `input.time`; everything else here
-## is arithmetic on those numbers.
+## The platform supplies one `Cycle` as `input.time` per host cycle. These
+## helpers convert its nanosecond values to seconds for simulation math.
 Time := [].{
 
 	## Timing samples attached to one host cycle.

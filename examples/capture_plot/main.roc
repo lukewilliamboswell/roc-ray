@@ -1,3 +1,7 @@
+## Renders an animated bar chart to `captures/plot.webm`, then exits. The
+## window stays hidden, but a display is still required; use `xvfb-run` on a
+## machine without one. This example shows how to configure recording, advance
+## animation by the same amount for every recorded frame, and track progress.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -6,26 +10,9 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## Render an animated bar chart to a file, with no runtime capture code.
-##
-## The recording is declared in the startup config, so the host arms it before
-## the first frame and finalizes it on exit. Because it asks for `FixedStep`
-## timing, `program_input.time.elapsed_seconds` is exactly 1/25s every frame no matter how
-## long the readback actually took -- so the animation in the file is smooth and
-## identical between runs, even though capturing stalls the GPU.
-##
-## `with_visible(Bool.False)` keeps the window off screen while still rendering
-## on the GPU, so this runs like a batch job: start it and collect the frames.
-## It still needs a display server, so wrap it in `xvfb-run` on a machine
-## without one. That is not the same as the host's `--host-headless` flag, which
-## swaps in a stub backend that draws nothing and therefore captures nothing.
-##
-## The progress bar is drawn from `input.capture`'s `Active({ frames, .. })`,
-## so the recording reports its own state rather than the app counting frames.
-##
-## Run it, then open `captures/plot.webm`. Swap `.with_format(Gif)` and a
-## `.gif` path if you want something to drop straight into a README --
-## GIF is more portable, WebM is far smaller and keeps full colour.
+## The Model keeps the animation time, completed-frame count, and prepared
+## labels between updates. Each Input passed to `update!` includes recording
+## progress, so the count reflects frames actually captured.
 Model : {
 	elapsed : F32,
 
@@ -38,12 +25,10 @@ Model : {
 
 program = { init!, update!, render! }
 
-bar_count : U64
-bar_count = 12
+bar_count = 12.U64
 
 ## Frames recorded before the host finalizes the files and the app exits.
-recorded_frames : U64
-recorded_frames = 75
+recorded_frames = 75.U64
 
 init! : App.Init(Model, [ResourceLimit])
 init! = App.init(

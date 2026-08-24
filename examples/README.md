@@ -3,9 +3,7 @@
 A zip of the examples pinned to this release is attached to every release;
 unzip and `roc examples/<name>/main.roc`.
 
-These examples are small applications first and API demonstrations second.
-Choose one that resembles what you want to build, copy its directory, and keep
-the model/update/render shape as the project grows.
+Choose the closest example to what you want to build and copy its directory.
 
 Build from the repository root so asset paths resolve consistently:
 
@@ -14,15 +12,14 @@ roc build examples/snake/main.roc --output snake
 ./snake
 ```
 
-## A good first hour
+## Start here
 
 1. Start with [Hello World](hello_world/main.roc) to see the complete app loop
    without asset loading or game rules.
 2. Change [Pong](pong/main.roc) to learn time-based movement, collision, input,
    scoring, and generated sound in one approachable file.
-3. Read [Task Sleep](task_sleep/main.roc) once you need anything that waits: a
-   file, a network reply, a screenshot. It is the whole task model in eighty
-   lines.
+3. Read [Task Sleep](task_sleep/main.roc) before adding files, networking, or
+   any other work that waits.
 4. Pick a direction: [Pixel Workshop](generated_assets/main.roc) for an
    interactive tool, [Responsive Settings](responsive_ui/main.roc) for an app
    interface, or [Snake](snake/main.roc) for a state-driven game.
@@ -30,11 +27,8 @@ roc build examples/snake/main.roc --output snake
 
 ## Work that waits
 
-`update!` calls host effects directly, and most of them answer at once. Work
-that has to wait goes in `Task.spawn!(input, || ...)` instead: the closure runs
-on its own coroutine while the frame loop keeps drawing, and its return value
-arrives as a `Msg` on a later `input.messages`. These six are that idea, from
-the smallest version to the largest.
+Use these when copying the `Task.spawn!(input, || ...)` pattern. A task's return
+value arrives as one `Msg` on a later `input.messages`.
 
 | Example | What it is |
 | --- | --- |
@@ -67,14 +61,11 @@ the smallest version to the largest.
 | [Top Down](top_down/main.roc) | An authored TMX level, sprites, collision, music, sound effects, camera movement, and a multi-state game loop |
 | [Cave Climb](cave_climb/main.roc) | Platforming physics, a mirror-bouncing laser and a spring grapple, tilemaps, camera tracking, and audio split across modules |
 
-These are useful references once a project has outgrown its first feature. They
-show how features fit together, but they are intentionally not the shortest
-introduction to any individual API.
+Use these to see several systems composed in one application.
 
 ## Focused recipes
 
-The recipes stay narrow so their unusual API is easy to find. They are not the
-recommended starting point for a whole application.
+Use these as focused references, not starter projects.
 
 | Example | Reach for it when you need... |
 | --- | --- |
@@ -85,25 +76,20 @@ recommended starting point for a whole application.
 | [Capture Plot](capture_plot/main.roc) | A deterministic hidden-window WebM batch render |
 | [Capture UI Demo](capture_ui_demo/main.roc) | Reproducible UI recordings driven through the real pointer and keyboard path |
 
-## What these examples consider good practice
+## Conventions used here
 
 - Keep application state in `Model`; fold `App.Input` into it in pure helpers that `update!` calls.
 - Load and prepare long-lived resources once in `init!`, then retain them in the
   model instead of recreating them each frame.
-- Derive layout and view-only values with pure helpers rather than storing
-  duplicate state that can drift out of sync. Ask `frame.size!()` for the
-  surface being drawn to instead of copying `input.window.size` into the model:
-  it is current, and inside `with_render_texture!` it is the target's size
-  rather than the window's.
+- Derive layout and view-only values with pure helpers. Use `frame.size!()` for
+  the active surface instead of copying `input.window.size` into the model.
 - Call host effects directly from `update!` for work that answers immediately;
   use `Task.spawn!(input, || ...)` for work that waits, and fold its return
   value in when it arrives as a message on a later `input.messages`.
-- Give each kind of deferred work its own `Msg` variant, which is identity
-  enough. Only work that can be in flight against itself -- HTTP Fetch's `R`
-  key -- needs to carry an id as well.
-- Keep game or tool rules separate from rendering where that makes them easy to
-  test, as Breakout does. `roc test` cannot call `update!`, so whatever you want
-  covered has to live in a function that does not need a host.
+- Give each kind of deferred work its own `Msg` variant. Add an id only when
+  multiple instances of the same work may be in flight.
+- Keep rules in pure functions so `roc test` can exercise them without calling
+  effectful `update!`.
 - Treat capture, scripted input, and headless execution as useful app modes,
   not as branches inside ordinary interaction logic.
 

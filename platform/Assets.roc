@@ -1,7 +1,6 @@
-## Host-owned textures and the store they are loaded from.
+## Load, create, and update host-owned textures.
 ##
-## Open a store, load textures from it, keep them in the model, and draw them.
-## All three steps happen in `init!` in most apps:
+## Open a store and load long-lived textures during `init!`:
 ##
 ## ```roc
 ## init! = App.init(
@@ -18,10 +17,8 @@
 ## }
 ## ```
 ##
-## A store is an explicitly located directory the host holds a handle to, so
-## every relative asset path means the same thing however the process was
-## launched. The host never calls `chdir`, and a path that would escape the
-## store is refused rather than rewritten.
+## A store anchors relative asset paths to an explicit directory. Paths that
+## escape the store are refused rather than rewritten.
 ##
 ## Textures are the shared texture type from the companion `roc-ray-types`
 ## package, re-exported here as `Assets.Texture`. Releasing the final reference
@@ -37,17 +34,8 @@
 ## `update!`, and tasks, and refused in `render!`, where a decode or an upload
 ## would land in the middle of drawing a frame.
 ##
-## That split is what a texture loaded after startup goes through: read the
-## file on a task with `Files.read_bytes!`, return the bytes as the task's
-## message, and call `texture_from_bytes!` from `update!` when the message
-## arrives. Calling `load_texture!` inside the task itself does the same in one
-## step, which is what a hot reload wants -- poll `Files.metadata!` on a task,
-## and load again when the modification time moves.
-##
 ## `ResourceLimit` on any of them means the host's fixed texture table is full.
-## It is a bound on how many textures exist at once, not on how fast they are
-## made, so it is answered rather than retried: release a texture the app no
-## longer draws, or load fewer.
+## Release textures the app no longer needs before loading more.
 import Color
 import AssetsHost
 import rrt.Texture as RrtTexture

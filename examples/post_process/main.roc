@@ -1,3 +1,8 @@
+## Draw a scene to a texture, then apply a shader that changes the finished
+## image before it appears on screen.
+##
+## Press Escape to quit. This example shows drawing in stages, combining light
+## additively, and changing a shader setting before using it.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -6,19 +11,9 @@ import rr.Color
 import rr.Draw
 import rr.Math
 
-## Render a scene to an offscreen texture, then draw that texture through a
-## fragment shader.
-##
-## Both are scopes: `with_render_texture!` redirects the draws inside it, and
-## `with_shader!` applies to the draws inside that. `size!` answers for whatever
-## surface the scope is drawing to, so the same call gives the target's size
-## inside and the window's size outside. The shader's uniform location is
-## resolved once in `init!` and written in `render!`, immediately before the
-## draw it applies to.
-##
-## The offscreen scene is three additively blended lobes orbiting a common
-## centre; the shader then warps and tints the whole thing as one image. ESC
-## quits.
+## State kept between updates: the offscreen drawing target, shader, and its
+## prepared time setting, plus the elapsed time that animates the scene. These
+## resources are created once and reused for every frame.
 Model : {
 	target : Draw.RenderTexture,
 	shader : Draw.Shader,

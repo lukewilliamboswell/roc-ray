@@ -7,12 +7,37 @@ import rr.Sprite
 import rr.Tilemap
 
 Cave := [].{
+	Space := [].{
+		map_to_world : Math.Vec2 -> Physics.Point
+		map_to_world = |point| Physics.point(point.x, 0 - point.y, 0)
+
+		world_to_map : Physics.Point -> Math.Vec2
+		world_to_map = |point| {
+			coords = Physics.coords(point)
+			{ x: coords.x, y: 0 - coords.y }
+		}
+	}
 
 	GameState := [Playing, Won, GameOver]
 
-	LaserSegment : { start : Physics.Point, end : Physics.Point }
+	LaserSegment := { start : Physics.Point, end : Physics.Point }.{
+		distance_to : LaserSegment, Physics.Point -> F32
+		distance_to = |segment, point| {
+			along = Physics.sub(segment.end, segment.start)
+			length_squared = Physics.length_squared(along)
+			if length_squared == 0 {
+				Physics.distance(point, segment.start)
+			} else {
+				amount = Math.clamp(Physics.dot(Physics.sub(point, segment.start), along) / length_squared, 0, 1)
+				Physics.distance(point, Physics.add(segment.start, Physics.scale(along, amount)))
+			}
+		}
+	}
 
-	LaserState : { active : Bool, segments : List(LaserSegment) }
+	LaserState := { active : Bool, segments : List(LaserSegment) }.{
+		inactive : LaserState
+		inactive = { active: Bool.False, segments: [] }
+	}
 
 	LaserTrace : {
 		segments : List(LaserSegment),
@@ -30,12 +55,27 @@ Cave := [].{
 
 	HookState := [HookIdle, HookFlying(HookProjectile), HookLatched(HookLatch)]
 
-	Mirror : {
+	Mirror := {
 		id : U64,
 		pos : Physics.Point,
 		length : F32,
 		base_turn : F32,
 		spin : F32,
+	}.{
+		axis : Mirror, F32 -> Physics.Vector
+		axis = |mirror, phase| unit_from_turn(mirror.base_turn + phase * mirror.spin)
+
+		normal : Mirror, F32 -> Physics.Vector
+		normal = |mirror, phase| {
+			components = Physics.components(mirror.axis(phase))
+			Physics.normalize(Physics.vector(0 - components.y, components.x, 0))
+		}
+
+		segment : Mirror, F32 -> LaserSegment
+		segment = |mirror, phase| {
+			offset = Physics.scale(mirror.axis(phase), mirror.length * 0.5)
+			{ start: Physics.add(mirror.pos, Physics.scale(offset, -1)), end: Physics.add(mirror.pos, offset) }
+		}
 	}
 
 	MirrorHit : { point : Physics.Point, normal : Physics.Vector }
@@ -49,11 +89,20 @@ Cave := [].{
 		hook_pressed : Bool,
 	}
 
-	Gem : { id : U64, pos : Physics.Point, taken : Bool }
+	Gem := { id : U64, pos : Physics.Point, taken : Bool }.{
+		is_available_at : Gem, Physics.Point, F32 -> Bool
+		is_available_at = |gem, point, radius| !(gem.taken) and Physics.distance(gem.pos, point) <= radius
+	}
 
-	Danger : { pos : Physics.Point, radius : F32 }
+	Danger := { pos : Physics.Point, radius : F32 }.{
+		touches : Danger, Physics.Point, F32 -> Bool
+		touches = |danger, point, point_radius| Physics.distance(danger.pos, point) <= danger.radius + point_radius
+	}
 
-	Enemy : { id : U64, pos : Physics.Point, radius : F32, alive : Bool }
+	Enemy := { id : U64, pos : Physics.Point, radius : F32, alive : Bool }.{
+		is_hit_at : Enemy, Physics.Point -> Bool
+		is_hit_at = |enemy, point| enemy.alive and Physics.distance(enemy.pos, point) <= enemy.radius
+	}
 
 	Level : {
 		tilemap : Tilemap,
@@ -67,13 +116,23 @@ Cave := [].{
 		bounds : Math.Rect,
 	}
 
-	Player : {
+	Player := {
 		pos : Physics.Point,
 		velocity : Physics.Vector,
 		grounded : Bool,
 		facing : F32,
 		animation : Sprite.Animation,
 		invuln : F32,
+	}.{
+		new : Physics.Point -> Player
+		new = |pos| {
+			pos,
+			velocity: Physics.zero,
+			grounded: Bool.False,
+			facing: 1,
+			animation: Sprite.animation({ frame_count: 2, fps: 8 }),
+			invuln: 0,
+		}
 	}
 
 	World : {
@@ -100,4 +159,38 @@ Cave := [].{
 		world : World,
 	}
 
+}
+
+wrap_turn : F32 -> F32
+wrap_turn = |value| if value >= 1 wrap_turn(value - 1) else if value < 0 wrap_turn(value + 1) else value
+
+quarter_wave : F32 -> F32
+quarter_wave = |amount| {
+	t = Math.clamp01(amount)
+	t * (2 - t)
+}
+
+sin_turn : F32 -> F32
+sin_turn = |turn| {
+	t = wrap_turn(turn)
+	if t < 0.25 {
+		quarter_wave(t * 4)
+	} else if t < 0.5 {
+		quarter_wave((0.5 - t) * 4)
+	} else if t < 0.75 {
+		0 - quarter_wave((t - 0.5) * 4)
+	} else {
+		0 - quarter_wave((1 - t) * 4)
+	}
+}
+
+unit_from_turn : F32 -> Physics.Vector
+unit_from_turn = |turn| Physics.normalize(Physics.vector(sin_turn(turn + 0.25), sin_turn(turn), 0))
+
+expect wrap_turn(1.25) == 0.25
+expect Physics.components(unit_from_turn(0)) == { x: 1, y: 0, z: 0 }
+expect {
+	segment : Cave.LaserSegment
+	segment = { start: Physics.point_xy(0, 0), end: Physics.point_xy(10, 0) }
+	segment.distance_to(Physics.point_xy(5, 3)) == 3
 }

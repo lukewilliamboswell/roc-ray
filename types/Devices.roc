@@ -1,14 +1,10 @@
 ## One cycle of sampled keyboard, text, mouse and gamepad state.
 ##
-## A `Snapshot` is an observation: it says what the input devices looked like
-## when the host sampled them at the start of a cycle, and nothing else. It
-## carries no authority to change anything, so it is safe to hold in a model and
-## safe to hand to a pure function. `App.Input` carries one as `input.devices`.
+## `App.Input` carries the host's start-of-cycle observation as
+## `input.devices`. A snapshot is pure data and grants no device authority.
 ##
-## A test writes an observation of its own. `Devices.none` is a neutral snapshot
-## with the host's packed list lengths, and the `with_key_*` and `with_mouse_*`
-## receivers state one device's state at a time, so a test can say exactly the
-## thing it is about and nothing else.
+## Tests can start from `Devices.none` and set only the relevant state with the
+## `with_key_*` and `with_mouse_*` receivers.
 ##
 ## ```roc
 ## Devices.none.with_key_pressed(KeySpace)

@@ -47,6 +47,7 @@ class PackageExamplesTests(unittest.TestCase):
         """A miniature repository with two examples, an asset, and junk to exclude."""
         examples = root / "examples"
         (examples / "pong" / "assets").mkdir(parents=True)
+        (examples / "gallery").mkdir(parents=True)
         (examples / "snake").mkdir(parents=True)
         (examples / "README.md").write_text("# Example gallery\n", encoding="utf-8")
         (examples / "pong" / "main.roc").write_text(
@@ -57,6 +58,7 @@ class PackageExamplesTests(unittest.TestCase):
             APP_HEADER.format(ref=BUNDLE_URL), encoding="utf-8"
         )
         (examples / "snake" / "Board.roc").write_text("module []\n", encoding="utf-8")
+        (examples / "gallery" / "pong.webp").write_bytes(b"RIFF gallery")
 
         git(root, "init", "-q")
         git(root, "config", "user.email", "test@example.com")
@@ -126,6 +128,7 @@ class PackageExamplesTests(unittest.TestCase):
             self.assertNotIn("../../platform/main.roc", pong)
             self.assertNotIn(BUNDLE_URL, snake)
             self.assertEqual(b"\x89PNG ball", ball)
+            self.assertNotIn("examples/gallery/pong.webp", names)
             self.assertEqual({(1980, 1, 1, 0, 0, 0)}, stamps)
 
     def test_default_output_name_uses_the_tag(self) -> None:

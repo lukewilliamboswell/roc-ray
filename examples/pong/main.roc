@@ -1,3 +1,8 @@
+## Play Pong against a computer-controlled right paddle.
+##
+## Use W and S to move, Space to serve or start a new match, and Escape to quit.
+## This example shows frame-rate-independent movement, separating game rules
+## from sound effects, and seeded random serves that can be reproduced.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
@@ -9,21 +14,11 @@ import rr.App
 import rr.Math
 import rr.Text
 
-## Two-paddle Pong: W and S drive the left paddle, an AI tracks the ball on the
-## right, first to five wins and SPACE serves a new match.
-##
-## The presentation is a neon arcade cabinet: a gradient field with a dashed
-## centre line, paddles and ball lit by additive glow, a fading ball trail, and
-## a screen flash that pulses on every hit and every point. All of it is derived
-## from the model -- the trail is a short list of past ball positions and the
-## flash is one decaying number -- so the rules below stay the whole game.
-##
-## Everything moves in pixels per second scaled by the cycle's elapsed seconds,
-## so the game plays the same at any frame rate. The step is pure and returns
-## the sounds the frame made; `update!` plays them and checks for Escape. Serve
-## angles are drawn from a `Random.State` held in the model, so a run replays
-## exactly from its seed.
-Model : {
+## State kept between updates: ball and paddle movement, scores, visual effects,
+## prepared text and sounds, and the random generator used for serves. Keeping
+## both game state and short-lived presentation details here lets `render!`
+## draw the latest result without changing the game.
+Model := {
 	ball_x : F32,
 	ball_y : F32,
 	ball_vx : F32,
@@ -57,69 +52,55 @@ Model : {
 	## Simulation randomness lives in the model, so a serve is drawn on the
 	## frame that needs it and a run replays exactly from its seed.
 	rng : Random.State,
+}.{
+
+	## The match ends as soon as either score reaches the winning score.
+	is_over : Model -> Bool
+	is_over = |model| model.left_score >= win_score or model.right_score >= win_score
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
-paddle_w : F32
-paddle_w = 15
+paddle_w = 15.F32
 
-paddle_h : F32
-paddle_h = 100
+paddle_h = 100.F32
 
-paddle_margin : F32
-paddle_margin = 30
+paddle_margin = 30.F32
 
-ball_r : F32
-ball_r = 10
+ball_r = 10.F32
 
-paddle_speed : F32
-paddle_speed = 360
+paddle_speed = 360.F32
 
-ai_speed : F32
-ai_speed = 270
+ai_speed = 270.F32
 
-init_vx : F32
-init_vx = 260
+init_vx = 260.F32
 
 # vy gained per pixel of offset between ball and paddle centre on a hit
-bounce_factor : F32
-bounce_factor = 6
+bounce_factor = 6.F32
 
 # First player to this many points wins.
-win_score : U64
-win_score = 5
+win_score = 5.U64
 
 # The ball's comet: how many past positions to keep, and how far apart to
 # sample them.
-trail_length : U64
-trail_length = 14
+trail_length = 14.U64
 
-trail_spacing : F32
-trail_spacing = 11
+trail_spacing = 11.F32
 
 # --- Palette: one dark field, two rival neons, one warm ball ---
-field_top : Color.Rgba
 field_top = Color.from_hex_rgb(0x141a35)
 
-field_bottom : Color.Rgba
 field_bottom = Color.from_hex_rgb(0x05060f)
 
-left_neon : Color.Rgba
 left_neon = Color.from_hex_rgb(0x38e8ff)
 
-right_neon : Color.Rgba
 right_neon = Color.from_hex_rgb(0xff4fa3)
 
-ball_neon : Color.Rgba
 ball_neon = Color.from_hex_rgb(0xffe7a3)
 
-hint_color : Color.Rgba
 hint_color = Color.from_hex_rgb(0x6d7aa8)
 
 # A random vertical serve speed in px/second, so each serve leaves at a
@@ -232,11 +213,6 @@ init! = App.init(
 	},
 )
 
-## Whether the match is over is a function of the scores, so both `update!` and
-## `render!` ask rather than storing a flag that could drift out of step.
-game_over : Model -> Bool
-game_over = |model| model.left_score >= win_score or model.right_score >= win_score
-
 ## A frame's outcome: the model it produced, and the sounds it wants heard.
 ##
 ## Both steppers return this shape even when one of them can never make a sound,
@@ -255,7 +231,7 @@ update! = |model, program_input| {
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = program_input.time.elapsed_seconds
 
-	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
+	stepped = if model.is_over() step_game_over(model, input) else step_playing(model, input, dt)
 
 	# The step is pure and says which sounds this frame made; playing them is
 	# the one effect here.
@@ -295,7 +271,7 @@ render! = |model, frame| {
 
 	draw_bodies!(frame, model)
 
-	if game_over(model) {
+	if model.is_over() {
 		# Dim the frozen field so the banner reads, then name the winner.
 		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(field_bottom, 190)) })
 		winner_index = if model.left_score >= win_score 0 else 1
@@ -521,8 +497,8 @@ test_model = {
 	rng: Random.seed(1),
 }
 
-expect !game_over(test_model)
-expect game_over({ ..test_model, right_score: win_score })
+expect !test_model.is_over()
+expect { ..test_model, right_score: win_score }.is_over()
 
 ## The empty list is the no-op, so a caller can concatenate unconditionally.
 expect List.is_empty(play_if(Bool.False, Audio.Sound.stub))

@@ -1,3 +1,9 @@
+## Create a postcard, move the sun with the mouse, choose a colourway with
+## 1-3, and press S to export `postcards/sunrise.png`. Escape quits. Run with
+## `--record-demo` to save a repeatable gallery recording instead.
+##
+## This example shows how to draw a large composition into a render texture,
+## display a scaled preview, and use a Task for an export that may take time.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,18 +14,10 @@ import rr.Math
 import rr.Task
 import rr.Text
 
-## A tiny postcard maker: choose a colourway, move the sun, and export the
-## composition as `postcards/sunrise.png` at twice the window's resolution.
-##
-## The postcard is composed once, into an offscreen render target 1440x960, and
-## the window shows that target scaled down to fit. Pressing S exports the
-## target itself, so the file is the full 1440x960 -- a window cannot be larger
-## than the monitor, and a framebuffer capture cannot be larger than the window,
-## so an offscreen target is the only way to export output at print size.
-##
-## The export runs from a task, at a realistic boundary: the editor stays
-## responsive while the task parks on the host encoding the image, and the
-## outcome arrives as a message on a later cycle.
+## State retained between updates: prepared text and the large render texture,
+## the selected colourway and sun position, export status, and whether the
+## repeatable demo is running. Keeping the render texture here lets `render!`
+## draw the same full-resolution postcard before showing its smaller preview.
 Model : {
 
 	## Prepared at the poster's size, because that is where they are drawn: the
@@ -33,6 +31,7 @@ Model : {
 	theme : U64,
 	sun : Math.Vec2,
 	status : Text.Prepared,
+	demo : Bool,
 }
 
 Msg : [PostcardExported(Try({}, Capture.TextureExportError))]
@@ -41,26 +40,50 @@ program = { init!, update!, render! }
 
 ## The window, and the poster it is a view of. Everything drawn into the poster
 ## is in poster coordinates, so the two only meet where the target is blitted.
-window_width : F32
-window_width = 720
+window_width = 720.F32
 
-window_height : F32
-window_height = 480
+window_height = 480.F32
 
-poster_width : F32
-poster_width = 1440
+poster_width = 1440.F32
 
-poster_height : F32
-poster_height = 960
+poster_height = 960.F32
+
+demo_frames = 125.U64
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+postcard_config : List(Str) -> App.Config
+postcard_config = |args| {
+	base =
+		App.default
+			.with_title("RocRay Postcard Studio")
+			.with_size({ width: 720, height: 480 })
+			.with_output_dir("postcards")
+			.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("postcard_studio.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Half)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
 
 init! : App.Init(Model, [ResourceLimit, RenderTextureLoadFailed])
-init! = App.init(
-	App.default
-		.with_title("RocRay Postcard Studio")
-		.with_size({ width: 720, height: 480 })
-		.with_output_dir("postcards")
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	postcard_config,
+	|startup| {
 		font = Draw.default_font!()
 		idle = Text.from("Ready to export 1440x960", font).size(14).prepare!()?
 		Ok({
@@ -79,6 +102,7 @@ init! = App.init(
 			theme: 0,
 			sun: { x: 520, y: 170 },
 			status: idle,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
@@ -97,19 +121,29 @@ update! = |model, program_input| {
 			},
 	)
 
+	cycle = program_input.time.cycle_count
 	theme =
-		if input.key_pressed(Key1) 0
+		if resolved.demo {
+			if cycle < 42 0 else if cycle < 84 1 else 2
+		} else if input.key_pressed(Key1) 0
 		else if input.key_pressed(Key2) 1
 		else if input.key_pressed(Key3) 2
 		else resolved.theme
 
 	# Exports itself once early on as well, so a run with no keyboard -- the
 	# headless sweep -- still takes the export path.
-	save = input.key_pressed(KeyS) or program_input.time.cycle_count == 3
+	save = input.key_pressed(KeyS) or (resolved.demo == Bool.False and cycle == 3)
+	sun =
+		if resolved.demo {
+			phase = U64.to_f32(cycle % demo_frames) / U64.to_f32(demo_frames)
+			{ x: 110 + phase * 500, y: 145 + F32.abs(phase * 2 - 1) * 90 }
+		} else {
+			input.mouse.position()
+		}
 	next = {
 		..resolved,
 		theme,
-		sun: input.mouse.position(),
+		sun,
 		status: if save chrome.saving else resolved.status,
 	}
 
@@ -117,26 +151,33 @@ update! = |model, program_input| {
 		Task.spawn!(program_input, || PostcardExported(Capture.screenshot_texture!(next.poster, "sunrise.png")))
 	}
 
-	if input.key_pressed(KeyEscape) {
+	if resolved.demo {
+		match program_input.capture {
+			Finished(_) => Err(Exit(0))
+			Failed(_) => Err(Exit(1))
+			_ => Ok(next)
+		}
+	} else if input.key_pressed(KeyEscape) {
 		Err(Exit(0))
 	} else {
 		Ok(next)
 	}
 }
 
-Palette : { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }
-
-palette : U64 -> Palette
-palette = |theme|
-	match theme {
-		0 => { sky_top: Color.from_hex_rgb(0x23395d), sky_bottom: Color.from_hex_rgb(0xf4a261), sun: Color.from_hex_rgb(0xffd166), sea: Color.from_hex_rgb(0x1d5b79), ink: Color.from_hex_rgb(0xfff4dd) }
-		1 => { sky_top: Color.from_hex_rgb(0x512b58), sky_bottom: Color.from_hex_rgb(0xe07a5f), sun: Color.from_hex_rgb(0xf2cc8f), sea: Color.from_hex_rgb(0x3d405b), ink: Color.white }
-		_ => { sky_top: Color.from_hex_rgb(0x0b525b), sky_bottom: Color.from_hex_rgb(0x56cfe1), sun: Color.from_hex_rgb(0xffe66d), sea: Color.from_hex_rgb(0x144552), ink: Color.from_hex_rgb(0xf7fff7) }
-	}
+## The five colours needed to render one postcard colourway.
+Palette := { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }.{
+	for_theme : U64 -> Palette
+	for_theme = |theme|
+		match theme {
+			0 => { sky_top: Color.from_hex_rgb(0x23395d), sky_bottom: Color.from_hex_rgb(0xf4a261), sun: Color.from_hex_rgb(0xffd166), sea: Color.from_hex_rgb(0x1d5b79), ink: Color.from_hex_rgb(0xfff4dd) }
+			1 => { sky_top: Color.from_hex_rgb(0x512b58), sky_bottom: Color.from_hex_rgb(0xe07a5f), sun: Color.from_hex_rgb(0xf2cc8f), sea: Color.from_hex_rgb(0x3d405b), ink: Color.white }
+			_ => { sky_top: Color.from_hex_rgb(0x0b525b), sky_bottom: Color.from_hex_rgb(0x56cfe1), sun: Color.from_hex_rgb(0xffe66d), sea: Color.from_hex_rgb(0x144552), ink: Color.from_hex_rgb(0xf7fff7) }
+		}
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
-	colors = palette(model.theme)
+	colors = Palette.for_theme(model.theme)
 	card = Box.unbox(model.card)
 
 	# Everything the postcard is made of, drawn at the size it is exported at.

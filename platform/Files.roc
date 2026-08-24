@@ -1,10 +1,8 @@
 ## Filesystem reads and writes, and their typed terminal outcomes.
 ##
-## These effects wait. Every one of them is legal in `init!`, where it blocks
-## startup until the answer is in -- which is what loading assets wants -- and
-## in tasks, where it parks the task while the frame loop keeps drawing. They
-## are refused in `update!` and `render!`, with a message naming the effect and
-## the fix.
+## Every effect here waits. It is legal in `init!`, where it blocks startup,
+## and in tasks, where it parks the task; it is refused in `update!` and
+## `render!`.
 ##
 ## ```roc
 ## update! = |model, input| {
@@ -15,26 +13,9 @@
 ## }
 ## ```
 ##
-## Because a task is ordinary straight-line code, a multi-step load is a
-## function rather than a state machine spread over `Msg` and `update!`:
-##
-## ```roc
-## load_level! : Str => Try(Msg, [LevelFailed])
-## load_level! = |dir| {
-##     manifest = Files.read_text!("${dir}/level.json") ? |_e| LevelFailed
-##     tiles = Files.read_bytes!("${dir}/tiles.bin") ? |_e| LevelFailed
-##     Ok(LevelLoaded({ manifest, tiles }))
-## }
-## ```
-##
-## `?` gives up on the first failure, so the function answers with a `Try` and
-## the task closure turns that into the one message it owes:
-## `Task.spawn!(input, || match load_level!(dir) { Ok(msg) => msg, Err(_) => LevelFailed })`.
-##
 ## Paths are used as the app gives them, resolved against the process working
-## directory, and nothing here is sandboxed. `Capture` is the one part of this
-## platform with an output root, and it confines captures only; see
-## `write_text!`.
+## directory. Filesystem access is not sandboxed; `Capture` confines only its
+## own outputs.
 import FilesHost
 import Time
 

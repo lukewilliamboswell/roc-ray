@@ -1,15 +1,10 @@
 ## Keyboard state and the key constants that name it.
 ##
-## A key is one byte of state in the snapshot `App.Input` carries. Bit 0 is
-## whether it is currently held, bit 1 whether it was pressed during the input
-## interval, and bit 2 whether it was released during it. Read it through
-## `Devices.Snapshot`'s receivers -- `input.devices.key_down(KeyW)`,
-## `key_pressed`, `key_released` -- rather than through the bytes.
+## Read keys through `Devices.Snapshot` receivers such as `key_down`,
+## `key_pressed`, and `key_released`.
 ##
-## The host stores fixed-size state lists with one byte per raylib key code
-## `0` through `348`. The named keys cover the whole raylib keyboard enum;
-## `Raw(code)` through `from_code` is the backend-specific escape hatch for a
-## key with no name here.
+## Named keys cover the raylib keyboard enum. `from_code` validates a
+## backend-specific raw key code.
 Keys := [].{
 
 	## Named raylib keyboard keys plus a validated backend-specific escape hatch.

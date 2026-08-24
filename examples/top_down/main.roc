@@ -1,3 +1,10 @@
+## Explore a top-down arena with WASD or the arrow keys, dash with Space,
+## collect every spark, and reach the open gate. Escape quits. Run with
+## `--record-demo` to save a repeatable gallery recording.
+##
+## This larger example combines a Tiled map, animated sprites, collision rules,
+## a following camera, screen shake, music, and sound cues chosen by pure game
+## calculations before `update!` plays them.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -9,6 +16,7 @@ import rr.Assets
 import rr.Audio
 import rr.Camera
 import rr.Color
+import rr.Capture
 import rr.Draw
 import rr.Devices
 import rr.Keys
@@ -16,15 +24,6 @@ import rr.Math
 import rr.Sprite
 import rr.Tilemap
 
-## A top-down arena built from an authored Tiled map: dash past the hazards,
-## collect every spark to open the gate, then reach the exit.
-##
-## An authored `.tmx` supplies the tiles and the typed objects the spawn, exit,
-## sparks, hazards, and decorations are read from. The simulation is one pure
-## step that returns the sound cues it wants; `update!` performs those cues and
-## nothing else decides when a sound plays. Sprites, a follow camera with
-## screen shake, looping music, and synthesized fallbacks for missing `.ogg`
-## files round out the loop.
 Facing := [North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest].{
 	is_eq : _
 }
@@ -292,6 +291,10 @@ Sounds : {
 	music : Audio.Music,
 }
 
+## State retained between updates: loaded fonts, textures and audio, the parsed
+## level, the changing game world, and progress through the repeatable demo.
+## Keeping resources beside the world lets `update!` advance the game and
+## `render!` draw the result without loading anything again.
 Model : {
 	font : Draw.Font,
 	characters : Draw.Texture,
@@ -299,48 +302,37 @@ Model : {
 	level : Level,
 	sounds : Sounds,
 	world : World,
+	demo : Bool,
+	demo_frame : U64,
 }
 
 program = { init!, update!, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
-world_left : F32
-world_left = -720
+world_left = -720.F32
 
-world_top : F32
-world_top = -520
+world_top = -520.F32
 
-world_right : F32
-world_right = 1456
+world_right = 1456.F32
 
-world_bottom : F32
-world_bottom = 1144
+world_bottom = 1144.F32
 
-player_radius : F32
-player_radius = 22
+player_radius = 22.F32
 
-player_speed : F32
-player_speed = 330
+player_speed = 330.F32
 
-dash_speed : F32
-dash_speed = 760
+dash_speed = 760.F32
 
-dash_duration : F32
-dash_duration = 0.18
+dash_duration = 0.18.F32
 
-dash_cooldown_time : F32
-dash_cooldown_time = 0.62
+dash_cooldown_time = 0.62.F32
 
-spark_radius : F32
-spark_radius = 24
+spark_radius = 24.F32
 
-spark_total : U64
-spark_total = 10
+spark_total = 10.U64
 
 top_down_map_path : Str
 top_down_map_path = "examples/top_down/assets/top_down.tmx"
@@ -372,36 +364,27 @@ music_path = "examples/top_down/assets/kenney-audio/music/spark_loop.wav"
 ## so every play has to name its sound's level -- a `Sound` has no volume of
 ## its own to set in `init!` and inherit. These constants are the one place the
 ## levels live, so no single play can drift away from what the mix intends.
-collect_volume : F32
-collect_volume = 0.58
+collect_volume = 0.58.F32
 
-hurt_volume : F32
-hurt_volume = 0.55
+hurt_volume = 0.55.F32
 
-win_volume : F32
-win_volume = 0.48
+win_volume = 0.48.F32
 
-lose_volume : F32
-lose_volume = 0.58
+lose_volume = 0.58.F32
 
-gate_volume : F32
-gate_volume = 0.46
+gate_volume = 0.46.F32
 
-dash_volume : F32
-dash_volume = 0.3
+dash_volume = 0.3.F32
 
-sparkle_volume : F32
-sparkle_volume = 0.16
+sparkle_volume = 0.16.F32
 
 ## The music stream is different: `SetMusicVolume` is a real mutation that
 ## sticks, so this is the level `init!` starts at and a restart returns to.
-music_volume : F32
-music_volume = 0.13
+music_volume = 0.13.F32
 
 ## Where the music is ducked to once the exit is reached, so the win sting sits
 ## on top of it.
-music_won_volume : F32
-music_won_volume = 0.08
+music_won_volume = 0.08.F32
 
 fallback_spawn : Math.Vec2
 fallback_spawn = { x: -560, y: -360 }
@@ -409,16 +392,41 @@ fallback_spawn = { x: -560, y: -360 }
 fallback_exit_center : Math.Vec2
 fallback_exit_center = { x: 1185, y: 920 }
 
-fallback_exit_radius : F32
-fallback_exit_radius = 58
+fallback_exit_radius = 58.F32
 
-burst_duration : F32
-burst_duration = 0.36
+burst_duration = 0.36.F32
+
+demo_frames = 150.U64
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+top_down_config : List(Str) -> App.Config
+top_down_config = |args| {
+	base = App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("top_down.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Quarter)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
 
 init! : App.Init(Model, _)
-init! = App.init(
-	App.default.with_title("RocRay Spark Run").with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	top_down_config,
+	|startup| {
 		assets = Assets.Store.open!(Assets.working_directory("examples/top_down/assets"))?
 		characters = Assets.load_texture!(assets, "kenney-topdown/characters.png")?
 		tiles = Assets.load_texture!(assets, "kenney-topdown/tiles.png")?
@@ -464,7 +472,12 @@ init! = App.init(
 		level = level_from_tilemap(tilemap)
 		sounds = make_sounds!()?
 		sounds.music.play!()
-		Ok(new_game(Draw.default_font!(), characters, tiles, level, sounds))
+		model = new_game(Draw.default_font!(), characters, tiles, level, sounds)
+		Ok({
+			..model,
+			demo: List.contains(App.args!(startup), record_demo_flag),
+			demo_frame: 0,
+		})
 	},
 )
 
@@ -517,6 +530,8 @@ new_game = |font, characters, tiles, level, sounds| {
 	level,
 	sounds,
 	world: World.new(level),
+	demo: Bool.False,
+	demo_frame: 0,
 }
 
 fallback_sparks : List(World.Spark)
@@ -728,6 +743,31 @@ input_axis = |input| {
 	down = input.key_down(KeyDown) or input.key_down(KeyS)
 
 	{ x: axis(left, right), y: axis(up, down) }
+}
+
+## A short route through the arena, expressed as the same device snapshots the
+## interactive game consumes. It collects a spark, then dashes through the map
+## to show movement, animation, camera tracking, and screen shake.
+demo_input : U64 -> Devices.Snapshot
+demo_input = |frame| {
+	base =
+		if frame < 19 {
+			Devices.none.with_key_down(KeyD).with_key_down(KeyS)
+		} else if frame < 38 {
+			Devices.none.with_key_down(KeyW)
+		} else if frame < 76 {
+			Devices.none.with_key_down(KeyD)
+		} else if frame < 108 {
+			Devices.none.with_key_down(KeyS).with_key_down(KeyD)
+		} else {
+			Devices.none.with_key_down(KeyA)
+		}
+
+	if frame == 20 or frame == 43 or frame == 82 or frame == 116 {
+		base.with_key_pressed(KeySpace)
+	} else {
+		base
+	}
 }
 
 facing_from_input : Math.Vec2, Facing -> Facing
@@ -1086,8 +1126,9 @@ advance_playing = |model, input, dt| {
 restart_on_space : Model, Devices.Snapshot -> { model : Model, cues : List(Cue) }
 restart_on_space = |model, input|
 	if input.key_pressed(KeySpace) {
+		fresh = new_game(model.font, model.characters, model.tiles, model.level, model.sounds)
 		{
-			model: new_game(model.font, model.characters, model.tiles, model.level, model.sounds),
+			model: { ..fresh, demo: model.demo, demo_frame: model.demo_frame },
 			cues: [MusicVolume(music_volume)],
 		}
 	} else {
@@ -1101,7 +1142,7 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	input = program_input.devices
+	input = if model.demo demo_input(model.demo_frame) else program_input.devices
 
 	next = match model.world.state {
 		Playing => advance_playing(model, input, program_input.time.elapsed_seconds)
@@ -1113,10 +1154,22 @@ update! = |model, program_input| {
 		perform_cue!(model, cue)
 	}
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok(next.model)
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if input.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..next.model, demo_frame: model.demo_frame + 1 })
 	}
 }
 
@@ -1168,8 +1221,7 @@ draw_world! = |frame, level, characters, tiles, world, viewport, font| {
 	draw_player!(frame, characters, world.player)
 }
 
-tile_cols : U64
-tile_cols = 27
+tile_cols = 27.U64
 
 tile_id : Tile -> U64
 tile_id = |tile|

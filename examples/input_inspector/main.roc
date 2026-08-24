@@ -1,3 +1,9 @@
+## Display live keyboard, mouse, gamepad, text, window, and capture input.
+##
+## The window lists its controls; Q quits because Escape is displayed as an
+## ordinary key. This example shows how each `Input` gives `update!` the latest
+## device state, and how `update!` can change the clipboard, cursor, and window
+## or read a pixel from the previous drawing.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
@@ -10,14 +16,9 @@ import rr.Gamepad
 import rr.App
 import rr.Capture
 
-## A diagnostic that draws the whole `Devices.Snapshot`: keys down, pressed and
-## released, mouse buttons and motion, gamepad sticks, and typed codepoints.
-##
-## Every host effect it uses -- the clipboard, the cursor mode, the exit key, a
-## minimum window size, the eyedropper -- answers immediately, so all of them
-## are ordinary calls from `update!` and the answers land on the cycle that
-## asked. Escape is handed back to the app with `with_exit_key(NoExitKey)` so it
-## can be shown lighting up like any other key; Q quits.
+## State kept between updates: accumulated typed text, clipboard feedback, the
+## latest device snapshot, and the last colour read beneath the pointer. The
+## font is retained for drawing each new snapshot.
 Model : {
 	font : Draw.Font,
 

@@ -1,3 +1,9 @@
+## Animate a fountain of 4,000 coloured sprites.
+##
+## Move the pointer to steer the fountain, hold Space for a wider spray, and
+## press Escape to quit. Run with `--record-demo` to create the gallery GIF.
+## This example shows a frame-rate-independent particle update and drawing many
+## copies of one texture in a single batch.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -5,50 +11,108 @@ app [Model, program] {
 
 import rr.App
 import rr.Assets
+import rr.Capture
 import rr.Color
 import rr.Draw
 import rr.Math
 import rr.Text
 
-## A sprite fountain that draws every particle in a single hosted call.
-##
-## `frame.texture!` crosses the Roc/host boundary once per sprite, and at a few
-## thousand sprites that crossing, not the GPU, is what a frame is spent on.
-## `frame.texture_instances!` hands the host one list and lets it loop, so the
-## whole fountain costs one crossing however many particles are in it.
-##
-## The simulation is pure and runs in `update!`: it advances the particles and
-## projects them onto the flat `Draw.TextureInstance` records the batch
-## transports. `render!` only hands that retained list to the host, so the
-## particle record can stay whatever the application wants it to be.
-##
-## Move the pointer to steer the emitter, hold Space for a wider spray, ESC quits.
+## State kept between updates: each particle's position and motion, the drawing
+## instances made from those particles, the shared sprite and prepared label,
+## and whether the deterministic recording mode is active.
 Model : {
 	sprite : Draw.Texture,
 	particles : List(Particle),
 	instances : List(Draw.TextureInstance),
 	hud : Text.Prepared,
+	demo : Bool,
 }
 
 ## One particle. `seed` and `phase` are fixed per particle, so respawns are
 ## deterministic and the fountain looks the same on every run without needing a
 ## random source. Two independent values keep the launch angle uncorrelated from
 ## speed and lifetime, which is what stops the spray looking like a flower.
-Particle : {
+Particle := {
 	pos : Math.Vec2,
 	vel : Math.Vec2,
 	life : F32,
 	seed : F32,
 	phase : F32,
 	tint : Color.Rgba,
+}.{
+
+	## Advance this particle, respawning it at the emitter when its life ends.
+	step : Particle, Math.Vec2, F32, F32 -> Particle
+	step = |particle, emitter, spread, dt| {
+		life = particle.life - dt
+		if life > 0 {
+			{
+				..particle,
+				pos: { x: particle.pos.x + particle.vel.x * dt, y: particle.pos.y + particle.vel.y * dt },
+				vel: { x: particle.vel.x, y: particle.vel.y + 420 * dt },
+				life,
+			}
+		} else {
+			angle = particle.phase * 6.2831855
+			speed = 90 + 150 * particle.seed
+			{
+				..particle,
+				pos: emitter,
+				vel: { x: F32.cos(angle) * speed * spread, y: F32.sin(angle) * speed - 210 },
+				life: 1.1 + particle.seed * 1.7,
+			}
+		}
+	}
+
+	## Make the draw command used by the texture-instance batch.
+	to_instance : Particle -> Draw.TextureInstance
+	to_instance = |particle| {
+		size = 3 + 6 * particle.seed
+		{
+			source: sprite_source,
+			dest: Math.rect(particle.pos.x, particle.pos.y, size, size),
+			origin: { x: size / 2, y: size / 2 },
+			rotation: particle.life * 120,
+			tint: particle.tint,
+		}
+	}
 }
 
 Msg : []
 
 program = { init!, update!, render! }
 
-particle_count : U64
-particle_count = 4000
+particle_count = 4000.U64
+
+demo_frames = 125.U64
+
+record_demo_flag : Str
+record_demo_flag = "--record-demo"
+
+particles_config : List(Str) -> App.Config
+particles_config = |args| {
+	base = App.default
+		.with_title("RocRay Particles")
+		.with_size({ width: 800, height: 600 })
+		.with_frame_pacing(Capped(120))
+
+	if List.contains(args, record_demo_flag) {
+		base
+			.with_visible(Bool.False)
+			.with_output_dir("examples/gallery")
+			.with_recording(
+				Capture.default
+					.with_path("particles.gif")
+					.with_format(Gif)
+					.with_fps(25)
+					.with_max_frames(demo_frames)
+					.with_scale(Quarter)
+					.with_timing(FixedStep),
+			)
+	} else {
+		base
+	}
+}
 
 sprite_source : Math.Rect
 sprite_source = Math.rect(0, 0, 8, 8)
@@ -87,56 +151,18 @@ initial_particles = List.map_with_index(
 	},
 )
 
-## Advance one particle, respawning it at the emitter once its life runs out.
-step_particle : Particle, Math.Vec2, F32, F32 -> Particle
-step_particle = |particle, emitter, spread, dt| {
-	life = particle.life - dt
-	if life > 0 {
-		{
-			..particle,
-			pos: { x: particle.pos.x + particle.vel.x * dt, y: particle.pos.y + particle.vel.y * dt },
-			vel: { x: particle.vel.x, y: particle.vel.y + 420 * dt },
-			life: life,
-		}
-	} else {
-		angle = particle.phase * 6.2831855
-		speed = 90 + 150 * particle.seed
-		{
-			..particle,
-			pos: emitter,
-			vel: { x: F32.cos(angle) * speed * spread, y: F32.sin(angle) * speed - 210 },
-			life: 1.1 + particle.seed * 1.7,
-		}
-	}
-}
-
-## Project a particle onto the flat instance record the batch transports.
-to_instance : Particle -> Draw.TextureInstance
-to_instance = |particle| {
-	size = 3 + 6 * particle.seed
-	{
-		source: sprite_source,
-		dest: Math.rect(particle.pos.x, particle.pos.y, size, size),
-		origin: { x: size / 2, y: size / 2 },
-		rotation: particle.life * 120,
-		tint: particle.tint,
-	}
-}
-
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed])
-init! = App.init(
-	App.default
-		.with_title("RocRay Particles")
-		.with_size({ width: 800, height: 600 })
-		.with_frame_pacing(Capped(120)),
-	|_startup| {
+init! = App.init_for_args(
+	particles_config,
+	|startup| {
 		sprite = Assets.generate_color_texture!({ width: 8, height: 8, color: Color.white })?
 		font = Draw.default_font!()
 		Ok({
 			sprite: sprite,
 			particles: initial_particles,
-			instances: List.map(initial_particles, to_instance),
+			instances: List.map(initial_particles, Particle.to_instance),
 			hud: Text.from("4000 sprites, one hosted call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
+			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
 	},
 )
@@ -146,21 +172,36 @@ update! = |model, program_input| {
 	input = program_input.devices
 	# A long first frame or a resize stall must not teleport the fountain.
 	dt = F32.min(program_input.time.elapsed_seconds, 0.05)
-	spread = if input.key_down(KeySpace) 1.9 else 0.7
+	spread = if model.demo or input.key_down(KeySpace) 1.9 else 0.7
 	pointer = input.mouse.position()
 	emitter =
-		if pointer.x == 0 and pointer.y == 0 {
+		if model.demo {
+			phase = U64.to_f32(program_input.time.cycle_count) * 0.055
+			{ x: 400 + F32.sin(phase) * 170, y: 205 + F32.cos(phase * 0.7) * 45 }
+		} else if pointer.x == 0 and pointer.y == 0 {
 			{ x: I32.to_f32(program_input.window.size.width) / 2, y: I32.to_f32(program_input.window.size.height) / 3 }
 		} else {
 			pointer
 		}
 
-	particles = List.map(model.particles, |particle| step_particle(particle, emitter, spread, dt))
+	particles = List.map(model.particles, |particle| particle.step(emitter, spread, dt))
 
-	if input.key_pressed(KeyEscape) {
-		Err(Exit(0))
-	} else {
-		Ok({ ..model, particles: particles, instances: List.map(particles, to_instance) })
+	exit =
+		if model.demo {
+			match program_input.capture {
+				Finished(_) => Err(Exit(0))
+				Failed(_) => Err(Exit(1))
+				_ => Ok({})
+			}
+		} else if input.key_pressed(KeyEscape) {
+			Err(Exit(0))
+		} else {
+			Ok({})
+		}
+
+	match exit {
+		Err(code) => Err(code)
+		Ok({}) => Ok({ ..model, particles, instances: List.map(particles, Particle.to_instance) })
 	}
 }
 
@@ -174,17 +215,23 @@ render! = |model, frame| {
 }
 
 expect {
-	respawned = step_particle({ pos: Math.zero, vel: Math.zero, life: 0.01, seed: 0.5, phase: 0.25, tint: Color.white }, { x: 40, y: 60 }, 1, 0.02)
+	particle : Particle
+	particle = { pos: Math.zero, vel: Math.zero, life: 0.01, seed: 0.5, phase: 0.25, tint: Color.white }
+	respawned = particle.step({ x: 40, y: 60 }, 1, 0.02)
 	respawned.pos == { x: 40, y: 60 } and respawned.life > 1
 }
 
 expect {
-	moved = step_particle({ pos: { x: 10, y: 10 }, vel: { x: 100, y: 0 }, life: 1, seed: 0.5, phase: 0.25, tint: Color.white }, Math.zero, 1, 0.1)
+	particle : Particle
+	particle = { pos: { x: 10, y: 10 }, vel: { x: 100, y: 0 }, life: 1, seed: 0.5, phase: 0.25, tint: Color.white }
+	moved = particle.step(Math.zero, 1, 0.1)
 	moved.pos == { x: 20, y: 10 } and moved.vel.y == 42
 }
 
 expect {
-	instance = to_instance({ pos: { x: 12, y: 34 }, vel: Math.zero, life: 0.5, seed: 0, phase: 0, tint: Color.white })
+	particle : Particle
+	particle = { pos: { x: 12, y: 34 }, vel: Math.zero, life: 0.5, seed: 0, phase: 0, tint: Color.white }
+	instance = particle.to_instance()
 	instance.dest == Math.rect(12, 34, 3, 3) and instance.origin == { x: 1.5, y: 1.5 }
 }
 

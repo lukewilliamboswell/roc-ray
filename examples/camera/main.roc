@@ -1,3 +1,7 @@
+## Shows a movable camera over a larger 2D world with a fixed on-screen HUD.
+## Move with WASD or the arrow keys, zoom with the mouse wheel, rotate with
+## Q/E, reset with R, and quit with Escape. This example demonstrates camera
+## drawing and converting positions between world and screen coordinates.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,13 +12,10 @@ import rr.Devices
 import rr.Math
 import rr.Text
 
-## World space and screen space in one frame, and the projections between them.
-##
-## `frame.with_camera!` draws the world inside a scope; everything outside it is
-## screen space, which is where the HUD goes. The camera and both mouse
-## projections are derived in `render!` from the model rather than stored, so
-## `screen_to_world` and `world_to_screen` are always talking about the camera
-## actually in use. WASD moves, the wheel zooms, Q/E rotate, R resets.
+## The Model is the app state kept between updates: the player's world
+## position, camera settings, latest pointer position, and prepared HUD text.
+## Coordinate conversions are calculated while drawing, so they always use
+## the camera being drawn with.
 Model : {
 	player : Math.Vec2,
 	zoom : F32,
@@ -59,8 +60,8 @@ init! = App.init(
 axis : Bool, Bool -> F32
 axis = |negative, positive| if negative -1 else if positive 1 else 0
 
-## Movement is input plus a duration, so that is exactly what it asks for: the
-## sampled devices, and the seconds the caller wants integrated over.
+## Moves the player from the current keyboard state and elapsed time. Passing
+## only these values keeps the movement rules easy to test separately.
 move_player : Math.Vec2, Devices.Snapshot, F32 -> Math.Vec2
 move_player = |player, input, dt| {
 	left = input.key_down(KeyLeft) or input.key_down(KeyA)
@@ -94,9 +95,8 @@ update! = |model, program_input| {
 	}
 }
 
-## The camera and both mouse projections are derived rather than stored: they
-## are a pure function of the model, so keeping them out of it means there is
-## one less thing that can disagree with itself.
+## Builds the camera and coordinate conversions from the latest Model. This
+## avoids storing calculated values that could become inconsistent.
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ..])
 render! = |model, frame| {
 	camera = Camera.follow(model.player, { screen: { x: screen_w, y: screen_h }, zoom: model.zoom }).with_rotation(model.rotation)
@@ -178,8 +178,7 @@ draw_hud! = |frame, model, mouse_world| {
 	hud.title.draw!(frame, { pos: { x: 32, y: 28 }, color: Color.white, align: Text.align_top_left })
 	hud.subtitle.draw!(frame, { pos: { x: 32, y: 60 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
 	frame.line!({ start: { x: 32, y: 84 }, end: { x: 340, y: 84 }, stroke: Draw.stroke(Color.with_alpha(Color.white, 30), 1) })
-	# The readout is the point of the example, so it is on screen rather than
-	# left for the reader to imagine: the pointer in both spaces at once.
+	# Show the pointer coordinates in both spaces for direct comparison.
 	frame.text_at!({ pos: { x: 32, y: 92 }, text: "world ${coord(mouse_world.x)}, ${coord(mouse_world.y)}   zoom ${coord(model.zoom * 100)}%", size: 14, color: Color.from_hex_rgb(0xffd166) })
 	hud.help.draw!(frame, { pos: { x: 32, y: 114 }, color: Color.from_hex_rgb(0x8fa3b8), align: Text.align_top_left })
 }

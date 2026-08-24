@@ -11,38 +11,27 @@
 ## }
 ## ```
 ##
-## The `Frame` is a capability rather than a value: the host opens the frame
-## scope around `render!` and closes it afterwards, so nothing can draw before
-## the frame begins or after it ends, and the nested scopes -- `with_camera!`,
-## `with_shader!`, `with_scissor!`, `with_render_texture!`, `with_blend_mode!`
-## -- restore what they changed however their callback ends. Do not keep a
-## `Frame` in the model; pass the callback's own frame down through helpers.
+## `Frame` is render-scoped authority. Pass the callback's frame through draw
+## helpers; do not retain it in the model. Nested camera, shader, scissor,
+## render-texture, and blend scopes restore their outer state even when their
+## callback returns `Err`.
 ##
-## Every effect that takes a `Frame` -- every shape, every texture, every
-## scope, and every uniform `set!` -- is legal in `render!` only. The loaders
-## in this module are the other half. `default_font!`, `font_from_bytes!`,
+## Every effect that takes a `Frame` is legal only in `render!`. Resource
+## constructors `default_font!`, `font_from_bytes!`,
 ## `load_render_texture!`, `Shader.from_source!` and the `Shader.uniform_*!`
 ## resolvers allocate host resources from what the app already has, so they are
-## legal in `init!`, `update!`, and tasks, and refused in `render!`. The two
+## legal in `init!`, `update!`, and tasks. The two
 ## that read files out of an asset store, `load_store_font!` and
 ## `Shader.from_store!`, wait instead: each is legal in `init!`, where it
 ## blocks startup, and in tasks, where it parks the task, and refused in
-## `update!` and `render!`. Create them in `init!`, keep them in the model, and
-## hand the values to `render!`; per-frame drawing and uniform updates then
-## allocate nothing. To load a font or a shader after startup, read the file on
-## a task -- with `Files.read_bytes!`, then `font_from_bytes!` or
-## `Shader.from_source!` from `update!` when the message arrives, or by calling
-## the store loader inside the task itself.
+## `update!` and `render!`. Create long-lived resources in `init!` and retain
+## them in the model.
 ##
-## Most shapes come in two spellings: `frame.circle!(cfg)` and
-## `Draw.circle!(frame, cfg)` are the same call. Prefer the receiver; the free
-## function is kept because it composes in a pipeline where the frame is not
-## the value at hand.
+## Most shapes support equivalent receiver and free-function forms, such as
+## `frame.circle!(cfg)` and `Draw.circle!(frame, cfg)`.
 ##
-## Text has a fuller home in `Text`, which measures, wraps, aligns and prepares
-## it. `Draw.text!` and the `Draw.align_*` constants are the older, simpler
-## set: they draw a string with no layout pass. Reach for `Text` when the
-## position depends on the size of what is drawn.
+## `Draw.text!` draws without a layout pass. Use `Text` to measure, wrap, align,
+## or prepare text.
 import Assets
 import Camera
 import Color

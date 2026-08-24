@@ -1,10 +1,8 @@
-## An HTTP client for live dashboards and remote data visualization.
+## Send HTTP requests and decode common response bodies.
 ##
 ## Requests are built and read with the shared
 ## [`roc-lang/http`](https://github.com/roc-lang/http) `Request` and `Response`
-## types, exactly as in
-## [basic-cli](https://github.com/roc-lang/basic-cli/blob/main/platform/Http.roc).
-## This module adds the effects and the small JSON and UTF-8 conveniences.
+## types. This module adds the hosted effects plus JSON and UTF-8 conveniences.
 ##
 ## An app that names `Request` or `Response` declares the `http` package in its
 ## own header, beside the platform:
@@ -18,11 +16,6 @@
 ## import rr.Http
 ## import http.Request
 ## ```
-##
-## The platform entry above is the path the repository's own examples use;
-## outside the checkout it is the `platform` declaration from the latest
-## release. The `http` line is the version this platform is built against, and
-## an app that names `Request` or `Response` must declare that same one.
 ##
 ## `Http.get!` and `Http.get_utf8!` take a URL and hand back decoded data, so
 ## an app that uses only those needs no package dependency of its own.
@@ -48,10 +41,8 @@
 ## }
 ## ```
 ##
-## The task parks on the host's socket while the frame loop keeps drawing, and
-## the closure's return value arrives on a later `Input.messages`. `send!` is
-## legal in `init!`, where it blocks startup, and in tasks, where it parks the
-## task; it is refused in `update!` and `render!`.
+## `send!` is legal in `init!`, where it blocks startup, and in tasks, where it
+## parks the task; it is refused in `update!` and `render!`.
 ##
 ## Up to three redirects are followed, and the `Response` is the one at the end
 ## of that chain.
@@ -63,27 +54,17 @@
 ## overrides the config's deadline; `NoTimeout` on a request means the config's
 ## deadline applies, so an ordinarily built request is never sent without one.
 ##
-## The body cap is measured after decompression, and it is a refusal rather
-## than a truncation: a response over the cap fails the send, because a
-## truncated body decodes into wrong data rather than into an error. What it
-## bounds is how much of this process's memory a remote server can choose to
-## use.
+## The body cap is measured after decompression. A response over the cap fails
+## rather than being truncated.
 ##
 ## An HTTP status is not an error. A 404 or a 503 arrives as `Ok(response)`
 ## carrying that status; only a failure to complete the exchange is `HttpErr`.
 ##
-## `get!` and `send_json!` have a `_` where the decoded or encoded type would
-## be. That is static dispatch: the JSON parser and encoder are chosen from the
-## type the call site expects, so the same `get!` answers a `List(Reading)` in
-## one place and a `{ name : Str }` in another, and there is no decoder to pass
-## in. Annotate the binding, or the field the value goes into, and the
-## inference does the rest.
+## `get!` and `send_json!` infer the JSON type from their call site. Add a type
+## annotation when the expected decoded or encoded type is ambiguous.
 ##
-## TLS: `https` URLs are served by Zig's `std.crypto.tls` against the operating
-## system's certificate store -- on Linux the usual `/etc/ssl` bundle. Nothing
-## here configures a custom certificate authority or turns verification off. A
-## store that cannot be loaded fails the send with `HttpErr(Other(...))` saying
-## so, rather than continuing unverified.
+## HTTPS verifies peers with the operating system's certificate store. Custom
+## certificate authorities and disabling verification are not supported.
 import HttpHost
 import Url
 import http.Request

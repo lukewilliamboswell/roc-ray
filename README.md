@@ -1,296 +1,91 @@
 # RocRay
 
-Make native games, visual tools, and interactive apps in [Roc](https://www.roc-lang.org/), powered by [raylib](https://www.raylib.com/).
+Build native games, visual tools, and interactive apps in
+[Roc](https://www.roc-lang.org/), powered by
+[raylib](https://www.raylib.com/).
 
-![Launching Cave Climb from a terminal, followed by gameplay with animated sprites and a mouse-controlled laser](examples/roc-ray-showcase.webp)
+RocRay is a focused app platform, not a game engine. Your app keeps its own
+state and rules; RocRay provides drawing, audio, keyboard and mouse input,
+windows, recording, files, and networking. It runs on macOS (Intel and Apple
+Silicon), Linux x64, and Windows x64.
 
-*Cave Climb combines an authored tilemap, sprites, camera movement, collision
-handling, sound, and mouse-driven tools.*
+## See what it can do
 
-RocRay is intentionally simple: an app owns a model, updates it from the current
-input snapshot, and draws a frame. It is not trying to become a large game
-engine. Instead, it gives Roc apps a focused interface to raylib's broad set of
-graphics, audio, input, windowing, and resource features.
+These nine apps span small games, designed levels, creative tools, responsive
+interfaces, and scenes with thousands of moving objects. Each tile links to its
+complete Roc source; the [example guide](examples/README.md) covers the rest and
+suggests a learning path.
 
-RocRay is a usable app platform rather than a research experiment: release
-bundles are tested on the supported systems, and the repository includes
-complete games. It follows Roc's new compiler closely, so pin a RocRay release
-and its matching Roc nightly together. RocRay APIs may still change as the
-language evolves.
+<table>
+  <tr>
+    <td align="center"><a href="examples/cave_climb/main.roc"><img src="examples/gallery/cave_climb.webp" alt="Cave Climb gameplay" width="260"><br><strong>Cave Climb</strong></a><br>Designed level, jumping, camera, sound</td>
+    <td align="center"><a href="examples/breakout/main.roc"><img src="examples/gallery/breakout.webp" alt="Breakout gameplay" width="260"><br><strong>Breakout</strong></a><br>Arcade rules, sounds made in code, recording</td>
+    <td align="center"><a href="examples/capture_ui_demo/main.roc"><img src="examples/gallery/capture_ui_demo.webp" alt="A scripted responsive interface demonstration" width="260"><br><strong>Capture UI</strong></a><br>Automated controls and GIF recording</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="examples/top_down/main.roc"><img src="examples/gallery/top_down.webp" alt="Top Down gameplay" width="260"><br><strong>Top Down</strong></a><br>Designed map, characters, music, game states</td>
+    <td align="center"><a href="examples/generated_assets/main.roc"><img src="examples/gallery/generated_assets.webp" alt="Painting in Pixel Workshop" width="260"><br><strong>Pixel Workshop</strong></a><br>Drawing pixels and creating sounds in code</td>
+    <td align="center"><a href="examples/postcard_studio/main.roc"><img src="examples/gallery/postcard_studio.webp" alt="An animated postcard composition" width="260"><br><strong>Postcard Studio</strong></a><br>Generative art and saving larger images</td>
+  </tr>
+  <tr>
+    <td align="center"><a href="examples/responsive_ui/main.roc"><img src="examples/gallery/responsive_ui.webp" alt="Navigating the responsive settings interface" width="260"><br><strong>Responsive Settings</strong></a><br>Keyboard, mouse, resizing, display scaling</td>
+    <td align="center"><a href="examples/live_plot/main.roc"><img src="examples/gallery/live_plot.webp" alt="Source files appearing in Live Plot" width="260"><br><strong>Live Plot</strong></a><br>Loading and drawing hundreds of thousands of lines</td>
+    <td align="center"><a href="examples/particles/main.roc"><img src="examples/gallery/particles.webp" alt="A moving fountain of particles" width="260"><br><strong>Particles</strong></a><br>Thousands of moving images at once</td>
+  </tr>
+</table>
 
-## Quick start
+The capture examples also produce deterministic media directly, including this
+[WebM plot recording](examples/gallery/capture_plot.webm).
 
-Install the Roc nightly named in [`.roc-version`](.roc-version) and
-[Zig 0.16.0](https://ziglang.org/download/), then clone this repository and run
-the smallest example against the local platform:
+## Try it
+
+Install the Roc version named in [`.roc-version`](.roc-version), then run the
+smallest example. The first line of the app downloads RocRay automatically:
 
 ```bash
 git clone https://github.com/lukewilliamboswell/roc-ray.git
 cd roc-ray
-zig build
-roc build examples/hello_world/main.roc --output hello_world
-./hello_world
+roc examples/hello_world/main.roc
 ```
 
-On Windows, run `hello_world.exe`. Build from the repository root so example
-asset paths resolve correctly.
+Run examples from the repository root so asset paths resolve correctly. Use
+`roc build` later when producing an optimized executable for distribution.
 
-Use `roc build` to produce a native executable. Running a source file directly
-with `roc` uses Roc's in-development backend and is currently slower. Apps that
-load files at runtime still need those assets distributed at the paths their
-source expects.
+For your own project, copy the closest app from the
+[example guide](examples/README.md). Each example downloads the matching RocRay
+release automatically, so app authors need only Roc. Keep that RocRay release
+and its matching Roc version together; the
+[latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
+provides both.
 
-Zig is not required to build apps with a released RocRay bundle. It is required
-when using the local platform from a source checkout or changing the platform
-itself.
+## The programming model
 
-## The app loop
+A RocRay app provides three functions:
 
-A RocRay program has three callbacks. The model is the app state that survives
-from one host cycle to the next:
+- `init!` runs once. It sets the window options, loads what the app needs, and
+  creates the starting state.
+- `update!` handles input such as keys and mouse movement, then returns the next
+  state.
+- `render!` draws that state on the screen.
 
-- `init!` chooses the window configuration and creates the initial model.
-- `update!` receives that model and a read-only `App.Input` -- this cycle's
-  device snapshot, window snapshot, timing, and the messages finished tasks
-  delivered -- and returns the next model, or `Err(Exit(code))` to stop. It is
-  effectful: it calls host effects directly (`Window.set_clipboard_text!`,
-  `Audio.Sound.play!`, ...) and starts deferred work with `Task.spawn!`.
-- `render!` receives the model and a `Frame` used for drawing. It only draws;
-  an effect that changes host state stops the app with a message naming the
-  phase it belongs in.
+Reading a file or waiting for a network reply can take time. Start that work as
+a task so the app can keep updating and drawing; when it finishes, `update!`
+receives the result.
 
-Three rules say where an effect belongs, and the host enforces all three at
-runtime. Anything that **changes host state** -- the cursor, the window, audio,
-a recording, a texture's pixels -- runs from `init!`, `update!`, or a task.
-Anything that **draws** runs only from `render!`. Anything that **waits** on a
-file, a socket, or the clock runs only from `init!`, where it blocks startup on
-purpose, or from a task, where it parks that task and the frame keeps going.
-Break one and the app stops immediately with a message naming the effect, the
-phase it was called from, and where it belongs.
+Read [`hello_world/main.roc`](examples/hello_world/main.roc) for the smallest
+complete app, then choose a project from the
+[example guide](examples/README.md). The
+[API reference](https://lukewilliamboswell.github.io/roc-ray/) documents the
+available features and functions.
 
-Those rules are the summary; each effect's own docs page is the authority,
-and one waiting effect has a narrower set than the rule. `Capture.screenshot!`
-runs only from a task: what it waits for is the end of a frame, and `init!`
-returns before the frame loop has drawn one, so there is nothing for it to
-wait on there.
+## Project links
 
-Every loader that reads a file is a waiting effect, so it belongs in `init!` or
-in a task -- `Assets.Store.open!`, `Assets.load_texture!`, `Audio.load_sound!`,
-`Audio.load_music!`, `Draw.load_store_font!`, `Draw.Shader.from_store!`, and
-`Tilemap.load_tmx!`. The constructors that take bytes the app already holds --
-`Assets.texture_from_bytes!`, `Draw.font_from_bytes!`,
-`Draw.Shader.from_source!`, `Audio.gen_sound!` -- do not wait and stay legal in
-`update!`. That pair is the idiom for loading after startup: read the file on a
-task, and build the resource in `update!` when the message arrives, or just
-call the loader inside the task.
+- [Examples and learning path](examples/README.md)
+- [API reference](https://lukewilliamboswell.github.io/roc-ray/)
+- [Latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
+- [Architecture](design.md)
+- [Contributing](CONTRIBUTING.md)
 
-Read the complete [`hello_world/main.roc`](examples/hello_world/main.roc) from top
-to bottom to see this loop in the smallest complete app. Load long-lived
-textures, sounds, fonts, shaders, and text that does not change during `init!`;
-store them in the model and reuse them while rendering.
-
-### Tasks
-
-Work that finishes later never blocks the frame. A **task** is an effectful
-closure that runs on its own coroutine alongside the frame loop; its return
-value arrives as a message on a later `input.messages`. An effect that waits
-inside it -- `Task.sleep!`, `Files.read_text!`, `Capture.screenshot!`,
-`Http.send!` -- parks the task, not the frame:
-
-```roc
-Msg : [Woke]
-
-Task.spawn!(input, || {
-    Task.sleep!(300)
-    Woke
-})
-```
-
-The `input` is a witness that pins the closure's message type to your app's
-`Msg`; `Task.spawn!` never reads it. Only the platform's `main.roc` can name
-your `Msg` directly, so an `App.Input(Msg)` is how the rest of the API names it.
-
-Inside the closure a waiting effect returns its answer, so a multi-step load
-reads as straight-line code with `?` rather than a state machine spread over
-`Msg` and `update!`:
-
-```roc
-Msg : [ConfigLoaded(Try(Str, Files.ReadTextError))]
-
-Task.spawn!(input, || ConfigLoaded(Files.read_text!("config.txt")))
-```
-
-Apps do not allocate IDs, match raw responses, or maintain a batch. Messages
-arrive in the order the tasks finished, and every task delivers exactly one.
-The host runs 32 tasks at once and queues anything past that, starting each as
-a slot frees, so `Task.spawn!` never refuses. See
-[`async_read/main.roc`](examples/async_read/main.roc) for file reads,
-[`live_plot/main.roc`](examples/live_plot/main.roc) for a paced directory walk,
-[`task_sleep/main.roc`](examples/task_sleep/main.roc) for the smallest task, and
-[`http_fetch/main.roc`](examples/http_fetch/main.roc) for a fetch that keeps the
-frame moving while it waits.
-
-## Start your own project
-
-The easiest route is to copy one of the examples closest to what you want to
-make. Hello World, Pong, Snake, and Breakout are self-contained; larger examples
-keep their files in their own `assets/` directory. For a project outside
-this checkout:
-
-1. Copy the example directory, including its `assets/` and supporting modules.
-2. If `main.roc` refers to `platform "../../platform/main.roc"`, replace that
-   local path with the default `platform` declaration from the
-   [latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest).
-   Examples updated by the release workflow may already contain the bundle URL.
-3. Build its `main.roc`.
-
-Release bundles include the native host libraries, so app authors do not need
-to build RocRay or raylib themselves. A bundle is the packaged Roc API plus
-those libraries. Use the `.roc-version` from the bundle's release tag, which may
-differ from the version required by the current source checkout.
-
-Use the default bundle on macOS, Windows, and Linux through X11 or XWayland. A
-separate native Wayland bundle is included in each release for Linux x64.
-
-## What you can make
-
-RocRay provides the pieces needed for much more than a minimal drawing demo:
-
-- Styled 2D shapes, gradients, text, cameras, scissoring, blending, render
-  textures, and shaders.
-- Loaded or generated textures, spritesheet animation, mutable pixel data, and
-  exact projective texture drawing.
-- Explicit executable-relative, working-directory, or external disk asset
-  stores with optional manifest identity validation; see the `Assets` module docs.
-- Keyboard, mouse, Unicode text, gamepad, and cursor input, plus files dropped
-  onto the window with the pointer position they landed at.
-- Window and frame timing, wall-clock timestamps, startup entropy, the
-  [`roc-random`](https://github.com/kili-ilo/roc-random) generator package,
-  command-line arguments, and environment access.
-- File reads, writes, directory listings, and metadata; standard output and
-  error for headless and batch runs; an embedded SQLite database; UDP sockets;
-  external programs run as child processes with deadlines and output caps; and
-  an HTTP client over the shared
-  [`roc-lang/http`](https://github.com/roc-lang/http) `Request`/`Response`
-  types, with TLS through the system certificate store. Everything that waits
-  runs on a task while the frame keeps drawing.
-- Generated or loaded sound effects plus streamed music with playback controls.
-- 2D math and collision helpers, geometric-algebra helpers used for 2D gameplay,
-  and TMX tilemaps with culled drawing and object queries.
-- Resizable, fullscreen, VSync, capped, or uncapped native windows on macOS,
-  Linux, and Windows.
-- Screenshots and recordings an app takes of itself, written as PNG, animated
-  GIF, or VP8 video in a WebM container, and PNG export of an offscreen render
-  texture at any size.
-
-Browse the [API reference](https://lukewilliamboswell.github.io/roc-ray/) for
-individual functions and types.
-
-## Recording an app
-
-An app can capture its own output, which makes it a way to generate
-documentation assets and visualizations rather than only to play them. Declare a
-recording in the startup config and it needs no code in `render!` at all:
-
-```roc
-App.init(
-    App.default
-        .with_output_dir("captures")
-    # Render on the GPU with no window on screen, like a batch job.
-        .with_visible(Bool.False)
-        .with_recording(
-            Capture.default
-                .with_path("demo.gif")
-                .with_format(Gif)
-                .with_fps(25)
-                .with_max_frames(300),
-        ),
-    |_host| Ok({}),
-)
-```
-
-`Capture.screenshot!`, `Capture.start!`, and `Capture.stop!` cover the cases
-where the app decides when to capture. `Mouse.set_source!` drives a
-scripted pointer through the same input path a real one uses, so a recorded walk
-through a UI exercises the app's ordinary hover and click handling.
-
-Pixels also come back the other way. `Capture.pixel_at!` reads one pixel of the
-last presented frame or of a `Draw.RenderTexture`, and `Capture.read_region!`
-reads a rectangle of one as RGBA8 bytes -- an eyedropper, a golden-image check
-a headless run makes itself, or an image-processing pass written in Roc.
-
-Three things worth knowing:
-
-- **Paths are sandboxed.** Every capture path resolves under `with_output_dir`.
-  Absolute paths and paths containing `..` are refused rather than rewritten;
-  this is the only path-sandboxed writer the platform grants. `Files.write_text!`
-  and `Files.write_bytes!` write wherever the process itself may write.
-- **Recordings are reproducible.** `FixedStep` timing (the default) reports an
-  exact `1/fps` frame delta regardless of how long the readback actually took,
-  so a recording plays back smoothly and two runs produce identical output.
-  Choose `RealTime` if you would rather see the true frame pacing.
-- **A hidden window is not the same as `--host-headless`.** `with_visible(Bool.False)`
-  still renders on the GPU, so captures work; it needs a display server, so wrap
-  it in `xvfb-run` on a machine without one. The host's `--host-headless` flag swaps
-  in a stub backend that draws nothing, so it captures nothing.
-
-See `examples/postcard_studio/main.roc`, `examples/capture_plot/main.roc`, and
-`examples/capture_ui_demo/main.roc`.
-
-Separately, note that raylib's own screen-capture shortcut is compiled into the
-vendored library: pressing **F12** in any RocRay app writes `screenshotNNN.png`
-into the process working directory. That predates this feature, bypasses
-`with_output_dir`, and cannot be disabled without rebuilding raylib from source.
-
-## Examples
-
-Breakout can generate a README-ready GIF after building the local host:
-
-```bash
-zig build
-scripts/run-example.py examples/breakout -- --record-demo
-```
-
-The demo uses a hidden GPU window. On Linux without a display server, run the
-last command through `xvfb-run -a`. Commit `examples/breakout/demo.gif`, then
-add it to this section as a linked image card.
-
-For a small game, start with Pong, Snake, or Breakout:
-
-```bash
-roc build examples/pong/main.roc --output pong && ./pong
-roc build examples/snake/main.roc --output snake && ./snake
-roc build examples/breakout/main.roc --output breakout && ./breakout
-```
-
-The larger showcase apps combine authored levels, sprites, sound, cameras, and
-collision handling:
-
-```bash
-roc build examples/top_down/main.roc --output top_down && ./top_down
-roc build examples/cave_climb/main.roc --output cave_climb && ./cave_climb
-```
-
-In Cave Climb, use A/D to move, W, Up, or Space to jump, the left mouse button
-to fire the laser, and the right mouse button to use the hook.
-
-The [example gallery](examples/README.md) groups complete starter apps, larger
-showcases, and focused recipes. It also suggests a learning path and calls out
-the reusable patterns in each app, including responsive UI, input, cameras,
-generated assets, projective textures, post-processing, and capture workflows.
-
-## Supported systems
-
-| System | Architecture |
-| --- | --- |
-| macOS | Intel and Apple Silicon |
-| Linux | x64 (X11/XWayland or native Wayland bundle) |
-| Windows | x64 |
-
-ARM Linux is not currently included in release bundles.
-
-## Contributing
-
-Bug fixes, approachable APIs, documentation, examples, and well-scoped new
-capabilities are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the
-development setup, design principles, tests, and release tooling.
+RocRay follows Roc's new compiler closely, and its APIs may still change as the
+language evolves. Bug reports, documentation improvements, approachable APIs,
+and focused capabilities are welcome.

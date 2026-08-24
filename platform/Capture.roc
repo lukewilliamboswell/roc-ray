@@ -1,10 +1,8 @@
 ## Screenshots and recordings of the app's rendered output.
 ##
-## Recorded frames are captured from the framebuffer at the end of each frame,
-## and so are the size of the window. Supported outputs are PNG image sequences,
-## GIF, and WebM. A still image can also be exported from an offscreen
-## `Draw.RenderTexture` of any size, which is how output larger than the window
-## is produced.
+## Record the window framebuffer as a PNG sequence, GIF, or WebM. Recorded
+## frames use the window dimensions. Export a `Draw.RenderTexture` for a still
+## image at another size.
 ##
 ## Every path here is relative to the output directory set with
 ## `App.default.with_output_dir`, and one that would escape it -- absolute, or
@@ -13,16 +11,12 @@
 ## `Files.write_bytes!` write wherever the process may write, while everything
 ## here is confined to the output directory.
 ##
-## Recording starts and stops through `Capture.start!` and `Capture.stop!`,
-## a single frame is written by `Capture.screenshot!`, an offscreen
-## `Draw.RenderTexture` is written at its own size by
-## `Capture.screenshot_texture!`, and recording state is available as
-## `input.capture` each cycle.
+## `start!` and `stop!` control recording. `screenshot!` writes a presented
+## frame, and `screenshot_texture!` writes an offscreen render texture.
+## Recording state is sampled into `input.capture` each cycle.
 ##
-## Pixels also come back the other way, without becoming a file. `pixel_at!`
-## reads one pixel and `read_region!` reads a rectangle, from either the last
-## presented frame or a `Draw.RenderTexture`; both are refused in `render!`,
-## and both say what they cost.
+## `pixel_at!` and `read_region!` return pixels from the last presented frame
+## or a render texture without writing a file. Both are refused in `render!`.
 ##
 ## The types and pure helpers live in the companion `roc-ray-types` package so
 ## reusable packages can depend on them without depending on this platform.

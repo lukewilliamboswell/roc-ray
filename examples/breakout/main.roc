@@ -1,3 +1,7 @@
+## A complete Breakout game with keyboard controls, sound, and an automated
+## recording mode. Use Left/Right or A/D to move, Space to launch, and Escape
+## to quit. Pass `--record-demo` to create `examples/breakout/demo.gif`. The
+## example separates game rules from input, sound effects, and drawing.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -9,18 +13,6 @@ import rr.Devices
 import rr.Math
 import rr.Text
 
-## Breakout, with a `--record-demo` mode that records its own GIF.
-##
-## The cabinet is drawn in neon on a dark gradient: a lit wall of bricks, glow
-## under the ball and the paddle, and prepared HUD text measured once at
-## startup. None of that is game state -- the rules below are still one pure
-## step over a `Game` -- so the demo records exactly what a player sees.
-##
-## The rules are one pure step over a `Game` and a `FrameInput`, returning the
-## next game and the events it produced; `update!` turns those events into
-## sounds and plays them. Because the step only asks for a `FrameInput`, the
-## demo mode can hand it a paddle that follows the ball instead of a keyboard,
-## and record the result to a file with no other change.
 Brick : {
 	id : U64,
 	rect : Math.Rect,
@@ -44,13 +36,24 @@ StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCl
 	is_eq : _
 }
 
-Game : {
+## The complete playable state. `advance` applies one pure game step and reports
+## events for `update!` to turn into sounds.
+Game := {
 	bricks : List(Brick),
 	paddle_x : F32,
 	ball : Ball,
 	score : U64,
 	lives : U64,
 	state : GameState,
+}.{
+	advance : Game, FrameInput -> StepResult
+	advance = |game, input|
+		match game.state {
+			Ready => advance_ready(game, input)
+			Playing => advance_playing(game, input)
+			Won => advance_finished(game, input)
+			GameOver => advance_finished(game, input)
+		}
 }
 
 Sounds : {
@@ -61,6 +64,9 @@ Sounds : {
 	start : Audio.Sound,
 }
 
+## The Model is the state retained between updates. It keeps the current game,
+## loaded sounds, recording-mode choice, animation time, and prepared text so
+## `render!` can draw without rebuilding resources every frame.
 Model : {
 	game : Game,
 	sounds : Sounds,
@@ -92,11 +98,9 @@ StepResult : {
 
 program = { init!, update!, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
 # --- Palette: a dark cabinet, a cyan paddle, a warm ball ---
 field_top : Color.Rgba
@@ -117,71 +121,49 @@ hud_color = Color.from_hex_rgb(0xd7e3ff)
 hint_color : Color.Rgba
 hint_color = Color.from_hex_rgb(0x6d7aa8)
 
-top_wall_y : F32
-top_wall_y = 58
+top_wall_y = 58.F32
 
-paddle_w : F32
-paddle_w = 112
+paddle_w = 112.F32
 
-paddle_h : F32
-paddle_h = 16
+paddle_h = 16.F32
 
-paddle_y : F32
-paddle_y = 548
+paddle_y = 548.F32
 
-paddle_speed : F32
-paddle_speed = 460
+paddle_speed = 460.F32
 
-paddle_bounce_speed : F32
-paddle_bounce_speed = 360
+paddle_bounce_speed = 360.F32
 
-ball_radius : F32
-ball_radius = 8
+ball_radius = 8.F32
 
-ball_ready_gap : F32
-ball_ready_gap = 2
+ball_ready_gap = 2.F32
 
-ball_bounce_gap : F32
-ball_bounce_gap = 1
+ball_bounce_gap = 1.F32
 
-launch_vx : F32
-launch_vx = 170
+launch_vx = 170.F32
 
-launch_vy : F32
-launch_vy = -340
+launch_vy = -340.F32
 
-brick_left : F32
-brick_left = 44
+brick_left = 44.F32
 
-brick_top : F32
-brick_top = 88
+brick_top = 88.F32
 
-brick_w : F32
-brick_w = 64
+brick_w = 64.F32
 
-brick_h : F32
-brick_h = 22
+brick_h = 22.F32
 
-brick_gap : F32
-brick_gap = 8
+brick_gap = 8.F32
 
-bricks_per_row : U64
-bricks_per_row = 10
+bricks_per_row = 10.U64
 
-brick_score : U64
-brick_score = 10
+brick_score = 10.U64
 
-brick_band_top : F32
-brick_band_top = 84
+brick_band_top = 84.F32
 
-brick_band_bottom : F32
-brick_band_bottom = 236
+brick_band_bottom = 236.F32
 
-initial_lives : U64
-initial_lives = 3
+initial_lives = 3.U64
 
-demo_frames : U64
-demo_frames = 150
+demo_frames = 150.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"
@@ -500,15 +482,6 @@ advance_playing = |game, input| {
 	}
 }
 
-advance_game : Game, FrameInput -> StepResult
-advance_game = |game, input|
-	match game.state {
-		Ready => advance_ready(game, input)
-		Playing => advance_playing(game, input)
-		Won => advance_finished(game, input)
-		GameOver => advance_finished(game, input)
-	}
-
 ## One sound per event, in the order the step produced them.
 ##
 ## `List.map` rather than a fold: every event makes exactly one sound, so the
@@ -528,7 +501,7 @@ step_event_sounds = |sounds, events|
 			},
 	)
 
-## `advance_game` is a pure step returning events, and the events name the
+## `Game.advance` is a pure step returning events, and the events name the
 ## sounds they want; `update!` is where those sounds are played.
 Msg : []
 
@@ -550,7 +523,7 @@ update! = |model, program_input| {
 		}
 
 	game_input = if model.demo demo_frame_input(model.game, dt) else frame_input(input, dt)
-	result = advance_game(model.game, game_input)
+	result = model.game.advance(game_input)
 	if result.paddle_hit {
 		model.sounds.paddle.play!()
 	}

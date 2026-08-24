@@ -1,3 +1,7 @@
+## Drag the blue corner to reshape a texture in perspective; press R to reset.
+## This example shows how four editable corners place a texture in perspective,
+## how to place points with the same transformation, and how `update!` changes
+## the mouse cursor after calculating what the pointer is over.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -12,16 +16,13 @@ import rr.Math
 import rr.Mouse
 import rr.Text
 
-## Drag one corner of a texture and watch the perspective follow.
-##
-## `Draw.ProjectiveQuad.from_corners` builds a homography from four points and
-## refuses the ones that have no perspective -- degenerate, non-convex, or with
-## the horizon inside the quad -- so a rejected drag simply leaves the last good
-## quad in place. `quad.project` puts overlay points through that same
-## homography, so the marker at the centre really is the centre of the image.
 Corners : Draw.ProjectiveQuadCorners
 
-Model : {
+## State retained between updates: the texture and its last valid projective
+## quad, the editable corner positions, drag state, prepared help text, and
+## elapsed time for the handle animation. Invalid corner arrangements are not
+## stored, so rendering can always use `quad` safely.
+Model := {
 	texture : Draw.Texture,
 	quad : Draw.ProjectiveQuad,
 	corners : Corners,
@@ -30,6 +31,35 @@ Model : {
 
 	## Seconds since launch, so the handle can pulse and invite the drag.
 	elapsed : F32,
+}.{
+
+	## Apply pointer input and return the cursor that `update!` should set.
+	drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
+	drag_corner = |model, input| {
+		mouse = input.mouse.position()
+		handle_near = Math.distance(mouse, model.corners.top_right) < 34
+		dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
+		cursor = if handle_near or dragging ResizeAll else Arrow
+
+		candidate = if input.key_pressed(KeyR) {
+			initial_corners
+		} else if dragging {
+			{
+				..model.corners,
+				top_right: {
+					x: Math.clamp(mouse.x, 360, 750),
+					y: Math.clamp(mouse.y, 55, 390),
+				},
+			}
+		} else {
+			model.corners
+		}
+
+		match Draw.ProjectiveQuad.from_corners(candidate) {
+			Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, cursor }
+			Err(_) => { model: { ..model, dragging }, cursor }
+		}
+	}
 }
 
 program = { init!, update!, render! }
@@ -66,41 +96,9 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	dragged = drag_corner(model, program_input.devices)
+	dragged = model.drag_corner(program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-}
-
-## Fold one frame of pointer input into the quad.
-##
-## The cursor shape is a host effect rather than model state. This pure step
-## names the shape it wants and `update!` sets it, so the drag logic stays
-## testable without a host.
-drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
-drag_corner = |model, input| {
-	mouse = input.mouse.position()
-	handle_near = Math.distance(mouse, model.corners.top_right) < 34
-	dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
-	cursor = if handle_near or dragging ResizeAll else Arrow
-
-	candidate = if input.key_pressed(KeyR) {
-		initial_corners
-	} else if dragging {
-		{
-			..model.corners,
-			top_right: {
-				x: Math.clamp(mouse.x, 360, 750),
-				y: Math.clamp(mouse.y, 55, 390),
-			},
-		}
-	} else {
-		model.corners
-	}
-
-	match Draw.ProjectiveQuad.from_corners(candidate) {
-		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, cursor }
-		Err(_) => { model: { ..model, dragging }, cursor }
-	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -161,20 +159,20 @@ expect
 			model = test_model(quad)
 
 			# Nowhere near the handle: nothing is grabbed and the cursor is plain.
-			idle = drag_corner(model, Devices.none)
+			idle = model.drag_corner(Devices.none)
 
 			# Pressing on the handle grabs it and takes the corner to the pointer.
 			on_handle = Devices.none.with_mouse_position({ x: 600, y: 160 }).with_mouse_button_pressed(Left)
-			grabbed = drag_corner(model, on_handle)
+			grabbed = model.drag_corner(on_handle)
 
 			# A held corner is clamped to the range that still makes a quad, so
 			# dragging off the window cannot throw the perspective away.
 			off_window = Devices.none.with_mouse_position({ x: 4000, y: 4000 }).with_mouse_button_down(Left)
-			far = drag_corner({ ..model, dragging: Bool.True }, off_window)
+			far = { ..model, dragging: Bool.True }.drag_corner(off_window)
 
 			# R puts the corners back wherever the drag left them.
 			moved = { ..model, corners: { ..initial_corners, top_right: { x: 500, y: 300 } } }
-			reset = drag_corner(moved, Devices.none.with_key_pressed(KeyR))
+			reset = moved.drag_corner(Devices.none.with_key_pressed(KeyR))
 
 			idle.cursor
 				== Arrow

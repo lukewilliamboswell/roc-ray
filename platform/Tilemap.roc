@@ -1,12 +1,8 @@
 ## Tiled TMX data, tileset drawing, and grid queries.
 ##
-## Parse a map with `load_tmx!` in `init!`, bind its tilesets to loaded
-## textures, and keep the built `Tilemap` in the model. Parsing reads files, so
-## `load_tmx!` waits: it is legal in `init!`, where it blocks startup, and in
-## tasks, where it parks the task, and refused in `update!` and `render!`. To
-## swap levels while the app is running, call it inside `Task.spawn!` and build
-## the `Tilemap` from the map its message carries. Every `draw_*!` here takes a
-## `Draw.Frame` and is legal in `render!` only.
+## `load_tmx!` waits and is legal only in `init!` or a task. Bind every parsed
+## tileset to a loaded texture with `Builder`, then retain the built `Tilemap`
+## in the model. Drawing requires `Draw.Frame` and is legal only in `render!`.
 ##
 ## ```roc
 ## raw = Tilemap.load_tmx!("assets/level.tmx")?
@@ -20,22 +16,12 @@
 ## tilemap.draw_all!(frame)
 ## ```
 ##
-## The builder is where a parsed map becomes a drawable one. Tiled records a
-## tileset by its image path; `with_tileset_texture` says which loaded texture
-## each first GID means, and `build` refuses a map with a tileset left
-## unbound rather than drawing it blank. `layer_role` and `object_role` attach
-## the app's own meaning -- which layers are solid, which objects are spawns --
-## so the rest of the app asks about roles instead of about layer names.
+## `build` refuses unbound tilesets. `layer_role` and `object_role` attach
+## application-defined meanings for role-based drawing and queries.
 ##
 ## Grid queries and coordinate conversions are pure, so an app can use them
 ## from `update!` for collision and picking.
 ##
-## Signatures here name `TilemapRawMap`, `TilemapRawObject`, `TilemapBuilder`
-## and their siblings. Those are module-private nominals, one per public alias;
-## the names to write are the short ones on this page -- `Tilemap.RawMap`,
-## `Tilemap.RawObject`, `Tilemap.Builder`. A nominal has to be declared outside
-## the module object to be aliased inside it, which is why the two spellings
-## exist.
 import Assets
 import Camera
 import Draw

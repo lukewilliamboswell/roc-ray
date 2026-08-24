@@ -1,3 +1,8 @@
+## A platform game with a mirror-bouncing laser and a spring-like grapple.
+## Move with A/D or the arrow keys, jump with Space, aim with the mouse, use the
+## laser with the left button, grapple with the right button, and quit with
+## Escape. It demonstrates tilemaps, collision and movement, cameras, sprites,
+## and calculations for the two tools.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -17,15 +22,6 @@ import rr.Sprite
 import rr.Tilemap
 import Cave
 
-## A platformer with two mouse-driven tools: a laser that bounces off mirrors
-## and a grapple hook on a spring.
-##
-## Tilemap collision, gravity, and jumping come from `Physics`, with
-## `map_to_world` bridging Tiled's Y-down space and the Y-up physics space. Both
-## tools are pure recursive functions over the level, so a bounce path or a
-## latch point can be worked out without touching the host. Domain shapes live
-## in the sibling `Cave` module, which keeps this file to loading, simulation,
-## and drawing.
 GameState : Cave.GameState
 
 LaserSegment : Cave.LaserSegment
@@ -60,24 +56,23 @@ Player : Cave.Player
 
 World : Cave.World
 
+## The Model is defined in the nearby `Cave` module and retained between
+## updates. It groups loaded drawing resources with the level and changing
+## world state so movement, tools, and rendering all use the same game state.
 Model : Cave.Model
 
 program = { init!, update!, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
 map_path : Str
 map_path = "examples/cave_climb/assets/cave_climb.tmx"
 
-player_width : F32
-player_width = 42
+player_width = 42.F32
 
-player_height : F32
-player_height = 58
+player_height = 58.F32
 
 half_player_w : F32
 half_player_w = player_width * 0.5
@@ -85,77 +80,53 @@ half_player_w = player_width * 0.5
 half_player_h : F32
 half_player_h = player_height * 0.5
 
-move_speed : F32
-move_speed = 315
+move_speed = 315.F32
 
-gravity : F32
-gravity = -2100
+gravity = -2100.F32
 
-jump_velocity : F32
-jump_velocity = 920
+jump_velocity = 920.F32
 
-max_fall_speed : F32
-max_fall_speed = -980
+max_fall_speed = -980.F32
 
-gem_radius : F32
-gem_radius = 34
+gem_radius = 34.F32
 
-checkpoint_radius : F32
-checkpoint_radius = 38
+checkpoint_radius = 38.F32
 
-goal_radius : F32
-goal_radius = 54
+goal_radius = 54.F32
 
-laser_range : F32
-laser_range = 780
+laser_range = 780.F32
 
-laser_step : F32
-laser_step = 10
+laser_step = 10.F32
 
-laser_bounce_limit : U64
-laser_bounce_limit = 5
+laser_bounce_limit = 5.U64
 
-laser_player_radius : F32
-laser_player_radius = 17
+laser_player_radius = 17.F32
 
-laser_reflect_nudge : F32
-laser_reflect_nudge = 12
+laser_reflect_nudge = 12.F32
 
-mirror_thickness : F32
-mirror_thickness = 9
+mirror_thickness = 9.F32
 
-hook_launch_speed : F32
-hook_launch_speed = 1040
+hook_launch_speed = 1040.F32
 
-hook_max_range : F32
-hook_max_range = 980
+hook_max_range = 980.F32
 
-hook_max_age : F32
-hook_max_age = 1.35
+hook_max_age = 1.35.F32
 
-hook_collision_step : F32
-hook_collision_step = 9
+hook_collision_step = 9.F32
 
-hook_spring_strength : F32
-hook_spring_strength = 18
+hook_spring_strength = 18.F32
 
-hook_damping : F32
-hook_damping = 3.2
+hook_damping = 3.2.F32
 
-hook_max_acceleration : F32
-hook_max_acceleration = 3200
+hook_max_acceleration = 3200.F32
 
-ground_control : F32
-ground_control = 90
+ground_control = 90.F32
 
-air_control : F32
-air_control = 20
+air_control = 20.F32
 
-ground_friction : F32
-ground_friction = 70
+ground_friction = 70.F32
 
-air_drag : F32
-air_drag = 0.35
+air_drag = 0.35.F32
 
 init! : App.Init(Model, _)
 init! = App.init(
@@ -207,31 +178,9 @@ init! = App.init(
 	},
 )
 
-map_to_world : Math.Vec2 -> Physics.Point
-map_to_world = |point| Physics.point(point.x, 0 - point.y, 0)
-
-world_to_map : Physics.Point -> Math.Vec2
-world_to_map = |point| {
-	coords = Physics.coords(point)
-	{ x: coords.x, y: 0 - coords.y }
-}
-
-new_player : Physics.Point -> Player
-new_player = |pos| {
-	pos,
-	velocity: Physics.zero,
-	grounded: Bool.False,
-	facing: 1,
-	animation: Sprite.animation({ frame_count: 2, fps: 8 }),
-	invuln: 0,
-}
-
-inactive_laser : LaserState
-inactive_laser = { active: Bool.False, segments: [] }
-
 new_world : Level -> World
 new_world = |level| {
-	player: new_player(level.spawn),
+	player: Cave.Player.new(level.spawn),
 	gems: level.gems,
 	collected: 0,
 	enemies: level.enemy_spawns,
@@ -240,15 +189,15 @@ new_world = |level| {
 	state: Playing,
 	phase: 0,
 	flash: 0,
-	laser: inactive_laser,
+	laser: Cave.LaserState.inactive,
 	hook: HookIdle,
 }
 
 level_from_tilemap : Tilemap -> Level
 level_from_tilemap = |tilemap| {
 	raw = tilemap.raw_map()
-	spawn = map_to_world(object_role_center_or(tilemap, Spawn, { x: 160, y: 2520 }))
-	goal = map_to_world(object_role_center_or(tilemap, Goal, { x: 832, y: 260 }))
+	spawn = Cave.Space.map_to_world(object_role_center_or(tilemap, Spawn, { x: 160, y: 2520 }))
+	goal = Cave.Space.map_to_world(object_role_center_or(tilemap, Goal, { x: 832, y: 260 }))
 
 	{
 		tilemap,
@@ -274,7 +223,7 @@ gems_from_tilemap : Tilemap -> List(Gem)
 gems_from_tilemap = |tilemap| {
 	var $gems = []
 	for object in tilemap.objects_with_role(Collectible) {
-		$gems = List.append($gems, { id: object.id, pos: map_to_world(tilemap.object_world_center(object)), taken: Bool.False })
+		$gems = List.append($gems, { id: object.id, pos: Cave.Space.map_to_world(tilemap.object_world_center(object)), taken: Bool.False })
 	}
 	$gems
 }
@@ -286,7 +235,7 @@ hazards_from_tilemap = |raw, tilemap| {
 		$hazards = List.append(
 			$hazards,
 			{
-				pos: map_to_world(tilemap.object_world_center(object)),
+				pos: Cave.Space.map_to_world(tilemap.object_world_center(object)),
 				radius: Tilemap.property_f32(raw, object, "radius", 30),
 			},
 		)
@@ -304,7 +253,7 @@ mirrors_from_tilemap = |raw, tilemap| {
 			$mirrors,
 			{
 				id: object.id,
-				pos: map_to_world(center),
+				pos: Cave.Space.map_to_world(center),
 				length,
 				base_turn: Tilemap.property_f32(raw, object, "turn", object.rotation / 360),
 				spin: Tilemap.property_f32(raw, object, "spin", 0.22),
@@ -322,7 +271,7 @@ enemies_from_tilemap = |raw, tilemap| {
 			$enemies,
 			{
 				id: object.id,
-				pos: map_to_world(tilemap.object_world_center(object)),
+				pos: Cave.Space.map_to_world(tilemap.object_world_center(object)),
 				radius: Tilemap.property_f32(raw, object, "radius", 28),
 				alive: Bool.True,
 			},
@@ -333,23 +282,23 @@ enemies_from_tilemap = |raw, tilemap| {
 
 default_mirrors : List(Mirror)
 default_mirrors = [
-	{ id: 900, pos: map_to_world({ x: 365, y: 2295 }), length: 118, base_turn: 0.08, spin: 0.18 },
-	{ id: 901, pos: map_to_world({ x: 600, y: 1880 }), length: 104, base_turn: 0.32, spin: -0.16 },
-	{ id: 902, pos: map_to_world({ x: 700, y: 1240 }), length: 108, base_turn: 0.16, spin: 0.22 },
+	{ id: 900, pos: Cave.Space.map_to_world({ x: 365, y: 2295 }), length: 118, base_turn: 0.08, spin: 0.18 },
+	{ id: 901, pos: Cave.Space.map_to_world({ x: 600, y: 1880 }), length: 104, base_turn: 0.32, spin: -0.16 },
+	{ id: 902, pos: Cave.Space.map_to_world({ x: 700, y: 1240 }), length: 108, base_turn: 0.16, spin: 0.22 },
 ]
 
 default_enemies : List(Enemy)
 default_enemies = [
-	{ id: 920, pos: map_to_world({ x: 705, y: 2260 }), radius: 24, alive: Bool.True },
-	{ id: 921, pos: map_to_world({ x: 760, y: 1370 }), radius: 24, alive: Bool.True },
-	{ id: 922, pos: map_to_world({ x: 570, y: 820 }), radius: 24, alive: Bool.True },
+	{ id: 920, pos: Cave.Space.map_to_world({ x: 705, y: 2260 }), radius: 24, alive: Bool.True },
+	{ id: 921, pos: Cave.Space.map_to_world({ x: 760, y: 1370 }), radius: 24, alive: Bool.True },
+	{ id: 922, pos: Cave.Space.map_to_world({ x: 570, y: 820 }), radius: 24, alive: Bool.True },
 ]
 
 checkpoints_from_tilemap : Tilemap -> List(Physics.Point)
 checkpoints_from_tilemap = |tilemap| {
 	var $checkpoints = []
 	for object in tilemap.objects_with_role(Checkpoint) {
-		$checkpoints = List.append($checkpoints, map_to_world(tilemap.object_world_center(object)))
+		$checkpoints = List.append($checkpoints, Cave.Space.map_to_world(tilemap.object_world_center(object)))
 	}
 	$checkpoints
 }
@@ -373,44 +322,15 @@ tick_timer = |timer, dt| if timer <= dt 0 else timer - dt
 wrap_unit : F32 -> F32
 wrap_unit = |value| if value >= 1 value - 1 else if value < 0 value + 1 else value
 
-wrap_turn : F32 -> F32
-wrap_turn = |value| if value >= 1 wrap_turn(value - 1) else if value < 0 wrap_turn(value + 1) else value
-
 ping_pong : F32 -> F32
 ping_pong = |phase| if phase < 0.5 phase * 2 else (1 - phase) * 2
-
-quarter_wave : F32 -> F32
-quarter_wave = |amount| {
-	t = Math.clamp01(amount)
-	t * (2 - t)
-}
-
-sin_turn : F32 -> F32
-sin_turn = |turn| {
-	t = wrap_turn(turn)
-	if t < 0.25 {
-		quarter_wave(t * 4)
-	} else if t < 0.5 {
-		quarter_wave((0.5 - t) * 4)
-	} else if t < 0.75 {
-		0 - quarter_wave((t - 0.5) * 4)
-	} else {
-		0 - quarter_wave((1 - t) * 4)
-	}
-}
-
-cos_turn : F32 -> F32
-cos_turn = |turn| sin_turn(turn + 0.25)
-
-unit_from_turn : F32 -> Physics.Vector
-unit_from_turn = |turn| Physics.normalize(Physics.vector(cos_turn(turn), sin_turn(turn), 0))
 
 screen_to_map : Camera.Camera2D, Math.Vec2 -> Math.Vec2
 screen_to_map = |camera, screen| camera.screen_to_world(screen)
 
 tool_input : Devices.Snapshot, Camera.Camera2D -> ToolInput
 tool_input = |input, camera| {
-	aim = map_to_world(screen_to_map(camera, { x: input.mouse.x, y: input.mouse.y }))
+	aim = Cave.Space.map_to_world(screen_to_map(camera, { x: input.mouse.x, y: input.mouse.y }))
 	{
 		aim,
 		laser_down: input.mouse.button_down(Left),
@@ -421,12 +341,12 @@ tool_input = |input, camera| {
 
 player_rect_at : Physics.Point -> Math.Rect
 player_rect_at = |pos| {
-	map_pos = world_to_map(pos)
+	map_pos = Cave.Space.world_to_map(pos)
 	Math.rect(map_pos.x - half_player_w, map_pos.y - half_player_h, player_width, player_height)
 }
 
 solid_probe : Level, Physics.Point -> Bool
-solid_probe = |level, point| level.tilemap.solid_at_world(world_to_map(point))
+solid_probe = |level, point| level.tilemap.solid_at_world(Cave.Space.world_to_map(point))
 
 player_hits_solid : Level, Physics.Point, F32 -> Bool
 player_hits_solid = |level, pos, bottom_inset| {
@@ -495,37 +415,6 @@ solid_hit_at = |level, origin, direction, max_distance, step, distance| {
 	}
 }
 
-mirror_axis : Mirror, F32 -> Physics.Vector
-mirror_axis = |mirror, phase| unit_from_turn(mirror.base_turn + phase * mirror.spin)
-
-mirror_normal : Mirror, F32 -> Physics.Vector
-mirror_normal = |mirror, phase| {
-	axis_vector = Physics.components(mirror_axis(mirror, phase))
-	Physics.normalize(Physics.vector(0 - axis_vector.y, axis_vector.x, 0))
-}
-
-mirror_segment : Mirror, F32 -> LaserSegment
-mirror_segment = |mirror, phase| {
-	axis_vector = mirror_axis(mirror, phase)
-	offset = Physics.scale(axis_vector, mirror.length * 0.5)
-	{
-		start: Physics.add(mirror.pos, Physics.scale(offset, -1)),
-		end: Physics.add(mirror.pos, offset),
-	}
-}
-
-point_segment_distance : Physics.Point, LaserSegment -> F32
-point_segment_distance = |point, segment| {
-	ab = Physics.sub(segment.end, segment.start)
-	len_sq = Physics.length_squared(ab)
-	if len_sq == 0 {
-		physics_distance(point, segment.start)
-	} else {
-		t = Math.clamp(Physics.dot(Physics.sub(point, segment.start), ab) / len_sq, 0, 1)
-		physics_distance(point, Physics.add(segment.start, Physics.scale(ab, t)))
-	}
-}
-
 mirror_hit_at : List(Mirror), F32, Physics.Point -> Try(MirrorHit, [NoHit])
 mirror_hit_at = |mirrors, phase, point| {
 	var $hit = Err(NoHit)
@@ -533,9 +422,9 @@ mirror_hit_at = |mirrors, phase, point| {
 		match $hit {
 			Ok(_) => {}
 			Err(_) => {
-				segment = mirror_segment(mirror, phase)
-				if point_segment_distance(point, segment) <= mirror_thickness {
-					$hit = Ok({ point, normal: mirror_normal(mirror, phase) })
+				segment = mirror.segment(phase)
+				if segment.distance_to(point) <= mirror_thickness {
+					$hit = Ok({ point, normal: mirror.normal(phase) })
 				}
 			}
 		}
@@ -549,7 +438,7 @@ enemy_hit_at = |enemies, point| {
 	for enemy in enemies {
 		match $hit {
 			Ok(_) => {}
-			Err(_) => if enemy.alive and physics_distance(enemy.pos, point) <= enemy.radius {
+			Err(_) => if enemy.is_hit_at(point) {
 				$hit = Ok({ point, id: enemy.id })
 			}
 		}
@@ -736,8 +625,10 @@ CollectResult : {
 collect_gems : List(Gem), Physics.Point -> CollectResult
 collect_gems = |gems, player_pos| {
 	var $taken = 0
-	for gem in gems {
-		hit = !(gem.taken) and physics_distance(gem.pos, player_pos) <= gem_radius
+	for item in gems {
+		gem : Gem
+		gem = item
+		hit = gem.is_available_at(player_pos, gem_radius)
 		if hit {
 			$taken = $taken + 1
 		}
@@ -748,8 +639,10 @@ collect_gems = |gems, player_pos| {
 	} else {
 		next = List.map(
 			gems,
-			|gem| {
-				hit = !(gem.taken) and physics_distance(gem.pos, player_pos) <= gem_radius
+			|item| {
+				gem : Gem
+				gem = item
+				hit = gem.is_available_at(player_pos, gem_radius)
 				{ ..gem, taken: gem.taken or hit }
 			},
 		)
@@ -772,7 +665,7 @@ touches_hazard : List(Danger), Physics.Point -> Bool
 touches_hazard = |hazards, player_pos| {
 	var $hit = Bool.False
 	for hazard in hazards {
-		if physics_distance(hazard.pos, player_pos) <= hazard.radius + half_player_w {
+		if hazard.touches(player_pos, half_player_w) {
 			$hit = Bool.True
 		}
 	}
@@ -789,11 +682,11 @@ damage_player = |world, respawn| {
 	next_lives = if world.lives > 0 world.lives - 1 else 0
 	{
 		..world,
-		player: { ..new_player(respawn), invuln: 1.4 },
+		player: { ..Cave.Player.new(respawn), invuln: 1.4 },
 		lives: next_lives,
 		flash: 0.32,
 		state: if next_lives == 0 GameOver else Playing,
-		laser: inactive_laser,
+		laser: Cave.LaserState.inactive,
 		hook: HookIdle,
 	}
 }
@@ -851,8 +744,8 @@ advance_world = |level, world, move_axis, jump_pressed, input, dt| {
 	}
 
 	if goal_reached(level, base) {
-		{ ..base, state: Won, laser: inactive_laser, hook: HookIdle }
-	} else if player.invuln <= 0 and (laser_trace.hit_player or touches_hazard(level.hazards, player.pos) or (world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
+		{ ..base, state: Won, laser: Cave.LaserState.inactive, hook: HookIdle }
+	} else if player.invuln <= 0 and (laser_trace.hit_player or touches_hazard(level.hazards, player.pos) or (Cave.Space.world_to_map(player.pos)).y > Math.bottom(level.bounds) + 96) {
 		damage_player(base, checkpoint)
 	} else {
 		base
@@ -909,7 +802,7 @@ render! = |model, frame| {
 
 camera_for : Level, Physics.Point -> Camera.Camera2D
 camera_for = |level, target| {
-	map_target = world_to_map(target)
+	map_target = Cave.Space.world_to_map(target)
 	zoom = 0.96
 	half_w = screen_w * 0.5 / zoom
 	half_h = screen_h * 0.5 / zoom
@@ -987,7 +880,7 @@ draw_gems! : Draw.Frame, Draw.Texture, List(Gem), F32 => {}
 draw_gems! = |frame, tiles, gems, phase| {
 	for gem in gems {
 		if !(gem.taken) {
-			pos = world_to_map(gem.pos)
+			pos = Cave.Space.world_to_map(gem.pos)
 			pulse = 0.86 + ping_pong(wrap_unit(phase + U64.to_f32(gem.id) * 0.07)) * 0.12
 			frame.circle_gradient!({ center: pos, radius: 42 * pulse, color_inner: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 80), color_outer: Color.with_alpha(Color.from_hex_rgb(0x55c7ff), 0) })
 			draw_tile_sprite!(frame, tiles, gem_source, pos, 0.72 * pulse, phase * 60)
@@ -998,7 +891,7 @@ draw_gems! = |frame, tiles, gems, phase| {
 draw_hazard_marks! : Draw.Frame, Draw.Texture, List(Danger), F32 => {}
 draw_hazard_marks! = |frame, tiles, hazards, phase| {
 	for hazard in hazards {
-		pos = world_to_map(hazard.pos)
+		pos = Cave.Space.world_to_map(hazard.pos)
 		frame.circle_gradient!({ center: pos, radius: hazard.radius * 1.8, color_inner: Color.with_alpha(Color.from_hex_rgb(0xf94144), 60), color_outer: Color.with_alpha(Color.from_hex_rgb(0xf94144), 0) })
 		draw_tile_sprite!(frame, tiles, saw_source, pos, 0.78, phase * 260)
 	}
@@ -1007,8 +900,8 @@ draw_hazard_marks! = |frame, tiles, hazards, phase| {
 draw_checkpoints! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_checkpoints! = |frame, tiles, level, world| {
 	for checkpoint in level.checkpoints {
-		checkpoint_pos = world_to_map(checkpoint)
-		reached = checkpoint_pos.y >= (world_to_map(world.checkpoint)).y
+		checkpoint_pos = Cave.Space.world_to_map(checkpoint)
+		reached = checkpoint_pos.y >= (Cave.Space.world_to_map(world.checkpoint)).y
 		tint = if reached Color.white else Color.with_alpha(Color.white, 120)
 		sprite = Sprite.from_texture(tiles)
 			.source(
@@ -1031,7 +924,7 @@ draw_checkpoints! = |frame, tiles, level, world| {
 draw_goal! : Draw.Frame, Draw.Texture, Level, World => {}
 draw_goal! = |frame, tiles, level, world| {
 	ready = world.collected == List.len(level.gems)
-	pos = world_to_map(level.goal)
+	pos = Cave.Space.world_to_map(level.goal)
 	color = if ready Color.from_hex_rgb(0x90be6d) else Color.from_hex_rgb(0xadb5bd)
 	frame.circle_gradient!({ center: pos, radius: if ready 86 else 54, color_inner: Color.with_alpha(color, 95), color_outer: Color.with_alpha(color, 0) })
 	draw_tile_sprite!(frame, tiles, goal_source, pos, if ready 1.0 else 0.82, 0)
@@ -1040,10 +933,10 @@ draw_goal! = |frame, tiles, level, world| {
 draw_mirrors! : Draw.Frame, List(Mirror), F32 => {}
 draw_mirrors! = |frame, mirrors, phase| {
 	for mirror in mirrors {
-		segment = mirror_segment(mirror, phase)
-		start = world_to_map(segment.start)
-		end = world_to_map(segment.end)
-		center = world_to_map(mirror.pos)
+		segment = mirror.segment(phase)
+		start = Cave.Space.world_to_map(segment.start)
+		end = Cave.Space.world_to_map(segment.end)
+		center = Cave.Space.world_to_map(mirror.pos)
 		glass = Color.from_hex_rgb(0xbaf2ff)
 		edge = Color.from_hex_rgb(0x3a506b)
 		frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(edge, 235), 15) })
@@ -1065,7 +958,7 @@ draw_enemies! : Draw.Frame, Draw.Texture, List(Enemy), F32 => {}
 draw_enemies! = |frame, texture, enemies, phase| {
 	for enemy in enemies {
 		if enemy.alive {
-			pos = world_to_map(enemy.pos)
+			pos = Cave.Space.world_to_map(enemy.pos)
 			pulse = 0.9 + ping_pong(wrap_unit(phase + U64.to_f32(enemy.id) * 0.09)) * 0.08
 			frame.circle!({ center: pos, radius: enemy.radius + 3, style: Draw.outlined(Color.with_alpha(Color.from_hex_rgb(0xffba08), 150), 2) })
 			draw_tile_sprite!(frame, texture, enemy_source(enemy, phase), pos, 0.72 * pulse, 0)
@@ -1084,8 +977,8 @@ draw_laser! = |frame, laser| {
 	if laser.active {
 		laser_color = Color.from_hex_rgb(0x72f7ff)
 		for segment in laser.segments {
-			start = world_to_map(segment.start)
-			end = world_to_map(segment.end)
+			start = Cave.Space.world_to_map(segment.start)
+			end = Cave.Space.world_to_map(segment.end)
 			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(laser_color, 85), 8) })
 			frame.line!({ start, end, stroke: Draw.stroke(Color.white, 2) })
 			frame.circle_gradient!({ center: end, radius: 18, color_inner: Color.with_alpha(laser_color, 160), color_outer: Color.with_alpha(laser_color, 0) })
@@ -1095,11 +988,11 @@ draw_laser! = |frame, laser| {
 
 draw_hook! : Draw.Frame, Player, HookState => {}
 draw_hook! = |frame, player, hook| {
-	start = world_to_map(player.pos)
+	start = Cave.Space.world_to_map(player.pos)
 	match hook {
 		HookIdle => {}
 		HookFlying(projectile) => {
-			end = world_to_map(projectile.pos)
+			end = Cave.Space.world_to_map(projectile.pos)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			hook_color = Color.from_hex_rgb(0xffc857)
 			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(cord, 190), 2) })
@@ -1107,7 +1000,7 @@ draw_hook! = |frame, player, hook| {
 			frame.circle!({ center: end, radius: 10, style: Draw.outlined(Color.with_alpha(hook_color, 135), 2) })
 		}
 		HookLatched(latch) => {
-			end = world_to_map(latch.anchor)
+			end = Cave.Space.world_to_map(latch.anchor)
 			cord = Color.from_hex_rgb(0xd7dee8)
 			anchor_color = Color.from_hex_rgb(0xf9c74f)
 			frame.line!({ start, end, stroke: Draw.stroke(Color.with_alpha(Color.black, 120), 5) })
@@ -1133,7 +1026,7 @@ player_source = |player| {
 draw_player! : Draw.Frame, Draw.Texture, Player => {}
 draw_player! = |frame, characters, player| {
 	tint = if player.invuln > 0 Color.with_alpha(Color.white, 145) else Color.white
-	pos = world_to_map(player.pos)
+	pos = Cave.Space.world_to_map(player.pos)
 	Sprite.from_texture(characters)
 		.source(
 			player_source(player),
@@ -1181,8 +1074,8 @@ draw_modal! = |frame, title, subtitle, accent| {
 }
 
 expect physics_distance(Physics.point_xy(0, 0), Physics.point_xy(3, 4)) == 5
-expect world_to_map(map_to_world({ x: 10, y: 20 })) == { x: 10, y: 20 }
-expect player_rect_at(map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, player_width, player_height)
+expect Cave.Space.world_to_map(Cave.Space.map_to_world({ x: 10, y: 20 })) == { x: 10, y: 20 }
+expect player_rect_at(Cave.Space.map_to_world({ x: 10, y: 20 })) == Math.rect(-11, -9, player_width, player_height)
 expect tick_timer(0.1, 0.2) == 0
 expect F32.abs(wrap_unit(1.2) - 0.2) < 0.0001
 expect {
@@ -1192,9 +1085,6 @@ expect {
 expect Physics.components(direction_to(Physics.point_xy(0, 0), Physics.point_xy(3, 4), 1)) == { x: 0.6, y: 0.8, z: 0 }
 expect steered_x_velocity(0, 1, Bool.True, 1) == move_speed
 expect steered_x_velocity(20, 0, Bool.True, 1) == 0
-expect wrap_turn(1.25) == 0.25
-expect Physics.components(unit_from_turn(0)) == { x: 1, y: 0, z: 0 }
-expect point_segment_distance(Physics.point_xy(5, 3), { start: Physics.point_xy(0, 0), end: Physics.point_xy(10, 0) }) == 3
 expect {
 	enemy = { id: 1, pos: Physics.origin, radius: 4, alive: Bool.True }
 	match List.first(kill_laser_enemies([enemy], [1])) {

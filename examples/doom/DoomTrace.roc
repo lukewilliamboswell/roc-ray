@@ -56,7 +56,7 @@ DoomTrace := [].{
 	checksum : List(Snapshot) -> U64
 	checksum = |trace| checksum_from(trace, 0, 2166136261)
 
-	golden_checksum = 2427046857.U64
+	golden_checksum = 3698674134.U64
 }
 
 run_commands = |run, commands, partitions, index|

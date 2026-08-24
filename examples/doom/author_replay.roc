@@ -67,7 +67,8 @@ author_tic = |run| {
 	line_index = List.get(portal_lines, route_index) ?? exit_line
 	target = author_target(route_index, pos, line_midpoint(line_index))
 	route_line = List.get(map.raw().linedefs, line_index) ?? crash "route line missing"
-	blockers = List.concat(DoomRuntime.blockers_for_player(map, run.level, pos), decoration_segments(run.decorations))
+	decorations = decoration_segments(run.decorations)
+	blockers = List.concat(DoomRuntime.blockers_for_player(map, run.level, pos), decorations)
 	supply = closest_supply(run.world.doom.pickups, run.world.doom.player, pos, sector, blockers)
 	using_special = route_line.special != 0 and DoomSim.distance_squared(pos, target) < 64 * 64
 	combat_target = if can_fire(run.world.doom.player) and !(using_special) closest_visible_actor(run.world.doom.actors, pos, blockers) else Err(NoActor)
@@ -84,7 +85,7 @@ author_tic = |run| {
 		Err(_) => KeepWeapon
 	}
 	command = { ..movement, weapon_slot }
-	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, blockers, map)
+	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, decorations, map, run.level)
 	new_pos = advanced.world.doom.player.sim.state.pos
 	crossed = DoomRuntime.cross_specials(map, run.level, pos, new_pos)
 	use_result = DoomRuntime.use_forward(map, crossed.level, new_pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
@@ -144,7 +145,8 @@ author_target = |route_index, pos, portal| {
 	else if route_index == 6 and pos.y < 350 { x: 700, y: 370 }
 	else if route_index == 6 and pos.y < 420 { x: 800, y: 430 }
 	else if route_index == 10 { x: 680, y: 1024 }
-	else if route_index == 14 and pos.y < 1280 and pos.x > 240 { x: 224, y: 1240 }
+	else if route_index == 14 and pos.y > 1240 and pos.x > 240 { x: pos.x, y: 1200 }
+	else if route_index == 14 and pos.x > 240 { x: 224, y: 1200 }
 	else if route_index == 14 { x: 224, y: 1490 }
 	else if route_index == 15 and pos.x > 0 and pos.y < 1560 { x: 200, y: 1580 }
 	else if route_index == 15 and pos.x > -350 and pos.y > 1500 { x: -360, y: 1580 }
@@ -273,4 +275,4 @@ encode_runs = |runs, index, text|
 route_sectors = [140,141,91,150,98,142,17,93,10,9,13,12,37,34,8,135,63,64,68,66,67]
 portal_lines = [834,837,564,593,594,1084,573,577,55,62,76,248,203,201,1006,386,391,389,396,405]
 exit_line = 407
-max_tics = 3000.U64
+max_tics = 700.U64

@@ -29,6 +29,26 @@ PILLOW_VERSION = "10.2.0"
 MAP_NAME = "E1M1"
 PRESENTATION_SPRITES = {"PISG", "PISF", "SHTG", "SHTF", "BAL1", "BEXP", "PUFF", "BLUD"}
 HUD_GRAPHIC_PREFIXES = ("STBAR", "STTNUM", "STYSNUM", "STGNUM", "STKEYS", "STF", "STARMS", "STTPRCNT")
+GAMEPLAY_SOUNDS = {
+    "weapon/pistol": "DSPISTOL", "weapon/shotgun": "DSSHOTGN", "weapon/shotgun_cock": "DSSGCOCK",
+    "world/door_open": "DSDOROPN", "world/door_close": "DSDORCLS",
+    "world/blazing_door_open": "DSBDOPN", "world/blazing_door_close": "DSBDCLS",
+    "world/platform_start": "DSPSTART", "world/platform_stop": "DSPSTOP", "world/platform_move": "DSSTNMOV",
+    "world/switch_on": "DSSWTCHN", "world/switch_off": "DSSWTCHX",
+    "pickup/item": "DSITEMUP", "pickup/weapon": "DSWPNUP", "pickup/powerup": "DSGETPOW", "pickup/key": "DSITEMUP",
+    "monster/former_human_sight_1": "DSPOSIT1", "monster/former_human_sight_2": "DSPOSIT2", "monster/former_human_sight_3": "DSPOSIT3",
+    "monster/former_human_active": "DSPOSACT", "monster/former_human_attack": "DSPISTOL", "monster/former_human_pain": "DSPOPAIN",
+    "monster/former_human_death_1": "DSPODTH1", "monster/former_human_death_2": "DSPODTH2", "monster/former_human_death_3": "DSPODTH3",
+    "monster/shotgun_guy_sight_1": "DSPOSIT1", "monster/shotgun_guy_sight_2": "DSPOSIT2", "monster/shotgun_guy_sight_3": "DSPOSIT3",
+    "monster/shotgun_guy_active": "DSPOSACT", "monster/shotgun_guy_attack": "DSSHOTGN", "monster/shotgun_guy_pain": "DSPOPAIN",
+    "monster/shotgun_guy_death_1": "DSPODTH1", "monster/shotgun_guy_death_2": "DSPODTH2", "monster/shotgun_guy_death_3": "DSPODTH3",
+    "monster/imp_sight_1": "DSBGSIT1", "monster/imp_sight_2": "DSBGSIT2", "monster/imp_active": "DSBGACT",
+    "monster/imp_melee": "DSCLAW", "monster/imp_ranged_attack": "DSFIRSHT", "monster/imp_pain": "DSDMPAIN",
+    "monster/imp_death_1": "DSBGDTH1", "monster/imp_death_2": "DSBGDTH2",
+    "player/pain": "DSPLPAIN", "player/death": "DSPLDETH", "player/death_high": "DSPDIEHI",
+    "player/oof": "DSOOF", "player/no_way": "DSNOWAY",
+    "effect/imp_projectile": "DSFIRSHT", "effect/imp_explosion": "DSFIRXPL", "effect/barrel_explosion": "DSBAREXP",
+}
 
 # Standard Doom editor-number to sprite-prefix mapping for every thing type used
 # by Freedoom 0.13.0 E1M1. Starts and invisible-only things deliberately map to
@@ -447,6 +467,25 @@ def obtain_zip(path: Path | None) -> bytes:
         return response.read()
 
 
+def doom_sound_wav(data: bytes, lump_name: str) -> tuple[bytes, int, int]:
+    """Decode one DMX format-3 sound lump to canonical mono 8-bit PCM WAV."""
+    if len(data) < 8:
+        raise ValueError(f"sound lump {lump_name} is shorter than its DMX header")
+    encoding, sample_rate, sample_count = struct.unpack_from("<HHI", data)
+    if encoding != 3:
+        raise ValueError(f"sound lump {lump_name} has DMX encoding {encoding}, expected 3")
+    if sample_rate == 0:
+        raise ValueError(f"sound lump {lump_name} has zero sample rate")
+    samples = data[8:]
+    if sample_count != len(samples):
+        raise ValueError(f"sound lump {lump_name} declares {sample_count} samples but contains {len(samples)}")
+    fmt = struct.pack("<HHIIHH", 1, 1, sample_rate, sample_rate, 1, 8)
+    wav = (b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt) + 8 + len(samples)) + b"WAVE"
+           + b"fmt " + struct.pack("<I", len(fmt)) + fmt
+           + b"data" + struct.pack("<I", len(samples)) + samples)
+    return wav, sample_rate, sample_count
+
+
 def build(output: Path, supplied_zip: Path | None) -> None:
     archive = obtain_zip(supplied_zip)
     if digest(archive) != ZIP_SHA256:
@@ -470,6 +509,22 @@ def build(output: Path, supplied_zip: Path | None) -> None:
     if not midi.startswith(b"MThd"):
         raise ValueError("D_E1M1 is not a standard MIDI file")
     (music_dir / "e1m1.mid").write_bytes(midi)
+    sound_dir = output / "sounds"
+    sound_dir.mkdir(exist_ok=True)
+    for stale_sound in sound_dir.glob("*.wav"):
+        stale_sound.unlink()
+    sounds = []
+    for logical_name, lump_name in sorted(GAMEPLAY_SOUNDS.items()):
+        try:
+            raw_sound = wad.last(lump_name)
+        except KeyError as error:
+            raise ValueError(f"required gameplay sound lump {lump_name} ({logical_name}) is missing") from error
+        wav, sample_rate, sample_count = doom_sound_wav(raw_sound, lump_name)
+        relative_path = f"sounds/{logical_name.replace('/', '_')}.wav"
+        (output / relative_path).write_bytes(wav)
+        sounds.append({"name": logical_name, "lump": lump_name, "path": relative_path,
+                       "sample_rate": sample_rate, "sample_count": sample_count,
+                       "source_sha256": digest(raw_sound), "wav_sha256": digest(wav)})
     stats = {key: len(map_data[key]) for key in ("vertices", "linedefs", "sidedefs", "sectors", "things", "segs", "subsectors", "nodes")}
     polygon_sizes = [len(polygon["points"]) for polygon in map_data["subsector_polygons"]]
     manifest = {"project": "Freedoom: Phase 1", "version": VERSION, "release_url": ZIP_URL,
@@ -484,6 +539,8 @@ def build(output: Path, supplied_zip: Path | None) -> None:
                 "presentation_sprite_prefixes": sorted(PRESENTATION_SPRITES),
                 "hud_graphic_prefixes": list(HUD_GRAPHIC_PREFIXES),
                 "hud_graphic_lump_count": sum(1 for entry in sprites["entries"] if entry["kind"] == "graphic"),
+                "gameplay_sounds": sounds,
+                "gameplay_sound_count": len(sounds),
                 "music_lump": "D_E1M1",
                 "music_path": "music/e1m1.mid", "music_sha256": digest(midi)}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

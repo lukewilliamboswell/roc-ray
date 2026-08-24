@@ -36,7 +36,10 @@ It downloads the official binary release, verifies both the ZIP and embedded
 `freedoom1.wad`, parses the classic Doom map lumps, and composes every wall
 texture plus every flat and thing sprite referenced by E1M1. It also extracts
 the first-person weapon, combat-effect, explosion, and status-bar graphics the
-level can produce during play. See
+level can produce during play. It also decodes the strict E1M1 gameplay sound
+set from WAD DMX lumps to deterministic mono 8-bit PCM WAV files under
+`generated/e1m1/sounds/`; the manifest records logical names, source lumps,
+sample metadata, and source/output checksums. See
 `docs/E1M1.md` for the generated schema and known scope limits. The 61 MB ZIP
 and 28 MB WAD are not committed; `--archive` permits an offline rebuild.
 
@@ -51,8 +54,9 @@ layout.
 Freedoom is copyright 2001–2024 by contributors to the Freedoom project and is
 distributed under the modified BSD licence in `license/COPYING.adoc`. The full
 upstream contributor list is retained in `attribution/CREDITS`. The atlas is a
-mechanical composite and the renamed WAV files are byte-for-byte copies; these
-changes do not imply endorsement by Freedoom or its contributors.
+mechanical composite. WAD samples are unchanged inside mechanically generated
+WAV containers; these changes do not imply endorsement by Freedoom or its
+contributors.
 
 The source manifest records the pinned release, archive checksum, exact selected
 upstream paths, and each selected file's checksum. Keep the licence, credits,

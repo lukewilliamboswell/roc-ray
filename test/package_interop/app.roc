@@ -2,7 +2,7 @@ app [Model, program] {
 	rr: platform "../../platform/main.roc",
 	adapter: "input_adapter/main.roc",
 	rrt: "../../types/main.roc",
-	roc: "nightly-2026-08-21-90da19f",
+	roc: "nightly-2026-08-23-fb208ba",
 }
 
 import rr.App

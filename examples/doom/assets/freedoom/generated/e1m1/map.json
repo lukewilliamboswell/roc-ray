@@ -32046,7 +32046,7 @@
       "angle": 270,
       "type": 18,
       "flags": 7,
-      "sprite_prefix": "HEAD"
+      "sprite_prefix": "POSS"
     },
     {
       "x": 416,
@@ -32062,7 +32062,7 @@
       "angle": 270,
       "type": 15,
       "flags": 7,
-      "sprite_prefix": "POSS"
+      "sprite_prefix": "PLAY"
     },
     {
       "x": 984,
@@ -32070,7 +32070,7 @@
       "angle": 270,
       "type": 15,
       "flags": 6,
-      "sprite_prefix": "POSS"
+      "sprite_prefix": "PLAY"
     },
     {
       "x": 160,
@@ -32110,7 +32110,7 @@
       "angle": 270,
       "type": 18,
       "flags": 7,
-      "sprite_prefix": "HEAD"
+      "sprite_prefix": "POSS"
     },
     {
       "x": -192,
@@ -32198,7 +32198,7 @@
       "angle": 270,
       "type": 21,
       "flags": 7,
-      "sprite_prefix": "SPOS"
+      "sprite_prefix": "SARG"
     },
     {
       "x": -208,
@@ -32206,7 +32206,7 @@
       "angle": 270,
       "type": 21,
       "flags": 7,
-      "sprite_prefix": "SPOS"
+      "sprite_prefix": "SARG"
     },
     {
       "x": 2880,
@@ -32278,7 +32278,7 @@
       "angle": 315,
       "type": 17,
       "flags": 23,
-      "sprite_prefix": "SARG"
+      "sprite_prefix": "CELP"
     },
     {
       "x": 1600,
@@ -32470,7 +32470,7 @@
       "angle": 315,
       "type": 17,
       "flags": 23,
-      "sprite_prefix": "SARG"
+      "sprite_prefix": "CELP"
     },
     {
       "x": 1408,
@@ -32990,7 +32990,7 @@
       "angle": 135,
       "type": 15,
       "flags": 7,
-      "sprite_prefix": "POSS"
+      "sprite_prefix": "PLAY"
     },
     {
       "x": 896,
@@ -32998,7 +32998,7 @@
       "angle": 135,
       "type": 18,
       "flags": 7,
-      "sprite_prefix": "HEAD"
+      "sprite_prefix": "POSS"
     },
     {
       "x": 416,
@@ -33006,7 +33006,7 @@
       "angle": 135,
       "type": 18,
       "flags": 7,
-      "sprite_prefix": "HEAD"
+      "sprite_prefix": "POSS"
     },
     {
       "x": 128,
@@ -33014,7 +33014,7 @@
       "angle": 135,
       "type": 18,
       "flags": 7,
-      "sprite_prefix": "HEAD"
+      "sprite_prefix": "POSS"
     },
     {
       "x": 1184,
@@ -33550,7 +33550,7 @@
       "angle": 270,
       "type": 15,
       "flags": 7,
-      "sprite_prefix": "POSS"
+      "sprite_prefix": "PLAY"
     },
     {
       "x": -481,
@@ -33606,7 +33606,7 @@
       "angle": 90,
       "type": 19,
       "flags": 15,
-      "sprite_prefix": "SKUL"
+      "sprite_prefix": "SPOS"
     },
     {
       "x": 2512,
@@ -33894,7 +33894,7 @@
       "angle": 270,
       "type": 19,
       "flags": 1,
-      "sprite_prefix": "SKUL"
+      "sprite_prefix": "SPOS"
     },
     {
       "x": 2680,

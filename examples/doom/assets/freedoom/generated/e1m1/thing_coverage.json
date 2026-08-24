@@ -1,0 +1,398 @@
+{
+  "map": "E1M1",
+  "thing_count": 292,
+  "entries": [
+    {
+      "editor_type": 1,
+      "count": 1,
+      "semantic_kind": "Player 1 start",
+      "classification": "start",
+      "sprite_prefix": null,
+      "implementation_status": "start_consumed"
+    },
+    {
+      "editor_type": 2,
+      "count": 1,
+      "semantic_kind": "Player 2 start",
+      "classification": "start",
+      "sprite_prefix": null,
+      "implementation_status": "start_ignored"
+    },
+    {
+      "editor_type": 3,
+      "count": 1,
+      "semantic_kind": "Player 3 start",
+      "classification": "start",
+      "sprite_prefix": null,
+      "implementation_status": "start_ignored"
+    },
+    {
+      "editor_type": 4,
+      "count": 1,
+      "semantic_kind": "Player 4 start",
+      "classification": "start",
+      "sprite_prefix": null,
+      "implementation_status": "start_ignored"
+    },
+    {
+      "editor_type": 5,
+      "count": 1,
+      "semantic_kind": "Blue keycard",
+      "classification": "gameplay",
+      "sprite_prefix": "BKEY",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 8,
+      "count": 1,
+      "semantic_kind": "Backpack",
+      "classification": "gameplay",
+      "sprite_prefix": "BPAK",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 9,
+      "count": 13,
+      "semantic_kind": "Shotgun guy",
+      "classification": "gameplay",
+      "sprite_prefix": "SPOS",
+      "implementation_status": "implemented_actor"
+    },
+    {
+      "editor_type": 10,
+      "count": 3,
+      "semantic_kind": "Bloody mess 1",
+      "classification": "decorative",
+      "sprite_prefix": "PLAY",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 11,
+      "count": 8,
+      "semantic_kind": "Deathmatch start",
+      "classification": "start",
+      "sprite_prefix": null,
+      "implementation_status": "start_ignored"
+    },
+    {
+      "editor_type": 12,
+      "count": 3,
+      "semantic_kind": "Bloody mess 2",
+      "classification": "decorative",
+      "sprite_prefix": "PLAY",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 15,
+      "count": 4,
+      "semantic_kind": "Dead player",
+      "classification": "decorative",
+      "sprite_prefix": "PLAY",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 17,
+      "count": 2,
+      "semantic_kind": "Cell charge pack",
+      "classification": "gameplay",
+      "sprite_prefix": "CELP",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 18,
+      "count": 5,
+      "semantic_kind": "Dead former human",
+      "classification": "decorative",
+      "sprite_prefix": "POSS",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 19,
+      "count": 2,
+      "semantic_kind": "Dead shotgun guy",
+      "classification": "decorative",
+      "sprite_prefix": "SPOS",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 20,
+      "count": 2,
+      "semantic_kind": "Dead imp",
+      "classification": "decorative",
+      "sprite_prefix": "TROO",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 21,
+      "count": 2,
+      "semantic_kind": "Dead demon",
+      "classification": "decorative",
+      "sprite_prefix": "SARG",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 24,
+      "count": 2,
+      "semantic_kind": "Pool of blood and flesh",
+      "classification": "decorative",
+      "sprite_prefix": "POL5",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 26,
+      "count": 1,
+      "semantic_kind": "Candle",
+      "classification": "decorative",
+      "sprite_prefix": "CAND",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 43,
+      "count": 12,
+      "semantic_kind": "Burnt tree",
+      "classification": "decorative",
+      "sprite_prefix": "TRE1",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 47,
+      "count": 18,
+      "semantic_kind": "Stalagmite",
+      "classification": "decorative",
+      "sprite_prefix": "SMIT",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 48,
+      "count": 4,
+      "semantic_kind": "Tech pillar",
+      "classification": "decorative",
+      "sprite_prefix": "ELEC",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 54,
+      "count": 15,
+      "semantic_kind": "Large brown tree",
+      "classification": "decorative",
+      "sprite_prefix": "TRE2",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 58,
+      "count": 1,
+      "semantic_kind": "Spectre",
+      "classification": "gameplay",
+      "sprite_prefix": "SARG",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 60,
+      "count": 2,
+      "semantic_kind": "Hanging victim, arms out",
+      "classification": "decorative",
+      "sprite_prefix": "GOR4",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 2001,
+      "count": 4,
+      "semantic_kind": "Shotgun",
+      "classification": "gameplay",
+      "sprite_prefix": "SHOT",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2002,
+      "count": 2,
+      "semantic_kind": "Chaingun",
+      "classification": "gameplay",
+      "sprite_prefix": "MGUN",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2003,
+      "count": 2,
+      "semantic_kind": "Rocket launcher",
+      "classification": "gameplay",
+      "sprite_prefix": "LAUN",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2004,
+      "count": 1,
+      "semantic_kind": "Plasma rifle",
+      "classification": "gameplay",
+      "sprite_prefix": "PLAS",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2005,
+      "count": 1,
+      "semantic_kind": "Chainsaw",
+      "classification": "gameplay",
+      "sprite_prefix": "CSAW",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2007,
+      "count": 3,
+      "semantic_kind": "Ammo clip",
+      "classification": "gameplay",
+      "sprite_prefix": "CLIP",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2008,
+      "count": 18,
+      "semantic_kind": "Shotgun shells",
+      "classification": "gameplay",
+      "sprite_prefix": "SHEL",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2010,
+      "count": 8,
+      "semantic_kind": "Rocket",
+      "classification": "gameplay",
+      "sprite_prefix": "ROCK",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2011,
+      "count": 6,
+      "semantic_kind": "Stimpack",
+      "classification": "gameplay",
+      "sprite_prefix": "STIM",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2012,
+      "count": 5,
+      "semantic_kind": "Medikit",
+      "classification": "gameplay",
+      "sprite_prefix": "MEDI",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2013,
+      "count": 1,
+      "semantic_kind": "Soul sphere",
+      "classification": "gameplay",
+      "sprite_prefix": "SOUL",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2014,
+      "count": 30,
+      "semantic_kind": "Health bonus",
+      "classification": "gameplay",
+      "sprite_prefix": "BON1",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2015,
+      "count": 22,
+      "semantic_kind": "Armor bonus",
+      "classification": "gameplay",
+      "sprite_prefix": "BON2",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2018,
+      "count": 2,
+      "semantic_kind": "Green armor",
+      "classification": "gameplay",
+      "sprite_prefix": "ARM1",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2019,
+      "count": 1,
+      "semantic_kind": "Blue armor",
+      "classification": "gameplay",
+      "sprite_prefix": "ARM2",
+      "implementation_status": "implemented_pickup"
+    },
+    {
+      "editor_type": 2023,
+      "count": 1,
+      "semantic_kind": "Berserk",
+      "classification": "gameplay",
+      "sprite_prefix": "PSTR",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2028,
+      "count": 7,
+      "semantic_kind": "Floor lamp",
+      "classification": "decorative",
+      "sprite_prefix": "COLU",
+      "implementation_status": "decorative_ignored"
+    },
+    {
+      "editor_type": 2035,
+      "count": 22,
+      "semantic_kind": "Explosive barrel",
+      "classification": "gameplay",
+      "sprite_prefix": "BAR1",
+      "implementation_status": "implemented_actor"
+    },
+    {
+      "editor_type": 2046,
+      "count": 2,
+      "semantic_kind": "Computer map",
+      "classification": "gameplay",
+      "sprite_prefix": "PMAP",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2047,
+      "count": 1,
+      "semantic_kind": "Light amplification visor",
+      "classification": "gameplay",
+      "sprite_prefix": "PVIS",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2048,
+      "count": 4,
+      "semantic_kind": "Box of bullets",
+      "classification": "gameplay",
+      "sprite_prefix": "AMMO",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 2049,
+      "count": 5,
+      "semantic_kind": "Box of shells",
+      "classification": "gameplay",
+      "sprite_prefix": "SBOX",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 3001,
+      "count": 18,
+      "semantic_kind": "Imp",
+      "classification": "gameplay",
+      "sprite_prefix": "TROO",
+      "implementation_status": "implemented_actor"
+    },
+    {
+      "editor_type": 3002,
+      "count": 9,
+      "semantic_kind": "Demon",
+      "classification": "gameplay",
+      "sprite_prefix": "SARG",
+      "implementation_status": "gameplay_unimplemented"
+    },
+    {
+      "editor_type": 3004,
+      "count": 12,
+      "semantic_kind": "Former human",
+      "classification": "gameplay",
+      "sprite_prefix": "POSS",
+      "implementation_status": "implemented_actor"
+    }
+  ]
+}

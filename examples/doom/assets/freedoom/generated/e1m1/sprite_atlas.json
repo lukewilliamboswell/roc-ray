@@ -5,8 +5,8 @@
     {
       "name": "AMMOA0",
       "rect": {
-        "x": 1518,
-        "y": 588,
+        "x": 1999,
+        "y": 476,
         "width": 17,
         "height": 16
       },
@@ -24,8 +24,8 @@
     {
       "name": "ARM1A0",
       "rect": {
-        "x": 1785,
-        "y": 555,
+        "x": 235,
+        "y": 476,
         "width": 37,
         "height": 28
       },
@@ -43,8 +43,8 @@
     {
       "name": "ARM1B0",
       "rect": {
-        "x": 1824,
-        "y": 555,
+        "x": 274,
+        "y": 476,
         "width": 37,
         "height": 28
       },
@@ -62,8 +62,8 @@
     {
       "name": "ARM2A0",
       "rect": {
-        "x": 218,
-        "y": 588,
+        "x": 665,
+        "y": 476,
         "width": 37,
         "height": 25
       },
@@ -81,8 +81,8 @@
     {
       "name": "ARM2B0",
       "rect": {
-        "x": 257,
-        "y": 588,
+        "x": 704,
+        "y": 476,
         "width": 37,
         "height": 25
       },
@@ -100,8 +100,8 @@
     {
       "name": "BAL1A0",
       "rect": {
-        "x": 1721,
-        "y": 588,
+        "x": 156,
+        "y": 507,
         "width": 15,
         "height": 15
       },
@@ -119,8 +119,8 @@
     {
       "name": "BAL1B0",
       "rect": {
-        "x": 1738,
-        "y": 588,
+        "x": 173,
+        "y": 507,
         "width": 15,
         "height": 15
       },
@@ -138,8 +138,8 @@
     {
       "name": "BAL1C0",
       "rect": {
-        "x": 1437,
-        "y": 513,
+        "x": 1991,
+        "y": 387,
         "width": 34,
         "height": 33
       },
@@ -157,8 +157,8 @@
     {
       "name": "BAL1D0",
       "rect": {
-        "x": 1302,
-        "y": 513,
+        "x": 1856,
+        "y": 387,
         "width": 40,
         "height": 35
       },
@@ -176,8 +176,8 @@
     {
       "name": "BAL1E0",
       "rect": {
-        "x": 268,
-        "y": 513,
+        "x": 1654,
+        "y": 387,
         "width": 46,
         "height": 39
       },
@@ -195,8 +195,8 @@
     {
       "name": "BAR1A0",
       "rect": {
-        "x": 1902,
-        "y": 513,
+        "x": 431,
+        "y": 442,
         "width": 23,
         "height": 32
       },
@@ -214,8 +214,8 @@
     {
       "name": "BAR1B0",
       "rect": {
-        "x": 1927,
-        "y": 513,
+        "x": 456,
+        "y": 442,
         "width": 23,
         "height": 32
       },
@@ -233,8 +233,8 @@
     {
       "name": "BEXPA0",
       "rect": {
-        "x": 1952,
-        "y": 513,
+        "x": 481,
+        "y": 442,
         "width": 23,
         "height": 32
       },
@@ -252,8 +252,8 @@
     {
       "name": "BEXPB0",
       "rect": {
-        "x": 176,
-        "y": 555,
+        "x": 717,
+        "y": 442,
         "width": 25,
         "height": 31
       },
@@ -271,8 +271,8 @@
     {
       "name": "BEXPC0",
       "rect": {
-        "x": 114,
-        "y": 513,
+        "x": 1536,
+        "y": 387,
         "width": 36,
         "height": 40
       },
@@ -290,8 +290,8 @@
     {
       "name": "BEXPD0",
       "rect": {
-        "x": 1269,
-        "y": 457,
+        "x": 768,
+        "y": 387,
         "width": 56,
         "height": 50
       },
@@ -309,8 +309,8 @@
     {
       "name": "BEXPE0",
       "rect": {
-        "x": 37,
-        "y": 457,
+        "x": 1702,
+        "y": 329,
         "width": 59,
         "height": 53
       },
@@ -328,8 +328,8 @@
     {
       "name": "BKEYA0",
       "rect": {
-        "x": 615,
-        "y": 588,
+        "x": 1062,
+        "y": 476,
         "width": 14,
         "height": 21
       },
@@ -347,8 +347,8 @@
     {
       "name": "BKEYB0",
       "rect": {
-        "x": 631,
-        "y": 588,
+        "x": 1078,
+        "y": 476,
         "width": 14,
         "height": 21
       },
@@ -366,8 +366,8 @@
     {
       "name": "BLUDA0",
       "rect": {
-        "x": 52,
-        "y": 617,
+        "x": 525,
+        "y": 507,
         "width": 17,
         "height": 8
       },
@@ -385,8 +385,8 @@
     {
       "name": "BLUDB0",
       "rect": {
-        "x": 39,
-        "y": 617,
+        "x": 512,
+        "y": 507,
         "width": 11,
         "height": 10
       },
@@ -404,8 +404,8 @@
     {
       "name": "BLUDC0",
       "rect": {
-        "x": 125,
-        "y": 617,
+        "x": 598,
+        "y": 507,
         "width": 6,
         "height": 7
       },
@@ -423,8 +423,8 @@
     {
       "name": "BON1A0",
       "rect": {
-        "x": 1755,
-        "y": 588,
+        "x": 190,
+        "y": 507,
         "width": 11,
         "height": 15
       },
@@ -442,8 +442,8 @@
     {
       "name": "BON1B0",
       "rect": {
-        "x": 1768,
-        "y": 588,
+        "x": 203,
+        "y": 507,
         "width": 11,
         "height": 15
       },
@@ -461,8 +461,8 @@
     {
       "name": "BON1C0",
       "rect": {
-        "x": 1781,
-        "y": 588,
+        "x": 216,
+        "y": 507,
         "width": 11,
         "height": 15
       },
@@ -480,8 +480,8 @@
     {
       "name": "BON1D0",
       "rect": {
-        "x": 1794,
-        "y": 588,
+        "x": 229,
+        "y": 507,
         "width": 11,
         "height": 15
       },
@@ -499,8 +499,8 @@
     {
       "name": "BON2A0",
       "rect": {
-        "x": 1023,
-        "y": 588,
+        "x": 1504,
+        "y": 476,
         "width": 13,
         "height": 19
       },
@@ -518,8 +518,8 @@
     {
       "name": "BON2B0",
       "rect": {
-        "x": 1038,
-        "y": 588,
+        "x": 1519,
+        "y": 476,
         "width": 13,
         "height": 19
       },
@@ -537,8 +537,8 @@
     {
       "name": "BON2C0",
       "rect": {
-        "x": 1053,
-        "y": 588,
+        "x": 1534,
+        "y": 476,
         "width": 13,
         "height": 19
       },
@@ -556,8 +556,8 @@
     {
       "name": "BON2D0",
       "rect": {
-        "x": 1068,
-        "y": 588,
+        "x": 1549,
+        "y": 476,
         "width": 13,
         "height": 19
       },
@@ -575,8 +575,8 @@
     {
       "name": "BPAKA0",
       "rect": {
-        "x": 854,
-        "y": 555,
+        "x": 1395,
+        "y": 442,
         "width": 26,
         "height": 30
       },
@@ -594,8 +594,8 @@
     {
       "name": "CANDA0",
       "rect": {
-        "x": 1005,
-        "y": 588,
+        "x": 1486,
+        "y": 476,
         "width": 16,
         "height": 19
       },
@@ -611,10 +611,29 @@
       ]
     },
     {
+      "name": "CELPA0",
+      "rect": {
+        "x": 1286,
+        "y": 476,
+        "width": 32,
+        "height": 20
+      },
+      "kind": "sprite",
+      "doom_name": "CELPA0",
+      "sprite": "CELP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "CLIPA0",
       "rect": {
-        "x": 1960,
-        "y": 588,
+        "x": 395,
+        "y": 507,
         "width": 7,
         "height": 12
       },
@@ -632,8 +651,8 @@
     {
       "name": "COLUA0",
       "rect": {
-        "x": 1493,
-        "y": 457,
+        "x": 992,
+        "y": 387,
         "width": 18,
         "height": 48
       },
@@ -651,8 +670,8 @@
     {
       "name": "CSAWA0",
       "rect": {
-        "x": 922,
-        "y": 588,
+        "x": 1403,
+        "y": 476,
         "width": 47,
         "height": 19
       },
@@ -689,8 +708,8 @@
     {
       "name": "GOR4A0",
       "rect": {
-        "x": 1455,
-        "y": 457,
+        "x": 954,
+        "y": 387,
         "width": 36,
         "height": 48
       },
@@ -706,784 +725,10 @@
       ]
     },
     {
-      "name": "HEADA1",
-      "rect": {
-        "x": 405,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADA1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADA2A8",
-      "rect": {
-        "x": 207,
-        "y": 147,
-        "width": 64,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADA2A8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADA3A7",
-      "rect": {
-        "x": 2,
-        "y": 147,
-        "width": 67,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADA3A7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADA4A6",
-      "rect": {
-        "x": 860,
-        "y": 147,
-        "width": 62,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADA4A6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADA5",
-      "rect": {
-        "x": 470,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADA5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADB1",
-      "rect": {
-        "x": 988,
-        "y": 147,
-        "width": 61,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADB1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADB2B8",
-      "rect": {
-        "x": 535,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADB2B8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADB3B7",
-      "rect": {
-        "x": 1967,
-        "y": 2,
-        "width": 68,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADB3B7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADB4B6",
-      "rect": {
-        "x": 1051,
-        "y": 147,
-        "width": 61,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADB4B6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADB5",
-      "rect": {
-        "x": 600,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADB5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADC1",
-      "rect": {
-        "x": 1493,
-        "y": 2,
-        "width": 64,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADC1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADC2C8",
-      "rect": {
-        "x": 665,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADC2C8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADC3C7",
-      "rect": {
-        "x": 71,
-        "y": 147,
-        "width": 66,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADC3C7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADC4C6",
-      "rect": {
-        "x": 1177,
-        "y": 147,
-        "width": 63,
-        "height": 65
-      },
-      "kind": "sprite",
-      "doom_name": "HEADC4C6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADC5",
-      "rect": {
-        "x": 730,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADC5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADD1",
-      "rect": {
-        "x": 1559,
-        "y": 2,
-        "width": 64,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADD1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADD2D8",
-      "rect": {
-        "x": 924,
-        "y": 147,
-        "width": 62,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADD2D8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADD3D7",
-      "rect": {
-        "x": 139,
-        "y": 147,
-        "width": 66,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADD3D7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADD4D6",
-      "rect": {
-        "x": 273,
-        "y": 147,
-        "width": 64,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADD4D6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADD5",
-      "rect": {
-        "x": 339,
-        "y": 147,
-        "width": 64,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADD5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADE1",
-      "rect": {
-        "x": 1691,
-        "y": 2,
-        "width": 63,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADE1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADE2E8",
-      "rect": {
-        "x": 1625,
-        "y": 2,
-        "width": 64,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADE2E8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADE3E7",
-      "rect": {
-        "x": 1230,
-        "y": 2,
-        "width": 69,
-        "height": 68
-      },
-      "kind": "sprite",
-      "doom_name": "HEADE3E7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADE4E6",
-      "rect": {
-        "x": 1301,
-        "y": 2,
-        "width": 63,
-        "height": 68
-      },
-      "kind": "sprite",
-      "doom_name": "HEADE4E6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADE5",
-      "rect": {
-        "x": 1756,
-        "y": 2,
-        "width": 63,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADE5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADF1",
-      "rect": {
-        "x": 1430,
-        "y": 2,
-        "width": 61,
-        "height": 68
-      },
-      "kind": "sprite",
-      "doom_name": "HEADF1",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADF2F8",
-      "rect": {
-        "x": 1366,
-        "y": 2,
-        "width": 62,
-        "height": 68
-      },
-      "kind": "sprite",
-      "doom_name": "HEADF2F8",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 2,
-          "mirrored": false
-        },
-        {
-          "frame": "F",
-          "angle": 8,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADF3F7",
-      "rect": {
-        "x": 1096,
-        "y": 2,
-        "width": 68,
-        "height": 69
-      },
-      "kind": "sprite",
-      "doom_name": "HEADF3F7",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 3,
-          "mirrored": false
-        },
-        {
-          "frame": "F",
-          "angle": 7,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADF4F6",
-      "rect": {
-        "x": 1821,
-        "y": 2,
-        "width": 63,
-        "height": 67
-      },
-      "kind": "sprite",
-      "doom_name": "HEADF4F6",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 4,
-          "mirrored": false
-        },
-        {
-          "frame": "F",
-          "angle": 6,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "HEADF5",
-      "rect": {
-        "x": 795,
-        "y": 147,
-        "width": 63,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADF5",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADG0",
-      "rect": {
-        "x": 1114,
-        "y": 147,
-        "width": 61,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADG0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "G",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADH0",
-      "rect": {
-        "x": 1886,
-        "y": 2,
-        "width": 79,
-        "height": 66
-      },
-      "kind": "sprite",
-      "doom_name": "HEADH0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "H",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADI0",
-      "rect": {
-        "x": 958,
-        "y": 2,
-        "width": 83,
-        "height": 73
-      },
-      "kind": "sprite",
-      "doom_name": "HEADI0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "I",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADJ0",
-      "rect": {
-        "x": 879,
-        "y": 2,
-        "width": 77,
-        "height": 76
-      },
-      "kind": "sprite",
-      "doom_name": "HEADJ0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "J",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADK0",
-      "rect": {
-        "x": 579,
-        "y": 457,
-        "width": 83,
-        "height": 52
-      },
-      "kind": "sprite",
-      "doom_name": "HEADK0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "K",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "HEADL0",
-      "rect": {
-        "x": 1332,
-        "y": 555,
-        "width": 82,
-        "height": 29
-      },
-      "kind": "sprite",
-      "doom_name": "HEADL0",
-      "sprite": "HEAD",
-      "aliases": [
-        {
-          "frame": "L",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
       "name": "LAUNA0",
       "rect": {
-        "x": 647,
-        "y": 588,
+        "x": 1094,
+        "y": 476,
         "width": 59,
         "height": 20
       },
@@ -1501,8 +746,8 @@
     {
       "name": "MEDIA0",
       "rect": {
-        "x": 839,
-        "y": 588,
+        "x": 1320,
+        "y": 476,
         "width": 29,
         "height": 20
       },
@@ -1520,8 +765,8 @@
     {
       "name": "MGUNA0",
       "rect": {
-        "x": 166,
-        "y": 588,
+        "x": 613,
+        "y": 476,
         "width": 50,
         "height": 25
       },
@@ -1539,8 +784,8 @@
     {
       "name": "PISFA0",
       "rect": {
-        "x": 702,
-        "y": 555,
+        "x": 1243,
+        "y": 442,
         "width": 32,
         "height": 30
       },
@@ -1653,8 +898,8 @@
     {
       "name": "PLASA0",
       "rect": {
-        "x": 1465,
-        "y": 588,
+        "x": 1946,
+        "y": 476,
         "width": 51,
         "height": 16
       },
@@ -1672,8 +917,8 @@
     {
       "name": "PLAYA1",
       "rect": {
-        "x": 1476,
-        "y": 340,
+        "x": 1113,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -1691,8 +936,8 @@
     {
       "name": "PLAYA2A8",
       "rect": {
-        "x": 508,
-        "y": 399,
+        "x": 153,
+        "y": 329,
         "width": 26,
         "height": 56
       },
@@ -1715,8 +960,8 @@
     {
       "name": "PLAYA3A7",
       "rect": {
-        "x": 233,
-        "y": 399,
+        "x": 1896,
+        "y": 271,
         "width": 29,
         "height": 56
       },
@@ -1739,8 +984,8 @@
     {
       "name": "PLAYA4A6",
       "rect": {
-        "x": 1361,
-        "y": 399,
+        "x": 1006,
+        "y": 329,
         "width": 29,
         "height": 55
       },
@@ -1763,8 +1008,8 @@
     {
       "name": "PLAYA5",
       "rect": {
-        "x": 1198,
-        "y": 340,
+        "x": 835,
+        "y": 271,
         "width": 38,
         "height": 56
       },
@@ -1782,8 +1027,8 @@
     {
       "name": "PLAYB1",
       "rect": {
-        "x": 1514,
-        "y": 340,
+        "x": 1151,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -1801,8 +1046,8 @@
     {
       "name": "PLAYB2B8",
       "rect": {
-        "x": 1923,
-        "y": 340,
+        "x": 1560,
+        "y": 271,
         "width": 33,
         "height": 56
       },
@@ -1825,8 +1070,8 @@
     {
       "name": "PLAYB3B7",
       "rect": {
-        "x": 1071,
-        "y": 340,
+        "x": 708,
+        "y": 271,
         "width": 41,
         "height": 56
       },
@@ -1849,8 +1094,8 @@
     {
       "name": "PLAYB4B6",
       "rect": {
-        "x": 1398,
-        "y": 340,
+        "x": 1035,
+        "y": 271,
         "width": 37,
         "height": 56
       },
@@ -1873,8 +1118,8 @@
     {
       "name": "PLAYB5",
       "rect": {
-        "x": 1779,
-        "y": 340,
+        "x": 1416,
+        "y": 271,
         "width": 34,
         "height": 56
       },
@@ -1892,8 +1137,8 @@
     {
       "name": "PLAYC1",
       "rect": {
-        "x": 1552,
-        "y": 340,
+        "x": 1189,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -1911,8 +1156,8 @@
     {
       "name": "PLAYC2C8",
       "rect": {
-        "x": 536,
-        "y": 399,
+        "x": 181,
+        "y": 329,
         "width": 26,
         "height": 56
       },
@@ -1935,8 +1180,8 @@
     {
       "name": "PLAYC3C7",
       "rect": {
-        "x": 264,
-        "y": 399,
+        "x": 1927,
+        "y": 271,
         "width": 29,
         "height": 56
       },
@@ -1959,8 +1204,8 @@
     {
       "name": "PLAYC4C6",
       "rect": {
-        "x": 295,
-        "y": 399,
+        "x": 1958,
+        "y": 271,
         "width": 29,
         "height": 56
       },
@@ -1983,8 +1228,8 @@
     {
       "name": "PLAYC5",
       "rect": {
-        "x": 1590,
-        "y": 340,
+        "x": 1227,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -2002,8 +1247,8 @@
     {
       "name": "PLAYD1",
       "rect": {
-        "x": 1742,
-        "y": 340,
+        "x": 1379,
+        "y": 271,
         "width": 35,
         "height": 56
       },
@@ -2021,8 +1266,8 @@
     {
       "name": "PLAYD2D8",
       "rect": {
-        "x": 104,
-        "y": 399,
+        "x": 1767,
+        "y": 271,
         "width": 31,
         "height": 56
       },
@@ -2045,8 +1290,8 @@
     {
       "name": "PLAYD3D7",
       "rect": {
-        "x": 1025,
-        "y": 399,
+        "x": 670,
+        "y": 329,
         "width": 39,
         "height": 55
       },
@@ -2069,8 +1314,8 @@
     {
       "name": "PLAYD4D6",
       "rect": {
-        "x": 1437,
-        "y": 340,
+        "x": 1074,
+        "y": 271,
         "width": 37,
         "height": 56
       },
@@ -2093,8 +1338,8 @@
     {
       "name": "PLAYD5",
       "rect": {
-        "x": 1958,
-        "y": 340,
+        "x": 1595,
+        "y": 271,
         "width": 33,
         "height": 56
       },
@@ -2112,8 +1357,8 @@
     {
       "name": "PLAYE1",
       "rect": {
-        "x": 326,
-        "y": 399,
+        "x": 1989,
+        "y": 271,
         "width": 29,
         "height": 56
       },
@@ -2131,8 +1376,8 @@
     {
       "name": "PLAYE2E8",
       "rect": {
-        "x": 1628,
-        "y": 340,
+        "x": 1265,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -2155,8 +1400,8 @@
     {
       "name": "PLAYE3E7",
       "rect": {
-        "x": 316,
-        "y": 340,
+        "x": 1998,
+        "y": 211,
         "width": 47,
         "height": 56
       },
@@ -2179,8 +1424,8 @@
     {
       "name": "PLAYE4E6",
       "rect": {
-        "x": 1114,
-        "y": 340,
+        "x": 751,
+        "y": 271,
         "width": 41,
         "height": 56
       },
@@ -2203,8 +1448,8 @@
     {
       "name": "PLAYE5",
       "rect": {
-        "x": 137,
-        "y": 399,
+        "x": 1800,
+        "y": 271,
         "width": 30,
         "height": 56
       },
@@ -2222,8 +1467,8 @@
     {
       "name": "PLAYF1",
       "rect": {
-        "x": 357,
-        "y": 399,
+        "x": 2,
+        "y": 329,
         "width": 29,
         "height": 56
       },
@@ -2241,8 +1486,8 @@
     {
       "name": "PLAYF2F8",
       "rect": {
-        "x": 983,
-        "y": 340,
+        "x": 620,
+        "y": 271,
         "width": 42,
         "height": 56
       },
@@ -2265,8 +1510,8 @@
     {
       "name": "PLAYF3F7",
       "rect": {
-        "x": 202,
-        "y": 340,
+        "x": 1941,
+        "y": 211,
         "width": 55,
         "height": 56
       },
@@ -2289,8 +1534,8 @@
     {
       "name": "PLAYF4F6",
       "rect": {
-        "x": 365,
-        "y": 340,
+        "x": 2,
+        "y": 271,
         "width": 47,
         "height": 56
       },
@@ -2313,8 +1558,8 @@
     {
       "name": "PLAYF5",
       "rect": {
-        "x": 169,
-        "y": 399,
+        "x": 1832,
+        "y": 271,
         "width": 30,
         "height": 56
       },
@@ -2332,8 +1577,8 @@
     {
       "name": "PLAYG1",
       "rect": {
-        "x": 388,
-        "y": 399,
+        "x": 33,
+        "y": 329,
         "width": 29,
         "height": 56
       },
@@ -2351,8 +1596,8 @@
     {
       "name": "PLAYG2G8",
       "rect": {
-        "x": 1993,
-        "y": 340,
+        "x": 1630,
+        "y": 271,
         "width": 33,
         "height": 56
       },
@@ -2375,8 +1620,8 @@
     {
       "name": "PLAYG3G7",
       "rect": {
-        "x": 1027,
-        "y": 340,
+        "x": 664,
+        "y": 271,
         "width": 42,
         "height": 56
       },
@@ -2399,8 +1644,8 @@
     {
       "name": "PLAYG4G6",
       "rect": {
-        "x": 1815,
-        "y": 340,
+        "x": 1452,
+        "y": 271,
         "width": 34,
         "height": 56
       },
@@ -2423,8 +1668,8 @@
     {
       "name": "PLAYG5",
       "rect": {
-        "x": 419,
-        "y": 399,
+        "x": 64,
+        "y": 329,
         "width": 29,
         "height": 56
       },
@@ -2442,8 +1687,8 @@
     {
       "name": "PLAYH0",
       "rect": {
-        "x": 2,
-        "y": 399,
+        "x": 1665,
+        "y": 271,
         "width": 32,
         "height": 56
       },
@@ -2461,8 +1706,8 @@
     {
       "name": "PLAYI0",
       "rect": {
-        "x": 1239,
-        "y": 457,
+        "x": 738,
+        "y": 387,
         "width": 28,
         "height": 51
       },
@@ -2480,8 +1725,8 @@
     {
       "name": "PLAYJ0",
       "rect": {
-        "x": 188,
-        "y": 513,
+        "x": 1574,
+        "y": 387,
         "width": 27,
         "height": 40
       },
@@ -2499,8 +1744,8 @@
     {
       "name": "PLAYK0",
       "rect": {
-        "x": 296,
-        "y": 588,
+        "x": 743,
+        "y": 476,
         "width": 28,
         "height": 25
       },
@@ -2518,8 +1763,8 @@
     {
       "name": "PLAYL0",
       "rect": {
-        "x": 578,
-        "y": 588,
+        "x": 1025,
+        "y": 476,
         "width": 35,
         "height": 21
       },
@@ -2537,8 +1782,8 @@
     {
       "name": "PLAYM0",
       "rect": {
-        "x": 801,
-        "y": 588,
+        "x": 1248,
+        "y": 476,
         "width": 36,
         "height": 20
       },
@@ -2556,8 +1801,8 @@
     {
       "name": "PLAYN0",
       "rect": {
-        "x": 762,
-        "y": 588,
+        "x": 1209,
+        "y": 476,
         "width": 37,
         "height": 20
       },
@@ -2575,8 +1820,8 @@
     {
       "name": "PLAYO0",
       "rect": {
-        "x": 1238,
-        "y": 340,
+        "x": 875,
+        "y": 271,
         "width": 38,
         "height": 56
       },
@@ -2594,8 +1839,8 @@
     {
       "name": "PLAYP0",
       "rect": {
-        "x": 287,
-        "y": 457,
+        "x": 1952,
+        "y": 329,
         "width": 41,
         "height": 53
       },
@@ -2613,8 +1858,8 @@
     {
       "name": "PLAYQ0",
       "rect": {
-        "x": 1409,
-        "y": 457,
+        "x": 908,
+        "y": 387,
         "width": 44,
         "height": 49
       },
@@ -2632,8 +1877,8 @@
     {
       "name": "PLAYR0",
       "rect": {
-        "x": 1809,
-        "y": 457,
+        "x": 1225,
+        "y": 387,
         "width": 46,
         "height": 45
       },
@@ -2651,8 +1896,8 @@
     {
       "name": "PLAYS0",
       "rect": {
-        "x": 217,
-        "y": 513,
+        "x": 1603,
+        "y": 387,
         "width": 49,
         "height": 39
       },
@@ -2670,8 +1915,8 @@
     {
       "name": "PLAYT0",
       "rect": {
-        "x": 1251,
-        "y": 513,
+        "x": 1805,
+        "y": 387,
         "width": 49,
         "height": 35
       },
@@ -2689,8 +1934,8 @@
     {
       "name": "PLAYU0",
       "rect": {
-        "x": 2,
-        "y": 588,
+        "x": 449,
+        "y": 476,
         "width": 53,
         "height": 27
       },
@@ -2708,8 +1953,8 @@
     {
       "name": "PLAYV0",
       "rect": {
-        "x": 1355,
-        "y": 588,
+        "x": 1836,
+        "y": 476,
         "width": 53,
         "height": 16
       },
@@ -2727,8 +1972,8 @@
     {
       "name": "PLAYW0",
       "rect": {
-        "x": 1410,
-        "y": 588,
+        "x": 1891,
+        "y": 476,
         "width": 53,
         "height": 16
       },
@@ -2746,8 +1991,8 @@
     {
       "name": "PMAPA0",
       "rect": {
-        "x": 1863,
-        "y": 555,
+        "x": 313,
+        "y": 476,
         "width": 32,
         "height": 28
       },
@@ -2765,8 +2010,8 @@
     {
       "name": "PMAPB0",
       "rect": {
-        "x": 1897,
-        "y": 555,
+        "x": 347,
+        "y": 476,
         "width": 32,
         "height": 28
       },
@@ -2784,8 +2029,8 @@
     {
       "name": "PMAPC0",
       "rect": {
-        "x": 1931,
-        "y": 555,
+        "x": 381,
+        "y": 476,
         "width": 32,
         "height": 28
       },
@@ -2803,8 +2048,8 @@
     {
       "name": "PMAPD0",
       "rect": {
-        "x": 1965,
-        "y": 555,
+        "x": 415,
+        "y": 476,
         "width": 32,
         "height": 28
       },
@@ -2822,8 +2067,8 @@
     {
       "name": "POL5A0",
       "rect": {
-        "x": 1983,
-        "y": 588,
+        "x": 418,
+        "y": 507,
         "width": 55,
         "height": 10
       },
@@ -2841,8 +2086,8 @@
     {
       "name": "POSSA1",
       "rect": {
-        "x": 1812,
-        "y": 279,
+        "x": 1538,
+        "y": 211,
         "width": 41,
         "height": 57
       },
@@ -2860,8 +2105,8 @@
     {
       "name": "POSSA2",
       "rect": {
-        "x": 1196,
-        "y": 279,
+        "x": 922,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -2879,8 +2124,8 @@
     {
       "name": "POSSA3",
       "rect": {
-        "x": 1240,
-        "y": 279,
+        "x": 966,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -2898,8 +2143,8 @@
     {
       "name": "POSSA4",
       "rect": {
-        "x": 1284,
-        "y": 279,
+        "x": 1010,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -2917,8 +2162,8 @@
     {
       "name": "POSSA5",
       "rect": {
-        "x": 1278,
-        "y": 340,
+        "x": 915,
+        "y": 271,
         "width": 38,
         "height": 56
       },
@@ -2936,8 +2181,8 @@
     {
       "name": "POSSA6",
       "rect": {
-        "x": 846,
-        "y": 340,
+        "x": 483,
+        "y": 271,
         "width": 45,
         "height": 56
       },
@@ -2955,8 +2200,8 @@
     {
       "name": "POSSA7",
       "rect": {
-        "x": 414,
-        "y": 340,
+        "x": 51,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -2974,8 +2219,8 @@
     {
       "name": "POSSA8",
       "rect": {
-        "x": 1666,
-        "y": 340,
+        "x": 1303,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -2993,8 +2238,8 @@
     {
       "name": "POSSB1",
       "rect": {
-        "x": 1855,
-        "y": 279,
+        "x": 1581,
+        "y": 211,
         "width": 41,
         "height": 57
       },
@@ -3012,8 +2257,8 @@
     {
       "name": "POSSB2",
       "rect": {
-        "x": 1328,
-        "y": 279,
+        "x": 1054,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3031,8 +2276,8 @@
     {
       "name": "POSSB3",
       "rect": {
-        "x": 1372,
-        "y": 279,
+        "x": 1098,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3050,8 +2295,8 @@
     {
       "name": "POSSB4",
       "rect": {
-        "x": 1416,
-        "y": 279,
+        "x": 1142,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3069,8 +2314,8 @@
     {
       "name": "POSSB5",
       "rect": {
-        "x": 1318,
-        "y": 340,
+        "x": 955,
+        "y": 271,
         "width": 38,
         "height": 56
       },
@@ -3088,8 +2333,8 @@
     {
       "name": "POSSB6",
       "rect": {
-        "x": 462,
-        "y": 340,
+        "x": 99,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3107,8 +2352,8 @@
     {
       "name": "POSSB7",
       "rect": {
-        "x": 510,
-        "y": 340,
+        "x": 147,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3126,8 +2371,8 @@
     {
       "name": "POSSB8",
       "rect": {
-        "x": 1704,
-        "y": 340,
+        "x": 1341,
+        "y": 271,
         "width": 36,
         "height": 56
       },
@@ -3145,8 +2390,8 @@
     {
       "name": "POSSC1",
       "rect": {
-        "x": 1460,
-        "y": 279,
+        "x": 1186,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3164,8 +2409,8 @@
     {
       "name": "POSSC2",
       "rect": {
-        "x": 1504,
-        "y": 279,
+        "x": 1230,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3183,8 +2428,8 @@
     {
       "name": "POSSC3",
       "rect": {
-        "x": 1548,
-        "y": 279,
+        "x": 1274,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3202,8 +2447,8 @@
     {
       "name": "POSSC4",
       "rect": {
-        "x": 1592,
-        "y": 279,
+        "x": 1318,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3221,8 +2466,8 @@
     {
       "name": "POSSC5",
       "rect": {
-        "x": 1157,
-        "y": 340,
+        "x": 794,
+        "y": 271,
         "width": 39,
         "height": 56
       },
@@ -3240,8 +2485,8 @@
     {
       "name": "POSSC6",
       "rect": {
-        "x": 558,
-        "y": 340,
+        "x": 195,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3259,8 +2504,8 @@
     {
       "name": "POSSC7",
       "rect": {
-        "x": 606,
-        "y": 340,
+        "x": 243,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3278,8 +2523,8 @@
     {
       "name": "POSSC8",
       "rect": {
-        "x": 1939,
-        "y": 279,
+        "x": 1665,
+        "y": 211,
         "width": 36,
         "height": 57
       },
@@ -3297,8 +2542,8 @@
     {
       "name": "POSSD1",
       "rect": {
-        "x": 1636,
-        "y": 279,
+        "x": 1362,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3316,8 +2561,8 @@
     {
       "name": "POSSD2",
       "rect": {
-        "x": 1680,
-        "y": 279,
+        "x": 1406,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3335,8 +2580,8 @@
     {
       "name": "POSSD3",
       "rect": {
-        "x": 1724,
-        "y": 279,
+        "x": 1450,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3354,8 +2599,8 @@
     {
       "name": "POSSD4",
       "rect": {
-        "x": 1768,
-        "y": 279,
+        "x": 1494,
+        "y": 211,
         "width": 42,
         "height": 57
       },
@@ -3373,8 +2618,8 @@
     {
       "name": "POSSD5",
       "rect": {
-        "x": 1126,
-        "y": 457,
+        "x": 625,
+        "y": 387,
         "width": 39,
         "height": 51
       },
@@ -3392,8 +2637,8 @@
     {
       "name": "POSSD6",
       "rect": {
-        "x": 654,
-        "y": 340,
+        "x": 291,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3411,8 +2656,8 @@
     {
       "name": "POSSD7",
       "rect": {
-        "x": 702,
-        "y": 340,
+        "x": 339,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3430,8 +2675,8 @@
     {
       "name": "POSSD8",
       "rect": {
-        "x": 1977,
-        "y": 279,
+        "x": 1703,
+        "y": 211,
         "width": 36,
         "height": 57
       },
@@ -3449,8 +2694,8 @@
     {
       "name": "POSSE1",
       "rect": {
-        "x": 564,
-        "y": 399,
+        "x": 209,
+        "y": 329,
         "width": 26,
         "height": 56
       },
@@ -3468,8 +2713,8 @@
     {
       "name": "POSSE2",
       "rect": {
-        "x": 978,
-        "y": 399,
+        "x": 623,
+        "y": 329,
         "width": 45,
         "height": 55
       },
@@ -3487,8 +2732,8 @@
     {
       "name": "POSSE3",
       "rect": {
-        "x": 1510,
-        "y": 399,
+        "x": 1155,
+        "y": 329,
         "width": 50,
         "height": 54
       },
@@ -3506,8 +2751,8 @@
     {
       "name": "POSSE4",
       "rect": {
-        "x": 330,
-        "y": 457,
+        "x": 1995,
+        "y": 329,
         "width": 37,
         "height": 53
       },
@@ -3525,8 +2770,8 @@
     {
       "name": "POSSE5",
       "rect": {
-        "x": 964,
-        "y": 457,
+        "x": 512,
+        "y": 387,
         "width": 24,
         "height": 52
       },
@@ -3544,8 +2789,8 @@
     {
       "name": "POSSE6",
       "rect": {
-        "x": 517,
-        "y": 457,
+        "x": 150,
+        "y": 387,
         "width": 32,
         "height": 53
       },
@@ -3563,8 +2808,8 @@
     {
       "name": "POSSE7",
       "rect": {
-        "x": 1562,
-        "y": 399,
+        "x": 1207,
+        "y": 329,
         "width": 50,
         "height": 54
       },
@@ -3582,8 +2827,8 @@
     {
       "name": "POSSE8",
       "rect": {
-        "x": 954,
-        "y": 279,
+        "x": 680,
+        "y": 211,
         "width": 48,
         "height": 57
       },
@@ -3601,8 +2846,8 @@
     {
       "name": "POSSF1",
       "rect": {
-        "x": 450,
-        "y": 399,
+        "x": 95,
+        "y": 329,
         "width": 27,
         "height": 56
       },
@@ -3620,8 +2865,8 @@
     {
       "name": "POSSF2",
       "rect": {
-        "x": 750,
-        "y": 340,
+        "x": 387,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -3639,8 +2884,8 @@
     {
       "name": "POSSF3",
       "rect": {
-        "x": 764,
-        "y": 399,
+        "x": 409,
+        "y": 329,
         "width": 53,
         "height": 55
       },
@@ -3658,8 +2903,8 @@
     {
       "name": "POSSF4",
       "rect": {
-        "x": 1614,
-        "y": 399,
+        "x": 1259,
+        "y": 329,
         "width": 46,
         "height": 54
       },
@@ -3677,8 +2922,8 @@
     {
       "name": "POSSF5",
       "rect": {
-        "x": 551,
-        "y": 457,
+        "x": 184,
+        "y": 387,
         "width": 26,
         "height": 53
       },
@@ -3696,8 +2941,8 @@
     {
       "name": "POSSF6",
       "rect": {
-        "x": 369,
-        "y": 457,
+        "x": 2,
+        "y": 387,
         "width": 37,
         "height": 53
       },
@@ -3715,8 +2960,8 @@
     {
       "name": "POSSF7",
       "rect": {
-        "x": 1452,
-        "y": 399,
+        "x": 1097,
+        "y": 329,
         "width": 56,
         "height": 54
       },
@@ -3734,8 +2979,8 @@
     {
       "name": "POSSF8",
       "rect": {
-        "x": 144,
-        "y": 340,
+        "x": 1883,
+        "y": 211,
         "width": 56,
         "height": 56
       },
@@ -3753,8 +2998,8 @@
     {
       "name": "POSSG1",
       "rect": {
-        "x": 1066,
-        "y": 399,
+        "x": 711,
+        "y": 329,
         "width": 39,
         "height": 55
       },
@@ -3772,8 +3017,8 @@
     {
       "name": "POSSG2",
       "rect": {
-        "x": 1146,
-        "y": 399,
+        "x": 791,
+        "y": 329,
         "width": 36,
         "height": 55
       },
@@ -3791,8 +3036,8 @@
     {
       "name": "POSSG3",
       "rect": {
-        "x": 1709,
-        "y": 399,
+        "x": 1354,
+        "y": 329,
         "width": 40,
         "height": 54
       },
@@ -3810,8 +3055,8 @@
     {
       "name": "POSSG4",
       "rect": {
-        "x": 709,
-        "y": 457,
+        "x": 257,
+        "y": 387,
         "width": 41,
         "height": 52
       },
@@ -3829,8 +3074,8 @@
     {
       "name": "POSSG5",
       "rect": {
-        "x": 445,
-        "y": 457,
+        "x": 78,
+        "y": 387,
         "width": 34,
         "height": 53
       },
@@ -3848,8 +3093,8 @@
     {
       "name": "POSSG6",
       "rect": {
-        "x": 752,
-        "y": 457,
+        "x": 300,
+        "y": 387,
         "width": 41,
         "height": 52
       },
@@ -3867,8 +3112,8 @@
     {
       "name": "POSSG7",
       "rect": {
-        "x": 1793,
-        "y": 399,
+        "x": 1438,
+        "y": 329,
         "width": 39,
         "height": 54
       },
@@ -3886,8 +3131,8 @@
     {
       "name": "POSSG8",
       "rect": {
-        "x": 1898,
-        "y": 279,
+        "x": 1624,
+        "y": 211,
         "width": 39,
         "height": 57
       },
@@ -3905,8 +3150,8 @@
     {
       "name": "POSSH0",
       "rect": {
-        "x": 929,
-        "y": 399,
+        "x": 574,
+        "y": 329,
         "width": 47,
         "height": 55
       },
@@ -3924,8 +3169,8 @@
     {
       "name": "POSSI0",
       "rect": {
-        "x": 1901,
-        "y": 457,
+        "x": 1317,
+        "y": 387,
         "width": 38,
         "height": 42
       },
@@ -3943,8 +3188,8 @@
     {
       "name": "POSSJ0",
       "rect": {
-        "x": 1391,
-        "y": 513,
+        "x": 1945,
+        "y": 387,
         "width": 44,
         "height": 34
       },
@@ -3962,8 +3207,8 @@
     {
       "name": "POSSK0",
       "rect": {
-        "x": 57,
-        "y": 588,
+        "x": 504,
+        "y": 476,
         "width": 48,
         "height": 27
       },
@@ -3981,8 +3226,8 @@
     {
       "name": "POSSL0",
       "rect": {
-        "x": 870,
-        "y": 588,
+        "x": 1351,
+        "y": 476,
         "width": 50,
         "height": 19
       },
@@ -4000,8 +3245,8 @@
     {
       "name": "POSSM0",
       "rect": {
-        "x": 1003,
-        "y": 215,
+        "x": 708,
+        "y": 147,
         "width": 44,
         "height": 61
       },
@@ -4019,8 +3264,8 @@
     {
       "name": "POSSN0",
       "rect": {
-        "x": 798,
-        "y": 340,
+        "x": 435,
+        "y": 271,
         "width": 46,
         "height": 56
       },
@@ -4038,8 +3283,8 @@
     {
       "name": "POSSO0",
       "rect": {
-        "x": 819,
-        "y": 399,
+        "x": 464,
+        "y": 329,
         "width": 53,
         "height": 55
       },
@@ -4057,8 +3302,8 @@
     {
       "name": "POSSP0",
       "rect": {
-        "x": 1513,
-        "y": 457,
+        "x": 1012,
+        "y": 387,
         "width": 57,
         "height": 47
       },
@@ -4076,8 +3321,8 @@
     {
       "name": "POSSQ0",
       "rect": {
-        "x": 1975,
-        "y": 457,
+        "x": 1357,
+        "y": 387,
         "width": 65,
         "height": 40
       },
@@ -4095,8 +3340,8 @@
     {
       "name": "POSSR0",
       "rect": {
-        "x": 1416,
-        "y": 555,
+        "x": 1873,
+        "y": 442,
         "width": 67,
         "height": 29
       },
@@ -4114,8 +3359,8 @@
     {
       "name": "POSSS0",
       "rect": {
-        "x": 446,
-        "y": 588,
+        "x": 893,
+        "y": 476,
         "width": 64,
         "height": 23
       },
@@ -4133,8 +3378,8 @@
     {
       "name": "POSST0",
       "rect": {
-        "x": 1083,
-        "y": 588,
+        "x": 1564,
+        "y": 476,
         "width": 65,
         "height": 17
       },
@@ -4152,8 +3397,8 @@
     {
       "name": "POSSU0",
       "rect": {
-        "x": 1217,
-        "y": 588,
+        "x": 1698,
+        "y": 476,
         "width": 67,
         "height": 16
       },
@@ -4171,8 +3416,8 @@
     {
       "name": "PSTRA0",
       "rect": {
-        "x": 971,
-        "y": 588,
+        "x": 1452,
+        "y": 476,
         "width": 32,
         "height": 19
       },
@@ -4190,8 +3435,8 @@
     {
       "name": "PUFFA0",
       "rect": {
-        "x": 280,
-        "y": 617,
+        "x": 753,
+        "y": 507,
         "width": 5,
         "height": 5
       },
@@ -4209,8 +3454,8 @@
     {
       "name": "PUFFB0",
       "rect": {
-        "x": 1969,
-        "y": 588,
+        "x": 404,
+        "y": 507,
         "width": 12,
         "height": 11
       },
@@ -4228,8 +3473,8 @@
     {
       "name": "PUFFC0",
       "rect": {
-        "x": 1807,
-        "y": 588,
+        "x": 242,
+        "y": 507,
         "width": 15,
         "height": 14
       },
@@ -4247,8 +3492,8 @@
     {
       "name": "PUFFD0",
       "rect": {
-        "x": 1702,
-        "y": 588,
+        "x": 137,
+        "y": 507,
         "width": 17,
         "height": 15
       },
@@ -4266,8 +3511,8 @@
     {
       "name": "PVISA0",
       "rect": {
-        "x": 1900,
-        "y": 588,
+        "x": 335,
+        "y": 507,
         "width": 28,
         "height": 13
       },
@@ -4285,8 +3530,8 @@
     {
       "name": "PVISB0",
       "rect": {
-        "x": 1930,
-        "y": 588,
+        "x": 365,
+        "y": 507,
         "width": 28,
         "height": 13
       },
@@ -4304,8 +3549,8 @@
     {
       "name": "ROCKA0",
       "rect": {
-        "x": 434,
-        "y": 588,
+        "x": 881,
+        "y": 476,
         "width": 10,
         "height": 24
       },
@@ -4323,8 +3568,8 @@
     {
       "name": "SARGA1",
       "rect": {
-        "x": 1886,
-        "y": 215,
+        "x": 1591,
+        "y": 147,
         "width": 38,
         "height": 59
       },
@@ -4342,8 +3587,8 @@
     {
       "name": "SARGA2A8",
       "rect": {
-        "x": 575,
-        "y": 279,
+        "x": 301,
+        "y": 211,
         "width": 54,
         "height": 57
       },
@@ -4366,8 +3611,8 @@
     {
       "name": "SARGA3A7",
       "rect": {
-        "x": 102,
-        "y": 279,
+        "x": 1851,
+        "y": 147,
         "width": 58,
         "height": 58
       },
@@ -4390,8 +3635,8 @@
     {
       "name": "SARGA4A6",
       "rect": {
-        "x": 1054,
-        "y": 279,
+        "x": 780,
+        "y": 211,
         "width": 47,
         "height": 57
       },
@@ -4414,8 +3659,8 @@
     {
       "name": "SARGA5",
       "rect": {
-        "x": 1608,
-        "y": 215,
+        "x": 1313,
+        "y": 147,
         "width": 38,
         "height": 60
       },
@@ -4433,8 +3678,8 @@
     {
       "name": "SARGB1",
       "rect": {
-        "x": 2,
-        "y": 279,
+        "x": 1751,
+        "y": 147,
         "width": 34,
         "height": 59
       },
@@ -4452,8 +3697,8 @@
     {
       "name": "SARGB2B8",
       "rect": {
-        "x": 331,
-        "y": 279,
+        "x": 57,
+        "y": 211,
         "width": 49,
         "height": 58
       },
@@ -4476,8 +3721,8 @@
     {
       "name": "SARGB3B7",
       "rect": {
-        "x": 220,
-        "y": 279,
+        "x": 1969,
+        "y": 147,
         "width": 54,
         "height": 58
       },
@@ -4500,8 +3745,8 @@
     {
       "name": "SARGB4B6",
       "rect": {
-        "x": 1103,
-        "y": 279,
+        "x": 829,
+        "y": 211,
         "width": 46,
         "height": 57
       },
@@ -4524,8 +3769,8 @@
     {
       "name": "SARGB5",
       "rect": {
-        "x": 2,
-        "y": 340,
+        "x": 1741,
+        "y": 211,
         "width": 34,
         "height": 57
       },
@@ -4543,8 +3788,8 @@
     {
       "name": "SARGC1",
       "rect": {
-        "x": 1926,
-        "y": 215,
+        "x": 1631,
+        "y": 147,
         "width": 38,
         "height": 59
       },
@@ -4562,8 +3807,8 @@
     {
       "name": "SARGC2C8",
       "rect": {
-        "x": 530,
-        "y": 279,
+        "x": 256,
+        "y": 211,
         "width": 43,
         "height": 58
       },
@@ -4586,8 +3831,8 @@
     {
       "name": "SARGC3C7",
       "rect": {
-        "x": 631,
-        "y": 279,
+        "x": 357,
+        "y": 211,
         "width": 54,
         "height": 57
       },
@@ -4610,8 +3855,8 @@
     {
       "name": "SARGC4C6",
       "rect": {
-        "x": 1004,
-        "y": 279,
+        "x": 730,
+        "y": 211,
         "width": 48,
         "height": 57
       },
@@ -4634,8 +3879,8 @@
     {
       "name": "SARGC5",
       "rect": {
-        "x": 1648,
-        "y": 215,
+        "x": 1353,
+        "y": 147,
         "width": 38,
         "height": 60
       },
@@ -4653,8 +3898,8 @@
     {
       "name": "SARGD1",
       "rect": {
-        "x": 1966,
-        "y": 215,
+        "x": 1671,
+        "y": 147,
         "width": 38,
         "height": 59
       },
@@ -4672,8 +3917,8 @@
     {
       "name": "SARGD2D8",
       "rect": {
-        "x": 433,
-        "y": 279,
+        "x": 159,
+        "y": 211,
         "width": 47,
         "height": 58
       },
@@ -4696,8 +3941,8 @@
     {
       "name": "SARGD3D7",
       "rect": {
-        "x": 687,
-        "y": 279,
+        "x": 413,
+        "y": 211,
         "width": 54,
         "height": 57
       },
@@ -4720,8 +3965,8 @@
     {
       "name": "SARGD4D6",
       "rect": {
-        "x": 797,
-        "y": 279,
+        "x": 523,
+        "y": 211,
         "width": 51,
         "height": 57
       },
@@ -4744,8 +3989,8 @@
     {
       "name": "SARGD5",
       "rect": {
-        "x": 38,
-        "y": 340,
+        "x": 1777,
+        "y": 211,
         "width": 34,
         "height": 57
       },
@@ -4763,8 +4008,8 @@
     {
       "name": "SARGE1",
       "rect": {
-        "x": 1688,
-        "y": 215,
+        "x": 1393,
+        "y": 147,
         "width": 38,
         "height": 60
       },
@@ -4782,8 +4027,8 @@
     {
       "name": "SARGE2E8",
       "rect": {
-        "x": 276,
-        "y": 279,
+        "x": 2,
+        "y": 211,
         "width": 53,
         "height": 58
       },
@@ -4806,8 +4051,8 @@
     {
       "name": "SARGE3E7",
       "rect": {
-        "x": 162,
-        "y": 279,
+        "x": 1911,
+        "y": 147,
         "width": 56,
         "height": 58
       },
@@ -4830,8 +4075,8 @@
     {
       "name": "SARGE4E6",
       "rect": {
-        "x": 903,
-        "y": 279,
+        "x": 629,
+        "y": 211,
         "width": 49,
         "height": 57
       },
@@ -4854,8 +4099,8 @@
     {
       "name": "SARGE5",
       "rect": {
-        "x": 74,
-        "y": 340,
+        "x": 1813,
+        "y": 211,
         "width": 34,
         "height": 57
       },
@@ -4873,8 +4118,8 @@
     {
       "name": "SARGF1",
       "rect": {
-        "x": 1728,
-        "y": 215,
+        "x": 1433,
+        "y": 147,
         "width": 38,
         "height": 60
       },
@@ -4892,8 +4137,8 @@
     {
       "name": "SARGF2F8",
       "rect": {
-        "x": 743,
-        "y": 279,
+        "x": 469,
+        "y": 211,
         "width": 52,
         "height": 57
       },
@@ -4916,8 +4161,8 @@
     {
       "name": "SARGF3F7",
       "rect": {
-        "x": 38,
-        "y": 279,
+        "x": 1787,
+        "y": 147,
         "width": 62,
         "height": 58
       },
@@ -4940,8 +4185,8 @@
     {
       "name": "SARGF4F6",
       "rect": {
-        "x": 850,
-        "y": 279,
+        "x": 576,
+        "y": 211,
         "width": 51,
         "height": 57
       },
@@ -4964,8 +4209,8 @@
     {
       "name": "SARGF5",
       "rect": {
-        "x": 1851,
-        "y": 340,
+        "x": 1488,
+        "y": 271,
         "width": 34,
         "height": 56
       },
@@ -4983,8 +4228,8 @@
     {
       "name": "SARGG1",
       "rect": {
-        "x": 1768,
-        "y": 215,
+        "x": 1473,
+        "y": 147,
         "width": 34,
         "height": 60
       },
@@ -5002,8 +4247,8 @@
     {
       "name": "SARGG2G8",
       "rect": {
-        "x": 482,
-        "y": 279,
+        "x": 208,
+        "y": 211,
         "width": 46,
         "height": 58
       },
@@ -5026,8 +4271,8 @@
     {
       "name": "SARGG3G7",
       "rect": {
-        "x": 382,
-        "y": 279,
+        "x": 108,
+        "y": 211,
         "width": 49,
         "height": 58
       },
@@ -5050,8 +4295,8 @@
     {
       "name": "SARGG4G6",
       "rect": {
-        "x": 1151,
-        "y": 279,
+        "x": 877,
+        "y": 211,
         "width": 43,
         "height": 57
       },
@@ -5074,8 +4319,8 @@
     {
       "name": "SARGG5",
       "rect": {
-        "x": 36,
-        "y": 399,
+        "x": 1699,
+        "y": 271,
         "width": 32,
         "height": 56
       },
@@ -5093,8 +4338,8 @@
     {
       "name": "SARGH1",
       "rect": {
-        "x": 1374,
-        "y": 457,
+        "x": 873,
+        "y": 387,
         "width": 33,
         "height": 50
       },
@@ -5112,8 +4357,8 @@
     {
       "name": "SARGH2H8",
       "rect": {
-        "x": 1084,
-        "y": 457,
+        "x": 583,
+        "y": 387,
         "width": 40,
         "height": 51
       },
@@ -5136,8 +4381,8 @@
     {
       "name": "SARGH3H7",
       "rect": {
-        "x": 664,
-        "y": 457,
+        "x": 212,
+        "y": 387,
         "width": 43,
         "height": 52
       },
@@ -5160,8 +4405,8 @@
     {
       "name": "SARGH4H6",
       "rect": {
-        "x": 1039,
-        "y": 457,
+        "x": 538,
+        "y": 387,
         "width": 43,
         "height": 51
       },
@@ -5184,8 +4429,8 @@
     {
       "name": "SARGH5",
       "rect": {
-        "x": 1204,
-        "y": 457,
+        "x": 703,
+        "y": 387,
         "width": 33,
         "height": 51
       },
@@ -5203,8 +4448,8 @@
     {
       "name": "SARGI0",
       "rect": {
-        "x": 2006,
-        "y": 215,
+        "x": 1711,
+        "y": 147,
         "width": 38,
         "height": 59
       },
@@ -5222,8 +4467,8 @@
     {
       "name": "SARGJ0",
       "rect": {
-        "x": 1566,
-        "y": 215,
+        "x": 1271,
+        "y": 147,
         "width": 40,
         "height": 60
       },
@@ -5241,8 +4486,8 @@
     {
       "name": "SARGK0",
       "rect": {
-        "x": 197,
-        "y": 457,
+        "x": 1862,
+        "y": 329,
         "width": 43,
         "height": 53
       },
@@ -5260,8 +4505,8 @@
     {
       "name": "SARGL0",
       "rect": {
-        "x": 69,
-        "y": 513,
+        "x": 1491,
+        "y": 387,
         "width": 43,
         "height": 40
       },
@@ -5279,8 +4524,8 @@
     {
       "name": "SARGM0",
       "rect": {
-        "x": 652,
-        "y": 555,
+        "x": 1193,
+        "y": 442,
         "width": 48,
         "height": 30
       },
@@ -5298,8 +4543,8 @@
     {
       "name": "SARGN0",
       "rect": {
-        "x": 1552,
-        "y": 555,
+        "x": 2,
+        "y": 476,
         "width": 49,
         "height": 29
       },
@@ -5317,8 +4562,8 @@
     {
       "name": "SBOXA0",
       "rect": {
-        "x": 1864,
-        "y": 588,
+        "x": 299,
+        "y": 507,
         "width": 34,
         "height": 13
       },
@@ -5336,8 +4581,8 @@
     {
       "name": "SHELA0",
       "rect": {
-        "x": 23,
-        "y": 617,
+        "x": 496,
+        "y": 507,
         "width": 14,
         "height": 10
       },
@@ -5355,8 +4600,8 @@
     {
       "name": "SHOTA0",
       "rect": {
-        "x": 1824,
-        "y": 588,
+        "x": 259,
+        "y": 507,
         "width": 38,
         "height": 13
       },
@@ -5374,8 +4619,8 @@
     {
       "name": "SHTFA0",
       "rect": {
-        "x": 1631,
-        "y": 457,
+        "x": 1130,
+        "y": 387,
         "width": 36,
         "height": 47
       },
@@ -5393,8 +4638,8 @@
     {
       "name": "SHTFB0",
       "rect": {
-        "x": 646,
-        "y": 399,
+        "x": 291,
+        "y": 329,
         "width": 58,
         "height": 55
       },
@@ -5412,8 +4657,8 @@
     {
       "name": "SHTGA0",
       "rect": {
-        "x": 2,
-        "y": 215,
+        "x": 1711,
+        "y": 2,
         "width": 67,
         "height": 62
       },
@@ -5486,673 +4731,9 @@
       ]
     },
     {
-      "name": "SKULA1",
-      "rect": {
-        "x": 428,
-        "y": 513,
-        "width": 30,
-        "height": 39
-      },
-      "kind": "sprite",
-      "doom_name": "SKULA1",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULA5",
-      "rect": {
-        "x": 460,
-        "y": 513,
-        "width": 30,
-        "height": 39
-      },
-      "kind": "sprite",
-      "doom_name": "SKULA5",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULA6A4",
-      "rect": {
-        "x": 551,
-        "y": 513,
-        "width": 31,
-        "height": 38
-      },
-      "kind": "sprite",
-      "doom_name": "SKULA6A4",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 6,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 4,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULA7A3",
-      "rect": {
-        "x": 584,
-        "y": 513,
-        "width": 31,
-        "height": 38
-      },
-      "kind": "sprite",
-      "doom_name": "SKULA7A3",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 7,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 3,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULA8A2",
-      "rect": {
-        "x": 617,
-        "y": 513,
-        "width": 30,
-        "height": 38
-      },
-      "kind": "sprite",
-      "doom_name": "SKULA8A2",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "A",
-          "angle": 8,
-          "mirrored": false
-        },
-        {
-          "frame": "A",
-          "angle": 2,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULB1",
-      "rect": {
-        "x": 792,
-        "y": 513,
-        "width": 30,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULB1",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULB5",
-      "rect": {
-        "x": 824,
-        "y": 513,
-        "width": 30,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULB5",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULB6B4",
-      "rect": {
-        "x": 1153,
-        "y": 513,
-        "width": 31,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULB6B4",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 6,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 4,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULB7B3",
-      "rect": {
-        "x": 1186,
-        "y": 513,
-        "width": 31,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULB7B3",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 7,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 3,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULB8B2",
-      "rect": {
-        "x": 1219,
-        "y": 513,
-        "width": 30,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULB8B2",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "B",
-          "angle": 8,
-          "mirrored": false
-        },
-        {
-          "frame": "B",
-          "angle": 2,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULC1",
-      "rect": {
-        "x": 649,
-        "y": 513,
-        "width": 34,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULC1",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULC5",
-      "rect": {
-        "x": 1009,
-        "y": 513,
-        "width": 34,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULC5",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULC6C4",
-      "rect": {
-        "x": 856,
-        "y": 513,
-        "width": 38,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULC6C4",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 6,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 4,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULC7C3",
-      "rect": {
-        "x": 360,
-        "y": 513,
-        "width": 32,
-        "height": 39
-      },
-      "kind": "sprite",
-      "doom_name": "SKULC7C3",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 7,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 3,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULC8C2",
-      "rect": {
-        "x": 685,
-        "y": 513,
-        "width": 34,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULC8C2",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "C",
-          "angle": 8,
-          "mirrored": false
-        },
-        {
-          "frame": "C",
-          "angle": 2,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULD1",
-      "rect": {
-        "x": 1045,
-        "y": 513,
-        "width": 34,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULD1",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULD5",
-      "rect": {
-        "x": 1081,
-        "y": 513,
-        "width": 34,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULD5",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULD6D4",
-      "rect": {
-        "x": 935,
-        "y": 513,
-        "width": 35,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULD6D4",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 6,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 4,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULD7D3",
-      "rect": {
-        "x": 152,
-        "y": 513,
-        "width": 34,
-        "height": 40
-      },
-      "kind": "sprite",
-      "doom_name": "SKULD7D3",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 7,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 3,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULD8D2",
-      "rect": {
-        "x": 972,
-        "y": 513,
-        "width": 35,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULD8D2",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "D",
-          "angle": 8,
-          "mirrored": false
-        },
-        {
-          "frame": "D",
-          "angle": 2,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULE1",
-      "rect": {
-        "x": 721,
-        "y": 513,
-        "width": 34,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULE1",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 1,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULE5",
-      "rect": {
-        "x": 1117,
-        "y": 513,
-        "width": 34,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULE5",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 5,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULE6E4",
-      "rect": {
-        "x": 896,
-        "y": 513,
-        "width": 37,
-        "height": 36
-      },
-      "kind": "sprite",
-      "doom_name": "SKULE6E4",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 6,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 4,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULE7E3",
-      "rect": {
-        "x": 394,
-        "y": 513,
-        "width": 32,
-        "height": 39
-      },
-      "kind": "sprite",
-      "doom_name": "SKULE7E3",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 7,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 3,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULE8E2",
-      "rect": {
-        "x": 757,
-        "y": 513,
-        "width": 33,
-        "height": 37
-      },
-      "kind": "sprite",
-      "doom_name": "SKULE8E2",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "E",
-          "angle": 8,
-          "mirrored": false
-        },
-        {
-          "frame": "E",
-          "angle": 2,
-          "mirrored": true
-        }
-      ]
-    },
-    {
-      "name": "SKULF0",
-      "rect": {
-        "x": 1712,
-        "y": 457,
-        "width": 38,
-        "height": 46
-      },
-      "kind": "sprite",
-      "doom_name": "SKULF0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "F",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULG0",
-      "rect": {
-        "x": 1941,
-        "y": 457,
-        "width": 32,
-        "height": 42
-      },
-      "kind": "sprite",
-      "doom_name": "SKULG0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "G",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULH0",
-      "rect": {
-        "x": 1669,
-        "y": 457,
-        "width": 41,
-        "height": 46
-      },
-      "kind": "sprite",
-      "doom_name": "SKULH0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "H",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULI0",
-      "rect": {
-        "x": 990,
-        "y": 457,
-        "width": 47,
-        "height": 51
-      },
-      "kind": "sprite",
-      "doom_name": "SKULI0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "I",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULJ0",
-      "rect": {
-        "x": 259,
-        "y": 340,
-        "width": 55,
-        "height": 56
-      },
-      "kind": "sprite",
-      "doom_name": "SKULJ0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "J",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
-      "name": "SKULK0",
-      "rect": {
-        "x": 1381,
-        "y": 147,
-        "width": 60,
-        "height": 64
-      },
-      "kind": "sprite",
-      "doom_name": "SKULK0",
-      "sprite": "SKUL",
-      "aliases": [
-        {
-          "frame": "K",
-          "angle": 0,
-          "mirrored": false
-        }
-      ]
-    },
-    {
       "name": "SMITA0",
       "rect": {
-        "x": 1166,
+        "x": 932,
         "y": 2,
         "width": 62,
         "height": 69
@@ -6171,8 +4752,8 @@
     {
       "name": "SOULA0",
       "rect": {
-        "x": 326,
-        "y": 588,
+        "x": 773,
+        "y": 476,
         "width": 25,
         "height": 25
       },
@@ -6190,8 +4771,8 @@
     {
       "name": "SOULB0",
       "rect": {
-        "x": 353,
-        "y": 588,
+        "x": 800,
+        "y": 476,
         "width": 25,
         "height": 25
       },
@@ -6209,8 +4790,8 @@
     {
       "name": "SOULC0",
       "rect": {
-        "x": 380,
-        "y": 588,
+        "x": 827,
+        "y": 476,
         "width": 25,
         "height": 25
       },
@@ -6228,8 +4809,8 @@
     {
       "name": "SOULD0",
       "rect": {
-        "x": 407,
-        "y": 588,
+        "x": 854,
+        "y": 476,
         "width": 25,
         "height": 25
       },
@@ -6247,8 +4828,8 @@
     {
       "name": "SPOSA1",
       "rect": {
-        "x": 1184,
-        "y": 399,
+        "x": 829,
+        "y": 329,
         "width": 35,
         "height": 55
       },
@@ -6266,8 +4847,8 @@
     {
       "name": "SPOSA2A8",
       "rect": {
-        "x": 1328,
-        "y": 399,
+        "x": 973,
+        "y": 329,
         "width": 31,
         "height": 55
       },
@@ -6290,8 +4871,8 @@
     {
       "name": "SPOSA3A7",
       "rect": {
-        "x": 481,
-        "y": 457,
+        "x": 114,
+        "y": 387,
         "width": 34,
         "height": 53
       },
@@ -6314,8 +4895,8 @@
     {
       "name": "SPOSA4A6",
       "rect": {
-        "x": 1327,
-        "y": 457,
+        "x": 826,
+        "y": 387,
         "width": 45,
         "height": 50
       },
@@ -6338,8 +4919,8 @@
     {
       "name": "SPOSA5",
       "rect": {
-        "x": 1167,
-        "y": 457,
+        "x": 666,
+        "y": 387,
         "width": 35,
         "height": 51
       },
@@ -6357,8 +4938,8 @@
     {
       "name": "SPOSB1",
       "rect": {
-        "x": 1221,
-        "y": 399,
+        "x": 866,
+        "y": 329,
         "width": 35,
         "height": 55
       },
@@ -6376,8 +4957,8 @@
     {
       "name": "SPOSB2B8",
       "rect": {
-        "x": 1423,
-        "y": 399,
+        "x": 1068,
+        "y": 329,
         "width": 27,
         "height": 55
       },
@@ -6400,8 +4981,8 @@
     {
       "name": "SPOSB3B7",
       "rect": {
-        "x": 110,
-        "y": 340,
+        "x": 1849,
+        "y": 211,
         "width": 32,
         "height": 57
       },
@@ -6424,8 +5005,8 @@
     {
       "name": "SPOSB4B6",
       "rect": {
-        "x": 1751,
-        "y": 399,
+        "x": 1396,
+        "y": 329,
         "width": 40,
         "height": 54
       },
@@ -6448,8 +5029,8 @@
     {
       "name": "SPOSB5",
       "rect": {
-        "x": 1950,
-        "y": 399,
+        "x": 1595,
+        "y": 329,
         "width": 34,
         "height": 54
       },
@@ -6467,8 +5048,8 @@
     {
       "name": "SPOSC1",
       "rect": {
-        "x": 70,
-        "y": 399,
+        "x": 1733,
+        "y": 271,
         "width": 32,
         "height": 56
       },
@@ -6486,8 +5067,8 @@
     {
       "name": "SPOSC2C8",
       "rect": {
-        "x": 1392,
-        "y": 399,
+        "x": 1037,
+        "y": 329,
         "width": 29,
         "height": 55
       },
@@ -6510,8 +5091,8 @@
     {
       "name": "SPOSC3C7",
       "rect": {
-        "x": 1358,
-        "y": 340,
+        "x": 995,
+        "y": 271,
         "width": 38,
         "height": 56
       },
@@ -6534,8 +5115,8 @@
     {
       "name": "SPOSC4C6",
       "rect": {
-        "x": 1834,
-        "y": 399,
+        "x": 1479,
+        "y": 329,
         "width": 38,
         "height": 54
       },
@@ -6558,8 +5139,8 @@
     {
       "name": "SPOSC5",
       "rect": {
-        "x": 1258,
-        "y": 399,
+        "x": 903,
+        "y": 329,
         "width": 34,
         "height": 55
       },
@@ -6577,8 +5158,8 @@
     {
       "name": "SPOSD1",
       "rect": {
-        "x": 1887,
-        "y": 340,
+        "x": 1524,
+        "y": 271,
         "width": 34,
         "height": 56
       },
@@ -6596,8 +5177,8 @@
     {
       "name": "SPOSD2D8",
       "rect": {
-        "x": 479,
-        "y": 399,
+        "x": 124,
+        "y": 329,
         "width": 27,
         "height": 56
       },
@@ -6620,8 +5201,8 @@
     {
       "name": "SPOSD3D7",
       "rect": {
-        "x": 201,
-        "y": 399,
+        "x": 1864,
+        "y": 271,
         "width": 30,
         "height": 56
       },
@@ -6644,8 +5225,8 @@
     {
       "name": "SPOSD4D6",
       "rect": {
-        "x": 1107,
-        "y": 399,
+        "x": 752,
+        "y": 329,
         "width": 37,
         "height": 55
       },
@@ -6668,8 +5249,8 @@
     {
       "name": "SPOSD5",
       "rect": {
-        "x": 1913,
-        "y": 399,
+        "x": 1558,
+        "y": 329,
         "width": 35,
         "height": 54
       },
@@ -6687,8 +5268,8 @@
     {
       "name": "SPOSE1",
       "rect": {
-        "x": 620,
-        "y": 399,
+        "x": 265,
+        "y": 329,
         "width": 24,
         "height": 56
       },
@@ -6706,8 +5287,8 @@
     {
       "name": "SPOSE2E8",
       "rect": {
-        "x": 1874,
-        "y": 399,
+        "x": 1519,
+        "y": 329,
         "width": 37,
         "height": 54
       },
@@ -6730,8 +5311,8 @@
     {
       "name": "SPOSE3E7",
       "rect": {
-        "x": 151,
-        "y": 457,
+        "x": 1816,
+        "y": 329,
         "width": 44,
         "height": 53
       },
@@ -6754,8 +5335,8 @@
     {
       "name": "SPOSE4E6",
       "rect": {
-        "x": 838,
-        "y": 457,
+        "x": 386,
+        "y": 387,
         "width": 34,
         "height": 52
       },
@@ -6778,8 +5359,8 @@
     {
       "name": "SPOSE5",
       "rect": {
-        "x": 910,
-        "y": 457,
+        "x": 458,
+        "y": 387,
         "width": 25,
         "height": 52
       },
@@ -6797,8 +5378,8 @@
     {
       "name": "SPOSF1",
       "rect": {
-        "x": 592,
-        "y": 399,
+        "x": 237,
+        "y": 329,
         "width": 26,
         "height": 56
       },
@@ -6816,8 +5397,8 @@
     {
       "name": "SPOSF2F8",
       "rect": {
-        "x": 893,
-        "y": 340,
+        "x": 530,
+        "y": 271,
         "width": 43,
         "height": 56
       },
@@ -6840,8 +5421,8 @@
     {
       "name": "SPOSF3F7",
       "rect": {
-        "x": 98,
-        "y": 457,
+        "x": 1763,
+        "y": 329,
         "width": 51,
         "height": 53
       },
@@ -6864,8 +5445,8 @@
     {
       "name": "SPOSF4F6",
       "rect": {
-        "x": 795,
-        "y": 457,
+        "x": 343,
+        "y": 387,
         "width": 41,
         "height": 52
       },
@@ -6888,8 +5469,8 @@
     {
       "name": "SPOSF5",
       "rect": {
-        "x": 937,
-        "y": 457,
+        "x": 485,
+        "y": 387,
         "width": 25,
         "height": 52
       },
@@ -6907,8 +5488,8 @@
     {
       "name": "SPOSG1",
       "rect": {
-        "x": 1294,
-        "y": 399,
+        "x": 939,
+        "y": 329,
         "width": 32,
         "height": 55
       },
@@ -6926,8 +5507,8 @@
     {
       "name": "SPOSG2G8",
       "rect": {
-        "x": 2,
-        "y": 457,
+        "x": 1667,
+        "y": 329,
         "width": 33,
         "height": 54
       },
@@ -6950,8 +5531,8 @@
     {
       "name": "SPOSG3G7",
       "rect": {
-        "x": 242,
-        "y": 457,
+        "x": 1907,
+        "y": 329,
         "width": 43,
         "height": 53
       },
@@ -6974,8 +5555,8 @@
     {
       "name": "SPOSG4G6",
       "rect": {
-        "x": 874,
-        "y": 457,
+        "x": 422,
+        "y": 387,
         "width": 34,
         "height": 52
       },
@@ -6998,8 +5579,8 @@
     {
       "name": "SPOSG5",
       "rect": {
-        "x": 1986,
-        "y": 399,
+        "x": 1631,
+        "y": 329,
         "width": 34,
         "height": 54
       },
@@ -7017,8 +5598,8 @@
     {
       "name": "SPOSH0",
       "rect": {
-        "x": 1804,
-        "y": 215,
+        "x": 1509,
+        "y": 147,
         "width": 33,
         "height": 60
       },
@@ -7036,8 +5617,8 @@
     {
       "name": "SPOSI0",
       "rect": {
-        "x": 408,
-        "y": 457,
+        "x": 41,
+        "y": 387,
         "width": 35,
         "height": 53
       },
@@ -7055,8 +5636,8 @@
     {
       "name": "SPOSJ0",
       "rect": {
-        "x": 316,
-        "y": 513,
+        "x": 1702,
+        "y": 387,
         "width": 42,
         "height": 39
       },
@@ -7074,8 +5655,8 @@
     {
       "name": "SPOSK0",
       "rect": {
-        "x": 1344,
-        "y": 513,
+        "x": 1898,
+        "y": 387,
         "width": 45,
         "height": 34
       },
@@ -7093,8 +5674,8 @@
     {
       "name": "SPOSL0",
       "rect": {
-        "x": 708,
-        "y": 588,
+        "x": 1155,
+        "y": 476,
         "width": 52,
         "height": 20
       },
@@ -7112,8 +5693,8 @@
     {
       "name": "SPOSM0",
       "rect": {
-        "x": 1187,
-        "y": 215,
+        "x": 892,
+        "y": 147,
         "width": 41,
         "height": 61
       },
@@ -7131,8 +5712,8 @@
     {
       "name": "SPOSN0",
       "rect": {
-        "x": 938,
-        "y": 340,
+        "x": 575,
+        "y": 271,
         "width": 43,
         "height": 56
       },
@@ -7150,8 +5731,8 @@
     {
       "name": "SPOSO0",
       "rect": {
-        "x": 874,
-        "y": 399,
+        "x": 519,
+        "y": 329,
         "width": 53,
         "height": 55
       },
@@ -7169,8 +5750,8 @@
     {
       "name": "SPOSP0",
       "rect": {
-        "x": 1572,
-        "y": 457,
+        "x": 1071,
+        "y": 387,
         "width": 57,
         "height": 47
       },
@@ -7188,8 +5769,8 @@
     {
       "name": "SPOSQ0",
       "rect": {
-        "x": 2,
-        "y": 513,
+        "x": 1424,
+        "y": 387,
         "width": 65,
         "height": 40
       },
@@ -7207,8 +5788,8 @@
     {
       "name": "SPOSR0",
       "rect": {
-        "x": 515,
-        "y": 555,
+        "x": 1056,
+        "y": 442,
         "width": 67,
         "height": 30
       },
@@ -7226,8 +5807,8 @@
     {
       "name": "SPOSS0",
       "rect": {
-        "x": 512,
-        "y": 588,
+        "x": 959,
+        "y": 476,
         "width": 64,
         "height": 23
       },
@@ -7245,8 +5826,8 @@
     {
       "name": "SPOST0",
       "rect": {
-        "x": 1150,
-        "y": 588,
+        "x": 1631,
+        "y": 476,
         "width": 65,
         "height": 17
       },
@@ -7264,8 +5845,8 @@
     {
       "name": "SPOSU0",
       "rect": {
-        "x": 1286,
-        "y": 588,
+        "x": 1767,
+        "y": 476,
         "width": 67,
         "height": 16
       },
@@ -7283,8 +5864,8 @@
     {
       "name": "STARMS",
       "rect": {
-        "x": 1862,
-        "y": 513,
+        "x": 391,
+        "y": 442,
         "width": 38,
         "height": 32
       },
@@ -7296,8 +5877,8 @@
     {
       "name": "STBAR",
       "rect": {
-        "x": 1473,
-        "y": 513,
+        "x": 2,
+        "y": 442,
         "width": 320,
         "height": 32
       },
@@ -7309,8 +5890,8 @@
     {
       "name": "STFB0",
       "rect": {
-        "x": 1977,
-        "y": 513,
+        "x": 506,
+        "y": 442,
         "width": 35,
         "height": 31
       },
@@ -7322,8 +5903,8 @@
     {
       "name": "STFB1",
       "rect": {
-        "x": 2,
-        "y": 555,
+        "x": 543,
+        "y": 442,
         "width": 35,
         "height": 31
       },
@@ -7335,8 +5916,8 @@
     {
       "name": "STFB2",
       "rect": {
-        "x": 39,
-        "y": 555,
+        "x": 580,
+        "y": 442,
         "width": 35,
         "height": 31
       },
@@ -7348,8 +5929,8 @@
     {
       "name": "STFB3",
       "rect": {
-        "x": 76,
-        "y": 555,
+        "x": 617,
+        "y": 442,
         "width": 35,
         "height": 31
       },
@@ -7361,8 +5942,8 @@
     {
       "name": "STFDEAD0",
       "rect": {
-        "x": 203,
-        "y": 555,
+        "x": 744,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7374,8 +5955,8 @@
     {
       "name": "STFEVL0",
       "rect": {
-        "x": 994,
-        "y": 555,
+        "x": 1535,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7387,8 +5968,8 @@
     {
       "name": "STFEVL1",
       "rect": {
-        "x": 1020,
-        "y": 555,
+        "x": 1561,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7400,8 +5981,8 @@
     {
       "name": "STFEVL2",
       "rect": {
-        "x": 1046,
-        "y": 555,
+        "x": 1587,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7413,8 +5994,8 @@
     {
       "name": "STFEVL3",
       "rect": {
-        "x": 1072,
-        "y": 555,
+        "x": 1613,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7426,8 +6007,8 @@
     {
       "name": "STFEVL4",
       "rect": {
-        "x": 1098,
-        "y": 555,
+        "x": 1639,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7439,8 +6020,8 @@
     {
       "name": "STFGOD0",
       "rect": {
-        "x": 1603,
-        "y": 555,
+        "x": 53,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7452,8 +6033,8 @@
     {
       "name": "STFKILL0",
       "rect": {
-        "x": 1124,
-        "y": 555,
+        "x": 1665,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7465,8 +6046,8 @@
     {
       "name": "STFKILL1",
       "rect": {
-        "x": 1150,
-        "y": 555,
+        "x": 1691,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7478,8 +6059,8 @@
     {
       "name": "STFKILL2",
       "rect": {
-        "x": 1176,
-        "y": 555,
+        "x": 1717,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7491,8 +6072,8 @@
     {
       "name": "STFKILL3",
       "rect": {
-        "x": 1202,
-        "y": 555,
+        "x": 1743,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7504,8 +6085,8 @@
     {
       "name": "STFKILL4",
       "rect": {
-        "x": 1228,
-        "y": 555,
+        "x": 1769,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7517,8 +6098,8 @@
     {
       "name": "STFOUCH0",
       "rect": {
-        "x": 229,
-        "y": 555,
+        "x": 770,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7530,8 +6111,8 @@
     {
       "name": "STFOUCH1",
       "rect": {
-        "x": 255,
-        "y": 555,
+        "x": 796,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7543,8 +6124,8 @@
     {
       "name": "STFOUCH2",
       "rect": {
-        "x": 281,
-        "y": 555,
+        "x": 822,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7556,8 +6137,8 @@
     {
       "name": "STFOUCH3",
       "rect": {
-        "x": 307,
-        "y": 555,
+        "x": 848,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7569,8 +6150,8 @@
     {
       "name": "STFOUCH4",
       "rect": {
-        "x": 333,
-        "y": 555,
+        "x": 874,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7582,8 +6163,8 @@
     {
       "name": "STFST00",
       "rect": {
-        "x": 1629,
-        "y": 555,
+        "x": 79,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7595,8 +6176,8 @@
     {
       "name": "STFST01",
       "rect": {
-        "x": 1655,
-        "y": 555,
+        "x": 105,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7608,8 +6189,8 @@
     {
       "name": "STFST02",
       "rect": {
-        "x": 1681,
-        "y": 555,
+        "x": 131,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7621,8 +6202,8 @@
     {
       "name": "STFST10",
       "rect": {
-        "x": 1707,
-        "y": 555,
+        "x": 157,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7634,8 +6215,8 @@
     {
       "name": "STFST11",
       "rect": {
-        "x": 1733,
-        "y": 555,
+        "x": 183,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7647,8 +6228,8 @@
     {
       "name": "STFST12",
       "rect": {
-        "x": 1759,
-        "y": 555,
+        "x": 209,
+        "y": 476,
         "width": 24,
         "height": 29
       },
@@ -7660,8 +6241,8 @@
     {
       "name": "STFST20",
       "rect": {
-        "x": 1254,
-        "y": 555,
+        "x": 1795,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7673,8 +6254,8 @@
     {
       "name": "STFST21",
       "rect": {
-        "x": 1280,
-        "y": 555,
+        "x": 1821,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7686,8 +6267,8 @@
     {
       "name": "STFST22",
       "rect": {
-        "x": 1306,
-        "y": 555,
+        "x": 1847,
+        "y": 442,
         "width": 24,
         "height": 30
       },
@@ -7699,8 +6280,8 @@
     {
       "name": "STFST30",
       "rect": {
-        "x": 359,
-        "y": 555,
+        "x": 900,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7712,8 +6293,8 @@
     {
       "name": "STFST31",
       "rect": {
-        "x": 385,
-        "y": 555,
+        "x": 926,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7725,8 +6306,8 @@
     {
       "name": "STFST32",
       "rect": {
-        "x": 411,
-        "y": 555,
+        "x": 952,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7738,8 +6319,8 @@
     {
       "name": "STFST40",
       "rect": {
-        "x": 437,
-        "y": 555,
+        "x": 978,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7751,8 +6332,8 @@
     {
       "name": "STFST41",
       "rect": {
-        "x": 463,
-        "y": 555,
+        "x": 1004,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7764,8 +6345,8 @@
     {
       "name": "STFST42",
       "rect": {
-        "x": 489,
-        "y": 555,
+        "x": 1030,
+        "y": 442,
         "width": 24,
         "height": 31
       },
@@ -7777,8 +6358,8 @@
     {
       "name": "STFTL00",
       "rect": {
-        "x": 882,
-        "y": 555,
+        "x": 1423,
+        "y": 442,
         "width": 26,
         "height": 30
       },
@@ -7790,8 +6371,8 @@
     {
       "name": "STFTL10",
       "rect": {
-        "x": 910,
-        "y": 555,
+        "x": 1451,
+        "y": 442,
         "width": 26,
         "height": 30
       },
@@ -7803,8 +6384,8 @@
     {
       "name": "STFTL20",
       "rect": {
-        "x": 796,
-        "y": 555,
+        "x": 1337,
+        "y": 442,
         "width": 27,
         "height": 30
       },
@@ -7816,8 +6397,8 @@
     {
       "name": "STFTL30",
       "rect": {
-        "x": 145,
-        "y": 555,
+        "x": 686,
+        "y": 442,
         "width": 29,
         "height": 31
       },
@@ -7829,8 +6410,8 @@
     {
       "name": "STFTL40",
       "rect": {
-        "x": 113,
-        "y": 555,
+        "x": 654,
+        "y": 442,
         "width": 30,
         "height": 31
       },
@@ -7842,8 +6423,8 @@
     {
       "name": "STFTR00",
       "rect": {
-        "x": 938,
-        "y": 555,
+        "x": 1479,
+        "y": 442,
         "width": 26,
         "height": 30
       },
@@ -7855,8 +6436,8 @@
     {
       "name": "STFTR10",
       "rect": {
-        "x": 966,
-        "y": 555,
+        "x": 1507,
+        "y": 442,
         "width": 26,
         "height": 30
       },
@@ -7868,8 +6449,8 @@
     {
       "name": "STFTR20",
       "rect": {
-        "x": 825,
-        "y": 555,
+        "x": 1366,
+        "y": 442,
         "width": 27,
         "height": 30
       },
@@ -7881,8 +6462,8 @@
     {
       "name": "STFTR30",
       "rect": {
-        "x": 736,
-        "y": 555,
+        "x": 1277,
+        "y": 442,
         "width": 28,
         "height": 30
       },
@@ -7894,8 +6475,8 @@
     {
       "name": "STFTR40",
       "rect": {
-        "x": 766,
-        "y": 555,
+        "x": 1307,
+        "y": 442,
         "width": 28,
         "height": 30
       },
@@ -7907,8 +6488,8 @@
     {
       "name": "STGNUM0",
       "rect": {
-        "x": 133,
-        "y": 617,
+        "x": 606,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7920,8 +6501,8 @@
     {
       "name": "STGNUM1",
       "rect": {
-        "x": 139,
-        "y": 617,
+        "x": 612,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7933,8 +6514,8 @@
     {
       "name": "STGNUM2",
       "rect": {
-        "x": 145,
-        "y": 617,
+        "x": 618,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7946,8 +6527,8 @@
     {
       "name": "STGNUM3",
       "rect": {
-        "x": 151,
-        "y": 617,
+        "x": 624,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7959,8 +6540,8 @@
     {
       "name": "STGNUM4",
       "rect": {
-        "x": 157,
-        "y": 617,
+        "x": 630,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7972,8 +6553,8 @@
     {
       "name": "STGNUM5",
       "rect": {
-        "x": 163,
-        "y": 617,
+        "x": 636,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7985,8 +6566,8 @@
     {
       "name": "STGNUM6",
       "rect": {
-        "x": 169,
-        "y": 617,
+        "x": 642,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -7998,8 +6579,8 @@
     {
       "name": "STGNUM7",
       "rect": {
-        "x": 175,
-        "y": 617,
+        "x": 648,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8011,8 +6592,8 @@
     {
       "name": "STGNUM8",
       "rect": {
-        "x": 181,
-        "y": 617,
+        "x": 654,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8024,8 +6605,8 @@
     {
       "name": "STGNUM9",
       "rect": {
-        "x": 187,
-        "y": 617,
+        "x": 660,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8037,8 +6618,8 @@
     {
       "name": "STIMA0",
       "rect": {
-        "x": 2,
-        "y": 617,
+        "x": 475,
+        "y": 507,
         "width": 19,
         "height": 10
       },
@@ -8056,8 +6637,8 @@
     {
       "name": "STKEYS0",
       "rect": {
-        "x": 253,
-        "y": 617,
+        "x": 726,
+        "y": 507,
         "width": 7,
         "height": 5
       },
@@ -8069,8 +6650,8 @@
     {
       "name": "STKEYS1",
       "rect": {
-        "x": 262,
-        "y": 617,
+        "x": 735,
+        "y": 507,
         "width": 7,
         "height": 5
       },
@@ -8082,8 +6663,8 @@
     {
       "name": "STKEYS2",
       "rect": {
-        "x": 271,
-        "y": 617,
+        "x": 744,
+        "y": 507,
         "width": 7,
         "height": 5
       },
@@ -8095,8 +6676,8 @@
     {
       "name": "STKEYS3",
       "rect": {
-        "x": 71,
-        "y": 617,
+        "x": 544,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8108,8 +6689,8 @@
     {
       "name": "STKEYS4",
       "rect": {
-        "x": 80,
-        "y": 617,
+        "x": 553,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8121,8 +6702,8 @@
     {
       "name": "STKEYS5",
       "rect": {
-        "x": 89,
-        "y": 617,
+        "x": 562,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8134,8 +6715,8 @@
     {
       "name": "STKEYS6",
       "rect": {
-        "x": 98,
-        "y": 617,
+        "x": 571,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8147,8 +6728,8 @@
     {
       "name": "STKEYS7",
       "rect": {
-        "x": 107,
-        "y": 617,
+        "x": 580,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8160,8 +6741,8 @@
     {
       "name": "STKEYS8",
       "rect": {
-        "x": 116,
-        "y": 617,
+        "x": 589,
+        "y": 507,
         "width": 7,
         "height": 7
       },
@@ -8173,8 +6754,8 @@
     {
       "name": "STTNUM0",
       "rect": {
-        "x": 1537,
-        "y": 588,
+        "x": 2018,
+        "y": 476,
         "width": 13,
         "height": 16
       },
@@ -8186,8 +6767,8 @@
     {
       "name": "STTNUM1",
       "rect": {
-        "x": 1552,
-        "y": 588,
+        "x": 2033,
+        "y": 476,
         "width": 13,
         "height": 16
       },
@@ -8199,8 +6780,8 @@
     {
       "name": "STTNUM2",
       "rect": {
-        "x": 1567,
-        "y": 588,
+        "x": 2,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8212,8 +6793,8 @@
     {
       "name": "STTNUM3",
       "rect": {
-        "x": 1582,
-        "y": 588,
+        "x": 17,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8225,8 +6806,8 @@
     {
       "name": "STTNUM4",
       "rect": {
-        "x": 1597,
-        "y": 588,
+        "x": 32,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8238,8 +6819,8 @@
     {
       "name": "STTNUM5",
       "rect": {
-        "x": 1612,
-        "y": 588,
+        "x": 47,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8251,8 +6832,8 @@
     {
       "name": "STTNUM6",
       "rect": {
-        "x": 1627,
-        "y": 588,
+        "x": 62,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8264,8 +6845,8 @@
     {
       "name": "STTNUM7",
       "rect": {
-        "x": 1642,
-        "y": 588,
+        "x": 77,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8277,8 +6858,8 @@
     {
       "name": "STTNUM8",
       "rect": {
-        "x": 1657,
-        "y": 588,
+        "x": 92,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8290,8 +6871,8 @@
     {
       "name": "STTNUM9",
       "rect": {
-        "x": 1672,
-        "y": 588,
+        "x": 107,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8303,8 +6884,8 @@
     {
       "name": "STTPRCNT",
       "rect": {
-        "x": 1687,
-        "y": 588,
+        "x": 122,
+        "y": 507,
         "width": 13,
         "height": 16
       },
@@ -8316,8 +6897,8 @@
     {
       "name": "STYSNUM0",
       "rect": {
-        "x": 193,
-        "y": 617,
+        "x": 666,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8329,8 +6910,8 @@
     {
       "name": "STYSNUM1",
       "rect": {
-        "x": 199,
-        "y": 617,
+        "x": 672,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8342,8 +6923,8 @@
     {
       "name": "STYSNUM2",
       "rect": {
-        "x": 205,
-        "y": 617,
+        "x": 678,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8355,8 +6936,8 @@
     {
       "name": "STYSNUM3",
       "rect": {
-        "x": 211,
-        "y": 617,
+        "x": 684,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8368,8 +6949,8 @@
     {
       "name": "STYSNUM4",
       "rect": {
-        "x": 217,
-        "y": 617,
+        "x": 690,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8381,8 +6962,8 @@
     {
       "name": "STYSNUM5",
       "rect": {
-        "x": 223,
-        "y": 617,
+        "x": 696,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8394,8 +6975,8 @@
     {
       "name": "STYSNUM6",
       "rect": {
-        "x": 229,
-        "y": 617,
+        "x": 702,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8407,8 +6988,8 @@
     {
       "name": "STYSNUM7",
       "rect": {
-        "x": 235,
-        "y": 617,
+        "x": 708,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8420,8 +7001,8 @@
     {
       "name": "STYSNUM8",
       "rect": {
-        "x": 241,
-        "y": 617,
+        "x": 714,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8433,8 +7014,8 @@
     {
       "name": "STYSNUM9",
       "rect": {
-        "x": 247,
-        "y": 617,
+        "x": 720,
+        "y": 507,
         "width": 4,
         "height": 6
       },
@@ -8446,7 +7027,7 @@
     {
       "name": "TRE1A0",
       "rect": {
-        "x": 1043,
+        "x": 879,
         "y": 2,
         "width": 51,
         "height": 70
@@ -8484,8 +7065,8 @@
     {
       "name": "TROOA1",
       "rect": {
-        "x": 1328,
-        "y": 215,
+        "x": 1033,
+        "y": 147,
         "width": 48,
         "height": 60
       },
@@ -8503,8 +7084,8 @@
     {
       "name": "TROOA2A8",
       "rect": {
-        "x": 1049,
-        "y": 215,
+        "x": 754,
+        "y": 147,
         "width": 44,
         "height": 61
       },
@@ -8527,8 +7108,8 @@
     {
       "name": "TROOA3A7",
       "rect": {
-        "x": 1428,
-        "y": 215,
+        "x": 1133,
+        "y": 147,
         "width": 46,
         "height": 60
       },
@@ -8551,8 +7132,8 @@
     {
       "name": "TROOA4A6",
       "rect": {
-        "x": 609,
-        "y": 215,
+        "x": 314,
+        "y": 147,
         "width": 46,
         "height": 62
       },
@@ -8575,8 +7156,8 @@
     {
       "name": "TROOA5",
       "rect": {
-        "x": 1839,
-        "y": 215,
+        "x": 1544,
+        "y": 147,
         "width": 45,
         "height": 59
       },
@@ -8594,8 +7175,8 @@
     {
       "name": "TROOB1",
       "rect": {
-        "x": 297,
-        "y": 215,
+        "x": 2,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -8613,8 +7194,8 @@
     {
       "name": "TROOB2B8",
       "rect": {
-        "x": 1095,
-        "y": 215,
+        "x": 800,
+        "y": 147,
         "width": 44,
         "height": 61
       },
@@ -8637,8 +7218,8 @@
     {
       "name": "TROOB3B7",
       "rect": {
-        "x": 1849,
-        "y": 147,
+        "x": 1541,
+        "y": 2,
         "width": 42,
         "height": 63
       },
@@ -8661,8 +7242,8 @@
     {
       "name": "TROOB4B6",
       "rect": {
-        "x": 1486,
-        "y": 147,
+        "x": 1178,
+        "y": 2,
         "width": 40,
         "height": 64
       },
@@ -8685,8 +7266,8 @@
     {
       "name": "TROOB5",
       "rect": {
-        "x": 349,
-        "y": 215,
+        "x": 54,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -8704,8 +7285,8 @@
     {
       "name": "TROOC1",
       "rect": {
-        "x": 1378,
-        "y": 215,
+        "x": 1083,
+        "y": 147,
         "width": 48,
         "height": 60
       },
@@ -8723,8 +7304,8 @@
     {
       "name": "TROOC2C8",
       "rect": {
-        "x": 1230,
-        "y": 215,
+        "x": 935,
+        "y": 147,
         "width": 39,
         "height": 61
       },
@@ -8747,8 +7328,8 @@
     {
       "name": "TROOC3C7",
       "rect": {
-        "x": 1141,
-        "y": 215,
+        "x": 846,
+        "y": 147,
         "width": 44,
         "height": 61
       },
@@ -8771,8 +7352,8 @@
     {
       "name": "TROOC4C6",
       "rect": {
-        "x": 785,
-        "y": 215,
+        "x": 490,
+        "y": 147,
         "width": 39,
         "height": 62
       },
@@ -8795,8 +7376,8 @@
     {
       "name": "TROOC5",
       "rect": {
-        "x": 1476,
-        "y": 215,
+        "x": 1181,
+        "y": 147,
         "width": 45,
         "height": 60
       },
@@ -8814,8 +7395,8 @@
     {
       "name": "TROOD1",
       "rect": {
-        "x": 401,
-        "y": 215,
+        "x": 106,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -8833,8 +7414,8 @@
     {
       "name": "TROOD2D8",
       "rect": {
-        "x": 743,
-        "y": 215,
+        "x": 448,
+        "y": 147,
         "width": 40,
         "height": 62
       },
@@ -8857,8 +7438,8 @@
     {
       "name": "TROOD3D7",
       "rect": {
-        "x": 1937,
-        "y": 147,
+        "x": 1629,
+        "y": 2,
         "width": 39,
         "height": 63
       },
@@ -8881,8 +7462,8 @@
     {
       "name": "TROOD4D6",
       "rect": {
-        "x": 1443,
-        "y": 147,
+        "x": 1135,
+        "y": 2,
         "width": 41,
         "height": 64
       },
@@ -8905,8 +7486,8 @@
     {
       "name": "TROOD5",
       "rect": {
-        "x": 453,
-        "y": 215,
+        "x": 158,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -8924,8 +7505,8 @@
     {
       "name": "TROOE1",
       "rect": {
-        "x": 864,
-        "y": 215,
+        "x": 569,
+        "y": 147,
         "width": 29,
         "height": 62
       },
@@ -8943,8 +7524,8 @@
     {
       "name": "TROOE2E8",
       "rect": {
-        "x": 1893,
-        "y": 147,
+        "x": 1585,
+        "y": 2,
         "width": 42,
         "height": 63
       },
@@ -8967,8 +7548,8 @@
     {
       "name": "TROOE3E7",
       "rect": {
-        "x": 1978,
-        "y": 147,
+        "x": 1670,
+        "y": 2,
         "width": 39,
         "height": 63
       },
@@ -8991,8 +7572,8 @@
     {
       "name": "TROOE4E6",
       "rect": {
-        "x": 657,
-        "y": 215,
+        "x": 362,
+        "y": 147,
         "width": 41,
         "height": 62
       },
@@ -9015,8 +7596,8 @@
     {
       "name": "TROOE5",
       "rect": {
-        "x": 826,
-        "y": 215,
+        "x": 531,
+        "y": 147,
         "width": 36,
         "height": 62
       },
@@ -9034,8 +7615,8 @@
     {
       "name": "TROOF1",
       "rect": {
-        "x": 895,
-        "y": 215,
+        "x": 600,
+        "y": 147,
         "width": 54,
         "height": 61
       },
@@ -9053,8 +7634,8 @@
     {
       "name": "TROOF2F8",
       "rect": {
-        "x": 1642,
-        "y": 147,
+        "x": 1334,
+        "y": 2,
         "width": 52,
         "height": 63
       },
@@ -9077,8 +7658,8 @@
     {
       "name": "TROOF3F7",
       "rect": {
-        "x": 71,
-        "y": 215,
+        "x": 1780,
+        "y": 2,
         "width": 60,
         "height": 62
       },
@@ -9101,8 +7682,8 @@
     {
       "name": "TROOF4F6",
       "rect": {
-        "x": 244,
-        "y": 215,
+        "x": 1953,
+        "y": 2,
         "width": 51,
         "height": 62
       },
@@ -9125,8 +7706,8 @@
     {
       "name": "TROOF5",
       "rect": {
-        "x": 700,
-        "y": 215,
+        "x": 405,
+        "y": 147,
         "width": 41,
         "height": 62
       },
@@ -9144,8 +7725,8 @@
     {
       "name": "TROOG1",
       "rect": {
-        "x": 1242,
-        "y": 147,
+        "x": 996,
+        "y": 2,
         "width": 71,
         "height": 64
       },
@@ -9163,8 +7744,8 @@
     {
       "name": "TROOG2G8",
       "rect": {
-        "x": 1528,
-        "y": 147,
+        "x": 1220,
+        "y": 2,
         "width": 55,
         "height": 63
       },
@@ -9187,8 +7768,8 @@
     {
       "name": "TROOG3G7",
       "rect": {
-        "x": 1585,
-        "y": 147,
+        "x": 1277,
+        "y": 2,
         "width": 55,
         "height": 63
       },
@@ -9211,8 +7792,8 @@
     {
       "name": "TROOG4G6",
       "rect": {
-        "x": 505,
-        "y": 215,
+        "x": 210,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -9235,8 +7816,8 @@
     {
       "name": "TROOG5",
       "rect": {
-        "x": 1315,
-        "y": 147,
+        "x": 1069,
+        "y": 2,
         "width": 64,
         "height": 64
       },
@@ -9254,8 +7835,8 @@
     {
       "name": "TROOH1",
       "rect": {
-        "x": 1696,
-        "y": 147,
+        "x": 1388,
+        "y": 2,
         "width": 49,
         "height": 63
       },
@@ -9273,8 +7854,8 @@
     {
       "name": "TROOH2H8",
       "rect": {
-        "x": 951,
-        "y": 215,
+        "x": 656,
+        "y": 147,
         "width": 50,
         "height": 61
       },
@@ -9297,8 +7878,8 @@
     {
       "name": "TROOH3H7",
       "rect": {
-        "x": 1271,
-        "y": 215,
+        "x": 976,
+        "y": 147,
         "width": 55,
         "height": 60
       },
@@ -9321,8 +7902,8 @@
     {
       "name": "TROOH4H6",
       "rect": {
-        "x": 189,
-        "y": 215,
+        "x": 1898,
+        "y": 2,
         "width": 53,
         "height": 62
       },
@@ -9345,8 +7926,8 @@
     {
       "name": "TROOH5",
       "rect": {
-        "x": 1523,
-        "y": 215,
+        "x": 1228,
+        "y": 147,
         "width": 41,
         "height": 60
       },
@@ -9364,8 +7945,8 @@
     {
       "name": "TROOI0",
       "rect": {
-        "x": 1747,
-        "y": 147,
+        "x": 1439,
+        "y": 2,
         "width": 49,
         "height": 63
       },
@@ -9383,8 +7964,8 @@
     {
       "name": "TROOJ0",
       "rect": {
-        "x": 133,
-        "y": 215,
+        "x": 1842,
+        "y": 2,
         "width": 54,
         "height": 62
       },
@@ -9402,8 +7983,8 @@
     {
       "name": "TROOK0",
       "rect": {
-        "x": 1662,
-        "y": 399,
+        "x": 1307,
+        "y": 329,
         "width": 45,
         "height": 54
       },
@@ -9421,8 +8002,8 @@
     {
       "name": "TROOL0",
       "rect": {
-        "x": 1857,
-        "y": 457,
+        "x": 1273,
+        "y": 387,
         "width": 42,
         "height": 43
       },
@@ -9440,8 +8021,8 @@
     {
       "name": "TROOM0",
       "rect": {
-        "x": 107,
-        "y": 588,
+        "x": 554,
+        "y": 476,
         "width": 57,
         "height": 26
       },
@@ -9459,8 +8040,8 @@
     {
       "name": "TROON0",
       "rect": {
-        "x": 1798,
-        "y": 147,
+        "x": 1490,
+        "y": 2,
         "width": 49,
         "height": 63
       },
@@ -9478,8 +8059,8 @@
     {
       "name": "TROOO0",
       "rect": {
-        "x": 557,
-        "y": 215,
+        "x": 262,
+        "y": 147,
         "width": 50,
         "height": 62
       },
@@ -9497,8 +8078,8 @@
     {
       "name": "TROOP0",
       "rect": {
-        "x": 706,
-        "y": 399,
+        "x": 351,
+        "y": 329,
         "width": 56,
         "height": 55
       },
@@ -9516,8 +8097,8 @@
     {
       "name": "TROOQ0",
       "rect": {
-        "x": 1752,
-        "y": 457,
+        "x": 1168,
+        "y": 387,
         "width": 55,
         "height": 45
       },
@@ -9535,8 +8116,8 @@
     {
       "name": "TROOR0",
       "rect": {
-        "x": 492,
-        "y": 513,
+        "x": 1746,
+        "y": 387,
         "width": 57,
         "height": 38
       },
@@ -9554,8 +8135,8 @@
     {
       "name": "TROOS0",
       "rect": {
-        "x": 1795,
-        "y": 513,
+        "x": 324,
+        "y": 442,
         "width": 65,
         "height": 32
       },
@@ -9573,8 +8154,8 @@
     {
       "name": "TROOT0",
       "rect": {
-        "x": 1485,
-        "y": 555,
+        "x": 1942,
+        "y": 442,
         "width": 65,
         "height": 29
       },
@@ -9592,8 +8173,8 @@
     {
       "name": "TROOU0",
       "rect": {
-        "x": 584,
-        "y": 555,
+        "x": 1125,
+        "y": 442,
         "width": 66,
         "height": 30
       },

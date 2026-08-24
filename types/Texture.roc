@@ -8,7 +8,13 @@ Texture := {
 	width : F32,
 	height : F32,
 }.{
-	Handle :: Box(U64)
+	Handle :: Box(U64).{
+		is_eq : Handle, Handle -> Bool
+		is_eq = |Handle.(a), Handle.(b)| Box.unbox(a) == Box.unbox(b)
+
+		to_hash : Handle, Hasher -> Hasher
+		to_hash = |Handle.(value), hasher| U64.to_hash(Box.unbox(value), hasher)
+	}
 
 	## Resource-free texture value for pure tests.
 	##

@@ -13,6 +13,7 @@ import tempfile
 import urllib.request
 import zipfile
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 import PIL
@@ -90,6 +91,134 @@ def records(data: bytes, fmt: str):
     return struct.iter_unpack(fmt, data)
 
 
+def clipped_halfplane(
+    polygon: list[tuple[Fraction, Fraction]],
+    origin: tuple[int, int],
+    direction: tuple[int, int],
+    keep_right: bool,
+) -> list[tuple[Fraction, Fraction]]:
+    """Clip a CCW polygon to one side of a Doom BSP partition."""
+    ox, oy = origin
+    dx, dy = direction
+
+    def side(point: tuple[Fraction, Fraction]) -> Fraction:
+        px, py = point
+        return Fraction(dx) * (py - oy) - Fraction(dy) * (px - ox)
+
+    def inside(value: Fraction) -> bool:
+        return value <= 0 if keep_right else value >= 0
+
+    result = []
+    for start, end in zip(polygon, polygon[1:] + polygon[:1]):
+        start_side = side(start)
+        end_side = side(end)
+        start_inside = inside(start_side)
+        end_inside = inside(end_side)
+        if start_inside:
+            result.append(start)
+        if start_inside != end_inside:
+            amount = start_side / (start_side - end_side)
+            result.append((start[0] + amount * (end[0] - start[0]),
+                           start[1] + amount * (end[1] - start[1])))
+
+    # Clipping through an existing corner can produce duplicate or collinear
+    # points. Canonicalize them while all coordinates are still exact.
+    deduplicated = []
+    for point in result:
+        if not deduplicated or point != deduplicated[-1]:
+            deduplicated.append(point)
+    if len(deduplicated) > 1 and deduplicated[0] == deduplicated[-1]:
+        deduplicated.pop()
+    changed = True
+    while changed and len(deduplicated) >= 3:
+        changed = False
+        simplified = []
+        count = len(deduplicated)
+        for index, point in enumerate(deduplicated):
+            before = deduplicated[(index - 1) % count]
+            after = deduplicated[(index + 1) % count]
+            cross = ((point[0] - before[0]) * (after[1] - point[1])
+                     - (point[1] - before[1]) * (after[0] - point[0]))
+            if cross == 0:
+                changed = True
+            else:
+                simplified.append(point)
+        deduplicated = simplified
+    return deduplicated
+
+
+def subsector_cells(vertices, nodes, subsectors, segs, linedefs, sidedefs):
+    min_x = min(vertex["x"] for vertex in vertices)
+    max_x = max(vertex["x"] for vertex in vertices)
+    min_y = min(vertex["y"] for vertex in vertices)
+    max_y = max(vertex["y"] for vertex in vertices)
+    if min_x >= max_x or min_y >= max_y:
+        raise ValueError("map vertex bounds are degenerate")
+    bounds = {"min_x": min_x, "min_y": min_y, "max_x": max_x, "max_y": max_y}
+    initial = [(Fraction(min_x), Fraction(min_y)), (Fraction(max_x), Fraction(min_y)),
+               (Fraction(max_x), Fraction(max_y)), (Fraction(min_x), Fraction(max_y))]
+    leaves: dict[int, list[tuple[Fraction, Fraction]]] = {}
+    visited_nodes = set()
+
+    def descend(child, polygon):
+        if child["kind"] == "subsector":
+            index = child["index"]
+            if index in leaves:
+                raise ValueError(f"BSP reaches subsector {index} more than once")
+            leaves[index] = polygon
+            return
+        index = child["index"]
+        if index in visited_nodes:
+            raise ValueError(f"BSP reaches node {index} more than once")
+        if not 0 <= index < len(nodes):
+            raise ValueError(f"BSP node index {index} is out of range")
+        visited_nodes.add(index)
+        node = nodes[index]
+        if node["dx"] == 0 and node["dy"] == 0:
+            raise ValueError(f"BSP node {index} has a zero partition vector")
+        origin = (node["x"], node["y"])
+        direction = (node["dx"], node["dy"])
+        descend(node["right_child"], clipped_halfplane(polygon, origin, direction, True))
+        descend(node["left_child"], clipped_halfplane(polygon, origin, direction, False))
+
+    root = {"kind": "node", "index": len(nodes) - 1}
+    descend(root, initial)
+    expected = set(range(len(subsectors)))
+    if set(leaves) != expected:
+        raise ValueError(f"BSP subsector coverage mismatch: missing={sorted(expected - set(leaves))}")
+    expected_nodes = set(range(len(nodes)))
+    if visited_nodes != expected_nodes:
+        raise ValueError(f"BSP node coverage mismatch: missing={sorted(expected_nodes - visited_nodes)}")
+
+    def number(value: Fraction):
+        return value.numerator if value.denominator == 1 else round(float(value), 9)
+
+    output = []
+    for index in range(len(subsectors)):
+        polygon = leaves[index]
+        if len(polygon) < 3:
+            raise ValueError(f"subsector {index} clips to fewer than three points")
+        crosses = []
+        for before, point, after in zip(polygon[-1:] + polygon[:-1], polygon, polygon[1:] + polygon[:1]):
+            crosses.append((point[0] - before[0]) * (after[1] - point[1])
+                           - (point[1] - before[1]) * (after[0] - point[0]))
+        if any(cross <= 0 for cross in crosses):
+            raise ValueError(f"subsector {index} polygon is degenerate, clockwise, or non-convex")
+        subsection = subsectors[index]
+        sector_ids = set()
+        for seg_index in range(subsection["first_seg"], subsection["first_seg"] + subsection["seg_count"]):
+            seg = segs[seg_index]
+            line = linedefs[seg["linedef"]]
+            side_index = line["right_sidedef"] if seg["direction"] == 0 else line["left_sidedef"]
+            if side_index is not None:
+                sector_ids.add(sidedefs[side_index]["sector"])
+        if len(sector_ids) != 1:
+            raise ValueError(f"subsector {index} resolves to sectors {sorted(sector_ids)}")
+        output.append({"subsector": index, "sector": next(iter(sector_ids)),
+                       "points": [{"x": number(x), "y": number(y)} for x, y in polygon]})
+    return bounds, output
+
+
 def parse_map(wad: Wad) -> tuple[dict[str, object], set[str], set[str], set[str]]:
     lumps = wad.map_lumps(MAP_NAME)
     vertices = [{"x": x, "y": y} for x, y in records(lumps["VERTEXES"], "<hh")]
@@ -153,10 +282,14 @@ def parse_map(wad: Wad) -> tuple[dict[str, object], set[str], set[str], set[str]
                 break
             values.append(value)
         blocklists.append(values)
+    polygon_bounds, subsector_polygons = subsector_cells(
+        vertices, nodes, subsectors, segs, linedefs, sidedefs
+    )
     result = {
         "format": "doom", "map": MAP_NAME, "units": "Doom map units", "vertices": vertices,
         "linedefs": linedefs, "sidedefs": sidedefs, "sectors": sectors, "things": things,
         "segs": segs, "subsectors": subsectors, "nodes": nodes,
+        "subsector_polygon_bounds": polygon_bounds, "subsector_polygons": subsector_polygons,
         "blockmap": {"origin_x": origin_x, "origin_y": origin_y, "columns": columns, "rows": rows,
                      "linedef_lists": blocklists},
         "reject": {"encoding": "hex", "bytes": lumps["REJECT"].hex()},
@@ -327,9 +460,14 @@ def build(output: Path, supplied_zip: Path | None) -> None:
         raise ValueError("D_E1M1 is not a standard MIDI file")
     (music_dir / "e1m1.mid").write_bytes(midi)
     stats = {key: len(map_data[key]) for key in ("vertices", "linedefs", "sidedefs", "sectors", "things", "segs", "subsectors", "nodes")}
+    polygon_sizes = [len(polygon["points"]) for polygon in map_data["subsector_polygons"]]
     manifest = {"project": "Freedoom: Phase 1", "version": VERSION, "release_url": ZIP_URL,
                 "release_zip_sha256": ZIP_SHA256, "wad_member": WAD_MEMBER, "wad_sha256": WAD_SHA256,
                 "map": MAP_NAME, "map_stats": stats, "thing_type_counts": dict(sorted(Counter(t["type"] for t in map_data["things"]).items())),
+                "subsector_polygon_count": len(polygon_sizes),
+                "subsector_polygon_point_count": sum(polygon_sizes),
+                "subsector_polygon_min_points": min(polygon_sizes),
+                "subsector_polygon_max_points": max(polygon_sizes),
                 "texture_count": len(textures), "flat_count": len(flats), "sprite_prefixes": sorted(prefixes),
                 "sprite_lump_count": len(sprites["entries"]), "music_lump": "D_E1M1",
                 "music_path": "music/e1m1.mid", "music_sha256": digest(midi)}

@@ -122,8 +122,8 @@ update! = |model, input| {
 		fire = input.devices.mouse.button_down(Left) or input.devices.key_down(KeySpace)
 		weapon_slot = if input.devices.key_pressed(Key2) SelectSlot(2) else if input.devices.key_pressed(Key3) SelectSlot(3) else if input.devices.key_pressed(Key4) SelectSlot(4) else if input.devices.key_pressed(Key5) SelectSlot(5) else if input.devices.key_pressed(Key6) SelectSlot(6) else if input.devices.key_pressed(Key8) SelectSlot(8) else KeepWeapon
 		previous_pos = model.world.doom.player.sim.state.pos
-		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, model.level, previous_pos), decoration_segments(model.decorations))
-		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire, weapon_slot }, blockers, DoomMap.e1m1)
+		extra_blockers = decoration_segments(model.decorations)
+		advanced = DoomRuntime.advance_in_map(model.world, input.time.elapsed_seconds, { forward, side, turn, fire, weapon_slot }, extra_blockers, DoomMap.e1m1, model.level)
 		crossed = DoomRuntime.cross_specials(DoomMap.e1m1, model.level, previous_pos, advanced.world.doom.player.sim.state.pos)
 		use_result = if input.devices.key_pressed(KeyE) {
 			DoomRuntime.use_forward(DoomMap.e1m1, crossed.level, advanced.world.doom.player.sim.state.pos, advanced.world.doom.player.sim.state.angle, advanced.world.doom.player.keys)
@@ -138,6 +138,7 @@ update! = |model, input| {
 		}
 		world = if exited { ..advanced.world, phase: Exited } else advanced.world
 		level = advance_level(level0, advanced.tics)
+		blockers = List.concat(DoomRuntime.blockers_for_player(DoomMap.e1m1, level, world.doom.player.sim.state.pos), extra_blockers)
 		flashes = DoomView.advance(model.flashes, advanced.tics, { damaged: world.doom.player.health < model.world.doom.player.health, picked_up: taken_count(world.doom.pickups) > taken_count(model.world.doom.pickups) })
 		for cue in transition_cues(model.world, world, use_result, advanced.fired, input.devices.key_pressed(KeyE)) {
 			play_cue!(model.sounds, cue)

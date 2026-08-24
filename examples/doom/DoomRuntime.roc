@@ -47,24 +47,26 @@ DoomRuntime := [].{
 		}
 	}
 
-	advance_in_map : World, F32, DoomSim.Command, List(DoomSim.Segment), DoomMap.Map -> Advance
-	advance_in_map = |world, elapsed, command, blockers, map| {
+	advance_in_map : World, F32, DoomSim.Command, List(DoomSim.Segment), DoomMap.Map, DoomLevel.State -> Advance
+	advance_in_map = |world, elapsed, command, extra_blockers, map, level| {
 		if world.phase != Playing {
 			{ world, tics: 0, dropped: Bool.False, fired: Bool.False, projectile_saturated: Bool.False }
 		} else {
-			all_blockers = List.concat(blockers, actor_segments(world.doom.actors))
+			player_blockers = List.concat(blockers_for_player(map, level, world.doom.player.sim.state.pos), extra_blockers)
+			all_blockers = List.concat(player_blockers, actor_segments(world.doom.actors))
 			sim = DoomSim.advance(world.doom.player.sim, elapsed, command, all_blockers)
 			var $next = { ..world, doom: { ..world.doom, player: { ..world.doom.player, sim: sim.clock } } }
 			var $saturated = Bool.False
 			var $fired = Bool.False
 			var $tic = sim.clock.state.tic - sim.tics + 1
+			intercepts = List.concat(global_map_blockers(map, level), extra_blockers)
 			for _ in List.repeat({}, sim.tics) {
 				$next = prepare_weapon($next, command.weapon_slot, command.fire)
 				will_fire = command.fire and $next.weapon.cooldown == 0 and player_can_fire($next.doom.player)
 				sources = if will_fire List.append($next.sound_origins, $next.doom.player.sim.state.pos) else $next.sound_origins
 				heard0 = heard_actor_ids(map, sources, $next.doom.actors)
 				heard = if will_fire List.append(heard0, player_sound_id) else heard0
-				result = tic_hearing($next, heard, blockers)
+				result = tic_hearing_in_map_with_intercepts($next, heard, extra_blockers, map, level, intercepts)
 				$next = apply_sector_hazard(result.world, map, $tic)
 				$tic = $tic + 1
 				$saturated = $saturated or result.projectile_saturated
@@ -75,6 +77,15 @@ DoomRuntime := [].{
 		}
 	}
 
+	tic_hearing_in_map : World, List(U64), List(DoomSim.Segment), DoomMap.Map, DoomLevel.State -> { world : World, projectile_saturated : Bool, fired : Bool }
+	tic_hearing_in_map = |world, heard_actors, extra_blockers, map, level| {
+		intercepts = List.concat(global_map_blockers(map, level), extra_blockers)
+		tic_hearing_in_map_with_intercepts(world, heard_actors, extra_blockers, map, level, intercepts)
+	}
+
+	tic_hearing_in_map_with_intercepts = |world, heard_actors, extra_blockers, map, level, intercepts|
+		tic_hearing_with(world, heard_actors, intercepts, |actor| List.concat(blockers_for_player(map, level, actor.pos), extra_blockers))
+
 	tic : World, Bool, List(DoomSim.Segment) -> { world : World, projectile_saturated : Bool, fired : Bool }
 	tic = |world, heard_shot, blockers| {
 		heard = if heard_shot List.append(List.map(world.doom.actors, |actor| actor.id), player_sound_id) else []
@@ -83,6 +94,10 @@ DoomRuntime := [].{
 
 	tic_hearing : World, List(U64), List(DoomSim.Segment) -> { world : World, projectile_saturated : Bool, fired : Bool }
 	tic_hearing = |world, heard_actors, blockers| {
+		tic_hearing_with(world, heard_actors, blockers, |_actor| blockers)
+	}
+
+	tic_hearing_with = |world, heard_actors, intercept_blockers, actor_blockers_for| {
 		player_pos = world.doom.player.sim.state.pos
 		var $rng = world.doom.rng
 		var $damage = 0.I64
@@ -93,13 +108,14 @@ DoomRuntime := [].{
 		var $sound_origins = []
 		var $actor_hits = []
 		for actor in world.doom.actors {
+			actor_blockers = actor_blockers_for(actor)
 			target = aggro_target(world.aggro, actor.id, world.doom.actors)
 			target_pos = match target {
 				Ok(value) => value.pos
 				Err(PlayerTarget) => player_pos
 			}
 			facts : DoomWorld.ActorFacts
-			facts = { player_pos: target_pos, has_sight: line_of_sight(actor.pos, target_pos, blockers), heard_sound: List.contains(heard_actors, actor.id), blockers }
+			facts = { player_pos: target_pos, has_sight: line_of_sight(actor.pos, target_pos, intercept_blockers), heard_sound: List.contains(heard_actors, actor.id), blockers: actor_blockers }
 			turn = DoomWorld.tick_actor_with(actor, facts, $rng)
 			$rng = turn.rng
 			actor1 = if actor_overlaps(turn.actor, world.doom.actors) { ..turn.actor, pos: actor.pos } else turn.actor
@@ -132,7 +148,7 @@ DoomRuntime := [].{
 			}
 			$actors = List.append($actors, actor1)
 		}
-		projectile_step = advance_projectiles($projectiles, player_pos, $actors, blockers)
+		projectile_step = advance_projectiles($projectiles, player_pos, $actors, intercept_blockers)
 		all_hits = List.concat($actor_hits, projectile_step.actor_hits)
 		hit_result = apply_actor_hits($actors, all_hits, $rng, world.aggro)
 		$actors = hit_result.actors
@@ -150,7 +166,7 @@ DoomRuntime := [].{
 		doom = { ..world.doom, player: collected.player, actors: $actors, pickups: collected.pickups, rng: $rng }
 		world0 = { ..world, doom, projectiles: projectile_step.projectiles, explosions: $explosions, sound_origins: $sound_origins, aggro: hit_result.aggro, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }
 		firing = List.contains(heard_actors, player_sound_id)
-		fired_result = if firing and world.weapon.cooldown == 0 and doom.player.health > 0 fire(world0, blockers) else { world: world0, fired: Bool.False }
+		fired_result = if firing and world.weapon.cooldown == 0 and doom.player.health > 0 fire(world0, intercept_blockers) else { world: world0, fired: Bool.False }
 		cooldown = if fired_result.fired weapon_cadence(doom.player.weapon) - 1 else if world.weapon.cooldown > 0 world.weapon.cooldown - 1 else 0
 		phase = if fired_result.fired 1 else if cooldown > 0 world.weapon.phase + 1 else 0
 		{ world: { ..fired_result.world, weapon: { cooldown, phase } }, projectile_saturated: $saturated, fired: fired_result.fired }
@@ -234,6 +250,28 @@ heard_actor_ids = |map, sources, actors| {
 		}
 	}
 	$ids
+}
+
+# Build one bounded intercept set per simulation tic. Each linedef appears at
+# most once even though a two-sided boundary is discoverable from both sectors.
+global_map_blockers = |map, level| {
+	var $linedefs = []
+	var $segments = []
+	for indexed in List.map_with_index(map.raw().sectors, |_sector, index| index) {
+		for segment in DoomLevel.collision_segments(map, level, indexed) {
+			if !(List.contains($linedefs, segment.linedef)) {
+				$linedefs = List.append($linedefs, segment.linedef)
+				$segments = List.append(
+					$segments,
+					{
+						start: { x: F64.to_f32_wrap(segment.start.x), y: F64.to_f32_wrap(segment.start.y) },
+						end: { x: F64.to_f32_wrap(segment.end.x), y: F64.to_f32_wrap(segment.end.y) },
+					},
+				)
+			}
+		}
+	}
+	$segments
 }
 
 to_segment = |start, end| { start: { x: I64.to_f32(start.x), y: I64.to_f32(start.y) }, end: { x: I64.to_f32(end.x), y: I64.to_f32(end.y) } }
@@ -722,6 +760,31 @@ expect {
 	selected = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds, { ..DoomSim.neutral, weapon_slot: SelectSlot(4) }, []).world
 	ignored = DoomRuntime.advance(DoomRuntime.initial(doom), DoomSim.tic_seconds, { ..DoomSim.neutral, weapon_slot: SelectSlot(6) }, []).world
 	selected.doom.player.weapon == Chaingun and ignored.doom.player.weapon == Pistol
+}
+
+expect {
+	# E1M1 linedef 55 separates sectors 9/10. The player is not used to derive
+	# the actor's blockers: closed global intercepts keep this actor asleep, and
+	# the same sight line wakes it after the door has fully opened.
+	map = DoomMap.e1m1
+	closed_level = DoomLevel.initial(map)
+	player = DoomWorld.player({ x: 832, y: 520 }, DoomSim.Angle.from_turns(0.25))
+	actor = DoomWorld.actor(1, ZombieMan, { x: 832, y: 568 }, DoomSim.Angle.from_turns(0.75), Bool.False)
+	doom : DoomWorld.World
+	doom = { player, actors: [actor], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	closed = DoomRuntime.tic_hearing_in_map(DoomRuntime.initial(doom), [], [], map, closed_level).world
+	activated = DoomLevel.use_line(map, closed_level, 55, { blue: Bool.False, yellow: Bool.False, red: Bool.False })
+	var $open_level = match activated {
+		Activated(value) => value
+		_ => crash "E1M1 door 55 did not activate"
+	}
+	for _ in List.repeat({}, 80) {
+		$open_level = DoomLevel.tick($open_level)
+	}
+	opened = DoomRuntime.tic_hearing_in_map(DoomRuntime.initial(doom), [], [], map, $open_level).world
+	closed_actor = List.get(closed.doom.actors, 0) ?? actor
+	opened_actor = List.get(opened.doom.actors, 0) ?? actor
+	closed_actor.state.mode == Look and opened_actor.state.mode == Chase
 }
 
 expect {

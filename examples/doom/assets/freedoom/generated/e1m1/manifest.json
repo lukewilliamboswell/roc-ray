@@ -83,7 +83,7 @@
     "COLU",
     "CSAW",
     "ELEC",
-    "GOR2",
+    "GOR4",
     "HEAD",
     "LAUN",
     "MEDI",
@@ -101,7 +101,6 @@
     "SHEL",
     "SHOT",
     "SKUL",
-    "SMBT",
     "SMIT",
     "SOUL",
     "SPOS",
@@ -110,5 +109,5 @@
     "TRE2",
     "TROO"
   ],
-  "sprite_lump_count": 388
+  "sprite_lump_count": 384
 }

@@ -31878,7 +31878,7 @@
       "angle": 90,
       "type": 60,
       "flags": 15,
-      "sprite_prefix": "GOR2"
+      "sprite_prefix": "GOR4"
     },
     {
       "x": 1696,
@@ -32158,7 +32158,7 @@
       "angle": 270,
       "type": 60,
       "flags": 7,
-      "sprite_prefix": "GOR2"
+      "sprite_prefix": "GOR4"
     },
     {
       "x": 0,
@@ -32230,7 +32230,7 @@
       "angle": 270,
       "type": 58,
       "flags": 12,
-      "sprite_prefix": "SMBT"
+      "sprite_prefix": "SARG"
     },
     {
       "x": 1952,

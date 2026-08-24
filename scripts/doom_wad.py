@@ -34,7 +34,7 @@ THING_SPRITES: dict[int, str | None] = {
     1: None, 2: None, 3: None, 4: None, 5: "BKEY", 8: "BPAK", 9: "SPOS",
     10: "PLAY", 11: None, 12: "PLAY", 15: "POSS", 17: "SARG", 18: "HEAD",
     19: "SKUL", 20: "TROO", 21: "SPOS", 24: "POL5", 26: "CAND",
-    43: "TRE1", 47: "SMIT", 48: "ELEC", 54: "TRE2", 58: "SMBT", 60: "GOR2",
+    43: "TRE1", 47: "SMIT", 48: "ELEC", 54: "TRE2", 58: "SARG", 60: "GOR4",
     2001: "SHOT", 2002: "MGUN", 2003: "LAUN", 2004: "PLAS", 2005: "CSAW",
     2007: "CLIP", 2008: "SHEL", 2010: "ROCK", 2011: "STIM", 2012: "MEDI",
     2013: "SOUL", 2014: "BON1", 2015: "BON2", 2018: "ARM1", 2019: "ARM2",

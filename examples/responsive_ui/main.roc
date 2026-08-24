@@ -18,6 +18,38 @@ import rr.Window
 
 Selection := [Display, AudioSettings, Controls].{
 	is_eq : _
+
+	previous : Selection -> Selection
+	previous = |selection|
+		match selection {
+			Display => Controls
+			AudioSettings => Display
+			Controls => AudioSettings
+		}
+
+	next : Selection -> Selection
+	next = |selection|
+		match selection {
+			Display => AudioSettings
+			AudioSettings => Controls
+			Controls => Display
+		}
+
+	from_keyboard : Selection, Devices.Snapshot -> Selection
+	from_keyboard = |selection, input|
+		if input.key_pressed(KeyUp) {
+			selection.previous()
+		} else if input.key_pressed(KeyDown) {
+			selection.next()
+		} else if input.key_pressed(Key1) {
+			Display
+		} else if input.key_pressed(Key2) {
+			AudioSettings
+		} else if input.key_pressed(Key3) {
+			Controls
+		} else {
+			selection
+		}
 }
 
 UiCopy : {
@@ -50,7 +82,6 @@ program = { init!, update!, render! }
 
 demo_frames = 150.U64
 
-record_demo_flag : Str
 record_demo_flag = "--record-demo"
 
 responsive_config : List(Str) -> App.Config
@@ -108,38 +139,6 @@ init! = App.init_for_args(
 		})
 	},
 )
-
-previous_selection : Selection -> Selection
-previous_selection = |selection|
-	match selection {
-		Display => Controls
-		AudioSettings => Display
-		Controls => AudioSettings
-	}
-
-next_selection : Selection -> Selection
-next_selection = |selection|
-	match selection {
-		Display => AudioSettings
-		AudioSettings => Controls
-		Controls => Display
-	}
-
-keyboard_selection : Selection, Devices.Snapshot -> Selection
-keyboard_selection = |selection, input|
-	if input.key_pressed(KeyUp) {
-		previous_selection(selection)
-	} else if input.key_pressed(KeyDown) {
-		next_selection(selection)
-	} else if input.key_pressed(Key1) {
-		Display
-	} else if input.key_pressed(Key2) {
-		AudioSettings
-	} else if input.key_pressed(Key3) {
-		Controls
-	} else {
-		selection
-	}
 
 ## Walk the window on to the next display, re-reading the monitor list first so
 ## the move is decided from what is connected now rather than from what was
@@ -282,7 +281,7 @@ draw_preview! = |frame, bounds, selection, ui, screen, model| {
 ## `update!` gets the size from the input's window, because which arrangement to
 ## use is application logic. `render!` gets it from `frame.size!()`, because by
 ## then it is a property of what is being drawn to.
-Layout : {
+Layout := {
 	margin : F32,
 	screen_h : F32,
 	nav : Math.Rect,
@@ -290,30 +289,30 @@ Layout : {
 	display_bounds : Math.Rect,
 	audio_bounds : Math.Rect,
 	controls_bounds : Math.Rect,
-}
+}.{
+	from_size : { width : F32, height : F32 } -> Layout
+	from_size = |screen| {
+		screen_w = F32.max(screen.width, 360)
+		screen_h = F32.max(screen.height, 360)
+		compact = screen_w < 700
+		margin = if compact 16 else 30
+		content_top = 104
+		content_w = screen_w - margin * 2
+		content_h = F32.max(screen_h - content_top - 52, 220)
 
-layout_for : { width : F32, height : F32 } -> Layout
-layout_for = |screen| {
-	screen_w = F32.max(screen.width, 360)
-	screen_h = F32.max(screen.height, 360)
-	compact = screen_w < 700
-	margin = if compact 16 else 30
-	content_top = 104
-	content_w = screen_w - margin * 2
-	content_h = F32.max(screen_h - content_top - 52, 220)
+		nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
+		preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
+		item_w = nav.width - 24
 
-	nav = if compact Math.rect(margin, content_top, content_w, 176) else Math.rect(margin, content_top, 240, content_h)
-	preview = if compact Math.rect(margin, content_top + 192, content_w, F32.max(content_h - 192, 120)) else Math.rect(margin + 256, content_top, content_w - 256, content_h)
-	item_w = nav.width - 24
-
-	{
-		margin,
-		screen_h,
-		nav,
-		preview,
-		display_bounds: Math.rect(nav.x + 12, nav.y + 14, item_w, 46),
-		audio_bounds: Math.rect(nav.x + 12, nav.y + 66, item_w, 46),
-		controls_bounds: Math.rect(nav.x + 12, nav.y + 118, item_w, 46),
+		{
+			margin,
+			screen_h,
+			nav,
+			preview,
+			display_bounds: Math.rect(nav.x + 12, nav.y + 14, item_w, 46),
+			audio_bounds: Math.rect(nav.x + 12, nav.y + 66, item_w, 46),
+			controls_bounds: Math.rect(nav.x + 12, nav.y + 118, item_w, 46),
+		}
 	}
 }
 
@@ -325,7 +324,7 @@ update! = |model, program_input| {
 
 	# Layout follows the window, pointing follows the mouse, and the preview
 	# animates on the clock -- three separate observations off one input.
-	view = layout_for({ width: I32.to_f32(program_input.window.size.width), height: I32.to_f32(program_input.window.size.height) })
+	view = Layout.from_size({ width: I32.to_f32(program_input.window.size.width), height: I32.to_f32(program_input.window.size.height) })
 	mouse = input.mouse.position()
 	hover_display = view.display_bounds.contains(mouse)
 	hover_audio = view.audio_bounds.contains(mouse)
@@ -338,7 +337,7 @@ update! = |model, program_input| {
 		else if model.demo and cycle == 78 Devices.none.with_key_pressed(KeyDown)
 		else if model.demo and cycle == 118 Devices.none.with_key_pressed(KeyUp)
 		else input
-	from_keyboard = keyboard_selection(model.selection, selection_input)
+	from_keyboard = model.selection.from_keyboard(selection_input)
 	selection = if input.mouse.button_pressed(Left) and hover_display {
 		Display
 	} else if input.mouse.button_pressed(Left) and hover_audio {
@@ -375,7 +374,7 @@ render! = |model, frame| {
 	# visible here on the cycle it happens, without a copy in the model that
 	# could be a frame behind it.
 	screen = frame.size!()
-	view = layout_for(screen)
+	view = Layout.from_size(screen)
 	hover_display = view.display_bounds.contains(model.mouse)
 	hover_audio = view.audio_bounds.contains(model.mouse)
 	hover_controls = view.controls_bounds.contains(model.mouse)
@@ -402,20 +401,39 @@ render! = |model, frame| {
 }
 
 ## Selection wraps in both directions, so an arrow key never dead-ends.
-expect previous_selection(Display) == Controls
-expect next_selection(Controls) == Display
-expect keyboard_selection(Display, Devices.none.with_key_pressed(Key3)) == Controls
-expect keyboard_selection(Display, Devices.none) == Display
+expect {
+	selection : Selection
+	selection = Display
+	selection.previous() == Controls
+}
+
+expect {
+	selection : Selection
+	selection = Controls
+	selection.next() == Display
+}
+
+expect {
+	selection : Selection
+	selection = Display
+	selection.from_keyboard(Devices.none.with_key_pressed(Key3)) == Controls
+}
+
+expect {
+	selection : Selection
+	selection = Display
+	selection.from_keyboard(Devices.none) == Display
+}
 
 ## The wide layout puts the preview beside the nav; the narrow one stacks it
 ## below. This is the only thing the 700px breakpoint does.
 expect {
-	wide = layout_for({ width: 960, height: 640 })
+	wide = Layout.from_size({ width: 960, height: 640 })
 	wide.preview.x > wide.nav.x + wide.nav.width
 }
 
 expect {
-	narrow = layout_for({ width: 480, height: 640 })
+	narrow = Layout.from_size({ width: 480, height: 640 })
 	narrow.preview.y > narrow.nav.y + narrow.nav.height
 }
 
@@ -433,6 +451,6 @@ expect monitor_line([{ index: 0, name: "Headless", size: { width: 800, height: 6
 ## Every nav item stays inside the nav panel at either size, which is what
 ## makes hit-testing against the same layout `render!` draws safe.
 expect {
-	view = layout_for({ width: 360, height: 360 })
+	view = Layout.from_size({ width: 360, height: 360 })
 	view.display_bounds.x >= view.nav.x and view.controls_bounds.x + view.controls_bounds.width <= view.nav.x + view.nav.width
 }

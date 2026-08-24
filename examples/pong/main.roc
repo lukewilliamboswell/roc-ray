@@ -18,7 +18,7 @@ import rr.Text
 ## prepared text and sounds, and the random generator used for serves. Keeping
 ## both game state and short-lived presentation details here lets `render!`
 ## draw the latest result without changing the game.
-Model : {
+Model := {
 	ball_x : F32,
 	ball_y : F32,
 	ball_vx : F32,
@@ -52,6 +52,11 @@ Model : {
 	## Simulation randomness lives in the model, so a serve is drawn on the
 	## frame that needs it and a run replays exactly from its seed.
 	rng : Random.State,
+}.{
+
+	## The match ends as soon as either score reaches the winning score.
+	is_over : Model -> Bool
+	is_over = |model| model.left_score >= win_score or model.right_score >= win_score
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
@@ -86,22 +91,16 @@ trail_length = 14.U64
 trail_spacing = 11.F32
 
 # --- Palette: one dark field, two rival neons, one warm ball ---
-field_top : Color.Rgba
 field_top = Color.from_hex_rgb(0x141a35)
 
-field_bottom : Color.Rgba
 field_bottom = Color.from_hex_rgb(0x05060f)
 
-left_neon : Color.Rgba
 left_neon = Color.from_hex_rgb(0x38e8ff)
 
-right_neon : Color.Rgba
 right_neon = Color.from_hex_rgb(0xff4fa3)
 
-ball_neon : Color.Rgba
 ball_neon = Color.from_hex_rgb(0xffe7a3)
 
-hint_color : Color.Rgba
 hint_color = Color.from_hex_rgb(0x6d7aa8)
 
 # A random vertical serve speed in px/second, so each serve leaves at a
@@ -214,11 +213,6 @@ init! = App.init(
 	},
 )
 
-## Whether the match is over is a function of the scores, so both `update!` and
-## `render!` ask rather than storing a flag that could drift out of step.
-game_over : Model -> Bool
-game_over = |model| model.left_score >= win_score or model.right_score >= win_score
-
 ## A frame's outcome: the model it produced, and the sounds it wants heard.
 ##
 ## Both steppers return this shape even when one of them can never make a sound,
@@ -237,7 +231,7 @@ update! = |model, program_input| {
 	# Seconds since the previous frame - the basis for all motion this frame.
 	dt = program_input.time.elapsed_seconds
 
-	stepped = if game_over(model) step_game_over(model, input) else step_playing(model, input, dt)
+	stepped = if model.is_over() step_game_over(model, input) else step_playing(model, input, dt)
 
 	# The step is pure and says which sounds this frame made; playing them is
 	# the one effect here.
@@ -277,7 +271,7 @@ render! = |model, frame| {
 
 	draw_bodies!(frame, model)
 
-	if game_over(model) {
+	if model.is_over() {
 		# Dim the frozen field so the banner reads, then name the winner.
 		frame.rectangle!({ x: 0, y: 0, width: screen_w, height: screen_h, style: Draw.filled(Color.with_alpha(field_bottom, 190)) })
 		winner_index = if model.left_score >= win_score 0 else 1
@@ -503,8 +497,8 @@ test_model = {
 	rng: Random.seed(1),
 }
 
-expect !game_over(test_model)
-expect game_over({ ..test_model, right_score: win_score })
+expect !test_model.is_over()
+expect { ..test_model, right_score: win_score }.is_over()
 
 ## The empty list is the no-op, so a caller can concatenate unconditionally.
 expect List.is_empty(play_if(Bool.False, Audio.Sound.stub))

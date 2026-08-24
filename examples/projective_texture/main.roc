@@ -22,7 +22,7 @@ Corners : Draw.ProjectiveQuadCorners
 ## quad, the editable corner positions, drag state, prepared help text, and
 ## elapsed time for the handle animation. Invalid corner arrangements are not
 ## stored, so rendering can always use `quad` safely.
-Model : {
+Model := {
 	texture : Draw.Texture,
 	quad : Draw.ProjectiveQuad,
 	corners : Corners,
@@ -31,6 +31,35 @@ Model : {
 
 	## Seconds since launch, so the handle can pulse and invite the drag.
 	elapsed : F32,
+}.{
+
+	## Apply pointer input and return the cursor that `update!` should set.
+	drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
+	drag_corner = |model, input| {
+		mouse = input.mouse.position()
+		handle_near = Math.distance(mouse, model.corners.top_right) < 34
+		dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
+		cursor = if handle_near or dragging ResizeAll else Arrow
+
+		candidate = if input.key_pressed(KeyR) {
+			initial_corners
+		} else if dragging {
+			{
+				..model.corners,
+				top_right: {
+					x: Math.clamp(mouse.x, 360, 750),
+					y: Math.clamp(mouse.y, 55, 390),
+				},
+			}
+		} else {
+			model.corners
+		}
+
+		match Draw.ProjectiveQuad.from_corners(candidate) {
+			Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, cursor }
+			Err(_) => { model: { ..model, dragging }, cursor }
+		}
+	}
 }
 
 program = { init!, update!, render! }
@@ -67,41 +96,9 @@ Msg : []
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
-	dragged = drag_corner(model, program_input.devices)
+	dragged = model.drag_corner(program_input.devices)
 	Mouse.set_cursor!(dragged.cursor)
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
-}
-
-## Apply the latest pointer input to the quad.
-##
-## This function returns the cursor shape alongside the next Model. `update!`
-## then applies that cursor as an effect, which keeps the calculations easy to
-## test with ordinary values.
-drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
-drag_corner = |model, input| {
-	mouse = input.mouse.position()
-	handle_near = Math.distance(mouse, model.corners.top_right) < 34
-	dragging = input.mouse.button_down(Left) and (model.dragging or (input.mouse.button_pressed(Left) and handle_near))
-	cursor = if handle_near or dragging ResizeAll else Arrow
-
-	candidate = if input.key_pressed(KeyR) {
-		initial_corners
-	} else if dragging {
-		{
-			..model.corners,
-			top_right: {
-				x: Math.clamp(mouse.x, 360, 750),
-				y: Math.clamp(mouse.y, 55, 390),
-			},
-		}
-	} else {
-		model.corners
-	}
-
-	match Draw.ProjectiveQuad.from_corners(candidate) {
-		Ok(quad) => { model: { ..model, quad, corners: candidate, dragging }, cursor }
-		Err(_) => { model: { ..model, dragging }, cursor }
-	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ..])
@@ -162,20 +159,20 @@ expect
 			model = test_model(quad)
 
 			# Nowhere near the handle: nothing is grabbed and the cursor is plain.
-			idle = drag_corner(model, Devices.none)
+			idle = model.drag_corner(Devices.none)
 
 			# Pressing on the handle grabs it and takes the corner to the pointer.
 			on_handle = Devices.none.with_mouse_position({ x: 600, y: 160 }).with_mouse_button_pressed(Left)
-			grabbed = drag_corner(model, on_handle)
+			grabbed = model.drag_corner(on_handle)
 
 			# A held corner is clamped to the range that still makes a quad, so
 			# dragging off the window cannot throw the perspective away.
 			off_window = Devices.none.with_mouse_position({ x: 4000, y: 4000 }).with_mouse_button_down(Left)
-			far = drag_corner({ ..model, dragging: Bool.True }, off_window)
+			far = { ..model, dragging: Bool.True }.drag_corner(off_window)
 
 			# R puts the corners back wherever the drag left them.
 			moved = { ..model, corners: { ..initial_corners, top_right: { x: 500, y: 300 } } }
-			reset = drag_corner(moved, Devices.none.with_key_pressed(KeyR))
+			reset = moved.drag_corner(Devices.none.with_key_pressed(KeyR))
 
 			idle.cursor
 				== Arrow

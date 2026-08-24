@@ -21,6 +21,24 @@ Cell : {
 
 Direction := [DirUp, DirDown, DirLeft, DirRight].{
 	is_eq : _
+
+	delta : Direction -> Cell
+	delta = |direction|
+		match direction {
+			DirUp => { x: 0, y: -1 }
+			DirDown => { x: 0, y: 1 }
+			DirLeft => { x: -1, y: 0 }
+			DirRight => { x: 1, y: 0 }
+		}
+
+	can_turn_to : Direction, Direction -> Bool
+	can_turn_to = |current, requested|
+		match current {
+			DirUp => requested != DirDown
+			DirDown => requested != DirUp
+			DirLeft => requested != DirRight
+			DirRight => requested != DirLeft
+		}
 }
 
 GameState := [Playing, GameOver]
@@ -176,24 +194,6 @@ head_of = |snake|
 		Err(_) => { x: 0, y: 0 }
 	}
 
-delta : Direction -> Cell
-delta = |direction|
-	match direction {
-		DirUp => { x: 0, y: -1 }
-		DirDown => { x: 0, y: 1 }
-		DirLeft => { x: -1, y: 0 }
-		DirRight => { x: 1, y: 0 }
-	}
-
-can_turn : Direction, Direction -> Bool
-can_turn = |current, requested|
-	match current {
-		DirUp => requested != DirDown
-		DirDown => requested != DirUp
-		DirLeft => requested != DirRight
-		DirRight => requested != DirLeft
-	}
-
 find_open_cell : Cell, List(Cell), I32 -> Cell
 find_open_cell = |seed, snake, attempt| {
 	cell_count = grid_cols * grid_rows
@@ -241,13 +241,13 @@ requested_direction = |model, input| {
 apply_input : Model, Devices.Snapshot -> Model
 apply_input = |model, input| {
 	requested = requested_direction(model, input)
-	pending = if can_turn(model.direction, requested) requested else model.pending_direction
+	pending = if model.direction.can_turn_to(requested) requested else model.pending_direction
 	{ ..model, pending_direction: pending }
 }
 
 step_snake : Model -> Stepped
 step_snake = |model| {
-	move = delta(model.pending_direction)
+	move = model.pending_direction.delta()
 	head = head_of(model.snake)
 	next_head = { x: head.x + move.x, y: head.y + move.y }
 	ate = next_head == model.food
@@ -356,11 +356,24 @@ test_model = {
 	rng: Random.seed(1),
 }
 
-expect delta(DirUp) == { x: 0, y: -1 }
+expect {
+	direction : Direction
+	direction = DirUp
+	direction.delta() == { x: 0, y: -1 }
+}
 
 ## A turn into the body is refused; any other turn is allowed.
-expect !can_turn(DirRight, DirLeft)
-expect can_turn(DirRight, DirUp)
+expect {
+	direction : Direction
+	direction = DirRight
+	!direction.can_turn_to(DirLeft)
+}
+
+expect {
+	direction : Direction
+	direction = DirRight
+	direction.can_turn_to(DirUp)
+}
 
 ## Food never lands on the snake: the probe walks on until it finds a free cell.
 expect find_open_cell({ x: 12, y: 9 }, start_snake, 0) == { x: 13, y: 9 }

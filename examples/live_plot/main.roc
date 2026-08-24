@@ -122,10 +122,7 @@ Model : {
 
 	## The backlog of listings and reads. Only `max_in_flight` of these are
 	## running as tasks at once, however much the walk has discovered.
-	pending : List(Work),
-
-	## How many spawned tasks have not yet delivered their message.
-	in_flight : U64,
+	queue : WorkQueue,
 
 	## What the walk has found so far, and what it is still owed.
 	walk : Walk,
@@ -322,12 +319,83 @@ Peak : {
 ##
 ## The counters accumulate within the current sample and the list holds the
 ## finished ones, so a graph never shows a partial bucket as a dip.
-Rates : {
+Rates := {
 	samples : List(Sample),
 	clock : F32,
 	bytes : U64,
 	lines : U64,
+}.{
+	is_eq : _
+
+	new = || Rates.{ samples: [], clock: 0, bytes: 0, lines: 0 }
+
+	add_bytes = |rates, count| Rates.{ samples: rates.samples, clock: rates.clock, bytes: rates.bytes + count, lines: rates.lines }
+
+	add_lines = |rates, count| Rates.{ samples: rates.samples, clock: rates.clock, bytes: rates.bytes, lines: rates.lines + count }
+
+	sample = |rates, delta| {
+		ticked = rates.clock + delta
+		if ticked < sample_period {
+			Rates.{ samples: rates.samples, clock: ticked, bytes: rates.bytes, lines: rates.lines }
+		} else {
+			kept = if List.len(rates.samples) >= rate_window {
+				List.drop_first(rates.samples, 1)
+			} else {
+				rates.samples
+			}
+			Rates.{
+				samples: List.append(kept, { bytes: rates.bytes, lines: rates.lines }),
+				clock: ticked - sample_period,
+				bytes: 0,
+				lines: 0,
+			}
+		}
+	}
+
+	peak = |rates, measure| List.fold(rates.samples, 1, |most, item| U64.max(most, measure(item)))
+
+	latest = |rates, measure|
+		match List.last(rates.samples) {
+			Ok(item) => measure(item)
+			Err(_) => 0
+		}
+
+	recent_mean = |rates, measure| {
+		len = List.len(rates.samples)
+		span = U64.min(len, mean_window)
+		if span == 0 {
+			0
+		} else {
+			total = List.fold(List.sublist(rates.samples, { start: len - span, len: span }), 0, |sum, item| sum + measure(item))
+			U64.to_f32(total) / U64.to_f32(span)
+		}
+	}
 }
+
+## A sample stays open until its period has elapsed.
+expect {
+	part = Rates.{ samples: [], clock: 0, bytes: 900, lines: 4 }.sample(sample_period / 2)
+	List.is_empty(part.samples) and part.bytes == 900
+}
+
+expect {
+	closed = Rates.{ samples: [], clock: 0, bytes: 900, lines: 4 }.sample(sample_period)
+	closed.samples == [{ bytes: 900, lines: 4 }] and closed.bytes == 0 and closed.lines == 0
+}
+
+## Sampling keeps a fixed-size history.
+expect {
+	full = List.repeat({ bytes: 1, lines: 1 }, rate_window)
+	rolled = Rates.{ samples: full, clock: 0, bytes: 7, lines: 7 }.sample(sample_period)
+	List.len(rolled.samples) == rate_window and List.last(rolled.samples) == Ok({ bytes: 7, lines: 7 })
+}
+
+expect Rates.{ samples: [{ bytes: 3, lines: 1 }, { bytes: 9, lines: 2 }], clock: 0, bytes: 0, lines: 0 }.peak(|item| item.bytes) == 9
+
+## An empty history still has a peak because it is used as a divisor.
+expect Rates.new().peak(|item| item.bytes) == 1
+expect Rates.new().latest(|item| item.lines) == 0
+expect Rates.{ samples: [{ bytes: 1, lines: 5 }], clock: 0, bytes: 0, lines: 0 }.latest(|item| item.lines) == 5
 
 Sample : {
 	bytes : U64,
@@ -380,6 +448,34 @@ Msg : [
 ## Ordinary data, so the backlog can be compared, counted and tested without a
 ## window. `start_work!` is the only place it becomes an effect.
 Work : [ListDir(Str), ReadFile(Str, [New, Lane(U64)])]
+
+max_in_flight = 6.U64
+
+## The app-owned backlog and the number of tasks still expected to answer.
+## Keeping them in one type puts all changes to the work limit in one place.
+WorkQueue := { pending : List(Work), in_flight : U64 }.{
+	is_eq : _
+
+	new = || WorkQueue.{ pending: [], in_flight: 0 }
+
+	enqueue = |queue, work| WorkQueue.{ pending: List.append(queue.pending, work), in_flight: queue.in_flight }
+
+	completed = |queue| WorkQueue.{ pending: queue.pending, in_flight: if queue.in_flight == 0 0 else queue.in_flight - 1 }
+
+	take_ready = |queue| {
+		room = if queue.in_flight >= max_in_flight 0 else max_in_flight - queue.in_flight
+		split = List.split_at(queue.pending, U64.min(room, List.len(queue.pending)))
+		{
+			queue: WorkQueue.{ pending: split.others, in_flight: queue.in_flight + List.len(split.before) },
+			starting: split.before,
+		}
+	}
+}
+
+expect WorkQueue.{ pending: [ListDir("a"), ListDir("b"), ListDir("c")], in_flight: 4 }.take_ready()
+	== { queue: WorkQueue.{ pending: [ListDir("c")], in_flight: 6 }, starting: [ListDir("a"), ListDir("b")] }
+expect WorkQueue.new().take_ready() == { queue: WorkQueue.new(), starting: [] }
+expect WorkQueue.new().completed() == WorkQueue.new()
 
 program = { init!, update!, render! }
 
@@ -607,13 +703,13 @@ enqueue_entries = |model, dir, entries|
 				Descend => {
 					..acc,
 					walk: { ..acc.walk, dirs_found: acc.walk.dirs_found + 1 },
-					pending: List.append(acc.pending, ListDir(path)),
+					queue: acc.queue.enqueue(ListDir(path)),
 				}
 
 				Read => {
 					..acc,
 					walk: { ..acc.walk, files_found: acc.walk.files_found + 1 },
-					pending: List.append(acc.pending, ReadFile(path, New)),
+					queue: acc.queue.enqueue(ReadFile(path, New)),
 				}
 
 				Ignore => { ..acc, walk: { ..acc.walk, files_skipped: acc.walk.files_skipped + 1 } }
@@ -669,43 +765,6 @@ describe_read_error = |reason|
 # ---------------------------------------------------------------------------
 # Pacing
 # ---------------------------------------------------------------------------
-
-## How many listings and reads may be running as tasks at once.
-##
-## The host runs 32 tasks at once and queues anything past that, so this is the
-## app's own choice rather than a limit it has to respect. Six is chosen so the
-## pacing is real rather than theoretical: a walk of a few hundred files
-## genuinely backs up, and the backlog in the masthead genuinely rises and falls.
-max_in_flight = 6.U64
-
-## Take as much off the front of the backlog as the in-flight budget has room
-## for, oldest first.
-##
-## The whole of the pacing, and pure: `update!` starts a task for each item
-## `starting` names and stores `pending` back in the model.
-take_ready : List(Work), U64 -> { pending : List(Work), starting : List(Work) }
-take_ready = |pending, in_flight| {
-	room = if in_flight >= max_in_flight 0 else max_in_flight - in_flight
-	split = List.split_at(pending, U64.min(room, List.len(pending)))
-	{ pending: split.others, starting: split.before }
-}
-
-## Readiness is FIFO, capped by the budget, and it takes from the front.
-expect take_ready([ListDir("a"), ListDir("b"), ListDir("c")], 4)
-	== { pending: [ListDir("c")], starting: [ListDir("a"), ListDir("b")] }
-expect take_ready([ListDir("a")], max_in_flight) == { pending: [ListDir("a")], starting: [] }
-expect take_ready([], 0) == { pending: [], starting: [] }
-expect take_ready([ReadFile("x", New), ReadFile("y", Lane(3))], 0)
-	== { pending: [], starting: [ReadFile("x", New), ReadFile("y", Lane(3))] }
-
-## One completion frees exactly one slot, and the count floors at zero so an
-## extra completion cannot wrap it into a budget that never starts anything.
-completed : U64 -> U64
-completed = |in_flight| if in_flight == 0 0 else in_flight - 1
-
-expect completed(0) == 0
-expect completed(1) == 0
-expect completed(6) == 5
 
 ## How many delivered-but-unparsed files the app will hold before it stops
 ## asking for more.
@@ -993,7 +1052,7 @@ scan_once = |model, scan| {
 		runs: grow_run(model.runs, List.len(dots)),
 		peak: retain_peak(model.peak, scan, result.best, lane_path(model, scan.lane)),
 		lanes: add_lines(add_columns(model.lanes, scan.lane, cols), scan.lane, List.len(dots)),
-		rates: { ..model.rates, lines: model.rates.lines + List.len(dots) },
+		rates: model.rates.add_lines(List.len(dots)),
 	}
 
 	if done {
@@ -1139,63 +1198,8 @@ sample_period = 0.1.F32
 
 rate_window = 80.U64
 
-## Close the current sample if its period has elapsed.
-##
-## The counters accumulate into `bytes` and `lines` as work happens and are
-## flushed here, so a graph never shows a partial bucket as a dip and the
-## sampling costs one comparison a frame.
-sample_rates : Rates, F32 -> Rates
-sample_rates = |rates, delta| {
-	ticked = rates.clock + delta
-	if ticked < sample_period {
-		{ ..rates, clock: ticked }
-	} else {
-		kept =
-			if List.len(rates.samples) >= rate_window {
-				List.drop_first(rates.samples, 1)
-			} else {
-				rates.samples
-			}
-		{
-			samples: List.append(kept, { bytes: rates.bytes, lines: rates.lines }),
-			clock: ticked - sample_period,
-			bytes: 0,
-			lines: 0,
-		}
-	}
-}
-
-## The most any one sample reached, which is what both graphs are scaled to.
-peak_sample : List(Sample), (Sample -> U64) -> U64
-peak_sample = |samples, of| List.fold(samples, 1, |most, sample| U64.max(most, of(sample)))
-
-## The mean of the last second, which is what the headline figure shows.
-##
-## A single 100 ms bucket is the right resolution for the graph and the wrong
-## one for a number: reads arrive in bursts, so whichever bucket happens to be
-## last reads either far above the real rate or, more often, zero. The graph
-## keeps the spikes; the number beside it is what they average to.
-recent_mean : List(Sample), (Sample -> U64) -> F32
-recent_mean = |samples, of| {
-	len = List.len(samples)
-	span = U64.min(len, mean_window)
-	if span == 0 {
-		0
-	} else {
-		total = List.fold(List.sublist(samples, { start: len - span, len: span }), 0, |sum, sample| sum + of(sample))
-		U64.to_f32(total) / U64.to_f32(span)
-	}
-}
-
 ## How many samples the headline figure averages over: one second.
 mean_window = 10.U64
-
-latest_sample : List(Sample), (Sample -> U64) -> U64
-latest_sample = |samples, of|
-	match List.last(samples) {
-		Ok(sample) => of(sample)
-		Err(_) => 0
-	}
 
 ## A per-sample count as a per-second rate.
 per_second : F32 -> F32
@@ -1612,8 +1616,7 @@ init! = App.init_for_args(
 		Ok({
 			demo: List.contains(App.args!(startup), record_demo_flag),
 			glow: glow,
-			pending: [],
-			in_flight: 0,
+			queue: WorkQueue.new(),
 			walk: { dirs_found: 0, dirs_listed: 0, dirs_failed: 0, files_found: 0, files_skipped: 0, bytes_read: 0 },
 			arrivals: [],
 			parsing: Idle,
@@ -1622,7 +1625,7 @@ init! = App.init_for_args(
 			runs: [],
 			refetching: Nothing,
 			peak: { path: "", columns: 0, text: "" },
-			rates: { samples: [], clock: 0, bytes: 0, lines: 0 },
+			rates: Rates.new(),
 			camera: Camera.default,
 			following: Bool.True,
 			# The configured size, replaced by the sampled one on the first
@@ -1673,7 +1676,7 @@ update! = |model, program_input| {
 			{
 				..settled_model,
 				walk: { ..settled_model.walk, dirs_found: 1 },
-				pending: List.append(settled_model.pending, ListDir(walk_root)),
+				queue: settled_model.queue.enqueue(ListDir(walk_root)),
 			}
 		} else {
 			settled_model
@@ -1704,9 +1707,9 @@ update! = |model, program_input| {
 	#    a time.
 	ready =
 		if model.demo or List.len(refetched.arrivals) >= arrival_limit {
-			{ pending: refetched.pending, starting: [] }
+			{ queue: refetched.queue, starting: [] }
 		} else {
-			take_ready(refetched.pending, refetched.in_flight)
+			refetched.queue.take_ready()
 		}
 
 	for work in ready.starting {
@@ -1728,7 +1731,7 @@ update! = |model, program_input| {
 
 	match exit {
 		Err(code) => Err(code)
-		Ok({}) => Ok({ ..refetched, pending: ready.pending, in_flight: refetched.in_flight + List.len(ready.starting) })
+		Ok({}) => Ok({ ..refetched, queue: ready.queue })
 	}
 }
 
@@ -1740,7 +1743,7 @@ receive = |model, message|
 			enqueue_entries(
 				{
 					..model,
-					in_flight: completed(model.in_flight),
+					queue: model.queue.completed(),
 					walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1 },
 				},
 				dir,
@@ -1753,35 +1756,33 @@ receive = |model, message|
 		# it is here because the error union says it can be.
 		Listed(dir, Err(Busy)) => {
 			..model,
-			in_flight: completed(model.in_flight),
-			pending: List.append(model.pending, ListDir(dir)),
+			queue: model.queue.completed().enqueue(ListDir(dir)),
 		}
 
 		Listed(_dir, Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			walk: { ..model.walk, dirs_listed: model.walk.dirs_listed + 1, dirs_failed: model.walk.dirs_failed + 1 },
 		}
 
 		FileRead(path, slot, Ok(bytes)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			# The bytes go straight into the model. There is no copy here and
 			# no host handle to hold: the list *is* the ownership.
 			arrivals: List.append(model.arrivals, { path: path, bytes: bytes, replaces: slot }),
 			walk: { ..model.walk, bytes_read: model.walk.bytes_read + List.len(bytes) },
-			rates: { ..model.rates, bytes: model.rates.bytes + List.len(bytes) },
+			rates: model.rates.add_bytes(List.len(bytes)),
 		}
 
 		FileRead(path, slot, Err(Busy)) => {
 			..model,
-			in_flight: completed(model.in_flight),
-			pending: List.append(model.pending, ReadFile(path, slot)),
+			queue: model.queue.completed().enqueue(ReadFile(path, slot)),
 		}
 
 		FileRead(_path, New, Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			walk: { ..model.walk, files_skipped: model.walk.files_skipped + 1 },
 		}
 
@@ -1789,7 +1790,7 @@ receive = |model, message|
 		# without points -- and clears the slot so another can be asked for.
 		FileRead(_path, Lane(_index), Err(_reason)) => {
 			..model,
-			in_flight: completed(model.in_flight),
+			queue: model.queue.completed(),
 			refetching: Nothing,
 		}
 	}
@@ -1868,7 +1869,7 @@ look = |model, program_input| {
 			model.fps
 		},
 		x_mode: mode,
-		rates: sample_rates(model.rates, delta),
+		rates: model.rates.sample(delta),
 	}
 
 	# The two things that move points rather than the view. Both are rare, and
@@ -1902,7 +1903,7 @@ request_refetch = |model|
 					Ok(index) => {
 						..model,
 						refetching: Fetching(index),
-						pending: List.append(model.pending, ReadFile(lane_path(model, index), Lane(index))),
+						queue: model.queue.enqueue(ReadFile(lane_path(model, index), Lane(index))),
 					}
 				}
 			}
@@ -2334,8 +2335,8 @@ draw_graphs! = |frame, model, fade| {
 	width = 208
 	gap = 18
 	right = model.screen.x - margin
-	reading = Str.concat(one_decimal(per_second(recent_mean(model.rates.samples, |sample| sample.bytes)) / 1_048_576), " MiB/s")
-	parsing = Str.concat(commas(rounded(per_second(recent_mean(model.rates.samples, |sample| sample.lines)))), " lines/s")
+	reading = Str.concat(one_decimal(per_second(model.rates.recent_mean(|sample| sample.bytes)) / 1_048_576), " MiB/s")
+	parsing = Str.concat(commas(rounded(per_second(model.rates.recent_mean(|sample| sample.lines)))), " lines/s")
 
 	draw_graph!(
 		frame,
@@ -2378,7 +2379,7 @@ draw_graph! = |frame, model, graph| {
 	plot_top = bounds.y + 30
 	plot_height = bounds.y + bounds.height - plot_top
 	measure = graph.of
-	peak = U64.to_f32(peak_sample(model.rates.samples, measure))
+	peak = U64.to_f32(model.rates.peak(measure))
 	step = bounds.width / U64.to_f32(rate_window)
 
 	text_left!(frame, model.small, { x: bounds.x, y: bounds.y }, graph.label, 9, 1.5, fade_to(ink_faint, graph.fade))
@@ -2439,8 +2440,8 @@ draw_figures! = |frame, model, fade| {
 		},
 		{
 			label: "QUEUED",
-			value: commas(List.len(model.pending)),
-			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.in_flight), Str.concat(" / ", U64.to_str(max_in_flight)))),
+			value: commas(List.len(model.queue.pending)),
+			note: Str.concat("IN FLIGHT ", Str.concat(U64.to_str(model.queue.in_flight), Str.concat(" / ", U64.to_str(max_in_flight)))),
 		},
 		{
 			label: "FILE BYTES HELD",
@@ -2869,7 +2870,7 @@ rounded = |value|
 # `update!` cannot be called from an `expect`: a `Model` holds a render texture,
 # a font and prepared text, and those are host resources that only `init!` can
 # produce. So every decision `update!` makes lives in a function that does not
-# need one -- `classify`, `scan_chunk`, `trim`, `sample_rates`, `zoom_at` -- and
+# need one -- `classify`, `scan_chunk`, `trim`, `Rates.sample`, `zoom_at` -- and
 # those are what is tested here.
 
 # --- Walking ----------------------------------------------------------------
@@ -2961,35 +2962,6 @@ expect !(has_run([], 0))
 ## A cycle's points go on the end of the run being parsed, and nowhere else.
 expect grow_run(sample_runs, 5) == [{ lane: 0, count: 4 }, { lane: 1, count: 3 }, { lane: 2, count: 7 }]
 expect grow_run([], 5) == []
-
-# --- Throughput -------------------------------------------------------------
-
-## A sample is only closed once its period has elapsed, so a graph never shows a
-## partial bucket as a dip.
-expect {
-	part = sample_rates({ samples: [], clock: 0, bytes: 900, lines: 4 }, sample_period / 2)
-	List.is_empty(part.samples) and part.bytes == 900
-}
-
-expect {
-	closed = sample_rates({ samples: [], clock: 0, bytes: 900, lines: 4 }, sample_period)
-	closed.samples == [{ bytes: 900, lines: 4 }] and closed.bytes == 0 and closed.lines == 0
-}
-
-## The window is a window: it never grows past `rate_window`, so an app left
-## running overnight holds the same eighty samples it held after eight seconds.
-expect {
-	full = List.repeat({ bytes: 1, lines: 1 }, rate_window)
-	rolled = sample_rates({ samples: full, clock: 0, bytes: 7, lines: 7 }, sample_period)
-	List.len(rolled.samples) == rate_window and List.last(rolled.samples) == Ok({ bytes: 7, lines: 7 })
-}
-
-expect peak_sample([{ bytes: 3, lines: 1 }, { bytes: 9, lines: 2 }], |sample| sample.bytes) == 9
-
-## An empty history still has a peak, because it is a divisor.
-expect peak_sample([], |sample| sample.bytes) == 1
-expect latest_sample([], |sample| sample.lines) == 0
-expect latest_sample([{ bytes: 1, lines: 5 }], |sample| sample.lines) == 5
 
 ## Ten samples a second, so a sample is a tenth of the rate.
 expect per_second(120) == 1200

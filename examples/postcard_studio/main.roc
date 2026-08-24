@@ -164,19 +164,20 @@ update! = |model, program_input| {
 	}
 }
 
-Palette : { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }
-
-palette : U64 -> Palette
-palette = |theme|
-	match theme {
-		0 => { sky_top: Color.from_hex_rgb(0x23395d), sky_bottom: Color.from_hex_rgb(0xf4a261), sun: Color.from_hex_rgb(0xffd166), sea: Color.from_hex_rgb(0x1d5b79), ink: Color.from_hex_rgb(0xfff4dd) }
-		1 => { sky_top: Color.from_hex_rgb(0x512b58), sky_bottom: Color.from_hex_rgb(0xe07a5f), sun: Color.from_hex_rgb(0xf2cc8f), sea: Color.from_hex_rgb(0x3d405b), ink: Color.white }
-		_ => { sky_top: Color.from_hex_rgb(0x0b525b), sky_bottom: Color.from_hex_rgb(0x56cfe1), sun: Color.from_hex_rgb(0xffe66d), sea: Color.from_hex_rgb(0x144552), ink: Color.from_hex_rgb(0xf7fff7) }
-	}
+## The five colours needed to render one postcard colourway.
+Palette := { sky_top : Color.Rgba, sky_bottom : Color.Rgba, sun : Color.Rgba, sea : Color.Rgba, ink : Color.Rgba }.{
+	for_theme : U64 -> Palette
+	for_theme = |theme|
+		match theme {
+			0 => { sky_top: Color.from_hex_rgb(0x23395d), sky_bottom: Color.from_hex_rgb(0xf4a261), sun: Color.from_hex_rgb(0xffd166), sea: Color.from_hex_rgb(0x1d5b79), ink: Color.from_hex_rgb(0xfff4dd) }
+			1 => { sky_top: Color.from_hex_rgb(0x512b58), sky_bottom: Color.from_hex_rgb(0xe07a5f), sun: Color.from_hex_rgb(0xf2cc8f), sea: Color.from_hex_rgb(0x3d405b), ink: Color.white }
+			_ => { sky_top: Color.from_hex_rgb(0x0b525b), sky_bottom: Color.from_hex_rgb(0x56cfe1), sun: Color.from_hex_rgb(0xffe66d), sea: Color.from_hex_rgb(0x144552), ink: Color.from_hex_rgb(0xf7fff7) }
+		}
+}
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
-	colors = palette(model.theme)
+	colors = Palette.for_theme(model.theme)
 	card = Box.unbox(model.card)
 
 	# Everything the postcard is made of, drawn at the size it is exported at.

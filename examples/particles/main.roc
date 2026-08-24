@@ -32,13 +32,50 @@ Model : {
 ## deterministic and the fountain looks the same on every run without needing a
 ## random source. Two independent values keep the launch angle uncorrelated from
 ## speed and lifetime, which is what stops the spray looking like a flower.
-Particle : {
+Particle := {
 	pos : Math.Vec2,
 	vel : Math.Vec2,
 	life : F32,
 	seed : F32,
 	phase : F32,
 	tint : Color.Rgba,
+}.{
+
+	## Advance this particle, respawning it at the emitter when its life ends.
+	step : Particle, Math.Vec2, F32, F32 -> Particle
+	step = |particle, emitter, spread, dt| {
+		life = particle.life - dt
+		if life > 0 {
+			{
+				..particle,
+				pos: { x: particle.pos.x + particle.vel.x * dt, y: particle.pos.y + particle.vel.y * dt },
+				vel: { x: particle.vel.x, y: particle.vel.y + 420 * dt },
+				life,
+			}
+		} else {
+			angle = particle.phase * 6.2831855
+			speed = 90 + 150 * particle.seed
+			{
+				..particle,
+				pos: emitter,
+				vel: { x: F32.cos(angle) * speed * spread, y: F32.sin(angle) * speed - 210 },
+				life: 1.1 + particle.seed * 1.7,
+			}
+		}
+	}
+
+	## Make the draw command used by the texture-instance batch.
+	to_instance : Particle -> Draw.TextureInstance
+	to_instance = |particle| {
+		size = 3 + 6 * particle.seed
+		{
+			source: sprite_source,
+			dest: Math.rect(particle.pos.x, particle.pos.y, size, size),
+			origin: { x: size / 2, y: size / 2 },
+			rotation: particle.life * 120,
+			tint: particle.tint,
+		}
+	}
 }
 
 Msg : []
@@ -114,42 +151,6 @@ initial_particles = List.map_with_index(
 	},
 )
 
-## Advance one particle, respawning it at the emitter once its life runs out.
-step_particle : Particle, Math.Vec2, F32, F32 -> Particle
-step_particle = |particle, emitter, spread, dt| {
-	life = particle.life - dt
-	if life > 0 {
-		{
-			..particle,
-			pos: { x: particle.pos.x + particle.vel.x * dt, y: particle.pos.y + particle.vel.y * dt },
-			vel: { x: particle.vel.x, y: particle.vel.y + 420 * dt },
-			life: life,
-		}
-	} else {
-		angle = particle.phase * 6.2831855
-		speed = 90 + 150 * particle.seed
-		{
-			..particle,
-			pos: emitter,
-			vel: { x: F32.cos(angle) * speed * spread, y: F32.sin(angle) * speed - 210 },
-			life: 1.1 + particle.seed * 1.7,
-		}
-	}
-}
-
-## Project a particle onto the flat instance record the batch transports.
-to_instance : Particle -> Draw.TextureInstance
-to_instance = |particle| {
-	size = 3 + 6 * particle.seed
-	{
-		source: sprite_source,
-		dest: Math.rect(particle.pos.x, particle.pos.y, size, size),
-		origin: { x: size / 2, y: size / 2 },
-		rotation: particle.life * 120,
-		tint: particle.tint,
-	}
-}
-
 init! : App.Init(Model, [ResourceLimit, TextureGenerationFailed])
 init! = App.init_for_args(
 	particles_config,
@@ -159,7 +160,7 @@ init! = App.init_for_args(
 		Ok({
 			sprite: sprite,
 			particles: initial_particles,
-			instances: List.map(initial_particles, to_instance),
+			instances: List.map(initial_particles, Particle.to_instance),
 			hud: Text.from("4000 sprites, one hosted call - Space widens the spray, ESC quits", font).size(18).prepare!()?,
 			demo: List.contains(App.args!(startup), record_demo_flag),
 		})
@@ -183,7 +184,7 @@ update! = |model, program_input| {
 			pointer
 		}
 
-	particles = List.map(model.particles, |particle| step_particle(particle, emitter, spread, dt))
+	particles = List.map(model.particles, |particle| particle.step(emitter, spread, dt))
 
 	exit =
 		if model.demo {
@@ -200,7 +201,7 @@ update! = |model, program_input| {
 
 	match exit {
 		Err(code) => Err(code)
-		Ok({}) => Ok({ ..model, particles: particles, instances: List.map(particles, to_instance) })
+		Ok({}) => Ok({ ..model, particles, instances: List.map(particles, Particle.to_instance) })
 	}
 }
 
@@ -214,17 +215,23 @@ render! = |model, frame| {
 }
 
 expect {
-	respawned = step_particle({ pos: Math.zero, vel: Math.zero, life: 0.01, seed: 0.5, phase: 0.25, tint: Color.white }, { x: 40, y: 60 }, 1, 0.02)
+	particle : Particle
+	particle = { pos: Math.zero, vel: Math.zero, life: 0.01, seed: 0.5, phase: 0.25, tint: Color.white }
+	respawned = particle.step({ x: 40, y: 60 }, 1, 0.02)
 	respawned.pos == { x: 40, y: 60 } and respawned.life > 1
 }
 
 expect {
-	moved = step_particle({ pos: { x: 10, y: 10 }, vel: { x: 100, y: 0 }, life: 1, seed: 0.5, phase: 0.25, tint: Color.white }, Math.zero, 1, 0.1)
+	particle : Particle
+	particle = { pos: { x: 10, y: 10 }, vel: { x: 100, y: 0 }, life: 1, seed: 0.5, phase: 0.25, tint: Color.white }
+	moved = particle.step(Math.zero, 1, 0.1)
 	moved.pos == { x: 20, y: 10 } and moved.vel.y == 42
 }
 
 expect {
-	instance = to_instance({ pos: { x: 12, y: 34 }, vel: Math.zero, life: 0.5, seed: 0, phase: 0, tint: Color.white })
+	particle : Particle
+	particle = { pos: { x: 12, y: 34 }, vel: Math.zero, life: 0.5, seed: 0, phase: 0, tint: Color.white }
+	instance = particle.to_instance()
 	instance.dest == Math.rect(12, 34, 3, 3) and instance.origin == { x: 1.5, y: 1.5 }
 }
 

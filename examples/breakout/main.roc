@@ -36,13 +36,24 @@ StepEvent := [GameStarted, WallHit, BrickHit(Brick), LifeLost(GameState), WallCl
 	is_eq : _
 }
 
-Game : {
+## The complete playable state. `advance` applies one pure game step and reports
+## events for `update!` to turn into sounds.
+Game := {
 	bricks : List(Brick),
 	paddle_x : F32,
 	ball : Ball,
 	score : U64,
 	lives : U64,
 	state : GameState,
+}.{
+	advance : Game, FrameInput -> StepResult
+	advance = |game, input|
+		match game.state {
+			Ready => advance_ready(game, input)
+			Playing => advance_playing(game, input)
+			Won => advance_finished(game, input)
+			GameOver => advance_finished(game, input)
+		}
 }
 
 Sounds : {
@@ -471,15 +482,6 @@ advance_playing = |game, input| {
 	}
 }
 
-advance_game : Game, FrameInput -> StepResult
-advance_game = |game, input|
-	match game.state {
-		Ready => advance_ready(game, input)
-		Playing => advance_playing(game, input)
-		Won => advance_finished(game, input)
-		GameOver => advance_finished(game, input)
-	}
-
 ## One sound per event, in the order the step produced them.
 ##
 ## `List.map` rather than a fold: every event makes exactly one sound, so the
@@ -499,7 +501,7 @@ step_event_sounds = |sounds, events|
 			},
 	)
 
-## `advance_game` is a pure step returning events, and the events name the
+## `Game.advance` is a pure step returning events, and the events name the
 ## sounds they want; `update!` is where those sounds are played.
 Msg : []
 
@@ -521,7 +523,7 @@ update! = |model, program_input| {
 		}
 
 	game_input = if model.demo demo_frame_input(model.game, dt) else frame_input(input, dt)
-	result = advance_game(model.game, game_input)
+	result = model.game.advance(game_input)
 	if result.paddle_hit {
 		model.sounds.paddle.play!()
 	}

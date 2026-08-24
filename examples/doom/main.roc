@@ -18,6 +18,7 @@ import DoomPresentation
 import DoomRuntime
 import DoomSim
 import DoomSprites
+import DoomView
 import DoomWorld
 import E1M1Renderer
 import "sprite_cutout.fs" as sprite_fragment_shader : Str
@@ -35,12 +36,14 @@ Model : {
 	world_atlas : Draw.Texture,
 	sprite_atlas : Draw.Texture,
 	sprite_shader : Draw.Shader,
+	logical_target : Draw.RenderTexture,
+	flashes : DoomView.Flashes,
 	sounds : Sounds,
 }
 
-Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound }
+Sounds : { fire : Audio.Sound, pickup : Audio.Sound, pain : Audio.Sound, death : Audio.Sound, alert : Audio.Sound, door : Audio.Sound, switch_on : Audio.Sound, switch_off : Audio.Sound, monster_attack : Audio.Sound, projectile : Audio.Sound, explosion : Audio.Sound, oof : Audio.Sound, no_way : Audio.Sound, platform_move : Audio.Sound, music : Audio.Music }
 
-Cue : [FireCue, PickupCue, PainCue, DeathCue, AlertCue, DoorCue, SwitchOnCue, SwitchOffCue]
+Cue : [FireCue, PickupCue, PainCue, DeathCue, AlertCue, DoorCue, SwitchOnCue, SwitchOffCue, MonsterAttackCue, ProjectileCue, ExplosionCue, OofCue, NoWayCue, PlatformCue]
 
 Msg : []
 
@@ -63,6 +66,7 @@ init! = App.init(
 		Assets.set_texture_filter!(world_atlas, Point)
 		Assets.set_texture_filter!(sprite_atlas, Point)
 		sprite_shader = Draw.Shader.from_source!({ vertex_source: "", fragment_source: sprite_fragment_shader })?
+		logical_target = Draw.load_render_texture!({ width: 320.I32, height: 200.I32 })?
 		sounds = load_sounds!()?
 
 		map = DoomMap.e1m1
@@ -80,7 +84,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader, sounds })
+		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
 	},
 )
 
@@ -95,7 +99,7 @@ update! = |model, input| {
 		world = initial_runtime(DoomMap.e1m1, position, angle)
 		level = DoomLevel.initial(DoomMap.e1m1)
 		blockers = DoomRuntime.blockers_for_player(DoomMap.e1m1, level, position)
-		Ok({ ..model, world, level, blockers })
+		Ok({ ..model, world, level, blockers, flashes: DoomView.initial })
 	} else {
 		forward = signed_command(
 			input.devices.key_down(KeyW) or input.devices.key_down(KeyUp),
@@ -126,23 +130,35 @@ update! = |model, input| {
 		}
 		world = if exited { ..advanced.world, phase: Exited } else advanced.world
 		level = advance_level(level0, advanced.tics)
-		for cue in transition_cues(model.world, world, use_result, advanced.fired) {
+		flashes = DoomView.advance(model.flashes, advanced.tics, { damaged: world.doom.player.health < model.world.doom.player.health, picked_up: taken_count(world.doom.pickups) > taken_count(model.world.doom.pickups) })
+		for cue in transition_cues(model.world, world, use_result, advanced.fired, input.devices.key_pressed(KeyE)) {
 			play_cue!(model.sounds, cue)
 		}
-		Ok({ ..model, world, level, blockers })
+		Ok({ ..model, world, level, blockers, flashes })
 	}
 }
 
 render! : Model, Draw.Frame => Try({}, [Exit(I64), ScopeLimit, ScopeUnavailable, ..])
 render! = |model, frame| {
 	frame.clear!(Color.from_hex_rgb(0x101010))
+	frame.with_render_texture!(model.logical_target, |logical| draw_logical!(model, logical))?
+	size = frame.size!()
+	scale = F32.min(size.width / logical_width, size.height / logical_height)
+	width = logical_width * scale
+	height = logical_height * scale
+	frame.texture!({ texture: Draw.render_texture(model.logical_target), source: Draw.render_texture_source(model.logical_target), dest: { x: (size.width - width) * 0.5, y: (size.height - height) * 0.5, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	Ok({})
+}
+
+draw_logical! = |model, frame| {
+	frame.clear!(Color.black)
 	state = model.world.doom.player.sim.state
 	world_x = state.pos.x * E1M1Renderer.doom_scale
 	world_z = state.pos.y * E1M1Renderer.doom_scale
 	facing = state.angle.forward()
 	sector = DoomLevel.sector_at(DoomMap.e1m1, { x: F32.to_f64(state.pos.x), y: F32.to_f64(state.pos.y) }) ?? crash "player left validated E1M1 geometry"
 	heights = DoomLevel.heights_for(model.level, sector) ?? crash "player sector state missing"
-	eye_y = I64.to_f32(heights.floor + 41) * E1M1Renderer.doom_scale
+	eye_y = (I64.to_f32(heights.floor + 41) + state.view.offset) * E1M1Renderer.doom_scale
 	camera = Camera.perspective({
 		position: { x: world_x, y: eye_y, z: world_z },
 		target: { x: world_x + facing.x, y: eye_y, z: world_z + facing.y },
@@ -172,7 +188,8 @@ render! = |model, frame| {
 		},
 	)?
 	draw_weapon!(frame, model.sprite_atlas, model.world)
-	draw_hud!(frame, model.sprite_atlas, model.world)
+	draw_hud!(frame, model.sprite_atlas, model.world, model.flashes)
+	draw_flashes!(frame, model.flashes)
 	Ok({})
 }
 
@@ -235,29 +252,55 @@ append_sprite = |geometry, primitive| {
 }
 
 draw_weapon! = |frame, atlas, world| {
-	if world.phase == Playing {
+	playing = match world.phase {
+		Playing => Bool.True
+		_ => Bool.False
+	}
+	if playing {
 		match DoomPresentation.weapon(world.doom.player.weapon, world.weapon.phase) {
 			Ok(view) => {
 				size = frame.size!()
-				width = U64.to_f32(view.rect.width) * 3
-				height = U64.to_f32(view.rect.height) * 3
-				frame.texture!({ texture: atlas, source: atlas_rect(view.rect), dest: { x: size.width * 0.5 - width * 0.5, y: size.height - height - hud_height, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+				width = U64.to_f32(view.rect.width)
+				height = U64.to_f32(view.rect.height)
+				bob = world.doom.player.sim.state.view
+				frame.texture!({ texture: atlas, source: atlas_rect(view.rect), dest: { x: size.width * 0.5 - width * 0.5 + bob.weapon_x, y: size.height - height - hud_height + bob.weapon_y + bob.weapon_kick, width, height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 			}
 			Err(_) => {}
 		}
 	}
 }
 
-draw_hud! = |frame, atlas, world| {
+draw_hud! = |frame, atlas, world, flashes| {
 	player = world.doom.player
 	size = frame.size!()
-	ammo = if player.weapon == Pistol player.ammo.bullets else player.ammo.shells
+	ammo = match player.weapon {
+		Pistol => player.ammo.bullets
+		Shotgun => player.ammo.shells
+	}
 	bar = DoomPresentation.hud(StatusBar) ?? crash "generated status bar sprite missing"
-	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: size.width * 0.5 - 480, y: size.height - hud_height, width: 960, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
-	draw_number!(frame, atlas, I64.max(0, ammo), size.width * 0.5 - 430, size.height - 82)
-	draw_number!(frame, atlas, I64.max(0, player.health), size.width * 0.5 - 270, size.height - 82)
-	face = DoomPresentation.hud(Face("ST00")) ?? crash "generated status face sprite missing"
-	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: size.width * 0.5 - 54, y: size.height - 96, width: 108, height: 90 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	frame.texture!({ texture: atlas, source: atlas_rect(bar), dest: { x: 0, y: size.height - hud_height, width: 320, height: hud_height }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+	draw_number!(frame, atlas, I64.max(0, ammo), 43, size.height - 29)
+	draw_number!(frame, atlas, I64.max(0, player.health), 90, size.height - 29)
+	dead = match world.phase {
+		Dead => Bool.True
+		_ => Bool.False
+	}
+	face = if dead {
+		DoomPresentation.hud(Face("DEAD0")) ?? crash "dead face missing"
+	} else if flashes.damage > 0 {
+		DoomPresentation.hud(Face("OUCH0")) ?? crash "ouch face missing"
+	} else if world.doom.player.health <= 20 {
+		DoomPresentation.hud(Face("ST40")) ?? crash "critical face missing"
+	} else if world.doom.player.health <= 40 {
+		DoomPresentation.hud(Face("ST30")) ?? crash "hurt face missing"
+	} else if world.doom.player.health <= 60 {
+		DoomPresentation.hud(Face("ST20")) ?? crash "hurt face missing"
+	} else if world.doom.player.health <= 80 {
+		DoomPresentation.hud(Face("ST10")) ?? crash "hurt face missing"
+	} else {
+		DoomPresentation.hud(Face("ST00")) ?? crash "healthy face missing"
+	}
+	frame.texture!({ texture: atlas, source: atlas_rect(face), dest: { x: 143, y: size.height - 30, width: 36, height: 30 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 	draw_keys!(frame, atlas, player.keys, size)
 	frame.line!({ start: { x: size.width * 0.5 - 6, y: size.height * 0.5 }, end: { x: size.width * 0.5 + 6, y: size.height * 0.5 }, stroke: Draw.stroke(Color.white, 1) })
 	frame.line!({ start: { x: size.width * 0.5, y: size.height * 0.5 - 6 }, end: { x: size.width * 0.5, y: size.height * 0.5 + 6 }, stroke: Draw.stroke(Color.white, 1) })
@@ -273,7 +316,7 @@ draw_number! = |frame, atlas, value, x, y| {
 	digits = [I64.to_u8_wrap(n / 100), I64.to_u8_wrap((n / 10) % 10), I64.to_u8_wrap(n % 10)]
 	for entry in List.map_with_index(digits, |digit, index| { digit, index }) {
 		match DoomPresentation.hud(LargeDigit(entry.digit)) {
-			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: x + U64.to_f32(entry.index) * 42, y, width: 42, height: 54 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+			Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: x + U64.to_f32(entry.index) * 14, y, width: 14, height: 18 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 			Err(_) => {}
 		}
 	}
@@ -284,7 +327,7 @@ draw_keys! = |frame, atlas, keys, size| {
 	for item in List.map_with_index(flags, |entry, slot| { entry, slot }) {
 		if item.entry.present {
 			match DoomPresentation.hud(Key(item.entry.index)) {
-				Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: size.width * 0.5 + 300 + U64.to_f32(item.slot) * 42, y: size.height - 70, width: 36, height: 30 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
+				Ok(rect) => frame.texture!({ texture: atlas, source: atlas_rect(rect), dest: { x: 239 + U64.to_f32(item.slot) * 14, y: size.height - 23, width: 12, height: 10 }, origin: { x: 0, y: 0 }, rotation: 0, tint: Color.white })
 				Err(_) => {}
 			}
 		}
@@ -328,9 +371,25 @@ advance_level = |level, tics| if tics == 0 level else advance_level(DoomLevel.ti
 
 mouse_turns_per_pixel = 0.0004
 
-hud_height = 96
+logical_width = 320
 
-transition_cues = |before, after, use_result, fired| {
+logical_height = 200
+
+hud_height = 32
+
+draw_flashes! = |frame, flashes| {
+	size = frame.size!()
+	if flashes.pickup > 0 {
+		alpha = U64.to_u8_wrap(U64.min(80, flashes.pickup * 8))
+		frame.rectangle!({ x: 0, y: 0, width: size.width, height: size.height, style: Draw.filled(Color.with_alpha(Color.from_hex_rgb(0xd6b64c), alpha)) })
+	}
+	if flashes.damage > 0 {
+		alpha = U64.to_u8_wrap(U64.min(120, flashes.damage * 8))
+		frame.rectangle!({ x: 0, y: 0, width: size.width, height: size.height, style: Draw.filled(Color.with_alpha(Color.red, alpha)) })
+	}
+}
+
+transition_cues = |before, after, use_result, fired, used| {
 	var $cues = if fired [FireCue] else []
 	if taken_count(after.doom.pickups) > taken_count(before.doom.pickups) {
 		$cues = List.append($cues, PickupCue)
@@ -343,21 +402,56 @@ transition_cues = |before, after, use_result, fired| {
 	if awake_count(after.doom.actors) > awake_count(before.doom.actors) {
 		$cues = List.append($cues, AlertCue)
 	}
+	if attack_count(after.doom.actors) > attack_count(before.doom.actors) {
+		$cues = List.append($cues, MonsterAttackCue)
+	}
+	if List.len(after.projectiles) > List.len(before.projectiles) {
+		$cues = List.append($cues, ProjectileCue)
+	}
+	if List.len(after.explosions) > List.len(before.explosions) {
+		$cues = List.append($cues, ExplosionCue)
+	}
+	if after.doom.player.health < before.doom.player.health {
+		$cues = List.append($cues, OofCue)
+	}
 	match use_result {
 		Activated(_) => {
 			$cues = List.append($cues, DoorCue)
 			$cues = List.append($cues, SwitchOnCue)
+			$cues = List.append($cues, PlatformCue)
 		}
-		_ => {}
+		_ => if used {
+			$cues = List.append($cues, NoWayCue)
+		}
 	}
 	$cues
 }
 
 taken_count = |pickups| List.len(List.keep_if(pickups, |pickup| pickup.taken))
 
-dead_count = |actors| List.len(List.keep_if(actors, |actor| actor.state.mode == Dead))
+dead_count = |actors|
+	List.len(
+		List.keep_if(
+			actors,
+			|actor| match actor.state.mode {
+				Dead => Bool.True
+				_ => Bool.False
+			},
+		),
+	)
 
 awake_count = |actors| List.len(List.keep_if(actors, |actor| actor.state.mode != Look and actor.state.mode != Dead))
+
+attack_count = |actors|
+	List.len(
+		List.keep_if(
+			actors,
+			|actor| match actor.state.mode {
+				Attack => Bool.True
+				_ => Bool.False
+			},
+		),
+	)
 
 actor_health = |actors| List.fold(actors, 0.I64, |total, actor| total + actor.health)
 
@@ -371,19 +465,35 @@ play_cue! = |sounds, cue|
 		DoorCue => sounds.door.play!()
 		SwitchOnCue => sounds.switch_on.play!()
 		SwitchOffCue => sounds.switch_off.play!()
+		MonsterAttackCue => sounds.monster_attack.play!()
+		ProjectileCue => sounds.projectile.play!()
+		ExplosionCue => sounds.explosion.play!()
+		OofCue => sounds.oof.play!()
+		NoWayCue => sounds.no_way.play!()
+		PlatformCue => sounds.platform_move.play!()
 	}
 
 load_sounds! = || {
-	base = "examples/doom/assets/freedoom/generated/audio"
-	fire = Audio.load_sound!("${base}/pistol.wav")?
-	pickup = Audio.load_sound!("${base}/pickup.wav")?
-	pain = Audio.load_sound!("${base}/enemy_pain.wav")?
-	death = Audio.load_sound!("${base}/enemy_die.wav")?
-	alert = Audio.load_sound!("${base}/enemy_alert.wav")?
-	door = Audio.load_sound!("${base}/door_move.wav")?
-	switch_on = Audio.load_sound!("${base}/switch_on.wav")?
-	switch_off = Audio.load_sound!("${base}/switch_off.wav")?
-	Ok({ fire, pickup, pain, death, alert, door, switch_on, switch_off })
+	base = "examples/doom/assets/freedoom/generated/e1m1/sounds"
+	fire = Audio.load_sound!("${base}/weapon_pistol.wav")?
+	pickup = Audio.load_sound!("${base}/pickup_item.wav")?
+	pain = Audio.load_sound!("${base}/monster_former_human_pain.wav")?
+	death = Audio.load_sound!("${base}/monster_former_human_death_1.wav")?
+	alert = Audio.load_sound!("${base}/monster_former_human_sight_1.wav")?
+	door = Audio.load_sound!("${base}/world_door_open.wav")?
+	switch_on = Audio.load_sound!("${base}/world_switch_on.wav")?
+	switch_off = Audio.load_sound!("${base}/world_switch_off.wav")?
+	monster_attack = Audio.load_sound!("${base}/monster_imp_ranged_attack.wav")?
+	projectile = Audio.load_sound!("${base}/effect_imp_projectile.wav")?
+	explosion = Audio.load_sound!("${base}/effect_imp_explosion.wav")?
+	oof = Audio.load_sound!("${base}/player_oof.wav")?
+	no_way = Audio.load_sound!("${base}/player_no_way.wav")?
+	platform_move = Audio.load_sound!("${base}/world_platform_move.wav")?
+	music = Audio.load_music!("examples/doom/assets/freedoom/generated/e1m1/music/e1m1.wav")?
+	music.set_looping!(Bool.True)
+	music.set_volume!(0.45)
+	music.play!()
+	Ok({ fire, pickup, pain, death, alert, door, switch_on, switch_off, monster_attack, projectile, explosion, oof, no_way, platform_move, music })
 }
 
 expect signed_command(Bool.True, Bool.False, 50) == 50
@@ -395,5 +505,9 @@ expect {
 	doom : DoomWorld.World
 	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
 	world = DoomRuntime.initial(doom)
-	transition_cues(world, world, NotUsable, Bool.True) == [FireCue]
+	cues = transition_cues(world, world, NotUsable, Bool.True, Bool.False)
+	List.len(cues) == 1 and match List.get(cues, 0) {
+		Ok(FireCue) => Bool.True
+		_ => Bool.False
+	}
 }

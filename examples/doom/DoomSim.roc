@@ -148,7 +148,11 @@ DoomSim := [].{
 				tangent = normalize(sub(blocker.end, blocker.start))
 				slide = scale(tangent, dot(displacement, tangent))
 				slide_candidate = add(position, slide)
-				$result = if any_penetration(slide_candidate, radius, blockers) position else slide_candidate
+				# A portal can leave the player radius overlapping an adjacent closed
+				# boundary (notably E1M1's narrow sector 142). Permit motion that does
+				# not deepen an existing overlap, so the player can slide out rather
+				# than becoming permanently pinned by that other boundary.
+				$result = if any_deeper_penetration(position, slide_candidate, radius, blockers) position else slide_candidate
 			}
 		}
 		$result
@@ -158,6 +162,17 @@ DoomSim := [].{
 	any_collision = |center, radius, blockers| List.any(blockers, |blocker| circle_hits_segment(center, radius, blocker))
 	any_penetration : Vec2, F32, List(Segment) -> Bool
 	any_penetration = |center, radius, blockers| List.any(blockers, |blocker| distance_to_segment_squared(center, blocker) < radius * radius - 0.000001)
+
+	any_deeper_penetration : Vec2, Vec2, F32, List(Segment) -> Bool
+	any_deeper_penetration = |from, to, radius, blockers|
+		List.any(
+			blockers,
+			|blocker| {
+				before = distance_to_segment_squared(from, blocker)
+				after = distance_to_segment_squared(to, blocker)
+				after < radius * radius - 0.000001 and after < before - 0.000001
+			},
+		)
 
 	circle_hits_segment : Vec2, F32, Segment -> Bool
 	circle_hits_segment = |center, radius, segment| {

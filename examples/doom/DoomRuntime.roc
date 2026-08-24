@@ -589,6 +589,21 @@ expect {
 }
 
 expect {
+	# Real E1M1 connector regression: sector 142 is only 16 units wide, so a
+	# radius-16 player overlaps its blocked southern boundary while leaving
+	# east through the valid portal at linedef 1084. The overlap must not pin it.
+	map = DoomMap.e1m1
+	level = DoomLevel.initial(map)
+	var $state = DoomSim.initial({ x: 196.56944, y: 310.7271 }, DoomSim.Angle.from_turns(0))
+	for _ in List.repeat({}, 16) {
+		blockers = DoomRuntime.blockers_for_player(map, level, $state.pos)
+		$state = DoomSim.tic($state, { ..DoomSim.neutral, forward: 50 }, blockers)
+	}
+	sector = DoomLevel.sector_at(map, { x: F32.to_f64($state.pos.x), y: F32.to_f64($state.pos.y) })
+	$state.pos.x > 208 and sector == Ok(17)
+}
+
+expect {
 	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
 	doom : DoomWorld.World
 	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(7) }

@@ -25,6 +25,19 @@ python3 scripts/doom_assets.py
 python3 scripts/doom_assets.py --check
 ```
 
+The genuine Phase 1 E1M1 extraction is a separate reproducible stage:
+
+```sh
+python3 scripts/doom_wad.py
+python3 scripts/doom_wad.py --check
+```
+
+It downloads the official binary release, verifies both the ZIP and embedded
+`freedoom1.wad`, parses the classic Doom map lumps, and composes every wall
+texture plus every flat and thing sprite referenced by E1M1. See
+`docs/E1M1.md` for the generated schema and known scope limits. The 61 MB ZIP
+and 28 MB WAD are not committed; `--archive` permits an offline rebuild.
+
 For an offline rebuild, download the archive named in `source/manifest.json`
 and pass `--archive /path/to/freedoom-v0.13.0.tar.gz`. The script verifies its
 SHA-256 before reading it. It selects only the listed upstream files, performs

@@ -205,16 +205,17 @@ def main() -> None:
             candidate = Path(temporary) / "freedoom"
             build(candidate, args.archive)
             expected = {p.relative_to(candidate): p.read_bytes() for p in candidate.rglob("*") if p.is_file()}
+            # Another reproducible stage owns generated/e1m1 and its docs.
+            # Compare only this source-selection stage's declared output.
             actual = {
-                p.relative_to(args.output): p.read_bytes()
-                for p in args.output.rglob("*")
-                if p.is_file() and p.relative_to(args.output) != Path("README.md")
+                relative: (args.output / relative).read_bytes()
+                for relative in expected
+                if (args.output / relative).is_file()
             }
             if actual != expected:
                 missing = sorted(str(p) for p in expected.keys() - actual.keys())
-                extra = sorted(str(p) for p in actual.keys() - expected.keys())
                 changed = sorted(str(p) for p in expected.keys() & actual.keys() if expected[p] != actual[p])
-                raise SystemExit(f"asset output differs (missing={missing}, extra={extra}, changed={changed})")
+                raise SystemExit(f"asset output differs (missing={missing}, changed={changed})")
         return
 
     build(args.output, args.archive)

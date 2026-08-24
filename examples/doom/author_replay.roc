@@ -71,9 +71,13 @@ author_tic = |run| {
 	supply = closest_supply(run.world.doom.pickups, run.world.doom.player, pos, sector, blockers)
 	using_special = route_line.special != 0 and DoomSim.distance_squared(pos, target) < 64 * 64
 	combat_target = if can_fire(run.world.doom.player) and !(using_special) closest_visible_actor(run.world.doom.actors, pos, blockers) else Err(NoActor)
-	command = match combat_target {
+	planned = match combat_target {
 		Ok(actor) => combat_move(run.world.doom.player.sim.state, actor.pos, match supply { Ok(pickup) => pickup.pos, Err(_) => target })
 		Err(_) => steer(run.world.doom.player.sim.state, match supply { Ok(pickup) => pickup.pos, Err(_) => target }, Bool.False)
+	}
+	command = match closest_projectile(run.world.projectiles, pos) {
+		Ok(projectile) => evade_projectile(run.world.doom.player.sim.state, projectile.momentum, target)
+		Err(_) => planned
 	}
 	advanced = DoomRuntime.advance_in_map(run.world, DoomSim.tic_seconds * 1.0001, command, blockers, map)
 	new_pos = advanced.world.doom.player.sim.state.pos
@@ -86,6 +90,32 @@ author_tic = |run| {
 	last_sector = List.last(run.visited) ?? sector
 	visited = if new_sector == last_sector run.visited else List.append(run.visited, new_sector)
 	{ ..run, world, level: advance_level(level0, advanced.tics), route_index, tics: run.tics + advanced.tics, runs: append_run(run.runs, command), visited }
+}
+
+closest_projectile = |projectiles, pos| {
+	var $best = Err(NoProjectile)
+	var $distance = 160 * 160
+	for projectile in projectiles {
+		distance = DoomSim.distance_squared(pos, projectile.pos)
+		if distance < $distance {
+			$best = Ok(projectile)
+			$distance = distance
+		}
+	}
+	$best
+}
+
+evade_projectile = |state, momentum, target| {
+	left = { x: 0 - momentum.y, y: momentum.x }
+	rightward = { x: momentum.y, y: 0 - momentum.x }
+	route = DoomSim.normalize(DoomSim.sub(target, state.pos))
+	direction = if DoomSim.dot(left, route) > DoomSim.dot(rightward, route) left else rightward
+	move = DoomSim.normalize(direction)
+	facing = state.angle.forward()
+	right = { x: facing.y, y: 0 - facing.x }
+	forward = DoomSim.dot(facing, move)
+	side = DoomSim.dot(right, move)
+	{ forward: if forward > 0.2 50 else if forward < -0.2 -50 else 0, side: if side > 0.2 40 else if side < -0.2 -40 else 0, turn: 0, fire: Bool.False }
 }
 
 recover_route_index = |sector, current| {
@@ -109,6 +139,8 @@ author_target = |route_index, pos, portal| {
 	else if route_index == 6 and pos.y < 350 { x: 700, y: 370 }
 	else if route_index == 6 and pos.y < 420 { x: 800, y: 430 }
 	else if route_index == 10 { x: 680, y: 1024 }
+	else if route_index == 14 and pos.y < 1280 and pos.x > 240 { x: 224, y: 1240 }
+	else if route_index == 14 { x: 224, y: 1490 }
 	else if route_index == 15 and pos.x > 0 and pos.y < 1560 { x: 200, y: 1580 }
 	else if route_index == 15 and pos.x > -350 and pos.y > 1500 { x: -360, y: 1580 }
 	else if route_index == 15 and pos.y > 1440 { x: -360, y: 1440 }

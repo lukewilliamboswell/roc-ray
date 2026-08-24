@@ -45,7 +45,7 @@ DoomTrace := [].{
 		player = DoomWorld.player({ x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }, DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360))
 		doom : DoomWorld.World
 		doom = { player, actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
-		{ world: DoomRuntime.initial(doom), level: DoomLevel.initial(map), trace: [] }
+		{ world: DoomRuntime.initial_for_skill(doom, Medium), level: DoomLevel.initial(map), trace: [] }
 	}
 
 	## Run the command script with each tic split into the supplied fractions of

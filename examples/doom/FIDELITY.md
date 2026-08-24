@@ -11,13 +11,13 @@ identify observable behaviour and constants, but code is not copied into Roc.
 | --- | --- | --- |
 | Map data | Freedoom Phase 1 E1M1 WAD lumps | Checked-in deterministic extraction with source checksum; counts and cross-references validated |
 | Timing | Doom 35 Hz game tic | Tests show the same command stream produces the same tic trace across different host-cycle deltas, with bounded catch-up |
-| Player movement | Chocolate Doom `p_user.c`, `p_map.c`, `p_mobj.c` | Golden traces for thrust, turning, friction, stopping, collision radius, and wall sliding |
-| Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, upper/lower/middle textures, offsets, light levels, sky, and moving sectors |
+| Player movement | Chocolate Doom `p_user.c`, `p_map.c`, `p_mobj.c` | Deterministic regression traces cover thrust, turning, friction, stopping, collision radius, wall sliding, and narrow-portal recovery; these are not yet cross-engine golden traces |
+| Sectors | Doom linedefs, sidedefs, sectors and subsectors | E1M1 renders floor/ceiling heights, upper/lower/middle textures, offsets, light levels, sky, and moving sectors; special-7 damaging floors apply five damage on the 32-tic cadence |
 | Interaction | Chocolate Doom `p_map.c`, `p_doors.c`, `p_spec.c` | Use and crossing specials operate the corresponding E1M1 doors, switches and exit |
 | Things | Doom thing types and difficulty flags | Player start, enemies, weapons, ammo, health, keys and decorations come from E1M1 data |
-| Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic weapon cadence, ammunition, hitscan spread, damage, pain and death state tests |
-| Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death advance through explicit 35 Hz state durations |
-| Presentation | Chocolate Doom screenshots and state | 320x200-style viewport, weapon bob, palette flashes, status bar, directional sprites and sector lighting |
+| Combat | Chocolate Doom `p_pspr.c`, `p_map.c`, `p_inter.c`, `info.c` | Deterministic tests cover the implemented weapon cadence, ammunition, hitscan spread, damage, pain and death states; weapon ownership/selection and several exact weapon state chains remain incomplete |
+| Enemies | Chocolate Doom `p_enemy.c`, `p_mobj.c`, `info.c` | Look, wake, chase, attack, pain and death use explicit 35 Hz durations, with deterministic sound propagation and infighting; exact per-frame state tables remain approximations |
+| Presentation | Chocolate Doom screenshots and state | A 320x200-style viewport, weapon bob, palette-like flashes, status bar, directional sprites and base sector lighting are present; screenshot parity, animated light specials, and full status-face priority are not yet evidenced |
 | Audio | Freedoom sounds and music | Positional effects and a reproducibly rendered or natively synthesized Freedoom track accompany a complete run |
 | Whole level | Chocolate Doom running the same pinned WAD | A recorded start-to-exit input trace completes E1M1; state checkpoints and representative frames are compared |
 
@@ -104,3 +104,24 @@ never an input.
 The initial target is gameplay-compatible E1M1, not demo-byte compatibility.
 Any intentional departure is recorded here with an observable reason rather
 than silently becoming the new definition of Doom behaviour.
+
+## Current verified gaps
+
+- Weapon pickups select the collected weapon, but owned-weapon inventory,
+  number-key selection, and automatic fallback when ammunition is exhausted
+  are not modeled yet.
+- Skill is retained in deterministic runtime state. Baby halves incoming
+  damage with integer truncation; Nightmare's faster actor cadence/respawning and the
+  Baby/Nightmare doubled-ammunition pickup rule are not implemented yet.
+- E1M1 sector specials 1 and 12 still use their base light level rather than
+  deterministic random/fast blinking. Secret special 9 is present in map data,
+  but the runtime does not count secret discovery.
+- Actor modes have deterministic tic durations, but they are coarser than the
+  complete Doom sprite-state chains. The status face similarly provides useful
+  health feedback without implementing the full original priority machine.
+- Damage resolves before pickup contact each tic, and lethal damage prevents a
+  same-tic health pickup from reviving the player; corpse/death-camera motion is
+  not modeled beyond the terminal runtime phase.
+- The checked-in trace proves partition invariance and regression stability for
+  this implementation. A Chocolate Doom run of the identical command stream is
+  still required before calling it a cross-engine golden comparison.

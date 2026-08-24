@@ -15,11 +15,14 @@ DoomRuntime := [].{
 	Aggro : { hunter : U64, target : U64 }
 	Explosion : { pos : DoomSim.Vec2, remaining : U64 }
 	WeaponState : { cooldown : U64, phase : U64 }
-	World : { doom : DoomWorld.World, projectiles : List(Projectile), explosions : List(Explosion), sound_origins : List(DoomSim.Vec2), aggro : List(Aggro), next_projectile_id : U64, weapon : WeaponState, phase : Phase }
+	World : { doom : DoomWorld.World, skill : DoomWorld.Skill, projectiles : List(Projectile), explosions : List(Explosion), sound_origins : List(DoomSim.Vec2), aggro : List(Aggro), next_projectile_id : U64, weapon : WeaponState, phase : Phase }
 	Advance : { world : World, tics : U64, dropped : Bool, fired : Bool, projectile_saturated : Bool }
 
 	initial : DoomWorld.World -> World
-	initial = |doom| { doom, projectiles: [], explosions: [], sound_origins: [], aggro: [], next_projectile_id: 0, weapon: { cooldown: 0, phase: 0 }, phase: if doom.player.health <= 0 Dead else Playing }
+	initial = |doom| initial_for_skill(doom, Medium)
+
+	initial_for_skill : DoomWorld.World, DoomWorld.Skill -> World
+	initial_for_skill = |doom, skill| { doom, skill, projectiles: [], explosions: [], sound_origins: [], aggro: [], next_projectile_id: 0, weapon: { cooldown: 0, phase: 0 }, phase: if doom.player.health <= 0 Dead else Playing }
 
 	advance : World, F32, DoomSim.Command, List(DoomSim.Segment) -> Advance
 	advance = |world, elapsed, command, blockers| {
@@ -53,13 +56,15 @@ DoomRuntime := [].{
 			var $next = { ..world, doom: { ..world.doom, player: { ..world.doom.player, sim: sim.clock } } }
 			var $saturated = Bool.False
 			var $fired = Bool.False
+			var $tic = sim.clock.state.tic - sim.tics + 1
 			for _ in List.repeat({}, sim.tics) {
 				will_fire = command.fire and $next.weapon.cooldown == 0 and player_can_fire($next.doom.player)
 				sources = if will_fire List.append($next.sound_origins, $next.doom.player.sim.state.pos) else $next.sound_origins
 				heard0 = heard_actor_ids(map, sources, $next.doom.actors)
 				heard = if will_fire List.append(heard0, player_sound_id) else heard0
 				result = tic_hearing($next, heard, blockers)
-				$next = result.world
+				$next = apply_sector_hazard(result.world, map, $tic)
+				$tic = $tic + 1
 				$saturated = $saturated or result.projectile_saturated
 				$fired = $fired or result.fired
 			}
@@ -138,8 +143,8 @@ DoomRuntime := [].{
 				$saturated = Bool.True
 			}
 		}
-		player0 = DoomWorld.damage_player(DoomWorld.tick_player_powers(world.doom.player), $damage + projectile_step.damage)
-		collected = collect_nearby(player0, world.doom.pickups)
+		player0 = damage_player_for_skill(DoomWorld.tick_player_powers(world.doom.player), $damage + projectile_step.damage, world.skill)
+		collected = if player0.health <= 0 { player: player0, pickups: world.doom.pickups } else collect_nearby(player0, world.doom.pickups)
 		doom = { ..world.doom, player: collected.player, actors: $actors, pickups: collected.pickups, rng: $rng }
 		world0 = { ..world, doom, projectiles: projectile_step.projectiles, explosions: $explosions, sound_origins: $sound_origins, aggro: hit_result.aggro, next_projectile_id: $next_id, phase: if doom.player.health <= 0 Dead else world.phase }
 		firing = List.contains(heard_actors, player_sound_id)
@@ -394,6 +399,21 @@ player_can_fire = |player|
 		Chainsaw => Bool.True
 	}
 
+apply_sector_hazard = |world, map, tic| {
+	sector = DoomLevel.sector_at(map, { x: F32.to_f64(world.doom.player.sim.state.pos.x), y: F32.to_f64(world.doom.player.sim.state.pos.y) }) ?? return world
+	raw_sector = List.get(map.raw().sectors, sector) ?? return world
+	damage = if raw_sector.special == 7 and tic % 32 == 0 5 else 0
+	if damage == 0 {
+		world
+	} else {
+		player = damage_player_for_skill(world.doom.player, damage, world.skill)
+		{ ..world, doom: { ..world.doom, player }, phase: if player.health <= 0 Dead else world.phase }
+	}
+}
+
+damage_player_for_skill = |player, damage, skill|
+	DoomWorld.damage_player(player, if skill == Baby damage / 2 else damage)
+
 spend_ammo = |player|
 	match player.weapon {
 		Pistol => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
@@ -601,6 +621,40 @@ expect {
 	}
 	sector = DoomLevel.sector_at(map, { x: F32.to_f64($state.pos.x), y: F32.to_f64($state.pos.y) })
 	$state.pos.x > 208 and sector == Ok(17)
+}
+
+expect {
+	# E1M1 sector 38 is damaging floor special 7: five damage on the global
+	# 32-tic cadence, with normal armor absorption handled by player damage.
+	player = DoomWorld.player({ x: 2124, y: 958 }, DoomSim.Angle.from_turns(0))
+	doom : DoomWorld.World
+	doom = { player, actors: [], pickups: [], rng: DoomWorld.Rng.seed(0) }
+	world = DoomRuntime.initial(doom)
+	safe = apply_sector_hazard(world, DoomMap.e1m1, 31)
+	hurt = apply_sector_hazard(world, DoomMap.e1m1, 32)
+	safe.doom.player.health == 100 and hurt.doom.player.health == 95
+}
+
+expect {
+	# Lethal damage wins before pickup contact; a medikit under the player must
+	# not resurrect them during the same simulation tic.
+	player = { ..DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0)), health: 1 }
+	zombie0 = DoomWorld.actor(1, ZombieMan, { x: 32, y: 0 }, DoomSim.Angle.from_turns(0.5), Bool.False)
+	zombie = { ..zombie0, state: { mode: Attack, remaining: 1 } }
+	medikit : DoomWorld.Pickup
+	medikit = { id: 0, kind: MedikitPickup, pos: player.sim.state.pos, taken: Bool.False }
+	doom : DoomWorld.World
+	doom = { player, actors: [zombie], pickups: [medikit], rng: DoomWorld.Rng.seed(0) }
+	next = DoomRuntime.tic(DoomRuntime.initial(doom), Bool.False, []).world
+	item = List.get(next.doom.pickups, 0) ?? medikit
+	next.phase == Dead and next.doom.player.health == 0 and !(item.taken)
+}
+
+expect {
+	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	medium = damage_player_for_skill(player, 15, Medium)
+	baby = damage_player_for_skill(player, 15, Baby)
+	medium.health == 85 and baby.health == 93
 }
 
 expect {

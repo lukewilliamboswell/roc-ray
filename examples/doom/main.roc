@@ -374,7 +374,7 @@ initial_runtime = |map, position, angle| {
 	}
 	doom : DoomWorld.World
 	doom = { player: DoomWorld.player(position, angle), actors: spawned.actors, pickups: spawned.pickups, rng: DoomWorld.Rng.seed(0) }
-	{ world: DoomRuntime.initial(doom), decorations: spawned.decorations }
+	{ world: DoomRuntime.initial_for_skill(doom, Medium), decorations: spawned.decorations }
 }
 
 decoration_segments = |decorations| {

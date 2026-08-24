@@ -5,8 +5,8 @@
     {
       "name": "AMMOA0",
       "rect": {
-        "x": 598,
-        "y": 530,
+        "x": 1518,
+        "y": 588,
         "width": 17,
         "height": 16
       },
@@ -24,8 +24,8 @@
     {
       "name": "ARM1A0",
       "rect": {
-        "x": 883,
-        "y": 492,
+        "x": 1785,
+        "y": 555,
         "width": 37,
         "height": 28
       },
@@ -43,8 +43,8 @@
     {
       "name": "ARM1B0",
       "rect": {
-        "x": 922,
-        "y": 492,
+        "x": 1824,
+        "y": 555,
         "width": 37,
         "height": 28
       },
@@ -62,8 +62,8 @@
     {
       "name": "ARM2A0",
       "rect": {
-        "x": 1313,
-        "y": 492,
+        "x": 218,
+        "y": 588,
         "width": 37,
         "height": 25
       },
@@ -81,8 +81,8 @@
     {
       "name": "ARM2B0",
       "rect": {
-        "x": 1352,
-        "y": 492,
+        "x": 257,
+        "y": 588,
         "width": 37,
         "height": 25
       },
@@ -98,10 +98,105 @@
       ]
     },
     {
+      "name": "BAL1A0",
+      "rect": {
+        "x": 1721,
+        "y": 588,
+        "width": 15,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1A0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1B0",
+      "rect": {
+        "x": 1738,
+        "y": 588,
+        "width": 15,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1B0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1C0",
+      "rect": {
+        "x": 1437,
+        "y": 513,
+        "width": 34,
+        "height": 33
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1C0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1D0",
+      "rect": {
+        "x": 1302,
+        "y": 513,
+        "width": 40,
+        "height": 35
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1D0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BAL1E0",
+      "rect": {
+        "x": 268,
+        "y": 513,
+        "width": 46,
+        "height": 39
+      },
+      "kind": "sprite",
+      "doom_name": "BAL1E0",
+      "sprite": "BAL1",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "BAR1A0",
       "rect": {
-        "x": 347,
-        "y": 492,
+        "x": 1902,
+        "y": 513,
         "width": 23,
         "height": 32
       },
@@ -119,8 +214,8 @@
     {
       "name": "BAR1B0",
       "rect": {
-        "x": 372,
-        "y": 492,
+        "x": 1927,
+        "y": 513,
         "width": 23,
         "height": 32
       },
@@ -136,10 +231,105 @@
       ]
     },
     {
+      "name": "BEXPA0",
+      "rect": {
+        "x": 1952,
+        "y": 513,
+        "width": 23,
+        "height": 32
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPA0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPB0",
+      "rect": {
+        "x": 176,
+        "y": 555,
+        "width": 25,
+        "height": 31
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPB0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPC0",
+      "rect": {
+        "x": 114,
+        "y": 513,
+        "width": 36,
+        "height": 40
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPC0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPD0",
+      "rect": {
+        "x": 1269,
+        "y": 457,
+        "width": 56,
+        "height": 50
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPD0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BEXPE0",
+      "rect": {
+        "x": 37,
+        "y": 457,
+        "width": 59,
+        "height": 53
+      },
+      "kind": "sprite",
+      "doom_name": "BEXPE0",
+      "sprite": "BEXP",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "BKEYA0",
       "rect": {
-        "x": 1710,
-        "y": 492,
+        "x": 615,
+        "y": 588,
         "width": 14,
         "height": 21
       },
@@ -157,8 +347,8 @@
     {
       "name": "BKEYB0",
       "rect": {
-        "x": 1726,
-        "y": 492,
+        "x": 631,
+        "y": 588,
         "width": 14,
         "height": 21
       },
@@ -174,10 +364,67 @@
       ]
     },
     {
+      "name": "BLUDA0",
+      "rect": {
+        "x": 52,
+        "y": 617,
+        "width": 17,
+        "height": 8
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDA0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BLUDB0",
+      "rect": {
+        "x": 39,
+        "y": 617,
+        "width": 11,
+        "height": 10
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDB0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "BLUDC0",
+      "rect": {
+        "x": 125,
+        "y": 617,
+        "width": 6,
+        "height": 7
+      },
+      "kind": "sprite",
+      "doom_name": "BLUDC0",
+      "sprite": "BLUD",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "BON1A0",
       "rect": {
-        "x": 617,
-        "y": 530,
+        "x": 1755,
+        "y": 588,
         "width": 11,
         "height": 15
       },
@@ -195,8 +442,8 @@
     {
       "name": "BON1B0",
       "rect": {
-        "x": 630,
-        "y": 530,
+        "x": 1768,
+        "y": 588,
         "width": 11,
         "height": 15
       },
@@ -214,8 +461,8 @@
     {
       "name": "BON1C0",
       "rect": {
-        "x": 643,
-        "y": 530,
+        "x": 1781,
+        "y": 588,
         "width": 11,
         "height": 15
       },
@@ -233,8 +480,8 @@
     {
       "name": "BON1D0",
       "rect": {
-        "x": 656,
-        "y": 530,
+        "x": 1794,
+        "y": 588,
         "width": 11,
         "height": 15
       },
@@ -252,8 +499,8 @@
     {
       "name": "BON2A0",
       "rect": {
-        "x": 103,
-        "y": 530,
+        "x": 1023,
+        "y": 588,
         "width": 13,
         "height": 19
       },
@@ -271,8 +518,8 @@
     {
       "name": "BON2B0",
       "rect": {
-        "x": 118,
-        "y": 530,
+        "x": 1038,
+        "y": 588,
         "width": 13,
         "height": 19
       },
@@ -290,8 +537,8 @@
     {
       "name": "BON2C0",
       "rect": {
-        "x": 133,
-        "y": 530,
+        "x": 1053,
+        "y": 588,
         "width": 13,
         "height": 19
       },
@@ -309,8 +556,8 @@
     {
       "name": "BON2D0",
       "rect": {
-        "x": 148,
-        "y": 530,
+        "x": 1068,
+        "y": 588,
         "width": 13,
         "height": 19
       },
@@ -328,8 +575,8 @@
     {
       "name": "BPAKA0",
       "rect": {
-        "x": 584,
-        "y": 492,
+        "x": 854,
+        "y": 555,
         "width": 26,
         "height": 30
       },
@@ -347,8 +594,8 @@
     {
       "name": "CANDA0",
       "rect": {
-        "x": 85,
-        "y": 530,
+        "x": 1005,
+        "y": 588,
         "width": 16,
         "height": 19
       },
@@ -366,8 +613,8 @@
     {
       "name": "CLIPA0",
       "rect": {
-        "x": 805,
-        "y": 530,
+        "x": 1960,
+        "y": 588,
         "width": 7,
         "height": 12
       },
@@ -385,8 +632,8 @@
     {
       "name": "COLUA0",
       "rect": {
-        "x": 500,
-        "y": 438,
+        "x": 1493,
+        "y": 457,
         "width": 18,
         "height": 48
       },
@@ -404,8 +651,8 @@
     {
       "name": "CSAWA0",
       "rect": {
-        "x": 2,
-        "y": 530,
+        "x": 922,
+        "y": 588,
         "width": 47,
         "height": 19
       },
@@ -423,7 +670,7 @@
     {
       "name": "ELECA0",
       "rect": {
-        "x": 2,
+        "x": 297,
         "y": 2,
         "width": 26,
         "height": 128
@@ -442,8 +689,8 @@
     {
       "name": "GOR4A0",
       "rect": {
-        "x": 462,
-        "y": 438,
+        "x": 1455,
+        "y": 457,
         "width": 36,
         "height": 48
       },
@@ -461,8 +708,8 @@
     {
       "name": "HEADA1",
       "rect": {
-        "x": 1717,
-        "y": 2,
+        "x": 405,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -480,8 +727,8 @@
     {
       "name": "HEADA2A8",
       "rect": {
-        "x": 1519,
-        "y": 2,
+        "x": 207,
+        "y": 147,
         "width": 64,
         "height": 66
       },
@@ -504,8 +751,8 @@
     {
       "name": "HEADA3A7",
       "rect": {
-        "x": 1314,
-        "y": 2,
+        "x": 2,
+        "y": 147,
         "width": 67,
         "height": 66
       },
@@ -528,8 +775,8 @@
     {
       "name": "HEADA4A6",
       "rect": {
-        "x": 132,
-        "y": 132,
+        "x": 860,
+        "y": 147,
         "width": 62,
         "height": 66
       },
@@ -552,8 +799,8 @@
     {
       "name": "HEADA5",
       "rect": {
-        "x": 1782,
-        "y": 2,
+        "x": 470,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -571,8 +818,8 @@
     {
       "name": "HEADB1",
       "rect": {
-        "x": 260,
-        "y": 132,
+        "x": 988,
+        "y": 147,
         "width": 61,
         "height": 66
       },
@@ -590,8 +837,8 @@
     {
       "name": "HEADB2B8",
       "rect": {
-        "x": 1847,
-        "y": 2,
+        "x": 535,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -614,7 +861,7 @@
     {
       "name": "HEADB3B7",
       "rect": {
-        "x": 1244,
+        "x": 1967,
         "y": 2,
         "width": 68,
         "height": 66
@@ -638,8 +885,8 @@
     {
       "name": "HEADB4B6",
       "rect": {
-        "x": 323,
-        "y": 132,
+        "x": 1051,
+        "y": 147,
         "width": 61,
         "height": 66
       },
@@ -662,8 +909,8 @@
     {
       "name": "HEADB5",
       "rect": {
-        "x": 1912,
-        "y": 2,
+        "x": 600,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -681,7 +928,7 @@
     {
       "name": "HEADC1",
       "rect": {
-        "x": 770,
+        "x": 1493,
         "y": 2,
         "width": 64,
         "height": 67
@@ -700,8 +947,8 @@
     {
       "name": "HEADC2C8",
       "rect": {
-        "x": 1977,
-        "y": 2,
+        "x": 665,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -724,8 +971,8 @@
     {
       "name": "HEADC3C7",
       "rect": {
-        "x": 1383,
-        "y": 2,
+        "x": 71,
+        "y": 147,
         "width": 66,
         "height": 66
       },
@@ -748,8 +995,8 @@
     {
       "name": "HEADC4C6",
       "rect": {
-        "x": 449,
-        "y": 132,
+        "x": 1177,
+        "y": 147,
         "width": 63,
         "height": 65
       },
@@ -772,8 +1019,8 @@
     {
       "name": "HEADC5",
       "rect": {
-        "x": 2,
-        "y": 132,
+        "x": 730,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -791,7 +1038,7 @@
     {
       "name": "HEADD1",
       "rect": {
-        "x": 836,
+        "x": 1559,
         "y": 2,
         "width": 64,
         "height": 67
@@ -810,8 +1057,8 @@
     {
       "name": "HEADD2D8",
       "rect": {
-        "x": 196,
-        "y": 132,
+        "x": 924,
+        "y": 147,
         "width": 62,
         "height": 66
       },
@@ -834,8 +1081,8 @@
     {
       "name": "HEADD3D7",
       "rect": {
-        "x": 1451,
-        "y": 2,
+        "x": 139,
+        "y": 147,
         "width": 66,
         "height": 66
       },
@@ -858,8 +1105,8 @@
     {
       "name": "HEADD4D6",
       "rect": {
-        "x": 1585,
-        "y": 2,
+        "x": 273,
+        "y": 147,
         "width": 64,
         "height": 66
       },
@@ -882,8 +1129,8 @@
     {
       "name": "HEADD5",
       "rect": {
-        "x": 1651,
-        "y": 2,
+        "x": 339,
+        "y": 147,
         "width": 64,
         "height": 66
       },
@@ -901,7 +1148,7 @@
     {
       "name": "HEADE1",
       "rect": {
-        "x": 968,
+        "x": 1691,
         "y": 2,
         "width": 63,
         "height": 67
@@ -920,7 +1167,7 @@
     {
       "name": "HEADE2E8",
       "rect": {
-        "x": 902,
+        "x": 1625,
         "y": 2,
         "width": 64,
         "height": 67
@@ -944,7 +1191,7 @@
     {
       "name": "HEADE3E7",
       "rect": {
-        "x": 507,
+        "x": 1230,
         "y": 2,
         "width": 69,
         "height": 68
@@ -968,7 +1215,7 @@
     {
       "name": "HEADE4E6",
       "rect": {
-        "x": 578,
+        "x": 1301,
         "y": 2,
         "width": 63,
         "height": 68
@@ -992,7 +1239,7 @@
     {
       "name": "HEADE5",
       "rect": {
-        "x": 1033,
+        "x": 1756,
         "y": 2,
         "width": 63,
         "height": 67
@@ -1011,7 +1258,7 @@
     {
       "name": "HEADF1",
       "rect": {
-        "x": 707,
+        "x": 1430,
         "y": 2,
         "width": 61,
         "height": 68
@@ -1030,7 +1277,7 @@
     {
       "name": "HEADF2F8",
       "rect": {
-        "x": 643,
+        "x": 1366,
         "y": 2,
         "width": 62,
         "height": 68
@@ -1054,7 +1301,7 @@
     {
       "name": "HEADF3F7",
       "rect": {
-        "x": 373,
+        "x": 1096,
         "y": 2,
         "width": 68,
         "height": 69
@@ -1078,7 +1325,7 @@
     {
       "name": "HEADF4F6",
       "rect": {
-        "x": 1098,
+        "x": 1821,
         "y": 2,
         "width": 63,
         "height": 67
@@ -1102,8 +1349,8 @@
     {
       "name": "HEADF5",
       "rect": {
-        "x": 67,
-        "y": 132,
+        "x": 795,
+        "y": 147,
         "width": 63,
         "height": 66
       },
@@ -1121,8 +1368,8 @@
     {
       "name": "HEADG0",
       "rect": {
-        "x": 386,
-        "y": 132,
+        "x": 1114,
+        "y": 147,
         "width": 61,
         "height": 66
       },
@@ -1140,7 +1387,7 @@
     {
       "name": "HEADH0",
       "rect": {
-        "x": 1163,
+        "x": 1886,
         "y": 2,
         "width": 79,
         "height": 66
@@ -1159,7 +1406,7 @@
     {
       "name": "HEADI0",
       "rect": {
-        "x": 235,
+        "x": 958,
         "y": 2,
         "width": 83,
         "height": 73
@@ -1178,7 +1425,7 @@
     {
       "name": "HEADJ0",
       "rect": {
-        "x": 156,
+        "x": 879,
         "y": 2,
         "width": 77,
         "height": 76
@@ -1197,8 +1444,8 @@
     {
       "name": "HEADK0",
       "rect": {
-        "x": 1666,
-        "y": 381,
+        "x": 579,
+        "y": 457,
         "width": 83,
         "height": 52
       },
@@ -1216,8 +1463,8 @@
     {
       "name": "HEADL0",
       "rect": {
-        "x": 612,
-        "y": 492,
+        "x": 1332,
+        "y": 555,
         "width": 82,
         "height": 29
       },
@@ -1235,8 +1482,8 @@
     {
       "name": "LAUNA0",
       "rect": {
-        "x": 1742,
-        "y": 492,
+        "x": 647,
+        "y": 588,
         "width": 59,
         "height": 20
       },
@@ -1254,8 +1501,8 @@
     {
       "name": "MEDIA0",
       "rect": {
-        "x": 1934,
-        "y": 492,
+        "x": 839,
+        "y": 588,
         "width": 29,
         "height": 20
       },
@@ -1273,8 +1520,8 @@
     {
       "name": "MGUNA0",
       "rect": {
-        "x": 1261,
-        "y": 492,
+        "x": 166,
+        "y": 588,
         "width": 50,
         "height": 25
       },
@@ -1290,10 +1537,124 @@
       ]
     },
     {
+      "name": "PISFA0",
+      "rect": {
+        "x": 702,
+        "y": 555,
+        "width": 32,
+        "height": 30
+      },
+      "kind": "sprite",
+      "doom_name": "PISFA0",
+      "sprite": "PISF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGA0",
+      "rect": {
+        "x": 795,
+        "y": 2,
+        "width": 82,
+        "height": 92
+      },
+      "kind": "sprite",
+      "doom_name": "PISGA0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGB0",
+      "rect": {
+        "x": 711,
+        "y": 2,
+        "width": 82,
+        "height": 96
+      },
+      "kind": "sprite",
+      "doom_name": "PISGB0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGC0",
+      "rect": {
+        "x": 625,
+        "y": 2,
+        "width": 84,
+        "height": 100
+      },
+      "kind": "sprite",
+      "doom_name": "PISGC0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGD0",
+      "rect": {
+        "x": 539,
+        "y": 2,
+        "width": 84,
+        "height": 106
+      },
+      "kind": "sprite",
+      "doom_name": "PISGD0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PISGE0",
+      "rect": {
+        "x": 451,
+        "y": 2,
+        "width": 86,
+        "height": 120
+      },
+      "kind": "sprite",
+      "doom_name": "PISGE0",
+      "sprite": "PISG",
+      "aliases": [
+        {
+          "frame": "E",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "PLASA0",
       "rect": {
-        "x": 545,
-        "y": 530,
+        "x": 1465,
+        "y": 588,
         "width": 51,
         "height": 16
       },
@@ -1311,8 +1672,8 @@
     {
       "name": "PLAYA1",
       "rect": {
-        "x": 680,
-        "y": 323,
+        "x": 1476,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -1330,8 +1691,8 @@
     {
       "name": "PLAYA2A8",
       "rect": {
-        "x": 1738,
-        "y": 323,
+        "x": 508,
+        "y": 399,
         "width": 26,
         "height": 56
       },
@@ -1354,8 +1715,8 @@
     {
       "name": "PLAYA3A7",
       "rect": {
-        "x": 1463,
-        "y": 323,
+        "x": 233,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1378,8 +1739,8 @@
     {
       "name": "PLAYA4A6",
       "rect": {
-        "x": 489,
-        "y": 381,
+        "x": 1361,
+        "y": 399,
         "width": 29,
         "height": 55
       },
@@ -1402,8 +1763,8 @@
     {
       "name": "PLAYA5",
       "rect": {
-        "x": 402,
-        "y": 323,
+        "x": 1198,
+        "y": 340,
         "width": 38,
         "height": 56
       },
@@ -1421,8 +1782,8 @@
     {
       "name": "PLAYB1",
       "rect": {
-        "x": 718,
-        "y": 323,
+        "x": 1514,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -1440,8 +1801,8 @@
     {
       "name": "PLAYB2B8",
       "rect": {
-        "x": 1127,
-        "y": 323,
+        "x": 1923,
+        "y": 340,
         "width": 33,
         "height": 56
       },
@@ -1464,8 +1825,8 @@
     {
       "name": "PLAYB3B7",
       "rect": {
-        "x": 275,
-        "y": 323,
+        "x": 1071,
+        "y": 340,
         "width": 41,
         "height": 56
       },
@@ -1488,8 +1849,8 @@
     {
       "name": "PLAYB4B6",
       "rect": {
-        "x": 602,
-        "y": 323,
+        "x": 1398,
+        "y": 340,
         "width": 37,
         "height": 56
       },
@@ -1512,8 +1873,8 @@
     {
       "name": "PLAYB5",
       "rect": {
-        "x": 983,
-        "y": 323,
+        "x": 1779,
+        "y": 340,
         "width": 34,
         "height": 56
       },
@@ -1531,8 +1892,8 @@
     {
       "name": "PLAYC1",
       "rect": {
-        "x": 756,
-        "y": 323,
+        "x": 1552,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -1550,8 +1911,8 @@
     {
       "name": "PLAYC2C8",
       "rect": {
-        "x": 1766,
-        "y": 323,
+        "x": 536,
+        "y": 399,
         "width": 26,
         "height": 56
       },
@@ -1574,8 +1935,8 @@
     {
       "name": "PLAYC3C7",
       "rect": {
-        "x": 1494,
-        "y": 323,
+        "x": 264,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1598,8 +1959,8 @@
     {
       "name": "PLAYC4C6",
       "rect": {
-        "x": 1525,
-        "y": 323,
+        "x": 295,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1622,8 +1983,8 @@
     {
       "name": "PLAYC5",
       "rect": {
-        "x": 794,
-        "y": 323,
+        "x": 1590,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -1641,8 +2002,8 @@
     {
       "name": "PLAYD1",
       "rect": {
-        "x": 946,
-        "y": 323,
+        "x": 1742,
+        "y": 340,
         "width": 35,
         "height": 56
       },
@@ -1660,8 +2021,8 @@
     {
       "name": "PLAYD2D8",
       "rect": {
-        "x": 1334,
-        "y": 323,
+        "x": 104,
+        "y": 399,
         "width": 31,
         "height": 56
       },
@@ -1684,8 +2045,8 @@
     {
       "name": "PLAYD3D7",
       "rect": {
-        "x": 153,
-        "y": 381,
+        "x": 1025,
+        "y": 399,
         "width": 39,
         "height": 55
       },
@@ -1708,8 +2069,8 @@
     {
       "name": "PLAYD4D6",
       "rect": {
-        "x": 641,
-        "y": 323,
+        "x": 1437,
+        "y": 340,
         "width": 37,
         "height": 56
       },
@@ -1732,8 +2093,8 @@
     {
       "name": "PLAYD5",
       "rect": {
-        "x": 1162,
-        "y": 323,
+        "x": 1958,
+        "y": 340,
         "width": 33,
         "height": 56
       },
@@ -1751,8 +2112,8 @@
     {
       "name": "PLAYE1",
       "rect": {
-        "x": 1556,
-        "y": 323,
+        "x": 326,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1770,8 +2131,8 @@
     {
       "name": "PLAYE2E8",
       "rect": {
-        "x": 832,
-        "y": 323,
+        "x": 1628,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -1794,8 +2155,8 @@
     {
       "name": "PLAYE3E7",
       "rect": {
-        "x": 1534,
-        "y": 264,
+        "x": 316,
+        "y": 340,
         "width": 47,
         "height": 56
       },
@@ -1818,8 +2179,8 @@
     {
       "name": "PLAYE4E6",
       "rect": {
-        "x": 318,
-        "y": 323,
+        "x": 1114,
+        "y": 340,
         "width": 41,
         "height": 56
       },
@@ -1842,8 +2203,8 @@
     {
       "name": "PLAYE5",
       "rect": {
-        "x": 1367,
-        "y": 323,
+        "x": 137,
+        "y": 399,
         "width": 30,
         "height": 56
       },
@@ -1861,8 +2222,8 @@
     {
       "name": "PLAYF1",
       "rect": {
-        "x": 1587,
-        "y": 323,
+        "x": 357,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1880,8 +2241,8 @@
     {
       "name": "PLAYF2F8",
       "rect": {
-        "x": 187,
-        "y": 323,
+        "x": 983,
+        "y": 340,
         "width": 42,
         "height": 56
       },
@@ -1904,8 +2265,8 @@
     {
       "name": "PLAYF3F7",
       "rect": {
-        "x": 1420,
-        "y": 264,
+        "x": 202,
+        "y": 340,
         "width": 55,
         "height": 56
       },
@@ -1928,8 +2289,8 @@
     {
       "name": "PLAYF4F6",
       "rect": {
-        "x": 1583,
-        "y": 264,
+        "x": 365,
+        "y": 340,
         "width": 47,
         "height": 56
       },
@@ -1952,8 +2313,8 @@
     {
       "name": "PLAYF5",
       "rect": {
-        "x": 1399,
-        "y": 323,
+        "x": 169,
+        "y": 399,
         "width": 30,
         "height": 56
       },
@@ -1971,8 +2332,8 @@
     {
       "name": "PLAYG1",
       "rect": {
-        "x": 1618,
-        "y": 323,
+        "x": 388,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -1990,8 +2351,8 @@
     {
       "name": "PLAYG2G8",
       "rect": {
-        "x": 1197,
-        "y": 323,
+        "x": 1993,
+        "y": 340,
         "width": 33,
         "height": 56
       },
@@ -2014,8 +2375,8 @@
     {
       "name": "PLAYG3G7",
       "rect": {
-        "x": 231,
-        "y": 323,
+        "x": 1027,
+        "y": 340,
         "width": 42,
         "height": 56
       },
@@ -2038,8 +2399,8 @@
     {
       "name": "PLAYG4G6",
       "rect": {
-        "x": 1019,
-        "y": 323,
+        "x": 1815,
+        "y": 340,
         "width": 34,
         "height": 56
       },
@@ -2062,8 +2423,8 @@
     {
       "name": "PLAYG5",
       "rect": {
-        "x": 1649,
-        "y": 323,
+        "x": 419,
+        "y": 399,
         "width": 29,
         "height": 56
       },
@@ -2081,8 +2442,8 @@
     {
       "name": "PLAYH0",
       "rect": {
-        "x": 1232,
-        "y": 323,
+        "x": 2,
+        "y": 399,
         "width": 32,
         "height": 56
       },
@@ -2100,8 +2461,8 @@
     {
       "name": "PLAYI0",
       "rect": {
-        "x": 304,
-        "y": 438,
+        "x": 1239,
+        "y": 457,
         "width": 28,
         "height": 51
       },
@@ -2119,8 +2480,8 @@
     {
       "name": "PLAYJ0",
       "rect": {
-        "x": 1159,
-        "y": 438,
+        "x": 188,
+        "y": 513,
         "width": 27,
         "height": 40
       },
@@ -2138,8 +2499,8 @@
     {
       "name": "PLAYK0",
       "rect": {
-        "x": 1391,
-        "y": 492,
+        "x": 296,
+        "y": 588,
         "width": 28,
         "height": 25
       },
@@ -2157,8 +2518,8 @@
     {
       "name": "PLAYL0",
       "rect": {
-        "x": 1673,
-        "y": 492,
+        "x": 578,
+        "y": 588,
         "width": 35,
         "height": 21
       },
@@ -2176,8 +2537,8 @@
     {
       "name": "PLAYM0",
       "rect": {
-        "x": 1896,
-        "y": 492,
+        "x": 801,
+        "y": 588,
         "width": 36,
         "height": 20
       },
@@ -2195,8 +2556,8 @@
     {
       "name": "PLAYN0",
       "rect": {
-        "x": 1857,
-        "y": 492,
+        "x": 762,
+        "y": 588,
         "width": 37,
         "height": 20
       },
@@ -2214,8 +2575,8 @@
     {
       "name": "PLAYO0",
       "rect": {
-        "x": 442,
-        "y": 323,
+        "x": 1238,
+        "y": 340,
         "width": 38,
         "height": 56
       },
@@ -2233,8 +2594,8 @@
     {
       "name": "PLAYP0",
       "rect": {
-        "x": 1374,
-        "y": 381,
+        "x": 287,
+        "y": 457,
         "width": 41,
         "height": 53
       },
@@ -2252,8 +2613,8 @@
     {
       "name": "PLAYQ0",
       "rect": {
-        "x": 416,
-        "y": 438,
+        "x": 1409,
+        "y": 457,
         "width": 44,
         "height": 49
       },
@@ -2271,8 +2632,8 @@
     {
       "name": "PLAYR0",
       "rect": {
-        "x": 778,
-        "y": 438,
+        "x": 1809,
+        "y": 457,
         "width": 46,
         "height": 45
       },
@@ -2290,8 +2651,8 @@
     {
       "name": "PLAYS0",
       "rect": {
-        "x": 1188,
-        "y": 438,
+        "x": 217,
+        "y": 513,
         "width": 49,
         "height": 39
       },
@@ -2309,8 +2670,8 @@
     {
       "name": "PLAYT0",
       "rect": {
-        "x": 136,
-        "y": 492,
+        "x": 1251,
+        "y": 513,
         "width": 49,
         "height": 35
       },
@@ -2328,8 +2689,8 @@
     {
       "name": "PLAYU0",
       "rect": {
-        "x": 1097,
-        "y": 492,
+        "x": 2,
+        "y": 588,
         "width": 53,
         "height": 27
       },
@@ -2347,8 +2708,8 @@
     {
       "name": "PLAYV0",
       "rect": {
-        "x": 435,
-        "y": 530,
+        "x": 1355,
+        "y": 588,
         "width": 53,
         "height": 16
       },
@@ -2366,8 +2727,8 @@
     {
       "name": "PLAYW0",
       "rect": {
-        "x": 490,
-        "y": 530,
+        "x": 1410,
+        "y": 588,
         "width": 53,
         "height": 16
       },
@@ -2385,8 +2746,8 @@
     {
       "name": "PMAPA0",
       "rect": {
-        "x": 961,
-        "y": 492,
+        "x": 1863,
+        "y": 555,
         "width": 32,
         "height": 28
       },
@@ -2404,8 +2765,8 @@
     {
       "name": "PMAPB0",
       "rect": {
-        "x": 995,
-        "y": 492,
+        "x": 1897,
+        "y": 555,
         "width": 32,
         "height": 28
       },
@@ -2423,8 +2784,8 @@
     {
       "name": "PMAPC0",
       "rect": {
-        "x": 1029,
-        "y": 492,
+        "x": 1931,
+        "y": 555,
         "width": 32,
         "height": 28
       },
@@ -2442,8 +2803,8 @@
     {
       "name": "PMAPD0",
       "rect": {
-        "x": 1063,
-        "y": 492,
+        "x": 1965,
+        "y": 555,
         "width": 32,
         "height": 28
       },
@@ -2461,8 +2822,8 @@
     {
       "name": "POL5A0",
       "rect": {
-        "x": 814,
-        "y": 530,
+        "x": 1983,
+        "y": 588,
         "width": 55,
         "height": 10
       },
@@ -2480,8 +2841,8 @@
     {
       "name": "POSSA1",
       "rect": {
-        "x": 1017,
-        "y": 264,
+        "x": 1812,
+        "y": 279,
         "width": 41,
         "height": 57
       },
@@ -2499,8 +2860,8 @@
     {
       "name": "POSSA2",
       "rect": {
-        "x": 401,
-        "y": 264,
+        "x": 1196,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2518,8 +2879,8 @@
     {
       "name": "POSSA3",
       "rect": {
-        "x": 445,
-        "y": 264,
+        "x": 1240,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2537,8 +2898,8 @@
     {
       "name": "POSSA4",
       "rect": {
-        "x": 489,
-        "y": 264,
+        "x": 1284,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2556,8 +2917,8 @@
     {
       "name": "POSSA5",
       "rect": {
-        "x": 482,
-        "y": 323,
+        "x": 1278,
+        "y": 340,
         "width": 38,
         "height": 56
       },
@@ -2575,8 +2936,8 @@
     {
       "name": "POSSA6",
       "rect": {
-        "x": 50,
-        "y": 323,
+        "x": 846,
+        "y": 340,
         "width": 45,
         "height": 56
       },
@@ -2594,8 +2955,8 @@
     {
       "name": "POSSA7",
       "rect": {
-        "x": 1632,
-        "y": 264,
+        "x": 414,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -2613,8 +2974,8 @@
     {
       "name": "POSSA8",
       "rect": {
-        "x": 870,
-        "y": 323,
+        "x": 1666,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -2632,8 +2993,8 @@
     {
       "name": "POSSB1",
       "rect": {
-        "x": 1060,
-        "y": 264,
+        "x": 1855,
+        "y": 279,
         "width": 41,
         "height": 57
       },
@@ -2651,8 +3012,8 @@
     {
       "name": "POSSB2",
       "rect": {
-        "x": 533,
-        "y": 264,
+        "x": 1328,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2670,8 +3031,8 @@
     {
       "name": "POSSB3",
       "rect": {
-        "x": 577,
-        "y": 264,
+        "x": 1372,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2689,8 +3050,8 @@
     {
       "name": "POSSB4",
       "rect": {
-        "x": 621,
-        "y": 264,
+        "x": 1416,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2708,8 +3069,8 @@
     {
       "name": "POSSB5",
       "rect": {
-        "x": 522,
-        "y": 323,
+        "x": 1318,
+        "y": 340,
         "width": 38,
         "height": 56
       },
@@ -2727,8 +3088,8 @@
     {
       "name": "POSSB6",
       "rect": {
-        "x": 1680,
-        "y": 264,
+        "x": 462,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -2746,8 +3107,8 @@
     {
       "name": "POSSB7",
       "rect": {
-        "x": 1728,
-        "y": 264,
+        "x": 510,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -2765,8 +3126,8 @@
     {
       "name": "POSSB8",
       "rect": {
-        "x": 908,
-        "y": 323,
+        "x": 1704,
+        "y": 340,
         "width": 36,
         "height": 56
       },
@@ -2784,8 +3145,8 @@
     {
       "name": "POSSC1",
       "rect": {
-        "x": 665,
-        "y": 264,
+        "x": 1460,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2803,8 +3164,8 @@
     {
       "name": "POSSC2",
       "rect": {
-        "x": 709,
-        "y": 264,
+        "x": 1504,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2822,8 +3183,8 @@
     {
       "name": "POSSC3",
       "rect": {
-        "x": 753,
-        "y": 264,
+        "x": 1548,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2841,8 +3202,8 @@
     {
       "name": "POSSC4",
       "rect": {
-        "x": 797,
-        "y": 264,
+        "x": 1592,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2860,8 +3221,8 @@
     {
       "name": "POSSC5",
       "rect": {
-        "x": 361,
-        "y": 323,
+        "x": 1157,
+        "y": 340,
         "width": 39,
         "height": 56
       },
@@ -2879,8 +3240,8 @@
     {
       "name": "POSSC6",
       "rect": {
-        "x": 1776,
-        "y": 264,
+        "x": 558,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -2898,8 +3259,8 @@
     {
       "name": "POSSC7",
       "rect": {
-        "x": 1824,
-        "y": 264,
+        "x": 606,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -2917,8 +3278,8 @@
     {
       "name": "POSSC8",
       "rect": {
-        "x": 1144,
-        "y": 264,
+        "x": 1939,
+        "y": 279,
         "width": 36,
         "height": 57
       },
@@ -2936,8 +3297,8 @@
     {
       "name": "POSSD1",
       "rect": {
-        "x": 841,
-        "y": 264,
+        "x": 1636,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2955,8 +3316,8 @@
     {
       "name": "POSSD2",
       "rect": {
-        "x": 885,
-        "y": 264,
+        "x": 1680,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2974,8 +3335,8 @@
     {
       "name": "POSSD3",
       "rect": {
-        "x": 929,
-        "y": 264,
+        "x": 1724,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -2993,8 +3354,8 @@
     {
       "name": "POSSD4",
       "rect": {
-        "x": 973,
-        "y": 264,
+        "x": 1768,
+        "y": 279,
         "width": 42,
         "height": 57
       },
@@ -3012,8 +3373,8 @@
     {
       "name": "POSSD5",
       "rect": {
-        "x": 191,
-        "y": 438,
+        "x": 1126,
+        "y": 457,
         "width": 39,
         "height": 51
       },
@@ -3031,8 +3392,8 @@
     {
       "name": "POSSD6",
       "rect": {
-        "x": 1872,
-        "y": 264,
+        "x": 654,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -3050,8 +3411,8 @@
     {
       "name": "POSSD7",
       "rect": {
-        "x": 1920,
-        "y": 264,
+        "x": 702,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -3069,8 +3430,8 @@
     {
       "name": "POSSD8",
       "rect": {
-        "x": 1182,
-        "y": 264,
+        "x": 1977,
+        "y": 279,
         "width": 36,
         "height": 57
       },
@@ -3088,8 +3449,8 @@
     {
       "name": "POSSE1",
       "rect": {
-        "x": 1794,
-        "y": 323,
+        "x": 564,
+        "y": 399,
         "width": 26,
         "height": 56
       },
@@ -3107,8 +3468,8 @@
     {
       "name": "POSSE2",
       "rect": {
-        "x": 106,
-        "y": 381,
+        "x": 978,
+        "y": 399,
         "width": 45,
         "height": 55
       },
@@ -3126,8 +3487,8 @@
     {
       "name": "POSSE3",
       "rect": {
-        "x": 638,
-        "y": 381,
+        "x": 1510,
+        "y": 399,
         "width": 50,
         "height": 54
       },
@@ -3145,8 +3506,8 @@
     {
       "name": "POSSE4",
       "rect": {
-        "x": 1417,
-        "y": 381,
+        "x": 330,
+        "y": 457,
         "width": 37,
         "height": 53
       },
@@ -3164,8 +3525,8 @@
     {
       "name": "POSSE5",
       "rect": {
-        "x": 29,
-        "y": 438,
+        "x": 964,
+        "y": 457,
         "width": 24,
         "height": 52
       },
@@ -3183,8 +3544,8 @@
     {
       "name": "POSSE6",
       "rect": {
-        "x": 1604,
-        "y": 381,
+        "x": 517,
+        "y": 457,
         "width": 32,
         "height": 53
       },
@@ -3202,8 +3563,8 @@
     {
       "name": "POSSE7",
       "rect": {
-        "x": 690,
-        "y": 381,
+        "x": 1562,
+        "y": 399,
         "width": 50,
         "height": 54
       },
@@ -3221,8 +3582,8 @@
     {
       "name": "POSSE8",
       "rect": {
-        "x": 159,
-        "y": 264,
+        "x": 954,
+        "y": 279,
         "width": 48,
         "height": 57
       },
@@ -3240,8 +3601,8 @@
     {
       "name": "POSSF1",
       "rect": {
-        "x": 1680,
-        "y": 323,
+        "x": 450,
+        "y": 399,
         "width": 27,
         "height": 56
       },
@@ -3259,8 +3620,8 @@
     {
       "name": "POSSF2",
       "rect": {
-        "x": 1968,
-        "y": 264,
+        "x": 750,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -3278,8 +3639,8 @@
     {
       "name": "POSSF3",
       "rect": {
-        "x": 1934,
-        "y": 323,
+        "x": 764,
+        "y": 399,
         "width": 53,
         "height": 55
       },
@@ -3297,8 +3658,8 @@
     {
       "name": "POSSF4",
       "rect": {
-        "x": 742,
-        "y": 381,
+        "x": 1614,
+        "y": 399,
         "width": 46,
         "height": 54
       },
@@ -3316,8 +3677,8 @@
     {
       "name": "POSSF5",
       "rect": {
-        "x": 1638,
-        "y": 381,
+        "x": 551,
+        "y": 457,
         "width": 26,
         "height": 53
       },
@@ -3335,8 +3696,8 @@
     {
       "name": "POSSF6",
       "rect": {
-        "x": 1456,
-        "y": 381,
+        "x": 369,
+        "y": 457,
         "width": 37,
         "height": 53
       },
@@ -3354,8 +3715,8 @@
     {
       "name": "POSSF7",
       "rect": {
-        "x": 580,
-        "y": 381,
+        "x": 1452,
+        "y": 399,
         "width": 56,
         "height": 54
       },
@@ -3373,8 +3734,8 @@
     {
       "name": "POSSF8",
       "rect": {
-        "x": 1362,
-        "y": 264,
+        "x": 144,
+        "y": 340,
         "width": 56,
         "height": 56
       },
@@ -3392,8 +3753,8 @@
     {
       "name": "POSSG1",
       "rect": {
-        "x": 194,
-        "y": 381,
+        "x": 1066,
+        "y": 399,
         "width": 39,
         "height": 55
       },
@@ -3411,8 +3772,8 @@
     {
       "name": "POSSG2",
       "rect": {
-        "x": 274,
-        "y": 381,
+        "x": 1146,
+        "y": 399,
         "width": 36,
         "height": 55
       },
@@ -3430,8 +3791,8 @@
     {
       "name": "POSSG3",
       "rect": {
-        "x": 837,
-        "y": 381,
+        "x": 1709,
+        "y": 399,
         "width": 40,
         "height": 54
       },
@@ -3449,8 +3810,8 @@
     {
       "name": "POSSG4",
       "rect": {
-        "x": 1796,
-        "y": 381,
+        "x": 709,
+        "y": 457,
         "width": 41,
         "height": 52
       },
@@ -3468,8 +3829,8 @@
     {
       "name": "POSSG5",
       "rect": {
-        "x": 1532,
-        "y": 381,
+        "x": 445,
+        "y": 457,
         "width": 34,
         "height": 53
       },
@@ -3487,8 +3848,8 @@
     {
       "name": "POSSG6",
       "rect": {
-        "x": 1839,
-        "y": 381,
+        "x": 752,
+        "y": 457,
         "width": 41,
         "height": 52
       },
@@ -3506,8 +3867,8 @@
     {
       "name": "POSSG7",
       "rect": {
-        "x": 921,
-        "y": 381,
+        "x": 1793,
+        "y": 399,
         "width": 39,
         "height": 54
       },
@@ -3525,8 +3886,8 @@
     {
       "name": "POSSG8",
       "rect": {
-        "x": 1103,
-        "y": 264,
+        "x": 1898,
+        "y": 279,
         "width": 39,
         "height": 57
       },
@@ -3544,8 +3905,8 @@
     {
       "name": "POSSH0",
       "rect": {
-        "x": 57,
-        "y": 381,
+        "x": 929,
+        "y": 399,
         "width": 47,
         "height": 55
       },
@@ -3563,8 +3924,8 @@
     {
       "name": "POSSI0",
       "rect": {
-        "x": 870,
-        "y": 438,
+        "x": 1901,
+        "y": 457,
         "width": 38,
         "height": 42
       },
@@ -3582,8 +3943,8 @@
     {
       "name": "POSSJ0",
       "rect": {
-        "x": 234,
-        "y": 492,
+        "x": 1391,
+        "y": 513,
         "width": 44,
         "height": 34
       },
@@ -3601,8 +3962,8 @@
     {
       "name": "POSSK0",
       "rect": {
-        "x": 1152,
-        "y": 492,
+        "x": 57,
+        "y": 588,
         "width": 48,
         "height": 27
       },
@@ -3620,8 +3981,8 @@
     {
       "name": "POSSL0",
       "rect": {
-        "x": 1965,
-        "y": 492,
+        "x": 870,
+        "y": 588,
         "width": 50,
         "height": 19
       },
@@ -3639,8 +4000,8 @@
     {
       "name": "POSSM0",
       "rect": {
-        "x": 179,
-        "y": 200,
+        "x": 1003,
+        "y": 215,
         "width": 44,
         "height": 61
       },
@@ -3658,8 +4019,8 @@
     {
       "name": "POSSN0",
       "rect": {
-        "x": 2,
-        "y": 323,
+        "x": 798,
+        "y": 340,
         "width": 46,
         "height": 56
       },
@@ -3677,8 +4038,8 @@
     {
       "name": "POSSO0",
       "rect": {
-        "x": 1989,
-        "y": 323,
+        "x": 819,
+        "y": 399,
         "width": 53,
         "height": 55
       },
@@ -3696,8 +4057,8 @@
     {
       "name": "POSSP0",
       "rect": {
-        "x": 520,
-        "y": 438,
+        "x": 1513,
+        "y": 457,
         "width": 57,
         "height": 47
       },
@@ -3715,8 +4076,8 @@
     {
       "name": "POSSQ0",
       "rect": {
-        "x": 944,
-        "y": 438,
+        "x": 1975,
+        "y": 457,
         "width": 65,
         "height": 40
       },
@@ -3734,8 +4095,8 @@
     {
       "name": "POSSR0",
       "rect": {
-        "x": 696,
-        "y": 492,
+        "x": 1416,
+        "y": 555,
         "width": 67,
         "height": 29
       },
@@ -3753,8 +4114,8 @@
     {
       "name": "POSSS0",
       "rect": {
-        "x": 1541,
-        "y": 492,
+        "x": 446,
+        "y": 588,
         "width": 64,
         "height": 23
       },
@@ -3772,8 +4133,8 @@
     {
       "name": "POSST0",
       "rect": {
-        "x": 163,
-        "y": 530,
+        "x": 1083,
+        "y": 588,
         "width": 65,
         "height": 17
       },
@@ -3791,8 +4152,8 @@
     {
       "name": "POSSU0",
       "rect": {
-        "x": 297,
-        "y": 530,
+        "x": 1217,
+        "y": 588,
         "width": 67,
         "height": 16
       },
@@ -3810,8 +4171,8 @@
     {
       "name": "PSTRA0",
       "rect": {
-        "x": 51,
-        "y": 530,
+        "x": 971,
+        "y": 588,
         "width": 32,
         "height": 19
       },
@@ -3827,10 +4188,86 @@
       ]
     },
     {
+      "name": "PUFFA0",
+      "rect": {
+        "x": 280,
+        "y": 617,
+        "width": 5,
+        "height": 5
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFA0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFB0",
+      "rect": {
+        "x": 1969,
+        "y": 588,
+        "width": 12,
+        "height": 11
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFB0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFC0",
+      "rect": {
+        "x": 1807,
+        "y": 588,
+        "width": 15,
+        "height": 14
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFC0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "PUFFD0",
+      "rect": {
+        "x": 1702,
+        "y": 588,
+        "width": 17,
+        "height": 15
+      },
+      "kind": "sprite",
+      "doom_name": "PUFFD0",
+      "sprite": "PUFF",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "PVISA0",
       "rect": {
-        "x": 745,
-        "y": 530,
+        "x": 1900,
+        "y": 588,
         "width": 28,
         "height": 13
       },
@@ -3848,8 +4285,8 @@
     {
       "name": "PVISB0",
       "rect": {
-        "x": 775,
-        "y": 530,
+        "x": 1930,
+        "y": 588,
         "width": 28,
         "height": 13
       },
@@ -3867,8 +4304,8 @@
     {
       "name": "ROCKA0",
       "rect": {
-        "x": 1529,
-        "y": 492,
+        "x": 434,
+        "y": 588,
         "width": 10,
         "height": 24
       },
@@ -3886,8 +4323,8 @@
     {
       "name": "SARGA1",
       "rect": {
-        "x": 1062,
-        "y": 200,
+        "x": 1886,
+        "y": 215,
         "width": 38,
         "height": 59
       },
@@ -3905,8 +4342,8 @@
     {
       "name": "SARGA2A8",
       "rect": {
-        "x": 1795,
-        "y": 200,
+        "x": 575,
+        "y": 279,
         "width": 54,
         "height": 57
       },
@@ -3929,8 +4366,8 @@
     {
       "name": "SARGA3A7",
       "rect": {
-        "x": 1322,
-        "y": 200,
+        "x": 102,
+        "y": 279,
         "width": 58,
         "height": 58
       },
@@ -3953,8 +4390,8 @@
     {
       "name": "SARGA4A6",
       "rect": {
-        "x": 259,
-        "y": 264,
+        "x": 1054,
+        "y": 279,
         "width": 47,
         "height": 57
       },
@@ -3977,8 +4414,8 @@
     {
       "name": "SARGA5",
       "rect": {
-        "x": 784,
-        "y": 200,
+        "x": 1608,
+        "y": 215,
         "width": 38,
         "height": 60
       },
@@ -3996,8 +4433,8 @@
     {
       "name": "SARGB1",
       "rect": {
-        "x": 1222,
-        "y": 200,
+        "x": 2,
+        "y": 279,
         "width": 34,
         "height": 59
       },
@@ -4015,8 +4452,8 @@
     {
       "name": "SARGB2B8",
       "rect": {
-        "x": 1551,
-        "y": 200,
+        "x": 331,
+        "y": 279,
         "width": 49,
         "height": 58
       },
@@ -4039,8 +4476,8 @@
     {
       "name": "SARGB3B7",
       "rect": {
-        "x": 1440,
-        "y": 200,
+        "x": 220,
+        "y": 279,
         "width": 54,
         "height": 58
       },
@@ -4063,8 +4500,8 @@
     {
       "name": "SARGB4B6",
       "rect": {
-        "x": 308,
-        "y": 264,
+        "x": 1103,
+        "y": 279,
         "width": 46,
         "height": 57
       },
@@ -4087,8 +4524,8 @@
     {
       "name": "SARGB5",
       "rect": {
-        "x": 1220,
-        "y": 264,
+        "x": 2,
+        "y": 340,
         "width": 34,
         "height": 57
       },
@@ -4106,8 +4543,8 @@
     {
       "name": "SARGC1",
       "rect": {
-        "x": 1102,
-        "y": 200,
+        "x": 1926,
+        "y": 215,
         "width": 38,
         "height": 59
       },
@@ -4125,8 +4562,8 @@
     {
       "name": "SARGC2C8",
       "rect": {
-        "x": 1750,
-        "y": 200,
+        "x": 530,
+        "y": 279,
         "width": 43,
         "height": 58
       },
@@ -4149,8 +4586,8 @@
     {
       "name": "SARGC3C7",
       "rect": {
-        "x": 1851,
-        "y": 200,
+        "x": 631,
+        "y": 279,
         "width": 54,
         "height": 57
       },
@@ -4173,8 +4610,8 @@
     {
       "name": "SARGC4C6",
       "rect": {
-        "x": 209,
-        "y": 264,
+        "x": 1004,
+        "y": 279,
         "width": 48,
         "height": 57
       },
@@ -4197,8 +4634,8 @@
     {
       "name": "SARGC5",
       "rect": {
-        "x": 824,
-        "y": 200,
+        "x": 1648,
+        "y": 215,
         "width": 38,
         "height": 60
       },
@@ -4216,8 +4653,8 @@
     {
       "name": "SARGD1",
       "rect": {
-        "x": 1142,
-        "y": 200,
+        "x": 1966,
+        "y": 215,
         "width": 38,
         "height": 59
       },
@@ -4235,8 +4672,8 @@
     {
       "name": "SARGD2D8",
       "rect": {
-        "x": 1653,
-        "y": 200,
+        "x": 433,
+        "y": 279,
         "width": 47,
         "height": 58
       },
@@ -4259,8 +4696,8 @@
     {
       "name": "SARGD3D7",
       "rect": {
-        "x": 1907,
-        "y": 200,
+        "x": 687,
+        "y": 279,
         "width": 54,
         "height": 57
       },
@@ -4283,8 +4720,8 @@
     {
       "name": "SARGD4D6",
       "rect": {
-        "x": 2,
-        "y": 264,
+        "x": 797,
+        "y": 279,
         "width": 51,
         "height": 57
       },
@@ -4307,8 +4744,8 @@
     {
       "name": "SARGD5",
       "rect": {
-        "x": 1256,
-        "y": 264,
+        "x": 38,
+        "y": 340,
         "width": 34,
         "height": 57
       },
@@ -4326,8 +4763,8 @@
     {
       "name": "SARGE1",
       "rect": {
-        "x": 864,
-        "y": 200,
+        "x": 1688,
+        "y": 215,
         "width": 38,
         "height": 60
       },
@@ -4345,8 +4782,8 @@
     {
       "name": "SARGE2E8",
       "rect": {
-        "x": 1496,
-        "y": 200,
+        "x": 276,
+        "y": 279,
         "width": 53,
         "height": 58
       },
@@ -4369,8 +4806,8 @@
     {
       "name": "SARGE3E7",
       "rect": {
-        "x": 1382,
-        "y": 200,
+        "x": 162,
+        "y": 279,
         "width": 56,
         "height": 58
       },
@@ -4393,8 +4830,8 @@
     {
       "name": "SARGE4E6",
       "rect": {
-        "x": 108,
-        "y": 264,
+        "x": 903,
+        "y": 279,
         "width": 49,
         "height": 57
       },
@@ -4417,8 +4854,8 @@
     {
       "name": "SARGE5",
       "rect": {
-        "x": 1292,
-        "y": 264,
+        "x": 74,
+        "y": 340,
         "width": 34,
         "height": 57
       },
@@ -4436,8 +4873,8 @@
     {
       "name": "SARGF1",
       "rect": {
-        "x": 904,
-        "y": 200,
+        "x": 1728,
+        "y": 215,
         "width": 38,
         "height": 60
       },
@@ -4455,8 +4892,8 @@
     {
       "name": "SARGF2F8",
       "rect": {
-        "x": 1963,
-        "y": 200,
+        "x": 743,
+        "y": 279,
         "width": 52,
         "height": 57
       },
@@ -4479,8 +4916,8 @@
     {
       "name": "SARGF3F7",
       "rect": {
-        "x": 1258,
-        "y": 200,
+        "x": 38,
+        "y": 279,
         "width": 62,
         "height": 58
       },
@@ -4503,8 +4940,8 @@
     {
       "name": "SARGF4F6",
       "rect": {
-        "x": 55,
-        "y": 264,
+        "x": 850,
+        "y": 279,
         "width": 51,
         "height": 57
       },
@@ -4527,8 +4964,8 @@
     {
       "name": "SARGF5",
       "rect": {
-        "x": 1055,
-        "y": 323,
+        "x": 1851,
+        "y": 340,
         "width": 34,
         "height": 56
       },
@@ -4546,8 +4983,8 @@
     {
       "name": "SARGG1",
       "rect": {
-        "x": 944,
-        "y": 200,
+        "x": 1768,
+        "y": 215,
         "width": 34,
         "height": 60
       },
@@ -4565,8 +5002,8 @@
     {
       "name": "SARGG2G8",
       "rect": {
-        "x": 1702,
-        "y": 200,
+        "x": 482,
+        "y": 279,
         "width": 46,
         "height": 58
       },
@@ -4589,8 +5026,8 @@
     {
       "name": "SARGG3G7",
       "rect": {
-        "x": 1602,
-        "y": 200,
+        "x": 382,
+        "y": 279,
         "width": 49,
         "height": 58
       },
@@ -4613,8 +5050,8 @@
     {
       "name": "SARGG4G6",
       "rect": {
-        "x": 356,
-        "y": 264,
+        "x": 1151,
+        "y": 279,
         "width": 43,
         "height": 57
       },
@@ -4637,8 +5074,8 @@
     {
       "name": "SARGG5",
       "rect": {
-        "x": 1266,
-        "y": 323,
+        "x": 36,
+        "y": 399,
         "width": 32,
         "height": 56
       },
@@ -4656,8 +5093,8 @@
     {
       "name": "SARGH1",
       "rect": {
-        "x": 381,
-        "y": 438,
+        "x": 1374,
+        "y": 457,
         "width": 33,
         "height": 50
       },
@@ -4675,8 +5112,8 @@
     {
       "name": "SARGH2H8",
       "rect": {
-        "x": 149,
-        "y": 438,
+        "x": 1084,
+        "y": 457,
         "width": 40,
         "height": 51
       },
@@ -4699,8 +5136,8 @@
     {
       "name": "SARGH3H7",
       "rect": {
-        "x": 1751,
-        "y": 381,
+        "x": 664,
+        "y": 457,
         "width": 43,
         "height": 52
       },
@@ -4723,8 +5160,8 @@
     {
       "name": "SARGH4H6",
       "rect": {
-        "x": 104,
-        "y": 438,
+        "x": 1039,
+        "y": 457,
         "width": 43,
         "height": 51
       },
@@ -4747,8 +5184,8 @@
     {
       "name": "SARGH5",
       "rect": {
-        "x": 269,
-        "y": 438,
+        "x": 1204,
+        "y": 457,
         "width": 33,
         "height": 51
       },
@@ -4766,8 +5203,8 @@
     {
       "name": "SARGI0",
       "rect": {
-        "x": 1182,
-        "y": 200,
+        "x": 2006,
+        "y": 215,
         "width": 38,
         "height": 59
       },
@@ -4785,8 +5222,8 @@
     {
       "name": "SARGJ0",
       "rect": {
-        "x": 742,
-        "y": 200,
+        "x": 1566,
+        "y": 215,
         "width": 40,
         "height": 60
       },
@@ -4804,8 +5241,8 @@
     {
       "name": "SARGK0",
       "rect": {
-        "x": 1284,
-        "y": 381,
+        "x": 197,
+        "y": 457,
         "width": 43,
         "height": 53
       },
@@ -4823,8 +5260,8 @@
     {
       "name": "SARGL0",
       "rect": {
-        "x": 1078,
-        "y": 438,
+        "x": 69,
+        "y": 513,
         "width": 43,
         "height": 40
       },
@@ -4842,8 +5279,8 @@
     {
       "name": "SARGM0",
       "rect": {
-        "x": 534,
-        "y": 492,
+        "x": 652,
+        "y": 555,
         "width": 48,
         "height": 30
       },
@@ -4861,8 +5298,8 @@
     {
       "name": "SARGN0",
       "rect": {
-        "x": 832,
-        "y": 492,
+        "x": 1552,
+        "y": 555,
         "width": 49,
         "height": 29
       },
@@ -4880,8 +5317,8 @@
     {
       "name": "SBOXA0",
       "rect": {
-        "x": 709,
-        "y": 530,
+        "x": 1864,
+        "y": 588,
         "width": 34,
         "height": 13
       },
@@ -4899,8 +5336,8 @@
     {
       "name": "SHELA0",
       "rect": {
-        "x": 892,
-        "y": 530,
+        "x": 23,
+        "y": 617,
         "width": 14,
         "height": 10
       },
@@ -4918,8 +5355,8 @@
     {
       "name": "SHOTA0",
       "rect": {
-        "x": 669,
-        "y": 530,
+        "x": 1824,
+        "y": 588,
         "width": 38,
         "height": 13
       },
@@ -4935,10 +5372,124 @@
       ]
     },
     {
+      "name": "SHTFA0",
+      "rect": {
+        "x": 1631,
+        "y": 457,
+        "width": 36,
+        "height": 47
+      },
+      "kind": "sprite",
+      "doom_name": "SHTFA0",
+      "sprite": "SHTF",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTFB0",
+      "rect": {
+        "x": 646,
+        "y": 399,
+        "width": 58,
+        "height": 55
+      },
+      "kind": "sprite",
+      "doom_name": "SHTFB0",
+      "sprite": "SHTF",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGA0",
+      "rect": {
+        "x": 2,
+        "y": 215,
+        "width": 67,
+        "height": 62
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGA0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "A",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGB0",
+      "rect": {
+        "x": 207,
+        "y": 2,
+        "width": 88,
+        "height": 128
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGB0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "B",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGC0",
+      "rect": {
+        "x": 2,
+        "y": 2,
+        "width": 93,
+        "height": 143
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGC0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "C",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
+      "name": "SHTGD0",
+      "rect": {
+        "x": 97,
+        "y": 2,
+        "width": 108,
+        "height": 129
+      },
+      "kind": "sprite",
+      "doom_name": "SHTGD0",
+      "sprite": "SHTG",
+      "aliases": [
+        {
+          "frame": "D",
+          "angle": 0,
+          "mirrored": false
+        }
+      ]
+    },
+    {
       "name": "SKULA1",
       "rect": {
-        "x": 1351,
-        "y": 438,
+        "x": 428,
+        "y": 513,
         "width": 30,
         "height": 39
       },
@@ -4956,8 +5507,8 @@
     {
       "name": "SKULA5",
       "rect": {
-        "x": 1383,
-        "y": 438,
+        "x": 460,
+        "y": 513,
         "width": 30,
         "height": 39
       },
@@ -4975,8 +5526,8 @@
     {
       "name": "SKULA6A4",
       "rect": {
-        "x": 1474,
-        "y": 438,
+        "x": 551,
+        "y": 513,
         "width": 31,
         "height": 38
       },
@@ -4999,8 +5550,8 @@
     {
       "name": "SKULA7A3",
       "rect": {
-        "x": 1507,
-        "y": 438,
+        "x": 584,
+        "y": 513,
         "width": 31,
         "height": 38
       },
@@ -5023,8 +5574,8 @@
     {
       "name": "SKULA8A2",
       "rect": {
-        "x": 1540,
-        "y": 438,
+        "x": 617,
+        "y": 513,
         "width": 30,
         "height": 38
       },
@@ -5047,8 +5598,8 @@
     {
       "name": "SKULB1",
       "rect": {
-        "x": 1715,
-        "y": 438,
+        "x": 792,
+        "y": 513,
         "width": 30,
         "height": 37
       },
@@ -5066,8 +5617,8 @@
     {
       "name": "SKULB5",
       "rect": {
-        "x": 1747,
-        "y": 438,
+        "x": 824,
+        "y": 513,
         "width": 30,
         "height": 37
       },
@@ -5085,8 +5636,8 @@
     {
       "name": "SKULB6B4",
       "rect": {
-        "x": 38,
-        "y": 492,
+        "x": 1153,
+        "y": 513,
         "width": 31,
         "height": 36
       },
@@ -5109,8 +5660,8 @@
     {
       "name": "SKULB7B3",
       "rect": {
-        "x": 71,
-        "y": 492,
+        "x": 1186,
+        "y": 513,
         "width": 31,
         "height": 36
       },
@@ -5133,8 +5684,8 @@
     {
       "name": "SKULB8B2",
       "rect": {
-        "x": 104,
-        "y": 492,
+        "x": 1219,
+        "y": 513,
         "width": 30,
         "height": 36
       },
@@ -5157,8 +5708,8 @@
     {
       "name": "SKULC1",
       "rect": {
-        "x": 1572,
-        "y": 438,
+        "x": 649,
+        "y": 513,
         "width": 34,
         "height": 37
       },
@@ -5176,8 +5727,8 @@
     {
       "name": "SKULC5",
       "rect": {
-        "x": 1932,
-        "y": 438,
+        "x": 1009,
+        "y": 513,
         "width": 34,
         "height": 36
       },
@@ -5195,8 +5746,8 @@
     {
       "name": "SKULC6C4",
       "rect": {
-        "x": 1779,
-        "y": 438,
+        "x": 856,
+        "y": 513,
         "width": 38,
         "height": 36
       },
@@ -5219,8 +5770,8 @@
     {
       "name": "SKULC7C3",
       "rect": {
-        "x": 1283,
-        "y": 438,
+        "x": 360,
+        "y": 513,
         "width": 32,
         "height": 39
       },
@@ -5243,8 +5794,8 @@
     {
       "name": "SKULC8C2",
       "rect": {
-        "x": 1608,
-        "y": 438,
+        "x": 685,
+        "y": 513,
         "width": 34,
         "height": 37
       },
@@ -5267,8 +5818,8 @@
     {
       "name": "SKULD1",
       "rect": {
-        "x": 1968,
-        "y": 438,
+        "x": 1045,
+        "y": 513,
         "width": 34,
         "height": 36
       },
@@ -5286,8 +5837,8 @@
     {
       "name": "SKULD5",
       "rect": {
-        "x": 2004,
-        "y": 438,
+        "x": 1081,
+        "y": 513,
         "width": 34,
         "height": 36
       },
@@ -5305,8 +5856,8 @@
     {
       "name": "SKULD6D4",
       "rect": {
-        "x": 1858,
-        "y": 438,
+        "x": 935,
+        "y": 513,
         "width": 35,
         "height": 36
       },
@@ -5329,8 +5880,8 @@
     {
       "name": "SKULD7D3",
       "rect": {
-        "x": 1123,
-        "y": 438,
+        "x": 152,
+        "y": 513,
         "width": 34,
         "height": 40
       },
@@ -5353,8 +5904,8 @@
     {
       "name": "SKULD8D2",
       "rect": {
-        "x": 1895,
-        "y": 438,
+        "x": 972,
+        "y": 513,
         "width": 35,
         "height": 36
       },
@@ -5377,8 +5928,8 @@
     {
       "name": "SKULE1",
       "rect": {
-        "x": 1644,
-        "y": 438,
+        "x": 721,
+        "y": 513,
         "width": 34,
         "height": 37
       },
@@ -5396,8 +5947,8 @@
     {
       "name": "SKULE5",
       "rect": {
-        "x": 2,
-        "y": 492,
+        "x": 1117,
+        "y": 513,
         "width": 34,
         "height": 36
       },
@@ -5415,8 +5966,8 @@
     {
       "name": "SKULE6E4",
       "rect": {
-        "x": 1819,
-        "y": 438,
+        "x": 896,
+        "y": 513,
         "width": 37,
         "height": 36
       },
@@ -5439,8 +5990,8 @@
     {
       "name": "SKULE7E3",
       "rect": {
-        "x": 1317,
-        "y": 438,
+        "x": 394,
+        "y": 513,
         "width": 32,
         "height": 39
       },
@@ -5463,8 +6014,8 @@
     {
       "name": "SKULE8E2",
       "rect": {
-        "x": 1680,
-        "y": 438,
+        "x": 757,
+        "y": 513,
         "width": 33,
         "height": 37
       },
@@ -5487,8 +6038,8 @@
     {
       "name": "SKULF0",
       "rect": {
-        "x": 681,
-        "y": 438,
+        "x": 1712,
+        "y": 457,
         "width": 38,
         "height": 46
       },
@@ -5506,8 +6057,8 @@
     {
       "name": "SKULG0",
       "rect": {
-        "x": 910,
-        "y": 438,
+        "x": 1941,
+        "y": 457,
         "width": 32,
         "height": 42
       },
@@ -5525,8 +6076,8 @@
     {
       "name": "SKULH0",
       "rect": {
-        "x": 638,
-        "y": 438,
+        "x": 1669,
+        "y": 457,
         "width": 41,
         "height": 46
       },
@@ -5544,8 +6095,8 @@
     {
       "name": "SKULI0",
       "rect": {
-        "x": 55,
-        "y": 438,
+        "x": 990,
+        "y": 457,
         "width": 47,
         "height": 51
       },
@@ -5563,8 +6114,8 @@
     {
       "name": "SKULJ0",
       "rect": {
-        "x": 1477,
-        "y": 264,
+        "x": 259,
+        "y": 340,
         "width": 55,
         "height": 56
       },
@@ -5582,8 +6133,8 @@
     {
       "name": "SKULK0",
       "rect": {
-        "x": 653,
-        "y": 132,
+        "x": 1381,
+        "y": 147,
         "width": 60,
         "height": 64
       },
@@ -5601,7 +6152,7 @@
     {
       "name": "SMITA0",
       "rect": {
-        "x": 443,
+        "x": 1166,
         "y": 2,
         "width": 62,
         "height": 69
@@ -5620,8 +6171,8 @@
     {
       "name": "SOULA0",
       "rect": {
-        "x": 1421,
-        "y": 492,
+        "x": 326,
+        "y": 588,
         "width": 25,
         "height": 25
       },
@@ -5639,8 +6190,8 @@
     {
       "name": "SOULB0",
       "rect": {
-        "x": 1448,
-        "y": 492,
+        "x": 353,
+        "y": 588,
         "width": 25,
         "height": 25
       },
@@ -5658,8 +6209,8 @@
     {
       "name": "SOULC0",
       "rect": {
-        "x": 1475,
-        "y": 492,
+        "x": 380,
+        "y": 588,
         "width": 25,
         "height": 25
       },
@@ -5677,8 +6228,8 @@
     {
       "name": "SOULD0",
       "rect": {
-        "x": 1502,
-        "y": 492,
+        "x": 407,
+        "y": 588,
         "width": 25,
         "height": 25
       },
@@ -5696,8 +6247,8 @@
     {
       "name": "SPOSA1",
       "rect": {
-        "x": 312,
-        "y": 381,
+        "x": 1184,
+        "y": 399,
         "width": 35,
         "height": 55
       },
@@ -5715,8 +6266,8 @@
     {
       "name": "SPOSA2A8",
       "rect": {
-        "x": 456,
-        "y": 381,
+        "x": 1328,
+        "y": 399,
         "width": 31,
         "height": 55
       },
@@ -5739,8 +6290,8 @@
     {
       "name": "SPOSA3A7",
       "rect": {
-        "x": 1568,
-        "y": 381,
+        "x": 481,
+        "y": 457,
         "width": 34,
         "height": 53
       },
@@ -5763,8 +6314,8 @@
     {
       "name": "SPOSA4A6",
       "rect": {
-        "x": 334,
-        "y": 438,
+        "x": 1327,
+        "y": 457,
         "width": 45,
         "height": 50
       },
@@ -5787,8 +6338,8 @@
     {
       "name": "SPOSA5",
       "rect": {
-        "x": 232,
-        "y": 438,
+        "x": 1167,
+        "y": 457,
         "width": 35,
         "height": 51
       },
@@ -5806,8 +6357,8 @@
     {
       "name": "SPOSB1",
       "rect": {
-        "x": 349,
-        "y": 381,
+        "x": 1221,
+        "y": 399,
         "width": 35,
         "height": 55
       },
@@ -5825,8 +6376,8 @@
     {
       "name": "SPOSB2B8",
       "rect": {
-        "x": 551,
-        "y": 381,
+        "x": 1423,
+        "y": 399,
         "width": 27,
         "height": 55
       },
@@ -5849,8 +6400,8 @@
     {
       "name": "SPOSB3B7",
       "rect": {
-        "x": 1328,
-        "y": 264,
+        "x": 110,
+        "y": 340,
         "width": 32,
         "height": 57
       },
@@ -5873,8 +6424,8 @@
     {
       "name": "SPOSB4B6",
       "rect": {
-        "x": 879,
-        "y": 381,
+        "x": 1751,
+        "y": 399,
         "width": 40,
         "height": 54
       },
@@ -5897,8 +6448,8 @@
     {
       "name": "SPOSB5",
       "rect": {
-        "x": 1078,
-        "y": 381,
+        "x": 1950,
+        "y": 399,
         "width": 34,
         "height": 54
       },
@@ -5916,8 +6467,8 @@
     {
       "name": "SPOSC1",
       "rect": {
-        "x": 1300,
-        "y": 323,
+        "x": 70,
+        "y": 399,
         "width": 32,
         "height": 56
       },
@@ -5935,8 +6486,8 @@
     {
       "name": "SPOSC2C8",
       "rect": {
-        "x": 520,
-        "y": 381,
+        "x": 1392,
+        "y": 399,
         "width": 29,
         "height": 55
       },
@@ -5959,8 +6510,8 @@
     {
       "name": "SPOSC3C7",
       "rect": {
-        "x": 562,
-        "y": 323,
+        "x": 1358,
+        "y": 340,
         "width": 38,
         "height": 56
       },
@@ -5983,8 +6534,8 @@
     {
       "name": "SPOSC4C6",
       "rect": {
-        "x": 962,
-        "y": 381,
+        "x": 1834,
+        "y": 399,
         "width": 38,
         "height": 54
       },
@@ -6007,8 +6558,8 @@
     {
       "name": "SPOSC5",
       "rect": {
-        "x": 386,
-        "y": 381,
+        "x": 1258,
+        "y": 399,
         "width": 34,
         "height": 55
       },
@@ -6026,8 +6577,8 @@
     {
       "name": "SPOSD1",
       "rect": {
-        "x": 1091,
-        "y": 323,
+        "x": 1887,
+        "y": 340,
         "width": 34,
         "height": 56
       },
@@ -6045,8 +6596,8 @@
     {
       "name": "SPOSD2D8",
       "rect": {
-        "x": 1709,
-        "y": 323,
+        "x": 479,
+        "y": 399,
         "width": 27,
         "height": 56
       },
@@ -6069,8 +6620,8 @@
     {
       "name": "SPOSD3D7",
       "rect": {
-        "x": 1431,
-        "y": 323,
+        "x": 201,
+        "y": 399,
         "width": 30,
         "height": 56
       },
@@ -6093,8 +6644,8 @@
     {
       "name": "SPOSD4D6",
       "rect": {
-        "x": 235,
-        "y": 381,
+        "x": 1107,
+        "y": 399,
         "width": 37,
         "height": 55
       },
@@ -6117,8 +6668,8 @@
     {
       "name": "SPOSD5",
       "rect": {
-        "x": 1041,
-        "y": 381,
+        "x": 1913,
+        "y": 399,
         "width": 35,
         "height": 54
       },
@@ -6136,8 +6687,8 @@
     {
       "name": "SPOSE1",
       "rect": {
-        "x": 1850,
-        "y": 323,
+        "x": 620,
+        "y": 399,
         "width": 24,
         "height": 56
       },
@@ -6155,8 +6706,8 @@
     {
       "name": "SPOSE2E8",
       "rect": {
-        "x": 1002,
-        "y": 381,
+        "x": 1874,
+        "y": 399,
         "width": 37,
         "height": 54
       },
@@ -6179,8 +6730,8 @@
     {
       "name": "SPOSE3E7",
       "rect": {
-        "x": 1238,
-        "y": 381,
+        "x": 151,
+        "y": 457,
         "width": 44,
         "height": 53
       },
@@ -6203,8 +6754,8 @@
     {
       "name": "SPOSE4E6",
       "rect": {
-        "x": 1925,
-        "y": 381,
+        "x": 838,
+        "y": 457,
         "width": 34,
         "height": 52
       },
@@ -6227,8 +6778,8 @@
     {
       "name": "SPOSE5",
       "rect": {
-        "x": 1997,
-        "y": 381,
+        "x": 910,
+        "y": 457,
         "width": 25,
         "height": 52
       },
@@ -6246,8 +6797,8 @@
     {
       "name": "SPOSF1",
       "rect": {
-        "x": 1822,
-        "y": 323,
+        "x": 592,
+        "y": 399,
         "width": 26,
         "height": 56
       },
@@ -6265,8 +6816,8 @@
     {
       "name": "SPOSF2F8",
       "rect": {
-        "x": 97,
-        "y": 323,
+        "x": 893,
+        "y": 340,
         "width": 43,
         "height": 56
       },
@@ -6289,8 +6840,8 @@
     {
       "name": "SPOSF3F7",
       "rect": {
-        "x": 1185,
-        "y": 381,
+        "x": 98,
+        "y": 457,
         "width": 51,
         "height": 53
       },
@@ -6313,8 +6864,8 @@
     {
       "name": "SPOSF4F6",
       "rect": {
-        "x": 1882,
-        "y": 381,
+        "x": 795,
+        "y": 457,
         "width": 41,
         "height": 52
       },
@@ -6337,8 +6888,8 @@
     {
       "name": "SPOSF5",
       "rect": {
-        "x": 2,
-        "y": 438,
+        "x": 937,
+        "y": 457,
         "width": 25,
         "height": 52
       },
@@ -6356,8 +6907,8 @@
     {
       "name": "SPOSG1",
       "rect": {
-        "x": 422,
-        "y": 381,
+        "x": 1294,
+        "y": 399,
         "width": 32,
         "height": 55
       },
@@ -6375,8 +6926,8 @@
     {
       "name": "SPOSG2G8",
       "rect": {
-        "x": 1150,
-        "y": 381,
+        "x": 2,
+        "y": 457,
         "width": 33,
         "height": 54
       },
@@ -6399,8 +6950,8 @@
     {
       "name": "SPOSG3G7",
       "rect": {
-        "x": 1329,
-        "y": 381,
+        "x": 242,
+        "y": 457,
         "width": 43,
         "height": 53
       },
@@ -6423,8 +6974,8 @@
     {
       "name": "SPOSG4G6",
       "rect": {
-        "x": 1961,
-        "y": 381,
+        "x": 874,
+        "y": 457,
         "width": 34,
         "height": 52
       },
@@ -6447,8 +6998,8 @@
     {
       "name": "SPOSG5",
       "rect": {
-        "x": 1114,
-        "y": 381,
+        "x": 1986,
+        "y": 399,
         "width": 34,
         "height": 54
       },
@@ -6466,8 +7017,8 @@
     {
       "name": "SPOSH0",
       "rect": {
-        "x": 980,
-        "y": 200,
+        "x": 1804,
+        "y": 215,
         "width": 33,
         "height": 60
       },
@@ -6485,8 +7036,8 @@
     {
       "name": "SPOSI0",
       "rect": {
-        "x": 1495,
-        "y": 381,
+        "x": 408,
+        "y": 457,
         "width": 35,
         "height": 53
       },
@@ -6504,8 +7055,8 @@
     {
       "name": "SPOSJ0",
       "rect": {
-        "x": 1239,
-        "y": 438,
+        "x": 316,
+        "y": 513,
         "width": 42,
         "height": 39
       },
@@ -6523,8 +7074,8 @@
     {
       "name": "SPOSK0",
       "rect": {
-        "x": 187,
-        "y": 492,
+        "x": 1344,
+        "y": 513,
         "width": 45,
         "height": 34
       },
@@ -6542,8 +7093,8 @@
     {
       "name": "SPOSL0",
       "rect": {
-        "x": 1803,
-        "y": 492,
+        "x": 708,
+        "y": 588,
         "width": 52,
         "height": 20
       },
@@ -6561,8 +7112,8 @@
     {
       "name": "SPOSM0",
       "rect": {
-        "x": 363,
-        "y": 200,
+        "x": 1187,
+        "y": 215,
         "width": 41,
         "height": 61
       },
@@ -6580,8 +7131,8 @@
     {
       "name": "SPOSN0",
       "rect": {
-        "x": 142,
-        "y": 323,
+        "x": 938,
+        "y": 340,
         "width": 43,
         "height": 56
       },
@@ -6599,8 +7150,8 @@
     {
       "name": "SPOSO0",
       "rect": {
-        "x": 2,
-        "y": 381,
+        "x": 874,
+        "y": 399,
         "width": 53,
         "height": 55
       },
@@ -6618,8 +7169,8 @@
     {
       "name": "SPOSP0",
       "rect": {
-        "x": 579,
-        "y": 438,
+        "x": 1572,
+        "y": 457,
         "width": 57,
         "height": 47
       },
@@ -6637,8 +7188,8 @@
     {
       "name": "SPOSQ0",
       "rect": {
-        "x": 1011,
-        "y": 438,
+        "x": 2,
+        "y": 513,
         "width": 65,
         "height": 40
       },
@@ -6656,8 +7207,8 @@
     {
       "name": "SPOSR0",
       "rect": {
-        "x": 397,
-        "y": 492,
+        "x": 515,
+        "y": 555,
         "width": 67,
         "height": 30
       },
@@ -6675,8 +7226,8 @@
     {
       "name": "SPOSS0",
       "rect": {
-        "x": 1607,
-        "y": 492,
+        "x": 512,
+        "y": 588,
         "width": 64,
         "height": 23
       },
@@ -6694,8 +7245,8 @@
     {
       "name": "SPOST0",
       "rect": {
-        "x": 230,
-        "y": 530,
+        "x": 1150,
+        "y": 588,
         "width": 65,
         "height": 17
       },
@@ -6713,8 +7264,8 @@
     {
       "name": "SPOSU0",
       "rect": {
-        "x": 366,
-        "y": 530,
+        "x": 1286,
+        "y": 588,
         "width": 67,
         "height": 16
       },
@@ -6730,10 +7281,764 @@
       ]
     },
     {
+      "name": "STARMS",
+      "rect": {
+        "x": 1862,
+        "y": 513,
+        "width": 38,
+        "height": 32
+      },
+      "kind": "graphic",
+      "doom_name": "STARMS",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STBAR",
+      "rect": {
+        "x": 1473,
+        "y": 513,
+        "width": 320,
+        "height": 32
+      },
+      "kind": "graphic",
+      "doom_name": "STBAR",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB0",
+      "rect": {
+        "x": 1977,
+        "y": 513,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB1",
+      "rect": {
+        "x": 2,
+        "y": 555,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB2",
+      "rect": {
+        "x": 39,
+        "y": 555,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFB3",
+      "rect": {
+        "x": 76,
+        "y": 555,
+        "width": 35,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFB3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFDEAD0",
+      "rect": {
+        "x": 203,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFDEAD0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL0",
+      "rect": {
+        "x": 994,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL1",
+      "rect": {
+        "x": 1020,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL2",
+      "rect": {
+        "x": 1046,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL3",
+      "rect": {
+        "x": 1072,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFEVL4",
+      "rect": {
+        "x": 1098,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFEVL4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFGOD0",
+      "rect": {
+        "x": 1603,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFGOD0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL0",
+      "rect": {
+        "x": 1124,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL1",
+      "rect": {
+        "x": 1150,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL2",
+      "rect": {
+        "x": 1176,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL3",
+      "rect": {
+        "x": 1202,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFKILL4",
+      "rect": {
+        "x": 1228,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFKILL4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH0",
+      "rect": {
+        "x": 229,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH1",
+      "rect": {
+        "x": 255,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH2",
+      "rect": {
+        "x": 281,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH3",
+      "rect": {
+        "x": 307,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFOUCH4",
+      "rect": {
+        "x": 333,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFOUCH4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST00",
+      "rect": {
+        "x": 1629,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST01",
+      "rect": {
+        "x": 1655,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST01",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST02",
+      "rect": {
+        "x": 1681,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST02",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST10",
+      "rect": {
+        "x": 1707,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST11",
+      "rect": {
+        "x": 1733,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST11",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST12",
+      "rect": {
+        "x": 1759,
+        "y": 555,
+        "width": 24,
+        "height": 29
+      },
+      "kind": "graphic",
+      "doom_name": "STFST12",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST20",
+      "rect": {
+        "x": 1254,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST21",
+      "rect": {
+        "x": 1280,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST21",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST22",
+      "rect": {
+        "x": 1306,
+        "y": 555,
+        "width": 24,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFST22",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST30",
+      "rect": {
+        "x": 359,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST31",
+      "rect": {
+        "x": 385,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST31",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST32",
+      "rect": {
+        "x": 411,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST32",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST40",
+      "rect": {
+        "x": 437,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST41",
+      "rect": {
+        "x": 463,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST41",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFST42",
+      "rect": {
+        "x": 489,
+        "y": 555,
+        "width": 24,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFST42",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL00",
+      "rect": {
+        "x": 882,
+        "y": 555,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL10",
+      "rect": {
+        "x": 910,
+        "y": 555,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL20",
+      "rect": {
+        "x": 796,
+        "y": 555,
+        "width": 27,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL30",
+      "rect": {
+        "x": 145,
+        "y": 555,
+        "width": 29,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTL40",
+      "rect": {
+        "x": 113,
+        "y": 555,
+        "width": 30,
+        "height": 31
+      },
+      "kind": "graphic",
+      "doom_name": "STFTL40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR00",
+      "rect": {
+        "x": 938,
+        "y": 555,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR00",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR10",
+      "rect": {
+        "x": 966,
+        "y": 555,
+        "width": 26,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR10",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR20",
+      "rect": {
+        "x": 825,
+        "y": 555,
+        "width": 27,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR20",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR30",
+      "rect": {
+        "x": 736,
+        "y": 555,
+        "width": 28,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR30",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STFTR40",
+      "rect": {
+        "x": 766,
+        "y": 555,
+        "width": 28,
+        "height": 30
+      },
+      "kind": "graphic",
+      "doom_name": "STFTR40",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM0",
+      "rect": {
+        "x": 133,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM1",
+      "rect": {
+        "x": 139,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM2",
+      "rect": {
+        "x": 145,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM3",
+      "rect": {
+        "x": 151,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM4",
+      "rect": {
+        "x": 157,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM5",
+      "rect": {
+        "x": 163,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM6",
+      "rect": {
+        "x": 169,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM7",
+      "rect": {
+        "x": 175,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM8",
+      "rect": {
+        "x": 181,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STGNUM9",
+      "rect": {
+        "x": 187,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STGNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
       "name": "STIMA0",
       "rect": {
-        "x": 871,
-        "y": 530,
+        "x": 2,
+        "y": 617,
         "width": 19,
         "height": 10
       },
@@ -6749,9 +8054,399 @@
       ]
     },
     {
+      "name": "STKEYS0",
+      "rect": {
+        "x": 253,
+        "y": 617,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS1",
+      "rect": {
+        "x": 262,
+        "y": 617,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS2",
+      "rect": {
+        "x": 271,
+        "y": 617,
+        "width": 7,
+        "height": 5
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS3",
+      "rect": {
+        "x": 71,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS4",
+      "rect": {
+        "x": 80,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS5",
+      "rect": {
+        "x": 89,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS6",
+      "rect": {
+        "x": 98,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS7",
+      "rect": {
+        "x": 107,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STKEYS8",
+      "rect": {
+        "x": 116,
+        "y": 617,
+        "width": 7,
+        "height": 7
+      },
+      "kind": "graphic",
+      "doom_name": "STKEYS8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM0",
+      "rect": {
+        "x": 1537,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM1",
+      "rect": {
+        "x": 1552,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM2",
+      "rect": {
+        "x": 1567,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM3",
+      "rect": {
+        "x": 1582,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM4",
+      "rect": {
+        "x": 1597,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM5",
+      "rect": {
+        "x": 1612,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM6",
+      "rect": {
+        "x": 1627,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM7",
+      "rect": {
+        "x": 1642,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM8",
+      "rect": {
+        "x": 1657,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTNUM9",
+      "rect": {
+        "x": 1672,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STTPRCNT",
+      "rect": {
+        "x": 1687,
+        "y": 588,
+        "width": 13,
+        "height": 16
+      },
+      "kind": "graphic",
+      "doom_name": "STTPRCNT",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM0",
+      "rect": {
+        "x": 193,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM0",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM1",
+      "rect": {
+        "x": 199,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM1",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM2",
+      "rect": {
+        "x": 205,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM2",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM3",
+      "rect": {
+        "x": 211,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM3",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM4",
+      "rect": {
+        "x": 217,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM4",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM5",
+      "rect": {
+        "x": 223,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM5",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM6",
+      "rect": {
+        "x": 229,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM6",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM7",
+      "rect": {
+        "x": 235,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM7",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM8",
+      "rect": {
+        "x": 241,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM8",
+      "sprite": "",
+      "aliases": []
+    },
+    {
+      "name": "STYSNUM9",
+      "rect": {
+        "x": 247,
+        "y": 617,
+        "width": 4,
+        "height": 6
+      },
+      "kind": "graphic",
+      "doom_name": "STYSNUM9",
+      "sprite": "",
+      "aliases": []
+    },
+    {
       "name": "TRE1A0",
       "rect": {
-        "x": 320,
+        "x": 1043,
         "y": 2,
         "width": 51,
         "height": 70
@@ -6770,7 +8465,7 @@
     {
       "name": "TRE2A0",
       "rect": {
-        "x": 30,
+        "x": 325,
         "y": 2,
         "width": 124,
         "height": 124
@@ -6789,8 +8484,8 @@
     {
       "name": "TROOA1",
       "rect": {
-        "x": 504,
-        "y": 200,
+        "x": 1328,
+        "y": 215,
         "width": 48,
         "height": 60
       },
@@ -6808,8 +8503,8 @@
     {
       "name": "TROOA2A8",
       "rect": {
-        "x": 225,
-        "y": 200,
+        "x": 1049,
+        "y": 215,
         "width": 44,
         "height": 61
       },
@@ -6832,8 +8527,8 @@
     {
       "name": "TROOA3A7",
       "rect": {
-        "x": 604,
-        "y": 200,
+        "x": 1428,
+        "y": 215,
         "width": 46,
         "height": 60
       },
@@ -6856,8 +8551,8 @@
     {
       "name": "TROOA4A6",
       "rect": {
-        "x": 1829,
-        "y": 132,
+        "x": 609,
+        "y": 215,
         "width": 46,
         "height": 62
       },
@@ -6880,8 +8575,8 @@
     {
       "name": "TROOA5",
       "rect": {
-        "x": 1015,
-        "y": 200,
+        "x": 1839,
+        "y": 215,
         "width": 45,
         "height": 59
       },
@@ -6899,8 +8594,8 @@
     {
       "name": "TROOB1",
       "rect": {
-        "x": 1517,
-        "y": 132,
+        "x": 297,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -6918,8 +8613,8 @@
     {
       "name": "TROOB2B8",
       "rect": {
-        "x": 271,
-        "y": 200,
+        "x": 1095,
+        "y": 215,
         "width": 44,
         "height": 61
       },
@@ -6942,8 +8637,8 @@
     {
       "name": "TROOB3B7",
       "rect": {
-        "x": 1121,
-        "y": 132,
+        "x": 1849,
+        "y": 147,
         "width": 42,
         "height": 63
       },
@@ -6966,8 +8661,8 @@
     {
       "name": "TROOB4B6",
       "rect": {
-        "x": 758,
-        "y": 132,
+        "x": 1486,
+        "y": 147,
         "width": 40,
         "height": 64
       },
@@ -6990,8 +8685,8 @@
     {
       "name": "TROOB5",
       "rect": {
-        "x": 1569,
-        "y": 132,
+        "x": 349,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -7009,8 +8704,8 @@
     {
       "name": "TROOC1",
       "rect": {
-        "x": 554,
-        "y": 200,
+        "x": 1378,
+        "y": 215,
         "width": 48,
         "height": 60
       },
@@ -7028,8 +8723,8 @@
     {
       "name": "TROOC2C8",
       "rect": {
-        "x": 406,
-        "y": 200,
+        "x": 1230,
+        "y": 215,
         "width": 39,
         "height": 61
       },
@@ -7052,8 +8747,8 @@
     {
       "name": "TROOC3C7",
       "rect": {
-        "x": 317,
-        "y": 200,
+        "x": 1141,
+        "y": 215,
         "width": 44,
         "height": 61
       },
@@ -7076,8 +8771,8 @@
     {
       "name": "TROOC4C6",
       "rect": {
-        "x": 2005,
-        "y": 132,
+        "x": 785,
+        "y": 215,
         "width": 39,
         "height": 62
       },
@@ -7100,8 +8795,8 @@
     {
       "name": "TROOC5",
       "rect": {
-        "x": 652,
-        "y": 200,
+        "x": 1476,
+        "y": 215,
         "width": 45,
         "height": 60
       },
@@ -7119,8 +8814,8 @@
     {
       "name": "TROOD1",
       "rect": {
-        "x": 1621,
-        "y": 132,
+        "x": 401,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -7138,8 +8833,8 @@
     {
       "name": "TROOD2D8",
       "rect": {
-        "x": 1963,
-        "y": 132,
+        "x": 743,
+        "y": 215,
         "width": 40,
         "height": 62
       },
@@ -7162,8 +8857,8 @@
     {
       "name": "TROOD3D7",
       "rect": {
-        "x": 1209,
-        "y": 132,
+        "x": 1937,
+        "y": 147,
         "width": 39,
         "height": 63
       },
@@ -7186,8 +8881,8 @@
     {
       "name": "TROOD4D6",
       "rect": {
-        "x": 715,
-        "y": 132,
+        "x": 1443,
+        "y": 147,
         "width": 41,
         "height": 64
       },
@@ -7210,8 +8905,8 @@
     {
       "name": "TROOD5",
       "rect": {
-        "x": 1673,
-        "y": 132,
+        "x": 453,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -7229,8 +8924,8 @@
     {
       "name": "TROOE1",
       "rect": {
-        "x": 40,
-        "y": 200,
+        "x": 864,
+        "y": 215,
         "width": 29,
         "height": 62
       },
@@ -7248,8 +8943,8 @@
     {
       "name": "TROOE2E8",
       "rect": {
-        "x": 1165,
-        "y": 132,
+        "x": 1893,
+        "y": 147,
         "width": 42,
         "height": 63
       },
@@ -7272,8 +8967,8 @@
     {
       "name": "TROOE3E7",
       "rect": {
-        "x": 1250,
-        "y": 132,
+        "x": 1978,
+        "y": 147,
         "width": 39,
         "height": 63
       },
@@ -7296,8 +8991,8 @@
     {
       "name": "TROOE4E6",
       "rect": {
-        "x": 1877,
-        "y": 132,
+        "x": 657,
+        "y": 215,
         "width": 41,
         "height": 62
       },
@@ -7320,8 +9015,8 @@
     {
       "name": "TROOE5",
       "rect": {
-        "x": 2,
-        "y": 200,
+        "x": 826,
+        "y": 215,
         "width": 36,
         "height": 62
       },
@@ -7339,8 +9034,8 @@
     {
       "name": "TROOF1",
       "rect": {
-        "x": 71,
-        "y": 200,
+        "x": 895,
+        "y": 215,
         "width": 54,
         "height": 61
       },
@@ -7358,8 +9053,8 @@
     {
       "name": "TROOF2F8",
       "rect": {
-        "x": 914,
-        "y": 132,
+        "x": 1642,
+        "y": 147,
         "width": 52,
         "height": 63
       },
@@ -7382,8 +9077,8 @@
     {
       "name": "TROOF3F7",
       "rect": {
-        "x": 1291,
-        "y": 132,
+        "x": 71,
+        "y": 215,
         "width": 60,
         "height": 62
       },
@@ -7406,8 +9101,8 @@
     {
       "name": "TROOF4F6",
       "rect": {
-        "x": 1464,
-        "y": 132,
+        "x": 244,
+        "y": 215,
         "width": 51,
         "height": 62
       },
@@ -7430,8 +9125,8 @@
     {
       "name": "TROOF5",
       "rect": {
-        "x": 1920,
-        "y": 132,
+        "x": 700,
+        "y": 215,
         "width": 41,
         "height": 62
       },
@@ -7449,8 +9144,8 @@
     {
       "name": "TROOG1",
       "rect": {
-        "x": 514,
-        "y": 132,
+        "x": 1242,
+        "y": 147,
         "width": 71,
         "height": 64
       },
@@ -7468,8 +9163,8 @@
     {
       "name": "TROOG2G8",
       "rect": {
-        "x": 800,
-        "y": 132,
+        "x": 1528,
+        "y": 147,
         "width": 55,
         "height": 63
       },
@@ -7492,8 +9187,8 @@
     {
       "name": "TROOG3G7",
       "rect": {
-        "x": 857,
-        "y": 132,
+        "x": 1585,
+        "y": 147,
         "width": 55,
         "height": 63
       },
@@ -7516,8 +9211,8 @@
     {
       "name": "TROOG4G6",
       "rect": {
-        "x": 1725,
-        "y": 132,
+        "x": 505,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -7540,8 +9235,8 @@
     {
       "name": "TROOG5",
       "rect": {
-        "x": 587,
-        "y": 132,
+        "x": 1315,
+        "y": 147,
         "width": 64,
         "height": 64
       },
@@ -7559,8 +9254,8 @@
     {
       "name": "TROOH1",
       "rect": {
-        "x": 968,
-        "y": 132,
+        "x": 1696,
+        "y": 147,
         "width": 49,
         "height": 63
       },
@@ -7578,8 +9273,8 @@
     {
       "name": "TROOH2H8",
       "rect": {
-        "x": 127,
-        "y": 200,
+        "x": 951,
+        "y": 215,
         "width": 50,
         "height": 61
       },
@@ -7602,8 +9297,8 @@
     {
       "name": "TROOH3H7",
       "rect": {
-        "x": 447,
-        "y": 200,
+        "x": 1271,
+        "y": 215,
         "width": 55,
         "height": 60
       },
@@ -7626,8 +9321,8 @@
     {
       "name": "TROOH4H6",
       "rect": {
-        "x": 1409,
-        "y": 132,
+        "x": 189,
+        "y": 215,
         "width": 53,
         "height": 62
       },
@@ -7650,8 +9345,8 @@
     {
       "name": "TROOH5",
       "rect": {
-        "x": 699,
-        "y": 200,
+        "x": 1523,
+        "y": 215,
         "width": 41,
         "height": 60
       },
@@ -7669,8 +9364,8 @@
     {
       "name": "TROOI0",
       "rect": {
-        "x": 1019,
-        "y": 132,
+        "x": 1747,
+        "y": 147,
         "width": 49,
         "height": 63
       },
@@ -7688,8 +9383,8 @@
     {
       "name": "TROOJ0",
       "rect": {
-        "x": 1353,
-        "y": 132,
+        "x": 133,
+        "y": 215,
         "width": 54,
         "height": 62
       },
@@ -7707,8 +9402,8 @@
     {
       "name": "TROOK0",
       "rect": {
-        "x": 790,
-        "y": 381,
+        "x": 1662,
+        "y": 399,
         "width": 45,
         "height": 54
       },
@@ -7726,8 +9421,8 @@
     {
       "name": "TROOL0",
       "rect": {
-        "x": 826,
-        "y": 438,
+        "x": 1857,
+        "y": 457,
         "width": 42,
         "height": 43
       },
@@ -7745,8 +9440,8 @@
     {
       "name": "TROOM0",
       "rect": {
-        "x": 1202,
-        "y": 492,
+        "x": 107,
+        "y": 588,
         "width": 57,
         "height": 26
       },
@@ -7764,8 +9459,8 @@
     {
       "name": "TROON0",
       "rect": {
-        "x": 1070,
-        "y": 132,
+        "x": 1798,
+        "y": 147,
         "width": 49,
         "height": 63
       },
@@ -7783,8 +9478,8 @@
     {
       "name": "TROOO0",
       "rect": {
-        "x": 1777,
-        "y": 132,
+        "x": 557,
+        "y": 215,
         "width": 50,
         "height": 62
       },
@@ -7802,8 +9497,8 @@
     {
       "name": "TROOP0",
       "rect": {
-        "x": 1876,
-        "y": 323,
+        "x": 706,
+        "y": 399,
         "width": 56,
         "height": 55
       },
@@ -7821,8 +9516,8 @@
     {
       "name": "TROOQ0",
       "rect": {
-        "x": 721,
-        "y": 438,
+        "x": 1752,
+        "y": 457,
         "width": 55,
         "height": 45
       },
@@ -7840,8 +9535,8 @@
     {
       "name": "TROOR0",
       "rect": {
-        "x": 1415,
-        "y": 438,
+        "x": 492,
+        "y": 513,
         "width": 57,
         "height": 38
       },
@@ -7859,8 +9554,8 @@
     {
       "name": "TROOS0",
       "rect": {
-        "x": 280,
-        "y": 492,
+        "x": 1795,
+        "y": 513,
         "width": 65,
         "height": 32
       },
@@ -7878,8 +9573,8 @@
     {
       "name": "TROOT0",
       "rect": {
-        "x": 765,
-        "y": 492,
+        "x": 1485,
+        "y": 555,
         "width": 65,
         "height": 29
       },
@@ -7897,8 +9592,8 @@
     {
       "name": "TROOU0",
       "rect": {
-        "x": 466,
-        "y": 492,
+        "x": 584,
+        "y": 555,
         "width": 66,
         "height": 30
       },

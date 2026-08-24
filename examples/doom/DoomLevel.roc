@@ -9,12 +9,15 @@ DoomLevel := [].{
 	DoorPhase := [Opening, Waiting(U64), Closing].{ is_eq : _ }
 	Door : { sector : U64, closed : I64, open : I64, speed : I64, phase : DoorPhase, stays_open : Bool }
 	FloorMover : { sector : U64, target : I64, speed : I64 }
-	State : { heights : List(SectorHeights), doors : List(Door), floors : List(FloorMover) }
+	LiftPhase := [Lowering, LiftWaiting(U64), Raising].{ is_eq : _ }
+	Lift : { sector : U64, low : I64, high : I64, speed : I64, phase : LiftPhase }
+	State : { heights : List(SectorHeights), doors : List(Door), floors : List(FloorMover), lifts : List(Lift) }
 	UseResult : [Activated(State), Exit, Locked([Blue, Yellow, Red]), NotUsable]
 	Portal : { from_sector : U64, to_sector : U64, bottom : I64, top : I64, step : I64, traversable : Bool }
+	CollisionSegment : { linedef : U64, start : Point, end : Point }
 
 	initial : DoomMap.Map -> State
-	initial = |map| { heights: List.map(map.raw().sectors, |sector| { floor: sector.floor_height, ceiling: sector.ceiling_height }), doors: [], floors: [] }
+	initial = |map| { heights: List.map(map.raw().sectors, |sector| { floor: sector.floor_height, ceiling: sector.ceiling_height }), doors: [], floors: [], lifts: [] }
 
 	## Descend the classic Doom BSP (whose root is the last node) and return the
 	## validated sector associated with the reached subsector polygon.
@@ -53,6 +56,17 @@ DoomLevel := [].{
 		Ok({ from_sector, to_sector, bottom, top, step, traversable: !blocked and step <= 24 and top - to.floor >= 56 })
 	}
 
+	## Return the current sector boundary segments that collision must retain.
+	## Open, traversable two-sided portals are deliberately omitted.
+	collision_segments : DoomMap.Map, State, U64 -> List(CollisionSegment)
+	collision_segments = |map, state, sector| collision_segments_from(map, map.raw(), state, sector, 0)
+
+	## Return special linedefs crossed by a swept point, in map order. Endpoint
+	## touches count only when the sweep changes side, preventing repeat triggers
+	## while moving along a line.
+	crossed_lines : DoomMap.Map, Point, Point -> List(U64)
+	crossed_lines = |map, start, end| crossed_lines_from(map.raw(), start, end, 0)
+
 	## Activate the E1M1 use-line door vocabulary. Specials 1 and 117 are
 	## ordinary/blazing local doors; 26 is the blue-key variant; 62 opens all
 	## tagged doors permanently. Special 11 requests level exit.
@@ -73,12 +87,13 @@ DoomLevel := [].{
 		}
 	}
 
-	## W1 special 2 opens tagged doors permanently when crossed.
+	## W1 special 2 opens tagged doors permanently; WR special 88 starts the
+	## tagged lower-wait-raise lift cycle.
 	cross_line : DoomMap.Map, State, U64 -> UseResult
 	cross_line = |map, state, linedef| {
 		raw = map.raw()
 		match List.get(raw.linedefs, linedef) {
-			Ok(line) => if line.special == 2 activate_tagged_doors(raw, state, line.tag, Bool.True, 2) else NotUsable
+			Ok(line) => if line.special == 2 activate_tagged_doors(raw, state, line.tag, Bool.True, 2) else if line.special == 88 activate_tagged_lifts(raw, state, line.tag) else NotUsable
 			Err(_) => NotUsable
 		}
 	}
@@ -87,7 +102,8 @@ DoomLevel := [].{
 	tick : State -> State
 	tick = |state| {
 		doors_advanced = tick_doors(state, state.doors, [], 0)
-		tick_floors(doors_advanced, doors_advanced.floors, [], 0)
+		floors_advanced = tick_floors(doors_advanced, doors_advanced.floors, [], 0)
+		tick_lifts(floors_advanced, floors_advanced.lifts, [], 0)
 	}
 }
 
@@ -118,6 +134,55 @@ point_in_convex = |points, point, index|
 		cross >= -0.000001 and point_in_convex(points, point, index + 1)
 	}
 
+crossed_lines_from = |raw, start, end, index|
+	match List.get(raw.linedefs, index) {
+		Err(_) => []
+		Ok(line) => {
+			rest = crossed_lines_from(raw, start, end, index + 1)
+			if line.special == 0 rest else {
+				a_raw = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
+				b_raw = List.get(raw.vertices, line.end_vertex) ?? crash "validated vertex missing"
+				a = { x: I64.to_f64(a_raw.x), y: I64.to_f64(a_raw.y) }
+				b = { x: I64.to_f64(b_raw.x), y: I64.to_f64(b_raw.y) }
+				start_side = line_side(a, b, start)
+				end_side = line_side(a, b, end)
+				line_start_side = line_side(start, end, a)
+				line_end_side = line_side(start, end, b)
+				changes_side = (start_side < 0 and end_side >= 0) or (start_side > 0 and end_side <= 0)
+				intersects_extent = (line_start_side <= 0 and line_end_side >= 0) or (line_start_side >= 0 and line_end_side <= 0)
+				if changes_side and intersects_extent List.prepend(rest, index) else rest
+			}
+		}
+	}
+
+line_side = |a, b, point| (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+
+collision_segments_from = |map, raw, state, sector, index|
+	match List.get(raw.linedefs, index) {
+		Err(_) => []
+		Ok(line) => {
+			rest = collision_segments_from(map, raw, state, sector, index + 1)
+			right_sector = side_sector(raw, line.right_sidedef)
+			left_sector = side_sector(raw, line.left_sidedef)
+			touches = right_sector == Ok(sector) or left_sector == Ok(sector)
+			blocks = if !touches Bool.False else match line.left_sidedef {
+				Err(Null) => Bool.True
+				Ok(_) => match DoomLevel.portal(map, state, index, sector) { Ok(opening) => !(opening.traversable), Err(_) => Bool.True }
+			}
+			if blocks {
+				a = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
+				b = List.get(raw.vertices, line.end_vertex) ?? crash "validated vertex missing"
+				List.prepend(rest, { linedef: index, start: { x: I64.to_f64(a.x), y: I64.to_f64(a.y) }, end: { x: I64.to_f64(b.x), y: I64.to_f64(b.y) } })
+			} else rest
+		}
+	}
+
+side_sector = |raw, side_ref|
+	match side_ref {
+		Err(Null) => Err(NoSector)
+		Ok(index) => Ok((List.get(raw.sidedefs, index) ?? crash "validated sidedef missing").sector)
+	}
+
 activate_local_door = |raw, state, line, stays_open, speed|
 	match line.left_sidedef {
 		Err(Null) => NotUsable
@@ -141,6 +206,26 @@ activate_tagged_floors = |raw, state, tag| {
 	sectors = tagged_sectors(raw.sectors, tag, 0)
 	if List.is_empty(sectors) NotUsable else Activated(add_floor_movers(raw, state, sectors, 0))
 }
+
+activate_tagged_lifts = |raw, state, tag| {
+	sectors = tagged_sectors(raw.sectors, tag, 0)
+	if List.is_empty(sectors) NotUsable else Activated(add_lifts(raw, state, sectors, 0))
+}
+
+add_lifts = |raw, state, sectors, index|
+	match List.get(sectors, index) {
+		Err(_) => state
+		Ok(sector) => {
+			if List.any(state.lifts, |lift| lift.sector == sector) {
+				add_lifts(raw, state, sectors, index + 1)
+			} else {
+				heights = List.get(state.heights, sector) ?? crash "sector state missing"
+				low = lowest_adjacent_floor(raw, state, sector, 0, Err(NoAdjacent))
+				next = { ..state, lifts: List.append(state.lifts, { sector, low, high: heights.floor, speed: 1, phase: Lowering }) }
+				add_lifts(raw, next, sectors, index + 1)
+			}
+		}
+	}
 
 add_floor_movers = |raw, state, sectors, index|
 	match List.get(sectors, index) {
@@ -259,6 +344,30 @@ tick_floors = |state, remaining, next_floors, index|
 		}
 	}
 
+tick_lifts = |state, remaining, next_lifts, index|
+	match List.get(remaining, index) {
+		Err(_) => { ..state, lifts: next_lifts }
+		Ok(lift) => {
+			heights = List.get(state.heights, lift.sector) ?? crash "sector state missing"
+			advanced = match lift.phase {
+				Lowering => {
+					floor = I64.max(lift.low, heights.floor - lift.speed)
+					phase = if floor <= lift.low LiftWaiting(105) else Lowering
+					{ heights: { ..heights, floor }, lift: { ..lift, phase }, finished: Bool.False }
+				}
+				LiftWaiting(tics) => { heights, lift: { ..lift, phase: if tics <= 1 Raising else LiftWaiting(tics - 1) }, finished: Bool.False }
+				Raising => {
+					floor = I64.min(lift.high, heights.floor + lift.speed)
+					{ heights: { ..heights, floor }, lift, finished: floor >= lift.high }
+				}
+			}
+			replaced = List.replace(state.heights, lift.sector, advanced.heights) ?? crash "sector state missing"
+			state2 = { ..state, heights: replaced.list }
+			lifts2 = if advanced.finished next_lifts else List.append(next_lifts, advanced.lift)
+			tick_lifts(state2, remaining, lifts2, index + 1)
+		}
+	}
+
 advance_tics = |state, count|
 	if count == 0 state else advance_tics(DoomLevel.tick(state), count - 1)
 
@@ -296,6 +405,36 @@ expect {
 expect {
 	map = DoomMap.e1m1
 	initial = DoomLevel.initial(map)
+	match DoomLevel.cross_line(map, initial, 593) {
+		Activated(moving) => {
+			lift = List.get(moving.lifts, 0) ?? crash "special-88 lift missing"
+			before = DoomLevel.heights_for(moving, lift.sector) ?? crash "lift sector missing"
+			after = DoomLevel.heights_for(DoomLevel.tick(moving), lift.sector) ?? crash "lift sector missing"
+			finished = advance_tics(moving, 400)
+			finish_height = DoomLevel.heights_for(finished, lift.sector) ?? crash "lift sector missing"
+			lift.low < lift.high and after.floor == I64.max(lift.low, before.floor - 1) and finish_height.floor == lift.high and List.is_empty(finished.lifts)
+		}
+		_ => Bool.False
+	}
+}
+
+expect {
+	map = DoomMap.e1m1
+	raw = map.raw()
+	line = List.get(raw.linedefs, 593) ?? crash "special-88 line missing"
+	a = List.get(raw.vertices, line.start_vertex) ?? crash "line vertex missing"
+	b = List.get(raw.vertices, line.end_vertex) ?? crash "line vertex missing"
+	mid_x = (I64.to_f64(a.x) + I64.to_f64(b.x)) / 2
+	mid_y = (I64.to_f64(a.y) + I64.to_f64(b.y)) / 2
+	dx = I64.to_f64(b.x - a.x)
+	dy = I64.to_f64(b.y - a.y)
+	crossed = DoomLevel.crossed_lines(map, { x: mid_x + dy, y: mid_y - dx }, { x: mid_x - dy, y: mid_y + dx })
+	List.contains(crossed, 593)
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
 	match DoomLevel.use_line(map, initial, 753, { blue: Bool.False, yellow: Bool.False, red: Bool.False }) {
 		Activated(moving) => {
 			mover = List.get(moving.floors, 0) ?? crash "tagged floor mover missing"
@@ -320,8 +459,16 @@ expect {
 			door = List.get(opening.doors, 0) ?? crash "door missing"
 			from_sector = if door.sector == right_side.sector left_side.sector else right_side.sector
 			closed = DoomLevel.portal(map, initial, 55, from_sector) ?? crash "door portal missing"
-			opened = DoomLevel.portal(map, advance_tics(opening, 80), 55, from_sector) ?? crash "door portal missing"
-			!(closed.traversable) and opened.traversable and opened.step <= 24 and opened.top - opened.bottom >= 56
+			opened_state = advance_tics(opening, 80)
+			opened = DoomLevel.portal(map, opened_state, 55, from_sector) ?? crash "door portal missing"
+			closed_segments = DoomLevel.collision_segments(map, initial, from_sector)
+			opened_segments = DoomLevel.collision_segments(map, opened_state, from_sector)
+			!(closed.traversable)
+				and opened.traversable
+				and opened.step <= 24
+				and opened.top - opened.bottom >= 56
+				and List.any(closed_segments, |segment| segment.linedef == 55)
+				and !(List.any(opened_segments, |segment| segment.linedef == 55))
 		}
 		_ => Bool.False
 	}

@@ -86,6 +86,11 @@ DoomMap := [].{
 			Err(_) => Err(InvalidJson)
 		}
 
+	## The generated E1M1 asset is imported and decoded once here. Consumers
+	## should use this nominal value instead of importing or parsing map.json.
+	e1m1 : Map
+	e1m1 = decode(e1m1_json) ?? crash "generated E1M1 map failed validation"
+
 	## Validate an already-decoded fixture or generated value.
 	validate = |raw| {
 		if raw.format != "doom" {
@@ -506,16 +511,12 @@ expect {
 }
 
 expect {
-	match DoomMap.decode(e1m1_json) {
-		Err(_) => Bool.False
-		Ok(map) => {
-			surfaces = map.surface_polygons()
-			List.len(surfaces) == 1364
-				and List.len(map.blocking_segments()) > 100
-				and match map.player_start() {
-					Ok(start) => start.angle >= 0 and start.angle < 360
-					Err(_) => Bool.False
-				}
+	map = DoomMap.e1m1
+	surfaces = map.surface_polygons()
+	List.len(surfaces) == 1364
+		and List.len(map.blocking_segments()) > 100
+		and match map.player_start() {
+			Ok(start) => start.angle >= 0 and start.angle < 360
+			Err(_) => Bool.False
 		}
-	}
 }

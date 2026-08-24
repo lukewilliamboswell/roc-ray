@@ -39,18 +39,17 @@ The capture examples also produce deterministic media directly, including this
 
 ## Try it
 
-Install the Roc nightly named in [`.roc-version`](.roc-version), then build the
+Install the Roc nightly named in [`.roc-version`](.roc-version), then run the
 smallest example. Its app header points directly at the released RocRay bundle:
 
 ```bash
 git clone https://github.com/lukewilliamboswell/roc-ray.git
 cd roc-ray
-roc build examples/hello_world/main.roc --output hello_world
-./hello_world
+roc examples/hello_world/main.roc
 ```
 
-On Windows, run `hello_world.exe`. Build and run from the repository root so
-example asset paths resolve correctly.
+Run examples from the repository root so asset paths resolve correctly. Use
+`roc build` later when producing an optimized executable for distribution.
 
 For your own project, copy the closest app from the
 [example guide](examples/README.md). Each example uses a platform URL containing

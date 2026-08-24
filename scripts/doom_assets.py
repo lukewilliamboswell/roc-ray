@@ -13,6 +13,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+import PIL
 from PIL import Image
 
 
@@ -22,6 +23,7 @@ ARCHIVE_SHA256 = "860edb005bcf0b2acf29d10fd9130c91025301764a4d0d6dcffc503fdf8d2c
 ARCHIVE_ROOT = f"freedoom-{VERSION}"
 ATLAS_SIZE = (1024, 512)
 PADDING = 2
+PILLOW_VERSION = "10.2.0"
 
 # These are intentionally source images, not assets decoded from an IWAD. Keeping
 # the selection explicit makes upstream review and attribution straightforward.
@@ -160,6 +162,10 @@ def build(output: Path, supplied_archive: Path | None) -> None:
 
 
 def main() -> None:
+    if PIL.__version__ != PILLOW_VERSION:
+        raise SystemExit(
+            f"Pillow {PILLOW_VERSION} is required for byte-reproducible output; found {PIL.__version__}"
+        )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, help="use an already downloaded v0.13.0 source tarball")
     parser.add_argument(

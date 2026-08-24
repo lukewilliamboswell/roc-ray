@@ -10,9 +10,10 @@ Generated files are ready for RocRay: `generated/atlas.png` is one RGBA texture,
 directory rooted at `examples/doom/assets` and refer to these files relative to
 that root.
 
-Regenerate from the repository root with Python 3 and Pillow 10 or newer:
+Regenerate from the repository root with Python 3 and the pinned Pillow version:
 
 ```sh
+python3 -m pip install -r scripts/doom_assets_requirements.txt
 python3 scripts/doom_assets.py
 python3 scripts/doom_assets.py --check
 ```

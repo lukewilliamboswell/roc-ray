@@ -21,10 +21,19 @@ AtlasMetadata : {
 	height : U64,
 	sprites : {
 		wall_concrete : AtlasSprite,
+		door : AtlasSprite,
+		door_locked : AtlasSprite,
+		exit_sign : AtlasSprite,
 		floor : AtlasSprite,
 		ceiling : AtlasSprite,
 		enemy_walk_0 : AtlasSprite,
+		enemy_walk_1 : AtlasSprite,
+		enemy_attack_0 : AtlasSprite,
+		enemy_attack_1 : AtlasSprite,
+		enemy_die_4 : AtlasSprite,
 		ammo : AtlasSprite,
+		health : AtlasSprite,
+		key_blue_a : AtlasSprite,
 		pistol_0 : AtlasSprite,
 		pistol_2 : AtlasSprite,
 		hud_bar : AtlasSprite,
@@ -58,27 +67,27 @@ Renderer := [].{
 	build_room = {
 		floor = quad_region(
 			{ x: 0, y: 0, z: 0 },
-			{ x: 14, y: 0, z: 0 },
-			{ x: 14, y: 0, z: 11 },
-			{ x: 0, y: 0, z: 11 },
+			{ x: 24, y: 0, z: 0 },
+			{ x: 24, y: 0, z: 16 },
+			{ x: 0, y: 0, z: 16 },
 			Color.from_hex_rgb(0x777064),
 			floor_uv,
 		)
 		ceiling = quad_region(
-			{ x: 0, y: 2.8, z: 11 },
-			{ x: 14, y: 2.8, z: 11 },
-			{ x: 14, y: 2.8, z: 0 },
+			{ x: 0, y: 2.8, z: 16 },
+			{ x: 24, y: 2.8, z: 16 },
+			{ x: 24, y: 2.8, z: 0 },
 			{ x: 0, y: 2.8, z: 0 },
 			Color.from_hex_rgb(0x504b48),
 			ceiling_uv,
 		)
 		wall_vertices = List.join_map(Game.walls, wall_box)
-		vertices = List.concat(List.concat(floor, ceiling), wall_vertices)
+		vertices = List.concat(List.concat(List.concat(floor, ceiling), wall_vertices), exit_sign_geometry)
 		{ vertices, indices: sequential_indices(vertices) }
 	}
 
-	draw_world! : Draw.Frame, Draw.Texture, Geometry, Game.World => Try({}, [ScopeLimit, ..])
-	draw_world! = |frame, atlas, room, world| {
+	draw_world! : Draw.Frame, Draw.Texture, Draw.Shader, Geometry, Game.World => Try({}, [ScopeLimit, ScopeUnavailable, ..])
+	draw_world! = |frame, atlas, sprite_shader, room, world| {
 		player = world.player
 		forward = { x: F32.cos(player.yaw), z: F32.sin(player.yaw) }
 		camera = Camera.perspective({
@@ -88,22 +97,34 @@ Renderer := [].{
 			fovy: 72,
 		})
 
-		dynamic = List.concat(
-			if world.enemy.alive() enemy_billboard(world.enemy.pos, player.pos) else [],
-			if world.pickup.taken [] else pickup_billboard(world.pickup.pos, player.pos),
-		)
-		vertices = List.concat(room.vertices, dynamic)
+		enemy_vertices = List.join_map(world.enemies, |enemy| enemy_billboard(enemy, player.pos, world.elapsed))
+		pickup_vertices = List.join_map(world.pickups, |pickup| if pickup.taken [] else pickup_billboard(pickup, player.pos))
+		dynamic_vertices = List.concat(enemy_vertices, pickup_vertices)
+		door_vertices = if world.door.open [] else door_geometry(world.door, world.player.has_blue_key)
 		frame.with_camera_3d!(
 			camera,
 			|scene| {
-				scene.textured_triangles_3d!({ texture: atlas, vertices, indices: sequential_indices(vertices) })
+				# Retained level geometry crosses directly. Only the small door and
+				# billboard batches are rebuilt as application state changes.
+				scene.textured_triangles_3d!({ texture: atlas, vertices: room.vertices, indices: room.indices })
+				scene.textured_triangles_3d!({ texture: atlas, vertices: door_vertices, indices: sequential_indices(door_vertices) })
+				scene.with_shader!(
+					sprite_shader,
+					|sprites| {
+						sprites.textured_triangles_3d!({ texture: atlas, vertices: dynamic_vertices, indices: sequential_indices(dynamic_vertices) })
+						Ok({})
+					},
+				)?
 				Ok({})
 			},
 		)
 	}
 
 	wall_box : Math.Rect -> List(Draw.TexturedVertex3D)
-	wall_box = |wall| {
+	wall_box = |wall| wall_box_with_uv(wall, wall_uv)
+
+	wall_box_with_uv : Math.Rect, Uv -> List(Draw.TexturedVertex3D)
+	wall_box_with_uv = |wall, uv| {
 		x0 = wall.x
 		x1 = wall.x + wall.width
 		z0 = wall.y
@@ -111,21 +132,46 @@ Renderer := [].{
 		shade = Color.from_hex_rgb(0x9a7860)
 		List.concat(
 			List.concat(
-				quad({ x: x0, y: 0, z: z0 }, { x: x1, y: 0, z: z0 }, { x: x1, y: wall_height, z: z0 }, { x: x0, y: wall_height, z: z0 }, shade),
-				quad({ x: x1, y: 0, z: z1 }, { x: x0, y: 0, z: z1 }, { x: x0, y: wall_height, z: z1 }, { x: x1, y: wall_height, z: z1 }, shade),
+				quad_region({ x: x0, y: 0, z: z0 }, { x: x1, y: 0, z: z0 }, { x: x1, y: wall_height, z: z0 }, { x: x0, y: wall_height, z: z0 }, shade, uv),
+				quad_region({ x: x1, y: 0, z: z1 }, { x: x0, y: 0, z: z1 }, { x: x0, y: wall_height, z: z1 }, { x: x1, y: wall_height, z: z1 }, shade, uv),
 			),
 			List.concat(
-				quad({ x: x0, y: 0, z: z1 }, { x: x0, y: 0, z: z0 }, { x: x0, y: wall_height, z: z0 }, { x: x0, y: wall_height, z: z1 }, Color.from_hex_rgb(0x765b4d)),
-				quad({ x: x1, y: 0, z: z0 }, { x: x1, y: 0, z: z1 }, { x: x1, y: wall_height, z: z1 }, { x: x1, y: wall_height, z: z0 }, Color.from_hex_rgb(0x765b4d)),
+				quad_region({ x: x0, y: 0, z: z1 }, { x: x0, y: 0, z: z0 }, { x: x0, y: wall_height, z: z0 }, { x: x0, y: wall_height, z: z1 }, Color.from_hex_rgb(0x765b4d), uv),
+				quad_region({ x: x1, y: 0, z: z0 }, { x: x1, y: 0, z: z1 }, { x: x1, y: wall_height, z: z1 }, { x: x1, y: wall_height, z: z0 }, Color.from_hex_rgb(0x765b4d), uv),
 			),
 		)
 	}
 
-	enemy_billboard : Math.Vec2, Math.Vec2 -> List(Draw.TexturedVertex3D)
-	enemy_billboard = |pos, viewer| billboard(pos, viewer, 1.35, 1.85, Color.white, enemy_uv)
+	door_geometry : Game.Door, Bool -> List(Draw.TexturedVertex3D)
+	door_geometry = |door, has_key| wall_box_with_uv(door.rect, if door.requires_key and !has_key door_locked_uv else door_uv)
 
-	pickup_billboard : Math.Vec2, Math.Vec2 -> List(Draw.TexturedVertex3D)
-	pickup_billboard = |pos, viewer| billboard(pos, viewer, 0.6, 0.7, Color.from_hex_rgb(0x6de1ff), ammo_uv)
+	exit_sign_geometry : List(Draw.TexturedVertex3D)
+	exit_sign_geometry = quad_region(
+		{ x: 22.98, y: 1.45, z: 14.15 },
+		{ x: 22.98, y: 1.45, z: 12.35 },
+		{ x: 22.98, y: 2.35, z: 12.35 },
+		{ x: 22.98, y: 2.35, z: 14.15 },
+		Color.white,
+		exit_uv,
+	)
+
+	enemy_billboard : Game.Enemy, Math.Vec2, F32 -> List(Draw.TexturedVertex3D)
+	enemy_billboard = |enemy, viewer, elapsed|
+		if enemy.alive() {
+			billboard(enemy.pos, viewer, 1.35, 1.85, Color.white, enemy_uv(enemy, elapsed))
+		} else {
+			billboard(enemy.pos, viewer, 1.45, 0.6, Color.white, enemy_uv(enemy, elapsed))
+		}
+
+	pickup_billboard : Game.Pickup, Math.Vec2 -> List(Draw.TexturedVertex3D)
+	pickup_billboard = |pickup, viewer| {
+		config = match pickup.kind {
+			Ammo => { width: 0.6, height: 0.7, uv: ammo_uv }
+			Health => { width: 0.75, height: 0.65, uv: health_uv }
+			BlueKey => { width: 0.5, height: 0.75, uv: blue_key_uv }
+		}
+		billboard(pickup.pos, viewer, config.width, config.height, Color.white, config.uv)
+	}
 
 	billboard : Math.Vec2, Math.Vec2, F32, F32, Color.Rgba, Uv -> List(Draw.TexturedVertex3D)
 	billboard = |pos, viewer, width, height, tint, uv| {
@@ -141,9 +187,6 @@ Renderer := [].{
 			uv,
 		)
 	}
-
-	quad : Math.Vec3, Math.Vec3, Math.Vec3, Math.Vec3, Color.Rgba -> List(Draw.TexturedVertex3D)
-	quad = |a, b, c, d, tint| quad_region(a, b, c, d, tint, wall_uv)
 
 	Uv : { left : F32, top : F32, right : F32, bottom : F32 }
 
@@ -171,10 +214,29 @@ Renderer := [].{
 	floor_uv = atlas_uv(atlas_metadata.sprites.floor)
 	ceiling_uv : Uv
 	ceiling_uv = atlas_uv(atlas_metadata.sprites.ceiling)
-	enemy_uv : Uv
-	enemy_uv = atlas_uv(atlas_metadata.sprites.enemy_walk_0)
+	enemy_uv : Game.Enemy, F32 -> Uv
+	enemy_uv = |enemy, elapsed|
+		if !(enemy.alive()) {
+			atlas_uv(atlas_metadata.sprites.enemy_die_4)
+		} else if enemy.cooldown > 0.62 {
+			if F32.sin(elapsed * 18) >= 0 atlas_uv(atlas_metadata.sprites.enemy_attack_0) else atlas_uv(atlas_metadata.sprites.enemy_attack_1)
+		} else if F32.sin(elapsed * 8 + U64.to_f32(enemy.id)) >= 0 {
+			atlas_uv(atlas_metadata.sprites.enemy_walk_0)
+		} else {
+			atlas_uv(atlas_metadata.sprites.enemy_walk_1)
+		}
 	ammo_uv : Uv
 	ammo_uv = atlas_uv(atlas_metadata.sprites.ammo)
+	health_uv : Uv
+	health_uv = atlas_uv(atlas_metadata.sprites.health)
+	blue_key_uv : Uv
+	blue_key_uv = atlas_uv(atlas_metadata.sprites.key_blue_a)
+	door_uv : Uv
+	door_uv = atlas_uv(atlas_metadata.sprites.door)
+	door_locked_uv : Uv
+	door_locked_uv = atlas_uv(atlas_metadata.sprites.door_locked)
+	exit_uv : Uv
+	exit_uv = atlas_uv(atlas_metadata.sprites.exit_sign)
 
 	atlas_uv : AtlasSprite -> Uv
 	atlas_uv = |sprite| {
@@ -185,10 +247,10 @@ Renderer := [].{
 		atlas_width = U64.to_f32(atlas_metadata.width)
 		atlas_height = U64.to_f32(atlas_metadata.height)
 		{
-			left: x / atlas_width,
-			top: y / atlas_height,
-			right: (x + width) / atlas_width,
-			bottom: (y + height) / atlas_height,
+			left: (x + 0.5) / atlas_width,
+			top: (y + 0.5) / atlas_height,
+			right: (x + width - 0.5) / atlas_width,
+			bottom: (y + height - 0.5) / atlas_height,
 		}
 	}
 

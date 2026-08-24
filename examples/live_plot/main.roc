@@ -1,3 +1,11 @@
+## Plot the line lengths of files while a source tree is still being scanned.
+##
+## Run this app from the directory you want to inspect. Use the wheel to scroll,
+## Shift-wheel to zoom, drag to pan, R to return to new results, N to change the
+## horizontal scale, and Escape to quit. Run with `--record-demo` to create the
+## gallery GIF from built-in sample data. This larger example uses Tasks for
+## file work, limits how much work and data it keeps at once, and draws many
+## points efficiently.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -87,11 +95,15 @@ import rr.Text
 ## Paths are resolved relative to the working directory, so run it from the
 ## root of the tree it should plot:
 ##
-##     roc build examples/live_plot/main.roc --output live_plot
-##     ./live_plot
+##     roc examples/live_plot/main.roc
 ##
 ## Run with `--record-demo` to plot a deterministic built-in source tree and
 ## write `examples/gallery/live_plot.gif`.
+## State kept between updates: queued and active file work, partial parsing
+## results, bounded point data, permanent per-file summaries, camera position,
+## drawing resources, and prepared labels. These categories let scanning,
+## parsing, interaction, and drawing advance a little at a time without keeping
+## every line from every file in memory.
 Model : {
 	demo : Bool,
 
@@ -371,8 +383,7 @@ Work : [ListDir(Str), ReadFile(Str, [New, Lane(U64)])]
 
 program = { init!, update!, render! }
 
-demo_frames : U64
-demo_frames = 150
+demo_frames = 150.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"
@@ -665,8 +676,7 @@ describe_read_error = |reason|
 ## app's own choice rather than a limit it has to respect. Six is chosen so the
 ## pacing is real rather than theoretical: a walk of a few hundred files
 ## genuinely backs up, and the backlog in the masthead genuinely rises and falls.
-max_in_flight : U64
-max_in_flight = 6
+max_in_flight = 6.U64
 
 ## Take as much off the front of the backlog as the in-flight budget has room
 ## for, oldest first.
@@ -705,8 +715,7 @@ expect completed(6) == 5
 ## arrived. The parser consumes one bounded window a frame whatever it is given,
 ## so without this the reads win the race and the model ends up holding the
 ## whole tree in memory to parse it a window at a time.
-arrival_limit : U64
-arrival_limit = 8
+arrival_limit = 8.U64
 
 # ---------------------------------------------------------------------------
 # What is kept
@@ -719,8 +728,7 @@ arrival_limit = 8
 ## every retained point is paid for on every frame whether or not it is on
 ## screen. Sixty thousand instances is about four megabytes, which is what this
 ## figure spends. Raising it costs frame time in exact proportion.
-point_budget : U64
-point_budget = 60_000
+point_budget = 60_000.U64
 
 ## Drop whole runs from the front until the budget is met.
 ##
@@ -778,8 +786,7 @@ grow_run = |runs, added|
 scan_budget : Budget
 scan_budget = { max_lines: 2_048, max_bytes: 65_536 }
 
-newline : U8
-newline = 10
+newline = 10.U8
 
 ## Scan the next bounded window of one file into plot points.
 ##
@@ -1005,8 +1012,7 @@ scan_once = |model, scan| {
 }
 
 ## How much of the longest line to keep for the HUD.
-peak_bytes : U64
-peak_bytes = 56
+peak_bytes = 56.U64
 
 ## Keep the longest line found so far, as bytes of its own.
 ##
@@ -1068,8 +1074,7 @@ lane_path = |model, index|
 ## columns is one bucket per six columns: fine enough that the 60-to-90 column
 ## ridge most source files have is a ridge, coarse enough to stay smooth at
 ## forty pixels tall.
-hist_buckets : U64
-hist_buckets = 20
+hist_buckets = 20.U64
 
 bucket_of : U64 -> U64
 bucket_of = |columns| U64.min(columns * hist_buckets / 120, hist_buckets - 1)
@@ -1130,11 +1135,9 @@ total_lines = |lanes| List.fold(lanes, 0, |sum, lane| sum + lane.lines)
 
 ## How long one sample of the throughput graphs covers, and how many are kept.
 ## Eight seconds of history at ten samples a second.
-sample_period : F32
-sample_period = 0.1
+sample_period = 0.1.F32
 
-rate_window : U64
-rate_window = 80
+rate_window = 80.U64
 
 ## Close the current sample if its period has elapsed.
 ##
@@ -1185,8 +1188,7 @@ recent_mean = |samples, of| {
 }
 
 ## How many samples the headline figure averages over: one second.
-mean_window : U64
-mean_window = 10
+mean_window = 10.U64
 
 latest_sample : List(Sample), (Sample -> U64) -> U64
 latest_sample = |samples, of|
@@ -1206,23 +1208,19 @@ per_second = |count| count / sample_period
 ## World units per line index on the shared scale, so a lane is as wide as its
 ## file is long. Twelve thousand lines is the full width of the plot; the
 ## longest file in this repository is about eleven thousand.
-line_scale : F32
-line_scale = 0.08
+line_scale = 0.08.F32
 
 ## Columns past this are clipped to the top of the lane rather than allowed to
 ## rescale it. A plot whose axes move every time a longer line arrives cannot
 ## be read while it is still filling in, which is the state this app is in for
 ## most of its interesting life.
-max_columns : F32
-max_columns = 120
+max_columns = 120.F32
 
 ## How much of a lane, in world units, the trace may use. The rest is the gap
 ## to the lane below.
-lane_span : F32
-lane_span = 32.4
+lane_span = 32.4.F32
 
-lane_height : F32
-lane_height = 40
+lane_height = 40.F32
 
 ## How far above its baseline a line of `columns` columns is drawn.
 ##
@@ -1261,16 +1259,14 @@ world_height = |lanes| F32.max(U64.to_f32(List.len(lanes)) * lane_height, lane_h
 ## sprite is radially symmetric, so its flip is its own reflection and the
 ## source rectangle can be the plain one -- which is what lets `plot_dot` stay a
 ## pure function that no test has to build a framebuffer to call.
-sprite_size : F32
-sprite_size = 64
+sprite_size = 64.F32
 
 dot_source : Math.Rect
 dot_source = Math.rect(0, 0, sprite_size, sprite_size)
 
 ## Size of one point at low zoom, in world units. The sprite is mostly halo, so
 ## the solid core of this is about a quarter of it.
-dot_size : F32
-dot_size = 5.6
+dot_size = 5.6.F32
 
 ## Points are sized in world units, so a magnified view magnifies them. The fix
 ## is to shrink them as the view grows, and the catch is that doing it from the
@@ -1278,17 +1274,14 @@ dot_size = 5.6
 ##
 ## So the zoom is quantised first. Each step is a factor of `step_ratio`, and
 ## only crossing a step boundary rewrites anything.
-step_ratio : F32
-step_ratio = 1.5
+step_ratio = 1.5.F32
 
-max_dot_step : I32
-max_dot_step = 9
+max_dot_step = 9.I32
 
 ## The zoom the first step is taken at. Below it a point is drawn at `dot_size`
 ## and simply gets smaller with the view, which is what should happen when the
 ## whole figure is being looked at from further away.
-step_base : F32
-step_base = 1.2
+step_base = 1.2.F32
 
 dot_step_of : F32 -> I32
 dot_step_of = |zoom| steps_above(zoom, step_base, 0)
@@ -1318,17 +1311,13 @@ current_dot_size = |model| dot_size_for(model.dot_step)
 ## How much of the window the figure's furniture keeps for itself: a masthead
 ## above, a key below, and a gutter on the left carrying one row per visible
 ## file.
-hud_top : F32
-hud_top = 200
+hud_top = 200.F32
 
-hud_bottom : F32
-hud_bottom = 84
+hud_bottom = 84.F32
 
-hud_left : F32
-hud_left = 360
+hud_left = 360.F32
 
-margin : F32
-margin = 30
+margin = 30.F32
 
 ## The part of the window the plot may draw in. `render!` scissors to this, so
 ## a dragged plot cannot scribble over the furniture.
@@ -1336,11 +1325,9 @@ plot_area : Math.Vec2 -> Math.Rect
 plot_area = |screen|
 	Math.rect(hud_left, hud_top, F32.max(screen.x - hud_left - margin, 1), F32.max(screen.y - hud_top - hud_bottom, 1))
 
-min_zoom : F32
-min_zoom = 0.04
+min_zoom = 0.04.F32
 
-max_zoom : F32
-max_zoom = 24
+max_zoom = 24.F32
 
 # ---------------------------------------------------------------------------
 # Layout of the batch
@@ -1395,8 +1382,7 @@ normalised_scale = |span|
 ## Source files average a little under forty bytes a line. Erring high keeps an
 ## in-progress trace inside its lane, so the correction when the true count
 ## arrives pulls the trace out rather than snapping it back.
-bytes_per_line : U64
-bytes_per_line = 42
+bytes_per_line = 42.U64
 
 estimated_lines : U64 -> U64
 estimated_lines = |bytes| U64.max(bytes / bytes_per_line, 1)
@@ -1471,8 +1457,7 @@ visible_height = |area, zoom| area.height / zoom
 ## edge would pin the lane being parsed to the very bottom pixel of the plot --
 ## which is the one place a reader cannot watch it, because the trace grows into
 ## an edge rather than into space.
-tail_room : F32
-tail_room = 0.15
+tail_room = 0.15.F32
 
 ## Keep a scroll position inside the strip, plus that room at the end.
 clamp_scroll : F32, List(Lane), Math.Rect, F32 -> F32
@@ -1523,8 +1508,7 @@ pan = |camera, delta| camera.with_target(camera.target().sub(delta.scale(1 / cam
 
 ## Scroll by a fixed number of screen pixels a notch, whatever the zoom, so the
 ## wheel moves the page rather than the world.
-scroll_pixels : F32
-scroll_pixels = 110
+scroll_pixels = 110.F32
 
 scroll_by : Camera.Camera2D, F32 -> Camera.Camera2D
 scroll_by = |camera, notches|
@@ -1574,12 +1558,10 @@ lane_index_at = |y|
 	}
 
 ## How long the sweep takes to cross the plot, in seconds.
-sweep_period : F32
-sweep_period = 7
+sweep_period = 7.F32
 
 ## How long the opening move takes, in seconds.
-entrance_seconds : F32
-entrance_seconds = 1.1
+entrance_seconds = 1.1.F32
 
 ## Cubic ease-out: fast at the start, settling rather than stopping.
 ease_out : F32 -> F32
@@ -2249,8 +2231,7 @@ draw_points! = |frame, model|
 	)
 
 ## How many of the most recent points the trail covers.
-trail_length : U64
-trail_length = 900
+trail_length = 900.U64
 
 ## The scan frontier: where in its lane the parser has got to, this instant.
 draw_head! : Draw.Frame, Model => {}

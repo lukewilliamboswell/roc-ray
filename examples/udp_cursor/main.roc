@@ -1,3 +1,9 @@
+## Share mouse positions between two local instances. Run one with
+## `--udp-port 7001 --udp-peer 7002` and the other with those ports reversed;
+## Escape quits. With no arguments, one instance sends to itself.
+##
+## This example shows immediate UDP sends, a Task for receiving data that may
+## wait, and Messages that carry received batches back to `update!`.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -7,32 +13,10 @@ import rr.Task
 import rr.Text
 import rr.Udp
 
-## Two instances showing each other's mouse pointer over UDP.
-##
-## Each instance binds a socket, sends its own pointer position from `update!`
-## every frame, and draws the position the peer last sent. Sending does not
-## wait, so it is an ordinary effect in `update!` beside everything else the
-## frame does. Receiving waits, so it lives in a task, and `update!` starts the
-## next one each time the previous answers.
-##
-## The pointer labelled `you` is the one being sent; `peer` is the one that
-## arrived. With one instance they sit on top of each other.
-##
-## Run two of them:
-##
-##     ./main --udp-port 7001 --udp-peer 7002
-##     ./main --udp-port 7002 --udp-peer 7001
-##
-## With no arguments the instance binds an ephemeral port and peers with
-## itself, so a single run still exercises both directions -- which is what a
-## headless run does.
-##
-## The wire format here is four bytes, and it is the app's, not the platform's:
-## the platform moves payloads and never looks inside one. Two bytes of x and
-## two of y, big-endian, is enough for a demo and is deliberately not a
-## protocol -- there is no sequence number, no acknowledgement, and no attempt
-## to detect a lost or reordered datagram, all of which a real game needs and
-## all of which are the app's to add.
+## State retained between updates: the socket and peer address, whether a
+## receive Task is active, the latest local and peer pointers, send/receive
+## counts, and prepared labels. This is enough to continue one receive at a
+## time and draw the most recently reported positions.
 Model : {
 	socket : Udp.Socket,
 	peer : Udp.Address,

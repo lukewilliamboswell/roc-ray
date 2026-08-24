@@ -1,3 +1,9 @@
+## A small pixel-painting app made entirely from generated graphics and sound.
+##
+## Drag to paint, press 1-4 to choose a colour, C to reset, and Escape to quit.
+## Run with `--record-demo` to create the gallery GIF automatically. This
+## example shows generated assets, updating part of a texture, and keeping
+## drawing data separate from the effects that upload pixels and play sound.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -14,20 +20,14 @@ import rr.Math
 import rr.Mouse
 import rr.Text
 
-## A paint program whose canvas, palette, and brush sound are all generated at
-## startup: no image or audio files.
-##
-## The canvas is one `Assets.Texture`. Painting a cell uploads that one cell with
-## `Assets.update_texture_region!` rather than re-sending the whole grid. The
-## editor is pure -- it returns the next model and a list of `Edit`s -- so what
-## changed and what to do about it can never come apart, and `update!` is the
-## thin shell that performs them.
-##
-## Run with `--record-demo` to paint a deterministic gallery GIF.
 PaintState := [Idle, Painted(U64)].{
 	is_eq : _
 }
 
+## State kept between updates: the canvas pixels and texture, the selected
+## colour and last painted cell, the generated sound, and the small amount of
+## input and demo state needed for the next update. Prepared labels are kept so
+## they do not need to be rebuilt every frame.
 Model : {
 	texture : Assets.Texture,
 	pixels : List(Color.Rgba),
@@ -42,17 +42,13 @@ Model : {
 
 program = { init!, update!, render! }
 
-grid_side : U64
-grid_side = 16
+grid_side = 16.U64
 
-canvas_x : F32
-canvas_x = 72
+canvas_x = 72.F32
 
-canvas_y : F32
-canvas_y = 72
+canvas_y = 72.F32
 
-cell_size : F32
-cell_size = 28
+cell_size = 28.F32
 
 canvas_size : F32
 canvas_size = U64.to_f32(grid_side) * cell_size
@@ -60,8 +56,7 @@ canvas_size = U64.to_f32(grid_side) * cell_size
 canvas_bounds : Math.Rect
 canvas_bounds = Math.rect(canvas_x, canvas_y, canvas_size, canvas_size)
 
-demo_frames : U64
-demo_frames = 100
+demo_frames = 100.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"
@@ -91,8 +86,7 @@ generated_assets_config = |args| {
 ## The brush is quiet next to the tone it is generated from. Named once, because
 ## every `Play` edit has to state it: a `Playback` carries volume, pitch, and pan
 ## together, so a stroke that names only its pitch would play at full volume.
-paint_volume : F32
-paint_volume = 0.35
+paint_volume = 0.35.F32
 
 palette_color : U64 -> Color.Rgba
 palette_color = |index|

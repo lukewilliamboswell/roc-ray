@@ -1,3 +1,9 @@
+## Create a postcard, move the sun with the mouse, choose a colourway with
+## 1-3, and press S to export `postcards/sunrise.png`. Escape quits. Run with
+## `--record-demo` to save a repeatable gallery recording instead.
+##
+## This example shows how to draw a large composition into a render texture,
+## display a scaled preview, and use a Task for an export that may take time.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,19 +14,10 @@ import rr.Math
 import rr.Task
 import rr.Text
 
-## A tiny postcard maker: choose a colourway, move the sun, and export the
-## composition as `postcards/sunrise.png` at twice the window's resolution.
-## Pass `--record-demo` to record a deterministic tour of the colourways.
-##
-## The postcard is composed once, into an offscreen render target 1440x960, and
-## the window shows that target scaled down to fit. Pressing S exports the
-## target itself, so the file is the full 1440x960 -- a window cannot be larger
-## than the monitor, and a framebuffer capture cannot be larger than the window,
-## so an offscreen target is the only way to export output at print size.
-##
-## The export runs from a task, at a realistic boundary: the editor stays
-## responsive while the task parks on the host encoding the image, and the
-## outcome arrives as a message on a later cycle.
+## State retained between updates: prepared text and the large render texture,
+## the selected colourway and sun position, export status, and whether the
+## repeatable demo is running. Keeping the render texture here lets `render!`
+## draw the same full-resolution postcard before showing its smaller preview.
 Model : {
 
 	## Prepared at the poster's size, because that is where they are drawn: the
@@ -43,20 +40,15 @@ program = { init!, update!, render! }
 
 ## The window, and the poster it is a view of. Everything drawn into the poster
 ## is in poster coordinates, so the two only meet where the target is blitted.
-window_width : F32
-window_width = 720
+window_width = 720.F32
 
-window_height : F32
-window_height = 480
+window_height = 480.F32
 
-poster_width : F32
-poster_width = 1440
+poster_width = 1440.F32
 
-poster_height : F32
-poster_height = 960
+poster_height = 960.F32
 
-demo_frames : U64
-demo_frames = 125
+demo_frames = 125.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"

@@ -1,3 +1,6 @@
+## Reads text, bytes, and file details while continuing to animate the window.
+## Press Escape to quit. This example introduces tasks for work that may take
+## time, messages that return task results to `update!`, and typed file errors.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,34 +11,9 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## Read files without stalling the frame.
-##
-## Both reads happen inside tasks. `update!` spawns them and returns
-## immediately; each task parks on the host's event loop while the frame loop
-## keeps drawing, and its return value arrives as a typed `Msg` on a later
-## `input.messages`. Neither read needs an id or a completion filter: each has
-## its own `Msg` variant, so two answers landing on one cycle stay apart.
-##
-## Inside a task the read is an ordinary call that returns its answer, so a
-## multi-step load is straight-line code with `?` rather than a state machine
-## spread over `Msg` and `update!`.
-##
-## The third task neither reads nor copies: `Files.metadata!` asks what the
-## path is, how large it is, and when it last changed. Its `modified` is
-## wall-clock time, comparable with `Time.now!` and with a `modified` the app
-## saved earlier, which is what makes polling it a hot reload.
-##
-## Each card's indicator turns while its task is in flight and settles into a
-## dot when its answer lands. ESC quits.
-##
-## `Files.read_text!` copies valid UTF-8 into a `Str`, so it has a small
-## inline limit. `Files.read_bytes!` instead returns an ordinary `List(U8)`:
-## the host moves the worker allocation into List ARC without copying file
-## bytes. Keep the list in the model for as long as its bytes are useful; when
-## the final List or seamless sublist goes away, its typed host resource is
-## released automatically. To retain only a small portion, use
-## `List.release_excess_capacity` to deliberately copy that portion instead of
-## pinning the source file. List updates use normal copy-on-write semantics.
+## The Model is the app state kept between calls to `update!`. It stores each
+## operation's progress or result, animation time, and prepared labels needed
+## to draw the next frame.
 Model : {
 	small : ReadState,
 	large : BytesState,
@@ -48,8 +26,8 @@ Model : {
 
 ReadState : [Waiting, Loaded(U64), Failed(Str)]
 
-## Holding this ordinary Roc list is the whole ownership API. There is no host
-## handle and no release effect to remember.
+## The bytes are an ordinary Roc list. Keeping or discarding the list also
+## keeps or releases its storage; no manual cleanup is needed.
 BytesState : [Waiting, Held(List(U8)), Failed(Str)]
 
 ## A stat holds nothing: it answers with numbers, so the model keeps the answer
@@ -111,10 +89,8 @@ apply_message = |state, message|
 		MetadataFinished(result) => { ..state, meta: meta_state(result) }
 	}
 
-## What a stat found, as the line the app draws.
-##
-## `modified` is formatted as UTC rather than shown as a number, because an
-## instant an app can read is the point of it being a `Time.Timestamp`.
+## Formats file details as the line shown in the app. `modified` is a
+## `Time.Timestamp`, so it can be displayed as a UTC date and time.
 meta_state : Try(Files.Metadata, Files.MetadataError) -> MetaState
 meta_state = |result|
 	match result {
@@ -136,8 +112,8 @@ describe_kind = |kind|
 expect meta_state(Ok({ kind: File, size_bytes: 12, modified: Time.Timestamp.epoch }))
 	== Described("file, 12 bytes, modified 1970-01-01T00:00:00Z")
 
-## A stat has no `Busy`: it holds no host payload, so there is no delivery slot
-## for it to run out of, and the app has one refusal fewer to handle.
+## File details do not return retained data, so this operation has no `Busy`
+## result to handle.
 expect meta_state(Err(NotFound)) == Failed("not found")
 
 string_state : Try(Str, Files.ReadTextError) -> ReadState

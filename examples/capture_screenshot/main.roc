@@ -1,3 +1,7 @@
+## Saves a screenshot of the app and demonstrates capture-path safety. Press S
+## to save, E to try a refused `..` path, or Escape to quit. Without input it
+## saves on the third frame and exits for automated runs. This example shows
+## screenshot tasks, result messages, and output-directory confinement.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -8,26 +12,9 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## Take a single screenshot, and show what the output sandbox refuses.
-##
-## Every capture path is relative to the directory set with `with_output_dir`.
-## A path that would escape it -- absolute, or containing `..` -- is refused
-## rather than quietly rewritten. `Capture` is the one path-sandboxed writer the
-## platform grants; `Files.write_text!` and `Files.write_bytes!` write wherever
-## the process may write, so this confinement is `Capture`'s own promise rather
-## than the platform's only way of putting bytes on disk.
-##
-## The filename carries the wall-clock instant the app started, so a second run
-## does not overwrite the first one's picture. `Time.now!` is the only clock
-## that knows what day it is; `input.time` is the simulation timeline and would
-## give every run the same name. Reading it once in `init!` and keeping the
-## name in the model is what makes the name stable for the whole run, which is
-## the shape to copy: the calendar is nondeterministic, so an app reads it
-## deliberately at the moments it means to.
-##
-## Press S to write the shot, E to watch an escaping path be refused, ESC to
-## exit. With no keypress it screenshots itself on frame 3 and exits, so the
-## headless CI sweep still runs it.
+## The Model keeps prepared labels, the latest capture result, and the output
+## filename between updates. The filename is created once from wall-clock time
+## so it stays stable throughout the run and avoids overwriting an earlier shot.
 Model : {
 	title : Text.Prepared,
 	subtitle : Text.Prepared,
@@ -48,9 +35,8 @@ Model : {
 	shot_path : Str,
 }
 
-## How far the app has got. `NoCapture` until a task answers: the file is
-## encoded and written off the frame thread, so how many frames that takes is
-## not something this app gets to assume.
+## The latest screenshot result. `NoCapture` remains until the task returns a
+## message, because saving may complete after several frames.
 Outcome := [NoCapture, Saved, SaveFailed, Refused].{
 	is_eq : _
 }
@@ -73,7 +59,7 @@ init! = App.init(
 			shot_path = "scene-${Time.now!().to_file_stamp()}.png"
 			Ok({
 				title: Text.from("A picture of this frame", font).size(26).prepare!()?,
-				subtitle: Text.from("encoded and written off the frame thread, reported back as a message", font).size(14).prepare!()?,
+				subtitle: Text.from("saved in a task, then reported back as a message", font).size(14).prepare!()?,
 				help: Text.from("S  save        E  try to escape the sandbox        ESC  quit", font).size(13).spacing(2.0).prepare!()?,
 				idle: Text.from("no capture yet", font).size(16).prepare!()?,
 				saved: Text.from("saved shots/${shot_path}", font).size(16).prepare!()?,
@@ -85,12 +71,9 @@ init! = App.init(
 		},
 )
 
-## A screenshot waits: the host reads the framebuffer at the end of the frame
-## that asked, then encodes and writes the file off the frame thread. So the
-## call belongs inside a task, where it parks the coroutine and the frame loop
-## keeps drawing; its outcome arrives on a later input.
-##
-## The pixels are still the asking frame's. Only the report waits.
+## Screenshot saving may wait, so it runs in a Task instead of pausing
+## `update!`. A Task is work that can wait and later returns one Message through
+## `App.Input`. The captured pixels still come from the frame that requested it.
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, program_input| {
 	input = program_input.devices
@@ -101,11 +84,9 @@ update! = |model, program_input| {
 	escape_requested = input.key_pressed(KeyE)
 	save_requested = input.key_pressed(KeyS) or program_input.time.cycle_count == 3
 
-	# Frame 3 asks and the host reads the framebuffer at the end of it, but the
-	# file is encoded and written off the frame thread, so the outcome arrives
-	# on whichever later input the task finished by. Wait for it rather than for
-	# a frame number: that is the whole difference between a task and a direct
-	# effect. The frame cap is only so an unattended run cannot hang.
+	# Frame 3 requests the screenshot. The result arrives only when the task
+	# returns its message, rather than being inferred from a later frame number.
+	# The frame cap prevents an unattended run from waiting forever.
 	settled = outcome != NoCapture
 
 	if escape_requested {

@@ -1,3 +1,9 @@
+## Resize the window and select the Display, Audio, or Controls panel. Press M
+## to suggest moving the window to another monitor and Escape to quit. Run with
+## `--record-demo` to save a repeatable gallery recording.
+##
+## This example shows one shared layout calculation for drawing and pointer hit
+## testing, resizable-window settings, and monitor information.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -10,20 +16,6 @@ import rr.Mouse
 import rr.Text
 import rr.Window
 
-## A settings screen that rearranges itself as the window resizes. Pass
-## `--record-demo` to record a deterministic tour of its panels.
-##
-## `layout_for` is a pure function of the surface size, and both callbacks call
-## it: `update!` to decide what the pointer is over, `render!` to draw. Nothing
-## about the geometry is stored, so the two can never disagree. The window is
-## resizable with a minimum size, and `with_exit_key(NoExitKey)` frees Escape
-## for the UI so the app owns shutdown itself.
-##
-## The Display panel is where the window looks at the display it is on. It
-## reads `Window.scale!` while drawing -- a factor the backend already holds,
-## so it costs nothing mid-frame -- to report the framebuffer resolution behind
-## the logical size, and `M` walks the window across the monitors
-## `Window.monitors!` found.
 Selection := [Display, AudioSettings, Controls].{
 	is_eq : _
 }
@@ -40,12 +32,10 @@ UiCopy : {
 	help : Text.Prepared,
 }
 
-## The window size is deliberately absent. `update!` needs it to decide what the
-## pointer is over, and reads it off the input; `render!` needs it to draw the
-## same layout, and asks the frame. Neither reason is a reason to remember it.
-## The monitor list is remembered because it is not free to ask for: it
-## allocates a name per display. It is re-read whenever the app acts on it, so
-## a display plugged in mid-run still shows up.
+## State retained between updates: prepared labels, the selected panel and
+## pointer position, animation time, monitor choices, and demo mode. Window
+## size is intentionally omitted because `update!` and `render!` each receive
+## the current size when they need it.
 Model : {
 	ui : Box(UiCopy),
 	selection : Selection,
@@ -58,8 +48,7 @@ Model : {
 
 program = { init!, update!, render! }
 
-demo_frames : U64
-demo_frames = 150
+demo_frames = 150.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"

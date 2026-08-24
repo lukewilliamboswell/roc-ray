@@ -1,3 +1,8 @@
+## A platform game with a mirror-bouncing laser and a spring-like grapple.
+## Move with A/D or the arrow keys, jump with Space, aim with the mouse, use the
+## laser with the left button, grapple with the right button, and quit with
+## Escape. It demonstrates tilemaps, collision and movement, cameras, sprites,
+## and calculations for the two tools.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -17,15 +22,6 @@ import rr.Sprite
 import rr.Tilemap
 import Cave
 
-## A platformer with two mouse-driven tools: a laser that bounces off mirrors
-## and a grapple hook on a spring.
-##
-## Tilemap collision, gravity, and jumping come from `Physics`, with
-## `map_to_world` bridging Tiled's Y-down space and the Y-up physics space. Both
-## tools are pure recursive functions over the level, so a bounce path or a
-## latch point can be worked out without touching the host. Domain shapes live
-## in the sibling `Cave` module, which keeps this file to loading, simulation,
-## and drawing.
 GameState : Cave.GameState
 
 LaserSegment : Cave.LaserSegment
@@ -60,24 +56,23 @@ Player : Cave.Player
 
 World : Cave.World
 
+## The Model is defined in the nearby `Cave` module and retained between
+## updates. It groups loaded drawing resources with the level and changing
+## world state so movement, tools, and rendering all use the same game state.
 Model : Cave.Model
 
 program = { init!, update!, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
 map_path : Str
 map_path = "examples/cave_climb/assets/cave_climb.tmx"
 
-player_width : F32
-player_width = 42
+player_width = 42.F32
 
-player_height : F32
-player_height = 58
+player_height = 58.F32
 
 half_player_w : F32
 half_player_w = player_width * 0.5
@@ -85,77 +80,53 @@ half_player_w = player_width * 0.5
 half_player_h : F32
 half_player_h = player_height * 0.5
 
-move_speed : F32
-move_speed = 315
+move_speed = 315.F32
 
-gravity : F32
-gravity = -2100
+gravity = -2100.F32
 
-jump_velocity : F32
-jump_velocity = 920
+jump_velocity = 920.F32
 
-max_fall_speed : F32
-max_fall_speed = -980
+max_fall_speed = -980.F32
 
-gem_radius : F32
-gem_radius = 34
+gem_radius = 34.F32
 
-checkpoint_radius : F32
-checkpoint_radius = 38
+checkpoint_radius = 38.F32
 
-goal_radius : F32
-goal_radius = 54
+goal_radius = 54.F32
 
-laser_range : F32
-laser_range = 780
+laser_range = 780.F32
 
-laser_step : F32
-laser_step = 10
+laser_step = 10.F32
 
-laser_bounce_limit : U64
-laser_bounce_limit = 5
+laser_bounce_limit = 5.U64
 
-laser_player_radius : F32
-laser_player_radius = 17
+laser_player_radius = 17.F32
 
-laser_reflect_nudge : F32
-laser_reflect_nudge = 12
+laser_reflect_nudge = 12.F32
 
-mirror_thickness : F32
-mirror_thickness = 9
+mirror_thickness = 9.F32
 
-hook_launch_speed : F32
-hook_launch_speed = 1040
+hook_launch_speed = 1040.F32
 
-hook_max_range : F32
-hook_max_range = 980
+hook_max_range = 980.F32
 
-hook_max_age : F32
-hook_max_age = 1.35
+hook_max_age = 1.35.F32
 
-hook_collision_step : F32
-hook_collision_step = 9
+hook_collision_step = 9.F32
 
-hook_spring_strength : F32
-hook_spring_strength = 18
+hook_spring_strength = 18.F32
 
-hook_damping : F32
-hook_damping = 3.2
+hook_damping = 3.2.F32
 
-hook_max_acceleration : F32
-hook_max_acceleration = 3200
+hook_max_acceleration = 3200.F32
 
-ground_control : F32
-ground_control = 90
+ground_control = 90.F32
 
-air_control : F32
-air_control = 20
+air_control = 20.F32
 
-ground_friction : F32
-ground_friction = 70
+ground_friction = 70.F32
 
-air_drag : F32
-air_drag = 0.35
+air_drag = 0.35.F32
 
 init! : App.Init(Model, _)
 init! = App.init(

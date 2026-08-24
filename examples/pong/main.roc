@@ -1,3 +1,8 @@
+## Play Pong against a computer-controlled right paddle.
+##
+## Use W and S to move, Space to serve or start a new match, and Escape to quit.
+## This example shows frame-rate-independent movement, separating game rules
+## from sound effects, and seeded random serves that can be reproduced.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.Draw
@@ -9,20 +14,10 @@ import rr.App
 import rr.Math
 import rr.Text
 
-## Two-paddle Pong: W and S drive the left paddle, an AI tracks the ball on the
-## right, first to five wins and SPACE serves a new match.
-##
-## The presentation is a neon arcade cabinet: a gradient field with a dashed
-## centre line, paddles and ball lit by additive glow, a fading ball trail, and
-## a screen flash that pulses on every hit and every point. All of it is derived
-## from the model -- the trail is a short list of past ball positions and the
-## flash is one decaying number -- so the rules below stay the whole game.
-##
-## Everything moves in pixels per second scaled by the cycle's elapsed seconds,
-## so the game plays the same at any frame rate. The step is pure and returns
-## the sounds the frame made; `update!` plays them and checks for Escape. Serve
-## angles are drawn from a `Random.State` held in the model, so a run replays
-## exactly from its seed.
+## State kept between updates: ball and paddle movement, scores, visual effects,
+## prepared text and sounds, and the random generator used for serves. Keeping
+## both game state and short-lived presentation details here lets `render!`
+## draw the latest result without changing the game.
 Model : {
 	ball_x : F32,
 	ball_y : F32,
@@ -60,48 +55,35 @@ Model : {
 }
 
 # --- Constants (screen is 800x600; speeds in pixels/second) ---
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
-paddle_w : F32
-paddle_w = 15
+paddle_w = 15.F32
 
-paddle_h : F32
-paddle_h = 100
+paddle_h = 100.F32
 
-paddle_margin : F32
-paddle_margin = 30
+paddle_margin = 30.F32
 
-ball_r : F32
-ball_r = 10
+ball_r = 10.F32
 
-paddle_speed : F32
-paddle_speed = 360
+paddle_speed = 360.F32
 
-ai_speed : F32
-ai_speed = 270
+ai_speed = 270.F32
 
-init_vx : F32
-init_vx = 260
+init_vx = 260.F32
 
 # vy gained per pixel of offset between ball and paddle centre on a hit
-bounce_factor : F32
-bounce_factor = 6
+bounce_factor = 6.F32
 
 # First player to this many points wins.
-win_score : U64
-win_score = 5
+win_score = 5.U64
 
 # The ball's comet: how many past positions to keep, and how far apart to
 # sample them.
-trail_length : U64
-trail_length = 14
+trail_length = 14.U64
 
-trail_spacing : F32
-trail_spacing = 11
+trail_spacing = 11.F32
 
 # --- Palette: one dark field, two rival neons, one warm ball ---
 field_top : Color.Rgba

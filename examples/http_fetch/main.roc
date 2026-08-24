@@ -1,3 +1,9 @@
+## Fetch a web page while the window remains responsive.
+##
+## Press R to fetch again and Escape to quit. Pass `--url URL`, or set
+## `ROC_RAY_HTTP_URL`, to replace the default address. This example shows a
+## `Task`: work that may wait, such as an HTTP request. A finished Task returns
+## one `Message`, which a later `Input` delivers to `update!`.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	http: "https://github.com/roc-lang/http/releases/download/1.0.0/6ZUwqYhCS8PU9Mo6MF7oV82ET2o7KYb57CLKDq4cq4sS.tar.zst",
@@ -14,23 +20,10 @@ import rr.Text
 import http.Request
 import http.Response
 
-## Fetching over HTTP without dropping a frame.
-##
-## The whole request is one ordinary-looking line inside `Task.spawn!`:
-##
-##     Task.spawn!(input, || fetch!(id, url))
-##
-## `Http.send!` inside that closure looks synchronous and is: it returns the
-## response, or an error, and nothing else happens in that task until it does.
-## What it does *not* do is stall the frame. The host runs the closure on its
-## own coroutine and parks it on the socket, so the ring keeps spinning and the
-## elapsed counter keeps climbing for however long the server takes. That is
-## the difference this platform's task model buys: a 200 ms round trip costs
-## twelve frames if you call it from `update!`, and nothing if you call it from
-## a task.
-##
-## Press R to fetch again, ESC to quit. The URL comes from `--url`, then from
-## `ROC_RAY_HTTP_URL`, then from the default below.
+## State kept between updates: the selected URL, the latest request result and
+## timing, and prepared labels. The request number identifies the result that
+## belongs to the most recent fetch when several Tasks finish in a different
+## order from the one in which they started.
 Model : {
 	url : Str,
 	state : State,
@@ -65,13 +58,11 @@ default_url = "https://www.roc-lang.org/"
 
 ## Lines of the body to show. More than this and the panel stops being a
 ## preview and starts being a bad text viewer.
-preview_lines : U64
-preview_lines = 12
+preview_lines = 12.U64
 
 ## Bytes of each preview line to show, so a minified payload does not draw one
 ## row off the right edge of the window.
-preview_columns : U64
-preview_columns = 96
+preview_columns = 96.U64
 
 program = { init!, update!, render! }
 
@@ -147,8 +138,8 @@ update! = |model, input| {
 	}
 }
 
-## One request, written top to bottom. The host parks this coroutine on the
-## socket; `update!` has already returned by the time the reply arrives.
+## One request, written top to bottom. Waiting here pauses this Task while the
+## app continues updating and drawing.
 ##
 ## `Http.send!` rather than `Http.get_utf8!` because this URL is a runtime
 ## string: `get_utf8!` takes an already-validated `Url`, which is what a quoted

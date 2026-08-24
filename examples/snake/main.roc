@@ -1,3 +1,7 @@
+## Play Snake with the arrow keys; press Space after a crash to restart and
+## Escape to quit. The game demonstrates movement at a fixed rate independent
+## of drawing speed, reproducible random food placement, and sound effects
+## chosen by game rules and played from `update!`.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -10,19 +14,6 @@ import rr.Random
 import rr.Math
 import rr.Text
 
-## Snake on a fixed timestep, with a replayable simulation.
-##
-## The board is drawn as a neon arcade cabinet: a gridded panel, a snake that
-## fades from a bright head to a deep tail, and additive glow under the head and
-## the pulsing food. The pulse is the only presentation state, one seconds
-## counter the frame loop advances, so the rules below are still the whole game.
-##
-## `update!` folds each cycle's elapsed seconds into an accumulator and runs as
-## many discrete steps as the frame paid for, so the snake moves at the same
-## speed whatever the frame rate. The step is pure and returns the sounds it
-## made; `update!` plays them. Randomness is `Random.State` in the model rather
-## than an effect, so food placement is decided on the frame it is eaten and a
-## run replays exactly from its seed.
 Cell : {
 	x : I32,
 	y : I32,
@@ -34,6 +25,10 @@ Direction := [DirUp, DirDown, DirLeft, DirRight].{
 
 GameState := [Playing, GameOver]
 
+## State retained between updates: the snake board and score, queued direction,
+## fixed-rate timing, repeatable random state, audio and font resources, and a
+## small animation timer. These values are enough for the next update to
+## continue the same game and for `render!` to draw it.
 Model : {
 	snake : List(Cell),
 	direction : Direction,
@@ -76,36 +71,26 @@ Stepped : {
 
 program = { init!, update!, render! }
 
-screen_w : F32
-screen_w = 800
+screen_w = 800.F32
 
-screen_h : F32
-screen_h = 600
+screen_h = 600.F32
 
-board_x : F32
-board_x = 75
+board_x = 75.F32
 
-board_y : F32
-board_y = 80
+board_y = 80.F32
 
-cell_size : F32
-cell_size = 26
+cell_size = 26.F32
 
-grid_cols : I32
-grid_cols = 25
+grid_cols = 25.I32
 
-grid_rows : I32
-grid_rows = 18
+grid_rows = 18.I32
 
 # The same two counts as `U64`, for the list-shaped loops the renderer uses.
-grid_cols_count : U64
-grid_cols_count = 25
+grid_cols_count = 25.U64
 
-grid_rows_count : U64
-grid_rows_count = 18
+grid_rows_count = 18.U64
 
-step_time : F32
-step_time = 0.115
+step_time = 0.115.F32
 
 # --- Palette: one dark cabinet, a cyan snake, a warm apple ---
 field_top : Color.Rgba

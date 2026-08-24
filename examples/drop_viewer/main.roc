@@ -1,3 +1,6 @@
+## Displays an image dropped onto the window; press Escape to quit. This
+## example shows one-time dropped-file input, tasks that read without pausing
+## drawing, messages that return the bytes to `update!`, and texture creation.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -9,26 +12,9 @@ import rr.Math
 import rr.Task
 import rr.Text
 
-## Drop an image on the window and look at it.
-##
-## `input.dropped` is where a drop arrives, and it behaves like a key press
-## rather than like a position: it is empty on almost every cycle, and the one
-## call to `update!` that sees a drop is the only one that will. So this app
-## acts on it immediately rather than storing it.
-##
-## A dropped path is absolute and comes from outside anything the app chose,
-## and `Files` is not sandboxed, so reading it is an ordinary read: the task
-## spawned here parks on `Files.read_bytes!` while the frame loop keeps
-## drawing, and the bytes arrive as a message on a later cycle. Decoding them
-## into a texture is a host-state change, so it happens back in `update!`.
-##
-## The drop position rides along with each path. This viewer shows one image at
-## a time and only reports where it landed, but an app with two panes would use
-## it to decide which one the file was meant for.
-##
-## At most 64 paths cross in one cycle. A larger drop sets
-## `input.dropped_overflow`, which is why this app can say that it was handed
-## part of a drop instead of quietly showing the wrong file.
+## The Model keeps the current status, decoded texture, overflow warning, and
+## prepared title between updates. The dropped path itself is handled when it
+## arrives; only information needed for later progress and drawing is retained.
 Model : {
 	title : Text.Prepared,
 	status : Status,
@@ -43,11 +29,9 @@ Msg : [Opened(Str, { x : F32, y : F32 }, Try(List(U8), Files.ReadBytesError))]
 
 program = { init!, update!, render! }
 
-window_width : F32
-window_width = 900
+window_width = 900.F32
 
-window_height : F32
-window_height = 620
+window_height = 620.F32
 
 ## Where the image goes. Everything else is a line of text above or below it.
 canvas : Math.Rect
@@ -72,9 +56,8 @@ init! = App.init(
 
 update! : Model, App.Input(Msg) => Try(Model, [Exit(I64), ..])
 update! = |model, input| {
-	# One dropped path is one read. Every file in the drop is read, so the
-	# reads race; the app shows whichever answer lands last, which is the
-	# honest thing for a viewer that shows one image.
+	# One dropped path starts one read. If several files are dropped, the app
+	# displays the result whose message arrives last.
 	List.for_each!(
 		input.dropped,
 		|drop| Task.spawn!(input, || Opened(drop.path, drop.position, Files.read_bytes!(drop.path))),
@@ -110,7 +93,7 @@ update! = |model, input| {
 	}
 }
 
-## What one delivered read means, with nothing performed.
+## Converts one delivered read into the next status and an optional decode.
 Pending : { status : Status, decode : [NoDecode, Decode(Str, { x : F32, y : F32 }, Recognized, List(U8))] }
 
 apply_message : Pending, Msg -> Pending
@@ -192,8 +175,7 @@ expect
 		.status
 		== Reading("/home/example/holiday.png")
 
-## A failed read names the path, because the whole point of a drop is that the
-## user chose the file and the app did not.
+## A failed read names the path so the user can identify the selected file.
 expect
 	apply_message(
 		{ status: Reading("/home/example/gone.png"), decode: NoDecode },
@@ -202,8 +184,7 @@ expect
 		.status
 		== Refused("/home/example/gone.png: not found")
 
-## Bytes that are not an image are refused before the host is asked to decode
-## them.
+## Reject unrecognized bytes before asking `Assets` to decode them.
 expect
 	apply_message(
 		{ status: Reading("/home/example/notes.txt"), decode: NoDecode },

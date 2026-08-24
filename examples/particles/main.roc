@@ -1,3 +1,9 @@
+## Animate a fountain of 4,000 coloured sprites.
+##
+## Move the pointer to steer the fountain, hold Space for a wider spray, and
+## press Escape to quit. Run with `--record-demo` to create the gallery GIF.
+## This example shows a frame-rate-independent particle update and drawing many
+## copies of one texture in a single batch.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -11,20 +17,9 @@ import rr.Draw
 import rr.Math
 import rr.Text
 
-## A sprite fountain that draws every particle in one hosted call.
-##
-## `frame.texture!` crosses the Roc/host boundary once per sprite, and at a few
-## thousand sprites that crossing, not the GPU, is what a frame is spent on.
-## `frame.texture_instances!` hands the host one list and lets it loop, so the
-## whole fountain costs one crossing however many particles are in it.
-##
-## The simulation is pure and runs in `update!`: it advances the particles and
-## projects them onto the flat `Draw.TextureInstance` records the batch
-## transports. `render!` only hands that retained list to the host, so the
-## particle record can stay whatever the application wants it to be.
-##
-## Move the pointer to steer the emitter, hold Space for a wider spray, ESC quits.
-## Run with `--record-demo` to write a deterministic gallery GIF.
+## State kept between updates: each particle's position and motion, the drawing
+## instances made from those particles, the shared sprite and prepared label,
+## and whether the deterministic recording mode is active.
 Model : {
 	sprite : Draw.Texture,
 	particles : List(Particle),
@@ -50,11 +45,9 @@ Msg : []
 
 program = { init!, update!, render! }
 
-particle_count : U64
-particle_count = 4000
+particle_count = 4000.U64
 
-demo_frames : U64
-demo_frames = 125
+demo_frames = 125.U64
 
 record_demo_flag : Str
 record_demo_flag = "--record-demo"

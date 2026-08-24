@@ -1,3 +1,7 @@
+## Drag the blue corner to reshape a texture in perspective; press R to reset.
+## This example shows how four editable corners place a texture in perspective,
+## how to place points with the same transformation, and how `update!` changes
+## the mouse cursor after calculating what the pointer is over.
 app [Model, program] {
 	rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst",
 	roc: "nightly-2026-08-23-fb208ba",
@@ -12,15 +16,12 @@ import rr.Math
 import rr.Mouse
 import rr.Text
 
-## Drag one corner of a texture and watch the perspective follow.
-##
-## `Draw.ProjectiveQuad.from_corners` builds a homography from four points and
-## refuses the ones that have no perspective -- degenerate, non-convex, or with
-## the horizon inside the quad -- so a rejected drag simply leaves the last good
-## quad in place. `quad.project` puts overlay points through that same
-## homography, so the marker at the centre really is the centre of the image.
 Corners : Draw.ProjectiveQuadCorners
 
+## State retained between updates: the texture and its last valid projective
+## quad, the editable corner positions, drag state, prepared help text, and
+## elapsed time for the handle animation. Invalid corner arrangements are not
+## stored, so rendering can always use `quad` safely.
 Model : {
 	texture : Draw.Texture,
 	quad : Draw.ProjectiveQuad,
@@ -71,11 +72,11 @@ update! = |model, program_input| {
 	Ok({ ..dragged.model, elapsed: model.elapsed + program_input.time.elapsed_seconds })
 }
 
-## Fold one frame of pointer input into the quad.
+## Apply the latest pointer input to the quad.
 ##
-## The cursor shape is a host effect rather than model state. This pure step
-## names the shape it wants and `update!` sets it, so the drag logic stays
-## testable without a host.
+## This function returns the cursor shape alongside the next Model. `update!`
+## then applies that cursor as an effect, which keeps the calculations easy to
+## test with ordinary values.
 drag_corner : Model, Devices.Snapshot -> { model : Model, cursor : Mouse.Cursor }
 drag_corner = |model, input| {
 	mouse = input.mouse.position()

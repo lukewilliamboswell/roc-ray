@@ -1,3 +1,7 @@
+## Press Space to add a random score to a SQLite-backed high-score board;
+## Escape quits. Scores remain in `sqlite_scores_out/scores.db` between runs.
+## This example shows startup database setup, prepared statements, and Tasks:
+## work that may wait runs separately and returns rows as a later Message.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -10,28 +14,10 @@ import rr.Task
 import rr.Text
 import rr.Time
 
-## A high-score board that outlives the process.
-##
-## `init!` opens the database, runs the schema, and loads the top ten before the
-## first frame -- startup is the one place a waiting effect may block, and a
-## board with nothing in it is not worth drawing. After that every read and
-## write happens on a task, so a slow disk costs a query rather than a frame.
-##
-## The pattern worth copying is the round trip. `update!` spawns a task that
-## writes and then re-reads in one straight line, and the task answers with the
-## rows it read. The model never guesses what the database now holds; it is
-## told. That is what keeps a failed write visible instead of silently letting
-## the screen and the disk disagree.
-##
-## The insert is prepared once in `init!` and kept in the model, because the
-## same statement runs on every keypress and re-parsing it each time would be
-## work for nothing. The read is a one-shot `Sqlite.query!`, which does not
-## occupy a statement slot.
-##
-## Each row is stamped with `Time.now!` rather than with the cycle's simulation
-## clock, and the board renders that stamp as an ISO 8601 instant. A row
-## outlives the process that wrote it, so the only clock it can be measured
-## against is the world's.
+## State retained between updates: the open database and reusable insert
+## statement, the displayed rows and request status, random score generation,
+## drawing resources, and animation time. Keeping the last confirmed rows here
+## ensures the screen changes only after the database task reports its result.
 Model : {
 	db : Sqlite.Db,
 	insert : Sqlite.Stmt,
@@ -405,8 +391,7 @@ draw_status! = |frame, status, elapsed, y| {
 
 ## Half the indicator's width, so the status line has the same left margin as
 ## everything else on the screen.
-width_of_indicator : F32
-width_of_indicator = 12
+width_of_indicator = 12.F32
 
 spinner_dots : List({ lag : F32, radius : F32, alpha : U8 })
 spinner_dots = [

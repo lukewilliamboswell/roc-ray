@@ -1,3 +1,9 @@
+## A minimal RocRay app with animated drawing and pointer input.
+##
+## Move the pointer, hold the left mouse button to change the accent colour,
+## and press Escape to quit. This example introduces the three app functions:
+## `init!` creates the starting state, `update!` responds to each `Input`, and
+## `render!` draws the current state into a `Frame`.
 app [Model, program] { rr: platform "https://github.com/lukewilliamboswell/roc-ray/releases/download/0.10.0-rc2/CaTEYs2hRbxfDqcG6deiU9kmGXaR5T1tEgf4ASxHt1S1.tar.zst", roc: "nightly-2026-08-23-fb208ba" }
 
 import rr.App
@@ -5,13 +11,9 @@ import rr.Color
 import rr.Draw
 import rr.Text
 
-## The whole app loop, with nothing else in the way: prepare text once in
-## `init!`, fold each cycle's input into the model in `update!`, draw the model
-## in `render!`, and leave with `Err(Exit(0))`.
-##
-## `render!` is handed a frame and the model, and no input, so anything it needs
-## to know about the pointer or the clock has to be in the model. That is what
-## this one holds.
+## State kept between updates: prepared text and layout that can be reused,
+## plus the latest pointer position, button state, and elapsed time needed to
+## draw the next frame.
 Model : {
 	title : Text.Prepared,
 	help : Text.Prepared,

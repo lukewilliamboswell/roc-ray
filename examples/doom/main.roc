@@ -36,7 +36,11 @@ init! = App.init(
 		.with_size({ width: 1280, height: 720 })
 		.with_frame_pacing(VSync)
 		.with_cursor_mode(Locked),
-	|_startup| {
+	|startup| {
+		# App.Config currently transports Hidden and Locked as the same initial
+		# visibility bit. Reapply the full mode once the native window exists so
+		# first-person mouse movement cannot escape the window.
+		App.set_cursor_mode!(startup, Locked)
 		store = Assets.Store.open!(Assets.working_directory("examples/doom/assets"))?
 		atlas = Assets.load_texture!(store, "freedoom/generated/atlas.png")?
 		Assets.set_texture_filter!(atlas, Point)

@@ -20,7 +20,7 @@ DrawHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Text.Prepared.stub`.
 		stub : PreparedText
-		stub = PreparedText.(Box.box(0))
+		stub = PreparedText.(Box.box(U64.highest))
 	}
 
 	RenderTexture :: Texture.{
@@ -39,7 +39,7 @@ DrawHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Draw.Shader.stub`.
 		stub : Shader
-		stub = Shader.(Box.box(0))
+		stub = Shader.(Box.box(U64.highest))
 	}
 
 	Uniform :: { shader : Shader, location : I32 }.{

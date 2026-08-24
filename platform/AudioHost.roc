@@ -8,14 +8,14 @@ AudioHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Audio.Sound.stub`.
 		stub : Sound
-		stub = Sound.(Box.box(0))
+		stub = Sound.(Box.box(U64.highest))
 	}
 
 	Music :: Box(U64).{
 
 		## The invalid token, as a resource-free handle. See `Audio.Music.stub`.
 		stub : Music
-		stub = Music.(Box.box(0))
+		stub = Music.(Box.box(U64.highest))
 	}
 
 	SoundResult : { sound : Sound, err : U8 }

@@ -39,7 +39,7 @@ SqliteHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Sqlite.Db.stub`.
 		stub : Db
-		stub = Db.(Box.box(0))
+		stub = Db.(Box.box(U64.highest))
 	}
 
 	## Opaque prepared statement. Its heap slot retains the connection's, so a
@@ -48,7 +48,7 @@ SqliteHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Sqlite.Stmt.stub`.
 		stub : Stmt
-		stub = Stmt.(Box.box(0))
+		stub = Stmt.(Box.box(U64.highest))
 	}
 
 	## One column of one row, in row-major order, `ncols` to a row.

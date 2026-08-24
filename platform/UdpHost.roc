@@ -27,7 +27,7 @@ UdpHost := [].{
 
 		## The invalid token, as a resource-free handle. See `Udp.Socket.stub`.
 		stub : Handle
-		stub = Handle.(Box.box(0))
+		stub = Handle.(Box.box(U64.highest))
 	}
 
 	## A request to bind. `ip` is a dotted-quad IPv4 literal, which the host

@@ -3312,14 +3312,14 @@ test "copied shared texture destroys its native resource exactly once after the 
 /// The box is a genuine Roc allocation rather than a fake, so the host's
 /// decref of it runs the same path it runs at runtime and the testing allocator
 /// reports a leak or a double free either way.
-fn allocateTestResourceStub(host: *RocHost, token: u64) *u64 {
+fn allocateTestResourceStub(host: *RocHost) *u64 {
     const handle: *u64 = @ptrCast(@alignCast(abi.allocateBox(@sizeOf(u64), @alignOf(u64), false, host)));
-    handle.* = token;
+    handle.* = INVALID_RESOURCE_TOKEN;
     return handle;
 }
 
 fn allocateTestTextureStub(host: *RocHost, width: f32, height: f32) abi.Texture {
-    return .{ .handle = allocateTestResourceStub(host, INVALID_RESOURCE_TOKEN), .width = width, .height = height };
+    return .{ .handle = allocateTestResourceStub(host), .width = width, .height = height };
 }
 
 /// Take a second reference to a live host resource handle, the way a Roc value
@@ -3430,9 +3430,9 @@ test "resource-free draw handles are inert, and leave real resources alone" {
     // The Roc side publishes a `stub` for every resource an app can hold in its
     // model -- `Text.font_stub`, `Draw.Shader.stub`, `Draw.RenderTexture.stub`,
     // `Text.Prepared.stub`, `Assets.Store.stub` -- so that a pure test can write
-    // a model down. Font and texture use the maximum U64 token, while the
-    // other resource stubs carry zero. The host resolves none of them, refuses
-    // the operations they reach, and releases the box exactly once.
+    // a model down. Every resource stub carries the maximum U64 token. The host
+    // resolves none of them, refuses the operations they reach, and releases
+    // the box exactly once.
     //
     // A real resource of each kind is live throughout, and goes through the
     // same calls itself. Stub traffic must not disturb it, and the operations
@@ -3458,10 +3458,10 @@ test "resource-free draw handles are inert, and leave real resources alone" {
     // Stub tokens resolve nowhere. This is the property every stub rests on,
     // and the reason `stub` can be a pure value at all.
     try std.testing.expect(font_heap.get(INVALID_RESOURCE_TOKEN) == null);
-    try std.testing.expect(shader_heap.get(0) == null);
-    try std.testing.expect(render_texture_heap.get(0) == null);
-    try std.testing.expect(prepared_text_heap.get(0) == null);
-    try std.testing.expect(store_heap.get(0) == null);
+    try std.testing.expect(shader_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(render_texture_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(prepared_text_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(store_heap.get(INVALID_RESOURCE_TOKEN) == null);
 
     const real_shader = storeShader(.headless).?;
     const real_target = storeRenderTexture(.headless).?;
@@ -3472,13 +3472,13 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A stub font has no metrics to snapshot; the headless answer is the
         // built-in one, and the transferred handle is still released.
-        const snapshot = hostedDrawFontMetricsRaw(&roc_host, allocateTestResourceStub(&roc_host, INVALID_RESOURCE_TOKEN));
+        const snapshot = hostedDrawFontMetricsRaw(&roc_host, allocateTestResourceStub(&roc_host));
         defer snapshot.glyphs.decref(&roc_host);
 
         // Preparing text with a stub font is refused rather than silently
         // prepared against the default font, and consumes no heap slot.
         const prepared = hostedDrawPrepareTextRaw(&roc_host, .{
-            .font = allocateTestResourceStub(&roc_host, INVALID_RESOURCE_TOKEN),
+            .font = allocateTestResourceStub(&roc_host),
             .text = abi.RocStr.fromSlice("inert", &roc_host),
             .size = 16,
             .spacing = 1,
@@ -3490,26 +3490,26 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A uniform cannot be resolved on a stub shader.
         try std.testing.expectEqual(@as(i32, -1), hostedDrawShaderLocationRaw(&roc_host, .{
-            .shader = allocateTestResourceStub(&roc_host, 0),
+            .shader = allocateTestResourceStub(&roc_host),
             .name = abi.RocStr.fromSlice("uTime", &roc_host),
         }));
 
         // Every store-backed loader reports the read it could not make.
         const store_texture = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("atlas.png", &roc_host),
         });
         try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_texture.err);
 
         const store_font = hostedDrawLoadStoreFontRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
             .size = 16,
         });
         try std.testing.expectEqual(STORE_LOAD_ERR_READ, store_font.err);
 
         const store_shader = hostedDrawLoadStoreShaderRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
         });
@@ -3526,10 +3526,10 @@ test "resource-free draw handles are inert, and leave real resources alone" {
 
         // A scope cannot be opened on a stub, and reports the same refusal a
         // released resource would. Nothing is leased, so there is no end call.
-        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = allocateTestResourceStub(&roc_host, 0) }));
+        try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginShaderRaw(.{ .arg0 = allocateTestResourceStub(&roc_host) }));
         try std.testing.expectEqual(@as(usize, 0), shader_lease_count);
         try std.testing.expectEqual(SCOPE_UNAVAILABLE, hostedDrawBeginRenderTextureRaw(.{
-            .handle = allocateTestResourceStub(&roc_host, 0),
+            .handle = allocateTestResourceStub(&roc_host),
             .height = 90,
             .width = 160,
         }));
@@ -3540,7 +3540,7 @@ test "resource-free draw handles are inert, and leave real resources alone" {
         // one is: no draw is counted and nothing faults.
         const draws_before = prepared_text_draw_calls;
         hostedDrawPreparedTextRaw(&roc_host, .{
-            .prepared = allocateTestResourceStub(&roc_host, 0),
+            .prepared = allocateTestResourceStub(&roc_host),
             .pos = .{ .x = 10, .y = 20 },
             .color = .{ .r = 255, .g = 255, .b = 255, .a = 255 },
         });
@@ -3595,8 +3595,8 @@ test "resource-free audio handles are inert across every sound and music call" {
         active_roc_host = null;
     }
 
-    try std.testing.expect(sound_heap.get(0) == null);
-    try std.testing.expect(music_heap.get(0) == null);
+    try std.testing.expect(sound_heap.get(INVALID_RESOURCE_TOKEN) == null);
+    try std.testing.expect(music_heap.get(INVALID_RESOURCE_TOKEN) == null);
 
     const real_sound = storeSound(.headless).?;
     const real_music = storeMusic(.headless).?;
@@ -3605,30 +3605,30 @@ test "resource-free audio handles are inert across every sound and music call" {
         const scope = PhaseScope.enter(.update);
         defer scope.leave();
 
-        hostedAudioPlay(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioStop(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioPause(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioResume(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioSetVolume(allocateTestResourceStub(&roc_host, 0), 0.5);
-        hostedAudioSetPitch(allocateTestResourceStub(&roc_host, 0), 1.5);
-        hostedAudioSetPan(allocateTestResourceStub(&roc_host, 0), -0.25);
-        try std.testing.expect(!hostedAudioIsPlaying(allocateTestResourceStub(&roc_host, 0)));
+        hostedAudioPlay(allocateTestResourceStub(&roc_host));
+        hostedAudioStop(allocateTestResourceStub(&roc_host));
+        hostedAudioPause(allocateTestResourceStub(&roc_host));
+        hostedAudioResume(allocateTestResourceStub(&roc_host));
+        hostedAudioSetVolume(allocateTestResourceStub(&roc_host), 0.5);
+        hostedAudioSetPitch(allocateTestResourceStub(&roc_host), 1.5);
+        hostedAudioSetPan(allocateTestResourceStub(&roc_host), -0.25);
+        try std.testing.expect(!hostedAudioIsPlaying(allocateTestResourceStub(&roc_host)));
 
-        hostedAudioPlayMusic(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioStopMusic(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioPauseMusic(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioResumeMusic(allocateTestResourceStub(&roc_host, 0));
-        hostedAudioSetMusicVolume(allocateTestResourceStub(&roc_host, 0), 0.5);
-        hostedAudioSetMusicPitch(allocateTestResourceStub(&roc_host, 0), 1.5);
-        hostedAudioSetMusicPan(allocateTestResourceStub(&roc_host, 0), -0.25);
-        hostedAudioSetMusicLooping(allocateTestResourceStub(&roc_host, 0), true);
-        hostedAudioSeekMusic(allocateTestResourceStub(&roc_host, 0), 12.5);
+        hostedAudioPlayMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioStopMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioPauseMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioResumeMusic(allocateTestResourceStub(&roc_host));
+        hostedAudioSetMusicVolume(allocateTestResourceStub(&roc_host), 0.5);
+        hostedAudioSetMusicPitch(allocateTestResourceStub(&roc_host), 1.5);
+        hostedAudioSetMusicPan(allocateTestResourceStub(&roc_host), -0.25);
+        hostedAudioSetMusicLooping(allocateTestResourceStub(&roc_host), true);
+        hostedAudioSeekMusic(allocateTestResourceStub(&roc_host), 12.5);
 
         // A stream that does not exist has no length and has played nothing,
         // rather than reporting whatever the last real stream did.
-        try std.testing.expect(!hostedAudioIsMusicPlaying(allocateTestResourceStub(&roc_host, 0)));
-        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicLength(allocateTestResourceStub(&roc_host, 0)));
-        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicTimePlayed(allocateTestResourceStub(&roc_host, 0)));
+        try std.testing.expect(!hostedAudioIsMusicPlaying(allocateTestResourceStub(&roc_host)));
+        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicLength(allocateTestResourceStub(&roc_host)));
+        try std.testing.expectEqual(@as(f32, 0), hostedAudioMusicTimePlayed(allocateTestResourceStub(&roc_host)));
 
         // The real resources go through the same calls. Each consumes the
         // reference it was handed, so each call gets its own.
@@ -4562,7 +4562,7 @@ test "opening a store and loading a texture from it wait rather than load" {
         defer update.leave();
         last_phase_violation = null;
         _ = hostedAssetsLoadStoreTextureRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("logo.png", &roc_host),
         });
         const violation = last_phase_violation orelse return error.OperationWasNotRejected;
@@ -5419,7 +5419,7 @@ test "the store-backed font and shader loaders wait rather than load" {
         defer update.leave();
         last_phase_violation = null;
         _ = hostedDrawLoadStoreFontRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .path = abi.RocStr.fromSlice("body.ttf", &roc_host),
             .size = 16,
         });
@@ -5430,7 +5430,7 @@ test "the store-backed font and shader loaders wait rather than load" {
 
         last_phase_violation = null;
         _ = hostedDrawLoadStoreShaderRaw(&roc_host, .{
-            .store = allocateTestResourceStub(&roc_host, 0),
+            .store = allocateTestResourceStub(&roc_host),
             .vertex_path = abi.RocStr.empty(),
             .fragment_path = abi.RocStr.fromSlice("blur.fs", &roc_host),
         });

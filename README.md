@@ -39,14 +39,12 @@ The capture examples also produce deterministic media directly, including this
 
 ## Try it
 
-Install the Roc nightly named in [`.roc-version`](.roc-version) and
-[Zig 0.16.0](https://ziglang.org/download/), then run the smallest example from
-a source checkout:
+Install the Roc nightly named in [`.roc-version`](.roc-version), then build the
+smallest example. Its app header points directly at the released RocRay bundle:
 
 ```bash
 git clone https://github.com/lukewilliamboswell/roc-ray.git
 cd roc-ray
-zig build
 roc build examples/hello_world/main.roc --output hello_world
 ./hello_world
 ```
@@ -54,10 +52,12 @@ roc build examples/hello_world/main.roc --output hello_world
 On Windows, run `hello_world.exe`. Build and run from the repository root so
 example asset paths resolve correctly.
 
-For your own project, start from the
-[latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest).
-Release bundles include the native host libraries, so app authors do not need
-Zig or a raylib build. Pin the release and the Roc nightly it names together.
+For your own project, copy the closest app from the
+[example guide](examples/README.md). Each example uses a platform URL containing
+the native host libraries, so app authors need only Roc. Pin that URL and its
+matching Roc nightly together; the
+[latest release](https://github.com/lukewilliamboswell/roc-ray/releases/latest)
+provides both.
 
 ## The programming model
 

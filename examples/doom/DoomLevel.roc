@@ -6,18 +6,31 @@ DoomLevel := [].{
 	Point : { x : F64, y : F64 }
 	SectorHeights : { floor : I64, ceiling : I64 }
 	Keys : { blue : Bool, yellow : Bool, red : Bool }
-	DoorPhase := [Opening, Waiting(U64), Closing].{ is_eq : _ }
+	DoorPhase := [Opening, Waiting(U64), Closing].{
+		is_eq : _
+	}
 	Door : { sector : U64, closed : I64, open : I64, speed : I64, phase : DoorPhase, stays_open : Bool }
 	FloorMover : { sector : U64, target : I64, speed : I64 }
-	LiftPhase := [Lowering, LiftWaiting(U64), Raising].{ is_eq : _ }
+	LiftPhase := [Lowering, LiftWaiting(U64), Raising].{
+		is_eq : _
+	}
 	Lift : { sector : U64, low : I64, high : I64, speed : I64, phase : LiftPhase }
-	State : { heights : List(SectorHeights), doors : List(Door), floors : List(FloorMover), lifts : List(Lift) }
+	State : { heights : List(SectorHeights), incident_lines : List(List(U64)), doors : List(Door), floors : List(FloorMover), lifts : List(Lift) }
 	UseResult : [Activated(State), Exit, Locked([Blue, Yellow, Red]), NotUsable]
 	Portal : { from_sector : U64, to_sector : U64, bottom : I64, top : I64, step : I64, traversable : Bool }
 	CollisionSegment : { linedef : U64, start : Point, end : Point }
 
 	initial : DoomMap.Map -> State
-	initial = |map| { heights: List.map(map.raw().sectors, |sector| { floor: sector.floor_height, ceiling: sector.ceiling_height }), doors: [], floors: [], lifts: [] }
+	initial = |map| {
+		raw = map.raw()
+		{
+			heights: List.map(raw.sectors, |sector| { floor: sector.floor_height, ceiling: sector.ceiling_height }),
+			incident_lines: List.map_with_index(raw.sectors, |_sector, sector| incident_lines_for(raw, sector, 0, [])),
+			doors: [],
+			floors: [],
+			lifts: [],
+		}
+	}
 
 	## Descend the classic Doom BSP (whose root is the last node) and return the
 	## validated sector associated with the reached subsector polygon.
@@ -33,7 +46,10 @@ DoomLevel := [].{
 	}
 
 	heights_for : State, U64 -> Try(SectorHeights, [SectorOutOfRange(U64)])
-	heights_for = |state, sector| match List.get(state.heights, sector) { Ok(value) => Ok(value), Err(_) => Err(SectorOutOfRange(sector)) }
+	heights_for = |state, sector| match List.get(state.heights, sector) {
+		Ok(value) => Ok(value)
+		Err(_) => Err(SectorOutOfRange(sector))
+	}
 
 	## Evaluate a two-sided line from one of its sectors. A portal is passable
 	## only when it is not explicitly blocking, rises at most 24 units, and has
@@ -41,9 +57,18 @@ DoomLevel := [].{
 	portal : DoomMap.Map, State, U64, U64 -> Try(Portal, [LinedefOutOfRange(U64), NotTwoSided, SectorNotOnLine(U64)])
 	portal = |map, state, linedef, from_sector| {
 		raw = map.raw()
-		line = match List.get(raw.linedefs, linedef) { Ok(value) => value, Err(_) => return Err(LinedefOutOfRange(linedef)) }
-		right = match line.right_sidedef { Ok(value) => value, Err(Null) => return Err(NotTwoSided) }
-		left = match line.left_sidedef { Ok(value) => value, Err(Null) => return Err(NotTwoSided) }
+		line = match List.get(raw.linedefs, linedef) {
+			Ok(value) => value
+			Err(_) => return Err(LinedefOutOfRange(linedef))
+		}
+		right = match line.right_sidedef {
+			Ok(value) => value
+			Err(Null) => return Err(NotTwoSided)
+		}
+		left = match line.left_sidedef {
+			Ok(value) => value
+			Err(Null) => return Err(NotTwoSided)
+		}
 		right_sector = (List.get(raw.sidedefs, right) ?? crash "validated sidedef missing").sector
 		left_sector = (List.get(raw.sidedefs, left) ?? crash "validated sidedef missing").sector
 		to_sector = if from_sector == right_sector left_sector else if from_sector == left_sector right_sector else return Err(SectorNotOnLine(from_sector))
@@ -59,7 +84,13 @@ DoomLevel := [].{
 	## Return the current sector boundary segments that collision must retain.
 	## Open, traversable two-sided portals are deliberately omitted.
 	collision_segments : DoomMap.Map, State, U64 -> List(CollisionSegment)
-	collision_segments = |map, state, sector| collision_segments_from(map, map.raw(), state, sector, 0)
+	collision_segments = |map, state, sector| {
+		lines = List.get(state.incident_lines, sector) ?? return []
+		collision_segments_indexed(map, map.raw(), state, sector, lines, 0)
+	}
+
+	collision_candidate_count : State, U64 -> U64
+	collision_candidate_count = |state, sector| List.len(List.get(state.incident_lines, sector) ?? [])
 
 	## Return special linedefs crossed by a swept point, in map order. Endpoint
 	## touches count only when the sweep changes side, preventing repeat triggers
@@ -162,6 +193,38 @@ crossed_lines_from = |raw, start, end, index|
 
 line_side = |a, b, point| (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
 
+incident_lines_for = |raw, sector, index, result|
+	match List.get(raw.linedefs, index) {
+		Err(_) => result
+		Ok(line) => {
+			right = side_sector(raw, line.right_sidedef)
+			left = side_sector(raw, line.left_sidedef)
+			next = if right == Ok(sector) or left == Ok(sector) List.append(result, index) else result
+			incident_lines_for(raw, sector, index + 1, next)
+		}
+	}
+
+collision_segments_indexed = |map, raw, state, sector, lines, offset|
+	match List.get(lines, offset) {
+		Err(_) => []
+		Ok(index) => {
+			rest = collision_segments_indexed(map, raw, state, sector, lines, offset + 1)
+			line = List.get(raw.linedefs, index) ?? crash "validated incident linedef missing"
+			blocks = match line.left_sidedef {
+				Err(Null) => Bool.True
+				Ok(_) => match DoomLevel.portal(map, state, index, sector) {
+					Ok(opening) => !(opening.traversable)
+					Err(_) => Bool.True
+				}
+			}
+			if blocks {
+				a = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
+				b = List.get(raw.vertices, line.end_vertex) ?? crash "validated vertex missing"
+				List.prepend(rest, { linedef: index, start: { x: I64.to_f64(a.x), y: I64.to_f64(a.y) }, end: { x: I64.to_f64(b.x), y: I64.to_f64(b.y) } })
+			} else rest
+		}
+	}
+
 collision_segments_from = |map, raw, state, sector, index|
 	match List.get(raw.linedefs, index) {
 		Err(_) => []
@@ -172,7 +235,10 @@ collision_segments_from = |map, raw, state, sector, index|
 			touches = right_sector == Ok(sector) or left_sector == Ok(sector)
 			blocks = if !touches Bool.False else match line.left_sidedef {
 				Err(Null) => Bool.True
-				Ok(_) => match DoomLevel.portal(map, state, index, sector) { Ok(opening) => !(opening.traversable), Err(_) => Bool.True }
+				Ok(_) => match DoomLevel.portal(map, state, index, sector) {
+					Ok(opening) => !(opening.traversable)
+					Err(_) => Bool.True
+				}
 			}
 			if blocks {
 				a = List.get(raw.vertices, line.start_vertex) ?? crash "validated vertex missing"
@@ -284,7 +350,10 @@ activate_doors = |raw, state, sectors, index, stays_open, speed|
 	match List.get(sectors, index) {
 		Err(_) => state
 		Ok(sector) => {
-			next = match activate_door(raw, state, sector, stays_open, speed) { Activated(value) => value, _ => state }
+			next = match activate_door(raw, state, sector, stays_open, speed) {
+				Activated(value) => value
+				_ => state
+			}
 			activate_doors(raw, next, sectors, index + 1, stays_open, speed)
 		}
 	}
@@ -315,7 +384,10 @@ lowest_adjacent_ceiling = |raw, state, sector, line_index, found|
 				Err(_) => found
 				Ok(other) => {
 					height = (List.get(state.heights, other) ?? crash "sector state missing").ceiling
-					match found { Err(NoAdjacent) => Ok(height), Ok(value) => Ok(I64.min(value, height)) }
+					match found {
+						Err(NoAdjacent) => Ok(height)
+						Ok(value) => Ok(I64.min(value, height))
+					}
 				}
 			}
 			lowest_adjacent_ceiling(raw, state, sector, line_index + 1, found2)
@@ -331,7 +403,10 @@ lowest_adjacent_floor = |raw, state, sector, line_index, found|
 				Err(_) => found
 				Ok(other) => {
 					height = (List.get(state.heights, other) ?? crash "sector state missing").floor
-					match found { Err(NoAdjacent) => Ok(height), Ok(value) => Ok(I64.min(value, height)) }
+					match found {
+						Err(NoAdjacent) => Ok(height)
+						Ok(value) => Ok(I64.min(value, height))
+					}
 				}
 			}
 			lowest_adjacent_floor(raw, state, sector, line_index + 1, found2)
@@ -357,7 +432,9 @@ tick_doors = |state, remaining, next_doors, index|
 			advanced = match door.phase {
 				Opening => {
 					ceiling = I64.min(door.open, heights.ceiling + door.speed)
-					phase = if ceiling >= door.open { if door.stays_open Waiting(0) else Waiting(150) } else Opening
+					phase = if ceiling >= door.open {
+						if door.stays_open Waiting(0) else Waiting(150)
+					} else Opening
 					{ heights: { ..heights, ceiling }, door: { ..door, phase }, finished: door.stays_open and ceiling >= door.open }
 				}
 				Waiting(tics) => if tics == 0 { heights, door, finished: Bool.True } else { heights, door: { ..door, phase: if tics == 1 Closing else Waiting(tics - 1) }, finished: Bool.False }
@@ -424,9 +501,49 @@ expect {
 expect {
 	map = DoomMap.e1m1
 	state = DoomLevel.initial(map)
+	var $equivalent = Bool.True
+	var $sum = 0.U64
+	var $maximum = 0.U64
+	for indexed in List.map_with_index(map.raw().sectors, |_sector, index| index) {
+		indexed_segments = DoomLevel.collision_segments(map, state, indexed)
+		full_segments = collision_segments_from(map, map.raw(), state, indexed, 0)
+		$equivalent = $equivalent and indexed_segments == full_segments
+		count = DoomLevel.collision_candidate_count(state, indexed)
+		$sum = $sum + count
+		$maximum = U64.max($maximum, count)
+	}
+	# Every two-sided line is incident to at most two sectors; the pinned E1M1
+	# topology has no sector with more than 64 candidate lines. This turns each
+	# actor query from 1175 line checks into at most 64 exact portal evaluations.
+	$equivalent and $sum <= List.len(map.raw().linedefs) * 2 and $maximum <= 64
+}
+
+expect {
+	map = DoomMap.e1m1
+	initial = DoomLevel.initial(map)
+	activated = DoomLevel.use_line(map, initial, 55, { blue: Bool.False, yellow: Bool.False, red: Bool.False })
+	var $opened = match activated {
+		Activated(value) => value
+		_ => crash "door missing"
+	}
+	for _ in List.repeat({}, 80) {
+		$opened = DoomLevel.tick($opened)
+	}
+	List.all(
+		List.map_with_index(map.raw().sectors, |_sector, index| index),
+		|sector| DoomLevel.collision_segments(map, $opened, sector) == collision_segments_from(map, map.raw(), $opened, sector, 0),
+	)
+}
+
+expect {
+	map = DoomMap.e1m1
+	state = DoomLevel.initial(map)
 	locked = DoomLevel.use_line(map, state, 421, { blue: Bool.False, yellow: Bool.False, red: Bool.False })
 	unlocked = DoomLevel.use_line(map, state, 421, { blue: Bool.True, yellow: Bool.False, red: Bool.False })
-	locked == Locked(Blue) and match unlocked { Activated(next) => List.len(next.doors) == 1, _ => Bool.False }
+	locked == Locked(Blue) and match unlocked {
+		Activated(next) => List.len(next.doors) == 1
+		_ => Bool.False
+	}
 }
 
 expect {
@@ -507,10 +624,10 @@ expect {
 			opened_segments = DoomLevel.collision_segments(map, opened_state, from_sector)
 			!(closed.traversable)
 				and opened.traversable
-				and opened.step <= 24
-				and opened.top - opened.bottom >= 56
-				and List.any(closed_segments, |segment| segment.linedef == 55)
-				and !(List.any(opened_segments, |segment| segment.linedef == 55))
+					and opened.step <= 24
+						and opened.top - opened.bottom >= 56
+							and List.any(closed_segments, |segment| segment.linedef == 55)
+								and !(List.any(opened_segments, |segment| segment.linedef == 55))
 		}
 		_ => Bool.False
 	}

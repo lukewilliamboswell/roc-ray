@@ -84,7 +84,10 @@ DoomRuntime := [].{
 	}
 
 	tic_hearing_in_map_with_intercepts = |world, heard_actors, extra_blockers, map, level, intercepts|
-		tic_hearing_with(world, heard_actors, intercepts, |actor| List.concat(blockers_for_player(map, level, actor.pos), extra_blockers))
+		{
+			cache = actor_blocker_cache(map, level, world.doom.actors, extra_blockers)
+			tic_hearing_with(world, heard_actors, intercepts, |actor| actor_blockers_from_cache(cache, map, level, actor.pos, extra_blockers))
+		}
 
 	tic : World, Bool, List(DoomSim.Segment) -> { world : World, projectile_saturated : Bool, fired : Bool }
 	tic = |world, heard_shot, blockers| {
@@ -272,6 +275,26 @@ global_map_blockers = |map, level| {
 		}
 	}
 	$segments
+}
+
+actor_blocker_cache = |map, level, actors, extra_blockers| {
+	var $cache = []
+	for actor in actors {
+		match DoomLevel.sector_at(map, { x: F32.to_f64(actor.pos.x), y: F32.to_f64(actor.pos.y) }) {
+			Err(_) => {}
+			Ok(sector) => if !(List.any($cache, |entry| entry.sector == sector)) {
+				map_blockers = DoomRuntime.blockers_for_player(map, level, actor.pos)
+				$cache = List.append($cache, { sector, blockers: List.concat(map_blockers, extra_blockers) })
+			}
+		}
+	}
+	$cache
+}
+
+actor_blockers_from_cache = |cache, map, level, pos, extra_blockers| {
+	sector = DoomLevel.sector_at(map, { x: F32.to_f64(pos.x), y: F32.to_f64(pos.y) }) ?? return List.concat(List.map(map.blocking_segments(), |segment| to_segment(segment.start, segment.end)), extra_blockers)
+	entry = List.find_first(cache, |candidate| candidate.sector == sector) ?? return List.concat(DoomRuntime.blockers_for_player(map, level, pos), extra_blockers)
+	entry.blockers
 }
 
 to_segment = |start, end| { start: { x: I64.to_f32(start.x), y: I64.to_f32(start.y) }, end: { x: I64.to_f32(end.x), y: I64.to_f32(end.y) } }

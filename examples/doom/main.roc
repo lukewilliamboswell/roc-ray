@@ -33,6 +33,7 @@ Model : {
 	level : DoomLevel.State,
 	blockers : List(DoomSim.Segment),
 	batches : List(RenderGeometry),
+	masked_batches : List(RenderGeometry),
 	world_atlas : Draw.Texture,
 	sprite_atlas : Draw.Texture,
 	sprite_shader : Draw.Shader,
@@ -73,6 +74,7 @@ init! = App.init(
 		start = map.player_start() ?? crash "validated E1M1 must contain exactly one player start"
 		mesh_batches = E1M1Renderer.build_static(map) ?? crash "generated E1M1 atlas is incomplete"
 		batches = List.map(mesh_batches, render_geometry)
+		masked_batches = List.map(E1M1Renderer.build_masked_static(map) ?? crash "generated masked E1M1 atlas is incomplete", render_geometry)
 		position = { x: I64.to_f32(start.position.x), y: I64.to_f32(start.position.y) }
 		angle = DoomSim.Angle.from_turns(I64.to_f32(start.angle) / 360)
 		world = initial_runtime(map, position, angle)
@@ -84,7 +86,7 @@ init! = App.init(
 				end: { x: I64.to_f32(segment.end.x), y: I64.to_f32(segment.end.y) },
 			},
 		)
-		Ok({ world, level, blockers, batches, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
+		Ok({ world, level, blockers, batches, masked_batches, world_atlas, sprite_atlas, sprite_shader, logical_target, flashes: DoomView.initial, sounds })
 	},
 )
 
@@ -168,6 +170,8 @@ draw_logical! = |model, frame| {
 	frame.with_camera_3d!(
 		camera,
 		|scene| {
+			sky = render_geometry(E1M1Renderer.sky_geometry(world_x, world_z) ?? crash "generated E1M1 sky texture missing")
+			scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: sky.vertices, indices: sky.indices })
 			for batch in model.batches {
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: batch.vertices, indices: batch.indices })
 			}
@@ -176,10 +180,18 @@ draw_logical! = |model, frame| {
 				dynamic = render_geometry(batch)
 				scene.textured_triangles_3d!({ texture: model.world_atlas, vertices: dynamic.vertices, indices: dynamic.indices })
 			}
+			masked_dynamic = E1M1Renderer.build_masked_dynamic(DoomMap.e1m1, model.level) ?? crash "generated dynamic masked E1M1 atlas is incomplete"
 			sprites = sprite_geometry(model.world, model.level, state.pos)
 			scene.with_shader!(
 				model.sprite_shader,
 				|cutout| {
+					for batch in model.masked_batches {
+						cutout.textured_triangles_3d!({ texture: model.world_atlas, vertices: batch.vertices, indices: batch.indices })
+					}
+					for batch in masked_dynamic {
+						dynamic = render_geometry(batch)
+						cutout.textured_triangles_3d!({ texture: model.world_atlas, vertices: dynamic.vertices, indices: dynamic.indices })
+					}
 					cutout.textured_triangles_3d!({ texture: model.sprite_atlas, vertices: sprites.vertices, indices: sprites.indices })
 					Ok({})
 				},

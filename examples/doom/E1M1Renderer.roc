@@ -50,7 +50,7 @@ E1M1Renderer := [].{
 		dynamic = DoomLevel.dynamic_sectors(map)
 		raw = map.raw()
 		surfaces = List.keep_if(map.surface_polygons(), |surface| !(List.contains(dynamic, surface.sector)))
-		walls = List.keep_if(map.wall_spans(), |wall| !(line_touches_any(raw, wall.linedef, dynamic)))
+		walls = List.keep_if(map.wall_spans(), |wall| !(line_touches_any(raw, wall.linedef, dynamic)) and !(masked_middle(wall)))
 		build(surfaces, walls)
 	}
 
@@ -67,8 +67,22 @@ E1M1Renderer := [].{
 			},
 		)
 		all_walls = map.wall_spans_at(state.heights)
-		walls = List.keep_if(all_walls, |wall| line_touches_any(raw, wall.linedef, dynamic))
+		walls = List.keep_if(all_walls, |wall| line_touches_any(raw, wall.linedef, dynamic) and !(masked_middle(wall)))
 		build(surfaces, walls)
+	}
+
+	build_masked_static = |map| {
+		dynamic = DoomLevel.dynamic_sectors(map)
+		raw = map.raw()
+		walls = List.keep_if(map.wall_spans(), |wall| !(line_touches_any(raw, wall.linedef, dynamic)) and masked_middle(wall))
+		build([], walls)
+	}
+
+	build_masked_dynamic = |map, state| {
+		dynamic = DoomLevel.dynamic_sectors(map)
+		raw = map.raw()
+		walls = List.keep_if(map.wall_spans_at(state.heights), |wall| line_touches_any(raw, wall.linedef, dynamic) and masked_middle(wall))
+		build([], walls)
 	}
 
 	sector_surfaces = |map, state, sector| {
@@ -82,6 +96,7 @@ E1M1Renderer := [].{
 
 	surface_geometry : DoomMap.SurfacePolygon -> Try(Geometry, [MissingFlat(Str)])
 	surface_geometry = |surface| {
+		if surface.orientation == Ceiling and surface.flat == "F_SKY1" return Ok(empty)
 		rect = DoomAssets.flat(surface.flat)?
 		tint = light_tint(surface.light_level)
 		vertices = List.map(
@@ -97,6 +112,36 @@ E1M1Renderer := [].{
 		# and -Y ceilings respectively.
 		indices = reversed_fan_indices(List.len(vertices))
 		Ok({ vertices, indices })
+	}
+
+	## Camera-centred sky enclosure. Sky ceilings are omitted from world planes,
+	## so this far background appears only through F_SKY1 openings.
+	sky_geometry : F32, F32 -> Try(Geometry, [MissingTexture(Str)])
+	sky_geometry = |camera_x, camera_y| {
+		rect = DoomAssets.texture("SKY1")?
+		tint = { r: 255, g: 255, b: 255, a: 255 }
+		r = 60.F32
+		low = -20.F32
+		high = 30.F32
+		points = [{ x: camera_x - r, z: camera_y - r }, { x: camera_x + r, z: camera_y - r }, { x: camera_x + r, z: camera_y + r }, { x: camera_x - r, z: camera_y + r }]
+		var $vertices = []
+		var $indices = []
+		for edge in List.map_with_index(points, |point, index| { point, index }) {
+			next = List.get(points, (edge.index + 1) % 4) ?? crash "sky corner missing"
+			offset = U64.to_u32_wrap(List.len($vertices))
+			u0 = atlas_u_local(0, rect)
+			u1 = atlas_u_local(U64.to_f64(rect.width), rect)
+			v0 = atlas_v_local(0, rect)
+			v1 = atlas_v_local(U64.to_f64(rect.height), rect)
+			$vertices = List.concat($vertices, [
+				{ position: { x: edge.point.x, y: low, z: edge.point.z }, uv: { x: u0, y: v1 }, tint },
+				{ position: { x: next.x, y: low, z: next.z }, uv: { x: u1, y: v1 }, tint },
+				{ position: { x: next.x, y: high, z: next.z }, uv: { x: u1, y: v0 }, tint },
+				{ position: { x: edge.point.x, y: high, z: edge.point.z }, uv: { x: u0, y: v0 }, tint },
+			])
+			$indices = List.concat($indices, [offset, offset + 2, offset + 1, offset, offset + 3, offset + 2])
+		}
+		Ok({ vertices: $vertices, indices: $indices })
 	}
 
 	wall_geometry : DoomMap.WallSpan -> Try(Geometry, [MissingTexture(Str)])
@@ -164,6 +209,8 @@ line_touches_any = |raw, linedef, sectors| {
 	}
 	List.contains(sectors, right_sector) or left_touches
 }
+
+masked_middle = |wall| wall.kind == Middle and wall.flags.two_sided
 
 pack : Packed, E1M1Renderer.Geometry -> Try(Packed, [GeometryPrimitiveTooLarge(U64)])
 pack = |packed, primitive| {
@@ -433,4 +480,28 @@ expect {
 		and dynamic_counts.indices <= 1536
 		and dynamic_counts.vertices < static_counts.vertices
 		and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
+}
+
+expect {
+	map = DoomMap.e1m1
+	sky_surfaces = List.keep_if(map.surface_polygons(), |surface| surface.orientation == Ceiling and surface.flat == "F_SKY1")
+	first = List.get(sky_surfaces, 0) ?? crash "E1M1 sky ceiling missing"
+	omitted = E1M1Renderer.surface_geometry(first) ?? crash "sky sentinel should not need a flat"
+	sky = E1M1Renderer.sky_geometry(0, 0) ?? crash "SKY1 texture missing"
+	List.len(sky_surfaces) > 0 and List.is_empty(omitted.vertices) and List.is_empty(omitted.indices) and List.len(sky.vertices) == 16 and List.len(sky.indices) == 24
+}
+
+expect {
+	map = DoomMap.e1m1
+	masked = List.keep_if(map.wall_spans(), masked_middle)
+	first = List.get(masked, 0) ?? crash "E1M1 masked middle missing"
+	geometry = E1M1Renderer.wall_geometry(first) ?? crash "masked texture missing"
+	static = E1M1Renderer.build_masked_static(map) ?? crash "masked atlas incomplete"
+	first_vertex = List.get(geometry.vertices, 0) ?? crash "masked wall vertex missing"
+	List.len(masked) > 0
+		and first.kind == Middle
+		and first.flags.two_sided
+		and List.len(static) > 0
+		and first_vertex.tint.r == U64.to_u8_wrap(I64.to_u64_wrap(first.light_level))
+		and List.all(geometry.vertices, |vertex| vertex.uv.x >= 0 and vertex.uv.x <= 1 and vertex.uv.y >= 0 and vertex.uv.y <= 1)
 }

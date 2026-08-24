@@ -413,3 +413,24 @@ expect {
 	dynamic = E1M1Renderer.build_dynamic(map, initial) ?? crash "dynamic E1M1 atlas entry missing"
 	List.len(DoomLevel.dynamic_sectors(map)) > 0 and List.len(static) > 0 and List.len(dynamic) > 0
 }
+
+expect {
+	map = DoomMap.e1m1
+	state0 = DoomLevel.initial(map)
+	state1 = match DoomLevel.use_line(map, state0, 55, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) { Activated(value) => value, _ => state0 }
+	state2 = match DoomLevel.use_line(map, state1, 753, { blue: Bool.True, yellow: Bool.True, red: Bool.True }) { Activated(value) => value, _ => state1 }
+	state3 = match DoomLevel.cross_line(map, state2, 593) { Activated(value) => value, _ => state2 }
+	worst = advance_level(state3, 70)
+	static = E1M1Renderer.build_static(map) ?? crash "static geometry missing"
+	dynamic = E1M1Renderer.build_dynamic(map, worst) ?? crash "dynamic geometry missing"
+	static_counts = geometry_counts(static)
+	dynamic_counts = geometry_counts(dynamic)
+	List.len(DoomLevel.dynamic_sectors(map)) <= 20
+		and List.len(dynamic) <= 2
+		and static_counts.vertices <= 20000
+		and static_counts.indices <= 30000
+		and dynamic_counts.vertices <= 1024
+		and dynamic_counts.indices <= 1536
+		and dynamic_counts.vertices < static_counts.vertices
+		and List.all(List.concat(static, dynamic), |batch| List.len(batch.vertices) <= E1M1Renderer.max_batch_vertices and List.len(batch.indices) % 3 == 0)
+}

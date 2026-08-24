@@ -233,6 +233,10 @@ fire = |world, blockers| {
 	available = match world.doom.player.weapon {
 		Pistol => world.doom.player.ammo.bullets
 		Shotgun => world.doom.player.ammo.shells
+		Chaingun => world.doom.player.ammo.bullets
+		RocketLauncher => world.doom.player.ammo.rockets
+		PlasmaRifle => world.doom.player.ammo.cells
+		Chainsaw => 1
 	}
 	if available <= 0 or world.doom.player.health <= 0 {
 		{ world, fired: Bool.False }
@@ -264,9 +268,21 @@ spend_ammo = |player|
 	match player.weapon {
 		Pistol => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
 		Shotgun => { ..player, ammo: { ..player.ammo, shells: I64.max(0, player.ammo.shells - 1) } }
+		Chaingun => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
+		RocketLauncher => { ..player, ammo: { ..player.ammo, rockets: I64.max(0, player.ammo.rockets - 1) } }
+		PlasmaRifle => { ..player, ammo: { ..player.ammo, cells: I64.max(0, player.ammo.cells - 1) } }
+		Chainsaw => player
 	}
 
-weapon_cadence = |weapon| if weapon == Pistol 7 else 35
+weapon_cadence = |weapon|
+	match weapon {
+		Pistol => 7
+		Shotgun => 35
+		Chaingun => 4
+		RocketLauncher => 28
+		PlasmaRifle => 3
+		Chainsaw => 4
+	}
 
 target_actor = |actors, origin, angle, spread_turns, blockers| {
 	facing0 = angle.forward()

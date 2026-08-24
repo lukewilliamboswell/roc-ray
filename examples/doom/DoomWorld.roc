@@ -7,6 +7,7 @@
 ## Doom as oracles: `info.c` state durations/editor numbers, `p_enemy.c` actor
 ## state flow, `p_inter.c` pickup and armor rules, and `p_pspr.c` hitscan damage.
 import DoomSim
+import DoomMap
 
 DoomWorld := [].{
 	Skill := [Baby, Easy, Medium, Hard, Nightmare].{
@@ -15,17 +16,20 @@ DoomWorld := [].{
 	ArmorKind := [NoArmor, GreenArmor, BlueArmor].{
 		is_eq : _
 	}
-	Weapon := [Pistol, Shotgun].{
+	Weapon := [Pistol, Shotgun, Chaingun, RocketLauncher, PlasmaRifle, Chainsaw].{
 		is_eq : _
 	}
 
 	ThingKind := [
 		PlayerStart,
+		CooperativeStart,
 		DeathmatchStart,
 		TeleportDestination,
 		ZombieMan,
 		ShotgunGuy,
 		Imp,
+		Demon,
+		Spectre,
 		Barrel,
 		ShotgunPickup,
 		ClipPickup,
@@ -39,6 +43,33 @@ DoomWorld := [].{
 		BlueKeyPickup,
 		YellowKeyPickup,
 		RedKeyPickup,
+		BackpackPickup,
+		ChaingunPickup,
+		RocketLauncherPickup,
+		PlasmaRiflePickup,
+		ChainsawPickup,
+		RocketPickup,
+		SoulSpherePickup,
+		BerserkPickup,
+		ComputerMapPickup,
+		LightAmpPickup,
+		BulletBoxPickup,
+		ShellBoxPickup,
+		CellPackPickup,
+		BloodyMess,
+		DeadPlayer,
+		DeadFormerHuman,
+		DeadDemon,
+		DeadImp,
+		DeadShotgunGuy,
+		GorePool,
+		Candle,
+		BurntTree,
+		Stalagmite,
+		TechPillar,
+		LargeTree,
+		HangingBody,
+		FloorLamp,
 	].{
 		is_eq : _
 	}
@@ -55,6 +86,7 @@ DoomWorld := [].{
 	ActorTic : { actor : Actor, rng : Rng, player_damage : I64, attack_kind : AttackKind }
 	ActorDamage : { actor : Actor, rng : Rng, entered_pain : Bool }
 	Pickup : { id : U64, kind : ThingKind, pos : DoomSim.Vec2, taken : Bool }
+	Decoration : { id : U64, kind : ThingKind, pos : DoomSim.Vec2, blocking : Bool }
 
 	## Structural match for `DoomMap.Thing`, so a validated map can hand its
 	## things over directly without this runtime layer importing map payloads.
@@ -70,6 +102,8 @@ DoomWorld := [].{
 		ammo : Ammo,
 		keys : Keys,
 		weapon : Weapon,
+		backpack : Bool,
+		berserk : Bool,
 	}
 
 	Rng :: U8.{
@@ -82,7 +116,7 @@ DoomWorld := [].{
 	Random : { rng : Rng, byte : U8 }
 	Shot : { rng : Rng, damage : I64, spread_turns : F32, pellets : U64 }
 
-	Spawned : { player_start : Try(Thing, [NoPlayerStart]), actors : List(Actor), pickups : List(Pickup) }
+	Spawned : { player_start : Try(Thing, [NoPlayerStart]), actors : List(Actor), pickups : List(Pickup), decorations : List(Decoration), unsupported : List(U64) }
 	World : { player : Player, actors : List(Actor), pickups : List(Pickup), rng : Rng }
 	Advance : { world : World, tics : U64, dropped : Bool }
 
@@ -95,6 +129,8 @@ DoomWorld := [].{
 		ammo: { bullets: 50, shells: 0, rockets: 0, cells: 0 },
 		keys: { blue: Bool.False, yellow: Bool.False, red: Bool.False },
 		weapon: Pistol,
+		backpack: Bool.False,
+		berserk: Bool.False,
 	}
 
 	## Classify the editor numbers used by E1M1 and its normal Doom pickups.
@@ -102,11 +138,16 @@ DoomWorld := [].{
 	thing_kind = |editor_type|
 		match editor_type {
 			1 => Ok(PlayerStart)
+			2 => Ok(CooperativeStart)
+			3 => Ok(CooperativeStart)
+			4 => Ok(CooperativeStart)
 			11 => Ok(DeathmatchStart)
 			14 => Ok(TeleportDestination)
 			3004 => Ok(ZombieMan)
 			9 => Ok(ShotgunGuy)
 			3001 => Ok(Imp)
+			3002 => Ok(Demon)
+			58 => Ok(Spectre)
 			2035 => Ok(Barrel)
 			2001 => Ok(ShotgunPickup)
 			2007 => Ok(ClipPickup)
@@ -120,6 +161,34 @@ DoomWorld := [].{
 			5 => Ok(BlueKeyPickup)
 			6 => Ok(YellowKeyPickup)
 			13 => Ok(RedKeyPickup)
+			8 => Ok(BackpackPickup)
+			2002 => Ok(ChaingunPickup)
+			2003 => Ok(RocketLauncherPickup)
+			2004 => Ok(PlasmaRiflePickup)
+			2005 => Ok(ChainsawPickup)
+			2010 => Ok(RocketPickup)
+			2013 => Ok(SoulSpherePickup)
+			2023 => Ok(BerserkPickup)
+			2046 => Ok(ComputerMapPickup)
+			2047 => Ok(LightAmpPickup)
+			2048 => Ok(BulletBoxPickup)
+			2049 => Ok(ShellBoxPickup)
+			10 => Ok(BloodyMess)
+			12 => Ok(BloodyMess)
+			15 => Ok(DeadPlayer)
+			17 => Ok(CellPackPickup)
+			18 => Ok(DeadFormerHuman)
+			19 => Ok(DeadShotgunGuy)
+			20 => Ok(DeadImp)
+			21 => Ok(DeadDemon)
+			24 => Ok(GorePool)
+			26 => Ok(Candle)
+			43 => Ok(BurntTree)
+			47 => Ok(Stalagmite)
+			48 => Ok(TechPillar)
+			54 => Ok(LargeTree)
+			60 => Ok(HangingBody)
+			2028 => Ok(FloorLamp)
 			_ => Err(UnsupportedThing(editor_type))
 		}
 
@@ -141,9 +210,13 @@ DoomWorld := [].{
 		var $player_start = Err(NoPlayerStart)
 		var $actors = []
 		var $pickups = []
+		var $decorations = []
+		var $unsupported = []
 		for thing in things {
 			match thing_kind(thing.type) {
-				Err(_) => {}
+				Err(UnsupportedThing(editor_type)) => {
+					$unsupported = List.append($unsupported, editor_type)
+				}
 				Ok(kind) => {
 					if kind == PlayerStart {
 						$player_start = Ok(thing)
@@ -153,12 +226,14 @@ DoomWorld := [].{
 							$actors = List.append($actors, actor(List.len($actors), kind, pos, angle_from_degrees(thing.angle), U64.bitwise_and(thing.flags, ambush_flag) != 0))
 						} else if is_pickup(kind) {
 							$pickups = List.append($pickups, { id: List.len($pickups), kind, pos, taken: Bool.False })
+						} else if is_decoration(kind) {
+							$decorations = List.append($decorations, { id: List.len($decorations), kind, pos, blocking: decoration_blocking(kind) })
 						}
 					}
 				}
 			}
 		}
-		{ player_start: $player_start, actors: $actors, pickups: $pickups }
+		{ player_start: $player_start, actors: $actors, pickups: $pickups, decorations: $decorations, unsupported: $unsupported }
 	}
 
 	actor : U64, ThingKind, DoomSim.Vec2, DoomSim.Angle, Bool -> Actor
@@ -276,7 +351,10 @@ DoomWorld := [].{
 	## shotgun repeats the same 5/10/15 pellet rule seven times.
 	hitscan : Rng, Weapon -> Shot
 	hitscan = |rng, weapon| {
-		pellets = if weapon == Pistol 1 else 7
+		pellets = match weapon {
+			Shotgun => 7
+			_ => 1
+		}
 		var $rng = rng
 		var $damage = 0.I64
 		var $spread_total = 0.I64
@@ -351,10 +429,12 @@ DoomWorld := [].{
 			ZombieMan => 20
 			ShotgunGuy => 30
 			Imp => 60
+			Demon => 150
+			Spectre => 150
 			Barrel => 20
 			_ => 1
 		}
-	is_actor = |kind| kind == ZombieMan or kind == ShotgunGuy or kind == Imp or kind == Barrel
+	is_actor = |kind| kind == ZombieMan or kind == ShotgunGuy or kind == Imp or kind == Demon or kind == Spectre or kind == Barrel
 	is_pickup = |kind|
 		match kind {
 			ShotgunPickup => Bool.True
@@ -369,12 +449,37 @@ DoomWorld := [].{
 			BlueKeyPickup => Bool.True
 			YellowKeyPickup => Bool.True
 			RedKeyPickup => Bool.True
+			BackpackPickup => Bool.True
+			ChaingunPickup => Bool.True
+			RocketLauncherPickup => Bool.True
+			PlasmaRiflePickup => Bool.True
+			ChainsawPickup => Bool.True
+			RocketPickup => Bool.True
+			SoulSpherePickup => Bool.True
+			BerserkPickup => Bool.True
+			ComputerMapPickup => Bool.True
+			LightAmpPickup => Bool.True
+			BulletBoxPickup => Bool.True
+			ShellBoxPickup => Bool.True
+			CellPackPickup => Bool.True
+			_ => Bool.False
+		}
+	is_decoration = |kind|
+		match kind {
+			BloodyMess | DeadPlayer | DeadFormerHuman | DeadDemon | DeadImp | DeadShotgunGuy | GorePool | Candle | BurntTree | Stalagmite | TechPillar | LargeTree | HangingBody | FloorLamp => Bool.True
+			_ => Bool.False
+		}
+	decoration_blocking = |kind|
+		match kind {
+			BurntTree | Stalagmite | TechPillar | LargeTree | HangingBody | FloorLamp => Bool.True
 			_ => Bool.False
 		}
 	angle_from_degrees = |degrees| DoomSim.Angle.from_turns(I64.to_f32(degrees) / 360)
 	max_health = 100.I64
 	max_bullets = 200.I64
 	max_shells = 50.I64
+	max_rockets = 50.I64
+	max_cells = 300.I64
 	actor_radius = 20
 	player_collision_radius = 16
 	ambush_flag = 8.U64
@@ -395,17 +500,52 @@ apply_pickup = |player, kind|
 		YellowKeyPickup => { player: { ..player, keys: { ..player.keys, yellow: Bool.True } }, collected: !(player.keys.yellow) }
 		RedKeyPickup => { player: { ..player, keys: { ..player.keys, red: Bool.True } }, collected: !(player.keys.red) }
 		ShotgunPickup => { player: { ..give_shells(player, 8).player, weapon: Shotgun }, collected: Bool.True }
+		BackpackPickup => {
+			ammo = {
+				bullets: I64.min(DoomWorld.max_bullets * 2, player.ammo.bullets + 10),
+				shells: I64.min(DoomWorld.max_shells * 2, player.ammo.shells + 4),
+				rockets: I64.min(DoomWorld.max_rockets * 2, player.ammo.rockets + 1),
+				cells: I64.min(DoomWorld.max_cells * 2, player.ammo.cells + 20),
+			}
+			{ player: { ..player, backpack: Bool.True, ammo }, collected: Bool.True }
+		}
+		ChaingunPickup => { player: { ..give_bullets(player, 20).player, weapon: Chaingun }, collected: Bool.True }
+		RocketLauncherPickup => { player: { ..give_rockets(player, 2).player, weapon: RocketLauncher }, collected: Bool.True }
+		PlasmaRiflePickup => { player: { ..give_cells(player, 40).player, weapon: PlasmaRifle }, collected: Bool.True }
+		ChainsawPickup => { player: { ..player, weapon: Chainsaw }, collected: Bool.True }
+		RocketPickup => give_rockets(player, 1)
+		SoulSpherePickup => give_health(player, 100, 200)
+		BerserkPickup => { player: { ..give_health(player, 100, DoomWorld.max_health).player, berserk: Bool.True, weapon: Chainsaw }, collected: Bool.True }
+		ComputerMapPickup => { player, collected: Bool.True }
+		LightAmpPickup => { player, collected: Bool.True }
+		BulletBoxPickup => give_bullets(player, 50)
+		ShellBoxPickup => give_shells(player, 20)
+		CellPackPickup => give_cells(player, 100)
 		_ => { player, collected: Bool.False }
 	}
 
 give_bullets = |player, amount| {
-	next = I64.min(DoomWorld.max_bullets, player.ammo.bullets + amount)
+	cap = if player.backpack DoomWorld.max_bullets * 2 else DoomWorld.max_bullets
+	next = I64.min(cap, player.ammo.bullets + amount)
 	{ player: { ..player, ammo: { ..player.ammo, bullets: next } }, collected: next > player.ammo.bullets }
 }
 
 give_shells = |player, amount| {
-	next = I64.min(DoomWorld.max_shells, player.ammo.shells + amount)
+	cap = if player.backpack DoomWorld.max_shells * 2 else DoomWorld.max_shells
+	next = I64.min(cap, player.ammo.shells + amount)
 	{ player: { ..player, ammo: { ..player.ammo, shells: next } }, collected: next > player.ammo.shells }
+}
+
+give_rockets = |player, amount| {
+	cap = if player.backpack DoomWorld.max_rockets * 2 else DoomWorld.max_rockets
+	next = I64.min(cap, player.ammo.rockets + amount)
+	{ player: { ..player, ammo: { ..player.ammo, rockets: next } }, collected: next > player.ammo.rockets }
+}
+
+give_cells = |player, amount| {
+	cap = if player.backpack DoomWorld.max_cells * 2 else DoomWorld.max_cells
+	next = I64.min(cap, player.ammo.cells + amount)
+	{ player: { ..player, ammo: { ..player.ammo, cells: next } }, collected: next > player.ammo.cells }
 }
 
 give_health = |player, amount, cap| {
@@ -417,12 +557,20 @@ ammo_for = |player|
 	match player.weapon {
 		Pistol => player.ammo.bullets
 		Shotgun => player.ammo.shells
+		Chaingun => player.ammo.bullets
+		RocketLauncher => player.ammo.rockets
+		PlasmaRifle => player.ammo.cells
+		Chainsaw => 1
 	}
 
 spend_ammo = |player|
 	match player.weapon {
 		Pistol => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
 		Shotgun => { ..player, ammo: { ..player.ammo, shells: I64.max(0, player.ammo.shells - 1) } }
+		Chaingun => { ..player, ammo: { ..player.ammo, bullets: I64.max(0, player.ammo.bullets - 1) } }
+		RocketLauncher => { ..player, ammo: { ..player.ammo, rockets: I64.max(0, player.ammo.rockets - 1) } }
+		PlasmaRifle => { ..player, ammo: { ..player.ammo, cells: I64.max(0, player.ammo.cells - 1) } }
+		Chainsaw => player
 	}
 
 damage_first_live = |actors, damage| {
@@ -441,7 +589,9 @@ damage_first_live = |actors, damage| {
 
 can_attack = |actor, player_pos| {
 	distance2 = DoomSim.distance_squared(actor.pos, player_pos)
-	if actor.kind == Imp {
+	if actor.kind == Demon or actor.kind == Spectre {
+		distance2 <= 64 * 64
+	} else if actor.kind == Imp {
 		distance2 <= 1024 * 1024
 	} else {
 		(actor.kind == ZombieMan or actor.kind == ShotgunGuy) and distance2 <= 2048 * 2048
@@ -503,12 +653,17 @@ actor_speed = |kind|
 		ZombieMan => 8
 		ShotgunGuy => 8
 		Imp => 8
+		Demon => 10
+		Spectre => 10
 		_ => 0
 	}
 
 actor_attack = |actor, player_pos, rng| {
 	distance2 = DoomSim.distance_squared(actor.pos, player_pos)
-	if actor.kind == ShotgunGuy {
+	if actor.kind == Demon or actor.kind == Spectre {
+		roll = DoomWorld.random(rng)
+		{ rng: roll.rng, damage: (U8.to_i64(roll.byte % 10) + 1) * 4, kind: MeleeAttack }
+	} else if actor.kind == ShotgunGuy {
 		var $rng = rng
 		var $damage = 0.I64
 		for _ in List.repeat({}, 3) {
@@ -538,6 +693,8 @@ pain_chance = |kind|
 		ZombieMan => 200
 		ShotgunGuy => 170
 		Imp => 200
+		Demon => 180
+		Spectre => 180
 		Barrel => 255
 		_ => 0
 	}
@@ -652,4 +809,32 @@ expect {
 	melee = DoomWorld.tick_actor_with(ready, near, DoomWorld.Rng.seed(0))
 	projectile = DoomWorld.tick_actor_with(ready, far, DoomWorld.Rng.seed(0))
 	melee.attack_kind == MeleeAttack and projectile.attack_kind == ProjectileAttack
+}
+
+expect {
+	spawned = DoomWorld.spawn(DoomMap.e1m1.raw().things, Medium)
+	List.is_empty(spawned.unsupported)
+		and List.len(spawned.actors) == 51
+			and List.len(spawned.pickups) == 78
+				and List.len(spawned.decorations) == 80
+}
+
+expect {
+	demon0 = DoomWorld.actor(1, Demon, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	demon = { ..demon0, state: { mode: Attack, remaining: 1 } }
+	facts : DoomWorld.ActorFacts
+	facts = { player_pos: { x: 48, y: 0 }, has_sight: Bool.True, heard_sound: Bool.False, blockers: [] }
+	turn = DoomWorld.tick_actor_with(demon, facts, DoomWorld.Rng.seed(0))
+	turn.attack_kind == MeleeAttack and turn.player_damage > 0 and turn.actor.health == 150
+}
+
+expect {
+	player = DoomWorld.player({ x: 0, y: 0 }, DoomSim.Angle.from_turns(0))
+	backpack : DoomWorld.Pickup
+	backpack = { id: 0, kind: BackpackPickup, pos: { x: 0, y: 0 }, taken: Bool.False }
+	cell_pack : DoomWorld.Pickup
+	cell_pack = { id: 1, kind: CellPackPickup, pos: { x: 0, y: 0 }, taken: Bool.False }
+	packed = DoomWorld.collect(player, backpack)
+	cells = DoomWorld.collect(packed.player, cell_pack)
+	packed.player.backpack and packed.player.ammo.bullets == 60 and cells.player.ammo.cells == 120
 }

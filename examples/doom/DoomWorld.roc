@@ -46,8 +46,14 @@ DoomWorld := [].{
 	ActorMode := [Look, Chase, Attack, Pain, Dead].{
 		is_eq : _
 	}
+	AttackKind := [NoAttack, MeleeAttack, HitscanAttack, ProjectileAttack].{
+		is_eq : _
+	}
 	ActorState : { mode : ActorMode, remaining : I64 }
 	Actor : { id : U64, kind : ThingKind, pos : DoomSim.Vec2, angle : DoomSim.Angle, health : I64, state : ActorState, ambush : Bool }
+	ActorFacts : { player_pos : DoomSim.Vec2, has_sight : Bool, heard_sound : Bool, blockers : List(DoomSim.Segment) }
+	ActorTic : { actor : Actor, rng : Rng, player_damage : I64, attack_kind : AttackKind }
+	ActorDamage : { actor : Actor, rng : Rng, entered_pain : Bool }
 	Pickup : { id : U64, kind : ThingKind, pos : DoomSim.Vec2, taken : Bool }
 
 	## Structural match for `DoomMap.Thing`, so a validated map can hand its
@@ -181,6 +187,56 @@ DoomWorld := [].{
 		}
 	}
 
+	## Advance one actor from explicit perception facts. Sound wakes ordinary
+	## actors, while ambush actors require sight. Chase direction is quantized to
+	## Doom's eight compass directions and collision uses the shared bounded
+	## radius/segment slide. Attack damage is emitted for the caller to apply.
+	tick_actor_with : Actor, ActorFacts, Rng -> ActorTic
+	tick_actor_with = |value, facts, rng| {
+		if value.state.mode == Dead {
+			{ actor: value, rng, player_damage: 0, attack_kind: NoAttack }
+		} else {
+			match value.state.mode {
+				Look => {
+					awake = facts.has_sight or (facts.heard_sound and !(value.ambush))
+					actor1 = if awake {
+						{ ..value, state: state(Chase) }
+					} else if value.state.remaining > 1 {
+						{ ..value, state: { ..value.state, remaining: value.state.remaining - 1 } }
+					} else {
+						{ ..value, state: state(Look) }
+					}
+					{ actor: actor1, rng, player_damage: 0, attack_kind: NoAttack }
+				}
+				Chase => {
+					if value.state.remaining > 1 {
+						{ actor: { ..value, state: { ..value.state, remaining: value.state.remaining - 1 } }, rng, player_damage: 0, attack_kind: NoAttack }
+					} else if facts.has_sight and can_attack(value, facts.player_pos) {
+						{ actor: { ..value, angle: face_toward(value.pos, facts.player_pos), state: state(Attack) }, rng, player_damage: 0, attack_kind: NoAttack }
+					} else {
+						moved = chase_move(value, facts)
+						{ actor: { ..moved, state: state(Chase) }, rng, player_damage: 0, attack_kind: NoAttack }
+					}
+				}
+				Attack => {
+					if value.state.remaining > 1 {
+						{ actor: { ..value, state: { ..value.state, remaining: value.state.remaining - 1 } }, rng, player_damage: 0, attack_kind: NoAttack }
+					} else if facts.has_sight and can_attack(value, facts.player_pos) {
+						attack = actor_attack(value, facts.player_pos, rng)
+						{ actor: { ..value, state: state(Chase) }, rng: attack.rng, player_damage: attack.damage, attack_kind: attack.kind }
+					} else {
+						{ actor: { ..value, state: state(Chase) }, rng, player_damage: 0, attack_kind: NoAttack }
+					}
+				}
+				Pain => {
+					actor1 = if value.state.remaining > 1 { ..value, state: { ..value.state, remaining: value.state.remaining - 1 } } else { ..value, state: state(Chase) }
+					{ actor: actor1, rng, player_damage: 0, attack_kind: NoAttack }
+				}
+				Dead => { actor: value, rng, player_damage: 0, attack_kind: NoAttack }
+			}
+		}
+	}
+
 	set_pain : Actor -> Actor
 	set_pain = |value| if value.health <= 0 { ..value, state: state(Dead) } else { ..value, state: state(Pain) }
 
@@ -188,6 +244,22 @@ DoomWorld := [].{
 	damage_actor = |value, amount| {
 		health = I64.max(0, value.health - I64.max(0, amount))
 		if health <= 0 { ..value, health, state: state(Dead) } else { ..value, health, state: state(Pain) }
+	}
+
+	## Apply damage and consume one gameplay random byte for Doom-style pain
+	## chance. Death always wins; surviving actors may continue their current
+	## state when the pain roll misses.
+	damage_actor_random : Actor, I64, Rng -> ActorDamage
+	damage_actor_random = |value, amount, rng| {
+		roll = random(rng)
+		health = I64.max(0, value.health - I64.max(0, amount))
+		if health <= 0 {
+			{ actor: { ..value, health, state: state(Dead) }, rng: roll.rng, entered_pain: Bool.False }
+		} else {
+			entered_pain = U8.to_u64(roll.byte) < pain_chance(value.kind)
+			actor1 = if entered_pain { ..value, health, state: state(Pain) } else { ..value, health }
+			{ actor: actor1, rng: roll.rng, entered_pain }
+		}
 	}
 
 	## Table-free deterministic byte stream. Doom routes gameplay randomness
@@ -303,6 +375,8 @@ DoomWorld := [].{
 	max_health = 100.I64
 	max_bullets = 200.I64
 	max_shells = 50.I64
+	actor_radius = 20
+	player_collision_radius = 16
 	ambush_flag = 8.U64
 	multiplayer_flag = 16.U64
 }
@@ -365,6 +439,109 @@ damage_first_live = |actors, damage| {
 	$next
 }
 
+can_attack = |actor, player_pos| {
+	distance2 = DoomSim.distance_squared(actor.pos, player_pos)
+	if actor.kind == Imp {
+		distance2 <= 1024 * 1024
+	} else {
+		(actor.kind == ZombieMan or actor.kind == ShotgunGuy) and distance2 <= 2048 * 2048
+	}
+}
+
+## Doom chase movement selects one of eight directions rather than steering by
+## an arbitrary floating angle. The diagonal components are unit length.
+chase_direction = |from, to| {
+	dx = to.x - from.x
+	dy = to.y - from.y
+	ax = F32.abs(dx)
+	ay = F32.abs(dy)
+	sx = if dx < 0 -1 else if dx > 0 1 else 0
+	sy = if dy < 0 -1 else if dy > 0 1 else 0
+	if ax == 0 and ay == 0 {
+		DoomSim.zero
+	} else if ax > ay * 2 {
+		{ x: sx, y: 0 }
+	} else if ay > ax * 2 {
+		{ x: 0, y: sy }
+	} else {
+		{ x: sx * 0.70710677, y: sy * 0.70710677 }
+	}
+}
+
+direction_angle = |direction|
+	if direction.x > 0.9 {
+		DoomSim.Angle.from_turns(0)
+	} else if direction.x < -0.9 {
+		DoomSim.Angle.from_turns(0.5)
+	} else if direction.y > 0.9 {
+		DoomSim.Angle.from_turns(0.25)
+	} else if direction.y < -0.9 {
+		DoomSim.Angle.from_turns(0.75)
+	} else if direction.x > 0 and direction.y > 0 {
+		DoomSim.Angle.from_turns(0.125)
+	} else if direction.x < 0 and direction.y > 0 {
+		DoomSim.Angle.from_turns(0.375)
+	} else if direction.x < 0 and direction.y < 0 {
+		DoomSim.Angle.from_turns(0.625)
+	} else {
+		DoomSim.Angle.from_turns(0.875)
+	}
+
+face_toward = |from, to| direction_angle(chase_direction(from, to))
+
+chase_move = |actor, facts| {
+	direction = chase_direction(actor.pos, facts.player_pos)
+	displacement = DoomSim.scale(direction, actor_speed(actor.kind))
+	candidate = DoomSim.move_with_slide(actor.pos, displacement, DoomWorld.actor_radius, facts.blockers)
+	min_distance = DoomWorld.actor_radius + DoomWorld.player_collision_radius
+	pos = if DoomSim.distance_squared(candidate, facts.player_pos) < min_distance * min_distance actor.pos else candidate
+	{ ..actor, pos, angle: direction_angle(direction) }
+}
+
+actor_speed = |kind|
+	match kind {
+		ZombieMan => 8
+		ShotgunGuy => 8
+		Imp => 8
+		_ => 0
+	}
+
+actor_attack = |actor, player_pos, rng| {
+	distance2 = DoomSim.distance_squared(actor.pos, player_pos)
+	if actor.kind == ShotgunGuy {
+		var $rng = rng
+		var $damage = 0.I64
+		for _ in List.repeat({}, 3) {
+			roll = DoomWorld.random($rng)
+			$damage = $damage + (U8.to_i64(roll.byte % 5) + 1) * 3
+			$rng = roll.rng
+		}
+		{ rng: $rng, damage: $damage, kind: HitscanAttack }
+	} else {
+		roll = DoomWorld.random(rng)
+		melee = actor.kind == Imp and distance2 <= 64 * 64
+		damage = if melee {
+			(U8.to_i64(roll.byte % 8) + 1) * 3
+		} else if actor.kind == Imp {
+			# Deterministic impact foundation for the later projectile layer.
+			(U8.to_i64(roll.byte % 8) + 1) * 3
+		} else {
+			(U8.to_i64(roll.byte % 5) + 1) * 3
+		}
+		kind = if melee MeleeAttack else if actor.kind == Imp ProjectileAttack else HitscanAttack
+		{ rng: roll.rng, damage, kind }
+	}
+}
+
+pain_chance = |kind|
+	match kind {
+		ZombieMan => 200
+		ShotgunGuy => 170
+		Imp => 200
+		Barrel => 255
+		_ => 0
+	}
+
 fixture_thing = |editor_type, flags| { x: 64, y: -32, angle: 90, type: editor_type, flags }
 
 expect {
@@ -413,4 +590,66 @@ expect {
 	advanced = DoomWorld.advance(world, DoomSim.tic_seconds * 2.1, DoomSim.neutral, [])
 	next_actor = List.get(advanced.world.actors, 0) ?? actor
 	advanced.tics == 2 and next_actor.state.mode == Look and next_actor.state.remaining == 8
+}
+
+expect {
+	# Sound wakes ordinary monsters, but an ambush-flagged monster waits until
+	# it has direct sight.
+	base = DoomWorld.actor(1, ZombieMan, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	ambush = { ..base, id: 2, ambush: Bool.True }
+	facts : DoomWorld.ActorFacts
+	facts = { player_pos: { x: 128, y: 0 }, has_sight: Bool.False, heard_sound: Bool.True, blockers: [] }
+	woken = DoomWorld.tick_actor_with(base, facts, DoomWorld.Rng.seed(0))
+	sleeping = DoomWorld.tick_actor_with(ambush, facts, DoomWorld.Rng.seed(0))
+	var $still_ambush = sleeping
+	for _ in List.repeat({}, 12) {
+		$still_ambush = DoomWorld.tick_actor_with($still_ambush.actor, facts, $still_ambush.rng)
+	}
+	seen = DoomWorld.tick_actor_with(sleeping.actor, { ..facts, has_sight: Bool.True }, sleeping.rng)
+	woken.actor.state.mode == Chase and sleeping.actor.state.mode == Look and $still_ambush.actor.state.mode == Look and seen.actor.state.mode == Chase
+}
+
+expect {
+	# A chase decision cannot cross a blocking line, and cannot overlap the
+	# player's combined collision radii.
+	base = DoomWorld.actor(1, Imp, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	ready = { ..base, state: { mode: Chase, remaining: 1 } }
+	wall : DoomSim.Segment
+	wall = { start: { x: 24, y: -64 }, end: { x: 24, y: 64 } }
+	blocked = DoomWorld.tick_actor_with(ready, { player_pos: { x: 100, y: 0 }, has_sight: Bool.False, heard_sound: Bool.False, blockers: [wall] }, DoomWorld.Rng.seed(0))
+	close = DoomWorld.tick_actor_with(ready, { player_pos: { x: 32, y: 0 }, has_sight: Bool.False, heard_sound: Bool.False, blockers: [] }, DoomWorld.Rng.seed(0))
+	blocked.actor.pos == base.pos and close.actor.pos == base.pos
+}
+
+expect {
+	# Hitscan damage occurs only on the terminal attack tic and then returns to
+	# the chase cadence.
+	base = DoomWorld.actor(1, ZombieMan, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	var $turn = { actor: { ..base, state: DoomWorld.state(Attack) }, rng: DoomWorld.Rng.seed(0), player_damage: 0, attack_kind: NoAttack }
+	facts : DoomWorld.ActorFacts
+	facts = { player_pos: { x: 128, y: 0 }, has_sight: Bool.True, heard_sound: Bool.False, blockers: [] }
+	for _ in List.repeat({}, 7) {
+		$turn = DoomWorld.tick_actor_with($turn.actor, facts, $turn.rng)
+	}
+	before = $turn.attack_kind == NoAttack and $turn.actor.state.remaining == 1
+	$turn = DoomWorld.tick_actor_with($turn.actor, facts, $turn.rng)
+	before and $turn.attack_kind == HitscanAttack and $turn.player_damage == 6 and $turn.actor.state.mode == Chase
+}
+
+expect {
+	base = DoomWorld.actor(1, Imp, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	pained = DoomWorld.damage_actor_random(base, 5, DoomWorld.Rng.seed(0))
+	killed = DoomWorld.damage_actor_random(base, 1000, DoomWorld.Rng.seed(0))
+	pained.entered_pain and pained.actor.health == 55 and pained.actor.state.mode == Pain and killed.actor.health == 0 and killed.actor.state.mode == Dead and !(killed.entered_pain)
+}
+
+expect {
+	base = DoomWorld.actor(1, Imp, { x: 0, y: 0 }, DoomSim.Angle.from_turns(0), Bool.False)
+	ready = { ..base, state: { mode: Attack, remaining: 1 } }
+	near : DoomWorld.ActorFacts
+	near = { player_pos: { x: 48, y: 0 }, has_sight: Bool.True, heard_sound: Bool.False, blockers: [] }
+	far = { ..near, player_pos: { x: 256, y: 0 } }
+	melee = DoomWorld.tick_actor_with(ready, near, DoomWorld.Rng.seed(0))
+	projectile = DoomWorld.tick_actor_with(ready, far, DoomWorld.Rng.seed(0))
+	melee.attack_kind == MeleeAttack and projectile.attack_kind == ProjectileAttack
 }
